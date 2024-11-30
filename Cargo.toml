@@ -5,3 +5,4 @@ edition = "2021"
 
 [dependencies]
 ggez = "0.9.3"
+winit = "0.30.5"
