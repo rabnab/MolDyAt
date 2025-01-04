@@ -564,6 +564,7 @@ mod tests {
         {
             main_content.step_count = 10;
             main_content.collect_neighbours(DT_GOAL);
+            main_content.collect_neighbours(DT_GOAL);
 
             // After collecting neighbors, Ball1 and Ball2 should be neighbors
             let ball1: &Ball2D = &*main_content.v_points[0].borrow();
