@@ -111,35 +111,39 @@ impl<'a> Ball2D<'a> {
         Vec2D::copy_scaled(&self.v, self.mass)
     }
 
-    pub fn update_hood(&mut self, dt: f32, others: Vec<Rc<RefCell<Ball2D<'a>>>>) {
-    //pub fn update_hood(&mut self, dt: f32, others: &[&'a Ball2D<'a>]) {
-    //pub fn update_hood(&mut self, dt: f32, others: &[Weak<RefCell<&'a Ball2D<'a>>>]) {
+    pub fn update_hood(&mut self, dt: f32, self_rc: &Rc<RefCell<Self>>, others: Vec<Rc<RefCell<Ball2D<'a>>>>) {
        //use approximation for (v*dt+LJ_SIG)^2
        let v_sq = Vec2D::norm_sq(&self.v);
        let eq= LJ_SIG + self.radius;
        let dist_limit_by_v = v_sq * dt * dt + eq * eq + 2. * dt * eq * (self.v.x + self.v.y);
        let dist_limit_by_closest = if self.hood.nearest > 0. { self.hood.nearest * self.hood.nearest *4. } else { f32::MAX };
        let dist_limit = f32::max(dist_limit_by_closest, dist_limit_by_v); 
-       println!("update_hood: {} dist_lim: {}", self.get_name(), dist_limit);
-      
+       println!("update_hood: {} dist_lim: {}", self.get_name(), f32::sqrt(dist_limit));
+     
+
        for cur_rc in others.iter() {
 
          let cur_ref = cur_rc.borrow();
          let dist_sq=Vec2D::norm_sq(&self.pos.dist(&cur_ref.pos));
-         println!("checking {}", cur_ref.get_name());
+         //println!("checking {}", cur_ref.get_name());
          if dist_sq < dist_limit {
              //cur.hood.neighbours.push(self.into());
              //let new_neighbour = Rc::new( RefCell::new(cur));
              self.hood.neighbours.borrow_mut().push(Rc::downgrade(cur_rc));
-             println!("updated {}-neighbours {:?}", self.get_name(), self.hood.neighbours
-                .borrow() 
-                 .iter()
-                 .filter_map(|weak| weak.upgrade())
-                 .map(|val| val.borrow().get_name())
-                 .collect::<Vec<String>>());
+             cur_ref.hood.neighbours.borrow_mut().push(Rc::downgrade(self_rc));
+             println!("\tneighbour {}", cur_ref.get_name());
+             //println!("updated {}-neighbours {:?}", self.get_name(), self.hood.neighbours
+                //.borrow() 
+                 //.iter()
+                 //.filter_map(|weak| weak.upgrade())
+                 //.map(|val| val.borrow().get_name())
+                 //.collect::<Vec<String>>());
              //println!("updated {}-neighbours {:?}", cur.get_name(), cur.hood.neighbours);
          }
        }
+    }
+
+    pub fn update_closeness_stats(&mut self) {
 
        let (nearest_sq, farthest_sq) = self.hood.neighbours
            .borrow()
@@ -158,6 +162,7 @@ impl<'a> Ball2D<'a> {
        if farthest_sq.is_finite() {
            self.hood.farthest = f32::sqrt(farthest_sq);
        }
+       println!("update_closeness: {} nearest/farthest: {}/{}", self.get_name(), self.hood.nearest, self.hood.farthest);
     }
 
     pub fn is_colliding (&self, other: &Ball2D) -> bool {
