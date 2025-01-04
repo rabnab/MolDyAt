@@ -477,7 +477,7 @@ mod tests {
         {
             let invalid_x = -10.0;
             let invalid_y = -10.0;
-            main_content.add_candidate(invalid_x, invalid_y).unwrap();
+            let _ = main_content.add_candidate(invalid_x, invalid_y);
             assert_eq!(main_content.num_balls, 1, "Ball added out of valid region");
         }
     }
@@ -535,13 +535,13 @@ mod tests {
 
     #[test]
     fn test_collect_neighbours() {
-        let mut main_content = MainContent::new(500.,500.);
+        let mut main_content = MainContent::new(500.,500.).expect("could not create content");
 
         // Add balls to the system
-        let x1 = 30.0;
-        let y1 = 30.0;
-        let x2 = 50.0;
-        let y2 = 50.0;
+        let x1 = 80.0;
+        let y1 = 80.0;
+        let x2 = 90.0;
+        let y2 = 90.0;
         let x3 = 200.0;
         let y3 = 200.0;
         
