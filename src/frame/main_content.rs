@@ -297,11 +297,14 @@ impl<'a> MainContent<'a> {
 
     fn collect_neighbours(&mut self, dt: f32) {
         if self.step_count % 10 == 0 {
+            //clear all neighbours
+            for ball_rc in self.v_points.iter() {
+                
+                let mut ball = ball_rc.borrow_mut(); // Mutable borrow for updating the ball
+                ball.clear_hood();
+            }
+            //collect neighbours
             for (i, ball_rc) in self.v_points.iter().enumerate() {
-                {
-                    let mut ball = ball_rc.borrow_mut(); // Mutable borrow for updating the ball
-                    ball.clear_hood();
-                }
 
                 let neighbors: Vec<Rc<RefCell<Ball2D>>> = self.v_points[i + 1..]
                     .iter()
@@ -315,8 +318,15 @@ impl<'a> MainContent<'a> {
 
                 {
                     let mut ball = ball_rc.borrow_mut();
-                    ball.update_hood(dt, neighbors); // Updated to work with Rc<RefCell<Ball2D>>
+                    ball.update_hood(dt, ball_rc,  neighbors); // Updated to work with Rc<RefCell<Ball2D>>
                 }
+            }
+
+            //update stats
+            for ball_rc in self.v_points.iter() {
+                
+                let mut ball = ball_rc.borrow_mut(); // Mutable borrow for updating the ball
+                ball.update_closeness_stats();
             }
         }
     }
