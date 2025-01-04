@@ -103,6 +103,10 @@ impl<'a> Ball2D<'a> {
         self.id > other.id
     }
 
+    pub fn get_id(&self) -> usize {
+        self.id
+    }
+
     pub fn moment(&self) -> Vec2D{
         Vec2D::copy_scaled(&self.v, self.mass)
     }
@@ -116,7 +120,7 @@ impl<'a> Ball2D<'a> {
        let dist_limit_by_v = v_sq * dt * dt + eq * eq + 2. * dt * eq * (self.v.x + self.v.y);
        let dist_limit_by_closest = if self.hood.nearest > 0. { self.hood.nearest * self.hood.nearest *4. } else { f32::MAX };
        let dist_limit = f32::max(dist_limit_by_closest, dist_limit_by_v); 
-       println!("dist_lim: {}", dist_limit);
+       println!("update_hood: {} dist_lim: {}", self.get_name(), dist_limit);
       
        for cur_rc in others.iter() {
 
@@ -127,7 +131,12 @@ impl<'a> Ball2D<'a> {
              //cur.hood.neighbours.push(self.into());
              //let new_neighbour = Rc::new( RefCell::new(cur));
              self.hood.neighbours.borrow_mut().push(Rc::downgrade(cur_rc));
-             println!("updated {}-neighbours {:?}", self.get_name(), self.hood.neighbours);
+             println!("updated {}-neighbours {:?}", self.get_name(), self.hood.neighbours
+                .borrow() 
+                 .iter()
+                 .filter_map(|weak| weak.upgrade())
+                 .map(|val| val.borrow().get_name())
+                 .collect::<Vec<String>>());
              //println!("updated {}-neighbours {:?}", cur.get_name(), cur.hood.neighbours);
          }
        }

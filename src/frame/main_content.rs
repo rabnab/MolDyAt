@@ -139,6 +139,26 @@ impl<'a> MainContent<'a> {
         )?;
 
         canvas.draw(&cursor_circle, Vec2::new(0.,0.));
+
+        let txt_cursor = Text::new( 
+            TextFragment::new(
+                format!("x: {}, y: {}", 
+                    self.win_definition.curs_pos.x,
+                    self.win_definition.curs_pos.y,
+                    )
+                )
+                .scale(10.));
+        let txt_cursor_pos: [f32; 2] = match txt_cursor.dimensions(ctx) {
+            None => [0., 0.], 
+            Some(rec) => [
+                self.win_definition.margin_x*2.+self.win_definition.region_size_x-rec.w,
+                self.win_definition.margin_y*2.+self.win_definition.region_size_y-rec.h,
+            ],
+        };
+
+        canvas.draw(&txt_cursor, DrawParam::default().dest(txt_cursor_pos));
+
+
         Ok(())
     }
 
@@ -156,6 +176,20 @@ impl<'a> MainContent<'a> {
             )?;
 
             canvas.draw(&pt_circle, Vec2::new(0.,0.));
+
+            let txt_name = Text::new( 
+                TextFragment::new(format!("{}", ball.get_id()))
+                .scale(15.));
+
+            let txt_name_pos: [f32; 2] = match txt_name.dimensions(ctx) {
+                None => [0., 0.], 
+                Some(rec) => [
+                    ball.pos.x - rec.w*0.5, 
+                    ball.pos.y - rec.h*0.5,
+                ],
+            };
+
+            canvas.draw(&txt_name, DrawParam::default().dest(txt_name_pos));
         }
         Ok(())
     }
