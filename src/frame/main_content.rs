@@ -6,6 +6,9 @@ use ggez::input::mouse::MouseButton;
 use ggez::event::EventHandler;
 use ggez::glam::Vec2;
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 pub const MARGIN_X: f32 = 50.;
 pub const MARGIN_Y: f32 = 50.;
 pub const KB: f32 = 1.380649E-23;
@@ -44,12 +47,12 @@ struct SimStats {
     pause: bool,
 }
 
-pub struct MainContent {
+pub struct MainContent<'a> {
     win_definition: WindowDefinition,
     new_ball: NewBallDef,
     sim: SimStats,
     num_balls: usize,
-    v_points: Vec<Ball2D>,
+    v_points: Vec<Rc<RefCell<Ball2D<'a>>>>,
     real_data: bool,
     step_by_step: bool,
     step_count: i32,
@@ -89,8 +92,8 @@ impl Default for SimStats {
     }
 }
 
-impl Default for MainContent {
-    fn default() -> MainContent {
+impl<'a> Default for MainContent<'a> {
+    fn default() -> MainContent<'a> {
         MainContent {
             win_definition: WindowDefinition {
                 ..Default::default()
@@ -110,22 +113,26 @@ impl Default for MainContent {
     }
 }
 
-impl MainContent {
-    pub fn new(reg_x:f32, reg_y: f32) -> GameResult<MainContent> {
-        let s = MainContent {
+impl<'a> MainContent<'a> {
+    pub fn new(reg_x:f32, reg_y: f32) -> GameResult<MainContent<'a>> {
+        Ok(MainContent {
             win_definition: WindowDefinition {
                 region_size_x: reg_x,
                 region_size_y: reg_y,
-                margin_x: MARGIN_X,margin_y: MARGIN_Y,
+                margin_x: MARGIN_X,
+                margin_y: MARGIN_Y,
                 ..Default::default()
             },
+            v_points: Vec::new(),
             ..Default::default()
-        };
-        Ok(s)
+        })
     }
 
     fn draw_cursor(&self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult {
-        let cursor_circle = Mesh::new_circle(ctx,DrawMode::fill(),self.win_definition.curs_pos.clone(),
+        let cursor_circle = Mesh::new_circle(
+            ctx,
+            DrawMode::fill(),
+            self.win_definition.curs_pos.clone(),
             self.new_ball.ball_size,
             0.1,
             Color::WHITE 
@@ -137,8 +144,11 @@ impl MainContent {
 
     fn draw_balls(&self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult {
 
-        for ball in &self.v_points {
-            let pt_circle = Mesh::new_circle(ctx,DrawMode::fill(),
+        for ball_ref in &self.v_points {
+            let ball = ball_ref.borrow();
+            let pt_circle = Mesh::new_circle(
+                ctx,
+                DrawMode::fill(),
                 ball.pos.clone(),
                 ball.radius,
                 0.1,
@@ -151,9 +161,8 @@ impl MainContent {
     }
 
     fn status_text(&self) -> String {
-        let text: String;
-        if self.real_data {
-            text = format!("time: {:.0}[ns]\n#Balls: {}\nPotEnergy: {:.2E}[J]\nKinEnergy: {:.2E}[J]\nTotalE: {:.3E}[J]\nTemp: {:.2E}[K]\nmaxV: {:.2}[m/s]\nminDist: {:.2E}[m]\nvCOM: {}[m/s]", 
+        let text = if self.real_data {
+            format!("time: {:.0}[ns]\n#Balls: {}\nPotEnergy: {:.2E}[J]\nKinEnergy: {:.2E}[J]\nTotalE: {:.3E}[J]\nTemp: {:.2E}[K]\nmaxV: {:.2}[m/s]\nminDist: {:.2E}[m]\nvCOM: {}[m/s]", 
                 self.sim.time*TIME_SCALE*1.0E9,
                 self.num_balls,
                 self.sim.energy_pot*ENERGY_SCALE,
@@ -163,9 +172,9 @@ impl MainContent {
                 self.sim.max_v*LEN_SCALE/TIME_SCALE,
                 self.sim.min_dist*LEN_SCALE,
                 Vec2D::copy_scaled(&self.sim.v_com,LEN_SCALE/TIME_SCALE),
-                )
+            )
         } else {
-            text = format!("time: {}\n#Balls: {}\nPotEnergy: {:.2E}\nKinEnergy: {:.2E}\nTotalE: {:.3E}\nTemp: {:.2E}\nmaxV: {:.2}\nminDist: {:.2E}\nvCOM: {}", 
+            format!("time: {}\n#Balls: {}\nPotEnergy: {:.2E}\nKinEnergy: {:.2E}\nTotalE: {:.3E}\nTemp: {:.2E}\nmaxV: {:.2}\nminDist: {:.2E}\nvCOM: {}", 
                 self.sim.time,
                 self.num_balls,
                 self.sim.energy_pot,
@@ -175,37 +184,26 @@ impl MainContent {
                 self.sim.max_v,
                 self.sim.min_dist,
                 self.sim.v_com,
-                )
-        }
+            )
+        };
         text
     }
 
     fn draw_frame(&mut self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult {
 
-        let rect = Mesh::new_rectangle(ctx, DrawMode::stroke(3.), Rect::new(
+        let rect = Mesh::new_rectangle(
+            ctx, 
+            DrawMode::stroke(3.), 
+            Rect::new(
                 self.win_definition.margin_x,
                 self.win_definition.margin_y,
                 self.win_definition.region_size_x,
                 self.win_definition.region_size_y
-                ),Color::BLUE)?;
+                ),
+            Color::BLUE,
+        )?;
 
-        //let x = 3.*self.win_definition.margin_x/2.+ self.win_definition.region_size_x;
-        //let y = self.win_definition.margin_y/2.;
-        //let sample_pt = Ball2D::new_massive("SampleBall".to_string(), x, y, self.new_ball.ball_size, self.new_ball.ball_mass);
-        //let pt_sample = Mesh::new_circle(ctx,DrawMode::fill(),
-        //    sample_pt.pos.clone(),
-        //    sample_pt.radius,
-        //    0.1,
-        //    Color::YELLOW
-        //)?;
-        //canvas.draw(&pt_sample, Vec2::new(0.,0.));
-        //
-        let txt_balls = Text::new(
-            TextFragment::new(self.status_text())
-                .scale(60.)
-
-                //.font("DejaVuSansMono")
-            );
+        let txt_balls = Text::new( TextFragment::new(self.status_text()).scale(60.));
         let txt_balls_pos: [f32; 2] = match txt_balls.dimensions(ctx) {
             None => [0., 0.], 
             Some(rec) => [self.win_definition.margin_x*2.+self.win_definition.region_size_x-rec.w,0.],
@@ -236,19 +234,56 @@ impl MainContent {
 
         within
     }
-
+ 
     fn is_ball_colliding(&self, pt: &Ball2D) -> bool {
-        self.v_points.iter().any(|ball| pt.is_colliding(ball))
+        self.v_points.iter().
+            map(|ball_rc| ball_rc.borrow()).
+            any(|ball| pt.is_colliding(&(*ball)))
+    }
+
+    fn add_candidate(&mut self, x:f32, y:f32) -> GameResult {
+        let candidate: Ball2D<'a> = Ball2D::new_massive(
+            self.num_balls, 
+            x,
+            y, 
+            self.new_ball.ball_size, 
+            self.new_ball.ball_mass);
+
+        if !self.is_ball_in_region(&candidate) {
+            return Err(ggez::GameError::CustomError( format!("new ball not within region")));
+        }
+        if self.is_ball_colliding(&candidate) {
+            return Err(ggez::GameError::CustomError( format!("new ball colliding with existing ball")));
+        }
+        let candidate_rc: Rc<RefCell<Ball2D<'a>>> = Rc::new(RefCell::new(candidate));
+        self.v_points.push(candidate_rc);
+        self.num_balls+=1;
+        Ok(())
     }
 
     fn collect_neighbours(&mut self, dt: f32) {
-        let mut other_balls: Vec<&mut Ball2D>  = self.v_points.iter_mut().collect();
-        if (self.step_count % 10) == 0 {
-            other_balls.iter_mut().for_each(|ball| ball.clear_hood());
-            self.v_points.iter_mut().for_each(|ball| {
-                other_balls.retain(|other| other.get_name() != ball.get_name());
-                ball.update_hood(dt, other_balls);
-            })
+        if self.step_count % 10 == 0 {
+            for (i, ball_rc) in self.v_points.iter().enumerate() {
+                {
+                    let mut ball = ball_rc.borrow_mut(); // Mutable borrow for updating the ball
+                    ball.clear_hood();
+                }
+
+                let neighbors: Vec<Rc<RefCell<Ball2D>>> = self.v_points[i + 1..]
+                    .iter()
+                    .filter(|&other_rc| {
+                        let ball_borrowed = ball_rc.borrow();
+                        let other_borrowed = other_rc.borrow();
+                        other_borrowed.has_larger_id(&ball_borrowed)
+                    })
+                .cloned()
+                    .collect();
+
+                {
+                    let mut ball = ball_rc.borrow_mut();
+                    ball.update_hood(dt, neighbors); // Updated to work with Rc<RefCell<Ball2D>>
+                }
+            }
         }
     }
 
@@ -260,7 +295,12 @@ impl MainContent {
         if self.step_by_step {
                 self.sim.pause = true;
         }
-        let bound_rect = Rect::new(self.win_definition.margin_x, self.win_definition.margin_y, self.win_definition.region_size_x, self.win_definition.region_size_y);
+        let bound_rect = Rect::new(
+            self.win_definition.margin_x, 
+            self.win_definition.margin_y, 
+            self.win_definition.region_size_x,
+            self.win_definition.region_size_y
+        );
 
         let dt = DT_GOAL;
         let mut _min_dist = bound_rect.w + bound_rect.h;
@@ -274,7 +314,9 @@ impl MainContent {
         self.collect_neighbours(dt);
 
 
-        for cur in &mut self.v_points {
+        for ball_rc in &mut self.v_points {
+            let mut cur = ball_rc.borrow_mut();
+
             let (min_dist, cur_pot) =cur.update(dt, &bound_rect);
 
             pot += cur_pot*0.5;//double counts
@@ -291,9 +333,8 @@ impl MainContent {
 
             }
         }
-        self.v_points.retain(|cur| {
-            return !cur.pos.x.is_nan() && !cur.pos.y.is_nan() 
-        });
+
+        self.v_points.retain(|cur| !(*cur.borrow()).pos.x.is_nan() && !(*cur.borrow()).pos.y.is_nan());
         
         self.num_balls = self.v_points.len();
 
@@ -304,7 +345,8 @@ impl MainContent {
         self.sim.v_com = Vec2D::copy_scaled(&_v_com, 1./sum_mass);
 
         let mut sum_rel_kin: f32 = 0.;
-        for cur in &self.v_points {
+        for ball_rc in &self.v_points {
+            let cur = ball_rc.borrow();
             let v_abs = &cur.v;
             let v_rel_x = v_abs.x - self.sim.v_com.x;
             let v_rel_y = v_abs.y - self.sim.v_com.y;
@@ -318,7 +360,7 @@ impl MainContent {
 
 }
 
-impl EventHandler for MainContent {
+impl<'a> EventHandler for MainContent<'a> {
     fn update(&mut self, _ctx: &mut Context) -> GameResult {
 
         while _ctx.time.check_update_time(FPS_GOAL) {
@@ -342,12 +384,8 @@ impl EventHandler for MainContent {
     fn mouse_button_down_event(&mut self, _ctx: &mut Context, button: MouseButton, x: f32, y: f32) -> GameResult {
         match button {
             MouseButton::Left => {
-
-                let candidate = Ball2D::new_massive(format!("Ball{}",self.num_balls).to_string(), x,y, self.new_ball.ball_size, self.new_ball.ball_mass);
-                if self.is_ball_in_region(&candidate) && !self.is_ball_colliding(&candidate) {
-                    self.v_points.push(candidate);
-                    self.num_balls+=1;
-                }
+                self.add_candidate(x,y)
+                    .ok(); //ignore any errors because of not being able to add
             }
             MouseButton::Right => {
                 self.new_ball.ball_size+=3.;
@@ -388,18 +426,159 @@ impl EventHandler for MainContent {
         let mut canvas = Canvas::from_frame(ctx, Color::from_rgb(0,0,0)); 
         self.draw_frame(ctx, &mut canvas)?;
         self.draw_balls(ctx, &mut canvas)?;
-
-        //let mouse_pos = ctx.mouse.position();
-        //if 0.<mouse_pos.x && mouse_pos.x<self.win_definition.region_size_x+2.*self.win_definition.margin_x {
-            self.draw_cursor(ctx, &mut canvas)?;
-        //}
+        self.draw_cursor(ctx, &mut canvas)?;
         
-
-        
-
-
         canvas.finish(ctx)?;
 
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_defaults() {
+        let default_win = WindowDefinition::default();
+        assert_eq!(default_win.region_size_x, 100.);
+        assert_eq!(default_win.region_size_y, 100.);
+        assert_eq!(default_win.margin_x, 10.);
+        assert_eq!(default_win.margin_y, 10.);
+
+        let default_ball_def = NewBallDef::default();
+        assert_eq!(default_ball_def.ball_size, 3.);
+        assert_eq!(default_ball_def.ball_mass, 1.);
+
+        let default_sim_stats = SimStats::default();
+        assert_eq!(default_sim_stats.energy_pot, 0.);
+        assert_eq!(default_sim_stats.energy_kin, 0.);
+    }
+
+    #[test]
+    fn test_add_candidate() {
+        let mut main_content = MainContent::default();
+
+        // Add a valid candidate
+        let x = 30.0;
+        let y = 30.0;
+        main_content.add_candidate(x, y).unwrap();
+
+        assert_eq!(main_content.num_balls, 1);
+
+        // Ensure the added ball is in the correct position
+        {
+            let ball = main_content.v_points[0].borrow();
+            assert_eq!(ball.pos.x, x);
+            assert_eq!(ball.pos.y, y);
+        }
+
+        // Attempt to add a candidate out of region
+        {
+            let invalid_x = -10.0;
+            let invalid_y = -10.0;
+            main_content.add_candidate(invalid_x, invalid_y).unwrap();
+            assert_eq!(main_content.num_balls, 1, "Ball added out of valid region");
+        }
+    }
+
+    #[test]
+    fn test_is_ball_in_region() {
+        let main_content = MainContent::default();
+        let ball = Ball2D::new_massive(1, 30.0, 30.0, 5.0, 1.0);
+
+        assert!(main_content.is_ball_in_region(&ball));
+
+        // Move the ball outside the region
+        let invalid_ball = Ball2D::new_massive(2, -10.0, -10.0, 5.0, 1.0);
+        assert!(!main_content.is_ball_in_region(&invalid_ball));
+    }
+
+    #[test]
+    fn test_global_update() {
+        let mut main_content = MainContent::default();
+
+        // Add some balls
+        main_content.add_candidate(30.0, 30.0).unwrap();
+        main_content.add_candidate(40.0, 40.0).unwrap();
+        main_content.global_update().unwrap();
+
+        // Validate that the balls' velocities, positions, and energies are updated correctly
+        assert!(main_content.sim.energy_kin > 0.0, "Kinetic energy should be positive");
+        //assert!(main_content.sim.energy_pot >= 0.0, "Potential energy should be non-negative");
+    }
+
+    #[test]
+    fn test_resize_event() {
+        let mut main_content = MainContent::default();
+        let new_width = 300.0;
+        let new_height = 200.0;
+
+        main_content.resize(new_width, new_height).unwrap();
+
+        assert_eq!(main_content.win_definition.region_size_x, 300.0 - 2.0 * main_content.win_definition.margin_x);
+        assert_eq!(main_content.win_definition.region_size_y, 200.0 - 2.0 * main_content.win_definition.margin_y);
+    }
+
+    #[test]
+    fn test_ball_collision() {
+        let mut main_content = MainContent::default();
+
+        // Add two overlapping balls
+        main_content.add_candidate(30.0, 30.0).unwrap();
+        let colliding_ball = Ball2D::new_massive(2, 30.0, 30.0, 5.0, 1.0);
+
+        assert!(main_content.is_ball_colliding(&colliding_ball), "Collision not detected");
+    }
+
+
+
+    #[test]
+    fn test_collect_neighbours() {
+        let mut main_content = MainContent::new(500.,500.);
+
+        // Add balls to the system
+        let x1 = 30.0;
+        let y1 = 30.0;
+        let x2 = 50.0;
+        let y2 = 50.0;
+        let x3 = 200.0;
+        let y3 = 200.0;
+        
+        main_content.add_candidate(x1, y1).unwrap();
+        main_content.add_candidate(x2, y2).unwrap();
+        main_content.add_candidate(x3, y3).unwrap();
+
+        // Initial state check
+        {
+            let ball1: &Ball2D = &*main_content.v_points[0].borrow();
+            let ball2: &Ball2D = &*main_content.v_points[1].borrow();
+            let ball3: &Ball2D = &*main_content.v_points[2].borrow();
+
+            assert!(ball1.get_neighbour_names().is_empty(), "Ball 1 should have no neighbours initially");
+            assert!(ball2.get_neighbour_names().is_empty(), "Ball 2 should have no neighbours initially");
+            assert!(ball3.get_neighbour_names().is_empty(), "Ball 3 should have no neighbours initially");
+        }
+
+        // Call collect_neighbours with the appropriate timestep (let's assume step_count is divisible by 10)
+        {
+            main_content.step_count = 10;
+            main_content.collect_neighbours(DT_GOAL);
+
+            // After collecting neighbors, Ball1 and Ball2 should be neighbors
+            let ball1: &Ball2D = &*main_content.v_points[0].borrow();
+            let ball2: &Ball2D = &*main_content.v_points[1].borrow();
+            let ball3: &Ball2D = &*main_content.v_points[2].borrow();
+
+            assert_eq!(ball1.get_neighbour_names().len(), 1, "Ball 1 should have 1 neighbour");
+            assert_eq!(ball2.get_neighbour_names().len(), 1, "Ball 2 should have 1 neighbour");
+            assert!(ball1.get_neighbour_names().contains(&format!("Ball1")), "Ball 1 should be neighbour of Ball 2");
+            assert!(ball2.get_neighbour_names().contains(&format!("Ball2")), "Ball 2 should be neighbour of Ball 1");
+
+            assert!(ball3.get_neighbour_names().is_empty(), "Ball 3 should have no neighbours because it is far from others");
+        }
+    }
+}
+
+
+
