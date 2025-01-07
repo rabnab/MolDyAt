@@ -15,6 +15,7 @@ pub struct Ball2D<'a> {
     pub mass: f32,
     pub v: Vec2D,
     hood: Verlet<'a>,
+    pub verbose: bool,
 }
 
 #[derive(Debug)]
@@ -74,6 +75,7 @@ impl<'a> Default for Ball2D<'a> {
             mass: 1.,
             v: Vec2D::new(0.,0.),
             hood: Verlet { ..Default::default() },
+            verbose: false,
         }
     }
 }
@@ -116,9 +118,16 @@ impl<'a> Ball2D<'a> {
        let v_sq = Vec2D::norm_sq(&self.v);
        let eq= LJ_SIG + self.radius;
        let dist_limit_by_v = v_sq * dt * dt + eq * eq + 2. * dt * eq * (self.v.x + self.v.y);
-       let dist_limit_by_closest = if self.hood.nearest > 0. { self.hood.nearest * self.hood.nearest *4. } else { f32::MAX };
+       let dist_limit_by_closest = if self.hood.nearest > 0. { 
+           self.hood.nearest * self.hood.nearest *4. 
+       } else { 
+           //f32::MAX 
+           (40.*LJ_SIG)*(40.*LJ_SIG)*4.
+       };
        let dist_limit = f32::max(dist_limit_by_closest, dist_limit_by_v); 
-       println!("update_hood: {} dist_lim: {}", self.get_name(), f32::sqrt(dist_limit));
+       if self.verbose {
+           println!("update_hood: {} dist_lim: {} #others: {}", self.get_name(), f32::sqrt(dist_limit), others.len());
+       }
      
 
        for cur_rc in others.iter() {
@@ -131,7 +140,9 @@ impl<'a> Ball2D<'a> {
              //let new_neighbour = Rc::new( RefCell::new(cur));
              self.hood.neighbours.borrow_mut().push(Rc::downgrade(cur_rc));
              cur_ref.hood.neighbours.borrow_mut().push(Rc::downgrade(self_rc));
-             println!("\tneighbour {}", cur_ref.get_name());
+             if self.verbose {
+                 println!("\tneighbours {} at dist {}", cur_ref.get_name(), f32::sqrt(dist_sq));
+             }
              //println!("updated {}-neighbours {:?}", self.get_name(), self.hood.neighbours
                 //.borrow() 
                  //.iter()
@@ -162,7 +173,9 @@ impl<'a> Ball2D<'a> {
        if farthest_sq.is_finite() {
            self.hood.farthest = f32::sqrt(farthest_sq);
        }
-       println!("update_closeness: {} nearest/farthest: {}/{}", self.get_name(), self.hood.nearest, self.hood.farthest);
+       if self.verbose {
+           println!("update_closeness: {} nearest/farthest: {}/{}", self.get_name(), self.hood.nearest, self.hood.farthest);
+       }
     }
 
     pub fn is_colliding (&self, other: &Ball2D) -> bool {
@@ -306,7 +319,9 @@ impl<'a> Ball2D<'a> {
 
     pub fn update(&mut self, dt: f32, bound: &Rect) -> (f32, f32) {
 
-        println!("{} ------ [{:.2},{:.2}] neighbours: {:#?}", self.get_name(), self.hood.nearest, self.hood.farthest, self.hood.get_neighbour_names());
+        if self.verbose {
+            println!("{} ------ [{:.2},{:.2}] neighbours: {:#?}", self.get_name(), self.hood.nearest, self.hood.farthest, self.hood.get_neighbour_names());
+        }
 
         let (min_dist, total_force, total_pot) = self.force();
         let speed_limit = f32::min(bound.w, bound.h)/1E-1;
@@ -347,13 +362,15 @@ impl<'a> Ball2D<'a> {
             self.execute_update(&accel, dt_sub, bound);
         }
 
-        println!("{} --- dt: {} new pos: {} new v: {}", self.get_name(), dt, self.pos, self.v);
+        if self.verbose {
+            println!("{} --- dt: {} substeps: {} new pos: {} new v: {}", self.get_name(), dt, int_steps, self.pos, self.v);
+        }
         (min_dist, total_pot)
     }
 
 }
 
-impl<'a> Clone for Verlet<'a> {
+/*impl<'a> Clone for Verlet<'a> {
     fn clone(&self) -> Verlet<'a> {
         Verlet {
             nearest: self.nearest,
@@ -361,9 +378,9 @@ impl<'a> Clone for Verlet<'a> {
             neighbours: self.neighbours.clone(),
         }
     }
-}
+}*/
 
-impl<'a> Clone for Ball2D<'a> {
+/*impl<'a> Clone for Ball2D<'a> {
     fn clone(&self) -> Ball2D<'a> {
        Ball2D {
            id: self.id,
@@ -372,9 +389,10 @@ impl<'a> Clone for Ball2D<'a> {
            mass: self.mass,
            v: self.v.clone(),
            hood: self.hood.clone(),
+           verbose: self.verbose.clone(),
        }
     }
-}
+}*/
 
 
 #[cfg(test)]
