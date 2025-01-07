@@ -21,7 +21,7 @@ const KBOLTZMANN: f32 = 1.38E-23;
 const TEMP_SCALE: f32 = ENERGY_SCALE/KBOLTZMANN;
 
 const FPS_GOAL: u32 = 60;
-const DT_GOAL: f32 = 1./(FPS_GOAL as f32); 
+const DT_GOAL: f32 = 10./(FPS_GOAL as f32); 
 
 struct WindowDefinition {
     curs_pos: Vec2D,
@@ -55,6 +55,8 @@ pub struct MainContent<'a> {
     v_points: Vec<Rc<RefCell<Ball2D<'a>>>>,
     real_data: bool,
     step_by_step: bool,
+    show_timings: bool,
+    show_ball_stats: bool, 
     step_count: i32,
 }
 
@@ -109,6 +111,8 @@ impl<'a> Default for MainContent<'a> {
             real_data: false,
             step_by_step: false,
             step_count: 0,
+            show_timings: false,
+            show_ball_stats: false, 
         }
     }
 }
@@ -277,7 +281,7 @@ impl<'a> MainContent<'a> {
 
     fn add_candidate(&mut self, x:f32, y:f32) -> GameResult {
         let candidate: Ball2D<'a> = Ball2D::new_massive(
-            self.num_balls, 
+            self.num_balls+1, 
             x,
             y, 
             self.new_ball.ball_size, 
@@ -296,7 +300,8 @@ impl<'a> MainContent<'a> {
     }
 
     fn collect_neighbours(&mut self, dt: f32) {
-        if self.step_count % 10 == 0 {
+        if self.step_count % 1 == 0 {
+        //if self.step_count % 10 == 0 {
             //clear all neighbours
             for ball_rc in self.v_points.iter() {
                 
@@ -313,7 +318,7 @@ impl<'a> MainContent<'a> {
                         let other_borrowed = other_rc.borrow();
                         other_borrowed.has_larger_id(&ball_borrowed)
                     })
-                .cloned()
+                    .cloned()
                     .collect();
 
                 {
@@ -346,7 +351,6 @@ impl<'a> MainContent<'a> {
             self.win_definition.region_size_y
         );
 
-        let dt = DT_GOAL;
         let mut _min_dist = bound_rect.w + bound_rect.h;
         self.sim.min_dist = 0.;
         let mut max_v:f32 = 0.;
@@ -355,13 +359,17 @@ impl<'a> MainContent<'a> {
         let mut _v_com:Vec2D = Vec2D::new(0.,0.);
         let mut sum_mass: f32 = 0.;
 
-        self.collect_neighbours(dt);
+        let start_all = std::time::Instant::now();
 
+        self.collect_neighbours(DT_GOAL);
+        let dur = start_all.elapsed();
+        let collecting_ms = dur.as_millis();
 
+        let start = std::time::Instant::now();
         for ball_rc in &mut self.v_points {
             let mut cur = ball_rc.borrow_mut();
 
-            let (min_dist, cur_pot) =cur.update(dt, &bound_rect);
+            let (min_dist, cur_pot) =cur.update(DT_GOAL, &bound_rect);
 
             pot += cur_pot*0.5;//double counts
             _v_com.add(cur.moment());
@@ -377,6 +385,8 @@ impl<'a> MainContent<'a> {
 
             }
         }
+        let dur = start.elapsed();
+        let updating_ms = dur.as_millis();
 
         self.v_points.retain(|cur| !(*cur.borrow()).pos.x.is_nan() && !(*cur.borrow()).pos.y.is_nan());
         
@@ -389,6 +399,7 @@ impl<'a> MainContent<'a> {
         self.sim.v_com = Vec2D::copy_scaled(&_v_com, 1./sum_mass);
 
         let mut sum_rel_kin: f32 = 0.;
+        let start = std::time::Instant::now();
         for ball_rc in &self.v_points {
             let cur = ball_rc.borrow();
             let v_abs = &cur.v;
@@ -397,6 +408,15 @@ impl<'a> MainContent<'a> {
             sum_rel_kin+= cur.mass*(v_rel_x*v_rel_x + v_rel_y*v_rel_y);
         }
         self.sim.temperature = 0.5/(KB*(3.*self.v_points.len() as f32 - 3.)) * sum_rel_kin;
+        let dur = start.elapsed();
+        let props_ms = dur.as_millis();
+        let all_ms = start_all.elapsed().as_millis();
+
+        if self.show_timings && all_ms > 1 {
+            let text_timing = format!("coll/upd/prop/all: {}/{}/{}/{}",collecting_ms, updating_ms, props_ms, all_ms);
+            println!("{:>5}",text_timing);
+        }
+
         self.step_count += 1;
         Ok(())
     }
@@ -451,6 +471,42 @@ impl<'a> EventHandler for MainContent<'a> {
                KeyCode::S => {
                    self.step_by_step = !self.step_by_step
                },
+               KeyCode::T => {
+                   self.show_timings = !self.show_timings
+               },
+               KeyCode::B => {
+                   self.show_ball_stats = !self.show_ball_stats
+               },
+               KeyCode::V => {
+                   println!("Enter a ball ID (or 'a' to set all balls to verbose):");
+                   let mut input = String::new();
+                   if std::io::stdin().read_line(&mut input).is_ok() {
+                       if let Ok(number) = input.trim().parse::<usize>() {
+                           match number {
+                               0 => {
+                                   for b in self.v_points.iter() {
+                                       let mut ba = b.borrow_mut();
+                                       ba.verbose = false;
+                                   }
+
+                               },
+                               _ => {
+                                   if let Some(ball_rc) = self.v_points.iter()
+                                       .find(|&ball_rc_in| ball_rc_in.borrow().get_id() == number) 
+                                   {
+                                       let mut ball_found = ball_rc.borrow_mut();
+                                       ball_found.verbose = !ball_found.verbose;
+                                   }
+                               }
+                           }
+                       } else if input.trim() == "a" {
+                           for b in self.v_points.iter() {
+                               let mut ba = b.borrow_mut();
+                               ba.verbose = true;
+                           }
+                       }
+                   }
+               },
                KeyCode::Space => {
                    self.sim.pause = !self.sim.pause
                },
@@ -468,9 +524,9 @@ impl<'a> EventHandler for MainContent<'a> {
         // Get the window's width and height
         
         let mut canvas = Canvas::from_frame(ctx, Color::from_rgb(0,0,0)); 
-        self.draw_frame(ctx, &mut canvas)?;
         self.draw_balls(ctx, &mut canvas)?;
         self.draw_cursor(ctx, &mut canvas)?;
+        self.draw_frame(ctx, &mut canvas)?;
         
         canvas.finish(ctx)?;
 
@@ -607,7 +663,9 @@ mod tests {
         // Call collect_neighbours with the appropriate timestep (let's assume step_count is divisible by 10)
         {
             main_content.step_count = 10;
+            println!("--------------------------------");
             main_content.collect_neighbours(DT_GOAL);
+            println!("--------------------------------");
             main_content.collect_neighbours(DT_GOAL);
 
             // After collecting neighbors, Ball1 and Ball2 should be neighbors
@@ -615,10 +673,14 @@ mod tests {
             let ball2: &Ball2D = &*main_content.v_points[1].borrow();
             let ball3: &Ball2D = &*main_content.v_points[2].borrow();
 
+            println!("ball1.neigh: {:?}", ball1.get_neighbour_names());
+            println!("ball2.neigh: {:?}", ball2.get_neighbour_names());
+            println!("ball3.neigh: {:?}", ball3.get_neighbour_names());
+
             assert_eq!(ball1.get_neighbour_names().len(), 1, "Ball 1 should have 1 neighbour");
             assert_eq!(ball2.get_neighbour_names().len(), 1, "Ball 2 should have 1 neighbour");
-            assert!(ball1.get_neighbour_names().contains(&format!("Ball1")), "Ball 1 should be neighbour of Ball 2");
-            assert!(ball2.get_neighbour_names().contains(&format!("Ball2")), "Ball 2 should be neighbour of Ball 1");
+            assert!(ball1.get_neighbour_names().contains(&format!("Ball2")), "Ball 1 should be neighbour of Ball 2");
+            assert!(ball2.get_neighbour_names().contains(&format!("Ball1")), "Ball 2 should be neighbour of Ball 1");
 
             assert!(ball3.get_neighbour_names().is_empty(), "Ball 3 should have no neighbours because it is far from others");
         }
