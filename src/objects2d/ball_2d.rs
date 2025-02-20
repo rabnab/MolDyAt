@@ -62,6 +62,8 @@ impl<'a> Named for Ball2D<'a> {
     }
 }
 
+#[derive(PartialEq)]
+#[derive(Debug)]
 enum BallError {
     DistanceUnderflow,
     LessThanTwoBalls,
@@ -593,5 +595,88 @@ mod tests {
         assert!(result_force.abs()<1e-4,
             "force {} is not close to 0", result_force);
     }
+    #[test]
+    fn test_check_min_dist() {
+        // Case 1: actual_dist is negative → Expect Err(BallError::LessThanTwoBalls)
+        assert_eq!(
+            Ball2D::check_min_dist(-1.0, 2.0),
+            Err(BallError::LessThanTwoBalls),
+            "Expected LessThanTwoBalls error for negative distance"
+        );
 
+        // Case 2: actual_dist is exactly 0 → Expect Err(BallError::DistanceUnderflow)
+        assert_eq!(
+            Ball2D::check_min_dist(0.0, 2.0),
+            Err(BallError::DistanceUnderflow),
+            "Expected DistanceUnderflow error for distance == 0"
+        );
+
+        // Case 3: actual_dist is greater than 0 but less than min_dist → Expect Ok(actual_dist)
+        assert_eq!(
+            Ball2D::check_min_dist(1.5, 2.0),
+            Ok(1.5),
+            "Expected Ok(actual_dist) when actual_dist < min_dist"
+        );
+
+        // Case 4: actual_dist is greater than or equal to min_dist → Expect Ok(min_dist)
+        assert_eq!(
+            Ball2D::check_min_dist(2.5, 2.0),
+            Ok(2.0),
+            "Expected Ok(min_dist) when actual_dist > min_dist"
+        );
+
+        assert_eq!(
+            Ball2D::check_min_dist(2.0, 2.0),
+            Ok(2.0),
+            "Expected Ok(min_dist) when actual_dist == min_dist"
+        );
+    }
+
+    #[test]
+    fn test_accel_with_speed_limit() {
+        let mass = 1.0;
+
+        // Case 1: Zero velocity → No friction braking, accel = force/mass
+        let mut ball1 = Ball2D::new_massive(17, 2., 3., 4., mass,);
+        ball1.v = Vec2D::new(0.,0.);
+        let force = Vec2D::new(10.0, 0.0);
+        let (friction, accel) = ball1.accel_with_speed_limit(&force, 5.0);
+        assert_eq!(friction, 0.0, "Expected zero friction for zero velocity");
+        assert_eq!(accel, Vec2D::new(10.0, 0.0), "Expected acceleration to be force/mass");
+
+        // Case 2: Velocity below speed limit → Small friction
+        let mut ball1 = Ball2D::new_massive(17, 2., 3., 4., mass,);
+        ball1.v = Vec2D::new(2.,0.);
+        let (friction, accel) = ball1.accel_with_speed_limit(&force, 5.0);
+        assert!(friction > 0.0, "Friction should be positive for moving object");
+        assert!(accel.x < 10.0, "Acceleration should be slightly reduced by friction");
+
+        // Case 3: Velocity at speed limit → Noticeable friction
+        let mut ball1 = Ball2D::new_massive(17, 2., 3., 4., mass,);
+        ball1.v = Vec2D::new(5.,0.);
+        let (friction, accel) = ball1.accel_with_speed_limit(&force, 5.0);
+        assert!(friction > 0.1, "Friction should be significant at speed limit");
+        assert!(accel.x < 10.0, "Acceleration should be reduced by friction");
+
+        // Case 4: Velocity above speed limit → Strong friction
+        let mut ball1 = Ball2D::new_massive(17, 2., 3., 4., mass,);
+        ball1.v = Vec2D::new(10.,0.);
+        let (friction, accel) = ball1.accel_with_speed_limit(&force, 5.0);
+        assert!(friction > 0.5, "Friction should be strong above speed limit");
+        assert!(accel.x < 10.0, "Acceleration should be significantly reduced");
+
+        // Case 5: No force applied → Object only slows down due to friction
+        let mut ball1 = Ball2D::new_massive(17, 2., 3., 4., mass,);
+        ball1.v = Vec2D::new(3.,0.);
+        let force = Vec2D::new(0.0, 0.0);
+        let (friction, accel) = ball1.accel_with_speed_limit(&force, 5.0);
+        assert!(accel.x < 0.0, "Acceleration should be negative, causing deceleration");
+
+        // Case 6: Different mass values
+        let mut ball1 = Ball2D::new_massive(17, 2., 3., 4., 2.*mass,);
+        ball1.v = Vec2D::new(4.,0.);
+        let force = Vec2D::new(10.0, 0.0);
+        let (friction, accel) = ball1.accel_with_speed_limit(&force, 5.0);
+        assert_eq!(accel.x, (10.0 / 2.0) + (-friction * 4.0), "Acceleration should factor in mass correctly");
+    }
 }
