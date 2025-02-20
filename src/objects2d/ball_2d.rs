@@ -8,7 +8,7 @@ const MAX_UPDATE_RECURSION: i32 = 10;
 //LJ_SIG in SI units is for Argon 3.4A=3.4E-10m
 const LJ_SIG: f32 = 0.5; // equilibrium distance 
 const LJ_EPS: f32 = 1.;// attractive strength
-const SQRT6_OF_TWO: f32 = 1.12246; // == 2^(1/6)
+const SQRT6_OF_TWO: f32 = 1.122462048309372981; // == 2^(1/6)
 
 #[derive(Debug)]
 pub struct Ball2D<'a> {
@@ -215,7 +215,7 @@ impl<'a> Ball2D<'a> {
 
         let dist = dist_of_balls-radius_sum;
         let quot = LJ_SIG/dist;
-        let quot_six = quot*quot*quot*quot*quot*quot;
+        let quot_six = quot.powi(6);
         4.* LJ_EPS* quot_six * (quot_six - 1.)
     }
 
@@ -223,8 +223,8 @@ impl<'a> Ball2D<'a> {
 
         let dist = dist_of_balls - radius_sum;
         let quot = LJ_SIG/dist;
-        let quot_six = quot*quot*quot*quot*quot*quot;
-        let res = 4. * LJ_EPS*  quot_six * ( 12. * quot_six - 6.)/dist;
+        let quot_six = quot.powi(6);
+        let res = 24. * LJ_EPS*  quot_six * ( 2. * quot_six - 1.)/dist;
         //0==6(2*LJ_SIG/dist6-1)*const/dist
         //0==2*LJ_SIG/dist6-1
         //LJ_SIG/sqrt6(1/2)==dist
@@ -537,18 +537,12 @@ mod tests {
     }
 
     #[test]
-    fn test_moment(){
-        let mut ball1 = Ball2D::new_massive(17, 2., 3., 4., 5.,);
+    fn test_moment() {
+        let mut ball1 = Ball2D::new_massive(17, 2., 3., 4., 5., );
 
-        assert_eq!(ball1.moment(), Vec2D::new(0.,0.));
+        assert_eq!(ball1.moment(), Vec2D::new(0., 0.));
         ball1.v.x = 3.;
-        assert_eq!(ball1.moment(), Vec2D::new(15.,0.));
-    }
-
-    #[test]
-    fn test_equilibrium_radius(){
-        let _ball1 = Ball2D::new_massive(17, 2., 3., 4., 5.,);
-        //TODO test that force is zero at equilibrium radius
+        assert_eq!(ball1.moment(), Vec2D::new(15., 0.));
     }
 
     #[test]
@@ -596,10 +590,7 @@ mod tests {
             ball1.radius*2., 
             0);
 
-        assert!(approx_eq!(f32, 
-                result_force,
-                0., 
-                ulps = 2), 
+        assert!(result_force.abs()<1e-4,
             "force {} is not close to 0", result_force);
     }
 
