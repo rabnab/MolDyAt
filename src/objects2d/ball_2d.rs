@@ -115,13 +115,13 @@ impl<'a> Ball2D<'a> {
     }
 
     pub fn moment(&self) -> Vec2D{
-        Vec2D::copy_scaled(&self.v, self.mass)
+        self.v.scaled_copy(self.mass)
     }
 
 
     pub fn update_hood(&mut self, dt: f32, self_rc: &Rc<RefCell<Self>>, others: Vec<Rc<RefCell<Ball2D<'a>>>>) {
        //use approximation for (v*dt+LJ_SIG)^2
-       let v_sq = Vec2D::norm_sq(&self.v);
+       let v_sq = self.v.norm_sq();
        let eq= LJ_SIG + self.radius;
        //we only check hood every ten updates --> factors 100 and 10
        let dist_limit_by_v = 100.*v_sq * dt * dt + eq * eq + 2. * 10. * dt * eq * (self.v.x + self.v.y);
@@ -141,7 +141,7 @@ impl<'a> Ball2D<'a> {
        for cur_rc in others.iter() {
 
          let cur_ref = cur_rc.borrow();
-         let dist_sq=Vec2D::norm_sq(&self.pos.dist(&cur_ref.pos));
+         let dist_sq= self.pos.dist(&cur_ref.pos).norm_sq();
          //println!("checking {}", cur_ref.get_name());
          if dist_sq < dist_limit {
              //cur.hood.neighbours.push(self.into());
@@ -168,7 +168,7 @@ impl<'a> Ball2D<'a> {
            .borrow()
            .iter()
            .filter_map(|weak| weak.upgrade())
-           .map(|val| Vec2D::norm_sq(&self.pos.dist(&val.borrow().pos)))
+           .map(|val| self.pos.dist(&val.borrow().pos).norm_sq())
            .fold((f32::INFINITY, f32::NEG_INFINITY),
             |(min, max), val| {
                 ( min.min(val), max.max(val) )
@@ -189,11 +189,11 @@ impl<'a> Ball2D<'a> {
     pub fn is_colliding (&self, other: &Ball2D) -> bool {
         //use norm_sq to avoid sqrt in norm
         let radius_sum_sq = (self.radius +  other.radius)*(self.radius + other.radius);
-        let res = Vec2D::norm_sq(&self.pos.dist(&other.pos))<radius_sum_sq;
+        let res = self.pos.dist(&other.pos).norm_sq()<radius_sum_sq;
         if res {
-            println!("ball {} at {} is too close to {}: dist = {} sum_rad = {}", self.id, self.pos, other.pos, 
-                Vec2D::norm(&self.pos.dist(&other.pos)),
-                self.radius + other.radius)
+            println!("ball {} at {} is too close to {}: dist = {} sum_rad = {}", self.id, self.pos, other.pos,
+                     self.pos.dist(&other.pos).norm(),
+                     self.radius + other.radius)
         }
         res
     }
@@ -246,10 +246,11 @@ impl<'a> Ball2D<'a> {
     }
 
     fn check_min_dist(actual_dist: f32, min_dist: f32) -> BallResult {
-        if actual_dist < 0. {
-            return Err(BallError::LessThanTwoBalls);
-        }
-        if actual_dist < min_dist {
+        // let wiggle_room = LJ_SIG*0.1;
+        // if actual_dist < 0. {
+        //     return Err(BallError::LessThanTwoBalls);
+        // }
+        if actual_dist < min_dist || f32::is_nan(min_dist){
             if actual_dist <= 0. {
                 return Err(BallError::DistanceUnderflow);
             }
@@ -261,23 +262,24 @@ impl<'a> Ball2D<'a> {
     //fn force_by(&self, others: &Vec<Ball2D>)  -> (f32, Vec2D, f32) {
     fn force(&self) -> (f32, Vec2D, f32) {
         let mut force = Vec2D::new(0.,0.);
-        let mut min_dist = -1.;
+        let mut min_dist = f32::NAN;
         let mut total_pot = 0.;
         //for b in others {
-        for ref_b in self.hood.neighbours.borrow().iter(){
+        let the_neighbours = self.hood.neighbours.borrow();
+        for ref_b in the_neighbours.iter(){
             if let Some(b_rc) = ref_b.upgrade() {
 
                 //from other_ball to this_ball
                 let b = b_rc.borrow();
-                let dist_vec = b.pos.dist(&self.pos);
-                let dist = Vec2D::norm(&dist_vec);
+                let dist_vec = self.pos.dist(&b.pos);
+                let dist = dist_vec.norm();
                 let radsum = b.radius + self.radius; 
                 /*min_dist = match Ball2D::check_min_dist(dist - radsum*0.9, min_dist) {
                     Err(BallError::DistanceUnderflow) | Err(BallError::LessThanTwoBalls) => return(0., Vec2D::new(0.,0.), 0.),
                     Ok(dist_result) => dist_result,
                 };*/
 
-                match  Ball2D::check_min_dist(dist - radsum*0.9, min_dist) {
+                match  Ball2D::check_min_dist(dist - radsum, min_dist) {
                     Ok(min_dist_cur) => {
                         min_dist = min_dist_cur;
                         let lj_force = Ball2D::lenard_jones_force(dist, radsum, self.id);
@@ -358,10 +360,10 @@ impl<'a> Ball2D<'a> {
     }
 
     fn accel_with_speed_limit(&self, total_force: &Vec2D, speed_limit: f32 ) -> (f32, Vec2D) {
-        let speed_sq = Vec2D::norm_sq(&self.v);
+        let speed_sq = self.v.norm_sq();
         let _friction_number = speed_sq/speed_limit/speed_limit;
         let friction_braking = 2. * _friction_number * _friction_number;
-        let mut accel: Vec2D = Vec2D::copy_scaled(&total_force,1./self.mass);
+        let mut accel: Vec2D = total_force.scaled_copy(1./self.mass);
         accel.add(Vec2D::new(-friction_braking*self.v.x, -friction_braking*self.v.y));
         //println!("... F_t: {} and limit: {} for speed {}", total_force, speed_limit, self.v);
         //println!("...... friction_braking:{} and mass: {}", friction_braking, self.mass);
@@ -383,7 +385,7 @@ impl<'a> Ball2D<'a> {
         let speed_limit = f32::min(bound.w, bound.h)/1E-1;
         let (fb, accel) = self.accel_with_speed_limit(&total_force, speed_limit);
 
-        let a_norm = Vec2D::norm(&accel);
+        let a_norm = accel.norm();
         //let p = Vec2D::norm(&self.v)/a_norm;
         
         if fb>a_norm {
@@ -454,7 +456,7 @@ impl<'a> Ball2D<'a> {
 
 #[cfg(test)]
 mod tests {
-    use float_cmp::approx_eq;
+    use float_cmp::{approx_eq, assert_approx_eq};
 
     use super::*;
     
@@ -495,6 +497,36 @@ mod tests {
         assert_eq!(names[0], nu_ball1.borrow().get_name());
         assert_eq!(names[1], nu_ball2.borrow().get_name());
 
+    }
+
+    #[test]
+    fn test_clear_hood(){
+        let vlist: Verlet = Verlet::default();
+        let mut ball1=  Ball2D::new_massive(3, 20., 30., 4., 5.);
+
+
+        let nu_ball1= Rc::new( RefCell::new( Ball2D::new_massive(1, 2., 3., 4., 5.)));
+        let nu_ball2= Rc::new( RefCell::new( Ball2D::new_massive(2, 3., 4., 5., 6.)));
+        { //mutable section of lst
+            let mut lst_to_add = vlist.neighbours.borrow_mut();
+            lst_to_add.push(Rc::downgrade(&nu_ball1));
+            lst_to_add.push(Rc::downgrade(&nu_ball2));
+        }
+        ball1.hood = vlist;
+
+
+
+
+        let names = ball1.get_neighbour_names();
+
+        assert_eq!(names[0], nu_ball1.borrow().get_name());
+        assert_eq!(names[1], nu_ball2.borrow().get_name());
+
+        ball1.clear_hood();
+
+        let names = ball1.get_neighbour_names();
+
+        assert!(names.is_empty());
     }
 
     #[test]
@@ -583,7 +615,7 @@ mod tests {
     }
 
     #[test]
-    fn test_lenard_jones_equilibrium_distance(){
+    fn test_lenard_jones_no_force_at_equilibrium(){
 
         let ball1 = Ball2D::new_massive(17, 2., 3., 4., 5.,);
         let distance = ball1.equilibrium_radius()*2.;
@@ -595,14 +627,43 @@ mod tests {
         assert!(result_force.abs()<1e-4,
             "force {} is not close to 0", result_force);
     }
+
+    #[test]
+    fn test_lenard_jones_positive_force_if_near(){
+
+        let ball1 = Ball2D::new_massive(17, 2., 3., 4., 5.,);
+        let distance = ball1.equilibrium_radius()*2.*0.9;
+        let result_force: f32 = Ball2D::lenard_jones_force(
+            distance,
+            ball1.radius*2.,
+            0);
+
+        assert!(result_force<0.,
+                "force {} must be < 0 if closer than equilibrium", result_force);
+    }
+
+    #[test]
+    fn test_lenard_jones_negative_force_if_far(){
+
+        let ball1 = Ball2D::new_massive(17, 2., 3., 4., 5.,);
+        let distance = ball1.equilibrium_radius()*3.;
+        let result_force: f32 = Ball2D::lenard_jones_force(
+            distance,
+            ball1.radius*2.,
+            0);
+
+        assert!(result_force<0.,
+                "force {} must be < 0 if closer than equilibrium", result_force);
+    }
+
     #[test]
     fn test_check_min_dist() {
         // Case 1: actual_dist is negative → Expect Err(BallError::LessThanTwoBalls)
-        assert_eq!(
-            Ball2D::check_min_dist(-1.0, 2.0),
-            Err(BallError::LessThanTwoBalls),
-            "Expected LessThanTwoBalls error for negative distance"
-        );
+        // assert_eq!(
+        //     Ball2D::check_min_dist(-1.0, 2.0),
+        //     Err(BallError::LessThanTwoBalls),
+        //     "Expected LessThanTwoBalls error for negative distance"
+        // );
 
         // Case 2: actual_dist is exactly 0 → Expect Err(BallError::DistanceUnderflow)
         assert_eq!(
@@ -669,7 +730,7 @@ mod tests {
         let mut ball1 = Ball2D::new_massive(17, 2., 3., 4., mass,);
         ball1.v = Vec2D::new(3.,0.);
         let force = Vec2D::new(0.0, 0.0);
-        let (friction, accel) = ball1.accel_with_speed_limit(&force, 5.0);
+        let (_friction, accel) = ball1.accel_with_speed_limit(&force, 5.0);
         assert!(accel.x < 0.0, "Acceleration should be negative, causing deceleration");
 
         // Case 6: Different mass values
@@ -678,5 +739,103 @@ mod tests {
         let force = Vec2D::new(10.0, 0.0);
         let (friction, accel) = ball1.accel_with_speed_limit(&force, 5.0);
         assert_eq!(accel.x, (10.0 / 2.0) + (-friction * 4.0), "Acceleration should factor in mass correctly");
+    }
+
+    #[test]
+    fn test_force_no_neighbors() {
+        let ball = Ball2D::new_massive(17, 2., 3., 4., 1.0,);
+
+        let (min_dist, force, total_pot) = ball.force();
+
+        assert!(min_dist.is_nan(), "Expected min_dist to be NaN for no neighbors");
+        assert_eq!(force, Vec2D::new(0.0, 0.0), "Expected zero force for no neighbors");
+        assert_eq!(total_pot, 0.0, "Expected zero potential energy for no neighbors");
+    }
+
+    #[test]
+    fn test_force_one_neighbor_at_equilibrium() {
+
+        let ball = Ball2D::new_massive(17, 2., 3., 4., 1.,);
+        let neighbour = Rc::new(RefCell::new(Ball2D::new_massive(18, 2. + ball.equilibrium_radius()*2., 3., 4., 1.,)));
+
+
+        ball.hood.neighbours.borrow_mut().push(Rc::downgrade(&neighbour));
+
+        let (min_dist, force, total_pot) = ball.force();
+
+        assert!(min_dist > 0.0, "min_dist should be positive");
+        assert!(force.norm() < 1e-4, "Force should be close to zero at equilibrium but was {:?}", force);
+        assert!(total_pot < 0.0, "Potential energy should be negative (binding energy) but was {}", total_pot);
+    }
+
+    #[test]
+    fn test_force_one_neighbor_too_close() {
+
+        let ball = Ball2D::new_massive(17, 2., 3., 4., 1.,);
+        let dist_for_repulsion = ball.radius+ ball.equilibrium_radius();
+        let neigh_x = ball.pos.x + dist_for_repulsion;
+        let neigh_y = ball.pos.y;
+        let neighbour = Rc::new(RefCell::new(Ball2D::new_massive(18, neigh_x, neigh_y, 4., 1.,)));
+
+
+        ball.hood.neighbours.borrow_mut().push(Rc::downgrade(&neighbour));
+
+        let (min_dist, force, _total_pot) = ball.force();
+
+        assert!((min_dist- dist_for_repulsion +ball.radius*2.).abs()< 1e-7, "min_dist {} should be dist_for_repulsion {} (diff: {})",
+                min_dist,
+                dist_for_repulsion -ball.radius*2.,
+                min_dist- dist_for_repulsion +ball.radius*2.,
+        );
+        println!("the force vector is {:?} and the dist vector is {:?}", force, neighbour.borrow().pos.dist(&Vec2D::new(neigh_x, neigh_y)));
+        assert!(force.norm() > 50.0, "Force should be strongly repulsive");
+    }
+
+    #[test]
+    fn test_force_one_neighbor_far_away() {
+
+        let ball = Ball2D::new_massive(17, 2., 3., 4., 1.,);
+        let dist_for_attraction = 3.*ball.equilibrium_radius();
+        let neigh_x = ball.pos.x + dist_for_attraction;
+        let neigh_y = ball.pos.y;
+        let neighbour = Rc::new(RefCell::new(Ball2D::new_massive(18, neigh_x, neigh_y, ball.radius, 1.,)));
+
+
+        ball.hood.neighbours.borrow_mut().push(Rc::downgrade(&neighbour));
+
+        let (min_dist, force, _total_pot) = ball.force();
+
+        assert!((min_dist- dist_for_attraction +ball.radius*2.).abs()< 1e-7, "min_dist {} should be dist_for_attraction {} (diff: {})",
+                min_dist,
+                dist_for_attraction -ball.radius*2.,
+                min_dist- dist_for_attraction +ball.radius*2.,
+        );
+
+        println!("the force vector is {:?} and the dist vector is {:?}", force, neighbour.borrow().pos.dist(&Vec2D::new(neigh_x, neigh_y)));
+        assert_eq!(force.y, 0.);
+        assert!(force.x < 0.0, "Force should be slightly attractive");
+    }
+
+    #[test]
+    fn test_force_multiple_neighbors() {
+        let ball = Ball2D::new_massive(17, 2., 3., 4., 1.,);
+        let dist_for_repulsion = 3.*ball.equilibrium_radius();
+        let neighbour1 = Rc::new(RefCell::new(Ball2D::new_massive(18, 2. + dist_for_repulsion, 3., 4., 1.,)));
+        let neighbour2 = Rc::new(RefCell::new(Ball2D::new_massive(19, 2. , 3.+ dist_for_repulsion, 4., 1.,)));
+
+        let lj_force = Ball2D::lenard_jones_force(dist_for_repulsion, ball.radius*2., 17);
+
+
+        ball.hood.neighbours.borrow_mut().push(Rc::downgrade(&neighbour1));
+        ball.hood.neighbours.borrow_mut().push(Rc::downgrade(&neighbour2));
+
+        let (min_dist, force, total_pot) = ball.force();
+
+        assert!(min_dist > 0.0, "min_dist should be positive");
+        assert!(force.norm() > 0.0, "Total force should be non-zero");
+        assert!(total_pot < 0.0, "Total potential should be negative (binding energy)");
+
+        assert_approx_eq!(f32, force.x, lj_force, epsilon=1e-6);
+        assert_approx_eq!(f32, force.y, lj_force, epsilon=1e-6);
     }
 }
