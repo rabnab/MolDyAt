@@ -567,92 +567,7 @@ impl<'a> MainContent<'a> {
         Ok(())
     }
     
-    fn handle_verbose_output_setting(&mut self, ctx: &mut ggez::Context) -> Result<(), ggez::GameError> {
 
-        let mut text = String::new();
-
-
-        // Step 1: Display instructions
-        let instructions = "Enter a ball ID (or 'a' for all, '0' to disable verbosity):";
-        let instructions_text = Text::new(instructions);
-        
-
-        // Step 2: Capture Input
-
-        loop {
-            let mut canvas = Canvas::from_frame(ctx, Color::from_rgb(0,0,0)); 
-            canvas.draw(&instructions_text, Vec2::new(50.0, 50.0 ));
-            let input_display = Text::new(format!("Your input: {}", text)); 
-            canvas.draw(&input_display, Vec2::new(50.0, 100.0));
-            canvas.finish(ctx)?;
-            
-
-            for key in ctx.keyboard.pressed_keys() {
-                match key {
-                    KeyCode::Return => {
-                        return self.process_input(&text)
-                    },
-                    KeyCode::Back  => {
-                        text.pop();
-                    },
-                    KeyCode::A => {
-                        text.push('a');
-                    },
-                    KeyCode::Key0| KeyCode::Key1 | KeyCode::Key2 | KeyCode::Key3 | KeyCode::Key4
-                        |KeyCode::Key5 | KeyCode::Key6 | KeyCode::Key7 |KeyCode::Key8 | KeyCode::Key9 => {
-                        if let Some(c) = Self::keycode_to_char(*key) {
-                            text.push(c);
-                        }
-                    },
-                    _ => {}
-                }
-            }
-        }
-    }
-
-    fn process_input(&mut self, text: &str) -> ggez::GameResult<()> {
-        // Process the user's input after pressing Enter
-        if let Ok(number) = text.trim().parse::<usize>() {
-            match number {
-                0 => {
-                    for b in self.v_points.iter() {
-                        let mut ba = b.borrow_mut();
-                        ba.verbose = false;
-                    }
-                }
-                _ => {
-                    if let Some(ball_rc) = self.v_points.iter().find(|&ball_rc_in| ball_rc_in.borrow().get_id() == number) {
-                        let mut ball_found = ball_rc.borrow_mut();
-                        ball_found.verbose = !ball_found.verbose;
-                    }
-                }
-            }
-        } else if text.trim() == "a" {
-            for b in self.v_points.iter() {
-                let mut ba = b.borrow_mut();
-                ba.verbose = true;
-            }
-        }
-        Ok(())
-    } 
-
-    /// Helper function to map KeyCode to a character.
-    fn keycode_to_char(key: KeyCode) -> Option<char> {
-        match key {
-            KeyCode::Key0 => Some('0'),
-            KeyCode::Key1 => Some('1'),
-            KeyCode::Key2 => Some('2'),
-            KeyCode::Key3 => Some('3'),
-            KeyCode::Key4 => Some('4'),
-            KeyCode::Key5 => Some('5'),
-            KeyCode::Key6 => Some('6'),
-            KeyCode::Key7 => Some('7'),
-            KeyCode::Key8 => Some('8'),
-            KeyCode::Key9 => Some('9'),
-            KeyCode::A => Some('a'),
-            _ => None, // Add more mappings if needed
-        }
-    }
 
 }
 
@@ -695,7 +610,10 @@ impl<'a> EventHandler for MainContent<'a> {
     }
 
 
-    fn key_up_event(&mut self, ctx: &mut Context, input: ggez::input::keyboard::KeyInput) -> Result<(), ggez::GameError> {
+    fn key_up_event(&mut self,
+                    _ctx: &mut Context,
+                    input: ggez::input::keyboard::KeyInput
+    ) -> Result<(), ggez::GameError> {
        match input.keycode {
            Some(key) => match key {
                KeyCode::H => {
@@ -727,36 +645,34 @@ impl<'a> EventHandler for MainContent<'a> {
                    self.show_ball_stats = !self.show_ball_stats
                },
                KeyCode::V => {
-                   self.handle_verbose_output_setting(ctx)?;
+                   println!("Enter a ball ID (or 'a' to set all balls to verbose):");
+                   let mut input = String::new();
+                   if std::io::stdin().read_line(&mut input).is_ok() {
+                      if let Ok(number) = input.trim().parse::<usize>() {
+                          match number {
+                              0 => {
+                                  for b in self.v_points.iter() {
+                                      let mut ba = b.borrow_mut();
+                                      ba.verbose = false;
+                                  }
 
-                   //println!("Enter a ball ID (or 'a' to set all balls to verbose):");
-                   //let mut input = String::new();
-                   //if std::io::stdin().read_line(&mut input).is_ok() {
-                   //    if let Ok(number) = input.trim().parse::<usize>() {
-                   //        match number {
-                   //            0 => {
-                   //                for b in self.v_points.iter() {
-                   //                    let mut ba = b.borrow_mut();
-                   //                    ba.verbose = false;
-                   //                }
-
-                   //          },
-                   //            _ => {
-                   //                if let Some(ball_rc) = self.v_points.iter()
-                   //                    .find(|&ball_rc_in| ball_rc_in.borrow().get_id() == number) 
-                   //                {
-                   //                    let mut ball_found = ball_rc.borrow_mut();
-                   //                    ball_found.verbose = !ball_found.verbose;
-                   //                }
-                   //            }
-                   //        }
-                   //    } else if input.trim() == "a" {
-                   //        for b in self.v_points.iter() {
-                   //            let mut ba = b.borrow_mut();
-                   //            ba.verbose = true;
-                   //        }
-                   //    }
-                   //}
+                            },
+                              _ => {
+                                  if let Some(ball_rc) = self.v_points.iter()
+                                      .find(|&ball_rc_in| ball_rc_in.borrow().get_id() == number)
+                                  {
+                                      let mut ball_found = ball_rc.borrow_mut();
+                                      ball_found.verbose = !ball_found.verbose;
+                                  }
+                              }
+                          }
+                      } else if input.trim() == "a" {
+                          for b in self.v_points.iter() {
+                              let mut ba = b.borrow_mut();
+                              ba.verbose = true;
+                          }
+                      }
+                   }
                },
                KeyCode::Space => {
                    self.sim.pause = !self.sim.pause
