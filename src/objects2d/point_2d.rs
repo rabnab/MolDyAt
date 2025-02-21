@@ -17,24 +17,35 @@ impl Vec2D {
         }
     }
 
-    pub fn norm_sq(pt: &Vec2D) -> f32 {
+    pub fn norm_sq_of(pt: &Vec2D) -> f32 {
         pt.x*pt.x + pt.y * pt.y
     }
 
-    pub fn norm(pt: &Vec2D) -> f32 {
-        f32::sqrt(Vec2D::norm_sq(pt))
+    pub fn norm_of(pt: &Vec2D) -> f32 {
+        f32::sqrt(Vec2D::norm_sq_of(pt))
     }
     
-    pub fn copy_scaled(pt: &Vec2D, scale:f32) -> Vec2D {
+    pub fn scaled_copy_of(pt: &Vec2D, scale:f32) -> Vec2D {
         Vec2D::new( pt.x * scale, pt.y * scale)
     }
 
+    pub fn scaled_copy(&self, scale:f32) -> Vec2D {
+        Vec2D::scaled_copy_of(self, scale)
+    }
 
     /// calculates the distance vector from this ball to the other ball
     pub fn dist(&self, other: &Vec2D) -> Vec2D {
         let dist_x = other.x - self.x;
         let dist_y = other.y - self.y;
         Vec2D::new(dist_x, dist_y)
+    }
+
+    pub fn norm(&self) -> f32 {
+        Vec2D::norm_of(self)
+    }
+
+    pub fn norm_sq(&self) -> f32 {
+        Vec2D::norm_sq_of(self)
     }
     
     pub fn add(&mut self, pt: Vec2D) {
@@ -108,19 +119,19 @@ mod tests {
     #[test]
     fn test_norm_sq() {
         let v = Vec2D::new(3.0, 4.0);
-        assert_eq!(Vec2D::norm_sq(&v), 25.0);
+        assert_eq!(Vec2D::norm_sq_of(&v), 25.0);
     }
 
     #[test]
     fn test_norm() {
         let v = Vec2D::new(3.0, 4.0);
-        assert_eq!(Vec2D::norm(&v), 5.0);
+        assert_eq!(Vec2D::norm_of(&v), 5.0);
     }
 
     #[test]
     fn test_copy_scaled() {
         let v = Vec2D::new(2.0, 3.0);
-        let scaled = Vec2D::copy_scaled(&v, 2.0);
+        let scaled = Vec2D::scaled_copy_of(&v, 2.0);
         assert_eq!(scaled.x, 4.0);
         assert_eq!(scaled.y, 6.0);
     }

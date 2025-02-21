@@ -286,17 +286,17 @@ impl<'a> MainContent<'a> {
 
     fn status_text(&self) -> String {
         let text = if self.real_data {
-            format!("time: {:.0}[ns] ({})\n#Balls: {}\nPotEnergy: {:.2E}[J]\nKinEnergy: {:.2E}[J]\nTotalE: {:.3E}[J]\nTemp: {:.2E}[K]\nmaxV: {:.2}[m/s]\nminDist: {:.2E}[m]\nvCOM: {}[m/s]", 
-                self.sim.time*TIME_SCALE*1.0E9,
-                self.sim.speedup,
-                self.num_balls,
-                self.sim.energy_pot*ENERGY_SCALE,
-                self.sim.energy_kin*ENERGY_SCALE,
-                (self.sim.energy_pot + self.sim.energy_kin)*ENERGY_SCALE,
-                self.sim.temperature*TEMP_SCALE,
-                self.sim.max_v*LEN_SCALE/TIME_SCALE,
-                self.sim.min_dist*LEN_SCALE,
-                Vec2D::copy_scaled(&self.sim.v_com,LEN_SCALE/TIME_SCALE),
+            format!("time: {:.0}[ns] ({})\n#Balls: {}\nPotEnergy: {:.2E}[J]\nKinEnergy: {:.2E}[J]\nTotalE: {:.3E}[J]\nTemp: {:.2E}[K]\nmaxV: {:.2}[m/s]\nminDist: {:.2E}[m]\nvCOM: {}[m/s]",
+                    self.sim.time*TIME_SCALE*1.0E9,
+                    self.sim.speedup,
+                    self.num_balls,
+                    self.sim.energy_pot*ENERGY_SCALE,
+                    self.sim.energy_kin*ENERGY_SCALE,
+                    (self.sim.energy_pot + self.sim.energy_kin)*ENERGY_SCALE,
+                    self.sim.temperature*TEMP_SCALE,
+                    self.sim.max_v*LEN_SCALE/TIME_SCALE,
+                    self.sim.min_dist*LEN_SCALE,
+                    self.sim.v_com.scaled_copy(LEN_SCALE/TIME_SCALE),
             )
         } else {
             format!("time: {} ({})\n#Balls: {}\nPotEnergy: {:.2E}\nKinEnergy: {:.2E}\nTotalE: {:.3E}\nTemp: {:.2E}\nmaxV: {:.2}\nminDist: {:.2E}\nvCOM: {}", 
@@ -512,7 +512,7 @@ impl<'a> MainContent<'a> {
 
             pot += cur_pot*0.5;//double counts
             _v_com.add(cur.moment());
-            let speed_sq = Vec2D::norm_sq(&cur.v);
+            let speed_sq = cur.v.norm_sq();
             kin+= speed_sq*cur.mass*0.5;
             sum_mass+=cur.mass;
             if max_v*max_v<speed_sq {
@@ -538,7 +538,7 @@ impl<'a> MainContent<'a> {
         self.sim.max_v = max_v;
         self.sim.max_id = max_id;
         self.sim.time += dt;
-        self.sim.v_com = Vec2D::copy_scaled(&_v_com, 1./sum_mass);
+        self.sim.v_com = _v_com.scaled_copy(1./sum_mass);
 
         let mut sum_rel_kin: f32 = 0.;
         let start = std::time::Instant::now();
