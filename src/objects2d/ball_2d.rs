@@ -135,7 +135,7 @@ impl<'a> Ball2D<'a> {
             near_used * near_used * 4.
         } else {
             //f32::MAX
-            (4. * LJ_SIG) * (4. * LJ_SIG) * 4.
+            self.equilibrium_radius()*self.equilibrium_radius()*16.
         };
         let dist_limit = f32::max(dist_limit_by_closest, dist_limit_by_v);
         if self.verbose {
