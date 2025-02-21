@@ -6,7 +6,7 @@ use ggez::graphics::{
 };
 use ggez::input::keyboard::KeyCode;
 use ggez::input::mouse::MouseButton;
-use ggez::{Context, GameResult};
+use ggez::{Context, GameError, GameResult};
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -52,6 +52,7 @@ struct SimStats {
     time: f32,
     pause: bool,
     speedup: f32,
+    draw_cursor: bool,
 }
 
 /*
@@ -109,6 +110,7 @@ impl Default for SimStats {
             time: 0.,
             pause: false,
             speedup: 1.,
+            draw_cursor: false,
         }
     }
 }
@@ -152,19 +154,56 @@ impl<'a> MainContent<'a> {
             ..Default::default()
         })
     }
+}
 
+impl<'a> MainContent<'a> {
+fn len_to_px(coord_len: f32) -> f32 {
+    coord_len / LEN_TO_PX
+}
+fn px_to_len(coord_px: f32) -> f32 {
+    coord_px * LEN_TO_PX
+}
+fn px_to_coord(&self, px_x: f32, px_y: f32) -> Vec2D {
+    //window top left (0,0) px
+    //margin margin_px_[xy]
+    //region region_px_[xy]
+    //window bottom [xy] = region_px_[xy]+2*margin_px[xy]
+    //pos = px_to_len(px_pos - (region_px_[xy]+2*margin_px_[xy])*0.5)
+    Vec2D::new(
+        Self::px_to_len(
+            px_x - self.win_definition.region_px_x * 0.5 - self.win_definition.margin_px_x,
+        ),
+        Self::px_to_len(
+            px_y - self.win_definition.region_px_y * 0.5 - self.win_definition.margin_px_y,
+        ),
+    )
+}
+fn coord_to_px(&self, coord: &Vec2D) -> Vec2D {
+    Vec2D::new(
+        Self::len_to_px(coord.x)
+            + self.win_definition.region_px_x * 0.5
+            + self.win_definition.margin_px_x,
+        Self::len_to_px(coord.y)
+            + self.win_definition.region_px_y * 0.5
+            + self.win_definition.margin_px_y,
+    )
+}
+}
+
+impl<'a> MainContent<'a> {
     fn draw_cursor(&self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult {
-        let cursor_circle = Mesh::new_circle(
-            ctx,
-            DrawMode::fill(),
-            self.win_definition.curs_pos.clone(),
-            Self::len_to_px(self.new_ball.ball_size),
-            0.1,
-            Color::WHITE,
-        )?;
+        if self.sim.draw_cursor {
+            let cursor_circle = Mesh::new_circle(
+                ctx,
+                DrawMode::fill(),
+                self.win_definition.curs_pos.clone(),
+                Self::len_to_px(self.new_ball.ball_size),
+                0.1,
+                Color::WHITE,
+            )?;
 
-        canvas.draw(&cursor_circle, Vec2::new(0., 0.));
-
+            canvas.draw(&cursor_circle, Vec2::new(0., 0.));
+        }
         let curs_pos = self.px_to_coord(
             self.win_definition.curs_pos.x,
             self.win_definition.curs_pos.y,
@@ -178,7 +217,7 @@ impl<'a> MainContent<'a> {
                 curs_pos.x,
                 curs_pos.y,
             ))
-            .scale(10.),
+                .scale(20.),
         );
         let txt_cursor_pos: [f32; 2] = match txt_cursor.dimensions(ctx) {
             None => [0., 0.],
@@ -290,37 +329,6 @@ impl<'a> MainContent<'a> {
         Ok(())
     }
 
-    fn status_text(&self) -> String {
-        let text = if self.real_data {
-            format!("time: {:.0}[ns] ({})\n#Balls: {}\nPotEnergy: {:.2E}[J]\nKinEnergy: {:.2E}[J]\nTotalE: {:.3E}[J]\nTemp: {:.2E}[K]\nmaxV: {:.2}[m/s]\nminDist: {:.2E}[m]\nvCOM: {}[m/s]",
-                    self.sim.time*TIME_SCALE*1.0E9,
-                    self.sim.speedup,
-                    self.num_balls,
-                    self.sim.energy_pot*ENERGY_SCALE,
-                    self.sim.energy_kin*ENERGY_SCALE,
-                    (self.sim.energy_pot + self.sim.energy_kin)*ENERGY_SCALE,
-                    self.sim.temperature*TEMP_SCALE,
-                    self.sim.max_v*LEN_SCALE/TIME_SCALE,
-                    self.sim.min_dist*LEN_SCALE,
-                    self.sim.v_com.scaled_copy(LEN_SCALE/TIME_SCALE),
-            )
-        } else {
-            format!("time: {} ({})\n#Balls: {}\nPotEnergy: {:.2E}\nKinEnergy: {:.2E}\nTotalE: {:.3E}\nTemp: {:.2E}\nmaxV: {:.2}\nminDist: {:.2E}\nvCOM: {}", 
-                self.sim.time,
-                self.sim.speedup,
-                self.num_balls,
-                self.sim.energy_pot,
-                self.sim.energy_kin,
-                self.sim.energy_pot + self.sim.energy_kin,
-                self.sim.temperature,
-                self.sim.max_v,
-                self.sim.min_dist,
-                self.sim.v_com,
-            )
-        };
-        text
-    }
-
     fn draw_frame(&mut self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult {
         let rect = Mesh::new_rectangle(
             ctx,
@@ -350,37 +358,6 @@ impl<'a> MainContent<'a> {
         Ok(())
     }
 
-    fn len_to_px(coord_len: f32) -> f32 {
-        coord_len / LEN_TO_PX
-    }
-    fn px_to_len(coord_px: f32) -> f32 {
-        coord_px * LEN_TO_PX
-    }
-    fn px_to_coord(&self, px_x: f32, px_y: f32) -> Vec2D {
-        //window top left (0,0) px
-        //margin margin_px_[xy]
-        //region region_px_[xy]
-        //window bottom [xy] = region_px_[xy]+2*margin_px[xy]
-        //pos = px_to_len(px_pos - (region_px_[xy]+2*margin_px_[xy])*0.5)
-        Vec2D::new(
-            Self::px_to_len(
-                px_x - self.win_definition.region_px_x * 0.5 - self.win_definition.margin_px_x,
-            ),
-            Self::px_to_len(
-                px_y - self.win_definition.region_px_y * 0.5 - self.win_definition.margin_px_y,
-            ),
-        )
-    }
-    fn coord_to_px(&self, coord: &Vec2D) -> Vec2D {
-        Vec2D::new(
-            Self::len_to_px(coord.x)
-                + self.win_definition.region_px_x * 0.5
-                + self.win_definition.margin_px_x,
-            Self::len_to_px(coord.y)
-                + self.win_definition.region_px_y * 0.5
-                + self.win_definition.margin_px_y,
-        )
-    }
 
     fn resize(&mut self, width: f32, height: f32) -> Result<(), ggez::GameError> {
         self.win_definition.region_px_x = width - 2. * self.win_definition.margin_px_x;
@@ -388,6 +365,63 @@ impl<'a> MainContent<'a> {
         Ok(())
     }
 
+    fn any_log(&self) -> bool {
+        self.show_timings || self.show_ball_stats
+    }
+
+    fn print_help_message(&self) {
+        println!(
+            "HELP: The following Keys are available:\n\
+        H - Show this help message.\n\
+        D - Toggle the display of real data.\n\
+        S - Toggle step-by-step mode.\n\
+        T - Toggle the display of timing information.\n\
+        + - Increase the simulation speed.\n\
+        - - Decrease the simulation speed (minimum speed is 1).\n\
+        B - Toggle the display of ball statistics.\n\
+        V - Set verbosity for ball statistics:\n\
+            - Enter a specific ball ID to toggle verbose mode for that ball.\n\
+            - Enter 'a' to set all balls to verbose.\n\
+            - Enter '0' to disable verbose mode for all balls.\n\
+        SPACE - Pause or resume the simulation."
+        );
+    }
+
+    fn status_text(&self) -> String {
+        let text = if self.real_data {
+            format!("time: {:.0}[ns] ({})\n#Balls: {}\nPotEnergy: {:.2E}[J]\nKinEnergy: {:.2E}[J]\nTotalE: {:.3E}[J]\nTemp: {:.2E}[K]\nmaxV: {:.2}[m/s]\nminDist: {:.2E}[m]\nvCOM: {}[m/s]",
+                    self.sim.time * TIME_SCALE * 1.0E9,
+                    self.sim.speedup,
+                    self.num_balls,
+                    self.sim.energy_pot * ENERGY_SCALE,
+                    self.sim.energy_kin * ENERGY_SCALE,
+                    (self.sim.energy_pot + self.sim.energy_kin) * ENERGY_SCALE,
+                    self.sim.temperature * TEMP_SCALE,
+                    self.sim.max_v * LEN_SCALE / TIME_SCALE,
+                    self.sim.min_dist * LEN_SCALE,
+                    self.sim.v_com.scaled_copy(LEN_SCALE / TIME_SCALE),
+            )
+        } else {
+            format!("time: {} ({})\n#Balls: {}\nPotEnergy: {:.2E}\nKinEnergy: {:.2E}\nTotalE: {:.3E}\nTemp: {:.2E}\nmaxV: {:.2}\nminDist: {:.2E}\nvCOM: {}",
+                    self.sim.time,
+                    self.sim.speedup,
+                    self.num_balls,
+                    self.sim.energy_pot,
+                    self.sim.energy_kin,
+                    self.sim.energy_pot + self.sim.energy_kin,
+                    self.sim.temperature,
+                    self.sim.max_v,
+                    self.sim.min_dist,
+                    self.sim.v_com,
+            )
+        };
+        text
+    }
+
+
+}
+
+impl<'a> MainContent<'a> {
     fn is_ball_in_region(&self, pt: &Ball2D) -> bool {
         let min_x = self.win_definition.margin_px_x + Self::len_to_px(pt.radius);
         let max_x = min_x + self.win_definition.region_px_x - 2. * Self::len_to_px(pt.radius);
@@ -469,28 +503,6 @@ impl<'a> MainContent<'a> {
                 ball.update_closeness_stats();
             }
         }
-    }
-
-    fn any_log(&self) -> bool {
-        self.show_timings || self.show_ball_stats
-    }
-
-    fn print_help_message(&self) {
-        println!(
-            "HELP: The following Keys are available:\n\
-        H - Show this help message.\n\
-        D - Toggle the display of real data.\n\
-        S - Toggle step-by-step mode.\n\
-        T - Toggle the display of timing information.\n\
-        + - Increase the simulation speed.\n\
-        - - Decrease the simulation speed (minimum speed is 1).\n\
-        B - Toggle the display of ball statistics.\n\
-        V - Set verbosity for ball statistics:\n\
-            - Enter a specific ball ID to toggle verbose mode for that ball.\n\
-            - Enter 'a' to set all balls to verbose.\n\
-            - Enter '0' to disable verbose mode for all balls.\n\
-        SPACE - Pause or resume the simulation."
-        );
     }
 
     fn global_update(&mut self) -> GameResult {
@@ -594,6 +606,31 @@ impl<'a> MainContent<'a> {
     }
 }
 
+impl<'a> MainContent<'a> {
+    fn make_all_verbose(&mut self) {
+        for b in self.v_points.iter() {
+            let mut ba = b.borrow_mut();
+            ba.verbose = true;
+        }
+    }
+    fn toggle_ball_verbose(&mut self, number: usize) {
+        if let Some(ball_rc) = self
+            .v_points
+            .iter()
+            .find(|&ball_rc_in| ball_rc_in.borrow().get_id() == number)
+        {
+            let mut ball_found = ball_rc.borrow_mut();
+            ball_found.verbose = !ball_found.verbose;
+        }
+    }
+
+    fn clear_verbose_balls(&mut self) {
+        for b in self.v_points.iter() {
+            let mut ba = b.borrow_mut();
+            ba.verbose = false;
+        }
+    }
+}
 impl<'a> EventHandler for MainContent<'a> {
     fn update(&mut self, _ctx: &mut Context) -> GameResult {
         while _ctx.time.check_update_time(FPS_GOAL) {
@@ -638,17 +675,25 @@ impl<'a> EventHandler for MainContent<'a> {
         Ok(())
     }
 
+    fn mouse_button_up_event(&mut self, _ctx: &mut Context, button: MouseButton, x: f32, y: f32) -> Result<(), GameError> {
+        match button {
+            MouseButton::Left => {
+                self.add_candidate_px(x, y).ok(); //ignore any errors because of not being able to add
+                self.sim.draw_cursor = false;
+            }_ => (),
+        }
+        Ok(())
+    }
+
     fn mouse_button_down_event(
         &mut self,
         _ctx: &mut Context,
         button: MouseButton,
-        x: f32,
-        y: f32,
+        _x: f32,
+        _y: f32,
     ) -> GameResult {
         match button {
-            MouseButton::Left => {
-                self.add_candidate_px(x, y).ok(); //ignore any errors because of not being able to add
-            }
+            MouseButton::Left => self.sim.draw_cursor = true,
             MouseButton::Right => {
                 self.new_ball.ball_size += 1.;
                 if self.new_ball.ball_size > 5.5 {
@@ -726,36 +771,6 @@ impl<'a> EventHandler for MainContent<'a> {
     }
 }
 
-impl<'a> MainContent<'a> {
-    fn make_all_verbose(&mut self) {
-        for b in self.v_points.iter() {
-            let mut ba = b.borrow_mut();
-            ba.verbose = true;
-        }
-    }
-}
-
-impl<'a> MainContent<'a> {
-    fn toggle_ball_verbose(&mut self, number: usize) {
-        if let Some(ball_rc) = self
-            .v_points
-            .iter()
-            .find(|&ball_rc_in| ball_rc_in.borrow().get_id() == number)
-        {
-            let mut ball_found = ball_rc.borrow_mut();
-            ball_found.verbose = !ball_found.verbose;
-        }
-    }
-}
-
-impl<'a> MainContent<'a> {
-    fn clear_verbose_balls(&mut self) {
-        for b in self.v_points.iter() {
-            let mut ba = b.borrow_mut();
-            ba.verbose = false;
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {
