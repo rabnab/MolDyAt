@@ -1,35 +1,30 @@
-use std::fmt;
 use ggez::mint::Point2;
+use std::fmt;
 
-#[derive(Debug)]
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct Vec2D {
     pub x: f32,
     pub y: f32,
 }
 
-
 impl Vec2D {
-    pub fn new(_x: f32, _y: f32)  -> Vec2D {
-        Vec2D {
-            x: _x,
-            y: _y,
-        }
+    pub fn new(_x: f32, _y: f32) -> Vec2D {
+        Vec2D { x: _x, y: _y }
     }
 
     pub fn norm_sq_of(pt: &Vec2D) -> f32 {
-        pt.x*pt.x + pt.y * pt.y
+        pt.x * pt.x + pt.y * pt.y
     }
 
     pub fn norm_of(pt: &Vec2D) -> f32 {
         f32::sqrt(Vec2D::norm_sq_of(pt))
     }
-    
-    pub fn scaled_copy_of(pt: &Vec2D, scale:f32) -> Vec2D {
-        Vec2D::new( pt.x * scale, pt.y * scale)
+
+    pub fn scaled_copy_of(pt: &Vec2D, scale: f32) -> Vec2D {
+        Vec2D::new(pt.x * scale, pt.y * scale)
     }
 
-    pub fn scaled_copy(&self, scale:f32) -> Vec2D {
+    pub fn scaled_copy(&self, scale: f32) -> Vec2D {
         Vec2D::scaled_copy_of(self, scale)
     }
 
@@ -47,13 +42,13 @@ impl Vec2D {
     pub fn norm_sq(&self) -> f32 {
         Vec2D::norm_sq_of(self)
     }
-    
+
     pub fn add(&mut self, pt: Vec2D) {
-       self.x += pt.x;
-       self.y += pt.y;
+        self.x += pt.x;
+        self.y += pt.y;
     }
 
-    fn _scale(&mut self, scale:f32) {
+    fn _scale(&mut self, scale: f32) {
         self.x *= scale;
         self.y *= scale;
     }
@@ -71,7 +66,10 @@ impl fmt::Display for Vec2D {
 
 impl Into<Point2<f32>> for Vec2D {
     fn into(self) -> Point2<f32> {
-        Point2 { x: self.x, y: self.y }
+        Point2 {
+            x: self.x,
+            y: self.y,
+        }
     }
 }
 
@@ -86,9 +84,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_into_point2(){
-        let x_target:f32 = 4.;
-        let y_target:f32 = 1.234E-9;
+    fn test_into_point2() {
+        let x_target: f32 = 4.;
+        let y_target: f32 = 1.234E-9;
         let v = Vec2D::new(x_target, y_target);
         let p: Point2<f32> = v.into();
         assert_eq!(p.x, x_target);
@@ -96,20 +94,20 @@ mod tests {
     }
 
     #[test]
-    fn test_clone_vec2d(){
-        let x_target:f32 = 4.;
-        let y_target:f32 = 1.234E-9;
+    fn test_clone_vec2d() {
+        let x_target: f32 = 4.;
+        let y_target: f32 = 1.234E-9;
         let mut v1 = Vec2D::new(x_target, y_target);
         let v2 = v1.clone();
 
         assert_eq!(v2.x, v1.x);
         assert_eq!(v2.y, v1.y);
 
-        v1.x = x_target*2.;
+        v1.x = x_target * 2.;
         assert_ne!(v1.x, v2.x);
     }
 
-     #[test]
+    #[test]
     fn test_new() {
         let v = Vec2D::new(3.0, 4.0);
         assert_eq!(v.x, 3.0);
