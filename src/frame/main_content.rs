@@ -2,12 +2,14 @@ use crate::objects2d::{Ball2D, Vec2D};
 use ggez::event::EventHandler;
 use ggez::glam::Vec2;
 use ggez::graphics::{
-    Canvas, Color, DrawMode, DrawParam, Drawable, Mesh, Rect, Shader, Text, TextFragment,
+    Canvas, Color, DrawMode, DrawParam, Drawable, Mesh, MeshBuilder, Rect, Shader, Text,
+    TextFragment,
 };
 use ggez::input::keyboard::KeyCode;
 use ggez::input::mouse::MouseButton;
 use ggez::{Context, GameError, GameResult};
 
+use ggez::mint::Point2;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -157,37 +159,37 @@ impl<'a> MainContent<'a> {
 }
 
 impl<'a> MainContent<'a> {
-fn len_to_px(coord_len: f32) -> f32 {
-    coord_len / LEN_TO_PX
-}
-fn px_to_len(coord_px: f32) -> f32 {
-    coord_px * LEN_TO_PX
-}
-fn px_to_coord(&self, px_x: f32, px_y: f32) -> Vec2D {
-    //window top left (0,0) px
-    //margin margin_px_[xy]
-    //region region_px_[xy]
-    //window bottom [xy] = region_px_[xy]+2*margin_px[xy]
-    //pos = px_to_len(px_pos - (region_px_[xy]+2*margin_px_[xy])*0.5)
-    Vec2D::new(
-        Self::px_to_len(
-            px_x - self.win_definition.region_px_x * 0.5 - self.win_definition.margin_px_x,
-        ),
-        Self::px_to_len(
-            px_y - self.win_definition.region_px_y * 0.5 - self.win_definition.margin_px_y,
-        ),
-    )
-}
-fn coord_to_px(&self, coord: &Vec2D) -> Vec2D {
-    Vec2D::new(
-        Self::len_to_px(coord.x)
-            + self.win_definition.region_px_x * 0.5
-            + self.win_definition.margin_px_x,
-        Self::len_to_px(coord.y)
-            + self.win_definition.region_px_y * 0.5
-            + self.win_definition.margin_px_y,
-    )
-}
+    fn len_to_px(coord_len: f32) -> f32 {
+        coord_len / LEN_TO_PX
+    }
+    fn px_to_len(coord_px: f32) -> f32 {
+        coord_px * LEN_TO_PX
+    }
+    fn px_to_coord(&self, px_x: f32, px_y: f32) -> Vec2D {
+        //window top left (0,0) px
+        //margin margin_px_[xy]
+        //region region_px_[xy]
+        //window bottom [xy] = region_px_[xy]+2*margin_px[xy]
+        //pos = px_to_len(px_pos - (region_px_[xy]+2*margin_px_[xy])*0.5)
+        Vec2D::new(
+            Self::px_to_len(
+                px_x - self.win_definition.region_px_x * 0.5 - self.win_definition.margin_px_x,
+            ),
+            Self::px_to_len(
+                px_y - self.win_definition.region_px_y * 0.5 - self.win_definition.margin_px_y,
+            ),
+        )
+    }
+    fn coord_to_px(&self, coord: &Vec2D) -> Vec2D {
+        Vec2D::new(
+            Self::len_to_px(coord.x)
+                + self.win_definition.region_px_x * 0.5
+                + self.win_definition.margin_px_x,
+            Self::len_to_px(coord.y)
+                + self.win_definition.region_px_y * 0.5
+                + self.win_definition.margin_px_y,
+        )
+    }
 }
 
 impl<'a> MainContent<'a> {
@@ -203,6 +205,8 @@ impl<'a> MainContent<'a> {
             )?;
 
             canvas.draw(&cursor_circle, Vec2::new(0., 0.));
+        } else {
+            self.draw_cross_hair(ctx, canvas)?;
         }
         let curs_pos = self.px_to_coord(
             self.win_definition.curs_pos.x,
@@ -217,7 +221,7 @@ impl<'a> MainContent<'a> {
                 curs_pos.x,
                 curs_pos.y,
             ))
-                .scale(20.),
+            .scale(20.),
         );
         let txt_cursor_pos: [f32; 2] = match txt_cursor.dimensions(ctx) {
             None => [0., 0.],
@@ -358,7 +362,6 @@ impl<'a> MainContent<'a> {
         Ok(())
     }
 
-
     fn resize(&mut self, width: f32, height: f32) -> Result<(), ggez::GameError> {
         self.win_definition.region_px_x = width - 2. * self.win_definition.margin_px_x;
         self.win_definition.region_px_y = height - 2. * self.win_definition.margin_px_y;
@@ -418,7 +421,47 @@ impl<'a> MainContent<'a> {
         text
     }
 
+    fn draw_cross_hair(&self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult<()> {
+        let mut mesh_builder = MeshBuilder::new();
+        let crosshair_size = 10.0;
+        let color = Color::WHITE;
 
+        // Horizontal line
+        mesh_builder.line(
+            &[
+                Point2 {
+                    x: self.win_definition.curs_pos.x - crosshair_size,
+                    y: self.win_definition.curs_pos.y,
+                },
+                Point2 {
+                    x: self.win_definition.curs_pos.x + crosshair_size,
+                    y: self.win_definition.curs_pos.y,
+                },
+            ],
+            2.0,
+            color,
+        )?;
+
+        // Vertical line
+        mesh_builder.line(
+            &[
+                Point2 {
+                    x: self.win_definition.curs_pos.x,
+                    y: self.win_definition.curs_pos.y - crosshair_size,
+                },
+                Point2 {
+                    x: self.win_definition.curs_pos.x,
+                    y: self.win_definition.curs_pos.y + crosshair_size,
+                },
+            ],
+            2.0,
+            color,
+        )?;
+
+        let mesh = Mesh::from_data(ctx, mesh_builder.build());
+        canvas.draw(&mesh, Vec2D::new(0., 0.));
+        Ok(())
+    }
 }
 
 impl<'a> MainContent<'a> {
@@ -675,12 +718,19 @@ impl<'a> EventHandler for MainContent<'a> {
         Ok(())
     }
 
-    fn mouse_button_up_event(&mut self, _ctx: &mut Context, button: MouseButton, x: f32, y: f32) -> Result<(), GameError> {
+    fn mouse_button_up_event(
+        &mut self,
+        _ctx: &mut Context,
+        button: MouseButton,
+        x: f32,
+        y: f32,
+    ) -> Result<(), GameError> {
         match button {
             MouseButton::Left => {
                 self.add_candidate_px(x, y).ok(); //ignore any errors because of not being able to add
                 self.sim.draw_cursor = false;
-            }_ => (),
+            }
+            _ => (),
         }
         Ok(())
     }
@@ -770,7 +820,6 @@ impl<'a> EventHandler for MainContent<'a> {
         Ok(())
     }
 }
-
 
 #[cfg(test)]
 mod tests {
