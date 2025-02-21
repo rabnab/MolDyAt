@@ -196,11 +196,13 @@ impl<'a> MainContent<'a> {
             TextFragment::new(format!("{}", ball.get_id()))
             .scale(15.));
 
+        let ball_pos_px = self.coord_to_px(&ball.pos);
+
         let txt_name_pos: [f32; 2] = match txt_name.dimensions(ctx) {
             None => [0., 0.], 
             Some(rec) => [
-                Self::len_to_px(ball.pos.x) - rec.w*0.5, 
-                Self::len_to_px(ball.pos.y)  - rec.h*0.5,
+                ball_pos_px.x - rec.w*0.5,
+                ball_pos_px.y - rec.h*0.5,
             ],
         };
 
@@ -214,7 +216,7 @@ impl<'a> MainContent<'a> {
             let ball = ball_ref.borrow();
             let ball_coord_px = self.coord_to_px(&ball.pos);
             let ball_size_px = Self::len_to_px(ball.radius);
-            println!("drawing ball at {:?} of size {}", ball_coord_px, ball_size_px);
+            //println!("drawing ball at {:?} of size {}", ball_coord_px, ball_size_px);
             //draw the ball itself
             let pt_circle = Mesh::new_circle(
                 ctx,
@@ -359,7 +361,7 @@ impl<'a> MainContent<'a> {
         )
     }
     fn coord_to_px(&self, coord: &Vec2D) -> Vec2D {
-        Vec2D::new(Self::len_to_px(coord.x)+self.win_definition.region_px_x*0.5+self.win_definition.margin_px_x, 
+        Vec2D::new(Self::len_to_px(coord.x)+self.win_definition.region_px_x*0.5+self.win_definition.margin_px_x,
             Self::len_to_px(coord.y) + self.win_definition.region_px_y*0.5+self.win_definition.margin_px_y)
     }
 
@@ -481,11 +483,13 @@ impl<'a> MainContent<'a> {
         if self.step_by_step {
                 self.sim.pause = true;
         }
+        let top_left = self.px_to_coord(self.win_definition.margin_px_x, self.win_definition.margin_px_y);
+
         let bound_rect = Rect::new(
-            self.win_definition.margin_px_x, 
-            self.win_definition.margin_px_y, 
-            self.win_definition.region_px_x,
-            self.win_definition.region_px_y
+            top_left.x,
+            top_left.y,
+            Self::px_to_len(self.win_definition.region_px_x),
+            Self::px_to_len(self.win_definition.region_px_y)
         );
 
         let mut _min_dist = bound_rect.w + bound_rect.h;
