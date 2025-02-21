@@ -32,8 +32,8 @@ impl<'a> Default for Verlet<'a> {
     fn default() -> Verlet<'a> {
         Verlet {
         neighbours: RefCell::new(Vec::new()),
-        nearest: -1.,
-        farthest: -1.,
+        nearest: f32::NAN,
+        farthest: f32::NAN,
         }
     }
 }
@@ -66,7 +66,7 @@ impl<'a> Named for Ball2D<'a> {
 #[derive(Debug)]
 enum BallError {
     DistanceUnderflow,
-    LessThanTwoBalls,
+    // LessThanTwoBalls,
 }
 
 type BallResult = Result<f32, BallError>;
@@ -125,12 +125,12 @@ impl<'a> Ball2D<'a> {
        let eq= LJ_SIG + self.radius;
        //we only check hood every ten updates --> factors 100 and 10
        let dist_limit_by_v = 100.*v_sq * dt * dt + eq * eq + 2. * 10. * dt * eq * (self.v.x + self.v.y);
-       let dist_limit_by_closest = if self.hood.nearest > 0. { 
+       let dist_limit_by_closest = if self.hood.nearest.is_finite() {
            let near_used = f32::max(self.hood.nearest, self.radius+LJ_SIG*2.);
            near_used * near_used *4. 
        } else { 
            //f32::MAX 
-           (40.*LJ_SIG)*(40.*LJ_SIG)*4.
+           (4.*LJ_SIG)*(4.*LJ_SIG)*4.
        };
        let dist_limit = f32::max(dist_limit_by_closest, dist_limit_by_v); 
        if self.verbose {
@@ -164,23 +164,25 @@ impl<'a> Ball2D<'a> {
 
     pub fn update_closeness_stats(&mut self) {
 
-       let (nearest_sq, farthest_sq) = self.hood.neighbours
-           .borrow()
+        let actual_hood = self.hood.neighbours.borrow();
+
+       let (nearest_sq, farthest_sq) = actual_hood
            .iter()
            .filter_map(|weak| weak.upgrade())
-           .map(|val| self.pos.dist(&val.borrow().pos).norm_sq())
+           .map(|val| {
+               let d = self.pos.dist(&val.borrow().pos).norm_sq();
+               d
+           })
            .fold((f32::INFINITY, f32::NEG_INFINITY),
             |(min, max), val| {
                 ( min.min(val), max.max(val) )
             });
            
 
-       if nearest_sq.is_finite() {
-           self.hood.nearest = f32::sqrt(nearest_sq);
-       }
-       if farthest_sq.is_finite() {
-           self.hood.farthest = f32::sqrt(farthest_sq);
-       }
+
+       self.hood.nearest = if nearest_sq.is_finite() { f32::sqrt(nearest_sq) } else  { f32::NAN };
+       self.hood.farthest = if nearest_sq.is_finite() { f32::sqrt(farthest_sq) } else  { f32::NAN };
+
        if self.verbose {
            println!("update_closeness: {} nearest/farthest: {}/{}", self.get_name(), self.hood.nearest, self.hood.farthest);
        }
@@ -256,7 +258,7 @@ impl<'a> Ball2D<'a> {
             }
             return Ok(actual_dist);
         }
-        return Ok(min_dist);
+        Ok(min_dist)
     }
 
     //fn force_by(&self, others: &Vec<Ball2D>)  -> (f32, Vec2D, f32) {
@@ -273,16 +275,16 @@ impl<'a> Ball2D<'a> {
                 let b = b_rc.borrow();
                 let dist_vec = self.pos.dist(&b.pos);
                 let dist = dist_vec.norm();
-                let radsum = b.radius + self.radius; 
-                /*min_dist = match Ball2D::check_min_dist(dist - radsum*0.9, min_dist) {
+                let radius_sum = b.radius + self.radius;
+                /*min_dist = match Ball2D::check_min_dist(dist - radius_sum*0.9, min_dist) {
                     Err(BallError::DistanceUnderflow) | Err(BallError::LessThanTwoBalls) => return(0., Vec2D::new(0.,0.), 0.),
                     Ok(dist_result) => dist_result,
                 };*/
 
-                match  Ball2D::check_min_dist(dist - radsum, min_dist) {
+                match  Ball2D::check_min_dist(dist - radius_sum, min_dist) {
                     Ok(min_dist_cur) => {
                         min_dist = min_dist_cur;
-                        let lj_force = Ball2D::lenard_jones_force(dist, radsum, self.id);
+                        let lj_force = Ball2D::lenard_jones_force(dist, radius_sum, self.id);
                         let force_to_dist_val = lj_force/dist;
                         let local_force = Vec2D::new(dist_vec.x*force_to_dist_val, dist_vec.y*force_to_dist_val);
 
@@ -291,7 +293,7 @@ impl<'a> Ball2D<'a> {
                         }
 
                         force.add(local_force);
-                        total_pot += Ball2D::lenard_jones_potential(dist, radsum);
+                        total_pot += Ball2D::lenard_jones_potential(dist, radius_sum);
                     },
                     _ => {
                         min_dist = 0.;
@@ -305,7 +307,7 @@ impl<'a> Ball2D<'a> {
                         }
 
                         force.add(local_force);
-                        total_pot += Ball2D::lenard_jones_potential(dist, radsum);
+                        total_pot += Ball2D::lenard_jones_potential(dist, radius_sum);
                     },
                 };
 
@@ -365,8 +367,8 @@ impl<'a> Ball2D<'a> {
         let friction_braking = 2. * _friction_number * _friction_number;
         let mut accel: Vec2D = total_force.scaled_copy(1./self.mass);
         accel.add(Vec2D::new(-friction_braking*self.v.x, -friction_braking*self.v.y));
-        //println!("... F_t: {} and limit: {} for speed {}", total_force, speed_limit, self.v);
-        //println!("...... friction_braking:{} and mass: {}", friction_braking, self.mass);
+        // println!("... F_t: {} and limit: {} for speed {}", total_force, speed_limit, self.v);
+        // println!("...... friction_braking:{} and mass: {} accel_res: {:?}", friction_braking, self.mass, accel);
         (friction_braking, accel)
     }
 
@@ -376,7 +378,6 @@ impl<'a> Ball2D<'a> {
     }
 
     pub fn update(&mut self, dt: f32, bound: &Rect) -> (f32, f32) {
-
         if self.verbose {
             println!("{} ------ [{:.2},{:.2}] neighbours: {:#?}", self.get_name(), self.hood.nearest, self.hood.farthest, self.hood.get_neighbour_names());
         }
@@ -394,7 +395,6 @@ impl<'a> Ball2D<'a> {
 
         let dx = self.v.x * dt + 0.5*accel.x * dt * dt ;
         let dy = self.v.y * dt + 0.5*accel.y * dt * dt;
-        
         let mut dt_max = dt;
         if min_dist >= 0. && (dx*dx+dy*dy) > (min_dist*min_dist*0.5) {
             //dt_max = -p + f32::sqrt(p*p+min_dist/ a_norm);
@@ -471,8 +471,8 @@ mod tests {
     #[test]
     fn test_verlet_default(){
         let vlist: Verlet = Verlet::default();
-        assert_eq!(vlist.nearest, -1.);
-        assert_eq!(vlist.farthest, -1.);
+        assert!(vlist.nearest.is_nan());
+        assert!(vlist.farthest.is_nan());
 
         let actual_list = vlist.neighbours.borrow();
         assert_eq!(actual_list.len(), 0);
@@ -694,51 +694,80 @@ mod tests {
     }
 
     #[test]
-    fn test_accel_with_speed_limit() {
+    fn test_accel_with_no_velocity() {
         let mass = 1.0;
-
-        // Case 1: Zero velocity → No friction braking, accel = force/mass
-        let mut ball1 = Ball2D::new_massive(17, 2., 3., 4., mass,);
-        ball1.v = Vec2D::new(0.,0.);
+        let mut ball = Ball2D::new_massive(17, 2., 3., 4., mass);
+        ball.v = Vec2D::new(0., 0.);
         let force = Vec2D::new(10.0, 0.0);
-        let (friction, accel) = ball1.accel_with_speed_limit(&force, 5.0);
-        assert_eq!(friction, 0.0, "Expected zero friction for zero velocity");
-        assert_eq!(accel, Vec2D::new(10.0, 0.0), "Expected acceleration to be force/mass");
 
-        // Case 2: Velocity below speed limit → Small friction
-        let mut ball1 = Ball2D::new_massive(17, 2., 3., 4., mass,);
-        ball1.v = Vec2D::new(2.,0.);
-        let (friction, accel) = ball1.accel_with_speed_limit(&force, 5.0);
-        assert!(friction > 0.0, "Friction should be positive for moving object");
-        assert!(accel.x < 10.0, "Acceleration should be slightly reduced by friction");
+        let (friction, accel) = ball.accel_with_speed_limit(&force, 5.0);
 
-        // Case 3: Velocity at speed limit → Noticeable friction
-        let mut ball1 = Ball2D::new_massive(17, 2., 3., 4., mass,);
-        ball1.v = Vec2D::new(5.,0.);
-        let (friction, accel) = ball1.accel_with_speed_limit(&force, 5.0);
-        assert!(friction > 0.1, "Friction should be significant at speed limit");
-        assert!(accel.x < 10.0, "Acceleration should be reduced by friction");
+        assert_eq!(friction, 0.0, "Expected zero friction for zero velocity, got {}", friction);
+        assert_eq!(accel, Vec2D::new(10.0, 0.0), "Expected acceleration to be force/mass, got {:?}", accel);
+    }
 
-        // Case 4: Velocity above speed limit → Strong friction
-        let mut ball1 = Ball2D::new_massive(17, 2., 3., 4., mass,);
-        ball1.v = Vec2D::new(10.,0.);
-        let (friction, accel) = ball1.accel_with_speed_limit(&force, 5.0);
-        assert!(friction > 0.5, "Friction should be strong above speed limit");
-        assert!(accel.x < 10.0, "Acceleration should be significantly reduced");
+    #[test]
+    fn test_accel_with_velocity_below_speed_limit() {
+        let mass = 1.0;
+        let mut ball = Ball2D::new_massive(17, 2., 3., 4., mass);
+        ball.v = Vec2D::new(2., 0.);
+        let force = Vec2D::new(10.0, 0.0);
 
-        // Case 5: No force applied → Object only slows down due to friction
-        let mut ball1 = Ball2D::new_massive(17, 2., 3., 4., mass,);
-        ball1.v = Vec2D::new(3.,0.);
+        let (friction, accel) = ball.accel_with_speed_limit(&force, 5.0);
+
+        assert!(friction > 0.0, "Expected positive friction for moving object, got {}", friction);
+        assert!(accel.x < 10.0, "Expected acceleration to be slightly reduced by friction, got {:?}", accel);
+    }
+
+    #[test]
+    fn test_accel_with_velocity_at_speed_limit() {
+        let mass = 1.0;
+        let mut ball = Ball2D::new_massive(17, 2., 3., 4., mass);
+        ball.v = Vec2D::new(5., 0.);
+        let force = Vec2D::new(10.0, 0.0);
+
+        let (friction, accel) = ball.accel_with_speed_limit(&force, 5.0);
+
+        assert!(friction > 0.1, "Expected noticeable friction at speed limit, got {}", friction);
+        assert!(accel.x < 10.0, "Expected acceleration to be reduced by friction, got {:?}", accel);
+    }
+
+    #[test]
+    fn test_accel_with_velocity_above_speed_limit() {
+        let mass = 1.0;
+        let mut ball = Ball2D::new_massive(17, 2., 3., 4., mass);
+        ball.v = Vec2D::new(10., 0.);
+        let force = Vec2D::new(10.0, 0.0);
+
+        let (friction, accel) = ball.accel_with_speed_limit(&force, 5.0);
+
+        assert!(friction > 0.5, "Expected strong friction above speed limit, got {}", friction);
+        assert!(accel.x < 10.0, "Expected acceleration to be significantly reduced, got {:?}", accel);
+    }
+
+    #[test]
+    fn test_accel_with_no_force_applied() {
+        let mass = 1.0;
+        let mut ball = Ball2D::new_massive(17, 2., 3., 4., mass);
+        ball.v = Vec2D::new(3., 0.);
         let force = Vec2D::new(0.0, 0.0);
-        let (_friction, accel) = ball1.accel_with_speed_limit(&force, 5.0);
-        assert!(accel.x < 0.0, "Acceleration should be negative, causing deceleration");
 
-        // Case 6: Different mass values
-        let mut ball1 = Ball2D::new_massive(17, 2., 3., 4., 2.*mass,);
-        ball1.v = Vec2D::new(4.,0.);
+        let (_friction, accel) = ball.accel_with_speed_limit(&force, 5.0);
+
+        assert!(accel.x < 0.0, "Expected negative acceleration causing deceleration, got {:?}", accel);
+    }
+
+    #[test]
+    fn test_accel_with_different_mass() {
+        let mass = 1.0;
+        let mut ball = Ball2D::new_massive(17, 2., 3., 4., 2. * mass);
+        ball.v = Vec2D::new(4., 0.);
         let force = Vec2D::new(10.0, 0.0);
-        let (friction, accel) = ball1.accel_with_speed_limit(&force, 5.0);
-        assert_eq!(accel.x, (10.0 / 2.0) + (-friction * 4.0), "Acceleration should factor in mass correctly");
+
+        let (friction, accel) = ball.accel_with_speed_limit(&force, 5.0);
+
+        let expected_accel_x = (10.0 / 2.0) + (-friction * 4.0);
+        assert_eq!(accel.x, expected_accel_x, "Acceleration should factor in mass correctly. Expected: {}, got: {}", expected_accel_x, accel.x);
     }
 
     #[test]
@@ -838,4 +867,412 @@ mod tests {
         assert_approx_eq!(f32, force.x, lj_force, epsilon=1e-6);
         assert_approx_eq!(f32, force.y, lj_force, epsilon=1e-6);
     }
+
+    #[test]
+    fn test_execute_update_no_collision() {
+        // let mut ball = Ball2D {
+        //     pos: Vec2D::new(5.0, 5.0),
+        //     v: Vec2D::new(1.0, 1.0),
+        //     radius: 1.0,
+        // };
+        let mut ball = Ball2D::new_massive(17, 5., 5., 1., 1.,);
+        ball.v = Vec2D::new(1.0, 1.0);
+        let accel = Vec2D::new(0.0, 0.0);
+        let dt = 1.0;
+        let bound = Rect { x: 0.0, y: 0.0, w: 10.0, h: 10.0 };
+
+        ball.execute_update(&accel, dt, &bound);
+
+        assert_approx_eq!(f32, ball.pos.x, 6.0, ulps = 2);
+        assert_approx_eq!(f32, ball.pos.y, 6.0, ulps = 2);
+        assert_eq!(ball.v, Vec2D::new(1.0, 1.0)); // No change in velocity
+    }
+
+    #[test]
+    fn test_execute_update_left_wall_collision() {
+        // let mut ball = 2Ball2D {
+        //     pos: Vec2D::new(1.5, 5.0),
+        //     v: Vec2D::new(-2.0, 0.0),
+        //     radius: 1.0,
+        // };
+        let mut ball = Ball2D::new_massive(17, 1.5, 5., 1., 1.,);
+        ball.v = Vec2D::new(-2.0, 0.0);
+        let accel = Vec2D::new(0.0, 0.0);
+        let dt = 1.0;
+        let bound = Rect { x: 0.0, y: 0.0, w: 10.0, h: 10.0 };
+
+        ball.execute_update(&accel, dt, &bound);
+
+        assert!(ball.pos.x > 1.0, "Ball should bounce off left wall.");
+        assert_eq!(ball.v.x, 2.0, "Velocity should be reversed after hitting left wall.");
+    }
+
+    #[test]
+    fn test_execute_update_right_wall_collision() {
+        // let mut ball = Ball2D {
+        //     pos: Vec2D::new(8.5, 5.0),
+        //     v: Vec2D::new(2.0, 0.0),
+        //     radius: 1.0,
+        // };
+        let mut ball = Ball2D::new_massive(17, 8.5, 5., 1., 1.,);
+        ball.v = Vec2D::new(2.0, 0.0);
+        let accel = Vec2D::new(0.0, 0.0);
+        let dt = 1.0;
+        let bound = Rect { x: 0.0, y: 0.0, w: 10.0, h: 10.0 };
+
+        ball.execute_update(&accel, dt, &bound);
+
+        assert!(ball.pos.x < 9.0, "Ball should bounce off right wall.");
+        assert_eq!(ball.v.x, -2.0, "Velocity should be reversed after hitting right wall.");
+    }
+
+    #[test]
+    fn test_execute_update_top_wall_collision() {
+        // let mut ball = Ball2D {
+        //     pos: Vec2D::new(5.0, 8.5),
+        //     v: Vec2D::new(0.0, 2.0),
+        //     radius: 1.0,
+        // };
+        let mut ball = Ball2D::new_massive(17, 5., 8.5, 1., 1.,);
+        ball.v = Vec2D::new(0., 2.0);
+        let accel = Vec2D::new(0.0, 0.0);
+        let dt = 1.0;
+        let bound = Rect { x: 0.0, y: 0.0, w: 10.0, h: 10.0 };
+
+        ball.execute_update(&accel, dt, &bound);
+
+        assert!(ball.pos.y < 9.0, "Ball should bounce off top wall.");
+        assert_eq!(ball.v.y, -2.0, "Velocity should be reversed after hitting top wall.");
+    }
+
+    #[test]
+    fn test_execute_update_bottom_wall_collision() {
+        // let mut ball = Ball2D {
+        //     pos: Vec2D::new(5.0, 1.5),
+        //     v: Vec2D::new(0.0, -2.0),
+        //     radius: 1.0,
+        // };
+        let mut ball = Ball2D::new_massive(17, 5., 1.5, 1., 1.,);
+        ball.v = Vec2D::new(0., -2.0);
+        let accel = Vec2D::new(0.0, 0.0);
+        let dt = 1.0;
+        let bound = Rect { x: 0.0, y: 0.0, w: 10.0, h: 10.0 };
+
+        ball.execute_update(&accel, dt, &bound);
+
+        assert!(ball.pos.y > 1.0, "Ball should bounce off bottom wall.");
+        assert_eq!(ball.v.y, 2.0, "Velocity should be reversed after hitting bottom wall.");
+    }
+
+    #[test]
+    fn test_execute_update_corner_collision() {
+        // let mut ball = Ball2D {
+        //     pos: Vec2D::new(1.5, 1.5),
+        //     v: Vec2D::new(-2.0, -2.0),
+        //     radius: 1.0,
+        // };
+        let mut ball = Ball2D::new_massive(17, 1.5, 1.5, 1., 1.,);
+        ball.v = Vec2D::new(-2.0, -2.0);
+        let accel = Vec2D::new(0.0, 0.0);
+        let dt = 1.0;
+        let bound = Rect { x: 0.0, y: 0.0, w: 10.0, h: 10.0 };
+
+        ball.execute_update(&accel, dt, &bound);
+
+        assert!(ball.pos.x > 1.0, "Ball should bounce off left wall.");
+        assert!(ball.pos.y > 1.0, "Ball should bounce off bottom wall.");
+        assert_eq!(ball.v.x, 2.0, "Velocity X should be reversed.");
+        assert_eq!(ball.v.y, 2.0, "Velocity Y should be reversed.");
+    }
+
+    #[test]
+    fn test_execute_update_with_acceleration() {
+        // let mut ball = Ball2D {
+        //     pos: Vec2D::new(5.0, 5.0),   // Initial position
+        //     v: Vec2D::new(1.0, 1.0),     // Initial velocity
+        //     radius: 1.0,
+        // };
+        let mut ball = Ball2D::new_massive(17, 5., 5., 1., 1.,);
+        ball.v = Vec2D::new(1.0, 1.0);
+        let accel = Vec2D::new(2.0, -1.0); // Acceleration in x and y directions
+        let dt = 1.0; // Time step
+        let bound = Rect { x: 0.0, y: 0.0, w: 20.0, h: 20.0 }; // Sufficiently large boundary
+
+        ball.execute_update(&accel, dt, &bound);
+
+        // Expected position and velocity using kinematics
+        let expected_pos_x = 5.0 + 1.0 * dt + 0.5 * 2.0 * dt * dt; // 5 + 1 + 1 = 7.0
+        let expected_pos_y = 5.0 + 1.0 * dt + 0.5 * (-1.0) * dt * dt; // 5 + 1 - 0.5 = 5.5
+
+        let expected_vel_x = 1.0 + 2.0 * dt; // 1 + 2 = 3.0
+        let expected_vel_y = 1.0 + (-1.0) * dt; // 1 - 1 = 0.0
+
+        assert_approx_eq!(f32, ball.pos.x, expected_pos_x, ulps = 2);
+        assert_approx_eq!(f32, ball.pos.y, expected_pos_y, ulps = 2);
+        assert_approx_eq!(f32, ball.v.x, expected_vel_x, ulps = 2);
+        assert_approx_eq!(f32, ball.v.y, expected_vel_y, ulps = 2);
+    }
+
+    #[test]
+    fn test_update_no_movement() {
+        let mut ball = Ball2D::new_massive(17, 2.0, 3.0, 1.0, 1.0);
+        let bound = Rect::new(0.0, 0.0, 100.0, 100.0);
+
+        ball.verbose = true;
+        let (min_dist, total_pot) = ball.update(1.0, &bound);
+
+        assert_eq!(ball.v, Vec2D::new(0.0, 0.0), "Velocity should remain zero when no force is applied");
+        assert_eq!(ball.pos, Vec2D::new(2.0, 3.0), "Position should remain the same when stationary");
+        assert!(min_dist.is_nan(), "Min distance should NaN since no neighbours");
+        assert!(total_pot >= 0.0, "Total potential energy should be non-negative");
+    }
+
+    #[test]
+    fn test_update_with_force() {
+        let mut ball = Ball2D::new_massive(17, 2.0, 3.0, 1.0, 1.0);
+        ball.v = Vec2D::new(1.0, 1.0); // Initial velocity
+        let bound = Rect::new(0.0, 0.0, 100.0, 100.0);
+
+        let (min_dist, total_pot) = ball.update(1.0, &bound);
+
+        assert!(ball.pos.x > 2.0, "Ball should move in the x direction");
+        assert!(ball.pos.y > 3.0, "Ball should move in the y direction");
+        assert!(min_dist.is_nan(), "Min distance should NaN since not neighbours");
+        assert!(total_pot >= 0.0, "Total potential energy should be valid");
+    }
+
+    #[test]
+    fn test_update_with_boundary_collision() {
+        let mut ball = Ball2D::new_massive(17, 95.0, 95.0, 4.0, 1.0);
+        ball.v = Vec2D::new(10.0, 10.0);
+        let bound = Rect::new(0.0, 0.0, 100.0, 100.0);
+
+        let (_, _) = ball.update(1.0, &bound);
+
+        assert!(ball.pos.x <= 100.0, "Ball should not go out of bounds in x direction");
+        assert!(ball.pos.y <= 100.0, "Ball should not go out of bounds in y direction");
+        assert!(ball.v.x < 0.0 || ball.v.y < 0.0, "Velocity should reflect if boundary collision occurred");
+    }
+
+    #[test]
+    fn test_update_with_high_dt_causing_recursion() {
+        let mut ball = Ball2D::new_massive(17, 10.0, 10.0, 1.0, 1.0);
+        ball.v = Vec2D::new(50.0, 50.0); // High velocity to trigger dt subdivision
+        let bound = Rect::new(0.0, 0.0, 100.0, 100.0);
+
+        let (min_dist, total_pot) = ball.update(10.0, &bound);
+
+        assert!(min_dist.is_nan(), "Min distance should NaN since not neighbours");
+        assert!(total_pot >= 0.0, "Total potential energy should be non-negative");
+        assert!(ball.pos.x <= 100.0, "Ball should stay within bounds");
+        assert!(ball.pos.y <= 100.0, "Ball should stay within bounds");
+    }
+
+    #[test]
+    #[ignore]
+    #[should_panic(expected = "Too many substeps for update")]
+    fn test_update_panics_on_excessive_substeps() {
+        let mut ball = Ball2D::new_massive(17, 10.0, 10.0, 1.0, 1.0);
+        ball.v = Vec2D::new(1000.0, 1000.0); // Extreme velocity to trigger panic
+        let bound = Rect::new(0.0, 0.0, 100.0, 100.0);
+
+        ball.update(100.0, &bound); // Large dt should cause too many subdivisions and panic
+    }
+
+    #[test]
+    fn test_update_closeness_stats_no_neighbors() {
+        let mut ball = Ball2D::new_massive(17, 10.0, 10.0, 4.0, 1.0);
+        ball.update_closeness_stats();
+
+        assert!(ball.hood.nearest.is_nan(), "Nearest distance should become NaN if no neighbors exist");
+        assert!(ball.hood.farthest.is_nan(), "Farthest distance should become NaN if no neighbors exist");
+    }
+
+    #[test]
+    fn test_update_closeness_stats_one_neighbor() {
+        let mut ball = Ball2D::new_massive(17, 10.0, 10.0, 4.0, 1.0);
+        let neighbor = Ball2D::new_massive(18, 15.0, 10.0, 4.0, 1.0);
+        ball.verbose=true;
+        //ensure neighbour is held until after update_closeness
+        let neighbor_rc = &Rc::new(RefCell::new(neighbor));
+        ball.hood.neighbours.borrow_mut().push(Rc::downgrade(neighbor_rc));
+
+        ball.update_closeness_stats();
+
+        let expected_distance = 5.0;
+        assert_eq!(ball.hood.nearest, expected_distance, "Nearest distance should be correct for one neighbor");
+        assert_eq!(ball.hood.farthest, expected_distance, "Farthest distance should be correct for one neighbor");
+    }
+
+    #[test]
+    fn test_update_closeness_stats_multiple_neighbors() {
+        let mut ball = Ball2D::new_massive(17, 10.0, 10.0, 4.0, 1.0);
+        let neighbor1 = Ball2D::new_massive(18, 12.0, 10.0, 4.0, 1.0);
+        let neighbor2 = Ball2D::new_massive(19, 20.0, 10.0, 4.0, 1.0);
+        ball.verbose = true;
+
+        //ensure neighbour is held until after update_closeness
+        let neighbor1_rc = &Rc::new(RefCell::new(neighbor1));
+        ball.hood.neighbours.borrow_mut().push(Rc::downgrade(neighbor1_rc));
+        let neighbor2_rc = &Rc::new(RefCell::new(neighbor2));
+        ball.hood.neighbours.borrow_mut().push(Rc::downgrade(neighbor2_rc));
+
+        ball.update_closeness_stats();
+
+        let expected_nearest = 2.0;
+        let expected_farthest = 10.0;
+        assert_eq!(ball.hood.nearest, expected_nearest, "Nearest distance should be correct with multiple neighbors");
+        assert_eq!(ball.hood.farthest, expected_farthest, "Farthest distance should be correct with multiple neighbors");
+    }
+
+    #[test]
+    fn test_update_closeness_stats_ignores_dropped_neighbors() {
+        let mut ball = Ball2D::new_massive(17, 10.0, 10.0, 4.0, 1.0);
+        let neighbor = Ball2D::new_massive(18, 15.0, 10.0, 4.0, 1.0);
+
+        ball.verbose = true;
+        let neighbour_rc = Rc::new(RefCell::new(neighbor));
+        let weak_ref = Rc::downgrade(&neighbour_rc);
+        ball.hood.neighbours.borrow_mut().push(weak_ref);
+
+        // Simulate neighbor being dropped
+        drop(neighbour_rc);
+
+        ball.update_closeness_stats();
+
+        assert!(ball.hood.nearest.is_nan(), "Nearest distance should become NaN when all neighbors are dropped");
+        assert!(ball.hood.farthest.is_nan(), "Farthest distance should become NaN when all neighbors are dropped");
+    }
+    #[test]
+    fn test_update_hood_adds_neighbors_within_distance_limit() {
+        let ball1 = Ball2D::new_massive(1, 0.0, 0.0, 2.0, 1.0);
+        let ball2 = Ball2D::new_massive(2, 3.0, 4.0, 2.0, 1.0);
+
+        let ball1_rc = Rc::new(RefCell::new(ball1));
+        let ball2_rc = Rc::new(RefCell::new(ball2));
+
+        let dt = 1.0;
+        let others = vec![ball2_rc.clone()];
+
+        ball1_rc.borrow_mut().update_hood(dt, &ball1_rc, others);
+
+        let ball1_borrowed = ball1_rc.borrow();
+        let ball1_neighbours = ball1_borrowed.hood.neighbours.borrow();
+
+        assert_eq!(ball1_neighbours.len(), 1, "Ball1 should have one neighbor");
+        assert_eq!(ball1_neighbours[0].upgrade().is_some(), true, "Ball2 should be in the neighbors list of Ball1");
+    }
+    #[test]
+    fn test_update_hood_does_not_add_neighbors_outside_distance_limit() {
+        let mut ball1 = Ball2D::new_massive(1, 0.0, 0.0, 2.0, 1.0);
+        let mut ball2 = Ball2D::new_massive(2, 10.0, 10.0, 2.0, 1.0);
+
+        ball1.verbose = true;
+        ball2.verbose = true;
+        let ball1_rc = Rc::new(RefCell::new(ball1));
+        let ball2_rc = Rc::new(RefCell::new(ball2));
+
+        let dt = 1.0;
+        let others = vec![ball2_rc.clone()];
+
+
+
+        ball1_rc.borrow_mut().update_hood(dt, &ball1_rc, others);
+
+        let ball1_borrowed = ball1_rc.borrow();
+        let ball1_neighbours = ball1_borrowed.hood.neighbours.borrow();
+
+        println!("neighbours of ball1: {:?}", ball1_borrowed.get_neighbour_names());
+        assert_eq!(ball1_neighbours.len(), 0, "Ball1 should have no neighbors when Ball2 is outside the distance limit");
+    }
+    #[test]
+    fn test_update_hood_no_neighbors() {
+        let ball1 = Ball2D::new_massive(1, 0.0, 0.0, 2.0, 1.0);
+        let ball1_rc = Rc::new(RefCell::new(ball1));
+
+        let dt = 1.0;
+        let others: Vec<Rc<RefCell<Ball2D>>> = Vec::new();
+
+        ball1_rc.borrow_mut().update_hood(dt, &ball1_rc, others);
+
+        let ball1_borrowed = ball1_rc.borrow();
+        let ball1_neighbours = ball1_borrowed.hood.neighbours.borrow();
+
+        assert_eq!(ball1_neighbours.len(), 0, "Ball1 should have no neighbors when the others vector is empty");
+    }
+    #[test]
+    fn test_update_hood_multiple_neighbors() {
+        let  ball1 = Ball2D::new_massive(1, 0.0, 0.0, 2.0, 1.0);
+        let  ball2 = Ball2D::new_massive(2, 3.0, 4.0, 2.0, 1.0);
+        let  ball3 = Ball2D::new_massive(3, 6.0, 8.0, 2.0, 1.0);
+
+        let ball1_rc = Rc::new(RefCell::new(ball1));
+        let ball2_rc = Rc::new(RefCell::new(ball2));
+        let ball3_rc = Rc::new(RefCell::new(ball3));
+
+        let dt = 1.0;
+        let others = vec![ball2_rc.clone(), ball3_rc.clone()];
+
+        ball1_rc.borrow_mut().update_hood(dt, &ball1_rc, others);
+
+        let ball1_borrowed = ball1_rc.borrow();
+        let ball1_neighbours = ball1_borrowed.hood.neighbours.borrow();
+
+        assert_eq!(ball1_neighbours.len(), 2, "Ball1 should have two neighbors");
+    }
+    #[test]
+    fn test_update_hood_indirect_neighbors() {
+        let  ball1 = Ball2D::new_massive(1, 0.0, 0.0, 2.0, 1.0);
+        let  ball2 = Ball2D::new_massive(2, 3.0, 0.0, 2.0, 1.0);
+        let  ball3 = Ball2D::new_massive(3, 6.5, 0.0, 2.0, 1.0);
+
+        let ball1_rc = Rc::new(RefCell::new(ball1));
+        let ball2_rc = Rc::new(RefCell::new(ball2));
+        let ball3_rc = Rc::new(RefCell::new(ball3));
+
+        let dt = 1.0;
+
+        // Ball1 updates its hood with Ball2 as a potential neighbor
+        ball1_rc.borrow_mut().update_hood(dt, &ball1_rc, vec![ball2_rc.clone()]);
+
+        // Ball2 updates its hood with Ball1 and Ball3 as potential neighbors
+        ball2_rc.borrow_mut().update_hood(dt, &ball2_rc, vec![ball1_rc.clone(), ball3_rc.clone()]);
+
+        // Ball3 updates its hood with Ball2 as a potential neighbor
+        ball3_rc.borrow_mut().update_hood(dt, &ball3_rc, vec![ball2_rc.clone()]);
+
+        let ball1_borrowed = ball1_rc.borrow();
+        let ball2_borrowed = ball2_rc.borrow();
+        let ball3_borrowed = ball3_rc.borrow();
+
+        let ball1_neighbours = ball1_borrowed.hood.neighbours.borrow();
+        let ball2_neighbours = ball2_borrowed.hood.neighbours.borrow();
+        let ball3_neighbours = ball3_borrowed.hood.neighbours.borrow();
+
+        // Check if Ball2 is in Ball1's neighborhood
+        let ball1_has_ball2 = ball1_neighbours.iter().any(|w| w.upgrade().map_or(false, |b| b.borrow().id == 2));
+        assert!(ball1_has_ball2, "Ball2 should be a neighbor of Ball1");
+
+        // Check if Ball1 is in Ball2's neighborhood
+        let ball2_has_ball1 = ball2_neighbours.iter().any(|w| w.upgrade().map_or(false, |b| b.borrow().id == 1));
+        assert!(ball2_has_ball1, "Ball1 should be a neighbor of Ball2");
+
+        // Check if Ball3 is in Ball2's neighborhood
+        let ball2_has_ball3 = ball2_neighbours.iter().any(|w| w.upgrade().map_or(false, |b| b.borrow().id == 3));
+        assert!(ball2_has_ball3, "Ball3 should be a neighbor of Ball2");
+
+        // Check if Ball2 is in Ball3's neighborhood
+        let ball3_has_ball2 = ball3_neighbours.iter().any(|w| w.upgrade().map_or(false, |b| b.borrow().id == 2));
+        assert!(ball3_has_ball2, "Ball2 should be a neighbor of Ball3");
+
+        // Check that Ball1 is NOT in Ball3's neighborhood
+        let ball3_has_ball1 = ball3_neighbours.iter().any(|w| w.upgrade().map_or(false, |b| b.borrow().id == 1));
+        assert!(!ball3_has_ball1, "Ball1 should NOT be a neighbor of Ball3");
+
+        // Check that Ball3 is NOT in Ball1's neighborhood
+        let ball1_has_ball3 = ball1_neighbours.iter().any(|w| w.upgrade().map_or(false, |b| b.borrow().id == 3));
+        assert!(!ball1_has_ball3, "Ball3 should NOT be a neighbor of Ball1");
+    }
+
+
 }
