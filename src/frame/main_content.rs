@@ -692,27 +692,14 @@ impl<'a> EventHandler for MainContent<'a> {
                         if let Ok(number) = input.trim().parse::<usize>() {
                             match number {
                                 0 => {
-                                    for b in self.v_points.iter() {
-                                        let mut ba = b.borrow_mut();
-                                        ba.verbose = false;
-                                    }
+                                    self.clear_verbose_balls();
                                 }
                                 _ => {
-                                    if let Some(ball_rc) = self
-                                        .v_points
-                                        .iter()
-                                        .find(|&ball_rc_in| ball_rc_in.borrow().get_id() == number)
-                                    {
-                                        let mut ball_found = ball_rc.borrow_mut();
-                                        ball_found.verbose = !ball_found.verbose;
-                                    }
+                                    self.toggle_ball_verbose(number);
                                 }
                             }
                         } else if input.trim() == "a" {
-                            for b in self.v_points.iter() {
-                                let mut ba = b.borrow_mut();
-                                ba.verbose = true;
-                            }
+                            self.make_all_verbose();
                         }
                     }
                 }
@@ -736,6 +723,37 @@ impl<'a> EventHandler for MainContent<'a> {
         canvas.finish(ctx)?;
 
         Ok(())
+    }
+}
+
+impl<'a> MainContent<'a> {
+    fn make_all_verbose(&mut self) {
+        for b in self.v_points.iter() {
+            let mut ba = b.borrow_mut();
+            ba.verbose = true;
+        }
+    }
+}
+
+impl<'a> MainContent<'a> {
+    fn toggle_ball_verbose(&mut self, number: usize) {
+        if let Some(ball_rc) = self
+            .v_points
+            .iter()
+            .find(|&ball_rc_in| ball_rc_in.borrow().get_id() == number)
+        {
+            let mut ball_found = ball_rc.borrow_mut();
+            ball_found.verbose = !ball_found.verbose;
+        }
+    }
+}
+
+impl<'a> MainContent<'a> {
+    fn clear_verbose_balls(&mut self) {
+        for b in self.v_points.iter() {
+            let mut ba = b.borrow_mut();
+            ba.verbose = false;
+        }
     }
 }
 
@@ -840,12 +858,14 @@ mod tests {
                 ball_coord_px.y + ball_radius_px * 2.2,
             )
             .unwrap();
+        main_content.make_all_verbose();
         main_content.global_update().unwrap();
 
         // Validate that the balls' velocities, positions, and energies are updated correctly
         assert!(
             main_content.sim.energy_kin > 0.0,
-            "Kinetic energy should be positive"
+            "Kinetic energy should be positive but was {}",
+            main_content.sim.energy_kin
         );
         //assert!(main_content.sim.energy_pot >= 0.0, "Potential energy should be non-negative");
     }
