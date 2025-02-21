@@ -1423,7 +1423,7 @@ mod tests {
     #[test]
     fn test_update_hood_adds_neighbors_within_distance_limit() {
         let ball1 = Ball2D::new_massive(1, 0.0, 0.0, 2.0, 1.0);
-        let ball2 = Ball2D::new_massive(2, 3.0, 4.0, 2.0, 1.0);
+        let ball2 = Ball2D::new_massive(2, 3.0, 1.0, 2.0, 1.0);
 
         let ball1_rc = Rc::new(RefCell::new(ball1));
         let ball2_rc = Rc::new(RefCell::new(ball2));
@@ -1493,8 +1493,8 @@ mod tests {
     #[test]
     fn test_update_hood_multiple_neighbors() {
         let ball1 = Ball2D::new_massive(1, 0.0, 0.0, 2.0, 1.0);
-        let ball2 = Ball2D::new_massive(2, 3.0, 4.0, 2.0, 1.0);
-        let ball3 = Ball2D::new_massive(3, 6.0, 8.0, 2.0, 1.0);
+        let ball2 = Ball2D::new_massive(2, 1.0, 3.0, 2.0, 1.0);
+        let ball3 = Ball2D::new_massive(3, 2.0, 1.5, 2.0, 1.0);
 
         let ball1_rc = Rc::new(RefCell::new(ball1));
         let ball2_rc = Rc::new(RefCell::new(ball2));
