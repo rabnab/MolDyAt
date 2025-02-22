@@ -258,7 +258,7 @@ impl<'a> Ball2D<'a> {
         let dist = dist_of_balls - radius_sum;
         let quot = LJ_SIG / dist;
         let quot_six = quot.powi(6);
-        let res = 24. * LJ_EPS * quot_six * (2. * quot_six - 1.) / dist;
+        let res = - 24. * LJ_EPS * quot_six * (2. * quot_six - 1.) / dist;
         //0==6(2*LJ_SIG/dist6-1)*const/dist
         //0==2*LJ_SIG/dist6-1
         //LJ_SIG/sqrt6(1/2)==dist
