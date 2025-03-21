@@ -10,7 +10,7 @@ T [Si] = E*eps/kb;
 L [Si] = L*r_m;
 M [Si] = m*mAr;
 
-t [Si] = sqrt(mN2*r_m^2 / eps); --> time scale for interaction
+t [Si] = sqrt(mN2*r_m^2 / eps); --> timescale for interaction
 
 
 d_dt x = d_d(tscale tau) x = 1/tscale d_dtau xau * r_m = r_m/t_scale *d_dtau xau
