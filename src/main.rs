@@ -3,7 +3,7 @@ mod objects2d;
 
 use crate::frame::MainContent;
 
-use ggez::conf::WindowMode;
+use ggez::conf::{WindowMode, WindowSetup};
 use ggez::event::{self};
 use ggez::graphics::ShaderBuilder;
 use ggez::input::mouse;
@@ -23,6 +23,7 @@ fn main() -> GameResult {
     let height_default: f32 = 1024.;
     let (mut ctx, event_loop) = ContextBuilder::new("ThermoRust", "Rainer Kaltseis")
         .add_resource_path(resource_dir)
+        .window_setup(WindowSetup::default().title("Monatomic gas using modified Lenard Jones Potential"))
         .window_mode(WindowMode {
             resizable: true,
             min_width: frame::MARGIN_PX_Y,
