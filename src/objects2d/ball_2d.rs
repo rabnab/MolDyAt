@@ -334,7 +334,7 @@ impl<'a> Ball2D<'a> {
 
     pub fn is_colliding(&self, other: &Ball2D) -> bool {
         //use norm_sq to avoid sqrt in norm
-        let radius_sum_sq = (self.radius + other.radius) * (self.radius + other.radius);
+        let radius_sum_sq = (self.radius + other.radius+LJ_SIG) * (self.radius + other.radius+LJ_SIG);
         let res = self.pos.dist(&other.pos).norm_sq() < radius_sum_sq;
         if res {
             println!(
