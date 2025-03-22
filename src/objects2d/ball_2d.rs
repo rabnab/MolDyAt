@@ -7,6 +7,7 @@ use std::rc::{Rc, Weak};
 //const LJ_SIG: f32 = 5.; // equilibrium distance
 //LJ_SIG in SI units is for Argon 3.4A=3.4E-10m
 pub(crate) const LJ_SIG: f32 = 1.; // equilibrium distance
+pub(crate) const LJ_CUTOFF: f32 = 8. * LJ_SIG; //distance where lenard jones force is < 1e-4 (as long as sig>0.1)
 pub(crate) const LJ_EPS: f32 = 1.; // attractive strength
 const SQRT6_OF_TWO: f32 = 1.122462048309372981; // == 2^(1/6)
 
@@ -236,16 +237,11 @@ impl<'a> Ball2D<'a> {
         //use approximation for (v*dt+LJ_SIG)^2
         let v_sq = self.v.norm_sq();
         let eq = LJ_SIG + self.radius;
+        let cutoff = self.radius+LJ_CUTOFF;
         //we only check hood every ten updates --> factors 100 and 10
         let dist_limit_by_v_sq =
             100. * v_sq * dt * dt + eq * eq + 2. * 10. * dt * eq * (self.v.x + self.v.y);
-        let dist_limit_by_closest_sq = if self.hood.nearest.is_finite() {
-            let near_used = f32::max(self.hood.nearest, self.radius + LJ_SIG * 2.);
-            near_used * near_used * 4.
-        } else {
-            //4*equi_radius
-            self.equilibrium_radius()*self.equilibrium_radius()*16.
-        };
+        let dist_limit_by_closest_sq = cutoff*cutoff;
         let dist_limit_sq = f32::max(dist_limit_by_closest_sq, dist_limit_by_v_sq);
         if self.verbose.console {
             println!(
