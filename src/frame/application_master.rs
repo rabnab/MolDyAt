@@ -1355,10 +1355,10 @@ impl<'a> EventHandler for MainContent<'a> {
     fn resize_event(
         &mut self,
         _ctx: &mut Context,
-        _width: f32,
-        _height: f32,
+        width: f32,
+        height: f32,
     ) -> Result<(), GameError> {
-        self.resize(_width, _height)?;
+        self.resize(width, height)?;
         Ok(())
     }
 }
