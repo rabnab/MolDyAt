@@ -3,7 +3,7 @@ mod objects2d;
 
 use crate::frame::MainContent;
 
-use ggez::conf::{WindowMode, WindowSetup};
+use ggez::conf::{FullscreenType, WindowMode, WindowSetup};
 use ggez::event::{self};
 use ggez::graphics::ShaderBuilder;
 use ggez::input::mouse;
@@ -31,7 +31,7 @@ fn main() -> GameResult {
             width: height_default / 9. * 16.,
             height: height_default,
             ..Default::default()
-        })
+        }.fullscreen_type(FullscreenType::Windowed))
         .build()
         .expect("Failed to build context");
 
