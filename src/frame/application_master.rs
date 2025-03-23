@@ -771,18 +771,19 @@ impl DrawingStuff for MainContent<'_> {
             Color::BLUE,
         )?;
 
-        let fps = ctx.time.fps();
-        let txt_balls = Text::new(TextFragment::new(self.status_text(fps as u32)).scale(30.));
-        let txt_balls_pos: [f32; 2] = match txt_balls.dimensions(ctx) {
-            None => [0., 0.],
-            Some(rec) => [
-                self.win_definition.margin_px_x * 2. + self.win_definition.region_px_x - rec.w,
-                0.,
-            ],
-        };
+
 
         canvas.draw(&rect, Vec2::new(0., 0.));
         if self.show_ball_stats {
+            let fps = ctx.time.fps();
+            let txt_balls = Text::new(TextFragment::new(self.status_text(fps as u32)).scale(30.));
+            let txt_balls_pos: [f32; 2] = match txt_balls.dimensions(ctx) {
+                None => [0., 0.],
+                Some(rec) => [
+                    self.win_definition.margin_px_x * 2. + self.win_definition.region_px_x - rec.w,
+                    0.,
+                ],
+            };
             canvas.draw(&txt_balls, DrawParam::default().dest(txt_balls_pos));
         }
         Ok(())
