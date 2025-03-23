@@ -66,6 +66,7 @@ struct SimStats {
     frames_since_draw: u32,
     v_pot: VecDeque<f32>,
     v_kin: VecDeque<f32>,
+    max_neighbours: usize,
 }
 
 
@@ -199,6 +200,7 @@ impl Default for SimStats {
             frames_since_draw: 0,
             v_pot: VecDeque::with_capacity(100),
             v_kin: VecDeque::with_capacity(100),
+            max_neighbours: 0,
         }
     }
 }
@@ -822,12 +824,14 @@ impl LogStuff for MainContent<'_> {
 
     fn status_text(&self, fps: u32) -> String {
         let text = if self.real_data {
-            format!("fps {} time: {:.3}[ns] ({})\n#Balls: {} #Frms: {}\nPotEnergy: {:.2E}[J]\nKinEnergy: {:.2E}[J]\nTotalE: {:.3}[J]\nTemp: {:.2}[K]\nmaxV: {:.2}[m/s]\nminDist: {:.2E}[m]\nvCOM: {}[m/s]",
+            format!("fps {} time: {:.3}[ns] ({})\n#Balls: {} #Frms: {}\nmaxNeig: {}\nPotEnergy: \
+                {:.2E}[J]\nKinEnergy: {:.2E}[J]\nTotalE: {:.3E}[J]\nTemp: {:.2}[K]\nmaxV: {:.2}[m/s]\nminDist: {:.2E}[m]\nvCOM: {}[m/s]",
                     fps,
                     self.sim.time * TIME_SCALE_NS,
                     self.sim.speedup,
                     self.num_balls,
                     self.sim.frames_since_draw,
+                    self.sim.max_neighbours,
                     self.sim.energy_pot * ENERGY_SCALE_J,
                     self.sim.energy_kin * ENERGY_SCALE_J,
                     (self.sim.energy_pot + self.sim.energy_kin) * ENERGY_SCALE_J,
@@ -837,12 +841,13 @@ impl LogStuff for MainContent<'_> {
                     self.sim.v_com.scaled_copy(LEN_SCALE_M / TIME_SCALE),
             )
         } else {
-            format!("fps {} time: {:.3} ({})\n#Balls: {} #Frms: {}\nPotEnergy: {:.2E}\nKinEnergy: {:.2E}\nTotalE: {:.3E}\nTemp: {:.3}\nmaxV: {:.2}\nminDist: {:.2E}\nvCOM: {}",
+            format!("fps {} time: {:.3} ({})\n#Balls: {} #Frms: {}\nmaxNeig: {}\nPotEnergy: {:.2E}\nKinEnergy: {:.2E}\nTotalE: {:.3E}\nTemp: {:.3}\nmaxV: {:.2}\nminDist: {:.2E}\nvCOM: {}",
                     fps,
                     self.sim.time,
                     self.sim.speedup,
                     self.num_balls,
                     self.sim.frames_since_draw,
+                    self.sim.max_neighbours,
                     self.sim.energy_pot,
                     self.sim.energy_kin,
                     self.sim.energy_pot + self.sim.energy_kin,
@@ -968,6 +973,7 @@ impl<'a> GameLogic for MainContent<'a> {
 
     fn calculate_temperature(&mut self) {
         let mut sum_rel_kin_doubled: f32 = 0.;
+        let mut max_neighbours: usize = 0;
 
         for ball_rc in &self.v_points {
             let cur = ball_rc.borrow();
@@ -975,7 +981,11 @@ impl<'a> GameLogic for MainContent<'a> {
             let v_rel_x = v_abs.x - self.sim.v_com.x;
             let v_rel_y = v_abs.y - self.sim.v_com.y;
             sum_rel_kin_doubled += cur.mass * (v_rel_x * v_rel_x + v_rel_y * v_rel_y);
+
+            let cur_num_neighbour = cur.hood.get_neighbour_names().len();
+            max_neighbours = max_neighbours.max(cur_num_neighbour);
         }
+        self.sim.max_neighbours = max_neighbours;
         //self.sim.temperature = 0.5 / (/*KB*/ 1. * (3. * self.v_points.len() as f32 - 3.)) * sum_rel_kin;
         self.sim.temperature = sum_rel_kin_doubled /3./(self.v_points.len() as f32)/* /KB == /1*/
     }
