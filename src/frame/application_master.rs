@@ -34,6 +34,7 @@ const MAX_BALL_SIZE: f32 = 5.5;
 const FPS_GOAL: u32 = 60;
 const DT_GOAL: f32 = 0.01; // 1. / (FPS_GOAL as f32);
 const SHOW_FORCE: bool = false;
+const RADIUS_COMPARISON_EPSILON: f32 = 1e-4; // Extracted constant for the comparison threshold
 
 struct WindowDefinition {
     curs_pos: Vec2D,
@@ -53,68 +54,82 @@ struct NewBallDef {
 }
 
 impl NewBallDef {
-    pub(crate) fn get_mesh(&self, ctx: &Context, ball_radius: f32) -> Option<&Mesh> {
-        let idx_opt = self.get_ball_idx(ball_radius);
-        if idx_opt.is_none() {
-            return None;
-        }
-        let idx = idx_opt.unwrap();
-        // Check if the mesh doesn't exist and create it if necessary
-        if self.ball_mesh.get(idx).is_none() {}
-
-        // At this point, the mesh must exist, so we can safely return a reference
-        Some(&self.ball_mesh[idx])
+    pub(crate) fn get_mesh(&self, _ctx: &Context, ball_radius: f32) -> Option<&Mesh> {
+        let idx = self.find_ball_index_by_radius(ball_radius)?;
+        self.ball_mesh.get(idx)
     }
 
     pub(crate) fn new(ctx: &Context) -> NewBallDef {
-        let num_ball_size = 5usize;
-        let mut tmp_ball_size: Vec<f32> = Vec::new();
-        let mut tmp_mesh: Vec<Mesh> = Vec::new();
-        for i in 0..(num_ball_size - 1) as i32 {
-            tmp_ball_size.push(MIN_BALL_SIZE * (2.0f32).powi(i));
-            let ball_size = tmp_ball_size[i as usize];
-            let mut builder = MeshBuilder::new();
+        const NUM_BALL_SIZES: usize = 5; // Number of ball sizes to create
+        const CIRCLE_TOLERANCE: f32 = 0.1; // Tolerance for circle drawing
+        const STROKE_THICKNESS: f32 = 2.0; // Border thickness for stroke drawing
+        const BASE_EXPONENT: f32 = 2.0; // Base scaling exponent for sizes
 
-            builder
-                .circle(
-                    DrawMode::fill(),
-                    Vec2D::new(0., 0.),
-                    MainContent::len_to_px(ball_size),
-                    0.1,
-                    Color::RED,
-                )
-                .unwrap();
+        let mut ball_sizes: Vec<f32> = Vec::new();
+        let mut ball_meshes: Vec<Mesh> = Vec::new();
 
-            builder
-                .circle(
-                    DrawMode::stroke(2.),
-                    Vec2D::new(0., 0.),
-                    MainContent::len_to_px(Ball2D::equilibrium_of_radius(ball_size)),
-                    0.1,
-                    Color::MAGENTA,
-                )
-                .unwrap();
+        for size_index in 0..(NUM_BALL_SIZES - 1) as i32 {
+            let ball_size = MIN_BALL_SIZE * BASE_EXPONENT.powi(size_index);
+            ball_sizes.push(ball_size);
 
-            let ball_mesh_data = builder.build();
-
-            // Assign the newly created mesh to the requested index
-            tmp_mesh.push(Mesh::from_data(ctx, ball_mesh_data));
+            // Build the mesh and push to the list.
+            ball_meshes.push(Self::create_ball_mesh(
+                ctx,
+                ball_size,
+                CIRCLE_TOLERANCE,
+                STROKE_THICKNESS,
+            ));
         }
 
-        let def = NewBallDef {
-            ball_size: tmp_ball_size,
+        NewBallDef {
+            ball_size: ball_sizes,
             ball_size_idx: 2,
-            ball_mass: 1., //approx Ar mass
-            ball_mesh: tmp_mesh,
+            ball_mass: 1.0, // Approximate Argon mass
+            ball_mesh: ball_meshes,
             rand_speed: false,
-        };
-        def
+        }
     }
 
-    pub(crate) fn get_ball_idx(&self, radius: f32) -> Option<usize> {
-        self.ball_size
-            .iter()
-            .position(|r| (r - radius).abs() < 1e-4)
+    /// Helper function to create the mesh for a ball
+    fn create_ball_mesh(
+        ctx: &Context,
+        ball_size: f32,
+        tolerance: f32,
+        stroke_thickness: f32,
+    ) -> Mesh {
+        let mut builder = MeshBuilder::new();
+
+        // Inner filled circle
+        builder
+            .circle(
+                DrawMode::fill(),
+                Vec2D::new(0.0, 0.0),
+                MainContent::len_to_px(ball_size),
+                tolerance,
+                Color::RED,
+            )
+            .unwrap();
+
+        // Outer stroked circle
+        builder
+            .circle(
+                DrawMode::stroke(stroke_thickness),
+                Vec2D::new(0.0, 0.0),
+                MainContent::len_to_px(Ball2D::equilibrium_of_radius(ball_size)),
+                tolerance,
+                Color::MAGENTA,
+            )
+            .unwrap();
+
+        let ball_mesh_data = builder.build();
+        Mesh::from_data(ctx, ball_mesh_data)
+    }
+
+    fn find_ball_index_by_radius(&self, target_radius: f32) -> Option<usize> {
+        self.ball_size.iter().position(|&r| {
+            let difference = (r - target_radius).abs(); // Introduced variable for readability
+            difference < RADIUS_COMPARISON_EPSILON
+        })
     }
 
     pub(crate) fn get_ball_size(&self) -> f32 {
@@ -1488,7 +1503,7 @@ mod tests {
         assert_eq!(default_win.margin_px_x, 10.);
         assert_eq!(default_win.margin_px_y, 10.);
 
-        let default_ball_def = NewBallDef::new();
+        let default_ball_def = NewBallDef::default();
         assert_eq!(default_ball_def.get_ball_size(), MIN_BALL_SIZE);
         assert_eq!(default_ball_def.ball_mass, 1.);
 
