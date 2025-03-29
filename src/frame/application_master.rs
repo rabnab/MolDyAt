@@ -35,6 +35,9 @@ const FPS_GOAL: u32 = 60;
 const DT_GOAL: f32 = 0.01; // 1. / (FPS_GOAL as f32);
 const SHOW_FORCE: bool = false;
 const RADIUS_COMPARISON_EPSILON: f32 = 1e-4; // Extracted constant for the comparison threshold
+const CROSSHAIR_SIZE: f32 = 10.0;
+const LINE_THICKNESS: f32 = 2.0;
+const CROSSHAIR_COLOR: Color = Color::WHITE;
 
 struct WindowDefinition {
     curs_pos: Vec2D,
@@ -186,7 +189,7 @@ pub struct MainContent<'a> {
     show_ball_stats: bool,
     show_plot: PlotContent,
     step_count: i32,
-
+    crosshair_mesh: Option<Mesh>,
     shader: Option<Shader>,
 }
 /*
@@ -315,6 +318,7 @@ impl<'a> Default for MainContent<'a> {
             show_plot: PlotContent::NONE,
             show_ball_stats: false,
             shader: None,
+            crosshair_mesh: None,
         }
     }
 }
@@ -337,8 +341,51 @@ impl<'a> MainContent<'a> {
             v_points: Vec::new(),
             shader: shader_in,
             new_ball: NewBallDef::new(ctx),
+            crosshair_mesh: Self::create_crosshair(ctx),
             ..Default::default()
         })
+    }
+
+    fn create_crosshair(ctx: &Context) -> Option<Mesh> {
+        let mut builder = MeshBuilder::new();
+
+        // Draw horizontal and vertical lines
+        Self::draw_line(
+            &mut builder,
+            Point2 {
+                x: -CROSSHAIR_SIZE,
+                y: 0.,
+            },
+            Point2 {
+                x: CROSSHAIR_SIZE,
+                y: 0.,
+            },
+        );
+        Self::draw_line(
+            &mut builder,
+            Point2 {
+                x: 0.,
+                y: -CROSSHAIR_SIZE,
+            },
+            Point2 {
+                x: 0.,
+                y: CROSSHAIR_SIZE,
+            },
+        );
+
+        // Build the mesh and draw on canvas
+        let mesh = Mesh::from_data(ctx, builder.build());
+        Some(mesh)
+    }
+
+    fn draw_line(
+        builder: &mut MeshBuilder,
+        start: Point2<f32>,
+        end: Point2<f32>,
+    ) -> &mut MeshBuilder {
+        builder
+            .line(&[start, end], LINE_THICKNESS, CROSSHAIR_COLOR)
+            .unwrap()
     }
 }
 
@@ -828,44 +875,13 @@ impl DrawingStuff for MainContent<'_> {
     }
 
     fn draw_cross_hair(&self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult<()> {
-        let mut mesh_builder = MeshBuilder::new();
-        let crosshair_size = 10.0;
-        let color = Color::WHITE;
+        let cursor_x = self.win_definition.curs_pos.x;
+        let cursor_y = self.win_definition.curs_pos.y;
 
-        // Horizontal line
-        mesh_builder.line(
-            &[
-                Point2 {
-                    x: self.win_definition.curs_pos.x - crosshair_size,
-                    y: self.win_definition.curs_pos.y,
-                },
-                Point2 {
-                    x: self.win_definition.curs_pos.x + crosshair_size,
-                    y: self.win_definition.curs_pos.y,
-                },
-            ],
-            2.0,
-            color,
-        )?;
-
-        // Vertical line
-        mesh_builder.line(
-            &[
-                Point2 {
-                    x: self.win_definition.curs_pos.x,
-                    y: self.win_definition.curs_pos.y - crosshair_size,
-                },
-                Point2 {
-                    x: self.win_definition.curs_pos.x,
-                    y: self.win_definition.curs_pos.y + crosshair_size,
-                },
-            ],
-            2.0,
-            color,
-        )?;
-
-        let mesh = Mesh::from_data(ctx, mesh_builder.build());
-        canvas.draw(&mesh, Vec2D::new(0., 0.));
+        canvas.draw(
+            self.crosshair_mesh.as_ref().unwrap(),
+            self.win_definition.curs_pos.clone(),
+        );
         Ok(())
     }
 
