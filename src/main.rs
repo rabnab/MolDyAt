@@ -23,15 +23,20 @@ fn main() -> GameResult {
     let height_default: f32 = 1024.;
     let (mut ctx, event_loop) = ContextBuilder::new("ThermoRust", "Rainer Kaltseis")
         .add_resource_path(resource_dir)
-        .window_setup(WindowSetup::default().title("Monatomic gas using modified Lenard Jones Potential"))
-        .window_mode(WindowMode {
-            resizable: true,
-            min_width: frame::MARGIN_PX_Y,
-            min_height: frame::MARGIN_PX_X,
-            width: height_default / 9. * 16.,
-            height: height_default,
-            ..Default::default()
-        }.fullscreen_type(FullscreenType::Windowed))
+        .window_setup(
+            WindowSetup::default().title("Monatomic gas using modified Lenard Jones Potential"),
+        )
+        .window_mode(
+            WindowMode {
+                resizable: true,
+                min_width: frame::MARGIN_PX_Y,
+                min_height: frame::MARGIN_PX_X,
+                width: height_default / 9. * 16.,
+                height: height_default,
+                ..Default::default()
+            }
+            .fullscreen_type(FullscreenType::Windowed),
+        )
         .build()
         .expect("Failed to build context");
 
@@ -46,6 +51,6 @@ fn main() -> GameResult {
         .build(&mut ctx.gfx)?;
 
     //let state = MainContent::new(800.,500., Some(shader))?;
-    let state = MainContent::new(800., 500., None)?;
+    let state = MainContent::new(&ctx, 800., 500., None)?;
     event::run(ctx, event_loop, state)
 }
