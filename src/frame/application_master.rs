@@ -8,7 +8,7 @@ use ggez::graphics::{
 use ggez::input::keyboard::{KeyCode, KeyInput};
 use ggez::input::mouse::MouseButton;
 use ggez::{Context, GameError, GameResult};
-use rand::{rng, Rng};
+use rand::{Rng, rng};
 use rand_distr::{Distribution, Normal};
 
 use ggez::mint::Point2;
@@ -23,18 +23,17 @@ const _U_KG: f32 = 1.66E-27;
 const _MASS_SCALE_KG: f32 = 39.948 * _U_KG; //6.6E-26kg mass of Ar
 const ENERGY_SCALE_J: f32 = 122. * KBOLTZMANN_J_P_K; //energy scale for Ar at 122K
 const LEN_SCALE_M: f32 = 3.33729598E-9 / 6.; // about 0.5nm reason -- f32::cbrt(6.631E-26/1.784)/6; //density 1.784 kg/m³
-const TIME_SCALE: f32 = 3.48235E-11;//=f32::sqrt(MASS_SCALE_KG/ ENERGY_SCALE_J)*LEN_SCALE_M; //0.35ns
-const TIME_SCALE_NS: f32 = 3.48235E-2;//=f32::sqrt(MASS_SCALE_KG/ ENERGY_SCALE_J)*LEN_SCALE_M; //0.35ns
+const TIME_SCALE: f32 = 3.48235E-11; //=f32::sqrt(MASS_SCALE_KG/ ENERGY_SCALE_J)*LEN_SCALE_M; //0.35ns
+const TIME_SCALE_NS: f32 = 3.48235E-2; //=f32::sqrt(MASS_SCALE_KG/ ENERGY_SCALE_J)*LEN_SCALE_M; //0.35ns
 const KBOLTZMANN_J_P_K: f32 = 1.380649E-23;
 const TEMP_SCALE: f32 = 122.; //=ENERGY_SCALE_J / KBOLTZMANN_J_P_K; //exact 122K
 const LEN_TO_PX: f32 = 1. / 10.; // 50 px are one LEN_SCALE (SIG is about 0.5 to 1 LEN_SCALE)
 
-const DEFAULT_BALL_SIZE: f32 = 0.15;
-
+const MIN_BALL_SIZE: f32 = 0.15;
+const MAX_BALL_SIZE: f32 = 5.5;
 const FPS_GOAL: u32 = 60;
-const DT_GOAL: f32 = 0.01;// 1. / (FPS_GOAL as f32);
-
-
+const DT_GOAL: f32 = 0.01; // 1. / (FPS_GOAL as f32);
+const SHOW_FORCE: bool = false;
 
 struct WindowDefinition {
     curs_pos: Vec2D,
@@ -44,10 +43,92 @@ struct WindowDefinition {
     margin_px_y: f32,
 }
 
+#[derive(Default)]
 struct NewBallDef {
-    ball_size: f32,
+    ball_size_idx: usize,
+    ball_size: Vec<f32>,
+    ball_mesh: Vec<Mesh>,
     ball_mass: f32,
     rand_speed: bool,
+}
+
+impl NewBallDef {
+    pub(crate) fn get_mesh(&self, ctx: &Context, ball_radius: f32) -> Option<&Mesh> {
+        let idx_opt = self.get_ball_idx(ball_radius);
+        if idx_opt.is_none() {
+            return None;
+        }
+        let idx = idx_opt.unwrap();
+        // Check if the mesh doesn't exist and create it if necessary
+        if self.ball_mesh.get(idx).is_none() {}
+
+        // At this point, the mesh must exist, so we can safely return a reference
+        Some(&self.ball_mesh[idx])
+    }
+
+    pub(crate) fn new(ctx: &Context) -> NewBallDef {
+        let num_ball_size = 5usize;
+        let mut tmp_ball_size: Vec<f32> = Vec::new();
+        let mut tmp_mesh: Vec<Mesh> = Vec::new();
+        for i in 0..(num_ball_size - 1) as i32 {
+            tmp_ball_size.push(MIN_BALL_SIZE * (2.0f32).powi(i));
+            let ball_size = tmp_ball_size[i as usize];
+            let mut builder = MeshBuilder::new();
+
+            builder
+                .circle(
+                    DrawMode::fill(),
+                    Vec2D::new(0., 0.),
+                    MainContent::len_to_px(ball_size),
+                    0.1,
+                    Color::RED,
+                )
+                .unwrap();
+
+            builder
+                .circle(
+                    DrawMode::stroke(2.),
+                    Vec2D::new(0., 0.),
+                    MainContent::len_to_px(Ball2D::equilibrium_of_radius(ball_size)),
+                    0.1,
+                    Color::MAGENTA,
+                )
+                .unwrap();
+
+            let ball_mesh_data = builder.build();
+
+            // Assign the newly created mesh to the requested index
+            tmp_mesh.push(Mesh::from_data(ctx, ball_mesh_data));
+        }
+
+        let def = NewBallDef {
+            ball_size: tmp_ball_size,
+            ball_size_idx: 2,
+            ball_mass: 1., //approx Ar mass
+            ball_mesh: tmp_mesh,
+            rand_speed: false,
+        };
+        def
+    }
+
+    pub(crate) fn get_ball_idx(&self, radius: f32) -> Option<usize> {
+        self.ball_size
+            .iter()
+            .position(|r| (r - radius).abs() < 1e-4)
+    }
+
+    pub(crate) fn get_ball_size(&self) -> f32 {
+        self.ball_size[self.ball_size_idx]
+    }
+
+    pub(crate) fn get_ball_mass(&self) -> f32 {
+        let density = 2.;
+        1. + density * (self.get_ball_size() / MIN_BALL_SIZE - 1.).powi(2)
+    }
+
+    pub(crate) fn next_ball_size(&mut self) {
+        self.ball_size_idx = (self.ball_size_idx + 1) % self.ball_size.len();
+    }
 }
 
 struct SimStats {
@@ -67,12 +148,16 @@ struct SimStats {
     v_pot: VecDeque<f32>,
     v_kin: VecDeque<f32>,
     max_neighbours: usize,
+    update_hood_cnt: usize,
 }
-
 
 #[derive(PartialEq)]
 enum PlotContent {
-    NONE, EKIN, EPOT, ETOT, ALL,
+    NONE,
+    EKIN,
+    EPOT,
+    ETOT,
+    ALL,
 }
 pub struct MainContent<'a> {
     win_definition: WindowDefinition,
@@ -100,17 +185,15 @@ struct ShaderUniforms {
 
 trait DrawingStuff {
     fn draw_cursor(&self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult;
-    fn draw_plot(
-        &self,
-        ctx: &mut Context,
-        canvas: &mut Canvas) -> GameResult;
-    fn draw_text_on_ball(
+    fn draw_plot(&self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult;
+    fn draw_text_on_ball(&self, ctx: &Context, canvas: &mut Canvas, ball: &Ball2D) -> GameResult;
+    fn draw_simple_balls(&self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult;
+    fn draw_ball_by_mesh(
         &self,
         ctx: &mut Context,
         canvas: &mut Canvas,
-        ball: &Ball2D,
+        ball_cell: &Rc<RefCell<Ball2D>>,
     ) -> GameResult;
-    fn draw_simple_balls(&self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult;
     fn draw_neighbour_lines(
         &self,
         ctx: &mut Context,
@@ -120,7 +203,8 @@ trait DrawingStuff {
     ) -> Result<(), GameError>;
     fn draw_single_ball(
         &self,
-        ctx: &mut Context,
+        circle: &Mesh,
+        // scale_px: f32,
         canvas: &mut Canvas,
         ball: &Ref<Ball2D>,
         ball_coord_px: &Vec2D,
@@ -173,15 +257,6 @@ impl Default for WindowDefinition {
         }
     }
 }
-impl Default for NewBallDef {
-    fn default() -> NewBallDef {
-        NewBallDef {
-            ball_size: DEFAULT_BALL_SIZE,
-            ball_mass: 1., //approx Ar mass
-            rand_speed: false,
-        }
-    }
-}
 impl Default for SimStats {
     fn default() -> SimStats {
         SimStats {
@@ -201,6 +276,7 @@ impl Default for SimStats {
             v_pot: VecDeque::with_capacity(100),
             v_kin: VecDeque::with_capacity(100),
             max_neighbours: 0,
+            update_hood_cnt: 0,
         }
     }
 }
@@ -214,9 +290,7 @@ impl<'a> Default for MainContent<'a> {
             sim: SimStats {
                 ..Default::default()
             },
-            new_ball: NewBallDef {
-                ..Default::default()
-            },
+            new_ball: NewBallDef::default(),
             num_balls: 0,
             v_points: Vec::new(),
             real_data: false,
@@ -231,7 +305,12 @@ impl<'a> Default for MainContent<'a> {
 }
 
 impl<'a> MainContent<'a> {
-    pub fn new(reg_x: f32, reg_y: f32, shader_in: Option<Shader>) -> GameResult<MainContent<'a>> {
+    pub fn new(
+        ctx: &Context,
+        reg_x: f32,
+        reg_y: f32,
+        shader_in: Option<Shader>,
+    ) -> GameResult<MainContent<'a>> {
         Ok(MainContent {
             win_definition: WindowDefinition {
                 region_px_x: reg_x,
@@ -242,11 +321,10 @@ impl<'a> MainContent<'a> {
             },
             v_points: Vec::new(),
             shader: shader_in,
+            new_ball: NewBallDef::new(ctx),
             ..Default::default()
         })
     }
-
-
 }
 
 impl<'a> MainContent<'a> {
@@ -302,8 +380,7 @@ impl<'a> MainContent<'a> {
             let input_trimed = input.trim();
             let mut mode = VerboseInfoMode::MAIN;
             let mut particle_indicator = input_trimed;
-            if input_trimed.len() == 2 {
-
+            if input_trimed.len() >= 2 {
                 match input_trimed.chars().last() {
                     Some('c') => mode = VerboseInfoMode::CONSOLE,
                     Some('m') => mode = VerboseInfoMode::MAIN,
@@ -313,7 +390,6 @@ impl<'a> MainContent<'a> {
                 }
                 (particle_indicator, _) = input_trimed.split_at(input_trimed.len() - 1).into();
             }
-
 
             if let Ok(number) = particle_indicator.parse::<usize>() {
                 match number {
@@ -334,15 +410,13 @@ impl<'a> MainContent<'a> {
         let normal = self.calculate_normal_distribution_of_speed();
         let mut rng = rng();
 
-        self
-        .v_points
-        .iter()
-        .map(|ball|  ball.borrow_mut())
+        self.v_points
+            .iter()
+            .map(|ball| ball.borrow_mut())
             .for_each(|mut ball| {
                 ball.v.x = normal.sample(&mut rng);
                 ball.v.y = normal.sample(&mut rng);
             })
-
     }
 
     fn calculate_normal_distribution_of_speed(&mut self) -> Normal<f32> {
@@ -356,12 +430,12 @@ impl<'a> MainContent<'a> {
         let len = self.v_points.len() as f32;
         let sig = f32::sqrt(f32::sqrt(avg_vx / (len - 1.5) * avg_vy / (len - 1.5)));
 
-        let normal = Normal::new(0., f32::max(0.3 , sig)).expect("Invalid distribution parameters");
+        let normal = Normal::new(0., f32::max(0.3, sig)).expect("Invalid distribution parameters");
         println!("new normal distri {:?}", normal);
         normal
     }
 
-    fn toggle_ball_internal(ball_found: &mut Ball2D<'a>, mode: &VerboseInfoMode){
+    fn toggle_ball_internal(ball_found: &mut Ball2D<'a>, mode: &VerboseInfoMode) {
         match mode {
             VerboseInfoMode::CONSOLE => ball_found.verbose.toggle_console(),
             VerboseInfoMode::MAIN => ball_found.verbose.toggle_main_neighbour(),
@@ -370,22 +444,32 @@ impl<'a> MainContent<'a> {
         }
     }
 
-    fn calculate_plot_boundary<F>(&self, initial: f32, operation: F ) -> f32
-    where F: Fn(f32,f32) -> f32,
+    fn calculate_plot_boundary<F>(&self, initial: f32, operation: F) -> f32
+    where
+        F: Fn(f32, f32) -> f32,
     {
-        let val:f32  =  match self.show_plot {
+        let val: f32 = match self.show_plot {
             PlotContent::NONE => f32::NAN,
             PlotContent::EKIN => self.sim.v_kin.iter().cloned().fold(initial, operation),
             PlotContent::EPOT => self.sim.v_pot.iter().cloned().fold(initial, operation),
-            PlotContent::ETOT => self.sim.v_kin.iter().zip(self.sim.v_pot.iter())
+            PlotContent::ETOT => self
+                .sim
+                .v_kin
+                .iter()
+                .zip(self.sim.v_pot.iter())
                 .map(|(kin, pot)| kin + pot)
                 .fold(initial, operation),
-            PlotContent::ALL => self.sim.v_kin.iter().chain(self.sim.v_pot.iter()).cloned().fold(initial, operation),
+            PlotContent::ALL => self
+                .sim
+                .v_kin
+                .iter()
+                .chain(self.sim.v_pot.iter())
+                .cloned()
+                .fold(initial, operation),
         };
         val
     }
 }
-
 
 impl DrawingStuff for MainContent<'_> {
     fn draw_cursor(&self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult {
@@ -394,7 +478,7 @@ impl DrawingStuff for MainContent<'_> {
                 ctx,
                 DrawMode::fill(),
                 self.win_definition.curs_pos.clone(),
-                Self::len_to_px(self.new_ball.ball_size),
+                Self::len_to_px(self.new_ball.get_ball_size()),
                 0.1,
                 Color::WHITE,
             )?;
@@ -431,52 +515,54 @@ impl DrawingStuff for MainContent<'_> {
         Ok(())
     }
 
-
-
-    fn draw_plot(
-        &self,
-        ctx: &mut Context,
-        canvas: &mut Canvas) -> GameResult {
+    fn draw_plot(&self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult {
         if self.show_plot == PlotContent::NONE {
             return Ok(());
         }
         let max_len = self.sim.v_kin.len().max(self.sim.v_pot.len());
-        if max_len == 0  {
+        if max_len == 0 {
             return Ok(()); // No data to plot
         }
 
-            const PLOT_WIDTH: f32 = 2.*200.0;
-            const PLOT_HEIGHT: f32 = 2.*166.0;
-            const PLOT_MARGIN: f32 = MARGIN_PX_Y;
-            let screen_rect = canvas.screen_coordinates().unwrap_or(Rect::new(0.0, 0.0, PLOT_WIDTH, PLOT_HEIGHT));
-            let screen_width = screen_rect.w;
-            let screen_height = screen_rect.h;
+        const PLOT_WIDTH: f32 = 2. * 200.0;
+        const PLOT_HEIGHT: f32 = 2. * 166.0;
+        const PLOT_MARGIN: f32 = MARGIN_PX_Y;
+        let screen_rect =
+            canvas
+                .screen_coordinates()
+                .unwrap_or(Rect::new(0.0, 0.0, PLOT_WIDTH, PLOT_HEIGHT));
+        let screen_width = screen_rect.w;
+        let screen_height = screen_rect.h;
 
-            let plot_x = screen_width - PLOT_WIDTH - PLOT_MARGIN;
-            let plot_y = screen_height - PLOT_HEIGHT - PLOT_MARGIN;
+        let plot_x = screen_width - PLOT_WIDTH - PLOT_MARGIN;
+        let plot_y = screen_height - PLOT_HEIGHT - PLOT_MARGIN;
 
-            // Determine the min/max range for scaling
-            let min_val = self.calculate_plot_boundary(f32::INFINITY, f32::min);
-            let max_val = self.calculate_plot_boundary(f32::NEG_INFINITY, f32::max);
+        // Determine the min/max range for scaling
+        let min_val = self.calculate_plot_boundary(f32::INFINITY, f32::min);
+        let max_val = self.calculate_plot_boundary(f32::NEG_INFINITY, f32::max);
 
-            let value_range = (max_val - min_val).max(1.0); // Avoid division by zero
+        let value_range = (max_val - min_val).max(1.0); // Avoid division by zero
 
-            let mut mesh_builder = MeshBuilder::new();
+        let mut mesh_builder = MeshBuilder::new();
 
-            // Helper to convert (index, value) to screen coordinates
-            let to_screen_coords = |index: usize, value: f32| -> (f32, f32) {
-                let x = plot_x + (index as f32 / max_len as f32) * PLOT_WIDTH;
-                let y = plot_y + PLOT_HEIGHT - ((value - min_val) / value_range * PLOT_HEIGHT);
-                (x, y)
-            };
+        // Helper to convert (index, value) to screen coordinates
+        let to_screen_coords = |index: usize, value: f32| -> (f32, f32) {
+            let x = plot_x + (index as f32 / max_len as f32) * PLOT_WIDTH;
+            let y = plot_y + PLOT_HEIGHT - ((value - min_val) / value_range * PLOT_HEIGHT);
+            (x, y)
+        };
 
-            // Draw e_kin line (red)
+        // Draw e_kin line (red)
         if self.show_plot == PlotContent::ALL || self.show_plot == PlotContent::EKIN {
             for i in 1..self.sim.v_kin.len() {
                 let (x1, y1) = to_screen_coords(i - 1, self.sim.v_kin[i - 1]);
                 let (x2, y2) = to_screen_coords(i, self.sim.v_kin[i]);
 
-                mesh_builder.line(&[Point2 { x: x1, y: y1 }, Point2 { x: x2, y: y2 }], 2.0, Color::RED)?;
+                mesh_builder.line(
+                    &[Point2 { x: x1, y: y1 }, Point2 { x: x2, y: y2 }],
+                    2.0,
+                    Color::RED,
+                )?;
             }
         }
 
@@ -485,52 +571,58 @@ impl DrawingStuff for MainContent<'_> {
             for i in 1..self.sim.v_pot.len() {
                 let (x1, y1) = to_screen_coords(i - 1, self.sim.v_pot[i - 1]);
                 let (x2, y2) = to_screen_coords(i, self.sim.v_pot[i]);
-                mesh_builder.line(&[Point2 { x: x1, y: y1 }, Point2 { x: x2, y: y2 }], 2.0, Color::BLUE)?;
+                mesh_builder.line(
+                    &[Point2 { x: x1, y: y1 }, Point2 { x: x2, y: y2 }],
+                    2.0,
+                    Color::BLUE,
+                )?;
             }
         }
 
         // Draw e_tot line (Orange)
         if self.show_plot == PlotContent::ALL || self.show_plot == PlotContent::ETOT {
             for i in 1..self.sim.v_pot.len() {
-                let (x1, y1) = to_screen_coords(i - 1, self.sim.v_pot[i - 1] + self.sim.v_kin[i - 1]);
+                let (x1, y1) =
+                    to_screen_coords(i - 1, self.sim.v_pot[i - 1] + self.sim.v_kin[i - 1]);
                 let (x2, y2) = to_screen_coords(i, self.sim.v_pot[i] + self.sim.v_kin[i]);
-                mesh_builder.line(&[Point2 { x: x1, y: y1 }, Point2 { x: x2, y: y2 }], 2.0, Color::YELLOW)?;
+                mesh_builder.line(
+                    &[Point2 { x: x1, y: y1 }, Point2 { x: x2, y: y2 }],
+                    2.0,
+                    Color::YELLOW,
+                )?;
             }
         }
 
-            // Draw bounding box
-            mesh_builder.rectangle(
-                DrawMode::stroke(2.0),
-                Rect::new(plot_x, plot_y, PLOT_WIDTH, PLOT_HEIGHT),
-                Color::WHITE,
-            )?;
+        // Draw bounding box
+        mesh_builder.rectangle(
+            DrawMode::stroke(2.0),
+            Rect::new(plot_x, plot_y, PLOT_WIDTH, PLOT_HEIGHT),
+            Color::WHITE,
+        )?;
 
-            let mesh = Mesh::from_data(ctx, mesh_builder.build());
-            canvas.draw(&mesh, DrawParam::default());
+        let mesh = Mesh::from_data(ctx, mesh_builder.build());
+        canvas.draw(&mesh, DrawParam::default());
 
-        let max_value_text = Text::new(TextFragment::new(format!("{:.2e}", max_val)).color(Color::WHITE));
+        let max_value_text =
+            Text::new(TextFragment::new(format!("{:.2e}", max_val)).color(Color::WHITE));
         let text_position = Point2 {
             x: plot_x + 5.0, // Small margin inside the plot
             y: plot_y + 5.0,
         };
         canvas.draw(&max_value_text, text_position);
 
-        let min_value_text = Text::new(TextFragment::new(format!("{:.2e}", min_val)).color(Color::WHITE));
+        let min_value_text =
+            Text::new(TextFragment::new(format!("{:.2e}", min_val)).color(Color::WHITE));
         let text_position = Point2 {
-            x: plot_x + 5.0, // Small margin inside the plot
-            y: plot_y + PLOT_HEIGHT- 5.0 - 10.0 /*font height */,
+            x: plot_x + 5.0,                      // Small margin inside the plot
+            y: plot_y + PLOT_HEIGHT - 5.0 - 10.0, /*font height */
         };
         canvas.draw(&min_value_text, text_position);
 
         Ok(())
     }
 
-    fn draw_text_on_ball(
-        &self,
-        ctx: &mut Context,
-        canvas: &mut Canvas,
-        ball: &Ball2D,
-    ) -> GameResult {
+    fn draw_text_on_ball(&self, ctx: &Context, canvas: &mut Canvas, ball: &Ball2D) -> GameResult {
         let txt_name = Text::new(TextFragment::new(format!("{}", ball.get_id())).scale(15.));
 
         let ball_pos_px = self.coord_to_px(&ball.pos);
@@ -545,24 +637,26 @@ impl DrawingStuff for MainContent<'_> {
     }
 
     fn draw_simple_balls(&self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult {
-        for ball_ref in &self.v_points {
-            let ball = ball_ref.borrow();
-            let ball_coord_px = self.coord_to_px(&ball.pos);
-            self.draw_single_ball(ctx, canvas, &ball, &ball_coord_px)?;
-
-            //draw the equilibrium position of an identical ball (different mass/size might
-            //result in slightly different eq position)
-            let pt_eq = Mesh::new_circle(
-                ctx,
-                DrawMode::stroke(1.),
-                ball_coord_px,
-                Self::len_to_px(ball.equilibrium_radius()),
-                0.1,
-                Color::MAGENTA,
-            )?;
-            canvas.draw(&pt_eq, Vec2::new(0., 0.));
-            self.draw_text_on_ball(ctx, canvas, &ball)?;
+        for ball_cell in &self.v_points {
+            self.draw_ball_by_mesh(ctx, canvas, ball_cell)?;
         }
+        Ok(())
+    }
+
+    fn draw_ball_by_mesh(
+        &self,
+        ctx: &mut Context,
+        canvas: &mut Canvas,
+        ball_cell: &Rc<RefCell<Ball2D>>,
+    ) -> GameResult {
+        let ball = ball_cell.borrow();
+        let ball_coord_px = self.coord_to_px(&ball.pos);
+
+        if let Some(cur_mesh) = self.new_ball.get_mesh(ctx, ball.radius) {
+            self.draw_single_ball(cur_mesh, canvas, &ball, &ball_coord_px)?;
+        }
+
+        self.draw_text_on_ball(ctx, canvas, &ball)?;
         Ok(())
     }
 
@@ -575,14 +669,15 @@ impl DrawingStuff for MainContent<'_> {
     ) -> Result<(), GameError> {
         let neighbour_info = ball.get_neighbour_force_and_pos();
         let start: Point2<f32> = ball_coord_px.clone().into();
-        let max_force = neighbour_info.iter()
+        let max_force = neighbour_info
+            .iter()
             .map(|info| info.1)
             .into_iter()
             .reduce(f32::max)
             .unwrap_or(0.);
         for (other_pos, other_force_ref) in neighbour_info.iter() {
             let other_force = *other_force_ref;
-            let is_main = other_force >0.5 * max_force;
+            let is_main = other_force > 0.5 * max_force;
             if ball.verbose.is_main() && !is_main {
                 continue;
             }
@@ -605,63 +700,65 @@ impl DrawingStuff for MainContent<'_> {
             )?;
             // Draw the line
             canvas.draw(&line, DrawParam::default());
+            if SHOW_FORCE {
+                // Calculate the midpoint of the line
+                let mid_x = (start.x + end.x) / 2.0;
+                let mid_y = (start.y + end.y) / 2.0;
 
-            // Calculate the midpoint of the line
-            let mid_x = (start.x + end.x) / 2.0;
-            let mid_y = (start.y + end.y) / 2.0;
+                let text_force = Self::format_g(other_force, 3);
+                // Create the text
+                let text = Text::new(TextFragment::new(text_force).color(Color::YELLOW));
 
-            let text_force = Self::format_g(other_force, 3);
-            // Create the text
-            let text = Text::new(TextFragment::new(text_force).color(Color::YELLOW));
+                // Calculate centered position for the text
+                let text_pos: [f32; 2] = match text.dimensions(ctx) {
+                    None => [0., 0.],
+                    Some(rec) => {
+                        let pos = [mid_x - (rec.w / 2.0), mid_y - (rec.h / 2.0)];
 
-            // Calculate centered position for the text
-            let text_pos: [f32; 2] = match text.dimensions(ctx) {
-                None => [0., 0.],
-                Some(rec) => {
-                    let pos = [mid_x - (rec.w / 2.0), mid_y - (rec.h / 2.0)];
+                        let rectangle = Mesh::new_rectangle(
+                            ctx,
+                            DrawMode::fill(),
+                            rec,
+                            Color::from_rgb(64, 64, 64),
+                        )?;
+                        canvas.draw(&rectangle, DrawParam::default().dest(pos));
+                        pos
+                    }
+                };
 
-                    let rectangle = Mesh::new_rectangle(
-                        ctx,
-                        DrawMode::fill(),
-                        rec,
-                        Color::from_rgb(64, 64, 64),
-                    )?;
-                    canvas.draw(&rectangle, DrawParam::default().dest(pos));
-                    pos
-                }
-            };
-
-            // Draw the text
-            canvas.draw(&text, DrawParam::default().dest(text_pos));
+                // Draw the text
+                canvas.draw(&text, DrawParam::default().dest(text_pos));
+            }
         }
         Ok(())
     }
 
     fn draw_single_ball(
         &self,
-        ctx: &mut Context,
+        pt_circle: &Mesh,
+        // std_size_px: f32,
         canvas: &mut Canvas,
         ball: &Ref<Ball2D>,
         ball_coord_px: &Vec2D,
     ) -> Result<(), GameError> {
-        let ball_color_used = if ball.get_id() == self.sim.max_id {
-            Color::CYAN
-        } else {
-            ball.ball_color()
-        };
-        let ball_size_px = Self::len_to_px(ball.radius);
+        let draw_par = DrawParam::default().dest(ball_coord_px.clone());
+
+        if ball.get_id() == self.sim.max_id {
+            draw_par.color(Color::CYAN);
+        }
+        // let ball_scale_px = Self::len_to_px(ball.radius)/std_size_px;
         //println!("drawing ball at {:?} of size {}", ball_coord_px, ball_size_px);
         //draw the ball itself
-        let pt_circle = Mesh::new_circle(
-            ctx,
-            DrawMode::fill(),
-            ball_coord_px.clone(),
-            ball_size_px,
-            0.1,
-            ball_color_used,
-        )?;
-        canvas.draw(&pt_circle, Vec2::new(0., 0.));
-
+        // let pt_circle = Mesh::new_circle(
+        //     ctx,
+        //     DrawMode::fill(),
+        //     ball_coord_px.clone(),
+        //     ball_size_px,
+        //     0.1,
+        //     ball_color_used,
+        // )?;
+        canvas.draw(pt_circle, draw_par);
+        //.scale(Vec2::new(ball_scale_px,ball_scale_px))
 
         Ok(())
     }
@@ -702,10 +799,10 @@ impl DrawingStuff for MainContent<'_> {
         } else {
             self.draw_simple_balls(ctx, canvas)?;
         }
-        let verbose_balls: Vec<Rc<RefCell<Ball2D>>> = self.v_points
+        let verbose_balls: Vec<Rc<RefCell<Ball2D>>> = self
+            .v_points
             .iter()
-            .filter(|any|
-                any.borrow().verbose.lines())
+            .filter(|any| any.borrow().verbose.lines())
             .cloned()
             .collect();
 
@@ -773,8 +870,6 @@ impl DrawingStuff for MainContent<'_> {
             Color::BLUE,
         )?;
 
-
-
         canvas.draw(&rect, Vec2::new(0., 0.));
         if self.show_ball_stats {
             let fps = ctx.time.fps();
@@ -797,7 +892,6 @@ impl DrawingStuff for MainContent<'_> {
         Ok(())
     }
 }
-
 
 impl LogStuff for MainContent<'_> {
     fn any_log(&self) -> bool {
@@ -824,43 +918,45 @@ impl LogStuff for MainContent<'_> {
 
     fn status_text(&self, fps: u32) -> String {
         let text = if self.real_data {
-            format!("fps {} time: {:.3}[ns] ({})\n#Balls: {} #Frms: {}\nmaxNeig: {}\nPotEnergy: \
+            format!(
+                "fps {} time: {:.3}[ns] ({})\n#Balls: {} #Frms: {}\nmaxNeig: {}\nPotEnergy: \
                 {:.2E}[J]\nKinEnergy: {:.2E}[J]\nTotalE: {:.3E}[J]\nTemp: {:.2}[K]\nmaxV: {:.2}[m/s]\nminDist: {:.2E}[m]\nvCOM: {}[m/s]",
-                    fps,
-                    self.sim.time * TIME_SCALE_NS,
-                    self.sim.speedup,
-                    self.num_balls,
-                    self.sim.frames_since_draw,
-                    self.sim.max_neighbours,
-                    self.sim.energy_pot * ENERGY_SCALE_J,
-                    self.sim.energy_kin * ENERGY_SCALE_J,
-                    (self.sim.energy_pot + self.sim.energy_kin) * ENERGY_SCALE_J,
-                    self.sim.temperature * TEMP_SCALE,
-                    self.sim.max_v * LEN_SCALE_M / TIME_SCALE,
-                    self.sim.min_dist * LEN_SCALE_M,
-                    self.sim.v_com.scaled_copy(LEN_SCALE_M / TIME_SCALE),
+                fps,
+                self.sim.time * TIME_SCALE_NS,
+                self.sim.speedup,
+                self.num_balls,
+                self.sim.frames_since_draw,
+                self.sim.max_neighbours,
+                self.sim.energy_pot * ENERGY_SCALE_J,
+                self.sim.energy_kin * ENERGY_SCALE_J,
+                (self.sim.energy_pot + self.sim.energy_kin) * ENERGY_SCALE_J,
+                self.sim.temperature * TEMP_SCALE,
+                self.sim.max_v * LEN_SCALE_M / TIME_SCALE,
+                self.sim.min_dist * LEN_SCALE_M,
+                self.sim.v_com.scaled_copy(LEN_SCALE_M / TIME_SCALE),
             )
         } else {
-            format!("fps {} time: {:.3} ({})\n#Balls: {} #Frms: {}\nmaxNeig: {}\nPotEnergy: {:.2E}\nKinEnergy: {:.2E}\nTotalE: {:.3E}\nTemp: {:.3}\nmaxV: {:.2}\nminDist: {:.2E}\nvCOM: {}",
-                    fps,
-                    self.sim.time,
-                    self.sim.speedup,
-                    self.num_balls,
-                    self.sim.frames_since_draw,
-                    self.sim.max_neighbours,
-                    self.sim.energy_pot,
-                    self.sim.energy_kin,
-                    self.sim.energy_pot + self.sim.energy_kin,
-                    self.sim.temperature,
-                    self.sim.max_v,
-                    self.sim.min_dist,
-                    self.sim.v_com,
+            format!(
+                "fps {} time: {:.3} ({})\n#Balls: {} #hoodCnt: {}/{}\nmaxNeig: {}\nPotEnergy: {:.2E}\nKinEnergy: {:.2E}\nTotalE: {:.3E}\nTemp: {:.3}\nmaxV: {:.2}\nminDist: {:.2E}\nvCOM: {}",
+                fps,
+                self.sim.time,
+                self.sim.speedup,
+                self.num_balls,
+                self.sim.update_hood_cnt,
+                Ball2D::get_update_hood_call_cnt(),
+                self.sim.max_neighbours,
+                self.sim.energy_pot,
+                self.sim.energy_kin,
+                self.sim.energy_pot + self.sim.energy_kin,
+                self.sim.temperature,
+                self.sim.max_v,
+                self.sim.min_dist,
+                self.sim.v_com,
             )
         };
         text
     }
 }
-
 
 impl<'a> GameLogic for MainContent<'a> {
     fn is_ball_in_region(&self, pt: &Ball2D) -> bool {
@@ -892,15 +988,15 @@ impl<'a> GameLogic for MainContent<'a> {
         let ball_v = if self.new_ball.rand_speed {
             let mut rng = rng();
             let normal = self.calculate_normal_distribution_of_speed();
-            Vec2D::new(normal.sample(&mut rng),normal.sample(&mut rng))
+            Vec2D::new(normal.sample(&mut rng), normal.sample(&mut rng))
         } else {
-            Vec2D::new(0.,0.)
+            Vec2D::new(0., 0.)
         };
         let candidate: Ball2D<'a> = Ball2D::new_massive_with_v(
             self.num_balls + 1,
             ball_pos.x,
             ball_pos.y,
-            self.new_ball.ball_size,
+            self.new_ball.get_ball_size(),
             self.new_ball.ball_mass,
             Some(ball_v),
         );
@@ -925,27 +1021,34 @@ impl<'a> GameLogic for MainContent<'a> {
 
     fn collect_neighbours(&mut self, dt: f32) {
         if self.step_count % 1 == 0 {
+            let others_base = self.v_points.clone();
             //if self.step_count % 10 == 0 {
             //clear all neighbours
-            for ball_rc in self.v_points.iter() {
-                let mut ball = ball_rc.borrow_mut(); // Mutable borrow for updating the ball
-                ball.clear_hood();
-            }
+            // for ball_rc in self.v_points.iter() {
+            //     let mut ball = ball_rc.borrow_mut(); // Mutable borrow for updating the ball
+            //     ball.clear_hood();
+            // }
             //collect neighbours
             for (i, ball_rc) in self.v_points.iter().enumerate() {
-                let neighbors: Vec<Rc<RefCell<Ball2D>>> = self.v_points[i + 1..]
-                    .iter()
-                    .filter(|&other_rc| {
-                        let ball_borrowed = ball_rc.borrow();
-                        let other_borrowed = other_rc.borrow();
-                        other_borrowed.has_larger_id(&ball_borrowed)
-                    })
-                    .cloned()
-                    .collect();
+                // let neighbors: Vec<Rc<RefCell<Ball2D>>> = self.v_points[i + 1..].cloned().collect();
+                // .iter()
+                // .filter(|&other_rc| {
+                //     let ball_borrowed = ball_rc.borrow();
+                //     let other_borrowed = other_rc.borrow();
+                //     other_borrowed.has_larger_id(&ball_borrowed)
+                // })
+                // .cloned()
+                // .collect();
 
                 {
+                    let mut others = others_base.clone();
+                    {
+                        let ball = ball_rc.borrow();
+                        others.retain(|rc| rc.borrow().get_id() != ball.id);
+                    }
+
                     let mut ball = ball_rc.borrow_mut();
-                    ball.update_hood(dt, ball_rc, neighbors); // Updated to work with Rc<RefCell<Ball2D>>
+                    ball.update_hood(dt, ball_rc, others); // Updated to work with Rc<RefCell<Ball2D>>
                 }
             }
 
@@ -967,7 +1070,6 @@ impl<'a> GameLogic for MainContent<'a> {
             keep
         });
 
-
         self.num_balls = self.v_points.len();
     }
 
@@ -987,7 +1089,7 @@ impl<'a> GameLogic for MainContent<'a> {
         }
         self.sim.max_neighbours = max_neighbours;
         //self.sim.temperature = 0.5 / (/*KB*/ 1. * (3. * self.v_points.len() as f32 - 3.)) * sum_rel_kin;
-        self.sim.temperature = sum_rel_kin_doubled /3./(self.v_points.len() as f32)/* /KB == /1*/
+        self.sim.temperature = sum_rel_kin_doubled / 3. / (self.v_points.len() as f32) /* /KB == /1*/
     }
 
     // fn global_update_euler(&mut self, dt: f32, bound_rect: &Rect) -> GameResult {
@@ -1053,7 +1155,6 @@ impl<'a> GameLogic for MainContent<'a> {
             Self::px_to_len(self.win_definition.region_px_y),
         );
 
-
         self.sim.min_dist = 0.;
         //let dt = self.sim.speedup * DT_GOAL;
         let dt = DT_GOAL;
@@ -1069,7 +1170,7 @@ impl<'a> GameLogic for MainContent<'a> {
         let start = Instant::now();
         self.calculate_temperature();
         let props_ms = Self::elapsed_since(start);
-        let all_ms =Self::elapsed_since(start_all);
+        let all_ms = Self::elapsed_since(start_all);
 
         if self.show_timings && all_ms > 1 {
             let text_timing = format!(
@@ -1102,9 +1203,10 @@ impl<'a> VerletIntegration for MainContent<'a> {
             let mut cur = ball_rc.borrow_mut();
 
             cur.update_positions(dt, &bound_rect);
-
         }
-        self.v_points.iter().for_each(|ball| { ball.borrow_mut().update_old_pos()});
+        self.v_points
+            .iter()
+            .for_each(|ball| ball.borrow_mut().update_old_pos());
 
         //update velocities and accel with new positions
         for ball_rc in &mut self.v_points {
@@ -1127,7 +1229,6 @@ impl<'a> VerletIntegration for MainContent<'a> {
             }
         }
 
-
         self.sim.energy_kin = kin;
         self.sim.energy_pot = pot;
         if (self.sim.step % PLT_STEP) == 0 {
@@ -1147,12 +1248,9 @@ impl<'a> VerletIntegration for MainContent<'a> {
         self.sim.step += 1;
         self.sim.v_com = _v_com.scaled_copy(1. / sum_mass);
 
-
         Ok(())
     }
 }
-
-
 
 impl<'a> SimulationToggler for MainContent<'a> {
     fn make_all_verbose(&mut self, mode: VerboseInfoMode) {
@@ -1170,7 +1268,6 @@ impl<'a> SimulationToggler for MainContent<'a> {
         }
     }
 
-
     fn clear_verbose_balls(&mut self) {
         for b in self.v_points.iter() {
             let mut ba = b.borrow_mut();
@@ -1182,7 +1279,8 @@ impl<'a> EventHandler for MainContent<'a> {
     fn update(&mut self, _ctx: &mut Context) -> GameResult {
         // let mut cnt = 0;
         // let mut sum: Duration = Duration::new(0, 0);
-        while _ctx.time.check_update_time(FPS_GOAL*self.sim.speedup) {
+        let tmp_cnt = Ball2D::get_update_hood_call_cnt();
+        while _ctx.time.check_update_time(FPS_GOAL * self.sim.speedup) {
             // let frame_start = Instant::now();
             // let dur = frame_start.checked_duration_since(self.sim.time_last_frame);
             // if let Some(dur) = dur {
@@ -1194,6 +1292,7 @@ impl<'a> EventHandler for MainContent<'a> {
             self.sim.frames_since_draw += 1;
             self.simulation_step()?;
         }
+        self.sim.update_hood_cnt = Ball2D::get_update_hood_call_cnt() - tmp_cnt;
         // if cnt > 0 {
         //     println!("simulate {} avg {:?} simtime {}", cnt, sum/cnt, self.sim.time);
         // }
@@ -1222,13 +1321,7 @@ impl<'a> EventHandler for MainContent<'a> {
     ) -> GameResult {
         match button {
             MouseButton::Right => {
-                self.new_ball.ball_size *= 2.;
-                if self.new_ball.ball_size > 5.5 {
-                    self.new_ball.ball_size = DEFAULT_BALL_SIZE;
-                }
-                let density = 2.;
-                self.new_ball.ball_mass =
-                    1. + density * (self.new_ball.ball_size / DEFAULT_BALL_SIZE - 1.).powi(2);
+                self.new_ball.next_ball_size();
             }
             _ => (),
         }
@@ -1287,7 +1380,11 @@ impl<'a> EventHandler for MainContent<'a> {
         match input.keycode {
             Some(key) => match key {
                 KeyCode::Space => self.sim.pause = !self.sim.pause,
-                KeyCode::LControl => if !repeated { self.sim.draw_cursor = true },
+                KeyCode::LControl => {
+                    if !repeated {
+                        self.sim.draw_cursor = true
+                    }
+                }
                 KeyCode::Escape => self.v_points.clear(),
                 KeyCode::LShift => self.new_ball.rand_speed = true,
                 _ => {}
@@ -1297,12 +1394,7 @@ impl<'a> EventHandler for MainContent<'a> {
         Ok(())
     }
 
-
-    fn key_up_event(
-        &mut self,
-        _ctx: &mut Context,
-        input: KeyInput,
-    ) -> Result<(), GameError> {
+    fn key_up_event(&mut self, _ctx: &mut Context, input: KeyInput) -> Result<(), GameError> {
         match input.keycode {
             Some(key) => match key {
                 KeyCode::H => {
@@ -1311,13 +1403,15 @@ impl<'a> EventHandler for MainContent<'a> {
                 KeyCode::D => self.real_data = !self.real_data,
                 KeyCode::S => self.step_by_step = !self.step_by_step,
                 KeyCode::T => self.show_timings = !self.show_timings,
-                KeyCode::P => self.show_plot = match self.show_plot {
-                    PlotContent::NONE => PlotContent::EKIN,
-                    PlotContent::EKIN => PlotContent::EPOT,
-                    PlotContent::EPOT => PlotContent::ETOT,
-                    PlotContent::ETOT => PlotContent::ALL,
-                    PlotContent::ALL => PlotContent::NONE,
-                },
+                KeyCode::P => {
+                    self.show_plot = match self.show_plot {
+                        PlotContent::NONE => PlotContent::EKIN,
+                        PlotContent::EKIN => PlotContent::EPOT,
+                        PlotContent::EPOT => PlotContent::ETOT,
+                        PlotContent::ETOT => PlotContent::ALL,
+                        PlotContent::ALL => PlotContent::NONE,
+                    }
+                }
                 KeyCode::Equals => self.sim.speedup += 1,
                 /*KeyCode::Plus => {
                     self.sim.speedup += 1.
@@ -1335,7 +1429,11 @@ impl<'a> EventHandler for MainContent<'a> {
                     self.start_handling_verbosity_input();
                 }
                 KeyCode::LControl => {
-                    self.add_candidate_px(self.win_definition.curs_pos.x, self.win_definition.curs_pos.y).ok(); //ignore any errors because of not being able to add
+                    self.add_candidate_px(
+                        self.win_definition.curs_pos.x,
+                        self.win_definition.curs_pos.y,
+                    )
+                    .ok(); //ignore any errors because of not being able to add
                     self.sim.draw_cursor = false;
                 }
                 KeyCode::F5 => {
@@ -1346,7 +1444,10 @@ impl<'a> EventHandler for MainContent<'a> {
                     let mut rng = rand::rng();
                     let rand_xy: Vec<(f32, f32)> = (0..100)
                         .map(|_| {
-                            (x_min+rng.random_range(0.0..x_range), y_min+ rng.random_range(0.0..y_range))
+                            (
+                                x_min + rng.random_range(0.0..x_range),
+                                y_min + rng.random_range(0.0..y_range),
+                            )
                         })
                         .collect();
                     for xy in rand_xy {
@@ -1387,8 +1488,8 @@ mod tests {
         assert_eq!(default_win.margin_px_x, 10.);
         assert_eq!(default_win.margin_px_y, 10.);
 
-        let default_ball_def = NewBallDef::default();
-        assert_eq!(default_ball_def.ball_size, DEFAULT_BALL_SIZE);
+        let default_ball_def = NewBallDef::new();
+        assert_eq!(default_ball_def.get_ball_size(), MIN_BALL_SIZE);
         assert_eq!(default_ball_def.ball_mass, 1.);
 
         let default_sim_stats = SimStats::default();
@@ -1402,9 +1503,9 @@ mod tests {
 
         // Add a valid candidate
         let x_px = main_content.win_definition.margin_px_x
-            + MainContent::len_to_px(main_content.new_ball.ball_size * 1.1);
+            + MainContent::len_to_px(main_content.new_ball.get_ball_size() * 1.1);
         let y_px = main_content.win_definition.margin_px_y
-            + MainContent::len_to_px(main_content.new_ball.ball_size * 1.1);
+            + MainContent::len_to_px(main_content.new_ball.get_ball_size() * 1.1);
         println!(
             "test adding ball at px ({},{}) | LEN_TO_PX: {}",
             x_px, y_px, LEN_TO_PX
@@ -1465,7 +1566,7 @@ mod tests {
 
         // Add some balls
         let ball_coord_px = Vec2D::new(30., 30.);
-        let ball_radius_px = MainContent::len_to_px(main_content.new_ball.ball_size);
+        let ball_radius_px = MainContent::len_to_px(main_content.new_ball.get_ball_size());
         main_content
             .add_candidate_px(ball_coord_px.x, ball_coord_px.y)
             .unwrap();
@@ -1511,8 +1612,8 @@ mod tests {
 
         // Add two overlapping balls
         let ball_coord_px = Vec2D::new(30., 30.);
-        let ball_radius_px = MainContent::len_to_px(main_content.new_ball.ball_size);
-        let ball_radius = main_content.new_ball.ball_size;
+        let ball_radius_px = MainContent::len_to_px(main_content.new_ball.get_ball_size());
+        let ball_radius = main_content.new_ball.get_ball_size();
         main_content
             .add_candidate_px(ball_coord_px.x, ball_coord_px.y)
             .unwrap();

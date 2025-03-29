@@ -10,7 +10,7 @@ pub(crate) const LJ_SIG: f32 = 1.; // equilibrium distance
 pub(crate) const LJ_CUTOFF: f32 = 8. * LJ_SIG; //distance where lenard jones force is < 1e-4 (as long as sig>0.1)
 pub(crate) const LJ_EPS: f32 = 1.; // attractive strength
 const SQRT6_OF_TWO: f32 = 1.122462048309372981; // == 2^(1/6)
-
+static mut UPDATE_HOOD_CNT: usize = 0;
 
 pub struct Ball2D<'a> {
     pub radius: f32,
@@ -23,6 +23,7 @@ pub struct Ball2D<'a> {
     braking: bool,
     pub pre_update_pos: Vec2D,
     pub accel: Vec2D,
+    last_update_hood_pos: Vec2D,
 }
 
 pub(crate) struct Verlet<'a> {
@@ -32,22 +33,25 @@ pub(crate) struct Verlet<'a> {
 }
 
 pub enum VerboseInfoMode {
-    CONSOLE, MAIN, OTHER, SPEED,
+    CONSOLE,
+    MAIN,
+    OTHER,
+    SPEED,
 }
 pub(crate) struct VerboseInfo {
-    console:bool,
-    main_neighbour:bool,
-    other_neighbour:bool,
-    speed:bool,
+    console: bool,
+    main_neighbour: bool,
+    other_neighbour: bool,
+    speed: bool,
 }
 
 impl VerboseInfo {
     fn default() -> VerboseInfo {
         VerboseInfo {
-            console:false,
+            console: false,
             main_neighbour: false,
-            other_neighbour:false,
-            speed:false,
+            other_neighbour: false,
+            speed: false,
         }
     }
 
@@ -71,11 +75,11 @@ impl VerboseInfo {
         self.speed = !self.speed;
     }
 
-    pub(crate)  fn any(&self) -> bool {
+    pub(crate) fn any(&self) -> bool {
         self.console || self.speed || self.main_neighbour || self.other_neighbour
     }
 
-    pub(crate)  fn is_main(&self) -> bool {
+    pub(crate) fn is_main(&self) -> bool {
         self.main_neighbour
     }
     pub(crate) fn clear_all(&mut self) {
@@ -98,7 +102,12 @@ impl<'a> Default for Verlet<'a> {
 
 impl<'a> core::fmt::Debug for Verlet<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
-        f.write_fmt(format_args!("nearest/farthest {:.3e}/{:.3e} num neighbours {}", self.nearest, self.farthest, self.neighbours.borrow().len()))
+        f.write_fmt(format_args!(
+            "nearest/farthest {:.3e}/{:.3e} num neighbours {}",
+            self.nearest,
+            self.farthest,
+            self.neighbours.borrow().len()
+        ))
     }
 }
 
@@ -130,7 +139,45 @@ impl<'a> Verlet<'a> {
             .collect()
     }
 
-    pub fn get_neighbour_force_and_pos(&self, ball_pos: &Vec2D, ball_radius: f32) -> Vec<(Vec2D, f32)> {
+    fn add_neighbour_already_sure_was_no_neighbour(&self, ball_rc: &Rc<RefCell<Ball2D<'a>>>) {
+        self.neighbours.borrow_mut().push(Rc::downgrade(ball_rc));
+    }
+    pub fn add_neighbour(
+        &self,
+        self_rc: &Rc<RefCell<Ball2D<'a>>>,
+        ball_rc: &Rc<RefCell<Ball2D<'a>>>,
+    ) -> bool {
+        let was_neighbour = self.is_a_neighbour(&ball_rc.borrow().get_name());
+        if !was_neighbour {
+            self.neighbours.borrow_mut().push(Rc::downgrade(ball_rc));
+            ball_rc
+                .borrow()
+                .hood
+                .add_neighbour_already_sure_was_no_neighbour(self_rc);
+        }
+        was_neighbour
+    }
+
+    pub fn is_a_neighbour(&self, name: &str) -> bool {
+        self.neighbours
+            .borrow()
+            .iter()
+            .filter_map(|weak| weak.upgrade())
+            .any(|rcrefcell| rcrefcell.borrow().get_name() == name)
+    }
+
+    pub fn remove(&mut self, name: &str) {
+        self.neighbours.borrow_mut().retain(|weak| {
+            weak.upgrade()
+                .is_some_and(|ball_rc| ball_rc.borrow().get_name() != name)
+        });
+    }
+
+    pub fn get_neighbour_force_and_pos(
+        &self,
+        ball_pos: &Vec2D,
+        ball_radius: f32,
+    ) -> Vec<(Vec2D, f32)> {
         self.neighbours
             .borrow()
             .iter()
@@ -139,9 +186,13 @@ impl<'a> Verlet<'a> {
                 let other = rcrefcell.borrow();
                 (
                     other.pos.clone(),
-                    Ball2D::lenard_jones_force(ball_pos.dist(&other.pos).norm(), ball_radius + other.radius, other.get_id())
+                    Ball2D::lenard_jones_force(
+                        ball_pos.dist(&other.pos).norm(),
+                        ball_radius + other.radius,
+                        other.get_id(),
+                    ),
                 )
-            } )
+            })
             .collect()
     }
 }
@@ -179,11 +230,12 @@ impl<'a> Default for Ball2D<'a> {
             id: 0,
             mass: 1.,
             v: Vec2D::new(0., 0.),
-            hood: Verlet ::default(),
+            hood: Verlet::default(),
             verbose: VerboseInfo::default(),
             braking: false,
             pre_update_pos: Vec2D::new(0., 0.),
             accel: Vec2D::new(0., 0.),
+            last_update_hood_pos: Vec2D::new(f32::INFINITY, f32::INFINITY),
         }
     }
 }
@@ -203,17 +255,32 @@ impl<'a> Ball2D<'a> {
         Ball2D::new_massive_with_v(_id, _x, _y, _radius, _m, None)
     }
 
-    pub fn new_massive_with_v(_id: usize, _x: f32, _y: f32, _radius: f32, _m: f32, v: Option<Vec2D>) -> Ball2D<'a> {
+    pub fn new_massive_with_v(
+        _id: usize,
+        _x: f32,
+        _y: f32,
+        _radius: f32,
+        _m: f32,
+        v: Option<Vec2D>,
+    ) -> Ball2D<'a> {
         let pos = Vec2D::new(_x, _y);
         Ball2D {
             id: _id,
             pos: pos.clone(),
             radius: _radius,
             mass: _m,
-            v: if v.is_none() { Vec2D::new(0., 0.)} else { v.unwrap() },
+            v: if v.is_none() {
+                Vec2D::new(0., 0.)
+            } else {
+                v.unwrap()
+            },
             pre_update_pos: pos,
             ..Default::default()
         }
+    }
+
+    pub fn get_update_hood_call_cnt() -> usize {
+        unsafe { UPDATE_HOOD_CNT }
     }
 
     pub fn has_larger_id(&self, other: &Self) -> bool {
@@ -228,20 +295,28 @@ impl<'a> Ball2D<'a> {
         self.v.scaled_copy(self.mass)
     }
 
+    pub fn needs_update_hood(&self) -> bool {
+        let travel_since_last_upd_sq = self.last_update_hood_pos.dist(&self.pos).norm_sq();
+        return (self.radius + LJ_CUTOFF) * (self.radius + LJ_CUTOFF) < travel_since_last_upd_sq; //TODO this is not correct
+    }
+
     pub fn update_hood(
         &mut self,
         dt: f32,
         self_rc: &Rc<RefCell<Self>>,
         others: Vec<Rc<RefCell<Ball2D<'a>>>>,
     ) {
+        //needs to be first call to break recursion
+
         //use approximation for (v*dt+LJ_SIG)^2
         let v_sq = self.v.norm_sq();
         let eq = LJ_SIG + self.radius;
-        let cutoff = self.radius+LJ_CUTOFF;
+        let cutoff = self.radius + LJ_CUTOFF * 2.;
+
+        let dist_limit_by_v_sq = 0.;
         //we only check hood every ten updates --> factors 100 and 10
-        let dist_limit_by_v_sq =
-            100. * v_sq * dt * dt + eq * eq + 2. * 10. * dt * eq * (self.v.x + self.v.y);
-        let dist_limit_by_closest_sq = cutoff*cutoff;
+        //100. * v_sq * dt * dt + eq * eq + 2. * 10. * dt * eq * (self.v.x + self.v.y);
+        let dist_limit_by_closest_sq = cutoff * cutoff;
         let dist_limit_sq = f32::max(dist_limit_by_closest_sq, dist_limit_by_v_sq);
         if self.verbose.console {
             println!(
@@ -252,23 +327,33 @@ impl<'a> Ball2D<'a> {
                 others.len()
             );
         }
-
+        let this_ball_needs_update = self.needs_update_hood();
+        if !this_ball_needs_update {
+            return;
+        }
+        unsafe {
+            UPDATE_HOOD_CNT += 1;
+        }
+        self.last_update_hood_pos = self.pos.clone();
         for cur_rc in others.iter() {
             let cur_ref = cur_rc.borrow();
+            // if cur_ref.needs_update_hood(){
+            //     let other_for_cur = others.clone();
+            //     other_for_cur.retain(|b_rc| b_rc.borrow().get_name() != cur_ref.get_name());
+            //     other_for_cur.push(self_rc.clone());
+            //     cur_ref.update_hood(dt, cur_rc, other_for_cur);
+            // }
+            // if self.hood.is_a_neighbour(&cur_ref.get_name()) {
+            //     continue;
+            // }
+
             let dist_sq = self.pos.dist(&cur_ref.pos).norm_sq();
             //println!("checking {}", cur_ref.get_name());
             if dist_sq < dist_limit_sq {
                 //cur.hood.neighbours.push(self.into());
                 //let new_neighbour = Rc::new( RefCell::new(cur));
-                self.hood
-                    .neighbours
-                    .borrow_mut()
-                    .push(Rc::downgrade(cur_rc));
-                cur_ref
-                    .hood
-                    .neighbours
-                    .borrow_mut()
-                    .push(Rc::downgrade(self_rc));
+                self.hood.add_neighbour(self_rc, cur_rc);
+
                 if self.verbose.console {
                     println!(
                         "\tneighbours {} at ({},{}) dist {}",
@@ -293,6 +378,8 @@ impl<'a> Ball2D<'a> {
                 //.map(|val| val.borrow().get_name())
                 //.collect::<Vec<String>>());
                 //println!("updated {}-neighbours {:?}", cur.get_name(), cur.hood.neighbours);
+            } else {
+                self.hood.remove(&cur_ref.get_name());
             }
         }
     }
@@ -334,7 +421,8 @@ impl<'a> Ball2D<'a> {
 
     pub fn is_colliding(&self, other: &Ball2D) -> bool {
         //use norm_sq to avoid sqrt in norm
-        let radius_sum_sq = (self.radius + other.radius+LJ_SIG) * (self.radius + other.radius+LJ_SIG);
+        let radius_sum_sq =
+            (self.radius + other.radius + LJ_SIG) * (self.radius + other.radius + LJ_SIG);
         let res = self.pos.dist(&other.pos).norm_sq() < radius_sum_sq;
         if res {
             println!(
@@ -351,10 +439,15 @@ impl<'a> Ball2D<'a> {
 
     pub fn equilibrium_radius(&self) -> f32 {
         //case: r1==r2 --- SQRT6_OF_TWO * LJ_SIG + 2* rad == dist_equi
-        (SQRT6_OF_TWO * LJ_SIG) * 0.5 + self.radius
+        Self::equilibrium_of_radius(self.radius)
     }
 
-    pub(crate) fn lenard_jones_potential(dist_btw_balls:f32) -> f32 {
+    pub(crate) fn equilibrium_of_radius(radius: f32) -> f32 {
+        //case: r1==r2 --- SQRT6_OF_TWO * LJ_SIG + 2* rad == dist_equi
+        (SQRT6_OF_TWO * LJ_SIG) * 0.5 + radius
+    }
+
+    pub(crate) fn lenard_jones_potential(dist_btw_balls: f32) -> f32 {
         //case dist_of_balls = equilibrium_radius*2 and radius_sum=2*radius
         //dist = SQRT6_OF_TWO LJ_SIG + 2*rad - 2*rad
         //dist = SQRT6_OF_TWO LJ_SIG
@@ -364,14 +457,14 @@ impl<'a> Ball2D<'a> {
         //    4 LJ_EPS 1/2 * (-1/2)
         //    - LJ_EPS
 
-
         if dist_btw_balls < Self::min_dist_for_const_force() {
             let quot = LJ_SIG / Self::min_dist_for_const_force();
             let quot_six = quot.powi(6);
             let pot_at_min_dist = 4. * LJ_EPS * quot_six * (quot_six - 1.);
 
             let force_at_min_dist = Self::lenard_jones_force_pure(Self::min_dist_for_const_force());
-            return pot_at_min_dist + (dist_btw_balls-Self::min_dist_for_const_force())*force_at_min_dist;
+            return pot_at_min_dist
+                + (dist_btw_balls - Self::min_dist_for_const_force()) * force_at_min_dist;
         }
 
         let quot = LJ_SIG / dist_btw_balls;
@@ -379,8 +472,8 @@ impl<'a> Ball2D<'a> {
         4. * LJ_EPS * quot_six * (quot_six - 1.)
     }
 
-    fn min_dist_for_const_force()-> f32 {
-         LJ_SIG*0.5   
+    fn min_dist_for_const_force() -> f32 {
+        LJ_SIG * 0.5
     }
 
     pub(crate) fn lenard_jones_force(dist_of_balls: f32, radius_sum: f32, _id: usize) -> f32 {
@@ -392,10 +485,9 @@ impl<'a> Ball2D<'a> {
         }
     }
     pub(crate) fn lenard_jones_force_pure(dist_btw_balls: f32) -> f32 {
-
         let quot = LJ_SIG / dist_btw_balls;
         let quot_six = quot.powi(6);
-        let res = - 24. * LJ_EPS * quot_six * (2. * quot_six - 1.) / dist_btw_balls;
+        let res = -24. * LJ_EPS * quot_six * (2. * quot_six - 1.) / dist_btw_balls;
 
         //0==6(2*LJ_SIG/dist6-1)*const/dist
         //0==2*LJ_SIG/dist6-1
@@ -476,7 +568,7 @@ impl<'a> Ball2D<'a> {
                     _ => {
                         min_dist = 0.;
                         //maybe use some max_force to repell
-                        let lj_force = - 100.;
+                        let lj_force = -100.;
                         let force_to_dist_val = lj_force / dist;
                         let local_force = Vec2D::new(
                             dist_vec.x * force_to_dist_val,
@@ -506,7 +598,6 @@ impl<'a> Ball2D<'a> {
         let dx = self.v.x * dt + 0.5 * self.accel.x * dt * dt;
         let dy = self.v.y * dt + 0.5 * self.accel.y * dt * dt;
 
-
         let bound_min_x = bound.x + self.radius;
         let bound_max_x = bound.x + bound.w - self.radius;
         let bound_min_y = bound.y + self.radius;
@@ -515,11 +606,19 @@ impl<'a> Ball2D<'a> {
         self.update_y_and_handle_top_bottom_boundary(dy, bound_min_y, bound_max_y);
 
         if self.verbose.console {
-            println!("moved pos {:?} -->  {:?} at dt {:.3} v {:?} a {:?}", old_pos, self.pos, dt, self.v, self.accel);
+            println!(
+                "moved pos {:?} -->  {:?} at dt {:.3} v {:?} a {:?}",
+                old_pos, self.pos, dt, self.v, self.accel
+            );
         }
     }
 
-    fn update_y_and_handle_top_bottom_boundary(&mut self, dy: f32, bound_min_y: f32, bound_max_y: f32) {
+    fn update_y_and_handle_top_bottom_boundary(
+        &mut self,
+        dy: f32,
+        bound_min_y: f32,
+        bound_max_y: f32,
+    ) {
         let newy = self.pos.y + dy;
 
         if bound_max_y > newy && newy > bound_min_y {
@@ -536,9 +635,13 @@ impl<'a> Ball2D<'a> {
         }
     }
 
-    fn update_x_and_handle_left_right_boundary(&mut self, dx: f32, bound_min_x:f32, bound_max_x:f32) {
+    fn update_x_and_handle_left_right_boundary(
+        &mut self,
+        dx: f32,
+        bound_min_x: f32,
+        bound_max_x: f32,
+    ) {
         let newx = self.pos.x + dx;
-
 
         if bound_max_x > newx && newx > bound_min_x {
             self.pos.x += dx;
@@ -561,7 +664,12 @@ impl<'a> Ball2D<'a> {
     pub fn update_old_pos(&mut self) {
         self.pre_update_pos = self.pos.clone();
     }
-    pub(crate) fn accel_with_speed_limit(&mut self, total_force: &Vec2D, speed_limit: f32, dt: f32) -> Vec2D {
+    pub(crate) fn accel_with_speed_limit(
+        &mut self,
+        total_force: &Vec2D,
+        speed_limit: f32,
+        dt: f32,
+    ) -> Vec2D {
         let mut accel: Vec2D = total_force.scaled_copy(1. / self.mass);
 
         let speed_sq = self.v.norm_sq();
@@ -569,8 +677,8 @@ impl<'a> Ball2D<'a> {
         if speed_sq > speed_limit.powi(2) {
             let speed = f32::sqrt(speed_sq);
             let overspeed = f32::min(speed, speed - speed_limit);
-            let speed_reduction = 0.25*f32::sqrt(2.)*overspeed;
-            let accel_modification = self.v.scaled_copy(-speed_reduction/dt/speed);
+            let speed_reduction = 0.25 * f32::sqrt(2.) * overspeed;
+            let accel_modification = self.v.scaled_copy(-speed_reduction / dt / speed);
 
             self.braking = true;
             accel.add(accel_modification);
@@ -584,7 +692,6 @@ impl<'a> Ball2D<'a> {
             self.braking = false;
         }
         accel
-
     }
 
     pub fn ball_color(&self) -> Color {
@@ -604,7 +711,8 @@ impl<'a> Ball2D<'a> {
     }
 
     pub fn get_neighbour_force_and_pos(&self) -> Vec<(Vec2D, f32)> {
-        self.hood.get_neighbour_force_and_pos(&self.pos, self.radius)
+        self.hood
+            .get_neighbour_force_and_pos(&self.pos, self.radius)
     }
 
     pub fn update_positions(&mut self, dt: f32, bound: &Rect) {
@@ -621,7 +729,6 @@ impl<'a> Ball2D<'a> {
         // let (min_dist, total_force, total_pot) = self.force();
         // let speed_limit = f32::min(bound.w, bound.h) / 200.;
         //let accel = self.accel_with_speed_limit(&total_force, speed_limit, dt);
-
 
         // let a_norm = accel.norm();
         //let p = Vec2D::norm(&self.v)/a_norm;
@@ -669,13 +776,12 @@ impl<'a> Ball2D<'a> {
         self.update_old_pos();
     }
 
-    pub fn update_accel_and_speed(&mut self, dt: f32, bound: &Rect) -> (f32, f32){
-
+    pub fn update_accel_and_speed(&mut self, dt: f32, bound: &Rect) -> (f32, f32) {
         let (min_dist, total_force, total_pot) = self.force();
         let speed_limit = f32::min(bound.w, bound.h) / 0.002;
         let accel = self.accel_with_speed_limit(&total_force, speed_limit, dt);
-        self.v.x = self.v.x + 0.5*(accel.x + self.accel.x)*dt;
-        self.v.y = self.v.y + 0.5*(accel.y + self.accel.y)*dt;
+        self.v.x = self.v.x + 0.5 * (accel.x + self.accel.x) * dt;
+        self.v.y = self.v.y + 0.5 * (accel.y + self.accel.y) * dt;
 
         self.accel = accel;
 
@@ -684,10 +790,7 @@ impl<'a> Ball2D<'a> {
         }
         (min_dist, total_pot)
     }
-
 }
-
-
 
 /*impl<'a> Clone for Verlet<'a> {
     fn clone(&self) -> Verlet<'a> {
@@ -712,4 +815,3 @@ impl<'a> Ball2D<'a> {
        }
     }
 }*/
-
