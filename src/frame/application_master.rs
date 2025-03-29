@@ -489,16 +489,13 @@ impl<'a> MainContent<'a> {
 impl DrawingStuff for MainContent<'_> {
     fn draw_cursor(&self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult {
         if self.sim.draw_cursor {
-            let cursor_circle = Mesh::new_circle(
-                ctx,
-                DrawMode::fill(),
-                self.win_definition.curs_pos.clone(),
-                Self::len_to_px(self.new_ball.get_ball_size()),
-                0.1,
-                Color::WHITE,
-            )?;
-
-            canvas.draw(&cursor_circle, Vec2::new(0., 0.));
+            let ball_mesh = self.new_ball.get_mesh(ctx, self.new_ball.get_ball_size());
+            canvas.draw(
+                ball_mesh.unwrap(),
+                DrawParam::default()
+                    .color(Color::WHITE)
+                    .dest(self.win_definition.curs_pos.clone()),
+            );
         } else {
             self.draw_cross_hair(ctx, canvas)?;
         }
