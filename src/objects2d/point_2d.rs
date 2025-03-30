@@ -8,63 +8,61 @@ pub struct Vec2D {
 }
 
 impl Vec2D {
-    pub fn new(_x: f32, _y: f32) -> Vec2D {
-        Vec2D { x: _x, y: _y }
+    pub fn new(x: f32, y: f32) -> Vec2D {
+        Vec2D { x, y }
     }
 
-    pub fn norm_sq_of(pt: &Vec2D) -> f32 {
-        pt.x * pt.x + pt.y * pt.y
-    }
-
-    pub fn norm_of(pt: &Vec2D) -> f32 {
-        f32::sqrt(Vec2D::norm_sq_of(pt))
-    }
-
-    pub fn scaled_copy_of(pt: &Vec2D, scale: f32) -> Vec2D {
-        Vec2D::new(pt.x * scale, pt.y * scale)
-    }
-
-    pub fn scaled_copy(&self, scale: f32) -> Vec2D {
-        Vec2D::scaled_copy_of(self, scale)
-    }
-
-    /// calculates the distance vector from this ball to the other ball
-    pub fn dist(&self, other: &Vec2D) -> Vec2D {
-        let dist_x = other.x - self.x;
-        let dist_y = other.y - self.y;
-        Vec2D::new(dist_x, dist_y)
-    }
-
-    pub fn norm(&self) -> f32 {
-        Vec2D::norm_of(self)
-    }
-
+    /// Returns the squared norm.
     pub fn norm_sq(&self) -> f32 {
-        Vec2D::norm_sq_of(self)
+        self.x * self.x + self.y * self.y
     }
 
-    pub fn add(&mut self, pt: Vec2D) {
-        self.x += pt.x;
-        self.y += pt.y;
+    /// Returns the norm (magnitude).
+    pub fn norm(&self) -> f32 {
+        self.norm_sq().sqrt()
     }
 
-    pub fn add_copy(&self, pt: Vec2D) -> Vec2D {
+    /// Creates a scaled copy of the vector.
+    pub fn scaled(&self, scale: f32) -> Vec2D {
+        Vec2D::new(self.x * scale, self.y * scale)
+    }
+
+    /// Adds another vector and returns a new vector.
+    pub fn add(&self, pt: Vec2D) -> Vec2D {
         Vec2D::new(self.x + pt.x, self.y + pt.y)
     }
 
-    fn _scale(&mut self, scale: f32) {
+    /// Adds another vector, scaled by a factor, and returns a new vector.
+    pub fn add_scaled(&self, pt: Vec2D, scale: f32) -> Vec2D {
+        let scaled_pt = pt.scaled(scale);
+        Vec2D::new(self.x + scaled_pt.x, self.y + scaled_pt.y)
+    }
+
+    /// Computes the distance vector to another vector.
+    pub fn dist(&self, other: &Vec2D) -> Vec2D {
+        Vec2D::new(other.x - self.x, other.y - self.y)
+    }
+
+    /// Adds another vector to this one mutably.
+    pub fn add_mut(&mut self, pt: Vec2D) {
+        *self = self.add_scaled(pt, 1.0);
+    }
+
+    /// Scales the vector in place.
+    pub fn scale_mut(&mut self, scale: f32) {
         self.x *= scale;
         self.y *= scale;
     }
 
-    fn _negate(&mut self) {
-        self._scale(-1.);
+    /// Negates the vector in place.
+    fn negate_mut(&mut self) {
+        self.scale_mut(-1.0);
     }
 }
 
 impl fmt::Display for Vec2D {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "({:.2E},{:.2E})", self.x, self.y)
+        write!(f, "({:.2E}, {:.2E})", self.x, self.y)
     }
 }
 
@@ -121,19 +119,19 @@ mod tests {
     #[test]
     fn test_norm_sq() {
         let v = Vec2D::new(3.0, 4.0);
-        assert_eq!(Vec2D::norm_sq_of(&v), 25.0);
+        assert_eq!(Vec2D::norm_sq(&v), 25.0);
     }
 
     #[test]
     fn test_norm() {
         let v = Vec2D::new(3.0, 4.0);
-        assert_eq!(Vec2D::norm_of(&v), 5.0);
+        assert_eq!(Vec2D::norm(&v), 5.0);
     }
 
     #[test]
     fn test_copy_scaled() {
         let v = Vec2D::new(2.0, 3.0);
-        let scaled = Vec2D::scaled_copy_of(&v, 2.0);
+        let scaled = Vec2D::scaled(v, 2.0);
         assert_eq!(scaled.x, 4.0);
         assert_eq!(scaled.y, 6.0);
     }
@@ -159,7 +157,7 @@ mod tests {
     #[test]
     fn test_private_scale() {
         let mut v = Vec2D::new(2.0, 3.0);
-        v._scale(2.0);
+        v.scale_mut(2.0);
         assert_eq!(v.x, 4.0);
         assert_eq!(v.y, 6.0);
     }
@@ -167,7 +165,7 @@ mod tests {
     #[test]
     fn test_private_negate() {
         let mut v = Vec2D::new(2.0, -3.0);
-        v._negate();
+        v.negate_mut();
         assert_eq!(v.x, -2.0);
         assert_eq!(v.y, 3.0);
     }
