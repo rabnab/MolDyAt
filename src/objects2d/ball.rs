@@ -1,4 +1,4 @@
-use crate::objects2d::point_2d::Vec2D;
+use crate::objects2d::vec_2d::Vec2D;
 use ggez::graphics::Rect;
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
