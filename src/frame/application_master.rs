@@ -380,6 +380,10 @@ impl<'a> MainContent<'a> {
 }
 
 impl<'a> MainContent<'a> {
+    fn clamp_to_bounds(value: f32, margin: f32, region: f32) -> f32 {
+        f32::max(margin, f32::min(margin + region, value))
+    }
+
     fn cycle_plot_content(&mut self) {
         self.show_plot = match self.show_plot {
             PlotContent::NONE => PlotContent::EKIN,
@@ -1441,21 +1445,20 @@ impl<'a> EventHandler for MainContent<'a> {
         _dx: f32,
         _dy: f32,
     ) -> GameResult {
-        let used_x = f32::max(
+        // Calculate clamped positions
+        let clamped_x = Self::clamp_to_bounds(
+            x,
             self.win_definition.margin_px_x,
-            f32::min(
-                self.win_definition.margin_px_x + self.win_definition.region_px_x,
-                x,
-            ),
+            self.win_definition.region_px_x,
         );
-        let used_y = f32::max(
+        let clamped_y = Self::clamp_to_bounds(
+            y,
             self.win_definition.margin_px_y,
-            f32::min(
-                self.win_definition.margin_px_y + self.win_definition.region_px_y,
-                y,
-            ),
+            self.win_definition.region_px_y,
         );
-        self.win_definition.curs_pos = Vec2D::new(used_x, used_y);
+
+        // Update cursor position
+        self.win_definition.curs_pos = Vec2D::new(clamped_x, clamped_y);
         Ok(())
     }
 
