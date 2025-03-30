@@ -1411,11 +1411,8 @@ impl<'a> EventHandler for MainContent<'a> {
         _x: f32,
         _y: f32,
     ) -> GameResult {
-        match button {
-            MouseButton::Right => {
-                self.new_ball.next_ball_size();
-            }
-            _ => (),
+        if let MouseButton::Right = button {
+            self.new_ball.next_ball_size();
         }
         Ok(())
     }
