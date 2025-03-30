@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use crate::objects2d::ball_2d::*;
     use crate::objects2d::Vec2D;
+    use crate::objects2d::ball_2d::*;
     use float_cmp::{approx_eq, assert_approx_eq};
     use ggez::graphics::Rect;
     use std::cell::RefCell;
@@ -808,8 +808,6 @@ mod tests {
      This may indicate an incorrect boundary handling or velocity reflection issue.",
             ball.pos.y
         );
-
-
     }
 
     #[test]
