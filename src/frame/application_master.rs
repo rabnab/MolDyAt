@@ -191,7 +191,7 @@ struct ShaderUniforms {
 }
 */
 
-trait DrawingStuff {
+trait DrawingStuff<'a> {
     fn draw_cursor(&self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult;
     fn draw_plot(&self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult;
     fn draw_text_on_ball(&self, ctx: &Context, canvas: &mut Canvas, ball: &Ball2D) -> GameResult;
@@ -224,6 +224,13 @@ trait DrawingStuff {
         shader_used: &Shader,
     ) -> GameResult;
     fn draw_balls(&self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult;
+    fn get_verbose_balls(&self) -> Vec<Rc<RefCell<Ball2D<'a>>>>;
+    fn draw_verbose_balls(
+        &self,
+        ctx: &mut Context,
+        canvas: &mut Canvas,
+        verbose_balls: &[Rc<RefCell<Ball2D>>],
+    ) -> GameResult;
     fn draw_cross_hair(&self, canvas: &mut Canvas) -> GameResult<()>;
     fn draw_frame(&mut self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult;
     fn resize(&mut self, width: f32, height: f32) -> Result<(), GameError>;
@@ -592,7 +599,7 @@ impl<'a> MainContent<'a> {
     }
 }
 
-impl DrawingStuff for MainContent<'_> {
+impl<'a> DrawingStuff<'a> for MainContent<'a> {
     fn draw_cursor(&self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult {
         if self.sim.draw_cursor {
             let ball_mesh = self.new_ball.get_mesh(ctx, self.new_ball.get_ball_size());
@@ -912,24 +919,35 @@ impl DrawingStuff for MainContent<'_> {
     }
 
     fn draw_balls(&self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult {
-        if let Some(shader_used) = &self.shader {
-            self.draw_opengl_balls(ctx, canvas, &shader_used)?;
-        } else {
-            self.draw_simple_balls(ctx, canvas)?;
+        match &self.shader {
+            Some(shader) => self.draw_opengl_balls(ctx, canvas, shader)?,
+            None => self.draw_simple_balls(ctx, canvas)?,
         }
-        let verbose_balls: Vec<Rc<RefCell<Ball2D>>> = self
-            .v_points
-            .iter()
-            .filter(|any| any.borrow().verbose.lines())
-            .cloned()
-            .collect();
 
+        let verbose_balls = self.get_verbose_balls();
+        self.draw_verbose_balls(ctx, canvas, &verbose_balls)?;
+        Ok(())
+    }
+
+    fn get_verbose_balls(&self) -> Vec<Rc<RefCell<Ball2D<'a>>>> {
+        self.v_points
+            .iter()
+            .filter(|ball| ball.borrow().verbose.lines())
+            .cloned()
+            .collect()
+    }
+
+    fn draw_verbose_balls(
+        &self,
+        ctx: &mut Context,
+        canvas: &mut Canvas,
+        verbose_balls: &[Rc<RefCell<Ball2D>>],
+    ) -> GameResult {
         for ball_ref in verbose_balls.iter() {
             let ball = ball_ref.borrow();
             let ball_coord_px = self.coord_to_px(&ball.pos);
             self.draw_neighbour_lines(ctx, canvas, &ball, &ball_coord_px)?;
         }
-
         Ok(())
     }
 
