@@ -292,13 +292,13 @@ impl<'a> Ball2D<'a> {
     }
 
     pub fn moment(&self) -> Vec2D {
-        self.v.scaled_copy(self.mass)
+        self.v.scaled(self.mass)
     }
 
     pub fn needs_update_hood(&self, dt: f32) -> bool {
         let travel_since_last_upd_sq = self
             .last_update_hood_pos
-            .add_copy(self.v.scaled_copy(dt))
+            .add(self.v.scaled(dt))
             .dist(&self.pos)
             .norm_sq();
         return (self.radius + LJ_CUTOFF) * (self.radius + LJ_CUTOFF) < travel_since_last_upd_sq; //TODO this is not correct
@@ -561,7 +561,7 @@ impl<'a> Ball2D<'a> {
                             );
                         }
 
-                        force.add(local_force);
+                        force.add_mut(local_force);
                         total_pot += Ball2D::lenard_jones_potential(dist - radius_sum);
                     }
                     _ => {
@@ -583,7 +583,7 @@ impl<'a> Ball2D<'a> {
                             );
                         }
 
-                        force.add(local_force);
+                        force.add_mut(local_force);
                         total_pot += Ball2D::lenard_jones_potential(dist - radius_sum);
                     }
                 };
@@ -669,7 +669,7 @@ impl<'a> Ball2D<'a> {
         speed_limit: f32,
         dt: f32,
     ) -> Vec2D {
-        let mut accel: Vec2D = total_force.scaled_copy(1. / self.mass);
+        let mut accel: Vec2D = total_force.scaled(1. / self.mass);
 
         let speed_sq = self.v.norm_sq();
 
@@ -677,10 +677,10 @@ impl<'a> Ball2D<'a> {
             let speed = f32::sqrt(speed_sq);
             let overspeed = f32::min(speed, speed - speed_limit);
             let speed_reduction = 0.25 * f32::sqrt(2.) * overspeed;
-            let accel_modification = self.v.scaled_copy(-speed_reduction / dt / speed);
+            let accel_modification = self.v.scaled(-speed_reduction / dt / speed);
 
             self.braking = true;
-            accel.add(accel_modification);
+            accel.add_mut(accel_modification);
 
             if self.verbose.console {
                 println!("braking: overspeed {} at speed {:?}", overspeed, self.v);

@@ -973,7 +973,7 @@ impl LogStuff for MainContent<'_> {
                 self.sim.temperature * TEMP_SCALE,
                 self.sim.max_v * LEN_SCALE_M / TIME_SCALE,
                 self.sim.min_dist * LEN_SCALE_M,
-                self.sim.v_com.scaled_copy(LEN_SCALE_M / TIME_SCALE),
+                self.sim.v_com.scaled(LEN_SCALE_M / TIME_SCALE),
             )
         } else {
             format!(
@@ -1269,7 +1269,7 @@ impl<'a> VerletIntegration for MainContent<'a> {
         self.sim.max_id = max_id;
         self.sim.time += dt;
         self.sim.step += 1;
-        self.sim.v_com = _v_com.scaled_copy(1. / sum_mass);
+        self.sim.v_com = _v_com.scaled(1. / sum_mass);
 
         Ok(())
     }
