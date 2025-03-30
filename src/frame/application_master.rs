@@ -30,7 +30,6 @@ const TEMP_SCALE: f32 = 122.; //=ENERGY_SCALE_J / KBOLTZMANN_J_P_K; //exact 122K
 const LEN_TO_PX: f32 = 1. / 10.; // 50 px are one LEN_SCALE (SIG is about 0.5 to 1 LEN_SCALE)
 
 const MIN_BALL_SIZE: f32 = 0.15;
-const MAX_BALL_SIZE: f32 = 5.5;
 const FPS_GOAL: u32 = 60;
 const DT_GOAL: f32 = 0.01; // 1. / (FPS_GOAL as f32);
 const SHOW_FORCE: bool = false;
@@ -52,7 +51,6 @@ struct NewBallDef {
     ball_size_idx: usize,
     ball_size: Vec<f32>,
     ball_mesh: Vec<Mesh>,
-    ball_mass: f32,
     rand_speed: bool,
 }
 
@@ -68,26 +66,18 @@ impl NewBallDef {
         const STROKE_THICKNESS: f32 = 2.0; // Border thickness for stroke drawing
         const BASE_EXPONENT: f32 = 2.0; // Base scaling exponent for sizes
 
-        let mut ball_sizes: Vec<f32> = Vec::new();
-        let mut ball_meshes: Vec<Mesh> = Vec::new();
+        let ball_sizes: Vec<f32> = (0..NUM_BALL_SIZES)
+            .map(|i| MIN_BALL_SIZE * BASE_EXPONENT.powi(i as i32))
+            .collect();
 
-        for size_index in 0..(NUM_BALL_SIZES - 1) as i32 {
-            let ball_size = MIN_BALL_SIZE * BASE_EXPONENT.powi(size_index);
-            ball_sizes.push(ball_size);
-
-            // Build the mesh and push to the list.
-            ball_meshes.push(Self::create_ball_mesh(
-                ctx,
-                ball_size,
-                CIRCLE_TOLERANCE,
-                STROKE_THICKNESS,
-            ));
-        }
+        let ball_meshes: Vec<Mesh> = ball_sizes
+            .iter()
+            .map(|&radius| Self::create_ball_mesh(ctx, radius, CIRCLE_TOLERANCE, STROKE_THICKNESS))
+            .collect();
 
         NewBallDef {
             ball_size: ball_sizes,
             ball_size_idx: 2,
-            ball_mass: 1.0, // Approximate Argon mass
             ball_mesh: ball_meshes,
             rand_speed: false,
         }
@@ -234,7 +224,7 @@ trait DrawingStuff {
         shader_used: &Shader,
     ) -> GameResult;
     fn draw_balls(&self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult;
-    fn draw_cross_hair(&self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult<()>;
+    fn draw_cross_hair(&self, canvas: &mut Canvas) -> GameResult<()>;
     fn draw_frame(&mut self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult;
     fn resize(&mut self, width: f32, height: f32) -> Result<(), GameError>;
 }
@@ -544,7 +534,7 @@ impl DrawingStuff for MainContent<'_> {
                     .dest(self.win_definition.curs_pos.clone()),
             );
         } else {
-            self.draw_cross_hair(ctx, canvas)?;
+            self.draw_cross_hair(canvas)?;
         }
         let curs_pos = self.px_to_coord(
             self.win_definition.curs_pos.x,
@@ -874,10 +864,7 @@ impl DrawingStuff for MainContent<'_> {
         Ok(())
     }
 
-    fn draw_cross_hair(&self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult<()> {
-        let cursor_x = self.win_definition.curs_pos.x;
-        let cursor_y = self.win_definition.curs_pos.y;
-
+    fn draw_cross_hair(&self, canvas: &mut Canvas) -> GameResult<()> {
         canvas.draw(
             self.crosshair_mesh.as_ref().unwrap(),
             self.win_definition.curs_pos.clone(),
@@ -927,20 +914,45 @@ impl LogStuff for MainContent<'_> {
     }
 
     fn print_help_message() {
-        println!(
-            "HELP: The following Keys are available:\n\
-        H - Show this help message.\n\
-        D - Toggle the display of real data.\n\
-        S - Toggle step-by-step mode.\n\
-        T - Toggle the display of timing information.\n\
-        + - Increase the simulation speed.\n\
-        - - Decrease the simulation speed (minimum speed is 1).\n\
-        B - Toggle the display of ball statistics.\n\
-        V - Set verbosity for ball statistics:\n\
+        const HELP_KEYS_INFO: &str = "HELP: The following Keys are available:";
+        const HELP_OPTION_H: &str = "H - Show this help message.";
+        const HELP_OPTION_D: &str = "D - Toggle the display of real data.";
+        const HELP_OPTION_S: &str = "S - Toggle step-by-step mode.";
+        const HELP_OPTION_T: &str = "T - Toggle the display of timing information.";
+        const HELP_OPTION_INCREASE_SPEED: &str = "+ - Increase the simulation speed.";
+        const HELP_OPTION_DECREASE_SPEED: &str =
+            "- - Decrease the simulation speed (minimum speed is 1).";
+        const HELP_OPTION_B: &str = "B - Toggle the display of ball statistics.";
+        const HELP_OPTION_V: &str = "V - Set verbosity for ball statistics:\n\
             - Enter a specific ball ID to toggle verbose mode for that ball.\n\
             - Enter 'a' to set all balls to verbose.\n\
-            - Enter '0' to disable verbose mode for all balls.\n\
-        SPACE - Pause or resume the simulation."
+            - Enter '0' to disable verbose mode for all balls.";
+        const HELP_OPTION_SPACE: &str = "SPACE - Pause or resume the simulation.";
+
+        println!(
+            "{}",
+            format!(
+                "{header}\n\
+             {opt_h}\n\
+             {opt_d}\n\
+             {opt_s}\n\
+             {opt_t}\n\
+             {opt_plus}\n\
+             {opt_minus}\n\
+             {opt_b}\n\
+             {opt_v}\n\
+             {opt_space}",
+                header = HELP_KEYS_INFO,
+                opt_h = HELP_OPTION_H,
+                opt_d = HELP_OPTION_D,
+                opt_s = HELP_OPTION_S,
+                opt_t = HELP_OPTION_T,
+                opt_plus = HELP_OPTION_INCREASE_SPEED,
+                opt_minus = HELP_OPTION_DECREASE_SPEED,
+                opt_b = HELP_OPTION_B,
+                opt_v = HELP_OPTION_V,
+                opt_space = HELP_OPTION_SPACE,
+            )
         );
     }
 
@@ -1025,7 +1037,7 @@ impl<'a> GameLogic for MainContent<'a> {
             ball_pos.x,
             ball_pos.y,
             self.new_ball.get_ball_size(),
-            self.new_ball.ball_mass,
+            self.new_ball.get_ball_mass(),
             Some(ball_v),
         );
 
@@ -1050,34 +1062,17 @@ impl<'a> GameLogic for MainContent<'a> {
     fn collect_neighbours(&mut self, dt: f32) {
         if self.step_count % 1 == 0 {
             let others_base = self.v_points.clone();
-            //if self.step_count % 10 == 0 {
-            //clear all neighbours
-            // for ball_rc in self.v_points.iter() {
-            //     let mut ball = ball_rc.borrow_mut(); // Mutable borrow for updating the ball
-            //     ball.clear_hood();
-            // }
+
             //collect neighbours
-            for (i, ball_rc) in self.v_points.iter().enumerate() {
-                // let neighbors: Vec<Rc<RefCell<Ball2D>>> = self.v_points[i + 1..].cloned().collect();
-                // .iter()
-                // .filter(|&other_rc| {
-                //     let ball_borrowed = ball_rc.borrow();
-                //     let other_borrowed = other_rc.borrow();
-                //     other_borrowed.has_larger_id(&ball_borrowed)
-                // })
-                // .cloned()
-                // .collect();
-
+            for ball_rc in self.v_points.iter() {
+                let mut others = others_base.clone();
                 {
-                    let mut others = others_base.clone();
-                    {
-                        let ball = ball_rc.borrow();
-                        others.retain(|rc| rc.borrow().get_id() != ball.id);
-                    }
-
-                    let mut ball = ball_rc.borrow_mut();
-                    ball.update_hood(dt, ball_rc, others); // Updated to work with Rc<RefCell<Ball2D>>
+                    let ball = ball_rc.borrow();
+                    others.retain(|rc| rc.borrow().get_id() != ball.id);
                 }
+
+                let mut ball = ball_rc.borrow_mut();
+                ball.update_hood(dt, ball_rc, others); // Updated to work with Rc<RefCell<Ball2D>>
             }
 
             //update stats
