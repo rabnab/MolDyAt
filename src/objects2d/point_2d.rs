@@ -48,6 +48,10 @@ impl Vec2D {
         self.y += pt.y;
     }
 
+    pub fn add_copy(&self, pt: Vec2D) -> Vec2D {
+        Vec2D::new(self.x + pt.x, self.y + pt.y)
+    }
+
     fn _scale(&mut self, scale: f32) {
         self.x *= scale;
         self.y *= scale;
