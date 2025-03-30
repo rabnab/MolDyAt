@@ -1,5 +1,5 @@
 use crate::objects2d::point_2d::Vec2D;
-use ggez::graphics::{Color, Rect};
+use ggez::graphics::Rect;
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 
@@ -75,9 +75,9 @@ impl VerboseInfo {
         self.speed = !self.speed;
     }
 
-    pub(crate) fn any(&self) -> bool {
-        self.console || self.speed || self.main_neighbour || self.other_neighbour
-    }
+    // pub(crate) fn any(&self) -> bool {
+    //     self.console || self.speed || self.main_neighbour || self.other_neighbour
+    // }
 
     pub(crate) fn is_main(&self) -> bool {
         self.main_neighbour
@@ -283,9 +283,9 @@ impl<'a> Ball2D<'a> {
         unsafe { UPDATE_HOOD_CNT }
     }
 
-    pub fn has_larger_id(&self, other: &Self) -> bool {
-        self.id > other.id
-    }
+    // pub fn has_larger_id(&self, other: &Self) -> bool {
+    //     self.id > other.id
+    // }
 
     pub fn get_id(&self) -> usize {
         self.id
@@ -295,8 +295,12 @@ impl<'a> Ball2D<'a> {
         self.v.scaled_copy(self.mass)
     }
 
-    pub fn needs_update_hood(&self) -> bool {
-        let travel_since_last_upd_sq = self.last_update_hood_pos.dist(&self.pos).norm_sq();
+    pub fn needs_update_hood(&self, dt: f32) -> bool {
+        let travel_since_last_upd_sq = self
+            .last_update_hood_pos
+            .add_copy(self.v.scaled_copy(dt))
+            .dist(&self.pos)
+            .norm_sq();
         return (self.radius + LJ_CUTOFF) * (self.radius + LJ_CUTOFF) < travel_since_last_upd_sq; //TODO this is not correct
     }
 
@@ -306,12 +310,7 @@ impl<'a> Ball2D<'a> {
         self_rc: &Rc<RefCell<Self>>,
         others: Vec<Rc<RefCell<Ball2D<'a>>>>,
     ) {
-        //needs to be first call to break recursion
-
-        //use approximation for (v*dt+LJ_SIG)^2
-        let v_sq = self.v.norm_sq();
-        let eq = LJ_SIG + self.radius;
-        let cutoff = self.radius + LJ_CUTOFF * 2.;
+        let cutoff = self.radius + LJ_CUTOFF * 2. + self.v.norm() * dt;
 
         let dist_limit_by_v_sq = 0.;
         //we only check hood every ten updates --> factors 100 and 10
@@ -327,7 +326,7 @@ impl<'a> Ball2D<'a> {
                 others.len()
             );
         }
-        let this_ball_needs_update = self.needs_update_hood();
+        let this_ball_needs_update = self.needs_update_hood(dt);
         if !this_ball_needs_update {
             return;
         }
@@ -657,9 +656,9 @@ impl<'a> Ball2D<'a> {
         }
     }
 
-    pub fn clear_hood(&mut self) {
-        self.hood.neighbours.borrow_mut().clear();
-    }
+    // pub fn clear_hood(&mut self) {
+    //     self.hood.neighbours.borrow_mut().clear();
+    // }
 
     pub fn update_old_pos(&mut self) {
         self.pre_update_pos = self.pos.clone();
@@ -694,16 +693,16 @@ impl<'a> Ball2D<'a> {
         accel
     }
 
-    pub fn ball_color(&self) -> Color {
-        let mut color_used = Color::RED;
-        if self.braking {
-            color_used = Color::YELLOW;
-        }
-        if self.verbose.any() {
-            color_used = Color::BLUE;
-        }
-        color_used
-    }
+    // pub fn ball_color(&self) -> Color {
+    //     let mut color_used = Color::RED;
+    //     if self.braking {
+    //         color_used = Color::YELLOW;
+    //     }
+    //     if self.verbose.any() {
+    //         color_used = Color::BLUE;
+    //     }
+    //     color_used
+    // }
 
     #[cfg(test)] //Only used in tests
     pub fn get_neighbour_names(&self) -> Vec<String> {
