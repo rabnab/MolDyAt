@@ -380,6 +380,53 @@ impl<'a> MainContent<'a> {
 }
 
 impl<'a> MainContent<'a> {
+    fn cycle_plot_content(&mut self) {
+        self.show_plot = match self.show_plot {
+            PlotContent::NONE => PlotContent::EKIN,
+            PlotContent::EKIN => PlotContent::EPOT,
+            PlotContent::EPOT => PlotContent::ETOT,
+            PlotContent::ETOT => PlotContent::ALL,
+            PlotContent::ALL => PlotContent::NONE,
+        };
+    }
+
+    fn decrease_speedup(&mut self) {
+        self.sim.speedup = if self.sim.speedup > 1 {
+            self.sim.speedup - 1
+        } else {
+            1
+        };
+    }
+
+    fn add_cursor_candidate(&mut self) {
+        let Vec2D { x, y } = self.win_definition.curs_pos;
+        self.add_candidate_px(x, y).ok(); // Ignore errors
+    }
+
+    fn add_random_candidates(&mut self, count: usize) {
+        let WindowDefinition {
+            margin_px_x: x_min,
+            margin_px_y: y_min,
+            region_px_x: x_range,
+            region_px_y: y_range,
+            ..
+        } = self.win_definition;
+
+        let mut rng = rand::rng();
+        let random_positions: Vec<(f32, f32)> = (0..count)
+            .map(|_| {
+                (
+                    x_min + rng.random_range(0.0..x_range),
+                    y_min + rng.random_range(0.0..y_range),
+                )
+            })
+            .collect();
+
+        for (x, y) in random_positions {
+            self.add_candidate_px(x, y).ok(); // Ignore errors
+        }
+    }
+
     fn toggle_pause(&mut self) {
         self.sim.pause = !self.sim.pause;
     }
@@ -1434,70 +1481,26 @@ impl<'a> EventHandler for MainContent<'a> {
     fn key_up_event(&mut self, _ctx: &mut Context, input: KeyInput) -> Result<(), GameError> {
         match input.keycode {
             Some(key) => match key {
-                KeyCode::H => {
-                    MainContent::print_help_message();
-                }
+                KeyCode::H => MainContent::print_help_message(),
                 KeyCode::D => self.real_data = !self.real_data,
                 KeyCode::S => self.step_by_step = !self.step_by_step,
                 KeyCode::T => self.show_timings = !self.show_timings,
-                KeyCode::P => {
-                    self.show_plot = match self.show_plot {
-                        PlotContent::NONE => PlotContent::EKIN,
-                        PlotContent::EKIN => PlotContent::EPOT,
-                        PlotContent::EPOT => PlotContent::ETOT,
-                        PlotContent::ETOT => PlotContent::ALL,
-                        PlotContent::ALL => PlotContent::NONE,
-                    }
-                }
+                KeyCode::P => self.cycle_plot_content(),
                 KeyCode::Equals => self.sim.speedup += 1,
-                /*KeyCode::Plus => {
-                    self.sim.speedup += 1.
-                },*/
-                KeyCode::Minus => {
-                    if self.sim.speedup > 1 {
-                        self.sim.speedup -= 1;
-                    } else {
-                        self.sim.speedup = 1;
-                    }
-                }
+                KeyCode::Minus => self.decrease_speedup(),
                 KeyCode::R => self.randomize_speeds(),
                 KeyCode::B => self.show_ball_stats = !self.show_ball_stats,
-                KeyCode::V => {
-                    self.start_handling_verbosity_input();
-                }
+                KeyCode::V => self.start_handling_verbosity_input(),
                 KeyCode::LControl => {
-                    self.add_candidate_px(
-                        self.win_definition.curs_pos.x,
-                        self.win_definition.curs_pos.y,
-                    )
-                    .ok(); //ignore any errors because of not being able to add
+                    self.add_cursor_candidate();
                     self.sim.draw_cursor = false;
                 }
-                KeyCode::F5 => {
-                    let x_min = self.win_definition.margin_px_x;
-                    let y_min = self.win_definition.margin_px_y;
-                    let x_range = self.win_definition.region_px_x;
-                    let y_range = self.win_definition.region_px_y;
-                    let mut rng = rand::rng();
-                    let rand_xy: Vec<(f32, f32)> = (0..100)
-                        .map(|_| {
-                            (
-                                x_min + rng.random_range(0.0..x_range),
-                                y_min + rng.random_range(0.0..y_range),
-                            )
-                        })
-                        .collect();
-                    for xy in rand_xy {
-                        self.add_candidate_px(xy.0, xy.1).ok();
-                    }
-                }
+                KeyCode::F5 => self.add_random_candidates(100),
                 KeyCode::LShift => self.new_ball.rand_speed = false,
-                // KeyCode::Space => self.sim.pause = !self.sim.pause,
-                _ => {}
+                _ => {} // No action required for unmatched keys
             },
-            None => {}
+            None => {} // No keycode provided
         }
-
         Ok(())
     }
 
