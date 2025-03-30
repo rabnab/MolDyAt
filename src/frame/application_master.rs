@@ -380,6 +380,24 @@ impl<'a> MainContent<'a> {
 }
 
 impl<'a> MainContent<'a> {
+    fn toggle_pause(&mut self) {
+        self.sim.pause = !self.sim.pause;
+    }
+
+    fn enable_drawing_cursor(&mut self, repeated: bool) {
+        if !repeated {
+            self.sim.draw_cursor = true;
+        }
+    }
+
+    fn clear_points(&mut self) {
+        self.v_points.clear();
+    }
+
+    fn enable_random_ball_speed(&mut self) {
+        self.new_ball.rand_speed = true;
+    }
+
     fn format_g(value: f32, precision: usize) -> String {
         if value.abs() >= 1e4 || value.abs() < 1e-3 && value != 0.0 {
             format!("{:.*e}", precision - 1, value) // Use scientific notation
@@ -1396,24 +1414,20 @@ impl<'a> EventHandler for MainContent<'a> {
 
     fn key_down_event(
         &mut self,
-        _ctx: &mut Context,
+        _context: &mut Context,
         input: KeyInput,
         repeated: bool,
     ) -> Result<(), GameError> {
-        match input.keycode {
-            Some(key) => match key {
-                KeyCode::Space => self.sim.pause = !self.sim.pause,
-                KeyCode::LControl => {
-                    if !repeated {
-                        self.sim.draw_cursor = true
-                    }
-                }
-                KeyCode::Escape => self.v_points.clear(),
-                KeyCode::LShift => self.new_ball.rand_speed = true,
-                _ => {}
-            },
-            None => {}
+        if let Some(key) = input.keycode {
+            match key {
+                KeyCode::Space => self.toggle_pause(),
+                KeyCode::LControl => self.enable_drawing_cursor(repeated),
+                KeyCode::Escape => self.clear_points(),
+                KeyCode::LShift => self.enable_random_ball_speed(),
+                _ => {} // explicit ignoring of other keys
+            }
         }
+
         Ok(())
     }
 
