@@ -131,7 +131,7 @@ mod tests {
     #[test]
     fn test_copy_scaled() {
         let v = Vec2D::new(2.0, 3.0);
-        let scaled = Vec2D::scaled(v, 2.0);
+        let scaled = v.scaled(2.0);
         assert_eq!(scaled.x, 4.0);
         assert_eq!(scaled.y, 6.0);
     }
@@ -149,7 +149,7 @@ mod tests {
     fn test_add() {
         let mut v1 = Vec2D::new(1.0, 2.0);
         let v2 = Vec2D::new(3.0, 4.0);
-        v1.add(v2);
+        v1.add_mut(v2);
         assert_eq!(v1.x, 4.0);
         assert_eq!(v1.y, 6.0);
     }
@@ -173,6 +173,6 @@ mod tests {
     #[test]
     fn test_display() {
         let v = Vec2D::new(1234.5678, -0.0009);
-        assert_eq!(format!("{}", v), "(1.23E3,-9.00E-4)");
+        assert_eq!(format!("{}", v), "(1.23E3, -9.00E-4)");
     }
 }
