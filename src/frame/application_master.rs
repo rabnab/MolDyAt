@@ -13,7 +13,7 @@ use rand_distr::{Distribution, Normal};
 
 use ggez::mint::Point2;
 use std::cell::{Ref, RefCell};
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -157,6 +157,7 @@ struct SimStats {
     v_kin: VecDeque<f32>,
     max_neighbours: usize,
     update_hood_cnt: usize,
+    pressed_key: HashSet<KeyCode>,
 }
 
 #[derive(PartialEq)]
@@ -292,6 +293,7 @@ impl Default for SimStats {
             v_kin: VecDeque::with_capacity(100),
             max_neighbours: 0,
             update_hood_cnt: 0,
+            pressed_key: HashSet::new(),
         }
     }
 }
@@ -407,6 +409,10 @@ impl<'a> MainContent<'a> {
             PlotContent::ETOT => PlotContent::ALL,
             PlotContent::ALL => PlotContent::NONE,
         };
+    }
+
+    fn increase_speedup(&mut self) {
+        self.sim.speedup = self.sim.speedup + 1;
     }
 
     fn decrease_speedup(&mut self) {
@@ -1391,6 +1397,11 @@ impl<'a> EventHandler for MainContent<'a> {
             self.simulation_step()?;
         }
         self.sim.update_hood_cnt = Ball2D::get_update_hood_call_cnt() - tmp_cnt;
+        if self.sim.pressed_key.contains(&KeyCode::Minus) {
+            self.decrease_speedup();
+        } else if self.sim.pressed_key.contains(&KeyCode::Equals) {
+            self.increase_speedup();
+        }
         // if cnt > 0 {
         //     println!("simulate {} avg {:?} simtime {}", cnt, sum/cnt, self.sim.time);
         // }
@@ -1401,7 +1412,7 @@ impl<'a> EventHandler for MainContent<'a> {
         // Get the window's width and height
         // println!("{} draw", self.sim.time);
         let mut canvas = Canvas::from_frame(ctx, Color::from_rgb(0, 0, 0));
-        self.draw_balls(ctx, &mut canvas)?;
+        //self.draw_balls(ctx, &mut canvas)?;
         self.draw_cursor(ctx, &mut canvas)?;
         self.draw_frame(ctx, &mut canvas)?;
         self.draw_plot(ctx, &mut canvas)?;
@@ -1477,6 +1488,9 @@ impl<'a> EventHandler for MainContent<'a> {
                 KeyCode::LControl => self.enable_drawing_cursor(repeated),
                 KeyCode::Escape => self.clear_points(),
                 KeyCode::LShift => self.enable_random_ball_speed(),
+                KeyCode::Minus | KeyCode::Equals => {
+                    self.sim.pressed_key.insert(key);
+                }
                 _ => {} // explicit ignoring of other keys
             }
         }
@@ -1492,8 +1506,9 @@ impl<'a> EventHandler for MainContent<'a> {
                 KeyCode::S => self.step_by_step = !self.step_by_step,
                 KeyCode::T => self.show_timings = !self.show_timings,
                 KeyCode::P => self.cycle_plot_content(),
-                KeyCode::Equals => self.sim.speedup += 1,
-                KeyCode::Minus => self.decrease_speedup(),
+                KeyCode::Equals | KeyCode::Minus => {
+                    self.sim.pressed_key.remove(&key);
+                }
                 KeyCode::R => self.randomize_speeds(),
                 KeyCode::B => self.show_ball_stats = !self.show_ball_stats,
                 KeyCode::V => self.start_handling_verbosity_input(),
