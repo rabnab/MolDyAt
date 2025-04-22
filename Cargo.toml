@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+dtrace = "0.1.1"
 ggez = "0.9.3"
 rand = "0.9.0"
 rand_distr = "0.5.1"
@@ -14,5 +15,5 @@ rand_distr = "0.5.1"
 [dev-dependencies]
 float-cmp = "0.10"
 
-#[profile.release]
-#debug = true
+[profile.release]
+debug = true
