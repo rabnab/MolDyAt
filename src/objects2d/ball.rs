@@ -1,5 +1,5 @@
 use crate::objects2d::vec_2d::Vec2D;
-use ggez::graphics::Rect;
+use ggez::graphics::{Color, Rect};
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 
@@ -7,7 +7,8 @@ use std::rc::{Rc, Weak};
 //const LJ_SIG: f32 = 5.; // equilibrium distance
 //LJ_SIG in SI units is for Argon 3.4A=3.4E-10m
 pub(crate) const LJ_SIG: f32 = 1.; // equilibrium distance
-pub(crate) const LJ_CUTOFF: f32 = 8. * LJ_SIG; //distance where lenard jones force is < 1e-4 (as long as sig>0.1)
+//pub(crate) const LJ_CUTOFF: f32 = 8. * LJ_SIG; //distance where lenard jones force is < 1e-4 (as long as sig>0.1)
+pub(crate) const LJ_CUTOFF: f32 = 4. * LJ_SIG; //distance where lenard jones force is < 1e-4 (as long as sig>0.1)
 pub(crate) const LJ_EPS: f32 = 1.; // attractive strength
 const SQRT6_OF_TWO: f32 = 1.122462048309372981; // == 2^(1/6)
 static mut UPDATE_HOOD_CNT: usize = 0;
@@ -301,7 +302,7 @@ impl<'a> Ball2D<'a> {
             .add(self.v.scaled(dt))
             .dist(&self.pos)
             .norm_sq();
-        return (self.radius + LJ_CUTOFF) * (self.radius + LJ_CUTOFF) < travel_since_last_upd_sq; //TODO this is not correct
+        return (self.radius + LJ_CUTOFF) * (self.radius + LJ_CUTOFF) < travel_since_last_upd_sq;
     }
 
     pub fn update_hood(
@@ -486,23 +487,7 @@ impl<'a> Ball2D<'a> {
     pub(crate) fn lenard_jones_force_pure(dist_btw_balls: f32) -> f32 {
         let quot = LJ_SIG / dist_btw_balls;
         let quot_six = quot.powi(6);
-        let res = -24. * LJ_EPS * quot_six * (2. * quot_six - 1.) / dist_btw_balls;
-
-        //0==6(2*LJ_SIG/dist6-1)*const/dist
-        //0==2*LJ_SIG/dist6-1
-        //LJ_SIG/sqrt6(1/2)==dist
-        //LJ_SIG/sqrt6(1/2)==dist
-        //1.12 *LJ_SIG == dist_equi - radius_sum
-        //SQRT6_OF_TWO * LJ_SIG == dist_equi
-        //case: r1==r2 --- SQRT6_OF_TWO * LJ_SIG + 2* rad == dist_equi
-        //
-        //println!("{} ------------ dist: {} ljForce: {} rad_sum: {} quot: {} r_m: {}",
-        //   name, dist, res, radius_sum, quot, r_m);
-
-        //equilibrium distance:
-        //2.036 rad+1.14 SIG == dist_equi
-        //equilibrium radius:
-        //1.018* self.radius + 0.57*LJ_SIG
+        let res = 24. * LJ_EPS * quot_six * (2. * quot_six - 1.) / dist_btw_balls;
         res
     }
 
@@ -532,7 +517,7 @@ impl<'a> Ball2D<'a> {
             if let Some(b_rc) = ref_b.upgrade() {
                 //from other_ball to this_ball
                 let b = b_rc.borrow();
-                let dist_vec = self.pos.dist(&b.pre_update_pos);
+                let dist_vec = b.pre_update_pos.dist(&self.pos);
                 let dist = dist_vec.norm();
                 let radius_sum = b.radius + self.radius;
                 /*min_dist = match Ball2D::check_min_dist(dist - radius_sum*0.9, min_dist) {
@@ -592,7 +577,7 @@ impl<'a> Ball2D<'a> {
         (min_dist, force, total_pot)
     }
 
-    pub(crate) fn execute_update_pos(&mut self, dt: f32, bound: &Rect) {
+    fn execute_update_pos(&mut self, dt: f32, bound: &Rect) {
         let old_pos = self.pos.clone();
         let dx = self.v.x * dt + 0.5 * self.accel.x * dt * dt;
         let dy = self.v.y * dt + 0.5 * self.accel.y * dt * dt;
@@ -693,20 +678,25 @@ impl<'a> Ball2D<'a> {
         accel
     }
 
-    // pub fn ball_color(&self) -> Color {
-    //     let mut color_used = Color::RED;
-    //     if self.braking {
-    //         color_used = Color::YELLOW;
-    //     }
-    //     if self.verbose.any() {
-    //         color_used = Color::BLUE;
-    //     }
-    //     color_used
-    // }
+    pub fn ball_color(&self) -> Option<Color> {
+        if self.verbose.console || self.verbose.lines() {
+            return Some(Color::BLUE);
+        }
+        if self.braking {
+            return Some(Color::YELLOW);
+        }
+
+        None
+    }
 
     #[cfg(test)] //Only used in tests
     pub fn get_neighbour_names(&self) -> Vec<String> {
         self.hood.get_neighbour_names()
+    }
+
+    #[cfg(test)]
+    pub fn set_accel(&mut self, accel: Vec2D) {
+        self.accel = accel;
     }
 
     pub fn get_neighbour_force_and_pos(&self) -> Vec<(Vec2D, f32)> {
@@ -772,7 +762,8 @@ impl<'a> Ball2D<'a> {
                 self.v
             );
         }
-        self.update_old_pos();
+        //TODO check if it is true that this should only be done later
+        //self.update_old_pos();
     }
 
     pub fn update_accel_and_speed(&mut self, dt: f32, bound: &Rect) -> (f32, f32) {
