@@ -643,15 +643,15 @@ impl<'a> DrawingStuff<'a> for MainContent<'a> {
             ))
             .scale(20.),
         );
-        let txt_cursor_pos: [f32; 2] = match txt_cursor.dimensions(ctx) {
-            None => [0., 0.],
-            Some(rec) => [
-                self.win_definition.margin_px_x * 2. + self.win_definition.region_px_x - rec.w,
-                self.win_definition.margin_px_y * 2. + self.win_definition.region_px_y - rec.h,
-            ],
-        };
 
-        canvas.draw(&txt_cursor, DrawParam::default().dest(txt_cursor_pos));
+        let txt_cursor_pos = [
+            self.win_definition.margin_px_x * 2. + self.win_definition.region_px_x,
+            self.win_definition.margin_px_y * 2. + self.win_definition.region_px_y,
+        ];
+        canvas.draw(
+            &txt_cursor,
+            DrawParam::default().dest(txt_cursor_pos).offset([1., 1.]),
+        );
 
         Ok(())
     }
@@ -757,13 +757,12 @@ impl<'a> DrawingStuff<'a> for MainContent<'a> {
         let txt_name = Text::new(TextFragment::new(format!("{}", ball.get_id())).scale(15.));
 
         let ball_pos_px = self.coord_to_px(&ball.pos);
+        let txt_name_pos = [ball_pos_px.x, ball_pos_px.y];
 
-        let txt_name_pos: [f32; 2] = match txt_name.dimensions(ctx) {
-            None => [0., 0.],
-            Some(rec) => [ball_pos_px.x - rec.w * 0.5, ball_pos_px.y - rec.h * 0.5],
-        };
-
-        canvas.draw(&txt_name, DrawParam::default().dest(txt_name_pos));
+        canvas.draw(
+            &txt_name,
+            DrawParam::default().dest(txt_name_pos).offset([0.5, 0.5]), //for text to be centered
+        );
         Ok(())
     }
 
@@ -1421,7 +1420,7 @@ impl<'a> EventHandler for MainContent<'a> {
         // Get the window's width and height
         // println!("{} draw", self.sim.time);
         let mut canvas = Canvas::from_frame(ctx, Color::from_rgb(0, 0, 0));
-        //self.draw_balls(ctx, &mut canvas)?;
+        self.draw_balls(ctx, &mut canvas)?;
         self.draw_cursor(ctx, &mut canvas)?;
         self.draw_frame(ctx, &mut canvas)?;
         self.draw_plot(ctx, &mut canvas)?;
