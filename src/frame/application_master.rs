@@ -44,6 +44,7 @@ struct WindowDefinition {
     region_px_y: f32,
     margin_px_x: f32,
     margin_px_y: f32,
+    text_pos: Option<[f32; 2]>,
 }
 
 #[derive(Default)]
@@ -270,6 +271,7 @@ impl Default for WindowDefinition {
             region_px_y: 100.,
             margin_px_x: 10.,
             margin_px_y: 10.,
+            text_pos: None,
         }
     }
 }
@@ -970,14 +972,21 @@ impl<'a> DrawingStuff<'a> for MainContent<'a> {
         if self.show_ball_stats {
             let fps = ctx.time.fps();
             let txt_balls = Text::new(TextFragment::new(self.status_text(fps as u32)).scale(30.));
-            let txt_balls_pos: [f32; 2] = match txt_balls.dimensions(ctx) {
-                None => [0., 0.],
-                Some(rec) => [
-                    self.win_definition.margin_px_x * 2. + self.win_definition.region_px_x - rec.w,
-                    0.,
-                ],
-            };
-            canvas.draw(&txt_balls, DrawParam::default().dest(txt_balls_pos));
+            let text_pos = self.win_definition.text_pos.unwrap_or([0., 0.]);
+            if self.win_definition.text_pos.is_none() {
+                match txt_balls.dimensions(ctx) {
+                    Some(rec) => {
+                        let p = [
+                            self.win_definition.margin_px_x * 2. + self.win_definition.region_px_x
+                                - rec.w,
+                            0.,
+                        ];
+                        self.win_definition.text_pos = Some(p);
+                    }
+                    None => {}
+                };
+            }
+            canvas.draw(&txt_balls, DrawParam::default().dest(text_pos));
         }
         Ok(())
     }
@@ -1510,7 +1519,12 @@ impl<'a> EventHandler for MainContent<'a> {
                     self.sim.pressed_key.remove(&key);
                 }
                 KeyCode::R => self.randomize_speeds(),
-                KeyCode::B => self.show_ball_stats = !self.show_ball_stats,
+                KeyCode::B => {
+                    self.show_ball_stats = !self.show_ball_stats;
+                    if !self.show_ball_stats {
+                        self.win_definition.text_pos = None;
+                    }
+                }
                 KeyCode::V => self.start_handling_verbosity_input(),
                 KeyCode::LControl => {
                     self.add_cursor_candidate();
