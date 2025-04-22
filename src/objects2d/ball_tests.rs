@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::objects2d::Vec2D;
-    use crate::objects2d::ball_2d::*;
+    use crate::objects2d::ball::{Ball2D, BallError, LJ_CUTOFF, LJ_EPS, LJ_SIG, Named, Verlet};
     use float_cmp::{approx_eq, assert_approx_eq};
     use ggez::graphics::Rect;
     use std::cell::RefCell;
@@ -9,7 +9,7 @@ mod tests {
 
     #[test]
     fn test_name() {
-        let b = Ball2D::new_massive(0, 0., 0., 3., 1.);
+        let b = Ball2D::_new_massive(0, 0., 0., 3., 1.);
         assert_eq!(b.get_name(), "Ball0");
     }
 
@@ -27,8 +27,8 @@ mod tests {
     fn test_verlet_names() {
         let vlist: Verlet = Verlet::default();
 
-        let nu_ball1 = Rc::new(RefCell::new(Ball2D::new_massive(1, 2., 3., 4., 5.)));
-        let nu_ball2 = Rc::new(RefCell::new(Ball2D::new_massive(2, 3., 4., 5., 6.)));
+        let nu_ball1 = Rc::new(RefCell::new(Ball2D::_new_massive(1, 2., 3., 4., 5.)));
+        let nu_ball2 = Rc::new(RefCell::new(Ball2D::_new_massive(2, 3., 4., 5., 6.)));
         {
             //mutable section of lst
             let mut lst_to_add = vlist.neighbours.borrow_mut();
@@ -43,35 +43,8 @@ mod tests {
     }
 
     #[test]
-    fn test_clear_hood() {
-        let vlist: Verlet = Verlet::default();
-        let mut ball1 = Ball2D::new_massive(3, 20., 30., 4., 5.);
-
-        let nu_ball1 = Rc::new(RefCell::new(Ball2D::new_massive(1, 2., 3., 4., 5.)));
-        let nu_ball2 = Rc::new(RefCell::new(Ball2D::new_massive(2, 3., 4., 5., 6.)));
-        {
-            //mutable section of lst
-            let mut lst_to_add = vlist.neighbours.borrow_mut();
-            lst_to_add.push(Rc::downgrade(&nu_ball1));
-            lst_to_add.push(Rc::downgrade(&nu_ball2));
-        }
-        ball1.hood = vlist;
-
-        let names = ball1.get_neighbour_names();
-
-        assert_eq!(names[0], nu_ball1.borrow().get_name());
-        assert_eq!(names[1], nu_ball2.borrow().get_name());
-
-        ball1.clear_hood();
-
-        let names = ball1.get_neighbour_names();
-
-        assert!(names.is_empty());
-    }
-
-    #[test]
     fn test_ball_name() {
-        let ball17 = Ball2D::new_massive(17, 2., 3., 4., 5.);
+        let ball17 = Ball2D::_new_massive(17, 2., 3., 4., 5.);
         let nam = ball17.get_name();
 
         assert_eq!(nam, "Ball17");
@@ -79,9 +52,9 @@ mod tests {
 
     #[test]
     fn test_partial_eq_ball2d() {
-        let ball1 = Ball2D::new_massive(17, 2., 3., 4., 5.);
-        let ball2 = Ball2D::new_massive(17, 4., 5., 6., 7.);
-        let ball3 = Ball2D::new_massive(16, 2., 3., 4., 5.);
+        let ball1 = Ball2D::_new_massive(17, 2., 3., 4., 5.);
+        let ball2 = Ball2D::_new_massive(17, 4., 5., 6., 7.);
+        let ball3 = Ball2D::_new_massive(16, 2., 3., 4., 5.);
 
         assert_eq!(ball1, ball2);
         assert_ne!(ball1, ball3);
@@ -89,26 +62,16 @@ mod tests {
 
     #[test]
     fn test_get_id() {
-        let ball1 = Ball2D::new_massive(17, 2., 3., 4., 5.);
-        let ball2 = Ball2D::new_massive(1, 4., 5., 6., 7.);
+        let ball1 = Ball2D::_new_massive(17, 2., 3., 4., 5.);
+        let ball2 = Ball2D::_new_massive(1, 4., 5., 6., 7.);
 
         assert_eq!(ball1.get_id(), 17);
         assert_eq!(ball2.get_id(), 1);
     }
 
     #[test]
-    fn test_has_larger_id() {
-        let ball1 = Ball2D::new_massive(17, 2., 3., 4., 5.);
-        let ball2 = Ball2D::new_massive(15, 4., 5., 6., 7.);
-
-        assert!(!ball1.has_larger_id(&ball1));
-        assert!(ball1.has_larger_id(&ball2));
-        assert!(!ball2.has_larger_id(&ball1));
-    }
-
-    #[test]
     fn test_moment() {
-        let mut ball1 = Ball2D::new_massive(17, 2., 3., 4., 5.);
+        let mut ball1 = Ball2D::_new_massive(17, 2., 3., 4., 5.);
 
         assert_eq!(ball1.moment(), Vec2D::new(0., 0.));
         ball1.v.x = 3.;
@@ -117,31 +80,52 @@ mod tests {
 
     #[test]
     fn test_is_colliding() {
-        let ball1 = Ball2D::new_massive(17, 2., 3., 4., 5.);
-        let ball2 = Ball2D::new_massive(15, 11.99999, 3., 6., 7.);
+        let primary_radius = 4.;
+        let other_radius = 6.;
+        let primary_xy = Vec2D::new(2., 3.);
+
+        let rad_sum = primary_radius + other_radius;
+        let ball1 = Ball2D::_new_massive(17, primary_xy.x, primary_xy.y, primary_radius, 5.);
+        let ball2 = Ball2D::_new_massive(
+            15,
+            primary_xy.x + LJ_SIG * 0.99999,
+            primary_xy.y,
+            other_radius,
+            7.,
+        );
 
         assert!(
             ball1.is_colliding(&ball2),
-            "ball1 {:?} ball2 {:?} dist: {:?}",
+            "collision undetected \nball1 {:?} \nball2 {:?} \ndist: {:?} < (LJ_SIG={}+rad_sum={})",
             ball1.pos,
             ball2.pos,
             Vec2D::dist(&ball1.pos, &ball2.pos),
+            LJ_SIG,
+            ball1.radius + ball2.radius,
         );
 
-        let ball3 = Ball2D::new_massive(13, 12., 5., 6., 7.);
+        let ball3 = Ball2D::_new_massive(
+            13,
+            primary_xy.x,
+            primary_xy.y + rad_sum + LJ_SIG * 1.00001,
+            other_radius,
+            7.,
+        );
 
         assert!(
             !ball1.is_colliding(&ball3),
-            "ball1 {:?} ball2 {:?} dist: {:?}",
+            "false positive in collision detection \nball1 {:?} \nball3 {:?} \ndist: {:?} < (LJ_SIG={}+rad_sum={})",
             ball1.pos,
             ball3.pos,
             Vec2D::dist(&ball1.pos, &ball3.pos),
+            LJ_SIG,
+            ball1.radius + ball3.radius,
         );
     }
 
     #[test]
     fn test_lenard_jones_potential() {
-        let ball1 = Ball2D::new_massive(17, 2., 3., 4., 5.);
+        let ball1 = Ball2D::_new_massive(17, 2., 3., 4., 5.);
         let distance = ball1.equilibrium_radius() * 2.;
         println!("ball: {:?}", ball1);
         println!(
@@ -161,7 +145,7 @@ mod tests {
 
     #[test]
     fn test_lenard_jones_no_force_at_equilibrium() {
-        let ball1 = Ball2D::new_massive(17, 2., 3., 4., 5.);
+        let ball1 = Ball2D::_new_massive(17, 2., 3., 4., 5.);
         let distance = ball1.equilibrium_radius() * 2.;
         let result_force: f32 = Ball2D::lenard_jones_force(distance, ball1.radius * 2., 0);
 
@@ -174,27 +158,41 @@ mod tests {
 
     #[test]
     fn test_lenard_jones_positive_force_if_near() {
-        let ball1 = Ball2D::new_massive(17, 2., 3., 4., 5.);
-        let distance = ball1.equilibrium_radius() * 2. * 0.9;
-        let result_force: f32 = Ball2D::lenard_jones_force(distance, ball1.radius * 2., 0);
+        let ball1 = Ball2D::_new_massive(17, 2., 3., 4., 5.);
+        let rad_sum = 2. * ball1.radius;
+        let distance = 0.9 * LJ_SIG + rad_sum;
+        let result_force: f32 = Ball2D::lenard_jones_force(distance, rad_sum, 0);
+
+        let delta_x = 0.001;
+        let p1 = Ball2D::lenard_jones_potential(distance);
+        let p2 = Ball2D::lenard_jones_potential(distance + delta_x);
+        let f_by_delta = (p2 - p1) / delta_x;
 
         assert!(
-            result_force < 0.,
-            "force {} must be < 0 if closer than equilibrium",
-            result_force
+            result_force > 0.,
+            "force {} must be > 0 if closer than equilibrium (estimate by delta: {})",
+            result_force,
+            f_by_delta,
         );
     }
 
     #[test]
     fn test_lenard_jones_negative_force_if_far() {
-        let ball1 = Ball2D::new_massive(17, 2., 3., 4., 5.);
-        let distance = ball1.equilibrium_radius() * 3.;
-        let result_force: f32 = Ball2D::lenard_jones_force(distance, ball1.radius * 2., 0);
+        let ball1 = Ball2D::_new_massive(17, 2., 3., 4., 5.);
+        let rad_sum = 2. * ball1.radius;
+        let distance = 3. * LJ_SIG + rad_sum;
+
+        let delta_x = 0.001;
+        let p1 = Ball2D::lenard_jones_potential(distance);
+        let p2 = Ball2D::lenard_jones_potential(distance + delta_x);
+        let f_by_delta = (p2 - p1) / delta_x;
+        let result_force: f32 = Ball2D::lenard_jones_force(distance, rad_sum, 0);
 
         assert!(
             result_force < 0.,
-            "force {} must be < 0 if closer than equilibrium",
-            result_force
+            "force {} must be < 0 if farther than equilibrium (estimate by delta: {})",
+            result_force,
+            f_by_delta,
         );
     }
 
@@ -238,7 +236,7 @@ mod tests {
     #[test]
     fn test_accel_with_no_velocity() {
         let mass = 1.0;
-        let mut ball = Ball2D::new_massive(17, 2., 3., 4., mass);
+        let mut ball = Ball2D::_new_massive(17, 2., 3., 4., mass);
         ball.v = Vec2D::new(0., 0.);
         let force = Vec2D::new(10.0, 0.0);
 
@@ -255,7 +253,7 @@ mod tests {
     #[test]
     fn test_accel_with_velocity_below_speed_limit() {
         let mass = 1.0;
-        let mut ball = Ball2D::new_massive(17, 2., 3., 4., mass);
+        let mut ball = Ball2D::_new_massive(17, 2., 3., 4., mass);
         ball.v = Vec2D::new(2., 0.);
         let force = Vec2D::new(10.0, 0.0);
 
@@ -271,7 +269,7 @@ mod tests {
     #[test]
     fn test_accel_with_velocity_at_speed_limit() {
         let mass = 1.0;
-        let mut ball = Ball2D::new_massive(17, 2., 3., 4., mass);
+        let mut ball = Ball2D::_new_massive(17, 2., 3., 4., mass);
         ball.v = Vec2D::new(5., 0.);
         let force = Vec2D::new(10.0, 0.0);
 
@@ -287,7 +285,7 @@ mod tests {
     #[test]
     fn test_accel_with_velocity_above_speed_limit() {
         let mass = 1.0;
-        let mut ball = Ball2D::new_massive(17, 2., 3., 4., mass);
+        let mut ball = Ball2D::_new_massive(17, 2., 3., 4., mass);
         ball.v = Vec2D::new(10., 0.);
         let force = Vec2D::new(10.0, 0.0);
 
@@ -303,7 +301,7 @@ mod tests {
     #[test]
     fn test_accel_with_no_force_applied() {
         let mass = 1.0;
-        let mut ball = Ball2D::new_massive(17, 2., 3., 4., mass);
+        let mut ball = Ball2D::_new_massive(17, 2., 3., 4., mass);
         ball.v = Vec2D::new(3., 0.);
         let force = Vec2D::new(0.0, 0.0);
 
@@ -319,7 +317,7 @@ mod tests {
     #[test]
     fn test_accel_with_different_mass() {
         let mass = 1.0;
-        let mut ball = Ball2D::new_massive(17, 2., 3., 4., 2. * mass);
+        let mut ball = Ball2D::_new_massive(17, 2., 3., 4., 2. * mass);
         ball.v = Vec2D::new(4., 0.);
         let force = Vec2D::new(10.0, 0.0);
 
@@ -335,7 +333,7 @@ mod tests {
 
     #[test]
     fn test_force_no_neighbors() {
-        let ball = Ball2D::new_massive(17, 2., 3., 4., 1.0);
+        let ball = Ball2D::_new_massive(17, 2., 3., 4., 1.0);
 
         let (min_dist, force, total_pot) = ball.force();
 
@@ -356,8 +354,8 @@ mod tests {
 
     #[test]
     fn test_force_one_neighbor_at_equilibrium() {
-        let ball = Ball2D::new_massive(17, 2., 3., 4., 1.);
-        let neighbour = Rc::new(RefCell::new(Ball2D::new_massive(
+        let ball = Ball2D::_new_massive(17, 2., 3., 4., 1.);
+        let neighbour = Rc::new(RefCell::new(Ball2D::_new_massive(
             18,
             2. + ball.equilibrium_radius() * 2.,
             3.,
@@ -387,11 +385,11 @@ mod tests {
 
     #[test]
     fn test_force_one_neighbor_too_close() {
-        let ball = Ball2D::new_massive(17, 2., 3., 4., 1.);
+        let ball = Ball2D::_new_massive(17, 2., 3., 4., 1.);
         let dist_for_repulsion = ball.radius + ball.equilibrium_radius();
         let neigh_x = ball.pos.x + dist_for_repulsion;
         let neigh_y = ball.pos.y;
-        let neighbour = Rc::new(RefCell::new(Ball2D::new_massive(
+        let neighbour = Rc::new(RefCell::new(Ball2D::_new_massive(
             18, neigh_x, neigh_y, 4., 1.,
         )));
 
@@ -419,11 +417,11 @@ mod tests {
 
     #[test]
     fn test_force_one_neighbor_far_away() {
-        let ball = Ball2D::new_massive(17, 2., 3., 4., 1.);
+        let ball = Ball2D::_new_massive(17, 2., 3., 4., 1.);
         let dist_for_attraction = 3. * ball.equilibrium_radius();
         let neigh_x = ball.pos.x + dist_for_attraction;
         let neigh_y = ball.pos.y;
-        let neighbour = Rc::new(RefCell::new(Ball2D::new_massive(
+        let neighbour = Rc::new(RefCell::new(Ball2D::_new_massive(
             18,
             neigh_x,
             neigh_y,
@@ -457,16 +455,16 @@ mod tests {
 
     #[test]
     fn test_force_multiple_neighbors() {
-        let ball = Ball2D::new_massive(17, 2., 3., 4., 1.);
+        let ball = Ball2D::_new_massive(17, 2., 3., 4., 1.);
         let dist_for_repulsion = 3. * ball.equilibrium_radius();
-        let neighbour1 = Rc::new(RefCell::new(Ball2D::new_massive(
+        let neighbour1 = Rc::new(RefCell::new(Ball2D::_new_massive(
             18,
             2. + dist_for_repulsion,
             3.,
             4.,
             1.,
         )));
-        let neighbour2 = Rc::new(RefCell::new(Ball2D::new_massive(
+        let neighbour2 = Rc::new(RefCell::new(Ball2D::_new_massive(
             19,
             2.,
             3. + dist_for_repulsion,
@@ -505,7 +503,7 @@ mod tests {
         //     v: Vec2D::new(1.0, 1.0),
         //     radius: 1.0,
         // };
-        let mut ball = Ball2D::new_massive(17, 5., 5., 1., 1.);
+        let mut ball = Ball2D::_new_massive(17, 5., 5., 1., 1.);
         ball.v = Vec2D::new(1.0, 1.0);
         let accel = Vec2D::new(0.0, 0.0);
         let dt = 1.0;
@@ -516,7 +514,8 @@ mod tests {
             h: 10.0,
         };
 
-        ball.execute_update(&accel, dt, &bound);
+        ball.set_accel(accel);
+        ball.update_positions(dt, &bound);
 
         assert_approx_eq!(f32, ball.pos.x, 6.0, ulps = 2);
         assert_approx_eq!(f32, ball.pos.y, 6.0, ulps = 2);
@@ -530,7 +529,7 @@ mod tests {
         //     v: Vec2D::new(-2.0, 0.0),
         //     radius: 1.0,
         // };
-        let mut ball = Ball2D::new_massive(17, 1.5, 5., 1., 1.);
+        let mut ball = Ball2D::_new_massive(17, 1.5, 5., 1., 1.);
         ball.v = Vec2D::new(-2.0, 0.0);
         let accel = Vec2D::new(0.0, 0.0);
         let dt = 1.0;
@@ -541,7 +540,8 @@ mod tests {
             h: 10.0,
         };
 
-        ball.execute_update(&accel, dt, &bound);
+        ball.set_accel(accel);
+        ball.update_positions(dt, &bound);
 
         assert!(ball.pos.x > 1.0, "Ball should bounce off left wall.");
         assert_eq!(
@@ -557,7 +557,7 @@ mod tests {
         //     v: Vec2D::new(2.0, 0.0),
         //     radius: 1.0,
         // };
-        let mut ball = Ball2D::new_massive(17, 8.5, 5., 1., 1.);
+        let mut ball = Ball2D::_new_massive(17, 8.5, 5., 1., 1.);
         ball.v = Vec2D::new(2.0, 0.0);
         let accel = Vec2D::new(0.0, 0.0);
         let dt = 1.0;
@@ -568,7 +568,8 @@ mod tests {
             h: 10.0,
         };
 
-        ball.execute_update(&accel, dt, &bound);
+        ball.set_accel(accel);
+        ball.update_positions(dt, &bound);
 
         assert!(ball.pos.x < 9.0, "Ball should bounce off right wall.");
         assert_eq!(
@@ -584,7 +585,7 @@ mod tests {
         //     v: Vec2D::new(0.0, 2.0),
         //     radius: 1.0,
         // };
-        let mut ball = Ball2D::new_massive(17, 5., 8.5, 1., 1.);
+        let mut ball = Ball2D::_new_massive(17, 5., 8.5, 1., 1.);
         ball.v = Vec2D::new(0., 2.0);
         let accel = Vec2D::new(0.0, 0.0);
         let dt = 1.0;
@@ -595,7 +596,8 @@ mod tests {
             h: 10.0,
         };
 
-        ball.execute_update(&accel, dt, &bound);
+        ball.set_accel(accel);
+        ball.update_positions(dt, &bound);
 
         assert!(ball.pos.y < 9.0, "Ball should bounce off top wall.");
         assert_eq!(
@@ -611,7 +613,7 @@ mod tests {
         //     v: Vec2D::new(0.0, -2.0),
         //     radius: 1.0,
         // };
-        let mut ball = Ball2D::new_massive(17, 5., 1.5, 1., 1.);
+        let mut ball = Ball2D::_new_massive(17, 5., 1.5, 1., 1.);
         ball.v = Vec2D::new(0., -2.0);
         let accel = Vec2D::new(0.0, 0.0);
         let dt = 1.0;
@@ -622,7 +624,8 @@ mod tests {
             h: 10.0,
         };
 
-        ball.execute_update(&accel, dt, &bound);
+        ball.set_accel(accel);
+        ball.update_positions(dt, &bound);
 
         assert!(ball.pos.y > 1.0, "Ball should bounce off bottom wall.");
         assert_eq!(
@@ -638,7 +641,7 @@ mod tests {
         //     v: Vec2D::new(-2.0, -2.0),
         //     radius: 1.0,
         // };
-        let mut ball = Ball2D::new_massive(17, 1.5, 1.5, 1., 1.);
+        let mut ball = Ball2D::_new_massive(17, 1.5, 1.5, 1., 1.);
         ball.v = Vec2D::new(-2.0, -2.0);
         let accel = Vec2D::new(0.0, 0.0);
         let dt = 1.0;
@@ -649,7 +652,8 @@ mod tests {
             h: 10.0,
         };
 
-        ball.execute_update(&accel, dt, &bound);
+        ball.set_accel(accel);
+        ball.update_positions(dt, &bound);
 
         assert!(ball.pos.x > 1.0, "Ball should bounce off left wall.");
         assert!(ball.pos.y > 1.0, "Ball should bounce off bottom wall.");
@@ -664,7 +668,7 @@ mod tests {
         //     v: Vec2D::new(1.0, 1.0),     // Initial velocity
         //     radius: 1.0,
         // };
-        let mut ball = Ball2D::new_massive(17, 5., 5., 1., 1.);
+        let mut ball = Ball2D::_new_massive(17, 5., 5., 1., 1.);
         ball.v = Vec2D::new(1.0, 1.0);
         let accel = Vec2D::new(2.0, -1.0); // Acceleration in x and y directions
         let dt = 1.0; // Time step
@@ -675,14 +679,16 @@ mod tests {
             h: 20.0,
         }; // Sufficiently large boundary
 
-        ball.execute_update(&accel, dt, &bound);
+        ball.set_accel(accel);
+        ball.update_positions(dt, &bound);
+        ball.update_accel_and_speed(dt, &bound);
 
         // Expected position and velocity using kinematics
         let expected_pos_x = 5.0 + 1.0 * dt + 0.5 * 2.0 * dt * dt; // 5 + 1 + 1 = 7.0
         let expected_pos_y = 5.0 + 1.0 * dt + 0.5 * (-1.0) * dt * dt; // 5 + 1 - 0.5 = 5.5
 
-        let expected_vel_x = 1.0 + 2.0 * dt; // 1 + 2 = 3.0
-        let expected_vel_y = 1.0 + (-1.0) * dt; // 1 - 1 = 0.0
+        let expected_vel_x = 1.0 + 0.5 * 2.0 * dt; // 1 + 2 = 3.0
+        let expected_vel_y = 1.0 + 0.5 * (-1.0) * dt; // 1 - 1 = 0.0
 
         assert_approx_eq!(f32, ball.pos.x, expected_pos_x, ulps = 2);
         assert_approx_eq!(f32, ball.pos.y, expected_pos_y, ulps = 2);
@@ -692,11 +698,11 @@ mod tests {
 
     #[test]
     fn test_update_no_movement() {
-        let mut ball = Ball2D::new_massive(17, 2.0, 3.0, 1.0, 1.0);
+        let mut ball = Ball2D::_new_massive(17, 2.0, 3.0, 1.0, 1.0);
         let bound = Rect::new(0.0, 0.0, 100.0, 100.0);
 
-        ball.verbose = true;
-        let (min_dist, total_pot) = ball.update_positions(1.0, &bound);
+        ball.verbose.toggle_console();
+        let (min_dist, total_pot) = ball.update_accel_and_speed(1.0, &bound);
 
         assert_eq!(
             ball.v,
@@ -720,11 +726,12 @@ mod tests {
 
     #[test]
     fn test_update_with_force() {
-        let mut ball = Ball2D::new_massive(17, 2.0, 3.0, 1.0, 1.0);
+        let mut ball = Ball2D::_new_massive(17, 2.0, 3.0, 1.0, 1.0);
         ball.v = Vec2D::new(1.0, 1.0); // Initial velocity
         let bound = Rect::new(0.0, 0.0, 100.0, 100.0);
 
-        let (min_dist, total_pot) = ball.update_positions(1.0, &bound);
+        let (min_dist, total_pot) = ball.update_accel_and_speed(1.0, &bound);
+        ball.update_positions(1.0, &bound);
 
         assert!(ball.pos.x > 2.0, "Ball should move in the x direction");
         assert!(ball.pos.y > 3.0, "Ball should move in the y direction");
@@ -738,11 +745,11 @@ mod tests {
     #[test]
     fn test_update_with_boundary_collision() {
         // Initialize a ball near the upper-right boundary with velocity directed outward
-        let mut ball = Ball2D::new_massive(17, 95.0, 95.0, 4.0, 1.0);
+        let mut ball = Ball2D::_new_massive(17, 95.0, 95.0, 4.0, 1.0);
         ball.v = Vec2D::new(10.0, 10.0); // Ball is moving diagonally toward the top-right
         let bound = Rect::new(0.0, 0.0, 100.0, 100.0); // Define the boundary limits
 
-        ball.verbose = true;
+        ball.verbose.toggle_console();
         let prev_v = ball.v.clone();
         // let prev_pos = ball.pos.clone();
         // Update the ball's position and handle potential boundary collision
@@ -774,12 +781,12 @@ mod tests {
 
     #[test]
     fn test_update_with_high_dt_causing_recursion() {
-        let mut ball = Ball2D::new_massive(17, 10.0, 10.0, 1.0, 1.0);
+        let mut ball = Ball2D::_new_massive(17, 10.0, 10.0, 1.0, 1.0);
         ball.v = Vec2D::new(50.0, 50.0); // High velocity to trigger dt subdivision
-        ball.verbose = true;
+        ball.verbose.toggle_console();
         let bound = Rect::new(0.0, 0.0, 100.0, 100.0);
 
-        let (min_dist, total_pot) = ball.update_positions(10.0, &bound);
+        let (min_dist, total_pot) = ball.update_accel_and_speed(10.0, &bound);
 
         assert!(
             min_dist.is_nan(),
@@ -814,7 +821,7 @@ mod tests {
     #[ignore]
     #[should_panic(expected = "Too many substeps for update")]
     fn test_update_panics_on_excessive_substeps() {
-        let mut ball = Ball2D::new_massive(17, 10.0, 10.0, 1.0, 1.0);
+        let mut ball = Ball2D::_new_massive(17, 10.0, 10.0, 1.0, 1.0);
         ball.v = Vec2D::new(1000.0, 1000.0); // Extreme velocity to trigger panic
         let bound = Rect::new(0.0, 0.0, 100.0, 100.0);
 
@@ -823,7 +830,7 @@ mod tests {
 
     #[test]
     fn test_update_closeness_stats_no_neighbors() {
-        let mut ball = Ball2D::new_massive(17, 10.0, 10.0, 4.0, 1.0);
+        let mut ball = Ball2D::_new_massive(17, 10.0, 10.0, 4.0, 1.0);
         ball.update_closeness_stats();
 
         assert!(
@@ -838,9 +845,9 @@ mod tests {
 
     #[test]
     fn test_update_closeness_stats_one_neighbor() {
-        let mut ball = Ball2D::new_massive(17, 10.0, 10.0, 4.0, 1.0);
-        let neighbor = Ball2D::new_massive(18, 15.0, 10.0, 4.0, 1.0);
-        ball.verbose = true;
+        let mut ball = Ball2D::_new_massive(17, 10.0, 10.0, 4.0, 1.0);
+        let neighbor = Ball2D::_new_massive(18, 15.0, 10.0, 4.0, 1.0);
+        ball.verbose.toggle_console();
         //ensure neighbour is held until after update_closeness
         let neighbor_rc = &Rc::new(RefCell::new(neighbor));
         ball.hood
@@ -863,10 +870,10 @@ mod tests {
 
     #[test]
     fn test_update_closeness_stats_multiple_neighbors() {
-        let mut ball = Ball2D::new_massive(17, 10.0, 10.0, 4.0, 1.0);
-        let neighbor1 = Ball2D::new_massive(18, 12.0, 10.0, 4.0, 1.0);
-        let neighbor2 = Ball2D::new_massive(19, 20.0, 10.0, 4.0, 1.0);
-        ball.verbose = true;
+        let mut ball = Ball2D::_new_massive(17, 10.0, 10.0, 4.0, 1.0);
+        let neighbor1 = Ball2D::_new_massive(18, 12.0, 10.0, 4.0, 1.0);
+        let neighbor2 = Ball2D::_new_massive(19, 20.0, 10.0, 4.0, 1.0);
+        ball.verbose.toggle_console();
 
         //ensure neighbour is held until after update_closeness
         let neighbor1_rc = &Rc::new(RefCell::new(neighbor1));
@@ -896,10 +903,10 @@ mod tests {
 
     #[test]
     fn test_update_closeness_stats_ignores_dropped_neighbors() {
-        let mut ball = Ball2D::new_massive(17, 10.0, 10.0, 4.0, 1.0);
-        let neighbor = Ball2D::new_massive(18, 15.0, 10.0, 4.0, 1.0);
+        let mut ball = Ball2D::_new_massive(17, 10.0, 10.0, 4.0, 1.0);
+        let neighbor = Ball2D::_new_massive(18, 15.0, 10.0, 4.0, 1.0);
 
-        ball.verbose = true;
+        ball.verbose.toggle_console();
         let neighbour_rc = Rc::new(RefCell::new(neighbor));
         let weak_ref = Rc::downgrade(&neighbour_rc);
         ball.hood.neighbours.borrow_mut().push(weak_ref);
@@ -920,8 +927,8 @@ mod tests {
     }
     #[test]
     fn test_update_hood_adds_neighbors_within_distance_limit() {
-        let ball1 = Ball2D::new_massive(1, 0.0, 0.0, 2.0, 1.0);
-        let ball2 = Ball2D::new_massive(2, 3.0, 1.0, 2.0, 1.0);
+        let ball1 = Ball2D::_new_massive(1, 0.0, 0.0, 2.0, 1.0);
+        let ball2 = Ball2D::_new_massive(2, 0.0 + LJ_CUTOFF, 1.0, 2.0, 1.0);
 
         let ball1_rc = Rc::new(RefCell::new(ball1));
         let ball2_rc = Rc::new(RefCell::new(ball2));
@@ -943,11 +950,11 @@ mod tests {
     }
     #[test]
     fn test_update_hood_does_not_add_neighbors_outside_distance_limit() {
-        let mut ball1 = Ball2D::new_massive(1, 0.0, 0.0, 2.0, 1.0);
-        let mut ball2 = Ball2D::new_massive(2, 10.0, 10.0, 2.0, 1.0);
+        let mut ball1 = Ball2D::_new_massive(1, 0.0, 0.0, 2.0, 1.0);
+        let mut ball2 = Ball2D::_new_massive(2, 10.0, 10.0, 2.0, 1.0);
 
-        ball1.verbose = true;
-        ball2.verbose = true;
+        ball1.verbose.toggle_console();
+        ball2.verbose.toggle_console();
         let ball1_rc = Rc::new(RefCell::new(ball1));
         let ball2_rc = Rc::new(RefCell::new(ball2));
 
@@ -971,7 +978,7 @@ mod tests {
     }
     #[test]
     fn test_update_hood_no_neighbors() {
-        let ball1 = Ball2D::new_massive(1, 0.0, 0.0, 2.0, 1.0);
+        let ball1 = Ball2D::_new_massive(1, 0.0, 0.0, 2.0, 1.0);
         let ball1_rc = Rc::new(RefCell::new(ball1));
 
         let dt = 1.0;
@@ -990,9 +997,9 @@ mod tests {
     }
     #[test]
     fn test_update_hood_multiple_neighbors() {
-        let ball1 = Ball2D::new_massive(1, 0.0, 0.0, 2.0, 1.0);
-        let ball2 = Ball2D::new_massive(2, 1.0, 3.0, 2.0, 1.0);
-        let ball3 = Ball2D::new_massive(3, 2.0, 1.5, 2.0, 1.0);
+        let ball1 = Ball2D::_new_massive(1, 0.0, 0.0, 2.0, 1.0);
+        let ball2 = Ball2D::_new_massive(2, 1.0, 3.0, 2.0, 1.0);
+        let ball3 = Ball2D::_new_massive(3, 2.0, 1.5, 2.0, 1.0);
 
         let ball1_rc = Rc::new(RefCell::new(ball1));
         let ball2_rc = Rc::new(RefCell::new(ball2));
@@ -1010,9 +1017,9 @@ mod tests {
     }
     #[test]
     fn test_update_hood_indirect_neighbors() {
-        let ball1 = Ball2D::new_massive(1, 0.0, 0.0, 2.0, 1.0);
-        let ball2 = Ball2D::new_massive(2, 3.0, 0.0, 2.0, 1.0);
-        let ball3 = Ball2D::new_massive(3, 6.5, 0.0, 2.0, 1.0);
+        let ball1 = Ball2D::_new_massive(1, 0.0, 0.0, 2.0, 1.0);
+        let ball2 = Ball2D::_new_massive(2, 3.0, 0.0, 2.0, 1.0);
+        let ball3 = Ball2D::_new_massive(3, 6.5, 0.0, 2.0, 1.0);
 
         let ball1_rc = Rc::new(RefCell::new(ball1));
         let ball2_rc = Rc::new(RefCell::new(ball2));
