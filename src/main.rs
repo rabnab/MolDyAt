@@ -51,6 +51,6 @@ fn main() -> GameResult {
         .build(&mut ctx.gfx)?;
 
     //let state = MainContent::new(800.,500., Some(shader))?;
-    let state = MainContent::new(&ctx, 800., 500., None)?;
+    let state = MainContent::new(Some(&ctx), 800., 500., None)?;
     event::run(ctx, event_loop, state)
 }
