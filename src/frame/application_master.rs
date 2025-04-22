@@ -322,7 +322,7 @@ impl<'a> Default for MainContent<'a> {
 
 impl<'a> MainContent<'a> {
     pub fn new(
-        ctx: &Context,
+        ctx: Option<&Context>,
         reg_x: f32,
         reg_y: f32,
         shader_in: Option<Shader>,
@@ -337,8 +337,16 @@ impl<'a> MainContent<'a> {
             },
             v_points: Vec::new(),
             shader: shader_in,
-            new_ball: NewBallDef::new(ctx),
-            crosshair_mesh: Self::create_crosshair(ctx),
+            new_ball: if let Some(the_ctx) = ctx {
+                NewBallDef::new(the_ctx)
+            } else {
+                NewBallDef::default()
+            },
+            crosshair_mesh: if let Some(the_ctx) = ctx {
+                Self::create_crosshair(the_ctx)
+            } else {
+                None
+            },
             ..Default::default()
         })
     }
@@ -645,7 +653,7 @@ impl<'a> DrawingStuff<'a> for MainContent<'a> {
             return Ok(());
         }
         let max_len = self.sim.v_kin.len().max(self.sim.v_pot.len());
-        if max_len == 0 {
+        if max_len <= 3 {
             return Ok(()); // No data to plot
         }
 
@@ -668,54 +676,42 @@ impl<'a> DrawingStuff<'a> for MainContent<'a> {
 
         let value_range = (max_val - min_val).max(1.0); // Avoid division by zero
 
-        let mut mesh_builder = MeshBuilder::new();
-
         // Helper to convert (index, value) to screen coordinates
-        let to_screen_coords = |index: usize, value: f32| -> (f32, f32) {
+        let to_screen_coords = |index: usize, value: f32| -> Point2<f32> {
             let x = plot_x + (index as f32 / max_len as f32) * PLOT_WIDTH;
             let y = plot_y + PLOT_HEIGHT - ((value - min_val) / value_range * PLOT_HEIGHT);
-            (x, y)
+            Point2 { x, y }
         };
+
+        let mut mesh_builder = MeshBuilder::new();
 
         // Draw e_kin line (red)
         if self.show_plot == PlotContent::ALL || self.show_plot == PlotContent::EKIN {
-            for i in 1..self.sim.v_kin.len() {
-                let (x1, y1) = to_screen_coords(i - 1, self.sim.v_kin[i - 1]);
-                let (x2, y2) = to_screen_coords(i, self.sim.v_kin[i]);
-
-                mesh_builder.line(
-                    &[Point2 { x: x1, y: y1 }, Point2 { x: x2, y: y2 }],
-                    2.0,
-                    Color::RED,
-                )?;
+            let data = &self.sim.v_kin;
+            let mut points: Vec<Point2<f32>> = Vec::with_capacity(data.len());
+            for (i, &value) in data.iter().enumerate() {
+                points.push(to_screen_coords(i, value));
             }
+            mesh_builder.polyline(DrawMode::stroke(2.0), &points, Color::RED)?;
         }
 
         // Draw e_pot line (blue)
         if self.show_plot == PlotContent::ALL || self.show_plot == PlotContent::EPOT {
-            for i in 1..self.sim.v_pot.len() {
-                let (x1, y1) = to_screen_coords(i - 1, self.sim.v_pot[i - 1]);
-                let (x2, y2) = to_screen_coords(i, self.sim.v_pot[i]);
-                mesh_builder.line(
-                    &[Point2 { x: x1, y: y1 }, Point2 { x: x2, y: y2 }],
-                    2.0,
-                    Color::BLUE,
-                )?;
+            let data = &self.sim.v_pot;
+            let mut points: Vec<Point2<f32>> = Vec::with_capacity(data.len());
+            for (i, &value) in data.iter().enumerate() {
+                points.push(to_screen_coords(i, value));
             }
+            mesh_builder.polyline(DrawMode::stroke(2.0), &points, Color::BLUE)?;
         }
 
         // Draw e_tot line (Orange)
         if self.show_plot == PlotContent::ALL || self.show_plot == PlotContent::ETOT {
-            for i in 1..self.sim.v_pot.len() {
-                let (x1, y1) =
-                    to_screen_coords(i - 1, self.sim.v_pot[i - 1] + self.sim.v_kin[i - 1]);
-                let (x2, y2) = to_screen_coords(i, self.sim.v_pot[i] + self.sim.v_kin[i]);
-                mesh_builder.line(
-                    &[Point2 { x: x1, y: y1 }, Point2 { x: x2, y: y2 }],
-                    2.0,
-                    Color::YELLOW,
-                )?;
+            let mut points = Vec::with_capacity(max_len);
+            for ((i, &kin), &pot) in self.sim.v_kin.iter().enumerate().zip(self.sim.v_pot.iter()) {
+                points.push(to_screen_coords(i, kin + pot));
             }
+            mesh_builder.polyline(DrawMode::stroke(2.0), &points, Color::YELLOW)?;
         }
 
         // Draw bounding box
@@ -728,21 +724,23 @@ impl<'a> DrawingStuff<'a> for MainContent<'a> {
         let mesh = Mesh::from_data(ctx, mesh_builder.build());
         canvas.draw(&mesh, DrawParam::default());
 
-        let max_value_text =
-            Text::new(TextFragment::new(format!("{:.2e}", max_val)).color(Color::WHITE));
-        let text_position = Point2 {
-            x: plot_x + 5.0, // Small margin inside the plot
-            y: plot_y + 5.0,
-        };
-        canvas.draw(&max_value_text, text_position);
+        // Draw max value label
+        canvas.draw(
+            &Text::new(TextFragment::new(format!("{:.2e}", max_val)).color(Color::WHITE)),
+            Point2 {
+                x: plot_x + 5.0,
+                y: plot_y + 5.0,
+            },
+        );
 
-        let min_value_text =
-            Text::new(TextFragment::new(format!("{:.2e}", min_val)).color(Color::WHITE));
-        let text_position = Point2 {
-            x: plot_x + 5.0,                      // Small margin inside the plot
-            y: plot_y + PLOT_HEIGHT - 5.0 - 10.0, /*font height */
-        };
-        canvas.draw(&min_value_text, text_position);
+        // Draw min value label
+        canvas.draw(
+            &Text::new(TextFragment::new(format!("{:.2e}", min_val)).color(Color::WHITE)),
+            Point2 {
+                x: plot_x + 5.0,
+                y: plot_y + PLOT_HEIGHT - 15.0,
+            },
+        );
 
         Ok(())
     }
@@ -870,20 +868,10 @@ impl<'a> DrawingStuff<'a> for MainContent<'a> {
 
         if ball.get_id() == self.sim.max_id {
             draw_par.color(Color::CYAN);
+        } else if let Some(col) = ball.ball_color() {
+            draw_par.color(col);
         }
-        // let ball_scale_px = Self::len_to_px(ball.radius)/std_size_px;
-        //println!("drawing ball at {:?} of size {}", ball_coord_px, ball_size_px);
-        //draw the ball itself
-        // let pt_circle = Mesh::new_circle(
-        //     ctx,
-        //     DrawMode::fill(),
-        //     ball_coord_px.clone(),
-        //     ball_size_px,
-        //     0.1,
-        //     ball_color_used,
-        // )?;
         canvas.draw(pt_circle, draw_par);
-        //.scale(Vec2::new(ball_scale_px,ball_scale_px))
 
         Ok(())
     }
@@ -1548,7 +1536,7 @@ mod tests {
 
         let default_ball_def = NewBallDef::default();
         assert_eq!(default_ball_def.get_ball_size(), MIN_BALL_SIZE);
-        assert_eq!(default_ball_def.ball_mass, 1.);
+        assert_eq!(default_ball_def.get_ball_mass(), 1.);
 
         let default_sim_stats = SimStats::default();
         assert_eq!(default_sim_stats.energy_pot, 0.);
@@ -1699,7 +1687,8 @@ mod tests {
 
     #[test]
     fn test_coord_trafo_idempotent() {
-        let main_content = MainContent::new(500., 500., None).expect("could not create content");
+        let main_content =
+            MainContent::new(None, 500., 500., None).expect("could not create content");
         let test_coord = Vec2D::new(18., 234.);
         let vec = main_content.coord_to_px(&test_coord);
         let res_coord = main_content.px_to_coord(vec.x, vec.y);
@@ -1720,7 +1709,8 @@ mod tests {
 
     #[test]
     fn test_px_to_coord() {
-        let main_content = MainContent::new(500., 300., None).expect("could not create content");
+        let main_content =
+            MainContent::new(None, 500., 300., None).expect("could not create content");
 
         println!(
             "window size: {} {} margin {} {} and region {} {}",
@@ -1758,7 +1748,7 @@ mod tests {
     #[test]
     fn test_collect_neighbours() {
         let mut main_content =
-            MainContent::new(500., 500., None).expect("could not create content");
+            MainContent::new(None, 500., 500., None).expect("could not create content");
 
         // Add balls to the system
         let x1 = 80.0;
