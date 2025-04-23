@@ -1073,16 +1073,14 @@ impl LogStuff for MainContent<'_> {
     fn status_text(&self, fps: u32) -> String {
         let text = if self.real_data {
             format!(
-                "fps {} time: {:.1}[ns] ({})\n#Balls: {}\nmaxNeig: {}\nPotEnergy: \
-                {:.2E}[J]\nKinEnergy: {:.2E}[J]\nTotalE: {:.3E}[J]\nTemp: {:.2}[K]\nmaxV: {:.2}[m/s]\nvCOM: {}[m/s]",
+                "fps {} time: {:.1}[ns] ({})\n#Balls: {}\nmaxNeig: {}\n\
+                TotalE: {:.3E}[J]\nTemp: {:.2}[K]\nmaxV: {:.2}[m/s]\nvCOM: {}[m/s]",
                 fps,
                 self.sim.time * TIME_SCALE_NS,
                 self.sim.speedup,
                 self.num_balls,
                 //self.sim.frames_since_draw,
                 self.sim.max_neighbours,
-                self.sim.energy_pot * ENERGY_SCALE_J,
-                self.sim.energy_kin * ENERGY_SCALE_J,
                 (self.sim.energy_pot + self.sim.energy_kin) * ENERGY_SCALE_J,
                 self.sim.temperature * TEMP_SCALE,
                 self.sim.max_v * LEN_SCALE_M / TIME_SCALE,
@@ -1091,7 +1089,7 @@ impl LogStuff for MainContent<'_> {
             )
         } else {
             format!(
-                "fps {} time: {:.1} ({})\n#Balls: {} #hoodCnt: {}/{}\nmaxNeig: {}\nPotEnergy: {:.2E}\nKinEnergy: {:.2E}\nTotalE: {:.3E}\nTemp: {:.3}\nmaxV: {:.2}\nvCOM: {}",
+                "fps {} time: {:.1} ({})\n#Balls: {} #hoodCnt: {}/{}\nmaxNeig: {}\nTotalE: {:.3E}\nTemp: {:.3}\nmaxV: {:.2}\nvCOM: {}",
                 fps,
                 self.sim.time,
                 self.sim.speedup,
@@ -1099,8 +1097,6 @@ impl LogStuff for MainContent<'_> {
                 self.sim.update_hood_cnt,
                 Ball2D::get_update_hood_call_cnt(),
                 self.sim.max_neighbours,
-                self.sim.energy_pot,
-                self.sim.energy_kin,
                 self.sim.energy_pot + self.sim.energy_kin,
                 self.sim.temperature,
                 self.sim.max_v,
