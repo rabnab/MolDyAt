@@ -49,12 +49,14 @@ impl Vec2D {
     }
 
     /// Scales the vector in place.
+    #[allow(dead_code)]
     pub fn scale_mut(&mut self, scale: f32) {
         self.x *= scale;
         self.y *= scale;
     }
 
     /// Negates the vector in place.
+    #[allow(dead_code)]
     fn negate_mut(&mut self) {
         self.scale_mut(-1.0);
     }
