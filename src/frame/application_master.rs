@@ -40,11 +40,51 @@ const CROSSHAIR_COLOR: Color = Color::WHITE;
 
 struct WindowDefinition {
     curs_pos: Vec2D,
+    curs_pos_of_txt: Vec2D,
     region_px_x: f32,
     region_px_y: f32,
     margin_px_x: f32,
     margin_px_y: f32,
     text_pos: Option<[f32; 2]>,
+    txt_cursor: Text,
+}
+
+impl WindowDefinition {
+    pub(crate) fn update_cursor_and_text(&mut self, x: f32, y: f32) {
+        self.curs_pos = Vec2D::new(x, y);
+        let curs_pos_coord = self.px_to_coord(x, y);
+
+        let curs_moved_sq = self.curs_pos.dist(&self.curs_pos_of_txt).norm_sq();
+        if curs_moved_sq > (f32::min(self.region_px_x, self.region_px_y) * 0.1) {
+            self.curs_pos_of_txt = self.curs_pos.clone();
+            self.txt_cursor = Text::new(
+                TextFragment::new(format!(
+                    "x: {}, y: {} pos ({:.3},{:.3})",
+                    x, y, curs_pos_coord.x, curs_pos_coord.y,
+                ))
+                .scale(20.),
+            );
+        }
+    }
+
+    fn px_to_coord(&self, px_x: f32, px_y: f32) -> Vec2D {
+        //window top left (0,0) px
+        //margin margin_px_[xy]
+        //region region_px_[xy]
+        //window bottom [xy] = region_px_[xy]+2*margin_px[xy]
+        //pos = px_to_len(px_pos - (region_px_[xy]+2*margin_px_[xy])*0.5)
+        Vec2D::new(
+            Self::px_to_len(px_x - self.region_px_x * 0.5 - self.margin_px_x),
+            Self::px_to_len(px_y - self.region_px_y * 0.5 - self.margin_px_y),
+        )
+    }
+
+    fn len_to_px(coord_len: f32) -> f32 {
+        coord_len / LEN_TO_PX
+    }
+    fn px_to_len(coord_px: f32) -> f32 {
+        coord_px * LEN_TO_PX
+    }
 }
 
 #[derive(Default)]
@@ -98,7 +138,7 @@ impl NewBallDef {
             .circle(
                 DrawMode::fill(),
                 Vec2D::new(0.0, 0.0),
-                MainContent::len_to_px(ball_size),
+                WindowDefinition::len_to_px(ball_size),
                 tolerance,
                 Color::RED,
             )
@@ -109,7 +149,7 @@ impl NewBallDef {
             .circle(
                 DrawMode::stroke(stroke_thickness),
                 Vec2D::new(0.0, 0.0),
-                MainContent::len_to_px(Ball2D::equilibrium_of_radius(ball_size)),
+                WindowDefinition::len_to_px(Ball2D::equilibrium_of_radius(ball_size)),
                 tolerance,
                 Color::MAGENTA,
             )
@@ -267,11 +307,16 @@ impl Default for WindowDefinition {
     fn default() -> WindowDefinition {
         WindowDefinition {
             curs_pos: Vec2D::new(0., 0.),
+            curs_pos_of_txt: Vec2D::new(0., 0.),
             region_px_x: 100.,
             region_px_y: 100.,
             margin_px_x: 10.,
             margin_px_y: 10.,
             text_pos: None,
+            txt_cursor: Text::new(
+                TextFragment::new(format!("x: {}, y: {} pos ({:.3},{:.3})", 0., 0., 0., 0.,))
+                    .scale(20.0),
+            ),
         }
     }
 }
@@ -479,33 +524,16 @@ impl<'a> MainContent<'a> {
             format!("{:.*}", precision, value) // Use normal float notation
         }
     }
-    fn len_to_px(coord_len: f32) -> f32 {
-        coord_len / LEN_TO_PX
-    }
-    fn px_to_len(coord_px: f32) -> f32 {
-        coord_px * LEN_TO_PX
-    }
+
     fn px_to_coord(&self, px_x: f32, px_y: f32) -> Vec2D {
-        //window top left (0,0) px
-        //margin margin_px_[xy]
-        //region region_px_[xy]
-        //window bottom [xy] = region_px_[xy]+2*margin_px[xy]
-        //pos = px_to_len(px_pos - (region_px_[xy]+2*margin_px_[xy])*0.5)
-        Vec2D::new(
-            Self::px_to_len(
-                px_x - self.win_definition.region_px_x * 0.5 - self.win_definition.margin_px_x,
-            ),
-            Self::px_to_len(
-                px_y - self.win_definition.region_px_y * 0.5 - self.win_definition.margin_px_y,
-            ),
-        )
+        self.win_definition.px_to_coord(px_x, px_y)
     }
     fn coord_to_px(&self, coord: &Vec2D) -> Vec2D {
         Vec2D::new(
-            Self::len_to_px(coord.x)
+            WindowDefinition::len_to_px(coord.x)
                 + self.win_definition.region_px_x * 0.5
                 + self.win_definition.margin_px_x,
-            Self::len_to_px(coord.y)
+            WindowDefinition::len_to_px(coord.y)
                 + self.win_definition.region_px_y * 0.5
                 + self.win_definition.margin_px_y,
         )
@@ -628,28 +656,13 @@ impl<'a> DrawingStuff<'a> for MainContent<'a> {
         } else {
             self.draw_cross_hair(canvas)?;
         }
-        let curs_pos = self.px_to_coord(
-            self.win_definition.curs_pos.x,
-            self.win_definition.curs_pos.y,
-        );
-
-        let txt_cursor = Text::new(
-            TextFragment::new(format!(
-                "x: {}, y: {} pos ({:.3},{:.3})",
-                self.win_definition.curs_pos.x,
-                self.win_definition.curs_pos.y,
-                curs_pos.x,
-                curs_pos.y,
-            ))
-            .scale(20.),
-        );
 
         let txt_cursor_pos = [
             self.win_definition.margin_px_x * 2. + self.win_definition.region_px_x,
             self.win_definition.margin_px_y * 2. + self.win_definition.region_px_y,
         ];
         canvas.draw(
-            &txt_cursor,
+            &self.win_definition.txt_cursor,
             DrawParam::default().dest(txt_cursor_pos).offset([1., 1.]),
         );
 
@@ -901,7 +914,7 @@ impl<'a> DrawingStuff<'a> for MainContent<'a> {
                 ctx,
                 DrawMode::stroke(1.),
                 self.coord_to_px(&ball.pos),
-                Self::len_to_px(ball.equilibrium_radius()),
+                WindowDefinition::len_to_px(ball.equilibrium_radius()),
                 0.1,
                 Color::MAGENTA,
             )?;
@@ -1089,10 +1102,12 @@ impl LogStuff for MainContent<'_> {
 
 impl<'a> GameLogic for MainContent<'a> {
     fn is_ball_in_region(&self, pt: &Ball2D) -> bool {
-        let min_x = self.win_definition.margin_px_x + Self::len_to_px(pt.radius);
-        let max_x = min_x + self.win_definition.region_px_x - 2. * Self::len_to_px(pt.radius);
-        let min_y = self.win_definition.margin_px_y + Self::len_to_px(pt.radius);
-        let max_y = min_y + self.win_definition.region_px_y - 2. * Self::len_to_px(pt.radius);
+        let min_x = self.win_definition.margin_px_x + WindowDefinition::len_to_px(pt.radius);
+        let max_x =
+            min_x + self.win_definition.region_px_x - 2. * WindowDefinition::len_to_px(pt.radius);
+        let min_y = self.win_definition.margin_px_y + WindowDefinition::len_to_px(pt.radius);
+        let max_y =
+            min_y + self.win_definition.region_px_y - 2. * WindowDefinition::len_to_px(pt.radius);
 
         // Check if the point is within the region in both x and y directions
         let pos_px = self.coord_to_px(&pt.pos);
@@ -1222,8 +1237,8 @@ impl<'a> GameLogic for MainContent<'a> {
         let bound_rect = Rect::new(
             top_left.x,
             top_left.y,
-            Self::px_to_len(self.win_definition.region_px_x),
-            Self::px_to_len(self.win_definition.region_px_y),
+            WindowDefinition::px_to_len(self.win_definition.region_px_x),
+            WindowDefinition::px_to_len(self.win_definition.region_px_y),
         );
 
         self.sim.min_dist = 0.;
@@ -1439,7 +1454,8 @@ impl<'a> EventHandler for MainContent<'a> {
         );
 
         // Update cursor position
-        self.win_definition.curs_pos = Vec2D::new(clamped_x, clamped_y);
+        self.win_definition
+            .update_cursor_and_text(clamped_x, clamped_y);
         Ok(())
     }
 
@@ -1536,9 +1552,9 @@ mod tests {
 
         // Add a valid candidate
         let x_px = main_content.win_definition.margin_px_x
-            + MainContent::len_to_px(main_content.new_ball.get_ball_size() * 1.1);
+            + WindowDefinition::len_to_px(main_content.new_ball.get_ball_size() * 1.1);
         let y_px = main_content.win_definition.margin_px_y
-            + MainContent::len_to_px(main_content.new_ball.get_ball_size() * 1.1);
+            + WindowDefinition::len_to_px(main_content.new_ball.get_ball_size() * 1.1);
         println!(
             "test adding ball at px ({},{}) | LEN_TO_PX: {}",
             x_px, y_px, LEN_TO_PX
@@ -1583,7 +1599,7 @@ mod tests {
             "ball coordindates are {:?} from px ({},{})",
             ball_coord, ball_px.x, ball_px.y
         );
-        let ball_radius = MainContent::px_to_len(10.);
+        let ball_radius = WindowDefinition::px_to_len(10.);
         let ball = Ball2D::_new_massive(1, ball_coord.x, ball_coord.y, ball_radius, 1.0);
 
         assert!(main_content.is_ball_in_region(&ball));
@@ -1599,7 +1615,7 @@ mod tests {
 
         // Add some balls
         let ball_coord_px = Vec2D::new(30., 30.);
-        let ball_radius_px = MainContent::len_to_px(main_content.new_ball.get_ball_size());
+        let ball_radius_px = WindowDefinition::len_to_px(main_content.new_ball.get_ball_size());
         main_content
             .add_candidate_px(ball_coord_px.x, ball_coord_px.y)
             .unwrap();
@@ -1645,7 +1661,7 @@ mod tests {
 
         // Add two overlapping balls
         let ball_coord_px = Vec2D::new(30., 30.);
-        let ball_radius_px = MainContent::len_to_px(main_content.new_ball.get_ball_size());
+        let ball_radius_px = WindowDefinition::len_to_px(main_content.new_ball.get_ball_size());
         let ball_radius = main_content.new_ball.get_ball_size();
         main_content
             .add_candidate_px(ball_coord_px.x, ball_coord_px.y)
