@@ -45,8 +45,10 @@ struct WindowDefinition {
     region_px_y: f32,
     margin_px_x: f32,
     margin_px_y: f32,
-    text_pos: Option<[f32; 2]>,
+    ball_status_text_pos: Option<[f32; 2]>,
     txt_cursor: Text,
+    last_status_text: String,
+    status_text_mesh: Text,
 }
 
 impl WindowDefinition {
@@ -312,11 +314,13 @@ impl Default for WindowDefinition {
             region_px_y: 100.,
             margin_px_x: 10.,
             margin_px_y: 10.,
-            text_pos: None,
+            ball_status_text_pos: None,
             txt_cursor: Text::new(
                 TextFragment::new(format!("x: {}, y: {} pos ({:.3},{:.3})", 0., 0., 0., 0.,))
                     .scale(20.0),
             ),
+            status_text_mesh: Text::new(TextFragment::new("")),
+            last_status_text: "".to_string(),
         }
     }
 }
@@ -983,22 +987,30 @@ impl<'a> DrawingStuff<'a> for MainContent<'a> {
         canvas.draw(&rect, Vec2::new(0., 0.));
         if self.show_ball_stats {
             let fps = ctx.time.fps();
-            let txt_balls = Text::new(TextFragment::new(self.status_text(fps as u32)).scale(30.));
-            let text_pos = self.win_definition.text_pos.unwrap_or([0., 0.]);
-            if self.win_definition.text_pos.is_none() {
-                match txt_balls.dimensions(ctx) {
-                    Some(rec) => {
-                        let p = [
-                            self.win_definition.margin_px_x * 2. + self.win_definition.region_px_x
-                                - rec.w,
-                            0.,
+            let new_txt = self.status_text(fps as u32);
+            if new_txt != self.win_definition.last_status_text {
+                self.win_definition.last_status_text = new_txt.clone();
+                self.win_definition.status_text_mesh =
+                    Text::new(TextFragment::new(new_txt).scale(30.));
+
+                if self.win_definition.ball_status_text_pos.is_none() {
+                    if let Some(bounds) = self.win_definition.status_text_mesh.dimensions(ctx) {
+                        let pos = [
+                            self.win_definition.margin_px_x * 2.0 + self.win_definition.region_px_x
+                                - bounds.w,
+                            0.0,
                         ];
-                        self.win_definition.text_pos = Some(p);
+                        self.win_definition.ball_status_text_pos = Some(pos);
                     }
-                    None => {}
-                };
+                }
             }
-            canvas.draw(&txt_balls, DrawParam::default().dest(text_pos));
+            let text_pos = self.win_definition.ball_status_text_pos.unwrap_or([0., 0.]);
+            canvas.draw(
+                &self.win_definition.status_text_mesh,
+                DrawParam::default().dest(text_pos),
+            );
+        } else {
+            self.win_definition.last_status_text = "".to_string();
         }
         Ok(())
     }
@@ -1061,25 +1073,25 @@ impl LogStuff for MainContent<'_> {
     fn status_text(&self, fps: u32) -> String {
         let text = if self.real_data {
             format!(
-                "fps {} time: {:.3}[ns] ({})\n#Balls: {} #Frms: {}\nmaxNeig: {}\nPotEnergy: \
-                {:.2E}[J]\nKinEnergy: {:.2E}[J]\nTotalE: {:.3E}[J]\nTemp: {:.2}[K]\nmaxV: {:.2}[m/s]\nminDist: {:.2E}[m]\nvCOM: {}[m/s]",
+                "fps {} time: {:.1}[ns] ({})\n#Balls: {}\nmaxNeig: {}\nPotEnergy: \
+                {:.2E}[J]\nKinEnergy: {:.2E}[J]\nTotalE: {:.3E}[J]\nTemp: {:.2}[K]\nmaxV: {:.2}[m/s]\nvCOM: {}[m/s]",
                 fps,
                 self.sim.time * TIME_SCALE_NS,
                 self.sim.speedup,
                 self.num_balls,
-                self.sim.frames_since_draw,
+                //self.sim.frames_since_draw,
                 self.sim.max_neighbours,
                 self.sim.energy_pot * ENERGY_SCALE_J,
                 self.sim.energy_kin * ENERGY_SCALE_J,
                 (self.sim.energy_pot + self.sim.energy_kin) * ENERGY_SCALE_J,
                 self.sim.temperature * TEMP_SCALE,
                 self.sim.max_v * LEN_SCALE_M / TIME_SCALE,
-                self.sim.min_dist * LEN_SCALE_M,
+                //self.sim.min_dist * LEN_SCALE_M,
                 self.sim.v_com.scaled(LEN_SCALE_M / TIME_SCALE),
             )
         } else {
             format!(
-                "fps {} time: {:.3} ({})\n#Balls: {} #hoodCnt: {}/{}\nmaxNeig: {}\nPotEnergy: {:.2E}\nKinEnergy: {:.2E}\nTotalE: {:.3E}\nTemp: {:.3}\nmaxV: {:.2}\nminDist: {:.2E}\nvCOM: {}",
+                "fps {} time: {:.1} ({})\n#Balls: {} #hoodCnt: {}/{}\nmaxNeig: {}\nPotEnergy: {:.2E}\nKinEnergy: {:.2E}\nTotalE: {:.3E}\nTemp: {:.3}\nmaxV: {:.2}\nvCOM: {}",
                 fps,
                 self.sim.time,
                 self.sim.speedup,
@@ -1092,7 +1104,7 @@ impl LogStuff for MainContent<'_> {
                 self.sim.energy_pot + self.sim.energy_kin,
                 self.sim.temperature,
                 self.sim.max_v,
-                self.sim.min_dist,
+                //self.sim.min_dist,
                 self.sim.v_com,
             )
         };
@@ -1496,7 +1508,7 @@ impl<'a> EventHandler for MainContent<'a> {
                 KeyCode::B => {
                     self.show_ball_stats = !self.show_ball_stats;
                     if !self.show_ball_stats {
-                        self.win_definition.text_pos = None;
+                        self.win_definition.ball_status_text_pos = None;
                     }
                 }
                 KeyCode::V => self.start_handling_verbosity_input(),
