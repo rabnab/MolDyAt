@@ -1204,47 +1204,6 @@ impl<'a> GameLogic for MainContent<'a> {
         self.sim.temperature = sum_rel_kin_doubled / 3. / (self.v_points.len() as f32) /* /KB == /1*/
     }
 
-    // fn global_update_euler(&mut self, dt: f32, bound_rect: &Rect) -> GameResult {
-    //     let mut _min_dist = bound_rect.w + bound_rect.h;
-    //     let mut max_v: f32 = 0.;
-    //     let mut max_id: usize = 0;
-    //     let mut pot: f32 = 0.;
-    //     let mut kin: f32 = 0.;
-    //     let mut _v_com: Vec2D = Vec2D::new(0., 0.);
-    //     let mut sum_mass: f32 = 0.;
-    //
-    //     for ball_rc in &mut self.v_points {
-    //         let mut cur = ball_rc.borrow_mut();
-    //
-    //         let (min_dist, cur_pot) = cur.update_positions(dt, &bound_rect);
-    //
-    //         pot += cur_pot * 0.5; //double counts
-    //         _v_com.add(cur.moment());
-    //         let speed_sq = cur.v.norm_sq();
-    //         kin += speed_sq * cur.mass * 0.5;
-    //         sum_mass += cur.mass;
-    //         if max_v * max_v < speed_sq {
-    //             max_v = f32::sqrt(speed_sq);
-    //             max_id = cur.get_id();
-    //         }
-    //
-    //         if _min_dist > min_dist && min_dist > 0. {
-    //             _min_dist = min_dist;
-    //             self.sim.min_dist = _min_dist;
-    //         }
-    //     }
-    //     self.v_points.iter().for_each(|ball| { ball.borrow_mut().update_old_pos()});
-    //
-    //     self.sim.energy_kin = kin;
-    //     self.sim.energy_pot = pot;
-    //     self.sim.max_v = max_v;
-    //     self.sim.max_id = max_id;
-    //     self.sim.time += dt;
-    //     self.sim.v_com = _v_com.scaled_copy(1. / sum_mass);
-    //
-    //     Ok(())
-    // }
-
     fn simulation_step(&mut self) -> GameResult {
         if self.sim.pause {
             return Ok(());
