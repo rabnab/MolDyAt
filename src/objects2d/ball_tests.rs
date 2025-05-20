@@ -1,7 +1,9 @@
 #[cfg(test)]
 mod tests {
     use crate::objects2d::Vec2D;
-    use crate::objects2d::ball::{Ball2D, BallError, LJ_CUTOFF, LJ_EPS, LJ_SIG, Named, Verlet};
+    use crate::objects2d::ball_impl::{
+        Ball2D, BallError, LJ_CUTOFF, LJ_EPS, LJ_SIG, Named, Verlet,
+    };
     use float_cmp::{approx_eq, assert_approx_eq};
     use ggez::graphics::Rect;
     use std::cell::RefCell;

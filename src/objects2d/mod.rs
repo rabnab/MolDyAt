@@ -1,6 +1,5 @@
-mod ball;
-mod ball_tests;
+pub(crate) mod ball_impl;
 mod vec_2d;
 
-pub use ball::{Ball2D, VerboseInfoMode};
+pub use ball_impl::verbose_info::VerboseInfoMode;
 pub use vec_2d::Vec2D;

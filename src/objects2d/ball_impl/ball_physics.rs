@@ -1,0 +1,325 @@
+use crate::objects2d::Vec2D;
+use crate::objects2d::ball_impl::{Ball2D, BallError, BallResult, Named};
+use ggez::graphics::Rect;
+
+//const LJ_SIG: f32 = 5.; // equilibrium distance
+//LJ_SIG in SI units is for Argon 3.4A=3.4E-10m
+const LJ_SIG: f32 = 1.; // equilibrium distance
+//pub(crate) const LJ_CUTOFF: f32 = 8. * LJ_SIG; //distance where lenard jones force is < 1e-4 (as long as sig>0.1)
+const LJ_CUTOFF: f32 = 4. * LJ_SIG; //distance where lenard jones force is < 1e-4 (as long as sig>0.1)
+const LJ_EPS: f32 = 1.; // attractive strength
+const SQRT6_OF_TWO: f32 = 1.122462048309372981; // == 2^(1/6)
+
+pub struct PhysicsConstants {
+    pub lj_sig: f32,
+    pub lj_eps: f32,
+    pub lj_cutoff: f32,
+    pub gravity: f32,
+    pub damping: f32,
+    pub softening: f32,
+    pub max_force: f32,
+}
+
+impl Default for PhysicsConstants {
+    fn default() -> Self {
+        PhysicsConstants {
+            lj_eps: LJ_EPS,
+            lj_sig: LJ_SIG,
+            //gravity: 9.81,
+            gravity: 0.0,
+            damping: 1.0,
+            max_force: 1000.0,
+            //softening: 0.01,
+            softening: 0.0,
+            lj_cutoff: LJ_CUTOFF, // Standard cutoff for L-J potential 2.5
+        }
+    }
+}
+pub struct BallPhysics {
+    constants: PhysicsConstants,
+}
+
+impl Default for BallPhysics {
+    fn default() -> Self {
+        BallPhysics {
+            constants: PhysicsConstants::default(),
+        }
+    }
+}
+
+impl BallPhysics {
+    pub fn new(constants: PhysicsConstants) -> Self {
+        BallPhysics { constants }
+    }
+
+    /// the cutoff distance used for evaluating lenard jones potentail
+    pub fn get_cutoff_distance(&self) -> f32 {
+        self.constants.lj_cutoff
+    }
+
+    pub fn get_min_movement_for_update_hood(&self, radius: f32) -> f32 {
+        radius + self.get_cutoff_distance()
+    }
+
+    pub(crate) fn equilibrium_of_radius(&self, radius: f32) -> f32 {
+        //case: r1==r2 --- SQRT6_OF_TWO * LJ_SIG + 2* rad == dist_equi
+        (SQRT6_OF_TWO * self.constants.lj_sig) * 0.5 + radius
+    }
+
+    pub(crate) fn lenard_jones_potential(&self, dist_btw_balls: f32) -> f32 {
+        //case dist_of_balls = equilibrium_radius*2 and radius_sum=2*radius
+        //dist = SQRT6_OF_TWO LJ_SIG + 2*rad - 2*rad
+        //dist = SQRT6_OF_TWO LJ_SIG
+        //quot = LJ_SIG/dist = 1/SQRT6_OF_TWO
+        //quot_six = 1/2
+        //potential: 4 LJ_EPS 1/2 *(1/2-1)
+        //    4 LJ_EPS 1/2 * (-1/2)
+        //    - LJ_EPS
+
+        if dist_btw_balls < self.min_dist_for_const_force() {
+            let quot = self.constants.lj_sig / self.min_dist_for_const_force();
+            let quot_six = quot.powi(6);
+            let pot_at_min_dist = 4. * self.constants.lj_eps * quot_six * (quot_six - 1.);
+
+            let force_at_min_dist = self.lenard_jones_force_pure(self.min_dist_for_const_force());
+            return pot_at_min_dist
+                + (dist_btw_balls - self.min_dist_for_const_force()) * force_at_min_dist;
+        }
+
+        let quot = self.constants.lj_sig / dist_btw_balls;
+        let quot_six = quot.powi(6);
+        4. * self.constants.lj_eps * quot_six * (quot_six - 1.)
+    }
+
+    fn min_dist_for_const_force(&self) -> f32 {
+        self.constants.lj_sig * 0.5
+    }
+
+    pub(crate) fn lenard_jones_force(
+        &self,
+        dist_of_balls: f32,
+        radius_sum: f32,
+        _id: usize,
+    ) -> f32 {
+        let dist = dist_of_balls - radius_sum;
+        if dist < self.min_dist_for_const_force() {
+            self.lenard_jones_force_pure(self.min_dist_for_const_force())
+        } else {
+            self.lenard_jones_force_pure(dist)
+        }
+    }
+    pub(crate) fn lenard_jones_force_pure(&self, dist_btw_balls: f32) -> f32 {
+        let quot = self.constants.lj_sig / dist_btw_balls;
+        let quot_six = quot.powi(6);
+        let res = 24. * self.constants.lj_eps * quot_six * (2. * quot_six - 1.) / dist_btw_balls;
+        res
+    }
+
+    pub(crate) fn check_min_dist(actual_dist: f32, min_dist: f32) -> BallResult<f32> {
+        // let wiggle_room = LJ_SIG*0.1;
+        // if actual_dist < 0. {
+        //     return Err(BallError::LessThanTwoBalls);
+        // }
+        if actual_dist < min_dist || f32::is_nan(min_dist) {
+            if actual_dist <= 0. {
+                return Err(BallError::DistanceUnderflow);
+            }
+            return Ok(actual_dist);
+        }
+        Ok(min_dist)
+    }
+
+    pub fn is_colliding(&self, this: &Ball2D, other: &Ball2D) -> bool {
+        //use norm_sq to avoid sqrt in norm
+        let radius_sum_sq = (this.radius + other.radius + self.constants.lj_sig)
+            * (this.radius + other.radius + self.constants.lj_sig);
+        let res = this.pos.dist(&other.pos).norm_sq() < radius_sum_sq;
+        if res {
+            println!(
+                "ball {} at {} is too close to {}: dist = {} sum_rad = {}",
+                this.id,
+                this.pos,
+                other.pos,
+                this.pos.dist(&other.pos).norm(),
+                this.radius + other.radius
+            )
+        }
+        res
+    }
+
+    pub fn update_accel_and_speed(&self, ball: &mut Ball2D, dt: f32, bound: &Rect) -> (f32, f32) {
+        let (min_dist, total_force, total_pot) = self.force(ball);
+        let speed_limit = f32::min(bound.w, bound.h) / 0.002;
+        let accel = ball.accel_with_speed_limit(&total_force, speed_limit, dt);
+        ball.v.x = ball.v.x + 0.5 * (accel.x + ball.accel.x) * dt;
+        ball.v.y = ball.v.y + 0.5 * (accel.y + ball.accel.y) * dt;
+
+        ball.accel = accel;
+
+        if ball.verbose.console {
+            println!("updated to  v {:?}  a {:?}", ball.v, ball.accel);
+        }
+        (min_dist, total_pot)
+    }
+
+    pub fn update_positions(&self, ball: &mut Ball2D, dt: f32, bound: &Rect) {
+        if ball.verbose.console {
+            println!(
+                "{} ------ [{:.2},{:.2}] neighbours: {:#?}",
+                ball.get_name(),
+                ball.hood.nearest,
+                ball.hood.farthest,
+                ball.hood.get_neighbour_names()
+            );
+        }
+
+        // let (min_dist, total_force, total_pot) = self.force();
+        // let speed_limit = f32::min(bound.w, bound.h) / 200.;
+        //let accel = self.accel_with_speed_limit(&total_force, speed_limit, dt);
+
+        // let a_norm = accel.norm();
+        //let p = Vec2D::norm(&self.v)/a_norm;
+
+        // let dx = self.v.x * dt + 0.5 * self.pre_update_accel.x * dt * dt;
+        // let dy = self.v.y * dt + 0.5 * self.pre_update_accel.y * dt * dt;
+        // let mut dt_max = dt;
+        // if (min_dist >= 0. && (dx * dx + dy * dy) > (min_dist * min_dist * 0.5))
+        //     || dx.abs() > bound.w * 0.5 || dy.abs() > bound.h * 0.5 {
+        //     //dt_max = -p + f32::sqrt(p*p+min_dist/ a_norm);
+        //     dt_max = 0.00001;
+        // }
+        //
+        // if (MAX_UPDATE_RECURSION as f32) < dt / dt_max {
+        //     dt_max = 2. * dt / (MAX_UPDATE_RECURSION as f32);
+        // }
+        //
+        // let steps = f32::ceil(dt / dt_max);
+        // let int_steps = steps as i32;
+        // let dt_sub = dt / steps;
+
+        // if int_steps > MAX_UPDATE_RECURSION {
+        //     panic!("Too many substeps for update: {}", int_steps);
+        // }
+        let dt_sub = dt;
+        let int_steps: usize = 1;
+        ball.execute_update_pos(dt_sub, bound);
+
+        // for _ in 1..int_steps {
+        //     let (_, total_force, _) = self.force();
+        //     let accel = self.accel_with_speed_limit(&total_force, speed_limit, dt_sub);
+        //     self.execute_update_pos(&accel, dt_sub, bound);
+        // }
+
+        if ball.verbose.console {
+            println!(
+                "{} --- dt: {} substeps: {} new pos: {} new v: {}",
+                ball.get_name(),
+                dt,
+                int_steps,
+                ball.pos,
+                ball.v
+            );
+        }
+        //TODO check if it is true that this should only be done later
+        //self.update_old_pos();
+    }
+
+    pub fn get_neighbour_force_and_pos(&self, ball: &Ball2D) -> Vec<(Vec2D, f32)> {
+        let ball_pos = ball.pos.clone();
+        let ball_radius = ball.radius;
+
+        ball.hood
+            .neighbours
+            .borrow()
+            .iter()
+            .filter_map(|weak| weak.upgrade()) // Filter out dropped references
+            .map(|rcrefcell| {
+                let other = rcrefcell.borrow();
+                (
+                    other.pos.clone(),
+                    self.lenard_jones_force(
+                        ball_pos.dist(&other.pos).norm(),
+                        ball_radius + other.radius,
+                        other.get_id(),
+                    ),
+                )
+            })
+            .collect()
+    }
+
+    //fn force_by(&self, others: &Vec<Ball2D>)  -> (f32, Vec2D, f32) {
+    pub(crate) fn force(&self, ball: &Ball2D) -> (f32, Vec2D, f32) {
+        let mut force = Vec2D::new(0., 0.);
+        let mut min_dist = f32::NAN;
+        let mut total_pot = 0.;
+        //for b in others {
+        let the_neighbours = ball.hood.neighbours.borrow();
+
+        for ref_b in the_neighbours.iter() {
+            if let Some(b_rc) = ref_b.upgrade() {
+                //from other_ball to this_ball
+                let b = b_rc.borrow();
+                let dist_vec = b.pre_update_pos.dist(&ball.pos);
+                let dist = dist_vec.norm();
+                let radius_sum = b.radius + ball.radius;
+                /*min_dist = match Ball2D::check_min_dist(dist - radius_sum*0.9, min_dist) {
+                    Err(BallError::DistanceUnderflow) | Err(BallError::LessThanTwoBalls) => return(0., Vec2D::new(0.,0.), 0.),
+                    Ok(dist_result) => dist_result,
+                };*/
+
+                match Self::check_min_dist(dist - radius_sum, min_dist) {
+                    Ok(min_dist_cur) => {
+                        min_dist = min_dist_cur;
+                        let lj_force = self.lenard_jones_force(dist, radius_sum, ball.id);
+                        let force_to_dist_val = lj_force / dist;
+                        let local_force = Vec2D::new(
+                            dist_vec.x * force_to_dist_val,
+                            dist_vec.y * force_to_dist_val,
+                        );
+
+                        if ball.verbose.console {
+                            println!(
+                                "\t\t {}--force: {} ({},{}) at dist: {}",
+                                b.get_name(),
+                                local_force.norm(),
+                                local_force.x,
+                                local_force.y,
+                                dist
+                            );
+                        }
+
+                        force += local_force;
+                        total_pot += self.lenard_jones_potential(dist - radius_sum);
+                    }
+                    _ => {
+                        min_dist = 0.;
+                        //maybe use some max_force to repell
+                        let lj_force = -100.;
+                        let force_to_dist_val = lj_force / dist;
+                        let local_force = Vec2D::new(
+                            dist_vec.x * force_to_dist_val,
+                            dist_vec.y * force_to_dist_val,
+                        );
+
+                        if ball.verbose.console {
+                            println!(
+                                "\t\t ball {}--force(max): {:?} at dist: {}",
+                                b.get_name(),
+                                local_force,
+                                dist
+                            );
+                        }
+
+                        force += local_force;
+                        total_pot += self.lenard_jones_potential(dist - radius_sum);
+                    }
+                };
+            }
+        }
+        (min_dist, force, total_pot)
+    }
+
+    // pub fn clear_hood(&mut self) {
+    //     self.hood.neighbours.borrow_mut().clear();
+    // }
+}

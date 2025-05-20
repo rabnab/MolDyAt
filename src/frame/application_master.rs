@@ -1,4 +1,7 @@
-use crate::objects2d::{Ball2D, Vec2D, VerboseInfoMode};
+use crate::objects2d::ball_impl::{
+    Ball2D, BallFactory, BallPhysics, Named, get_update_hood_call_cnt,
+};
+use crate::objects2d::{Vec2D, VerboseInfoMode};
 use ggez::event::EventHandler;
 use ggez::glam::Vec2;
 use ggez::graphics::{
@@ -11,6 +14,7 @@ use ggez::{Context, GameError, GameResult};
 use rand::{Rng, rng};
 use rand_distr::{Distribution, Normal};
 
+use crate::objects2d::ball_impl::verlet::Verlet;
 use ggez::mint::Point2;
 use std::cell::{Ref, RefCell};
 use std::collections::{HashSet, VecDeque};
@@ -103,7 +107,7 @@ impl NewBallDef {
         self.ball_mesh.get(idx)
     }
 
-    pub(crate) fn new(ctx: &Context) -> NewBallDef {
+    pub(crate) fn new(ctx: &Context, ball_physics: &BallPhysics) -> NewBallDef {
         const NUM_BALL_SIZES: usize = 5; // Number of ball sizes to create
         const CIRCLE_TOLERANCE: f32 = 0.1; // Tolerance for circle drawing
         const STROKE_THICKNESS: f32 = 2.0; // Border thickness for stroke drawing
@@ -115,7 +119,15 @@ impl NewBallDef {
 
         let ball_meshes: Vec<Mesh> = ball_sizes
             .iter()
-            .map(|&radius| Self::create_ball_mesh(ctx, radius, CIRCLE_TOLERANCE, STROKE_THICKNESS))
+            .map(|&radius| {
+                Self::create_ball_mesh(
+                    ctx,
+                    radius,
+                    ball_physics.equilibrium_of_radius(radius),
+                    CIRCLE_TOLERANCE,
+                    STROKE_THICKNESS,
+                )
+            })
             .collect();
 
         NewBallDef {
@@ -130,6 +142,7 @@ impl NewBallDef {
     fn create_ball_mesh(
         ctx: &Context,
         ball_size: f32,
+        ball_eq_radius: f32,
         tolerance: f32,
         stroke_thickness: f32,
     ) -> Mesh {
@@ -151,7 +164,7 @@ impl NewBallDef {
             .circle(
                 DrawMode::stroke(stroke_thickness),
                 Vec2D::new(0.0, 0.0),
-                WindowDefinition::len_to_px(Ball2D::equilibrium_of_radius(ball_size)),
+                WindowDefinition::len_to_px(ball_eq_radius),
                 tolerance,
                 Color::MAGENTA,
             )
@@ -212,6 +225,8 @@ enum PlotContent {
     ALL,
 }
 pub struct MainContent<'a> {
+    physics: BallPhysics,
+    ball_factory: BallFactory,
     win_definition: WindowDefinition,
     new_ball: NewBallDef,
     sim: SimStats,
@@ -238,7 +253,7 @@ struct ShaderUniforms {
 trait DrawingStuff<'a> {
     fn draw_cursor(&self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult;
     fn draw_plot(&self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult;
-    fn draw_text_on_ball(&self, ctx: &Context, canvas: &mut Canvas, ball: &Ball2D) -> GameResult;
+    fn draw_text_on_ball(&self, canvas: &mut Canvas, ball: &Ball2D) -> GameResult;
     fn draw_simple_balls(&self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult;
     fn draw_ball_by_mesh(
         &self,
@@ -352,6 +367,8 @@ impl Default for SimStats {
 impl<'a> Default for MainContent<'a> {
     fn default() -> MainContent<'a> {
         MainContent {
+            physics: BallPhysics::default(),
+            ball_factory: BallFactory::new(),
             win_definition: WindowDefinition {
                 ..Default::default()
             },
@@ -380,6 +397,7 @@ impl<'a> MainContent<'a> {
         reg_y: f32,
         shader_in: Option<Shader>,
     ) -> GameResult<MainContent<'a>> {
+        let physics = BallPhysics::default();
         Ok(MainContent {
             win_definition: WindowDefinition {
                 region_px_x: reg_x,
@@ -391,7 +409,7 @@ impl<'a> MainContent<'a> {
             v_points: Vec::new(),
             shader: shader_in,
             new_ball: if let Some(the_ctx) = ctx {
-                NewBallDef::new(the_ctx)
+                NewBallDef::new(the_ctx, &physics)
             } else {
                 NewBallDef::default()
             },
@@ -400,6 +418,7 @@ impl<'a> MainContent<'a> {
             } else {
                 None
             },
+            physics,
             ..Default::default()
         })
     }
@@ -770,9 +789,9 @@ impl<'a> DrawingStuff<'a> for MainContent<'a> {
         Ok(())
     }
 
-    fn draw_text_on_ball(&self, ctx: &Context, canvas: &mut Canvas, ball: &Ball2D) -> GameResult {
+    fn draw_text_on_ball(&self, canvas: &mut Canvas, ball: &Ball2D) -> GameResult {
         let txt_name = Text::new(TextFragment::new(format!("{}", ball.get_id())).scale(15.));
-
+        //TODO move this text to ball for performance
         let ball_pos_px = self.coord_to_px(&ball.pos);
         let txt_name_pos = [ball_pos_px.x, ball_pos_px.y];
 
@@ -803,7 +822,7 @@ impl<'a> DrawingStuff<'a> for MainContent<'a> {
             self.draw_single_ball(cur_mesh, canvas, &ball, &ball_coord_px)?;
         }
 
-        self.draw_text_on_ball(ctx, canvas, &ball)?;
+        self.draw_text_on_ball(canvas, &ball)?;
         Ok(())
     }
 
@@ -814,7 +833,7 @@ impl<'a> DrawingStuff<'a> for MainContent<'a> {
         ball: &Ref<Ball2D>,
         ball_coord_px: &Vec2D,
     ) -> Result<(), GameError> {
-        let neighbour_info = ball.get_neighbour_force_and_pos();
+        let neighbour_info = self.physics.get_neighbour_force_and_pos(ball);
         let start: Point2<f32> = ball_coord_px.clone().into();
         let max_force = neighbour_info
             .iter()
@@ -918,13 +937,13 @@ impl<'a> DrawingStuff<'a> for MainContent<'a> {
                 ctx,
                 DrawMode::stroke(1.),
                 self.coord_to_px(&ball.pos),
-                WindowDefinition::len_to_px(ball.equilibrium_radius()),
+                WindowDefinition::len_to_px(self.physics.equilibrium_of_radius(ball.radius)),
                 0.1,
                 Color::MAGENTA,
             )?;
             canvas.draw(&pt_influence, Vec2::new(0., 0.));
             //canvas.set_shader(&ggez::graphics::default_shader());
-            self.draw_text_on_ball(ctx, canvas, &ball)?;
+            self.draw_text_on_ball(canvas, &ball)?;
         }
         canvas.set_default_shader();
         Ok(())
@@ -1095,7 +1114,7 @@ impl LogStuff for MainContent<'_> {
                 self.sim.speedup,
                 self.num_balls,
                 self.sim.update_hood_cnt,
-                Ball2D::get_update_hood_call_cnt(),
+                get_update_hood_call_cnt(),
                 self.sim.max_neighbours,
                 self.sim.energy_pot + self.sim.energy_kin,
                 self.sim.temperature,
@@ -1131,7 +1150,7 @@ impl<'a> GameLogic for MainContent<'a> {
         self.v_points
             .iter()
             .map(|ball_rc| ball_rc.borrow())
-            .any(|ball| pt.is_colliding(&(*ball)))
+            .any(|ball| self.physics.is_colliding(pt, &(*ball)))
     }
 
     fn add_candidate_px(&mut self, x_px: f32, y_px: f32) -> GameResult {
@@ -1144,13 +1163,11 @@ impl<'a> GameLogic for MainContent<'a> {
         } else {
             Vec2D::new(0., 0.)
         };
-        let candidate: Ball2D<'a> = Ball2D::new_massive_with_v(
-            self.num_balls + 1,
-            ball_pos.x,
-            ball_pos.y,
+        let candidate = self.ball_factory.create_massive_with_velocity(
+            ball_pos,
             self.new_ball.get_ball_size(),
             self.new_ball.get_ball_mass(),
-            Some(ball_v),
+            ball_v,
         );
 
         if !self.is_ball_in_region(&candidate) {
@@ -1183,14 +1200,33 @@ impl<'a> GameLogic for MainContent<'a> {
                     others.retain(|rc| rc.borrow().get_id() != ball.id);
                 }
 
+                let ball_radius = { ball_rc.borrow().radius };
+
                 let mut ball = ball_rc.borrow_mut();
-                ball.update_hood(dt, ball_rc, others); // Updated to work with Rc<RefCell<Ball2D>>
+                Verlet::update_hood(
+                    &mut *ball,
+                    dt,
+                    others,
+                    self.physics.get_cutoff_distance(),
+                    self.physics.get_min_movement_for_update_hood(ball_radius),
+                );
             }
 
             //update stats
             for ball_rc in self.v_points.iter() {
+                let ball_pos = { ball_rc.borrow().pos.clone() };
                 let mut ball = ball_rc.borrow_mut(); // Mutable borrow for updating the ball
-                ball.update_closeness_stats();
+
+                ball.hood.update_closeness_stats(&ball_pos);
+
+                if ball.verbose.console {
+                    println!(
+                        "update_closeness: {} nearest/farthest: {}/{}",
+                        ball.get_name(),
+                        ball.hood.nearest,
+                        ball.hood.farthest
+                    );
+                }
             }
         }
     }
@@ -1295,8 +1331,7 @@ impl<'a> VerletIntegration for MainContent<'a> {
         //update positions
         for ball_rc in &mut self.v_points {
             let mut cur = ball_rc.borrow_mut();
-
-            cur.update_positions(dt, &bound_rect);
+            self.physics.update_positions(&mut *cur, dt, bound_rect);
         }
         self.v_points
             .iter()
@@ -1305,7 +1340,9 @@ impl<'a> VerletIntegration for MainContent<'a> {
         //update velocities and accel with new positions
         for ball_rc in &mut self.v_points {
             let mut cur = ball_rc.borrow_mut();
-            let (min_dist, cur_pot) = cur.update_accel_and_speed(dt, &bound_rect);
+            let (min_dist, cur_pot) = self
+                .physics
+                .update_accel_and_speed(&mut *cur, dt, bound_rect);
 
             //calculate properties
             if _min_dist > min_dist && min_dist > 0. {
@@ -1313,7 +1350,7 @@ impl<'a> VerletIntegration for MainContent<'a> {
                 self.sim.min_dist = _min_dist;
             }
             pot += cur_pot * 0.5; //double counts
-            _v_com.add(cur.moment());
+            _v_com += cur.moment();
             let speed_sq = cur.v.norm_sq();
             kin += speed_sq * cur.mass * 0.5;
             sum_mass += cur.mass;
@@ -1373,7 +1410,7 @@ impl<'a> EventHandler for MainContent<'a> {
     fn update(&mut self, _ctx: &mut Context) -> GameResult {
         // let mut cnt = 0;
         // let mut sum: Duration = Duration::new(0, 0);
-        let tmp_cnt = Ball2D::get_update_hood_call_cnt();
+        let tmp_cnt = get_update_hood_call_cnt();
         while _ctx.time.check_update_time(FPS_GOAL * self.sim.speedup) {
             // let frame_start = Instant::now();
             // let dur = frame_start.checked_duration_since(self.sim.time_last_frame);
@@ -1386,7 +1423,7 @@ impl<'a> EventHandler for MainContent<'a> {
             self.sim.frames_since_draw += 1;
             self.simulation_step()?;
         }
-        self.sim.update_hood_cnt = Ball2D::get_update_hood_call_cnt() - tmp_cnt;
+        self.sim.update_hood_cnt = get_update_hood_call_cnt() - tmp_cnt;
         if self.sim.pressed_key.contains(&KeyCode::Minus) {
             self.decrease_speedup();
         } else if self.sim.pressed_key.contains(&KeyCode::Equals) {
@@ -1600,7 +1637,7 @@ mod tests {
 
     #[test]
     fn test_is_ball_in_region() {
-        let main_content = MainContent::default();
+        let mut main_content = MainContent::default();
         let ball_px: Vec2D = Vec2D::new(30., 30.);
         let ball_coord = main_content.px_to_coord(ball_px.x, ball_px.y);
         println!(
@@ -1608,12 +1645,13 @@ mod tests {
             ball_coord, ball_px.x, ball_px.y
         );
         let ball_radius = WindowDefinition::px_to_len(10.);
-        let ball = Ball2D::_new_massive(1, ball_coord.x, ball_coord.y, ball_radius, 1.0);
-
+        let ball = main_content
+            .ball_factory
+            .create_basic(ball_coord, ball_radius);
         assert!(main_content.is_ball_in_region(&ball));
 
         // Move the ball outside the region
-        let invalid_ball = Ball2D::_new_massive(2, -10.0, -10.0, 5.0, 1.0);
+        let invalid_ball = main_content.ball_factory.create_basic([-10., -10.], 5.);
         assert!(!main_content.is_ball_in_region(&invalid_ball));
     }
 
@@ -1680,8 +1718,9 @@ mod tests {
             ball_coord.x + 0.5 * ball_radius,
             ball_coord.y + 0.5 * ball_radius,
         );
-        let colliding_ball =
-            Ball2D::_new_massive(2, new_ball_coord.x, new_ball_coord.y, ball_radius, 1.0);
+        let colliding_ball = main_content
+            .ball_factory
+            .create_basic(new_ball_coord.clone(), ball_radius);
 
         println!(
             "existing ball {:?} and new ball {:?} both with radius {}",
