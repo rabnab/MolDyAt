@@ -58,3 +58,25 @@ impl VerboseInfo {
         self.speed = false;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_verbose_toggles_and_lines() {
+        let mut v = VerboseInfo::default();
+        assert!(!v.lines());
+        assert!(!v.is_main());
+        v.toggle_console();
+        assert!(v.console);
+        v.toggle_main_neighbour();
+        assert!(v.is_main());
+        assert!(v.lines());
+        v.toggle_other_neighbour();
+        v.toggle_speed();
+        v.clear_all();
+        assert!(!v.console && !v.is_main());
+        assert!(!v.lines());
+    }
+}
