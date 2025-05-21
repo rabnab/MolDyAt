@@ -45,10 +45,8 @@ const CROSSHAIR_COLOR: Color = Color::WHITE;
 struct WindowDefinition {
     curs_pos: Vec2D,
     curs_pos_of_txt: Vec2D,
-    region_px_x: f32,
-    region_px_y: f32,
-    margin_px_x: f32,
-    margin_px_y: f32,
+    region_px: (f32, f32),
+    margin_px: (f32, f32),
     ball_status_text_pos: Option<[f32; 2]>,
     txt_cursor: Text,
     last_status_text: String,
@@ -61,7 +59,7 @@ impl WindowDefinition {
         let curs_pos_coord = self.px_to_coord(x, y);
 
         let curs_moved_sq = self.curs_pos.dist(&self.curs_pos_of_txt).norm_sq();
-        if curs_moved_sq > (f32::min(self.region_px_x, self.region_px_y) * 0.1) {
+        if curs_moved_sq > (f32::min(self.region_px.0, self.region_px.1) * 0.1) {
             self.curs_pos_of_txt = self.curs_pos.clone();
             self.txt_cursor = Text::new(
                 TextFragment::new(format!(
@@ -80,14 +78,15 @@ impl WindowDefinition {
         //window bottom [xy] = region_px_[xy]+2*margin_px[xy]
         //pos = px_to_len(px_pos - (region_px_[xy]+2*margin_px_[xy])*0.5)
         Vec2D::new(
-            Self::px_to_len(px_x - self.region_px_x * 0.5 - self.margin_px_x),
-            Self::px_to_len(px_y - self.region_px_y * 0.5 - self.margin_px_y),
+            Self::px_to_len(px_x - self.region_px.0 * 0.5 - self.margin_px.0),
+            -Self::px_to_len(px_y - self.region_px.1 * 0.5 - self.margin_px.1),
         )
     }
 
     fn len_to_px(coord_len: f32) -> f32 {
         coord_len / LEN_TO_PX
     }
+
     fn px_to_len(coord_px: f32) -> f32 {
         coord_px * LEN_TO_PX
     }
@@ -325,10 +324,8 @@ impl Default for WindowDefinition {
         WindowDefinition {
             curs_pos: Vec2D::new(0., 0.),
             curs_pos_of_txt: Vec2D::new(0., 0.),
-            region_px_x: 100.,
-            region_px_y: 100.,
-            margin_px_x: 10.,
-            margin_px_y: 10.,
+            region_px: (100., 100.),
+            margin_px: (10., 10.),
             ball_status_text_pos: None,
             txt_cursor: Text::new(
                 TextFragment::new(format!("x: {}, y: {} pos ({:.3},{:.3})", 0., 0., 0., 0.,))
@@ -400,10 +397,8 @@ impl<'a> MainContent<'a> {
         let physics = BallPhysics::default();
         Ok(MainContent {
             win_definition: WindowDefinition {
-                region_px_x: reg_x,
-                region_px_y: reg_y,
-                margin_px_x: MARGIN_PX_X,
-                margin_px_y: MARGIN_PX_Y,
+                region_px: (reg_x, reg_y),
+                margin_px: (MARGIN_PX_X, MARGIN_PX_Y),
                 ..Default::default()
             },
             v_points: Vec::new(),
@@ -500,10 +495,8 @@ impl<'a> MainContent<'a> {
 
     fn add_random_candidates(&mut self, count: usize) {
         let WindowDefinition {
-            margin_px_x: x_min,
-            margin_px_y: y_min,
-            region_px_x: x_range,
-            region_px_y: y_range,
+            margin_px: (x_min, y_min),
+            region_px: (x_range, y_range),
             ..
         } = self.win_definition;
 
@@ -554,11 +547,11 @@ impl<'a> MainContent<'a> {
     fn coord_to_px(&self, coord: &Vec2D) -> Vec2D {
         Vec2D::new(
             WindowDefinition::len_to_px(coord.x)
-                + self.win_definition.region_px_x * 0.5
-                + self.win_definition.margin_px_x,
+                + self.win_definition.region_px.0 * 0.5
+                + self.win_definition.margin_px.0,
             WindowDefinition::len_to_px(coord.y)
-                + self.win_definition.region_px_y * 0.5
-                + self.win_definition.margin_px_y,
+                + self.win_definition.region_px.1 * 0.5
+                + self.win_definition.margin_px.1,
         )
     }
 
@@ -664,6 +657,10 @@ impl<'a> MainContent<'a> {
         };
         val
     }
+
+    fn rect_of_tuple(top_left: (f32, f32), format: (f32, f32)) -> Rect {
+        Rect::new(top_left.0, top_left.1, format.0, format.1)
+    }
 }
 
 impl<'a> DrawingStuff<'a> for MainContent<'a> {
@@ -681,8 +678,8 @@ impl<'a> DrawingStuff<'a> for MainContent<'a> {
         }
 
         let txt_cursor_pos = [
-            self.win_definition.margin_px_x * 2. + self.win_definition.region_px_x,
-            self.win_definition.margin_px_y * 2. + self.win_definition.region_px_y,
+            self.win_definition.margin_px.0 * 2. + self.win_definition.region_px.0,
+            self.win_definition.margin_px.1 * 2. + self.win_definition.region_px.1,
         ];
         canvas.draw(
             &self.win_definition.txt_cursor,
@@ -994,12 +991,7 @@ impl<'a> DrawingStuff<'a> for MainContent<'a> {
         let rect = Mesh::new_rectangle(
             ctx,
             DrawMode::stroke(3.),
-            Rect::new(
-                self.win_definition.margin_px_x,
-                self.win_definition.margin_px_y,
-                self.win_definition.region_px_x,
-                self.win_definition.region_px_y,
-            ),
+            Self::rect_of_tuple(self.win_definition.margin_px, self.win_definition.region_px),
             Color::BLUE,
         )?;
 
@@ -1015,7 +1007,7 @@ impl<'a> DrawingStuff<'a> for MainContent<'a> {
                 if self.win_definition.ball_status_text_pos.is_none() {
                     if let Some(bounds) = self.win_definition.status_text_mesh.dimensions(ctx) {
                         let pos = [
-                            self.win_definition.margin_px_x * 2.0 + self.win_definition.region_px_x
+                            self.win_definition.margin_px.0 * 2.0 + self.win_definition.region_px.0
                                 - bounds.w,
                             0.0,
                         ];
@@ -1035,8 +1027,8 @@ impl<'a> DrawingStuff<'a> for MainContent<'a> {
     }
 
     fn resize(&mut self, width: f32, height: f32) -> Result<(), GameError> {
-        self.win_definition.region_px_x = width - 2. * self.win_definition.margin_px_x;
-        self.win_definition.region_px_y = height - 2. * self.win_definition.margin_px_y;
+        self.win_definition.region_px.0 = width - 2. * self.win_definition.margin_px.0;
+        self.win_definition.region_px.1 = height - 2. * self.win_definition.margin_px.1;
         Ok(())
     }
 }
@@ -1129,12 +1121,12 @@ impl LogStuff for MainContent<'_> {
 
 impl<'a> GameLogic for MainContent<'a> {
     fn is_ball_in_region(&self, pt: &Ball2D) -> bool {
-        let min_x = self.win_definition.margin_px_x + WindowDefinition::len_to_px(pt.radius);
+        let min_x = self.win_definition.margin_px.0 + WindowDefinition::len_to_px(pt.radius);
         let max_x =
-            min_x + self.win_definition.region_px_x - 2. * WindowDefinition::len_to_px(pt.radius);
-        let min_y = self.win_definition.margin_px_y + WindowDefinition::len_to_px(pt.radius);
+            min_x + self.win_definition.region_px.0 - 2. * WindowDefinition::len_to_px(pt.radius);
+        let min_y = self.win_definition.margin_px.1 + WindowDefinition::len_to_px(pt.radius);
         let max_y =
-            min_y + self.win_definition.region_px_y - 2. * WindowDefinition::len_to_px(pt.radius);
+            min_y + self.win_definition.region_px.1 - 2. * WindowDefinition::len_to_px(pt.radius);
 
         // Check if the point is within the region in both x and y directions
         let pos_px = self.coord_to_px(&pt.pos);
@@ -1273,16 +1265,16 @@ impl<'a> GameLogic for MainContent<'a> {
         if self.step_by_step {
             self.sim.pause = true;
         }
-        let top_left = self.px_to_coord(
-            self.win_definition.margin_px_x,
-            self.win_definition.margin_px_y,
+        let top_left_coord = self.px_to_coord(
+            self.win_definition.margin_px.0,
+            -self.win_definition.margin_px.1,
         );
 
         let bound_rect = Rect::new(
-            top_left.x,
-            top_left.y,
-            WindowDefinition::px_to_len(self.win_definition.region_px_x),
-            WindowDefinition::px_to_len(self.win_definition.region_px_y),
+            top_left_coord.x,
+            top_left_coord.y,
+            WindowDefinition::px_to_len(self.win_definition.region_px.0),
+            -WindowDefinition::px_to_len(self.win_definition.region_px.1),
         );
 
         self.sim.min_dist = 0.;
@@ -1489,13 +1481,13 @@ impl<'a> EventHandler for MainContent<'a> {
         // Calculate clamped positions
         let clamped_x = Self::clamp_to_bounds(
             x,
-            self.win_definition.margin_px_x,
-            self.win_definition.region_px_x,
+            self.win_definition.margin_px.0,
+            self.win_definition.region_px.0,
         );
         let clamped_y = Self::clamp_to_bounds(
             y,
-            self.win_definition.margin_px_y,
-            self.win_definition.region_px_y,
+            self.win_definition.margin_px.1,
+            self.win_definition.region_px.1,
         );
 
         // Update cursor position
@@ -1577,10 +1569,10 @@ mod tests {
     #[test]
     fn test_defaults() {
         let default_win = WindowDefinition::default();
-        assert_eq!(default_win.region_px_x, 100.);
-        assert_eq!(default_win.region_px_y, 100.);
-        assert_eq!(default_win.margin_px_x, 10.);
-        assert_eq!(default_win.margin_px_y, 10.);
+        assert_eq!(default_win.region_px.0, 100.);
+        assert_eq!(default_win.region_px.1, 100.);
+        assert_eq!(default_win.margin_px.0, 10.);
+        assert_eq!(default_win.margin_px.1, 10.);
 
         let default_ball_def = NewBallDef::default();
         assert_eq!(default_ball_def.get_ball_size(), MIN_BALL_SIZE);
@@ -1596,9 +1588,9 @@ mod tests {
         let mut main_content = MainContent::default();
 
         // Add a valid candidate
-        let x_px = main_content.win_definition.margin_px_x
+        let x_px = main_content.win_definition.margin_px.0
             + WindowDefinition::len_to_px(main_content.new_ball.get_ball_size() * 1.1);
-        let y_px = main_content.win_definition.margin_px_y
+        let y_px = main_content.win_definition.margin_px.1
             + WindowDefinition::len_to_px(main_content.new_ball.get_ball_size() * 1.1);
         println!(
             "test adding ball at px ({},{}) | LEN_TO_PX: {}",
@@ -1692,12 +1684,12 @@ mod tests {
         main_content.resize(new_width, new_height).unwrap();
 
         assert_eq!(
-            main_content.win_definition.region_px_x,
-            300.0 - 2.0 * main_content.win_definition.margin_px_x
+            main_content.win_definition.region_px.0,
+            300.0 - 2.0 * main_content.win_definition.margin_px.0
         );
         assert_eq!(
-            main_content.win_definition.region_px_y,
-            200.0 - 2.0 * main_content.win_definition.margin_px_y
+            main_content.win_definition.region_px.1,
+            200.0 - 2.0 * main_content.win_definition.margin_px.1
         );
     }
 
@@ -1764,12 +1756,12 @@ mod tests {
 
         println!(
             "window size: {} {} margin {} {} and region {} {}",
-            main_content.win_definition.margin_px_x * 2. + main_content.win_definition.region_px_x,
-            main_content.win_definition.margin_px_y * 2. + main_content.win_definition.region_px_y,
-            main_content.win_definition.margin_px_x,
-            main_content.win_definition.margin_px_y,
-            main_content.win_definition.region_px_x,
-            main_content.win_definition.region_px_y,
+            main_content.win_definition.margin_px.0 * 2. + main_content.win_definition.region_px.0,
+            main_content.win_definition.margin_px.1 * 2. + main_content.win_definition.region_px.1,
+            main_content.win_definition.margin_px.0,
+            main_content.win_definition.margin_px.1,
+            main_content.win_definition.region_px.0,
+            main_content.win_definition.region_px.1,
         );
         {
             let x_px = 500.;
