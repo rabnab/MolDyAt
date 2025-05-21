@@ -1,0 +1,179 @@
+use crate::frame::{GameLogic, LogStuff, MainContent, VerletIntegration};
+use crate::objects2d::Vec2D;
+use crate::objects2d::ball_impl::verlet::Verlet;
+use crate::objects2d::ball_impl::{Ball2D, BallFactory};
+use ggez::{GameError, GameResult};
+use rand::distr::Distribution;
+use rand::rng;
+use std::time::Instant;
+
+const DT_GOAL: f32 = 0.01; // 1. / (FPS_GOAL as f32);
+
+pub(crate) struct GameLogicData {
+    dt_goal: f32,
+    ball_factory: BallFactory,
+    neighbour_update_interval: usize,
+}
+
+struct Timer(Instant);
+impl Timer {
+    fn start() -> Self {
+        Self(Instant::now())
+    }
+
+    fn ms(&self) -> u128 {
+        self.0.elapsed().as_millis()
+    }
+}
+
+// fn elapsed_since(start: Instant) -> u128 {
+//     let dur = start.elapsed();
+//     let updating_ms = dur.as_millis();
+//     updating_ms
+// }
+
+impl Default for GameLogicData {
+    fn default() -> Self {
+        GameLogicData {
+            dt_goal: DT_GOAL,
+            ball_factory: BallFactory::new(),
+            neighbour_update_interval: 1,
+        }
+    }
+}
+
+impl GameLogicData {
+    pub(crate) fn get_ball_factory(&mut self) -> &mut BallFactory {
+        &mut self.ball_factory
+    }
+}
+
+impl<'a> GameLogic for MainContent<'a> {
+    fn init_game_logic() -> GameLogicData {
+        GameLogicData {
+            neighbour_update_interval: 1,
+            ..Default::default()
+        }
+    }
+
+    fn is_ball_in_region(&self, pt: &Ball2D) -> bool {
+        let world = self.get_window_definition().world_region_inset(pt.radius);
+        let pos = &pt.pos;
+
+        pos.x >= f32::min(world.x, world.x + world.w)
+            && pos.x <= f32::max(world.x, world.x + world.w)
+            && pos.y >= f32::min(world.y, world.y + world.h)
+            && pos.y <= f32::max(world.y, world.y + world.h)
+    }
+
+    fn is_ball_colliding(&self, pt: &Ball2D) -> bool {
+        self.get_ball_vec()
+            .iter()
+            .map(|ball_rc| ball_rc.borrow())
+            .any(|ball| self.physics.is_colliding(pt, &(*ball)))
+    }
+
+    fn add_candidate_px(&mut self, x_px: f32, y_px: f32) -> GameResult {
+        let ball_pos = self.get_window_definition().px_to_coord(x_px, y_px);
+
+        let ball_v = if self.new_ball.rand_speed {
+            let mut rng = rng();
+            let normal = self.calculate_normal_distribution_of_speed();
+            Vec2D::new(normal.sample(&mut rng), normal.sample(&mut rng))
+        } else {
+            Vec2D::new(0., 0.)
+        };
+        let ball_size = self.new_ball.get_ball_size();
+        let ball_mass = self.new_ball.get_ball_mass();
+
+        let candidate = self
+            .get_game_logic_data()
+            .get_ball_factory()
+            .create_massive_with_velocity(ball_pos, ball_size, ball_mass, ball_v);
+
+        if !self.is_ball_in_region(&candidate) {
+            return Err(GameError::CustomError(
+                "new ball not within region".to_string(),
+            ));
+        }
+        if self.is_ball_colliding(&candidate) {
+            return Err(GameError::CustomError(
+                "new ball colliding with existing ball".to_string(),
+            ));
+        }
+        self.add_candidate_to_vec(candidate);
+        self.sim.clear_energy();
+        Ok(())
+    }
+
+    fn collect_neighbours(&mut self, dt: f32) {
+        if self.step_count % self.get_game_logic_data().neighbour_update_interval == 0 {
+            let others_base = self.get_ball_vec().clone();
+
+            //collect neighbours
+            for ball_rc in self.get_ball_vec().iter() {
+                let mut others = others_base.clone();
+                {
+                    let ball = ball_rc.borrow();
+                    others.retain(|rc| rc.borrow().get_id() != ball.id);
+                }
+
+                let ball_radius = ball_rc.borrow().radius;
+
+                let mut ball = ball_rc.borrow_mut();
+                Verlet::update_hood(
+                    &mut *ball,
+                    dt,
+                    others,
+                    self.physics.get_cutoff_distance(),
+                    self.physics.get_min_movement_for_update_hood(ball_radius),
+                );
+            }
+
+            //update stats
+            for ball_rc in self.get_ball_vec().iter() {
+                let ball_pos = ball_rc.borrow().pos.clone();
+                let mut ball = ball_rc.borrow_mut(); // Mutable borrow for updating the ball
+                ball.hood.update_closeness_stats(&ball_pos);
+                Self::log_closeness_update(&ball);
+            }
+        }
+    }
+
+    fn simulation_step(&mut self) -> GameResult {
+        if self.sim.is_paused() {
+            return Ok(());
+        }
+        if self.any_log() {
+            Self::log_separator_line();
+        }
+        if self.step_by_step {
+            self.sim.set_pause(true);
+        }
+
+        let dt = self.get_game_logic_data().dt_goal;
+        let bound_rect = self.get_window_definition().compute_world_bounds_rect();
+
+        let start_all = Timer::start();
+        self.collect_neighbours(dt);
+        let collecting_ms = start_all.ms();
+
+        let start = Timer::start();
+        self.update_sim(dt, &bound_rect)?;
+        self.remove_invalid_balls();
+        let updating_ms = start.ms();
+
+        let start = Timer::start();
+
+        let ball_vec = self.get_ball_vec().clone();
+        self.sim.calculate_temperature(&ball_vec);
+
+        let props_ms = start.ms();
+        let all_ms = start_all.ms();
+
+        self.log_timings(collecting_ms, updating_ms, props_ms, all_ms);
+
+        self.step_count += 1;
+        Ok(())
+    }
+}

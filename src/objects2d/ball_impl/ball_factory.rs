@@ -1,7 +1,7 @@
 use crate::objects2d::ball_impl::ball_core::Ball2D;
-use crate::objects2d::ball_impl::verbose_info::VerboseInfo;
 use crate::objects2d::ball_impl::verlet::Verlet;
 use crate::objects2d::vec_2d::Vec2D;
+use crate::objects2d::verbose_info::VerboseInfo;
 
 use rand::Rng;
 use rand_distr::{Distribution, Normal};

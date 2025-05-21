@@ -1,7 +1,7 @@
-use crate::objects2d::ball_impl::verbose_info::VerboseInfo;
 use crate::objects2d::ball_impl::verlet::Verlet;
 use crate::objects2d::ball_impl::{BallId, Named};
 use crate::objects2d::vec_2d::Vec2D;
+use crate::objects2d::verbose_info::VerboseInfo;
 use ggez::graphics::{Color, Rect};
 
 pub struct Ball2D<'a> {
@@ -171,10 +171,15 @@ impl<'a> Ball2D<'a> {
         let dx = self.v.x * dt + 0.5 * self.accel.x * dt * dt;
         let dy = self.v.y * dt + 0.5 * self.accel.y * dt * dt;
 
-        let bound_min_x = bound.x + self.radius;
-        let bound_max_x = bound.x + bound.w - self.radius;
-        let bound_min_y = bound.y + self.radius;
-        let bound_max_y = bound.y + bound.h - self.radius;
+        let x0 = bound.x;
+        let x1 = bound.x + bound.w;
+        let y0 = bound.y;
+        let y1 = bound.y + bound.h;
+
+        let bound_min_x = f32::min(x0, x1) + self.radius;
+        let bound_max_x = f32::max(x0, x1) - self.radius;
+        let bound_min_y = f32::min(y0, y1) + self.radius;
+        let bound_max_y = f32::max(y0, y1) - self.radius;
         self.update_x_and_handle_left_right_boundary(dx, bound_min_x, bound_max_x);
         self.update_y_and_handle_top_bottom_boundary(dy, bound_min_y, bound_max_y);
 
@@ -218,5 +223,78 @@ impl<'a> core::fmt::Debug for Ball2D<'a> {
                              self.accel.y,
                              self.braking,
     ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_accel_with_speed_limit() {
+        let mut b = Ball2D::default();
+        b.mass = 2.0;
+        b.v = Vec2D::new(3.0, 4.0); // speed 5
+        let dt = 0.1;
+        // Case 1: limit above current speed -> no braking
+        let acc = b.accel_with_speed_limit(&Vec2D::new(2.0, 0.0), 10.0, dt);
+        assert_eq!(b.braking, false);
+        assert!((acc.x - 1.0).abs() < 1e-6 && (acc.y - 0.0).abs() < 1e-6);
+
+        // Case 2: limit below speed -> braking engaged and accel opposes v
+        let acc2 = b.accel_with_speed_limit(&Vec2D::new(0.0, 0.0), 1.0, dt);
+        assert!(b.braking);
+        // acceleration should have negative dot with velocity to reduce speed
+        let dot = acc2.x * b.v.x + acc2.y * b.v.y;
+        assert!(dot < 0.0, "accel should oppose velocity, dot={}", dot);
+    }
+
+    #[test]
+    fn test_execute_update_pos_and_bounce() {
+        let mut b = Ball2D::default();
+        b.radius = 1.0;
+        b.pos = Vec2D::new(0.0, 0.0);
+        b.v = Vec2D::new(10.0, 0.0);
+        b.set_accel(Vec2D::zero());
+        let bound = Rect {
+            x: -2.0,
+            y: -2.0,
+            w: 4.0,
+            h: 4.0,
+        }; // square from -2..2
+        // Move with dt so that we cross right boundary (max x = 2 - radius = 1)
+        b.execute_update_pos(0.2, &bound); // dx = 2.0
+        // Expect bounce: position mirrored inside and v.x flipped
+        assert!(b.pos.x <= 1.0 + 1e-6);
+        assert!(b.v.x <= 0.0);
+
+        // Now move towards bottom boundary in y
+        b.v = Vec2D::new(0.0, -10.0);
+        b.pos = Vec2D::new(0.0, 0.0);
+        b.execute_update_pos(0.2, &bound); // dy = -2.0 -> bounce at y = -1
+        assert!(b.pos.y >= -1.0 - 1e-6);
+        assert!(b.v.y >= 0.0);
+    }
+
+    #[test]
+    fn test_ball_name_and_id_and_moment_and_eq() {
+        let mut b1 = Ball2D::default();
+        b1.id = 17;
+        b1.mass = 5.0;
+        b1.radius = 4.0;
+        let mut b2 = Ball2D::default();
+        b2.id = 17; // same id -> equal
+        let mut b3 = Ball2D::default();
+        b3.id = 16; // different id -> not equal
+
+        assert_eq!(b1.get_name(), "Ball17");
+        assert_eq!(b1.get_id(), 17);
+
+        assert_eq!(b1.moment(), Vec2D::new(0.0, 0.0));
+        b1.v.x = 3.0; // 3 * mass(5) = 15
+        assert_eq!(b1.moment(), Vec2D::new(15.0, 0.0));
+
+        assert_eq!(b1, b2);
+        assert_ne!(b1, b3);
     }
 }

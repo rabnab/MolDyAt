@@ -7,7 +7,6 @@ pub use crate::objects2d::ball_impl::ball_core::Ball2D;
 mod ball_core;
 mod ball_factory;
 pub(crate) mod ball_physics;
-pub(crate) mod verbose_info;
 pub(crate) mod verlet;
 
 static mut UPDATE_HOOD_CNT: usize = 0;
@@ -39,6 +38,7 @@ pub enum BallError {
 
 // Common validation functions if needed
 #[inline]
+#[cfg(test)]
 pub(crate) fn validate_radius(radius: f32) -> BallResult<()> {
     if radius <= 0.0 {
         Err(BallError::InvalidParameter)
@@ -48,6 +48,7 @@ pub(crate) fn validate_radius(radius: f32) -> BallResult<()> {
 }
 
 #[inline]
+#[cfg(test)]
 pub(crate) fn validate_mass(mass: f32) -> BallResult<()> {
     if mass <= 0.0 {
         Err(BallError::InvalidParameter)

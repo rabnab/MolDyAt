@@ -131,8 +131,7 @@ impl BallPhysics {
 
     pub fn is_colliding(&self, this: &Ball2D, other: &Ball2D) -> bool {
         //use norm_sq to avoid sqrt in norm
-        let radius_sum_sq = (this.radius + other.radius + self.constants.lj_sig)
-            * (this.radius + other.radius + self.constants.lj_sig);
+        let radius_sum_sq = (this.radius + other.radius/*+ self.constants.lj_sig*/).powi(2);
         let res = this.pos.dist(&other.pos).norm_sq() < radius_sum_sq;
         if res {
             println!(
@@ -322,4 +321,83 @@ impl BallPhysics {
     // pub fn clear_hood(&mut self) {
     //     self.hood.neighbours.borrow_mut().clear();
     // }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn approx(a: f32, b: f32, eps: f32) -> bool {
+        (a - b).abs() <= eps * (1.0 + a.abs().max(b.abs()))
+    }
+
+    #[test]
+    fn test_lj_equilibrium() {
+        let phys = BallPhysics::default();
+        // Using default sigma=1 and eps=1 per file constants
+        let r_eq = 1.122462048309372981_f32; // 2^(1/6)
+        let pot = phys.lenard_jones_potential(r_eq);
+        assert!(
+            approx(pot, -1.0, 1e-5),
+            "potential at equilibrium should be -eps, got {}",
+            pot
+        );
+        let force = phys.lenard_jones_force_pure(r_eq);
+        assert!(
+            approx(force, 0.0, 1e-5),
+            "force at equilibrium should be 0, got {}",
+            force
+        );
+    }
+
+    #[test]
+    fn test_check_min_dist() {
+        // When actual <= 0 -> DistanceUnderflow
+        assert_eq!(
+            BallPhysics::check_min_dist(0.0, 1.0).unwrap_err(),
+            BallError::DistanceUnderflow
+        );
+        // When actual < min -> returns actual
+        let val = BallPhysics::check_min_dist(0.5, 1.0).unwrap();
+        assert!(approx(val, 0.5, 1e-6));
+        // When actual >= min -> returns min
+        let val2 = BallPhysics::check_min_dist(2.0, 1.0).unwrap();
+        assert!(approx(val2, 1.0, 1e-6));
+    }
+
+    #[test]
+    fn test_is_colliding_detection() {
+        let phys = BallPhysics::default();
+        let mut a = Ball2D::default();
+        a.radius = 4.0;
+        a.pos = Vec2D::new(2.0, 3.0);
+        let mut b = Ball2D::default();
+        b.radius = 6.0;
+        b.pos = Vec2D::new(2.0 + LJ_SIG * 0.99999, 3.0);
+        assert!(phys.is_colliding(&a, &b));
+        let mut c = Ball2D::default();
+        c.radius = 6.0;
+        c.pos = Vec2D::new(2.0, 3.0 + (a.radius + c.radius) + LJ_SIG * 1.00001);
+        assert!(!phys.is_colliding(&a, &c));
+    }
+
+    #[test]
+    fn test_lenard_jones_force_signs() {
+        let phys = BallPhysics::default();
+        let r_eq = 1.122462048309372981_f32; // 2^(1/6) * sigma with sigma=1
+        // Slightly below equilibrium -> repulsive -> positive force magnitude returned by pure
+        let f_near = phys.lenard_jones_force_pure(r_eq * 0.9);
+        // Slightly above equilibrium -> attractive -> negative force
+        let f_far = phys.lenard_jones_force_pure(r_eq * 3.0);
+        assert!(
+            f_near > 0.0,
+            "Expected repulsive (positive) force when nearer than equilibrium, got {}",
+            f_near
+        );
+        assert!(
+            f_far < 0.0,
+            "Expected attractive (negative) force when farther than equilibrium, got {}",
+            f_far
+        );
+    }
 }

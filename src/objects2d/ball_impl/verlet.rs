@@ -32,16 +32,16 @@ impl<'a> Verlet<'a> {
         Self::default()
     }
 
-    /// Creates a new Verlet integration system with custom parameters
-    #[allow(unused_variables)]
-    pub fn new_with_params(
-        interaction_radius: f32,
-        max_neighbors: usize,
-        update_frequency: usize,
-        min_movement_threshold: f32,
-    ) -> Self {
-        Verlet::default()
-    }
+    // /// Creates a new Verlet integration system with custom parameters
+    // #[allow(unused_variables)]
+    // pub fn new_with_params(
+    //     interaction_radius: f32,
+    //     max_neighbors: usize,
+    //     update_frequency: usize,
+    //     min_movement_threshold: f32,
+    // ) -> Self {
+    //     Verlet::default()
+    // }
 
     /// Retrieve the names of all valid neighbours.
     pub fn get_neighbour_names(&self) -> Vec<String> {
@@ -53,9 +53,9 @@ impl<'a> Verlet<'a> {
             .collect()
     }
 
-    fn add_neighbour_already_sure_was_no_neighbour(&self, ball_rc: Weak<RefCell<Ball2D<'a>>>) {
-        self.neighbours.borrow_mut().push(ball_rc);
-    }
+    // fn add_neighbour_already_sure_was_no_neighbour(&self, ball_rc: Weak<RefCell<Ball2D<'a>>>) {
+    //     self.neighbours.borrow_mut().push(ball_rc);
+    // }
     pub fn add_neighbour(&self, ball_rc: &Rc<RefCell<Ball2D<'a>>>) -> bool {
         let was_neighbour = self.is_a_neighbour(&ball_rc.borrow().get_name());
         if !was_neighbour {
@@ -193,5 +193,61 @@ impl<'a> core::fmt::Debug for Verlet<'a> {
             self.farthest,
             self.neighbours.borrow().len()
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_ball(id: usize, pos: Vec2D) -> Rc<RefCell<Ball2D<'static>>> {
+        let mut b = Ball2D::default();
+        b.pos = pos;
+        b.pre_update_pos = b.pos.clone();
+        b.id = id;
+        Rc::new(RefCell::new(b))
+    }
+
+    #[test]
+    fn test_add_remove_neighbour_and_query() {
+        let v = Verlet::new();
+        let a = make_ball(0, Vec2D::new(0.0, 0.0));
+        let b = make_ball(1, Vec2D::new(1.0, 0.0));
+        let was_neigh = v.add_neighbour(&b);
+        assert!(!was_neigh);
+        assert!(v.is_a_neighbour(&b.borrow().get_name()));
+        // Adding again returns true (was already neighbour)
+        assert!(v.add_neighbour(&b));
+        // Remove and ensure gone
+        let mut v_mut = v;
+        v_mut.remove(&b.borrow().get_name());
+        assert!(!v_mut.is_a_neighbour(&b.borrow().get_name()));
+        // No panic on removing non-existent
+        v_mut.remove(&a.borrow().get_name());
+    }
+
+    #[test]
+    fn test_update_closeness_stats() {
+        let mut v = Verlet::new();
+        let a = make_ball(0, Vec2D::new(0.0, 0.0));
+        let b = make_ball(1, Vec2D::new(3.0, 4.0)); // distance 5
+        v.add_neighbour(&a);
+        v.add_neighbour(&b);
+        v.update_closeness_stats(&Vec2D::new(0.0, 0.0));
+        assert!((v.nearest - 0.0).abs() < 1e-6);
+        assert!((v.farthest - 5.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_needs_update_hood_thresholds() {
+        let v = Verlet::new();
+        let mut ball = Ball2D::default();
+        ball.last_update_hood_pos = Vec2D::new(0.0, 0.0);
+        ball.pos = Vec2D::new(0.0, 0.0);
+        ball.v = Vec2D::new(1.0, 0.0);
+        // With small dt and high threshold -> false
+        assert!(!v.needs_update_hood(&ball, 0.01, 10.0));
+        // With larger dt -> true
+        assert!(v.needs_update_hood(&ball, 1.0, 0.5));
     }
 }
