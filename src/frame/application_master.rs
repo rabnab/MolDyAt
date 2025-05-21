@@ -14,6 +14,7 @@ use ggez::{Context, GameError, GameResult};
 use rand::{Rng, rng};
 use rand_distr::{Distribution, Normal};
 
+use crate::frame::window_definition::WindowDefinition;
 use crate::objects2d::ball_impl::verlet::Verlet;
 use ggez::mint::Point2;
 use std::cell::{Ref, RefCell};
@@ -31,7 +32,6 @@ const TIME_SCALE: f32 = 3.48235E-11; //=f32::sqrt(MASS_SCALE_KG/ ENERGY_SCALE_J)
 const TIME_SCALE_NS: f32 = 3.48235E-2; //=f32::sqrt(MASS_SCALE_KG/ ENERGY_SCALE_J)*LEN_SCALE_M; //0.35ns
 const KBOLTZMANN_J_P_K: f32 = 1.380649E-23;
 const TEMP_SCALE: f32 = 122.; //=ENERGY_SCALE_J / KBOLTZMANN_J_P_K; //exact 122K
-const LEN_TO_PX: f32 = 1. / 10.; // 50 px are one LEN_SCALE (SIG is about 0.5 to 1 LEN_SCALE)
 
 const MIN_BALL_SIZE: f32 = 0.15;
 const FPS_GOAL: u32 = 60;
@@ -41,56 +41,6 @@ const RADIUS_COMPARISON_EPSILON: f32 = 1e-4; // Extracted constant for the compa
 const CROSSHAIR_SIZE: f32 = 10.0;
 const LINE_THICKNESS: f32 = 2.0;
 const CROSSHAIR_COLOR: Color = Color::WHITE;
-
-struct WindowDefinition {
-    curs_pos: Vec2D,
-    curs_pos_of_txt: Vec2D,
-    region_px: (f32, f32),
-    margin_px: (f32, f32),
-    ball_status_text_pos: Option<[f32; 2]>,
-    txt_cursor: Text,
-    last_status_text: String,
-    status_text_mesh: Text,
-}
-
-impl WindowDefinition {
-    pub(crate) fn update_cursor_and_text(&mut self, x: f32, y: f32) {
-        self.curs_pos = Vec2D::new(x, y);
-        let curs_pos_coord = self.px_to_coord(x, y);
-
-        let curs_moved_sq = self.curs_pos.dist(&self.curs_pos_of_txt).norm_sq();
-        if curs_moved_sq > (f32::min(self.region_px.0, self.region_px.1) * 0.1) {
-            self.curs_pos_of_txt = self.curs_pos.clone();
-            self.txt_cursor = Text::new(
-                TextFragment::new(format!(
-                    "x: {}, y: {} pos ({:.3},{:.3})",
-                    x, y, curs_pos_coord.x, curs_pos_coord.y,
-                ))
-                .scale(20.),
-            );
-        }
-    }
-
-    fn px_to_coord(&self, px_x: f32, px_y: f32) -> Vec2D {
-        //window top left (0,0) px
-        //margin margin_px_[xy]
-        //region region_px_[xy]
-        //window bottom [xy] = region_px_[xy]+2*margin_px[xy]
-        //pos = px_to_len(px_pos - (region_px_[xy]+2*margin_px_[xy])*0.5)
-        Vec2D::new(
-            Self::px_to_len(px_x - self.region_px.0 * 0.5 - self.margin_px.0),
-            -Self::px_to_len(px_y - self.region_px.1 * 0.5 - self.margin_px.1),
-        )
-    }
-
-    fn len_to_px(coord_len: f32) -> f32 {
-        coord_len / LEN_TO_PX
-    }
-
-    fn px_to_len(coord_px: f32) -> f32 {
-        coord_px * LEN_TO_PX
-    }
-}
 
 #[derive(Default)]
 struct NewBallDef {
@@ -319,23 +269,6 @@ trait VerletIntegration {
     fn update_sim(&mut self, dt: f32, bound_rect: &Rect) -> GameResult;
 }
 
-impl Default for WindowDefinition {
-    fn default() -> WindowDefinition {
-        WindowDefinition {
-            curs_pos: Vec2D::new(0., 0.),
-            curs_pos_of_txt: Vec2D::new(0., 0.),
-            region_px: (100., 100.),
-            margin_px: (10., 10.),
-            ball_status_text_pos: None,
-            txt_cursor: Text::new(
-                TextFragment::new(format!("x: {}, y: {} pos ({:.3},{:.3})", 0., 0., 0., 0.,))
-                    .scale(20.0),
-            ),
-            status_text_mesh: Text::new(TextFragment::new("")),
-            last_status_text: "".to_string(),
-        }
-    }
-}
 impl Default for SimStats {
     fn default() -> SimStats {
         SimStats {
@@ -1594,7 +1527,9 @@ mod tests {
             + WindowDefinition::len_to_px(main_content.new_ball.get_ball_size() * 1.1);
         println!(
             "test adding ball at px ({},{}) | LEN_TO_PX: {}",
-            x_px, y_px, LEN_TO_PX
+            x_px,
+            y_px,
+            WindowDefinition::get_len_to_px()
         );
         main_content.add_candidate_px(x_px, y_px).unwrap();
 
