@@ -107,6 +107,19 @@ impl NewBallDef {
             )
             .unwrap();
 
+        // Outer stroked circle
+
+        let cutoff = 4_f32;
+        builder
+            .circle(
+                DrawMode::stroke(stroke_thickness),
+                Vec2D::new(0.0, 0.0),
+                WindowDefinition::len_to_px(ball_eq_radius + cutoff),
+                tolerance,
+                Color::from_rgb(110, 110, 110),
+            )
+            .unwrap();
+
         let ball_mesh_data = builder.build();
         Mesh::from_data(ctx, ball_mesh_data)
     }
@@ -123,8 +136,9 @@ impl NewBallDef {
     }
 
     pub(crate) fn get_ball_mass(&self) -> f32 {
-        let density = 2.;
-        1. + density * (self.get_ball_size() / MIN_BALL_SIZE - 1.).powi(2)
+        let density = 2. / 10.;
+        1. + density * (self.get_ball_size() / MIN_BALL_SIZE - 1.).powf(1.2)
+        // .powi(2)
     }
 
     pub(crate) fn next_ball_size(&mut self) {

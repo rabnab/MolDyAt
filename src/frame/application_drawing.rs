@@ -214,7 +214,9 @@ impl<'a> DrawingStuff<'a> for MainContent<'a> {
     fn draw_text_on_ball(&self, canvas: &mut Canvas, ball: &Ball2D) -> GameResult {
         let txt_name = Text::new(TextFragment::new(format!("{}", ball.get_id())).scale(15.));
         //TODO move this text to ball for performance
-        let ball_pos_px = self.get_window_definition().coord_to_px(&ball.pos);
+        let ball_pos_px = self
+            .get_window_definition()
+            .coord_to_px(&ball.get_position());
         let txt_name_pos = [ball_pos_px.x, ball_pos_px.y];
 
         canvas.draw(
@@ -243,10 +245,12 @@ impl<'a> DrawingStuff<'a> for MainContent<'a> {
         ball_cell: &Rc<RefCell<Ball2D>>,
     ) -> GameResult {
         let ball = ball_cell.borrow();
-        let ball_coord_px = self.get_window_definition().coord_to_px(&ball.pos);
+        let ball_coord_px = self
+            .get_window_definition()
+            .coord_to_px(&ball.get_position());
 
         if let Some(cur_mesh) = self.new_ball.get_mesh(ctx, ball.radius) {
-            self.draw_single_ball(cur_mesh, canvas, &ball, &ball_coord_px)?;
+            self.draw_single_ball(ctx, cur_mesh, canvas, &ball, &ball_coord_px)?;
         }
 
         self.draw_text_on_ball(canvas, &ball)?;
@@ -328,12 +332,15 @@ impl<'a> DrawingStuff<'a> for MainContent<'a> {
 
     fn draw_single_ball(
         &self,
+        ctx: &mut Context,
         pt_circle: &Mesh,
-        // std_size_px: f32,
         canvas: &mut Canvas,
         ball: &Ref<Ball2D>,
         ball_coord_px: &Vec2D,
     ) -> Result<(), GameError> {
+        // Draw the ball's trajectory tail
+        self.draw_ball_tail(ctx, canvas, ball)?;
+
         let draw_par = DrawParam::default().dest(ball_coord_px.clone());
 
         if self.sim.is_max_id(ball.get_id()) {
@@ -342,6 +349,73 @@ impl<'a> DrawingStuff<'a> for MainContent<'a> {
             draw_par.color(col);
         }
         canvas.draw(pt_circle, draw_par);
+
+        Ok(())
+    }
+
+    fn draw_ball_tail(
+        &self,
+        ctx: &mut Context,
+        canvas: &mut Canvas,
+        ball: &Ref<Ball2D>,
+    ) -> Result<(), GameError> {
+        if let Some(tail_positions) = ball.get_tail_positions() {
+            let tail_length = tail_positions.len();
+            if tail_length < 2 {
+                return Ok(());
+            }
+
+            let base_color = ball.ball_color().unwrap_or(Color::WHITE);
+            let mut mesh_builder = MeshBuilder::new();
+
+            // Draw connecting lines and dots for the tail
+            for (i, pos) in tail_positions.iter().enumerate() {
+                let pos_px = self.get_window_definition().coord_to_px(pos);
+                let alpha = (i as f32 / tail_length as f32) * 0.8; // Fade from 0 to 0.8
+                let faded_color = Color::from_rgba(
+                    (base_color.r * 255.0) as u8,
+                    (base_color.g * 255.0) as u8,
+                    (base_color.b * 255.0) as u8,
+                    (alpha * 255.0) as u8,
+                );
+
+                // Draw dot at position (3px wide)
+                mesh_builder.circle(
+                    DrawMode::fill(),
+                    Point2 {
+                        x: pos_px.x,
+                        y: pos_px.y,
+                    },
+                    1.5, // 3px diameter = 1.5px radius
+                    0.1,
+                    faded_color,
+                )?;
+
+                // Draw line to next position (1px wide)
+                if i < tail_length - 1 {
+                    let next_pos_px = self
+                        .get_window_definition()
+                        .coord_to_px(&tail_positions[i + 1]);
+                    mesh_builder.line(
+                        &[
+                            Point2 {
+                                x: pos_px.x,
+                                y: pos_px.y,
+                            },
+                            Point2 {
+                                x: next_pos_px.x,
+                                y: next_pos_px.y,
+                            },
+                        ],
+                        1.0, // 1px line thickness
+                        faded_color,
+                    )?;
+                }
+            }
+
+            let tail_mesh = Mesh::from_data(ctx, mesh_builder.build());
+            canvas.draw(&tail_mesh, DrawParam::default());
+        }
 
         Ok(())
     }
@@ -364,7 +438,8 @@ impl<'a> DrawingStuff<'a> for MainContent<'a> {
             let pt_influence = Mesh::new_circle(
                 ctx,
                 DrawMode::stroke(1.),
-                self.get_window_definition().coord_to_px(&ball.pos),
+                self.get_window_definition()
+                    .coord_to_px(&ball.get_position()),
                 WindowDefinition::len_to_px(self.physics.equilibrium_of_radius(ball.radius)),
                 0.1,
                 Color::MAGENTA,
@@ -409,7 +484,9 @@ impl<'a> DrawingStuff<'a> for MainContent<'a> {
     ) -> GameResult {
         for ball_ref in verbose_balls.iter() {
             let ball = ball_ref.borrow();
-            let ball_coord_px = self.get_window_definition().coord_to_px(&ball.pos);
+            let ball_coord_px = self
+                .get_window_definition()
+                .coord_to_px(&ball.get_position());
             self.draw_neighbour_lines(ctx, canvas, &ball, &ball_coord_px)?;
         }
         Ok(())

@@ -58,7 +58,7 @@ impl<'a> GameLogic for MainContent<'a> {
 
     fn is_ball_in_region(&self, pt: &Ball2D) -> bool {
         let world = self.get_window_definition().world_region_inset(pt.radius);
-        let pos = &pt.pos;
+        let pos = &pt.get_position();
 
         pos.x >= f32::min(world.x, world.x + world.w)
             && pos.x <= f32::max(world.x, world.x + world.w)
@@ -128,7 +128,7 @@ impl<'a> GameLogic for MainContent<'a> {
 
             //update stats
             for ball_rc in self.get_ball_vec().iter() {
-                let ball_pos = ball_rc.borrow().pos.clone();
+                let ball_pos = ball_rc.borrow().get_position().clone();
                 let mut ball = ball_rc.borrow_mut(); // Mutable borrow for updating the ball
                 ball.hood.update_closeness_stats(&ball_pos);
                 Self::log_closeness_update(&ball);

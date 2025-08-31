@@ -64,7 +64,7 @@ impl<'a> MainContent<'a> {
     pub(crate) fn remove_invalid_balls(&mut self) {
         self.v_points.retain(|cur| {
             let c = cur.borrow();
-            let keep = !c.pos.x.is_nan() && !c.pos.y.is_nan();
+            let keep = !c.get_position().x.is_nan() && !c.get_position().y.is_nan();
             if !keep {
                 println!("ball {:?} became invalid. removing", c);
             }

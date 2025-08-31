@@ -8,6 +8,8 @@ use ggez::{Context, GameError, GameResult};
 
 impl<'a> EventHandler for MainContent<'a> {
     fn update(&mut self, _ctx: &mut Context) -> GameResult {
+        self.unpause_after_resize();
+
         // let mut cnt = 0;
         // let mut sum: Duration = Duration::new(0, 0);
         let tmp_cnt = get_update_hood_call_cnt();
@@ -143,7 +145,7 @@ impl<'a> EventHandler for MainContent<'a> {
                     self.add_cursor_candidate();
                     self.sim.set_draw_cursor(false);
                 }
-                KeyCode::F5 => self.add_random_candidates(100),
+                KeyCode::F5 => self.add_random_candidates(10),
                 KeyCode::LShift => self.new_ball.rand_speed = false,
                 _ => {} // No action required for unmatched keys
             },
@@ -158,6 +160,10 @@ impl<'a> EventHandler for MainContent<'a> {
         width: f32,
         height: f32,
     ) -> Result<(), GameError> {
+        if !self.sim.is_paused() {
+            self.pause_for_resize()
+        }
+        // Resume after 300ms
         self.resize(width, height)?;
         Ok(())
     }

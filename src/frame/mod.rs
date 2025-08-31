@@ -1,7 +1,7 @@
 mod application_drawing;
 mod application_events;
 mod application_game_logic;
-mod application_log;
+pub(crate) mod application_log;
 mod application_master;
 mod application_sim_stats;
 mod new_ball_def;
@@ -53,6 +53,7 @@ pub trait DrawingStuff<'a> {
     ) -> Result<(), GameError>;
     fn draw_single_ball(
         &self,
+        ctx: &mut Context,
         circle: &Mesh,
         // scale_px: f32,
         canvas: &mut Canvas,
@@ -91,6 +92,12 @@ pub trait DrawingStuff<'a> {
     fn calculate_plot_boundary<F>(&self, initial: f32, operation: F) -> f32
     where
         F: Fn(f32, f32) -> f32;
+    fn draw_ball_tail(
+        &self,
+        ctx: &mut Context,
+        canvas: &mut Canvas,
+        ball: &Ref<Ball2D>,
+    ) -> Result<(), GameError>;
 }
 
 pub trait GameLogic {
