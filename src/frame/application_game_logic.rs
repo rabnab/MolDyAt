@@ -108,23 +108,19 @@ impl<'a> GameLogic for MainContent<'a> {
 
     fn collect_neighbours(&mut self, dt: f32) {
         if self.step_count % self.get_game_logic_data().neighbour_update_interval == 0 {
-            let others_base = self.get_ball_vec().clone();
+            let balls = self.get_ball_vec();
+            for i in 0..balls.len() {
+                let ball_radius = { balls[i].borrow().radius };
+                let mut ball = balls[i].borrow_mut();
 
-            //collect neighbours
-            for ball_rc in self.get_ball_vec().iter() {
-                let mut others = others_base.clone();
-                {
-                    let ball = ball_rc.borrow();
-                    others.retain(|rc| rc.borrow().get_id() != ball.id);
-                }
-
-                let ball_radius = ball_rc.borrow().radius;
-
-                let mut ball = ball_rc.borrow_mut();
+                let neighbours = balls
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(j, rc)| (j != i).then_some(rc));
                 Verlet::update_hood(
                     &mut *ball,
                     dt,
-                    others,
+                    neighbours,
                     self.physics.get_cutoff_distance(),
                     self.physics.get_min_movement_for_update_hood(ball_radius),
                 );

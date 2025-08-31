@@ -91,14 +91,16 @@ impl<'a> Verlet<'a> {
         min_movement_threshold * min_movement_threshold < travel_since_last_upd_sq
     }
 
-    pub fn update_hood(
+    pub fn update_hood<'b>(
         ball: &mut Ball2D<'a>,
         dt: f32,
         // self_rc: &Rc<RefCell<Ball2D<'a>>>,
-        others: Vec<Rc<RefCell<Ball2D<'a>>>>,
+        neighbours: impl IntoIterator<Item = &'b Rc<RefCell<Ball2D<'a>>>>,
         cutoff: f32,
         min_movement_threshold: f32,
-    ) {
+    ) where
+        'a: 'b,
+    {
         //let cutoff = self.radius + LJ_CUTOFF * 2. + self.v.norm() * dt;
 
         let dist_limit_by_v_sq = 0.;
@@ -109,10 +111,9 @@ impl<'a> Verlet<'a> {
         // let ball =  &mut *self_rc.borrow_mut();
         if ball.verbose.console {
             println!(
-                "update_hood: {:?} dist_lim: {}  #others: {}",
+                "update_hood: {:?} dist_lim: {} ",
                 ball,
                 f32::sqrt(dist_limit_sq),
-                others.len()
             );
         }
         ball.hood.updates_since_refresh += 1;
@@ -126,7 +127,7 @@ impl<'a> Verlet<'a> {
             UPDATE_HOOD_CNT += 1;
         }
         ball.last_update_hood_pos = ball.pos.clone();
-        for cur_rc in others.iter() {
+        for cur_rc in neighbours {
             let cur_ref = cur_rc.borrow();
 
             let dist_sq = ball.pos.dist(&cur_ref.pos).norm_sq();
