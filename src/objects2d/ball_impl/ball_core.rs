@@ -3,10 +3,15 @@ use crate::objects2d::ball_impl::{BallId, Named};
 use crate::objects2d::vec_2d::Vec2D;
 use crate::objects2d::verbose_info::VerboseInfo;
 use ggez::graphics::{Color, Rect};
+use std::collections::VecDeque;
+
+const DEFAULT_TAIL_LENGTH: usize = 100;
+
+const TAIL_RESOLUTION_DELTA_SQ: f32 = 1. * 1.; // minimum squared distance to add new tail point
 
 pub struct Ball2D<'a> {
     pub radius: f32,
-    pub pos: Vec2D,
+    pos: Vec2D,
     pub(crate) id: BallId,
     pub mass: f32,
     pub v: Vec2D,
@@ -16,34 +21,58 @@ pub struct Ball2D<'a> {
     pub pre_update_pos: Vec2D,
     pub accel: Vec2D,
     pub last_update_hood_pos: Vec2D,
+    pub tail: VecDeque<Vec2D>,
+    pub tail_length: usize,
 }
 
 impl<'a> Default for Ball2D<'a> {
     fn default() -> Ball2D<'a> {
         Ball2D {
             radius: 1.,
-            pos: Vec2D::new(0., 0.),
+            pos: Vec2D::zero(),
             id: 0,
             mass: 1.,
-            v: Vec2D::new(0., 0.),
+            v: Vec2D::zero(),
             hood: Verlet::default(),
             verbose: VerboseInfo::default(),
             braking: false,
-            pre_update_pos: Vec2D::new(0., 0.),
-            accel: Vec2D::new(0., 0.),
+            pre_update_pos: Vec2D::zero(),
+            accel: Vec2D::zero(),
             last_update_hood_pos: Vec2D::new(f32::INFINITY, f32::INFINITY),
+            tail_length: DEFAULT_TAIL_LENGTH,
+            tail: VecDeque::with_capacity(DEFAULT_TAIL_LENGTH),
         }
     }
 }
 
 impl<'a> Ball2D<'a> {
-    pub fn get_id(&self) -> usize {
+    pub fn new(id: BallId, pos: Vec2D, radius: f32) -> Ball2D<'a> {
+        let mut ball = Ball2D {
+            id,
+            pos: pos.clone(),
+            radius,
+            pre_update_pos: pos.clone(),
+            last_update_hood_pos: pos.clone(),
+            ..Ball2D::default()
+        };
+        ball.set_position(pos);
+        ball
+    }
+
+    pub fn get_id(&self) -> BallId {
         self.id
     }
 
     // Basic position and property access methods
     pub fn get_position(&self) -> &Vec2D {
         &self.pos
+    }
+
+    pub fn get_tail_positions(&self) -> Option<&VecDeque<Vec2D>> {
+        if self.tail.is_empty() {
+            return None;
+        }
+        Some(&self.tail)
     }
 
     pub fn get_velocity(&self) -> &Vec2D {
@@ -91,10 +120,12 @@ impl<'a> Ball2D<'a> {
     pub(crate) fn accel_with_speed_limit(
         &mut self,
         total_force: &Vec2D,
+        gravity: f32,
         speed_limit: f32,
         dt: f32,
     ) -> Vec2D {
-        let mut accel: Vec2D = total_force.scaled(1. / self.mass);
+        let gravi_vec = Vec2D::new(0., -gravity);
+        let mut accel: Vec2D = (total_force + gravi_vec).scaled(1. / self.mass);
 
         let speed_sq = self.v.norm_sq();
 
@@ -127,21 +158,25 @@ impl<'a> Ball2D<'a> {
         dy: f32,
         bound_min_y: f32,
         bound_max_y: f32,
-    ) {
+    ) -> (f32, f32) {
         let newy = self.pos.y + dy;
 
+        let mut res_y = newy;
+        let mut res_vy = self.v.y;
+
         if bound_max_y > newy && newy > bound_min_y {
-            self.pos.y += dy;
+            //nothing to do, inside boundary
         } else if newy <= bound_min_y {
             let overy = bound_min_y - newy;
-            self.pos.y = bound_min_y + overy;
-            self.v.y = -self.v.y;
+            res_y = bound_min_y + overy;
+            res_vy = -self.v.y;
         } else {
             // y is outside right boundary
             let overy = newy - bound_max_y;
-            self.pos.y = bound_max_y - overy;
-            self.v.y = -self.v.y;
+            res_y = bound_max_y - overy;
+            res_vy = -self.v.y;
         }
+        (res_y, res_vy)
     }
 
     fn update_x_and_handle_left_right_boundary(
@@ -149,21 +184,26 @@ impl<'a> Ball2D<'a> {
         dx: f32,
         bound_min_x: f32,
         bound_max_x: f32,
-    ) {
+    ) -> (f32, f32) {
         let newx = self.pos.x + dx;
 
+        let mut res_x = newx;
+        let mut res_vx = self.v.x;
+
         if bound_max_x > newx && newx > bound_min_x {
-            self.pos.x += dx;
+            //nothing to do, inside boundary
         } else if newx <= bound_min_x {
             let overx = bound_min_x - newx;
-            self.pos.x = bound_min_x + overx;
-            self.v.x = -self.v.x;
+            res_x = bound_min_x + overx;
+            res_vx = -self.v.x;
         } else {
             // x is outside right boundary
             let overx = newx - bound_max_x;
-            self.pos.x = bound_max_x - overx;
-            self.v.x = -self.v.x;
+            res_x = bound_max_x - overx;
+            res_vx = -self.v.x;
         }
+
+        (res_x, res_vx)
     }
 
     pub(crate) fn execute_update_pos(&mut self, dt: f32, bound: &Rect) {
@@ -180,8 +220,11 @@ impl<'a> Ball2D<'a> {
         let bound_max_x = f32::max(x0, x1) - self.radius;
         let bound_min_y = f32::min(y0, y1) + self.radius;
         let bound_max_y = f32::max(y0, y1) - self.radius;
-        self.update_x_and_handle_left_right_boundary(dx, bound_min_x, bound_max_x);
-        self.update_y_and_handle_top_bottom_boundary(dy, bound_min_y, bound_max_y);
+        let (x, vx) = self.update_x_and_handle_left_right_boundary(dx, bound_min_x, bound_max_x);
+        let (y, vy) = self.update_y_and_handle_top_bottom_boundary(dy, bound_min_y, bound_max_y);
+
+        self.set_position(Vec2D::new(x, y));
+        self.v = Vec2D::new(vx, vy);
 
         if self.verbose.console {
             println!(
@@ -189,6 +232,22 @@ impl<'a> Ball2D<'a> {
                 old_pos, self.pos, dt, self.v, self.accel
             );
         }
+    }
+
+    pub fn set_position(&mut self, new_pos: Vec2D) {
+        let end_pos = self.tail.back();
+        if end_pos.is_none() {
+            self.tail.push_back(new_pos.clone());
+        } else {
+            let dist = end_pos.unwrap().dist(&new_pos);
+            if dist.norm_sq() > TAIL_RESOLUTION_DELTA_SQ {
+                self.tail.push_back(new_pos.clone());
+            }
+        }
+        if self.tail.len() > self.tail_length {
+            self.tail.pop_front();
+        }
+        self.pos = new_pos;
     }
 
     #[cfg(test)]
@@ -237,12 +296,12 @@ mod tests {
         b.v = Vec2D::new(3.0, 4.0); // speed 5
         let dt = 0.1;
         // Case 1: limit above current speed -> no braking
-        let acc = b.accel_with_speed_limit(&Vec2D::new(2.0, 0.0), 10.0, dt);
+        let acc = b.accel_with_speed_limit(&Vec2D::new(2.0, 0.0), 0., 10.0, dt);
         assert_eq!(b.braking, false);
         assert!((acc.x - 1.0).abs() < 1e-6 && (acc.y - 0.0).abs() < 1e-6);
 
         // Case 2: limit below speed -> braking engaged and accel opposes v
-        let acc2 = b.accel_with_speed_limit(&Vec2D::new(0.0, 0.0), 1.0, dt);
+        let acc2 = b.accel_with_speed_limit(&Vec2D::new(0.0, 0.0), 0., 1.0, dt);
         assert!(b.braking);
         // acceleration should have negative dot with velocity to reduce speed
         let dot = acc2.x * b.v.x + acc2.y * b.v.y;

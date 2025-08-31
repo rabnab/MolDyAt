@@ -38,7 +38,9 @@ mod tests {
         // Ensure the added ball is in the correct position
         {
             let ball = main_content.v_points[0].borrow();
-            let ball_pos_px = main_content.win_definition.coord_to_px(&ball.pos);
+            let ball_pos_px = main_content
+                .win_definition
+                .coord_to_px(&ball.get_position());
             assert!(
                 approx_eq!(f32, ball_pos_px.x, x_px, ulps = 2),
                 "values in x are not close: {} vs {}",

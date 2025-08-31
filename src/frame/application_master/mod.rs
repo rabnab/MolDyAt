@@ -29,6 +29,8 @@ pub struct MainContent<'a> {
     pub(crate) crosshair_mesh: Option<Mesh>,
     shader: Option<Shader>,
     game_data: GameLogicData,
+    resize_resume_at: Option<std::time::Instant>,
+    was_paused_for_resize: bool,
 }
 
 // type alias to shorten signatures (optional)

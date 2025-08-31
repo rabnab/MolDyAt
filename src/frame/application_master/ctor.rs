@@ -23,6 +23,8 @@ impl<'a> Default for MainContent<'a> {
             show_ball_stats: false,
             shader: None,
             crosshair_mesh: None,
+            resize_resume_at: None,
+            was_paused_for_resize: false,
         }
     }
 }

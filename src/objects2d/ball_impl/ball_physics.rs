@@ -26,7 +26,7 @@ impl Default for PhysicsConstants {
             lj_eps: LJ_EPS,
             lj_sig: LJ_SIG,
             //gravity: 9.81,
-            gravity: 0.0,
+            gravity: 0.0, //1.0,
             damping: 1.0,
             max_force: 1000.0,
             //softening: 0.01,
@@ -129,17 +129,22 @@ impl BallPhysics {
         Ok(min_dist)
     }
 
+    pub fn distance_of_edges(a: &Ball2D, b: &Ball2D) -> f32 {
+        let center_dist = a.get_position().dist(&b.get_position()).norm();
+        center_dist - (a.radius + b.radius)
+    }
+
     pub fn is_colliding(&self, this: &Ball2D, other: &Ball2D) -> bool {
         //use norm_sq to avoid sqrt in norm
         let radius_sum_sq = (this.radius + other.radius/*+ self.constants.lj_sig*/).powi(2);
-        let res = this.pos.dist(&other.pos).norm_sq() < radius_sum_sq;
+        let res = this.get_position().dist(&other.get_position()).norm_sq() < radius_sum_sq;
         if res {
             println!(
                 "ball {} at {} is too close to {}: dist = {} sum_rad = {}",
                 this.id,
-                this.pos,
-                other.pos,
-                this.pos.dist(&other.pos).norm(),
+                this.get_position(),
+                other.get_position(),
+                this.get_position().dist(&other.get_position()).norm(),
                 this.radius + other.radius
             )
         }
@@ -148,8 +153,9 @@ impl BallPhysics {
 
     pub fn update_accel_and_speed(&self, ball: &mut Ball2D, dt: f32, bound: &Rect) -> (f32, f32) {
         let (min_dist, total_force, total_pot) = self.force(ball);
-        let speed_limit = f32::min(bound.w, bound.h) / 0.002;
-        let accel = ball.accel_with_speed_limit(&total_force, speed_limit, dt);
+        let speed_limit = f32::min(bound.w, bound.h) * 0.2;
+        let accel =
+            ball.accel_with_speed_limit(&total_force, self.constants.gravity, speed_limit, dt);
         ball.v.x = ball.v.x + 0.5 * (accel.x + ball.accel.x) * dt;
         ball.v.y = ball.v.y + 0.5 * (accel.y + ball.accel.y) * dt;
 
@@ -215,7 +221,7 @@ impl BallPhysics {
                 ball.get_name(),
                 dt,
                 int_steps,
-                ball.pos,
+                ball.get_position(),
                 ball.v
             );
         }
@@ -224,7 +230,7 @@ impl BallPhysics {
     }
 
     pub fn get_neighbour_force_and_pos(&self, ball: &Ball2D) -> Vec<(Vec2D, f32)> {
-        let ball_pos = ball.pos.clone();
+        let ball_pos = ball.get_position().clone();
         let ball_radius = ball.radius;
 
         ball.hood
@@ -235,9 +241,9 @@ impl BallPhysics {
             .map(|rcrefcell| {
                 let other = rcrefcell.borrow();
                 (
-                    other.pos.clone(),
+                    other.get_position().clone(),
                     self.lenard_jones_force(
-                        ball_pos.dist(&other.pos).norm(),
+                        ball_pos.dist(&other.get_position()).norm(),
                         ball_radius + other.radius,
                         other.get_id(),
                     ),
@@ -258,59 +264,60 @@ impl BallPhysics {
             if let Some(b_rc) = ref_b.upgrade() {
                 //from other_ball to this_ball
                 let b = b_rc.borrow();
-                let dist_vec = b.pre_update_pos.dist(&ball.pos);
-                let dist = dist_vec.norm();
+                let dist_vec = b.pre_update_pos.dist(&ball.get_position());
+                let center_dist = dist_vec.norm();
                 let radius_sum = b.radius + ball.radius;
+                let edge_dist = center_dist - radius_sum;
                 /*min_dist = match Ball2D::check_min_dist(dist - radius_sum*0.9, min_dist) {
                     Err(BallError::DistanceUnderflow) | Err(BallError::LessThanTwoBalls) => return(0., Vec2D::new(0.,0.), 0.),
                     Ok(dist_result) => dist_result,
                 };*/
 
-                match Self::check_min_dist(dist - radius_sum, min_dist) {
+                match Self::check_min_dist(center_dist - radius_sum, min_dist) {
                     Ok(min_dist_cur) => {
                         min_dist = min_dist_cur;
-                        let lj_force = self.lenard_jones_force(dist, radius_sum, ball.id);
-                        let force_to_dist_val = lj_force / dist;
+                        let lj_force = self.lenard_jones_force(center_dist, radius_sum, ball.id);
+                        let force_to_dist_val = lj_force / center_dist;
                         let local_force = Vec2D::new(
                             dist_vec.x * force_to_dist_val,
                             dist_vec.y * force_to_dist_val,
                         );
 
-                        if ball.verbose.console {
+                        if ball.verbose.console || edge_dist < 0. {
                             println!(
                                 "\t\t {}--force: {} ({},{}) at dist: {}",
                                 b.get_name(),
                                 local_force.norm(),
                                 local_force.x,
                                 local_force.y,
-                                dist
+                                edge_dist
                             );
                         }
 
                         force += local_force;
-                        total_pot += self.lenard_jones_potential(dist - radius_sum);
+                        total_pot += self.lenard_jones_potential(center_dist - radius_sum);
                     }
                     _ => {
                         min_dist = 0.;
                         //maybe use some max_force to repell
                         let lj_force = -100.;
-                        let force_to_dist_val = lj_force / dist;
+                        let force_to_dist_val = lj_force / center_dist;
                         let local_force = Vec2D::new(
                             dist_vec.x * force_to_dist_val,
                             dist_vec.y * force_to_dist_val,
                         );
 
-                        if ball.verbose.console {
+                        if ball.verbose.console || edge_dist < 0. {
                             println!(
                                 "\t\t ball {}--force(max): {:?} at dist: {}",
                                 b.get_name(),
                                 local_force,
-                                dist
+                                edge_dist
                             );
                         }
 
                         force += local_force;
-                        total_pot += self.lenard_jones_potential(dist - radius_sum);
+                        total_pot += self.lenard_jones_potential(center_dist - radius_sum);
                     }
                 };
             }
@@ -368,16 +375,17 @@ mod tests {
     #[test]
     fn test_is_colliding_detection() {
         let phys = BallPhysics::default();
-        let mut a = Ball2D::default();
-        a.radius = 4.0;
-        a.pos = Vec2D::new(2.0, 3.0);
-        let mut b = Ball2D::default();
-        b.radius = 6.0;
-        b.pos = Vec2D::new(2.0 + LJ_SIG * 0.99999, 3.0);
+        let a = Ball2D::new(1, Vec2D::new(2.0, 3.0), 4.0);
+
+        let b_pos = Vec2D::new(2.0 + LJ_SIG * 0.99999, 3.0);
+        let b = Ball2D::new(2, b_pos, 6.0);
+
         assert!(phys.is_colliding(&a, &b));
-        let mut c = Ball2D::default();
-        c.radius = 6.0;
-        c.pos = Vec2D::new(2.0, 3.0 + (a.radius + c.radius) + LJ_SIG * 1.00001);
+
+        let c_radius = 6.0;
+        let c_pos = Vec2D::new(2.0, 3.0 + (a.radius + c_radius) + LJ_SIG * 1.00001);
+        let c = Ball2D::new(2, c_pos, c_radius);
+
         assert!(!phys.is_colliding(&a, &c));
     }
 

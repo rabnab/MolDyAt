@@ -1,7 +1,5 @@
 use crate::objects2d::ball_impl::ball_core::Ball2D;
-use crate::objects2d::ball_impl::verlet::Verlet;
 use crate::objects2d::vec_2d::Vec2D;
-use crate::objects2d::verbose_info::VerboseInfo;
 
 use rand::Rng;
 use rand_distr::{Distribution, Normal};
@@ -11,9 +9,13 @@ pub struct BallFactory {
     next_id: usize,
 }
 
+const FIRST_BALL_ID: usize = 1;
+
 impl Default for BallFactory {
     fn default() -> Self {
-        BallFactory { next_id: 0 }
+        BallFactory {
+            next_id: FIRST_BALL_ID,
+        }
     }
 }
 
@@ -26,19 +28,8 @@ impl BallFactory {
     pub fn create_basic<'a>(&mut self, pos: impl Into<Vec2D>, radius: f32) -> Ball2D<'a> {
         let pos_vec = pos.into();
 
-        let ball = Ball2D {
-            id: self.next_id,
-            radius,
-            mass: 1.0,
-            v: Vec2D::zero(),
-            hood: Verlet::new(),
-            verbose: VerboseInfo::default(),
-            braking: false,
-            pre_update_pos: pos_vec.clone(),
-            accel: Vec2D::zero(),
-            last_update_hood_pos: pos_vec.clone(),
-            pos: pos_vec,
-        };
+        let ball = Ball2D::new(self.next_id, pos_vec.clone(), radius);
+
         self.next_id += 1;
         ball
     }
@@ -159,7 +150,7 @@ impl BallFactory {
 
     /// Resets the ID counter - useful for testing or when creating new simulation
     pub fn reset_id_counter(&mut self) {
-        self.next_id = 0;
+        self.next_id = FIRST_BALL_ID;
     }
 
     /// Get the next available ID without incrementing the counter
@@ -178,7 +169,7 @@ mod tests {
         let pos = Vec2D::new(1.0, 2.0);
         let ball = factory.create_basic(pos.clone(), 1.0);
 
-        assert_eq!(ball.get_id(), 0);
+        assert_eq!(ball.get_id(), 1);
         assert_eq!(*ball.get_position(), pos);
         assert_eq!(ball.get_radius(), 1.0);
         assert_eq!(ball.get_mass(), 1.0);
@@ -192,7 +183,7 @@ mod tests {
         let velocity = Vec2D::new(3.0, 4.0);
         let ball = factory.create_massive_with_velocity(pos.clone(), 2.0, 5.0, velocity.clone());
 
-        assert_eq!(ball.get_id(), 0);
+        assert_eq!(ball.get_id(), 1);
         assert_eq!(*ball.get_position(), pos);
         assert_eq!(ball.get_radius(), 2.0);
         assert_eq!(ball.get_mass(), 5.0);
