@@ -7,6 +7,7 @@ use crate::frame::application_game_logic::GameLogicData;
 use crate::frame::application_sim_stats::SimStats;
 use crate::frame::new_ball_def::NewBallDef;
 use crate::frame::window_definition::WindowDefinition;
+use crate::objects2d::ball_cell::cell_grid::CellGrid;
 use crate::objects2d::ball_impl::{Ball2D, BallPhysics};
 use crate::objects2d::{Vec2D, VerboseInfoMode};
 use ggez::graphics::{Mesh, Shader};
@@ -20,6 +21,7 @@ pub struct MainContent<'a> {
     pub(crate) sim: SimStats,
     pub(crate) num_balls: usize, // consider removing later
     v_points: Vec<BallCell<'a>>,
+    pub(crate) cell_grid: CellGrid<'a>,
     pub(crate) real_data: bool,
     pub(crate) step_by_step: bool,
     pub(crate) show_timings: bool,

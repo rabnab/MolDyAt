@@ -22,6 +22,14 @@ impl MainContent<'_> {
                 }
                 self.resize_resume_at = None;
                 self.was_paused_for_resize = false;
+
+                let nu_rect = self.get_window_definition().compute_world_bounds_rect();
+                let nu_grid  = CellGrid::resize(&mut self.cell_grid,
+                                                nu_rect,
+                                                self.physics.get_cutoff_distance(),
+                );
+                self.cell_grid = nu_grid;
+
             }
         }
     }

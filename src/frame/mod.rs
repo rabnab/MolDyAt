@@ -104,7 +104,7 @@ pub trait GameLogic {
     fn is_ball_in_region(&self, pt: &Ball2D) -> bool;
     fn is_ball_colliding(&self, pt: &Ball2D) -> bool;
     fn add_candidate_px(&mut self, x_px: f32, y_px: f32) -> GameResult;
-    fn collect_neighbours(&mut self, dt: f32);
+    fn collect_neighbours_by_cell(&mut self, dt: f32);
     fn simulation_step(&mut self) -> GameResult;
     fn init_game_logic() -> GameLogicData;
 }

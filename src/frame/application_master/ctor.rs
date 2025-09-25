@@ -25,6 +25,7 @@ impl<'a> Default for MainContent<'a> {
             crosshair_mesh: None,
             resize_resume_at: None,
             was_paused_for_resize: false,
+            cell_grid: CellGrid::default(),
         }
     }
 }
@@ -37,12 +38,21 @@ impl<'a> MainContent<'a> {
         shader_in: Option<Shader>,
     ) -> GameResult<Self> {
         let physics = BallPhysics::default();
+        let cutoff = physics.get_cutoff_distance();
+
+        let win_definition = WindowDefinition {
+            region_px: (reg_x, reg_y),
+            margin_px: (super::MARGIN_PX_X, super::MARGIN_PX_Y),
+            ..Default::default()
+        };
+        let world_rect = win_definition.compute_world_bounds_rect();
+        let cell_grid = CellGrid::new(
+            world_rect,
+            cutoff,
+        );
+
         Ok(Self {
-            win_definition: WindowDefinition {
-                region_px: (reg_x, reg_y),
-                margin_px: (super::MARGIN_PX_X, super::MARGIN_PX_Y),
-                ..Default::default()
-            },
+            win_definition,
             v_points: Vec::new(),
             shader: shader_in,
             new_ball: if let Some(the_ctx) = ctx {
@@ -56,6 +66,7 @@ impl<'a> MainContent<'a> {
                 None
             },
             physics,
+            cell_grid,
             ..Default::default()
         })
     }
