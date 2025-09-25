@@ -106,30 +106,69 @@ impl<'a> GameLogic for MainContent<'a> {
         Ok(())
     }
 
-    fn collect_neighbours(&mut self, dt: f32) {
-        if self.step_count % self.get_game_logic_data().neighbour_update_interval == 0 {
-            let balls = self.get_ball_vec();
-            for i in 0..balls.len() {
-                let ball_radius = { balls[i].borrow().radius };
-                let mut ball = balls[i].borrow_mut();
+    // fn collect_neighbours(&mut self, dt: f32) {
+    //     if self.step_count % self.get_game_logic_data().neighbour_update_interval == 0 {
+    //         let balls = self.get_ball_vec();
+    //         for i in 0..balls.len() {
+    //             let ball_radius = { balls[i].borrow().radius };
+    //             let mut ball = balls[i].borrow_mut();
+    //
+    //             let neighbours = balls
+    //                 .iter()
+    //                 .enumerate()
+    //                 .filter_map(|(j, rc)| (j != i).then_some(rc));
+    //             Verlet::update_hood(
+    //                 &mut *ball,
+    //                 dt,
+    //                 neighbours,
+    //                 self.physics.get_cutoff_distance(),
+    //                 self.physics.get_min_movement_for_update_hood(ball_radius),
+    //             );
+    //         }
+    //
+    //         // Update stats
+    //         for ball_rc in self.get_ball_vec().iter() {
+    //             let ball_pos = ball_rc.borrow().get_position().clone();
+    //             let mut ball = ball_rc.borrow_mut();
+    //             ball.hood.update_closeness_stats(&ball_pos);
+    //             Self::log_closeness_update(&ball);
+    //         }
+    //     }
+    // }
 
-                let neighbours = balls
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(j, rc)| (j != i).then_some(rc));
-                Verlet::update_hood(
-                    &mut *ball,
-                    dt,
-                    neighbours,
-                    self.physics.get_cutoff_distance(),
-                    self.physics.get_min_movement_for_update_hood(ball_radius),
-                );
+    fn collect_neighbours_by_cell(&mut self, dt: f32) {
+        if self.step_count % self.get_game_logic_data().neighbour_update_interval == 0 {
+            let (rows, cols) = self.cell_grid.get_grid_size();
+
+            for row in 0..rows {
+                for col in 0..cols {
+                    if let Some(cell) = self.cell_grid.get_cell(row, col) {
+                        let neighbor_balls = self.cell_grid.get_balls_in_neighborhood(row, col);
+
+                        for ball_rc in &cell.balls {
+                            let ball_radius = { ball_rc.borrow().radius };
+                            let mut ball = ball_rc.borrow_mut();
+
+                            let neighbors = neighbor_balls
+                                .iter()
+                                .filter(|neighbor| !std::ptr::eq(neighbor.as_ptr(), ball_rc.as_ptr()));
+
+                            Verlet::update_hood(
+                                &mut *ball,
+                                dt,
+                                neighbors,
+                                self.physics.get_cutoff_distance(),
+                                self.physics.get_min_movement_for_update_hood(ball_radius),
+                            );
+                        }
+                    }
+                }
             }
 
-            //update stats
+            // Update stats
             for ball_rc in self.get_ball_vec().iter() {
                 let ball_pos = ball_rc.borrow().get_position().clone();
-                let mut ball = ball_rc.borrow_mut(); // Mutable borrow for updating the ball
+                let mut ball = ball_rc.borrow_mut();
                 ball.hood.update_closeness_stats(&ball_pos);
                 Self::log_closeness_update(&ball);
             }
@@ -151,11 +190,34 @@ impl<'a> GameLogic for MainContent<'a> {
         let bound_rect = self.get_window_definition().compute_world_bounds_rect();
 
         let start_all = Timer::start();
-        self.collect_neighbours(dt);
+        self.collect_neighbours_by_cell(dt);
         let collecting_ms = start_all.ms();
 
         let start = Timer::start();
+
+        // Store old positions before update
+        let old_positions: Vec<_> = self.get_ball_vec()
+            .iter()
+            .map(|ball| ball.borrow().get_position().clone())
+            .collect();
+
         self.update_sim(dt, &bound_rect)?;
+
+        // Update cell grid with new positions
+        // Update cell grid with new positions
+        let updates: Vec<_> = self.get_ball_vec()
+            .iter()
+            .enumerate()
+            .map(|(i, ball_rc)| {
+                let new_pos = ball_rc.borrow().get_position().clone();
+                (ball_rc.clone(), old_positions[i].clone(), new_pos)
+            })
+            .collect();
+
+        for (ball_rc, old_pos, new_pos) in updates {
+            self.cell_grid.move_ball(ball_rc, &old_pos, &new_pos);
+        }
+
         self.remove_invalid_balls();
         let updating_ms = start.ms();
 

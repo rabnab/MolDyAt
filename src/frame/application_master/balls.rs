@@ -5,11 +5,14 @@ use rand_distr::{Distribution, Normal};
 
 impl<'a> MainContent<'a> {
     pub fn add_candidate_to_vec(&mut self, candidate: Ball2D<'a>) {
-        self.v_points.push(Rc::new(RefCell::new(candidate)));
+        let ball_rc = Rc::new(RefCell::new(candidate));
+        self.cell_grid.add_ball(ball_rc.clone());
+        self.v_points.push(ball_rc);
         self.num_balls = self.v_points.len();
     }
     pub(crate) fn clear_points(&mut self) {
         self.v_points.clear();
+        self.cell_grid.clear_all_cells();
         self.num_balls = 0;
     }
     pub(crate) fn get_number_of_balls(&self) -> usize {
@@ -62,14 +65,25 @@ impl<'a> MainContent<'a> {
         Normal::new(0., f32::max(0.3, sig)).expect("Invalid distribution parameters")
     }
     pub(crate) fn remove_invalid_balls(&mut self) {
-        self.v_points.retain(|cur| {
-            let c = cur.borrow();
-            let keep = !c.get_position().x.is_nan() && !c.get_position().y.is_nan();
+        let mut valid_balls = Vec::new();
+        self.cell_grid.clear_all_cells();
+        
+        for ball_rc in &self.v_points {
+            let ball = ball_rc.borrow();
+            let keep = !ball.get_position().x.is_nan() && !ball.get_position().y.is_nan();
             if !keep {
-                println!("ball {:?} became invalid. removing", c);
+                println!("ball {:?} became invalid. removing", ball);
+            } else {
+                valid_balls.push(ball_rc.clone());
             }
-            keep
-        });
+        }
+        
+        // Re-add valid balls to grid
+        for ball_rc in &valid_balls {
+            self.cell_grid.add_ball(ball_rc.clone());
+        }
+        
+        self.v_points = valid_balls;
         self.num_balls = self.v_points.len();
     }
 }

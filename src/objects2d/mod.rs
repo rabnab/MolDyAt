@@ -1,3 +1,4 @@
+pub(crate) mod ball_cell;
 pub(crate) mod ball_impl;
 mod vec_2d;
 pub(crate) mod verbose_info;
