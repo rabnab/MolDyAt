@@ -259,7 +259,7 @@ impl SimStats {
             let v_rel_y = v_abs.y - self.v_com.y;
             sum_rel_kin_doubled += cur.mass * (v_rel_x * v_rel_x + v_rel_y * v_rel_y);
 
-            let cur_num_neighbour = cur.hood.get_neighbour_names().len();
+            let cur_num_neighbour = cur.hood.get_number_of_neighbors();
             max_neighbours = max_neighbours.max(cur_num_neighbour);
         }
         self.max_neighbours = max_neighbours;

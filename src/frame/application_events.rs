@@ -7,13 +7,13 @@ use ggez::input::keyboard::{KeyCode, KeyInput};
 use ggez::{Context, GameError, GameResult};
 
 impl<'a> EventHandler for MainContent<'a> {
-    fn update(&mut self, _ctx: &mut Context) -> GameResult {
-        self.unpause_after_resize();
+    fn update(&mut self, ctx: &mut Context) -> GameResult {
+        self.unpause_after_resize(Some(ctx));
 
         // let mut cnt = 0;
         // let mut sum: Duration = Duration::new(0, 0);
         let tmp_cnt = get_update_hood_call_cnt();
-        while _ctx
+        while ctx
             .time
             .check_update_time(crate::frame::application_master::FPS_GOAL * self.sim.get_speedup())
         {
@@ -47,7 +47,7 @@ impl<'a> EventHandler for MainContent<'a> {
         // println!("{} draw", self.sim.time);
         let mut canvas = Canvas::from_frame(ctx, Color::from_rgb(0, 0, 0));
         self.draw_balls(ctx, &mut canvas, self.get_ball_vec())?;
-        self.draw_cursor(ctx, &mut canvas)?;
+        self.draw_cursor(&mut canvas)?;
         self.draw_frame(ctx, &mut canvas, self.get_number_of_balls())?;
         self.draw_plot(ctx, &mut canvas)?;
         canvas.finish(ctx)?;

@@ -13,7 +13,6 @@ use ggez::{Context, GameError, GameResult};
 use std::cell::{Ref, RefCell};
 use std::cmp::PartialEq;
 use std::rc::Rc;
-use crate::objects2d::ball_cell::cell_grid::CellGrid;
 
 const SHOW_FORCE: bool = false;
 const CROSSHAIR_SIZE: f32 = 10.0;
@@ -76,10 +75,10 @@ impl<'a> MainContent<'a> {
 }
 
 impl<'a> DrawingStuff<'a> for MainContent<'a> {
-    fn draw_cursor(&self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult {
+    fn draw_cursor(&self, canvas: &mut Canvas) -> GameResult {
         let win_def = self.get_window_definition();
         if self.sim.draw_cursor() {
-            let ball_mesh = self.new_ball.get_mesh(ctx, self.new_ball.get_ball_size());
+            let ball_mesh = self.new_ball.get_mesh(self.new_ball.get_ball_size());
             canvas.draw(
                 ball_mesh.unwrap(),
                 DrawParam::default()
@@ -229,19 +228,17 @@ impl<'a> DrawingStuff<'a> for MainContent<'a> {
 
     fn draw_simple_balls(
         &self,
-        ctx: &mut Context,
         canvas: &mut Canvas,
         balls: &Vec<Rc<RefCell<Ball2D>>>,
     ) -> GameResult {
         for ball_cell in balls {
-            self.draw_ball_by_mesh(ctx, canvas, ball_cell)?;
+            self.draw_ball_by_mesh(canvas, ball_cell)?;
         }
         Ok(())
     }
 
     fn draw_ball_by_mesh(
         &self,
-        ctx: &mut Context,
         canvas: &mut Canvas,
         ball_cell: &Rc<RefCell<Ball2D>>,
     ) -> GameResult {
@@ -250,8 +247,8 @@ impl<'a> DrawingStuff<'a> for MainContent<'a> {
             .get_window_definition()
             .coord_to_px(&ball.get_position());
 
-        if let Some(cur_mesh) = self.new_ball.get_mesh(ctx, ball.radius) {
-            self.draw_single_ball(ctx, cur_mesh, canvas, &ball, &ball_coord_px)?;
+        if let Some(cur_mesh) = self.new_ball.get_mesh(ball.radius) {
+            self.draw_single_ball(cur_mesh, canvas, &ball, &ball_coord_px)?;
         }
 
         self.draw_text_on_ball(canvas, &ball)?;
@@ -333,14 +330,12 @@ impl<'a> DrawingStuff<'a> for MainContent<'a> {
 
     fn draw_single_ball(
         &self,
-        ctx: &mut Context,
         pt_circle: &Mesh,
         canvas: &mut Canvas,
         ball: &Ref<Ball2D>,
         ball_coord_px: &Vec2D,
     ) -> Result<(), GameError> {
         // Draw the ball's trajectory tail
-        self.draw_ball_tail(ctx, canvas, ball)?;
 
         let draw_par = DrawParam::default().dest(ball_coord_px.clone());
 
@@ -354,70 +349,29 @@ impl<'a> DrawingStuff<'a> for MainContent<'a> {
         Ok(())
     }
 
-    fn draw_ball_tail(
+    fn draw_all_ball_tails(
         &self,
         ctx: &mut Context,
         canvas: &mut Canvas,
-        ball: &Ref<Ball2D>,
+        balls: &Vec<Rc<RefCell<Ball2D>>>,
     ) -> Result<(), GameError> {
-        if let Some(tail_positions) = ball.get_tail_positions() {
-            let tail_length = tail_positions.len();
-            if tail_length < 2 {
-                return Ok(());
-            }
+        let mut mesh_builder = MeshBuilder::new();
+        let to_screen_coords =
+            |pos: &Vec2D| -> Point2<f32> { self.get_window_definition().coord_to_px(pos).into() };
 
-            let base_color = ball.ball_color().unwrap_or(Color::WHITE);
-            let mut mesh_builder = MeshBuilder::new();
-
-            // Draw connecting lines and dots for the tail
-            for (i, pos) in tail_positions.iter().enumerate() {
-                let pos_px = self.get_window_definition().coord_to_px(pos);
-                let alpha = (i as f32 / tail_length as f32) * 0.8; // Fade from 0 to 0.8
-                let faded_color = Color::from_rgba(
-                    (base_color.r * 255.0) as u8,
-                    (base_color.g * 255.0) as u8,
-                    (base_color.b * 255.0) as u8,
-                    (alpha * 255.0) as u8,
-                );
-
-                // Draw dot at position (3px wide)
-                mesh_builder.circle(
-                    DrawMode::fill(),
-                    Point2 {
-                        x: pos_px.x,
-                        y: pos_px.y,
-                    },
-                    1.5, // 3px diameter = 1.5px radius
-                    0.1,
-                    faded_color,
-                )?;
-
-                // Draw line to next position (1px wide)
-                if i < tail_length - 1 {
-                    let next_pos_px = self
-                        .get_window_definition()
-                        .coord_to_px(&tail_positions[i + 1]);
-                    mesh_builder.line(
-                        &[
-                            Point2 {
-                                x: pos_px.x,
-                                y: pos_px.y,
-                            },
-                            Point2 {
-                                x: next_pos_px.x,
-                                y: next_pos_px.y,
-                            },
-                        ],
-                        1.0, // 1px line thickness
-                        faded_color,
-                    )?;
+        for ball_ref in balls {
+            let ball = ball_ref.borrow();
+            if let Some(tail_positions) = ball.get_tail_positions() {
+                let points: Vec<Point2<f32>> =
+                    tail_positions.iter().map(to_screen_coords).collect();
+                if points.len() > 1 {
+                    mesh_builder.polyline(DrawMode::stroke(1.0), &points, Color::WHITE)?;
                 }
             }
-
-            let tail_mesh = Mesh::from_data(ctx, mesh_builder.build());
-            canvas.draw(&tail_mesh, DrawParam::default());
         }
 
+        let tail_mesh = Mesh::from_data(ctx, mesh_builder.build());
+        canvas.draw(&tail_mesh, DrawParam::default());
         Ok(())
     }
 
@@ -461,7 +415,10 @@ impl<'a> DrawingStuff<'a> for MainContent<'a> {
     ) -> GameResult {
         match &self.get_shader() {
             Some(shader) => self.draw_opengl_balls(ctx, canvas, shader, balls)?,
-            None => self.draw_simple_balls(ctx, canvas, balls)?,
+            None => {
+                self.draw_all_ball_tails(ctx, canvas, balls)?;
+                self.draw_simple_balls(canvas, balls)?;
+            }
         }
 
         let verbose_balls = Self::get_verbose_balls(balls);
@@ -507,6 +464,9 @@ impl<'a> DrawingStuff<'a> for MainContent<'a> {
         canvas: &mut Canvas,
         num_balls: usize,
     ) -> GameResult {
+        // Draw cell grid background
+        self.draw_cell_grid_background(ctx, canvas)?;
+
         let win_def = self.get_window_definition();
         let rect = Mesh::new_rectangle(
             ctx,
@@ -529,36 +489,6 @@ impl<'a> DrawingStuff<'a> for MainContent<'a> {
             canvas.draw(text_to_draw.0, text_to_draw.1);
         }
 
-        // if self.show_ball_stats {
-        //   let fps = ctx.time.fps();
-        //   let new_txt = self.status_text(fps as u32, num_balls);
-        //   if new_txt != new_status_text {
-        //     new_status_text = new_txt.clone();
-        //     new_status_text_mesh =
-        //         Text::new(TextFragment::new(new_txt).scale(30.));
-        //
-        //     if win_def.ball_status_text_pos.is_none() {
-        //       if let Some(bounds) = new_status_text_mesh.dimensions(ctx) {
-        //         let pos = [
-        //           win_def.margin_px.0 * 2.0 + win_def.region_px.0
-        //               - bounds.w,
-        //           0.0,
-        //         ];
-        //         new_status_text_pos = Some(pos);
-        //       }
-        //     }
-        //   }
-        //   let text_pos = win_def.ball_status_text_pos.unwrap_or([0., 0.]);
-        //   canvas.draw(
-        //     &win_def.status_text_mesh,
-        //     DrawParam::default().dest(text_pos),
-        //   );
-        // } else {
-        //   new_status_text = "".to_string();
-        // }
-        // win_def.last_status_text = new_status_text;
-        // win_def.status_text_mesh = new_status_text_mesh;
-        // win_def.ball_status_text_pos = new_status_text_pos;
         Ok(())
     }
 
@@ -566,6 +496,35 @@ impl<'a> DrawingStuff<'a> for MainContent<'a> {
         let win_def = self.mut_window_definition();
         win_def.region_px.0 = width - 2. * win_def.margin_px.0;
         win_def.region_px.1 = height - 2. * win_def.margin_px.1;
+        Ok(())
+    }
+}
+
+impl<'a> MainContent<'a> {
+    /// Draws the cell grid as faint colored rectangles in the background.
+    fn draw_cell_grid_background(&self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult {
+        let grid = &self.cell_grid;
+        let (rows, cols) = grid.get_grid_size();
+
+        let win_def = self.get_window_definition();
+        for row in 0..rows {
+            for col in 0..cols {
+                if let Some(cur_cell) = grid.get_cell(row, col) {
+                    cur_cell.get_rect_mesh().map(|mesh| {
+                        let scaling_vec = Vec2::new(
+                            WindowDefinition::len_to_px(1.),
+                            WindowDefinition::len_to_px(1.),
+                        );
+                        let scale_and_pos = DrawParam::default()
+                            .dest(win_def.coord_to_px(&cur_cell.get_top_left()))
+                            .scale(scaling_vec);
+
+                        canvas.draw(mesh, scale_and_pos);
+                    });
+                }
+            }
+        }
+
         Ok(())
     }
 }

@@ -39,7 +39,7 @@ impl Default for NewBallDef {
 }
 
 impl NewBallDef {
-    pub(crate) fn get_mesh(&self, _ctx: &Context, ball_radius: f32) -> Option<&Mesh> {
+    pub(crate) fn get_mesh(&self, ball_radius: f32) -> Option<&Mesh> {
         let idx = self.find_ball_index_by_radius(ball_radius)?;
         self.ball_mesh.get(idx)
     }

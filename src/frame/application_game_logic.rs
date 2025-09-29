@@ -49,13 +49,6 @@ impl GameLogicData {
 }
 
 impl<'a> GameLogic for MainContent<'a> {
-    fn init_game_logic() -> GameLogicData {
-        GameLogicData {
-            neighbour_update_interval: 1,
-            ..Default::default()
-        }
-    }
-
     fn is_ball_in_region(&self, pt: &Ball2D) -> bool {
         let world = self.get_window_definition().world_region_inset(pt.radius);
         let pos = &pt.get_position();
@@ -106,36 +99,6 @@ impl<'a> GameLogic for MainContent<'a> {
         Ok(())
     }
 
-    // fn collect_neighbours(&mut self, dt: f32) {
-    //     if self.step_count % self.get_game_logic_data().neighbour_update_interval == 0 {
-    //         let balls = self.get_ball_vec();
-    //         for i in 0..balls.len() {
-    //             let ball_radius = { balls[i].borrow().radius };
-    //             let mut ball = balls[i].borrow_mut();
-    //
-    //             let neighbours = balls
-    //                 .iter()
-    //                 .enumerate()
-    //                 .filter_map(|(j, rc)| (j != i).then_some(rc));
-    //             Verlet::update_hood(
-    //                 &mut *ball,
-    //                 dt,
-    //                 neighbours,
-    //                 self.physics.get_cutoff_distance(),
-    //                 self.physics.get_min_movement_for_update_hood(ball_radius),
-    //             );
-    //         }
-    //
-    //         // Update stats
-    //         for ball_rc in self.get_ball_vec().iter() {
-    //             let ball_pos = ball_rc.borrow().get_position().clone();
-    //             let mut ball = ball_rc.borrow_mut();
-    //             ball.hood.update_closeness_stats(&ball_pos);
-    //             Self::log_closeness_update(&ball);
-    //         }
-    //     }
-    // }
-
     fn collect_neighbours_by_cell(&mut self, dt: f32) {
         if self.step_count % self.get_game_logic_data().neighbour_update_interval == 0 {
             let (rows, cols) = self.cell_grid.get_grid_size();
@@ -149,9 +112,9 @@ impl<'a> GameLogic for MainContent<'a> {
                             let ball_radius = { ball_rc.borrow().radius };
                             let mut ball = ball_rc.borrow_mut();
 
-                            let neighbors = neighbor_balls
-                                .iter()
-                                .filter(|neighbor| !std::ptr::eq(neighbor.as_ptr(), ball_rc.as_ptr()));
+                            let neighbors = neighbor_balls.iter().filter(|neighbor| {
+                                !std::ptr::eq(neighbor.as_ptr(), ball_rc.as_ptr())
+                            });
 
                             Verlet::update_hood(
                                 &mut *ball,
@@ -196,7 +159,8 @@ impl<'a> GameLogic for MainContent<'a> {
         let start = Timer::start();
 
         // Store old positions before update
-        let old_positions: Vec<_> = self.get_ball_vec()
+        let old_positions: Vec<_> = self
+            .get_ball_vec()
             .iter()
             .map(|ball| ball.borrow().get_position().clone())
             .collect();
@@ -205,7 +169,8 @@ impl<'a> GameLogic for MainContent<'a> {
 
         // Update cell grid with new positions
         // Update cell grid with new positions
-        let updates: Vec<_> = self.get_ball_vec()
+        let updates: Vec<_> = self
+            .get_ball_vec()
             .iter()
             .enumerate()
             .map(|(i, ball_rc)| {
@@ -233,5 +198,12 @@ impl<'a> GameLogic for MainContent<'a> {
 
         self.step_count += 1;
         Ok(())
+    }
+
+    fn init_game_logic() -> GameLogicData {
+        GameLogicData {
+            neighbour_update_interval: 1,
+            ..Default::default()
+        }
     }
 }

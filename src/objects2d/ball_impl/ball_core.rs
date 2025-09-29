@@ -5,9 +5,9 @@ use crate::objects2d::verbose_info::VerboseInfo;
 use ggez::graphics::{Color, Rect};
 use std::collections::VecDeque;
 
-const DEFAULT_TAIL_LENGTH: usize = 100;
+const DEFAULT_TAIL_LENGTH: usize = 0;
 
-const TAIL_RESOLUTION_DELTA_SQ: f32 = 1. * 1.; // minimum squared distance to add new tail point
+const TAIL_RESOLUTION_DELTA_SQ: f32 = 3. * 3.; // minimum squared distance to add new tail point
 
 pub struct Ball2D<'a> {
     pub radius: f32,

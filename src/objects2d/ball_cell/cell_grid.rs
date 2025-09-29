@@ -1,6 +1,8 @@
 use super::cell::{BallCell, Cell, CellBounds};
 use crate::objects2d::Vec2D;
-use ggez::graphics::Rect;
+use ggez::Context;
+use ggez::graphics::{Color, Rect};
+use std::fmt::Debug;
 
 pub struct CellGrid<'a> {
     cells: Vec<Vec<Cell<'a>>>,
@@ -13,14 +15,51 @@ pub struct CellGrid<'a> {
     grid_origin: (f32, f32), // (top-left x, top-left y)
 }
 
-impl<'a> CellGrid<'a> {
-    pub(crate) fn default() -> CellGrid<'a> {
-        Self::new(Rect::new(0.0, 0.0, 100.0, 100.0), 10.0)
+impl Debug for CellGrid<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(
+            f,
+            "CellGrid: {}x{} cells, cell size: ({:.2}, {:.2}), sim size: ({:.2}, {:.2}), origin: ({:.2}, {:.2})",
+            self.grid_height,
+            self.grid_width,
+            self.cell_size_x,
+            self.cell_size_y,
+            self.sim_width,
+            self.sim_height,
+            self.grid_origin.0,
+            self.grid_origin.1
+        )?;
+        for (row_idx, row) in self.cells.iter().enumerate() {
+            for (col_idx, cell) in row.iter().enumerate() {
+                writeln!(f, "Cell ({}, {}): {:?}", row_idx, col_idx, cell)?;
+            }
+        }
+        Ok(())
     }
 }
 
 impl<'a> CellGrid<'a> {
-    pub fn new(world_rect: Rect, cutoff: f32) -> Self {
+    pub(crate) fn default() -> Self {
+        Self {
+            cells: Vec::new(),
+            cell_size_x: 0.0,
+            cell_size_y: 0.0,
+            grid_width: 0,
+            grid_height: 0,
+            sim_width: 0.0,
+            sim_height: 0.0,
+            grid_origin: (0.0, 0.0),
+        }
+    }
+}
+
+impl<'a> CellGrid<'a> {
+    pub fn new<F: Fn(&Vec2D) -> Vec2D>(
+        world_rect: Rect,
+        cutoff: f32,
+        coord_to_px: F,
+        ctx: Option<&Context>,
+    ) -> Self {
         let sim_width = world_rect.w;
         let sim_height = world_rect.h;
         let top_left_x = world_rect.x;
@@ -43,12 +82,14 @@ impl<'a> CellGrid<'a> {
                     min_y: top_left_y - row as f32 * cell_size_y,
                     max_y: top_left_y - (row + 1) as f32 * cell_size_y,
                 };
-                cell_row.push(Cell::new(bounds));
+
+                let color = Self::get_cell_color(row, col);
+                cell_row.push(Cell::new(bounds, color, ctx));
             }
             cells.push(cell_row);
         }
 
-        Self {
+        let grid = Self {
             cells,
             cell_size_x,
             cell_size_y,
@@ -57,7 +98,9 @@ impl<'a> CellGrid<'a> {
             sim_width,
             sim_height,
             grid_origin: (top_left_x, top_left_y),
-        }
+        };
+
+        grid
     }
 
     pub(crate) fn get_grid_size(&self) -> (usize, usize) {
@@ -159,8 +202,14 @@ impl<'a> CellGrid<'a> {
         balls
     }
 
-    pub(crate) fn resize(old_grid: &mut CellGrid<'a>, new_world: Rect, cutoff: f32) -> Self {
-        let mut new_grid = CellGrid::new(new_world, cutoff);
+    pub(crate) fn resize(
+        old_grid: &mut CellGrid<'a>,
+        new_world: Rect,
+        cutoff: f32,
+        ctx: Option<&Context>,
+    ) -> Self {
+        let coord_to_px = |coord: &Vec2D| Vec2D::zero(); // Placeholder function
+        let mut new_grid = CellGrid::new(new_world, cutoff, coord_to_px, ctx);
 
         for row in &mut old_grid.cells {
             for cell in row {
@@ -171,5 +220,20 @@ impl<'a> CellGrid<'a> {
         }
 
         new_grid
+    }
+
+    /// Returns a faint background color for a cell based on its row and column.
+    pub fn get_cell_color(row: usize, col: usize) -> Color {
+        // 6 faint pastel colors
+        const COLORS: [Color; 6] = [
+            Color::new(0.8, 0.8, 1.0, 0.15), // faint blue
+            Color::new(0.8, 1.0, 0.8, 0.15), // faint green
+            Color::new(1.0, 0.8, 0.8, 0.15), // faint red
+            Color::new(1.0, 1.0, 0.8, 0.15), // faint yellow
+            Color::new(0.8, 1.0, 1.0, 0.15), // faint cyan
+            Color::new(1.0, 0.8, 1.0, 0.15), // faint magenta
+        ];
+        let idx = (row + col) % COLORS.len();
+        COLORS[idx]
     }
 }

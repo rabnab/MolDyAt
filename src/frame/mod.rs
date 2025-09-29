@@ -29,21 +29,16 @@ pub trait LogStuff {
 }
 
 pub trait DrawingStuff<'a> {
-    fn draw_cursor(&self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult;
+    fn draw_cursor(&self, canvas: &mut Canvas) -> GameResult;
     fn draw_plot(&self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult;
     fn draw_text_on_ball(&self, canvas: &mut Canvas, ball: &Ball2D) -> GameResult;
     fn draw_simple_balls(
         &self,
-        ctx: &mut Context,
         canvas: &mut Canvas,
         balls: &Vec<Rc<RefCell<Ball2D>>>,
     ) -> GameResult;
-    fn draw_ball_by_mesh(
-        &self,
-        ctx: &mut Context,
-        canvas: &mut Canvas,
-        ball_cell: &Rc<RefCell<Ball2D>>,
-    ) -> GameResult;
+    fn draw_ball_by_mesh(&self, canvas: &mut Canvas, ball_cell: &Rc<RefCell<Ball2D>>)
+    -> GameResult;
     fn draw_neighbour_lines(
         &self,
         ctx: &mut Context,
@@ -53,7 +48,6 @@ pub trait DrawingStuff<'a> {
     ) -> Result<(), GameError>;
     fn draw_single_ball(
         &self,
-        ctx: &mut Context,
         circle: &Mesh,
         // scale_px: f32,
         canvas: &mut Canvas,
@@ -92,11 +86,12 @@ pub trait DrawingStuff<'a> {
     fn calculate_plot_boundary<F>(&self, initial: f32, operation: F) -> f32
     where
         F: Fn(f32, f32) -> f32;
-    fn draw_ball_tail(
+
+    fn draw_all_ball_tails(
         &self,
         ctx: &mut Context,
         canvas: &mut Canvas,
-        ball: &Ref<Ball2D>,
+        balls: &Vec<Rc<RefCell<Ball2D>>>,
     ) -> Result<(), GameError>;
 }
 
