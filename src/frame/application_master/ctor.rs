@@ -37,26 +37,28 @@ impl<'a> MainContent<'a> {
         reg_y: f32,
         shader_in: Option<Shader>,
     ) -> GameResult<Self> {
-        let physics = BallPhysics::default();
-        let cutoff = physics.get_cutoff_distance();
+        let loc_physics = BallPhysics::default();
+        let cutoff = loc_physics.get_cutoff_distance();
 
-        let win_definition = WindowDefinition {
+        let my_win_definition = WindowDefinition {
             region_px: (reg_x, reg_y),
             margin_px: (super::MARGIN_PX_X, super::MARGIN_PX_Y),
             ..Default::default()
         };
-        let world_rect = win_definition.compute_world_bounds_rect();
-        let cell_grid = CellGrid::new(
+        let world_rect = my_win_definition.compute_world_bounds_rect();
+        let my_cell_grid = CellGrid::new(
             world_rect,
             cutoff,
+            |xy| my_win_definition.coord_to_px(xy),
+            ctx,
         );
 
         Ok(Self {
-            win_definition,
+            win_definition: my_win_definition,
             v_points: Vec::new(),
             shader: shader_in,
             new_ball: if let Some(the_ctx) = ctx {
-                NewBallDef::new(the_ctx, &physics)
+                NewBallDef::new(the_ctx, &loc_physics)
             } else {
                 NewBallDef::default()
             },
@@ -65,8 +67,8 @@ impl<'a> MainContent<'a> {
             } else {
                 None
             },
-            physics,
-            cell_grid,
+            physics: loc_physics,
+            cell_grid: my_cell_grid,
             ..Default::default()
         })
     }

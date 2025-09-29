@@ -77,9 +77,13 @@ impl WindowDefinition {
     }
 
     pub fn coord_to_px(&self, coord: &Vec2D) -> Vec2D {
+        Self::coord_to_px_raw(self.region_px, self.margin_px, coord)
+    }
+
+    pub fn coord_to_px_raw(region_px: (f32, f32), margin_px: (f32, f32), coord: &Vec2D) -> Vec2D {
         Vec2D::new(
-            Self::len_to_px(coord.x) + self.region_px.0 * 0.5 + self.margin_px.0,
-            -Self::len_to_px(coord.y) + self.region_px.1 * 0.5 + self.margin_px.1,
+            Self::len_to_px(coord.x) + region_px.0 * 0.5 + margin_px.0,
+            -Self::len_to_px(coord.y) + region_px.1 * 0.5 + margin_px.1,
         )
     }
 

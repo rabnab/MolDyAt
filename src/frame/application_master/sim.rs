@@ -1,35 +1,35 @@
 use super::*;
 use crate::frame::VerletIntegration;
-use ggez::GameResult;
 use ggez::graphics::Rect;
+use ggez::{Context, GameResult};
 
 impl MainContent<'_> {
     /// Call this when a window resize event is detected to pause the simulation
     pub(crate) fn pause_for_resize(&mut self) {
         self.was_paused_for_resize = true;
         self.sim.toggle_pause();
-        self.resize_resume_at =
-            Some(std::time::Instant::now() + std::time::Duration::from_millis(3000));
+        self.resize_resume_at = Some(std::time::Instant::now()); // + std::time::Duration::from_millis(3000));
     }
 
     /// Call this periodically (e.g., in the update loop) to check if it's time to unpause
     /// the simulation after a resize event.
-    pub(crate) fn unpause_after_resize(&mut self) {
+    pub(crate) fn unpause_after_resize(&mut self, ctx: Option<&Context>) {
         if let Some(resume_time) = self.resize_resume_at {
             if std::time::Instant::now() >= resume_time {
                 if self.was_paused_for_resize && self.sim.is_paused() {
                     self.sim.toggle_pause();
                 }
-                self.resize_resume_at = None;
-                self.was_paused_for_resize = false;
 
                 let nu_rect = self.get_window_definition().compute_world_bounds_rect();
-                let nu_grid  = CellGrid::resize(&mut self.cell_grid,
-                                                nu_rect,
-                                                self.physics.get_cutoff_distance(),
+                let nu_grid = CellGrid::resize(
+                    &mut self.cell_grid,
+                    nu_rect,
+                    self.physics.get_cutoff_distance(),
+                    ctx,
                 );
                 self.cell_grid = nu_grid;
-
+                self.resize_resume_at = None;
+                self.was_paused_for_resize = false;
             }
         }
     }

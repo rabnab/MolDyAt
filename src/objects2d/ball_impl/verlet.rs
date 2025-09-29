@@ -8,21 +8,23 @@ use std::rc::{Rc, Weak};
 const UPDATE_FREQ: usize = 100;
 
 pub(crate) struct Verlet<'a> {
-    pub neighbours: RefCell<Vec<Weak<RefCell<Ball2D<'a>>>>>,
+    neighbours: Vec<Weak<RefCell<Ball2D<'a>>>>,
     pub nearest: f32,
     pub farthest: f32,
     updates_frequency: usize,
     updates_since_refresh: usize,
+    num_neighbours: usize,
 }
 
 impl<'a> Default for Verlet<'a> {
     fn default() -> Verlet<'a> {
         Verlet {
-            neighbours: RefCell::new(Vec::new()),
+            neighbours: Vec::new(),
             nearest: f32::NAN,
             farthest: f32::NAN,
             updates_frequency: UPDATE_FREQ,
             updates_since_refresh: UPDATE_FREQ, //initialize with same for instant refresh on creation
+            num_neighbours: 0,
         }
     }
 }
@@ -44,10 +46,19 @@ impl<'a> Verlet<'a> {
     //     Verlet::default()
     // }
 
+    pub fn get_neighbour_iter(&self) -> impl Iterator<Item = Rc<RefCell<Ball2D<'a>>>> {
+        self.neighbours
+            .iter()
+            .filter_map(|weak| weak.upgrade().clone())
+    }
+
+    pub(crate) fn get_number_of_neighbors(&self) -> usize {
+        self.num_neighbours
+    }
+
     /// Retrieve the names of all valid neighbours.
     pub fn get_neighbour_names(&self) -> Vec<String> {
         self.neighbours
-            .borrow()
             .iter()
             .filter_map(|weak| weak.upgrade()) // Filter out dropped references
             .map(|rcrefcell| rcrefcell.borrow().get_name())
@@ -57,27 +68,32 @@ impl<'a> Verlet<'a> {
     // fn add_neighbour_already_sure_was_no_neighbour(&self, ball_rc: Weak<RefCell<Ball2D<'a>>>) {
     //     self.neighbours.borrow_mut().push(ball_rc);
     // }
-    pub fn add_neighbour(&self, ball_rc: &Rc<RefCell<Ball2D<'a>>>) -> bool {
+    pub fn add_neighbour(&mut self, ball_rc: &Rc<RefCell<Ball2D<'a>>>) -> bool {
         let was_neighbour = self.is_a_neighbour_id(ball_rc.borrow().get_id());
         if !was_neighbour {
-            self.neighbours.borrow_mut().push(Rc::downgrade(ball_rc));
+            self.neighbours.push(Rc::downgrade(ball_rc));
+            self.num_neighbours += 1;
         }
         was_neighbour
     }
 
     pub fn is_a_neighbour_id(&self, id_other: BallId) -> bool {
         self.neighbours
-            .borrow()
             .iter()
             .filter_map(|weak| weak.upgrade())
             .any(|rcrefcell| rcrefcell.borrow().id == id_other)
     }
 
-    pub fn remove(&mut self, name: &str) {
-        self.neighbours.borrow_mut().retain(|weak| {
-            weak.upgrade()
-                .is_some_and(|ball_rc| ball_rc.borrow().get_name() != name)
-        });
+    pub fn remove(&mut self, remove_id: BallId) -> bool {
+        if (self.is_a_neighbour_id(remove_id)) {
+            self.neighbours.retain(|weak| {
+                weak.upgrade()
+                    .is_some_and(|ball_rc| ball_rc.borrow().get_id() != remove_id)
+            });
+            self.num_neighbours -= 1;
+            return true;
+        }
+        false
     }
     /// Returns true if the ball has moved more than the min_movement_threshold since last update.
     pub fn has_ball_moved_enough(ball: &Ball2D, dt: f32, min_movement_threshold: f32) -> bool {
@@ -139,16 +155,15 @@ impl<'a> Verlet<'a> {
                     dist_limit * dist_limit,
                 );
             } else {
-                ball.hood.remove(&cur_ref.get_name());
+                ball.hood.remove(cur_ref.get_id());
             }
         }
         ball.hood.updates_since_refresh = 0;
     }
 
     pub fn update_closeness_stats(&mut self, ball_pos: &Vec2D) {
-        let actual_hood = self.neighbours.borrow();
-
-        let (nearest_sq, farthest_sq) = actual_hood
+        let (nearest_sq, farthest_sq) = self
+            .neighbours
             .iter()
             .filter_map(|weak| weak.upgrade())
             .map(|val| {
@@ -178,7 +193,7 @@ impl<'a> core::fmt::Debug for Verlet<'a> {
             "nearest/farthest {:.3e}/{:.3e} num neighbours {}",
             self.nearest,
             self.farthest,
-            self.neighbours.borrow().len()
+            self.neighbours.len()
         ))
     }
 }
@@ -194,7 +209,7 @@ mod tests {
 
     #[test]
     fn test_add_remove_neighbour_and_query() {
-        let v = Verlet::new();
+        let mut v = Verlet::new();
         let a = make_ball(0, Vec2D::new(0.0, 0.0));
         let b = make_ball(1, Vec2D::new(1.0, 0.0));
         let was_neigh = v.add_neighbour(&b);
@@ -204,10 +219,10 @@ mod tests {
         assert!(v.add_neighbour(&b));
         // Remove and ensure gone
         let mut v_mut = v;
-        v_mut.remove(&b.borrow().get_name());
+        v_mut.remove(b.borrow().get_id());
         assert!(!v_mut.is_a_neighbour_id(b.borrow().get_id()));
         // No panic on removing non-existent
-        v_mut.remove(&a.borrow().get_name());
+        v_mut.remove(a.borrow().get_id());
     }
 
     #[test]
@@ -297,5 +312,74 @@ mod tests {
             dt,
             min_movement_threshold
         ));
+    }
+
+    #[test]
+    fn test_num_neighbours_add_remove() {
+        let mut v = Verlet::new();
+        let a = make_ball(0, Vec2D::new(0.0, 0.0));
+        let b = make_ball(1, Vec2D::new(1.0, 0.0));
+        let c = make_ball(2, Vec2D::new(2.0, 0.0));
+
+        // Initially zero
+        assert_eq!(v.num_neighbours, 0);
+
+        // Add a
+        v.add_neighbour(&a);
+        assert_eq!(v.num_neighbours, 1);
+
+        // Add b
+        v.add_neighbour(&b);
+        assert_eq!(v.num_neighbours, 2);
+
+        // Add c
+        v.add_neighbour(&c);
+        assert_eq!(v.num_neighbours, 3);
+
+        // Add b again (should not increment)
+        v.add_neighbour(&b);
+        assert_eq!(v.num_neighbours, 3);
+
+        // Remove b
+        v.remove(b.borrow().get_id());
+        assert_eq!(v.num_neighbours, 2);
+
+        // Remove a
+        v.remove(a.borrow().get_id());
+        assert_eq!(v.num_neighbours, 1);
+
+        // Remove c
+        v.remove(c.borrow().get_id());
+        assert_eq!(v.num_neighbours, 0);
+
+        // Remove non-existent (should not go negative)
+        v.remove(a.borrow().get_id());
+        assert_eq!(v.num_neighbours, 0);
+    }
+
+    #[test]
+    fn test_num_neighbours_consistency_with_neighbours_vec() {
+        let mut v = Verlet::new();
+        let a = make_ball(0, Vec2D::new(0.0, 0.0));
+        let b = make_ball(1, Vec2D::new(1.0, 0.0));
+
+        v.add_neighbour(&a);
+        v.add_neighbour(&b);
+        // num_neighbours should match number of valid neighbours
+        let count = v
+            .neighbours
+            .iter()
+            .filter(|w| w.upgrade().is_some())
+            .count();
+        assert_eq!(v.num_neighbours, count);
+
+        // Remove one
+        v.remove(a.borrow().get_id());
+        let count = v
+            .neighbours
+            .iter()
+            .filter(|w| w.upgrade().is_some())
+            .count();
+        assert_eq!(v.num_neighbours, count);
     }
 }
