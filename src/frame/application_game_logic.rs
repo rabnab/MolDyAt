@@ -2,6 +2,7 @@ use crate::frame::{GameLogic, LogStuff, MainContent, VerletIntegration};
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::verlet::Verlet;
 use crate::objects2d::ball_impl::{Ball2D, BallFactory};
+use crate::timing_monad::TimingMonad;
 use ggez::{GameError, GameResult};
 use rand::distr::Distribution;
 use rand::rng;
@@ -110,11 +111,12 @@ impl<'a> GameLogic for MainContent<'a> {
 
                         for ball_rc in &cell.balls {
                             let ball_radius = { ball_rc.borrow().radius };
-                            let mut ball = ball_rc.borrow_mut();
 
                             let neighbors = neighbor_balls.iter().filter(|neighbor| {
                                 !std::ptr::eq(neighbor.as_ptr(), ball_rc.as_ptr())
                             });
+
+                            let mut ball = ball_rc.borrow_mut();
 
                             Verlet::update_hood(
                                 &mut *ball,
@@ -152,49 +154,45 @@ impl<'a> GameLogic for MainContent<'a> {
         let dt = self.get_game_logic_data().dt_goal;
         let bound_rect = self.get_window_definition().compute_world_bounds_rect();
 
-        let start_all = Timer::start();
-        self.collect_neighbours_by_cell(dt);
-        let collecting_ms = start_all.ms();
+        let mut timer = TimingMonad::new();
 
-        let start = Timer::start();
+        timer.time("collect_neighbours", || self.collect_neighbours_by_cell(dt));
 
-        // Store old positions before update
-        let old_positions: Vec<_> = self
-            .get_ball_vec()
-            .iter()
-            .map(|ball| ball.borrow().get_position().clone())
-            .collect();
+        timer.time("update_sim", || {
+            // Store old positions before update
+            let old_positions: Vec<_> = self
+                .get_ball_vec()
+                .iter()
+                .map(|ball| ball.borrow().get_position().clone())
+                .collect();
 
-        self.update_sim(dt, &bound_rect)?;
+            self.update_sim(dt, &bound_rect);
 
-        // Update cell grid with new positions
-        // Update cell grid with new positions
-        let updates: Vec<_> = self
-            .get_ball_vec()
-            .iter()
-            .enumerate()
-            .map(|(i, ball_rc)| {
-                let new_pos = ball_rc.borrow().get_position().clone();
-                (ball_rc.clone(), old_positions[i].clone(), new_pos)
-            })
-            .collect();
+            // Update cell grid with new positions
+            // Update cell grid with new positions
+            let updates: Vec<_> = self
+                .get_ball_vec()
+                .iter()
+                .enumerate()
+                .map(|(i, ball_rc)| {
+                    let new_pos = ball_rc.borrow().get_position().clone();
+                    (ball_rc.clone(), old_positions[i].clone(), new_pos)
+                })
+                .collect();
 
-        for (ball_rc, old_pos, new_pos) in updates {
-            self.cell_grid.move_ball(ball_rc, &old_pos, &new_pos);
-        }
+            for (ball_rc, old_pos, new_pos) in updates {
+                self.cell_grid.move_ball(ball_rc, &old_pos, &new_pos);
+            }
 
-        self.remove_invalid_balls();
-        let updating_ms = start.ms();
+            self.remove_invalid_balls();
+        });
 
-        let start = Timer::start();
+        timer.time("calculate_temperature", || {
+            let ball_vec = self.get_ball_vec().clone();
+            self.sim.calculate_temperature(&ball_vec);
+        });
 
-        let ball_vec = self.get_ball_vec().clone();
-        self.sim.calculate_temperature(&ball_vec);
-
-        let props_ms = start.ms();
-        let all_ms = start_all.ms();
-
-        self.log_timings(collecting_ms, updating_ms, props_ms, all_ms);
+        self.log_timings(timer);
 
         self.step_count += 1;
         Ok(())

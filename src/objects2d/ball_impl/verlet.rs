@@ -1,4 +1,5 @@
 use crate::frame::application_log;
+use crate::objects2d::ball_cell::cell::BallCell;
 use crate::objects2d::ball_impl::ball_core::Ball2D;
 use crate::objects2d::ball_impl::{BallId, BallPhysics, Named, UPDATE_HOOD_CNT};
 use crate::objects2d::vec_2d::Vec2D;
@@ -85,7 +86,7 @@ impl<'a> Verlet<'a> {
     }
 
     pub fn remove(&mut self, remove_id: BallId) -> bool {
-        if (self.is_a_neighbour_id(remove_id)) {
+        if self.is_a_neighbour_id(remove_id) {
             self.neighbours.retain(|weak| {
                 weak.upgrade()
                     .is_some_and(|ball_rc| ball_rc.borrow().get_id() != remove_id)
@@ -115,7 +116,7 @@ impl<'a> Verlet<'a> {
     pub fn update_hood<'b>(
         ball: &mut Ball2D<'a>,
         dt: f32,
-        neighbours: impl IntoIterator<Item = &'b Rc<RefCell<Ball2D<'a>>>>,
+        neighbours: impl IntoIterator<Item = &'b BallCell<'a>>,
         cutoff: f32,
         min_movement_threshold: f32,
     ) where

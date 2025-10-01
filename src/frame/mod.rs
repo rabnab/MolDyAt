@@ -10,6 +10,7 @@ mod window_definition;
 use crate::frame::application_game_logic::GameLogicData;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::Ball2D;
+use crate::timing_monad::TimingMonad;
 pub use application_master::MainContent;
 pub use application_master::{MARGIN_PX_X, MARGIN_PX_Y};
 use ggez::graphics::{Canvas, Mesh, Rect, Shader};
@@ -24,7 +25,7 @@ pub trait LogStuff {
     fn status_text(&self, fps: u32, num_balls: usize) -> String;
     fn format_g(value: f32, precision: usize) -> String;
     fn log_closeness_update(ball: &Ball2D);
-    fn log_timings(&self, collecting_ms: u128, updating_ms: u128, props_ms: u128, all_ms: u128);
+    fn log_timings(&self, timer: TimingMonad);
     fn log_separator_line();
 }
 
@@ -110,5 +111,5 @@ pub trait GameLogic {
 // }
 
 pub trait VerletIntegration {
-    fn update_sim(&mut self, dt: f32, bound_rect: &Rect) -> GameResult;
+    fn update_sim(&mut self, dt: f32, bound_rect: &Rect);
 }

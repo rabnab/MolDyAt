@@ -136,9 +136,17 @@ impl NewBallDef {
     }
 
     pub(crate) fn get_ball_mass(&self) -> f32 {
+        Self::get_ball_mass_of_size(self.get_ball_size())
+    }
+
+    /// Get ball size by index (0..4), returning MIN_BALL_SIZE if index is out of bounds
+    pub(crate) fn get_ball_size_of_idx(&self, idx: usize) -> f32 {
+        *self.ball_size.get(idx).unwrap_or(&MIN_BALL_SIZE)
+    }
+
+    pub(crate) fn get_ball_mass_of_size(size: f32) -> f32 {
         let density = 2. / 10.;
-        1. + density * (self.get_ball_size() / MIN_BALL_SIZE - 1.).powf(1.2)
-        // .powi(2)
+        1. + density * (size / MIN_BALL_SIZE - 1.).powf(1.2)
     }
 
     pub(crate) fn next_ball_size(&mut self) {

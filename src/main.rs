@@ -1,5 +1,6 @@
 mod frame;
 mod objects2d;
+mod timing_monad;
 
 use crate::frame::MainContent;
 

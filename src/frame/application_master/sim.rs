@@ -1,7 +1,7 @@
 use super::*;
 use crate::frame::VerletIntegration;
+use ggez::Context;
 use ggez::graphics::Rect;
-use ggez::{Context, GameResult};
 
 impl MainContent<'_> {
     /// Call this when a window resize event is detected to pause the simulation
@@ -36,7 +36,7 @@ impl MainContent<'_> {
 }
 
 impl<'a> VerletIntegration for MainContent<'a> {
-    fn update_sim(&mut self, dt: f32, bound_rect: &Rect) -> GameResult {
+    fn update_sim(&mut self, dt: f32, bound_rect: &Rect) {
         let mut max_v: f32 = 0.;
         let mut max_id: usize = 0;
         let mut pot: f32 = 0.;
@@ -77,6 +77,5 @@ impl<'a> VerletIntegration for MainContent<'a> {
 
         self.sim
             .update(kin, pot, max_id, max_v, dt, _v_com.scaled(1. / sum_mass));
-        Ok(())
     }
 }

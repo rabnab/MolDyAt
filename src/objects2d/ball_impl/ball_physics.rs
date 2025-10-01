@@ -26,7 +26,8 @@ impl Default for PhysicsConstants {
             lj_eps: LJ_EPS,
             lj_sig: LJ_SIG,
             //gravity: 9.81,
-            gravity: 0.0, //1.0,
+            gravity: 0.0,
+            //gravity: 1.0,
             damping: 1.0,
             max_force: 1000.0,
             //softening: 0.01,
@@ -178,42 +179,9 @@ impl BallPhysics {
             );
         }
 
-        // let (min_dist, total_force, total_pot) = self.force();
-        // let speed_limit = f32::min(bound.w, bound.h) / 200.;
-        //let accel = self.accel_with_speed_limit(&total_force, speed_limit, dt);
-
-        // let a_norm = accel.norm();
-        //let p = Vec2D::norm(&self.v)/a_norm;
-
-        // let dx = self.v.x * dt + 0.5 * self.pre_update_accel.x * dt * dt;
-        // let dy = self.v.y * dt + 0.5 * self.pre_update_accel.y * dt * dt;
-        // let mut dt_max = dt;
-        // if (min_dist >= 0. && (dx * dx + dy * dy) > (min_dist * min_dist * 0.5))
-        //     || dx.abs() > bound.w * 0.5 || dy.abs() > bound.h * 0.5 {
-        //     //dt_max = -p + f32::sqrt(p*p+min_dist/ a_norm);
-        //     dt_max = 0.00001;
-        // }
-        //
-        // if (MAX_UPDATE_RECURSION as f32) < dt / dt_max {
-        //     dt_max = 2. * dt / (MAX_UPDATE_RECURSION as f32);
-        // }
-        //
-        // let steps = f32::ceil(dt / dt_max);
-        // let int_steps = steps as i32;
-        // let dt_sub = dt / steps;
-
-        // if int_steps > MAX_UPDATE_RECURSION {
-        //     panic!("Too many substeps for update: {}", int_steps);
-        // }
         let dt_sub = dt;
         let int_steps: usize = 1;
         ball.execute_update_pos(dt_sub, bound);
-
-        // for _ in 1..int_steps {
-        //     let (_, total_force, _) = self.force();
-        //     let accel = self.accel_with_speed_limit(&total_force, speed_limit, dt_sub);
-        //     self.execute_update_pos(&accel, dt_sub, bound);
-        // }
 
         if ball.verbose.console {
             println!(
@@ -400,12 +368,19 @@ mod tests {
     }
 
     #[test]
-    fn test_lenard_jones_force_signs() {
+    fn test_lenard_jones_force_when_close() {
         let phys = BallPhysics::default();
         let r_eq = 1.122462048309372981_f32; // 2^(1/6) * sigma with sigma=1
         // Slightly below equilibrium -> repulsive -> positive force magnitude returned by pure
         let f_near = phys.lenard_jones_force_pure(r_eq * 0.9);
         // Slightly above equilibrium -> attractive -> negative force
+        for i in -30..30 {
+            let r = i as f32 * r_eq * 0.1;
+            let f = phys.lenard_jones_force_pure(r);
+            let f2 = phys.lenard_jones_force(r, 0.0, 0);
+            println!("r {r}  force: {f} eff: {f2}");
+        }
+
         let f_far = phys.lenard_jones_force_pure(r_eq * 3.0);
         assert!(
             f_near > 0.0,

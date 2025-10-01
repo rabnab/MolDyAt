@@ -1,6 +1,9 @@
 use crate::frame::application_master::MainContent;
+use crate::frame::new_ball_def::NewBallDef;
 use crate::frame::{DrawingStuff, GameLogic, LogStuff};
+use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::get_update_hood_call_cnt;
+use crate::timing_monad::TimingMonad;
 use ggez::event::{EventHandler, MouseButton};
 use ggez::graphics::{Canvas, Color};
 use ggez::input::keyboard::{KeyCode, KeyInput};
@@ -45,13 +48,20 @@ impl<'a> EventHandler for MainContent<'a> {
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         // Get the window's width and height
         // println!("{} draw", self.sim.time);
+        let mut timer = TimingMonad::new();
+
         let mut canvas = Canvas::from_frame(ctx, Color::from_rgb(0, 0, 0));
-        self.draw_balls(ctx, &mut canvas, self.get_ball_vec())?;
-        self.draw_cursor(&mut canvas)?;
-        self.draw_frame(ctx, &mut canvas, self.get_number_of_balls())?;
-        self.draw_plot(ctx, &mut canvas)?;
-        canvas.finish(ctx)?;
-        self.sim.reset_frame_since_draw();
+        timer.time_result("draw_balls", || {
+            self.draw_balls(ctx, &mut canvas, self.get_ball_vec())
+        })?;
+        timer.time_result("draw_cursor", || self.draw_cursor(&mut canvas))?;
+        timer.time_result("draw_frame", || {
+            self.draw_frame(ctx, &mut canvas, self.get_number_of_balls())
+        })?;
+        timer.time_result("draw_plot", || self.draw_plot(ctx, &mut canvas))?;
+        timer.time_result("finish_canvas", || canvas.finish(ctx))?;
+        timer.time("reset_frame", || self.sim.reset_frame_since_draw());
+        self.log_timings(timer);
         Ok(())
     }
 
@@ -67,23 +77,6 @@ impl<'a> EventHandler for MainContent<'a> {
         }
         Ok(())
     }
-
-    // fn mouse_button_up_event(
-    //     &mut self,
-    //     _ctx: &mut Context,
-    //     button: MouseButton,
-    //     x: f32,
-    //     y: f32,
-    // ) -> Result<(), GameError> {
-    //     match button {
-    //         MouseButton::Left => {
-    //             self.add_candidate_px(x, y).ok(); //ignore any errors because of not being able to add
-    //             self.sim.draw_cursor = false;
-    //         }
-    //         _ => (),
-    //     }
-    //     Ok(())
-    // }
 
     fn mouse_motion_event(
         &mut self,
@@ -146,6 +139,39 @@ impl<'a> EventHandler for MainContent<'a> {
                     self.sim.set_draw_cursor(false);
                 }
                 KeyCode::F5 => self.add_random_candidates(10),
+                KeyCode::F1 => self.get_ball_vec().iter().for_each(|b_rc| {
+                    let mut b = b_rc.borrow_mut();
+                    b.v = Vec2D::zero();
+                }),
+                KeyCode::F2 => {
+                    let small_size = self.new_ball.get_ball_size_of_idx(2);
+                    let large_size = self.new_ball.get_ball_size_of_idx(4);
+
+                    let small_mass = NewBallDef::get_ball_mass_of_size(small_size);
+                    let large_mass = NewBallDef::get_ball_mass_of_size(large_size);
+                    let small = self
+                        .get_game_logic_data()
+                        .get_ball_factory()
+                        .create_massive_with_velocity(
+                            Vec2D::zero(),
+                            small_size,
+                            small_mass,
+                            Vec2D::new(0.1, 0.),
+                        );
+
+                    let large = self
+                        .get_game_logic_data()
+                        .get_ball_factory()
+                        .create_massive_with_velocity(
+                            Vec2D::zero(),
+                            large_size,
+                            large_mass,
+                            Vec2D::new(0., 0.1),
+                        );
+
+                    self.add_candidate_to_vec(small);
+                    self.add_candidate_to_vec(large);
+                }
                 KeyCode::LShift => self.new_ball.rand_speed = false,
                 _ => {} // No action required for unmatched keys
             },
