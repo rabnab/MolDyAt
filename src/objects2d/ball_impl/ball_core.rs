@@ -125,7 +125,7 @@ impl<'a> Ball2D<'a> {
         dt: f32,
     ) -> Vec2D {
         let gravi_vec = Vec2D::new(0., -gravity);
-        let mut accel: Vec2D = (total_force + gravi_vec).scaled(1. / self.mass);
+        let mut accel: Vec2D = (total_force).scaled(1. / self.mass) + gravi_vec;
 
         let speed_sq = self.v.norm_sq();
 

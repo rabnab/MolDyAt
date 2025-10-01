@@ -46,12 +46,7 @@ impl<'a> MainContent<'a> {
             ..Default::default()
         };
         let world_rect = my_win_definition.compute_world_bounds_rect();
-        let my_cell_grid = CellGrid::new(
-            world_rect,
-            cutoff,
-            |xy| my_win_definition.coord_to_px(xy),
-            ctx,
-        );
+        let my_cell_grid = CellGrid::new(world_rect, cutoff, ctx);
 
         Ok(Self {
             win_definition: my_win_definition,

@@ -77,13 +77,9 @@ impl LogStuff for MainContent<'_> {
         }
     }
 
-    fn log_timings(&self, collecting_ms: u128, updating_ms: u128, props_ms: u128, all_ms: u128) {
-        if self.show_timings && all_ms > 1 {
-            let text_timing = format!(
-                "coll/upd/prop/all: {}/{}/{}/{}",
-                collecting_ms, updating_ms, props_ms, all_ms
-            );
-            println!("{:>5}", text_timing);
+    fn log_timings(&self, timer: crate::timing_monad::TimingMonad) {
+        if self.show_timings {
+            timer.log();
         }
     }
 

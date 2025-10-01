@@ -387,19 +387,12 @@ impl<'a> DrawingStuff<'a> for MainContent<'a> {
         //canvas.set_shader_params(ball_params);
         for ball_ref in balls {
             let ball = ball_ref.borrow();
-
-            //to set variables shared between shader and rust code
-            //canvas.set_shader_params(params)
-            let pt_influence = Mesh::new_circle(
-                ctx,
-                DrawMode::stroke(1.),
-                self.get_window_definition()
-                    .coord_to_px(&ball.get_position()),
-                WindowDefinition::len_to_px(self.physics.equilibrium_of_radius(ball.radius)),
-                0.1,
-                Color::MAGENTA,
-            )?;
-            canvas.draw(&pt_influence, Vec2::new(0., 0.));
+            if let Some(cur_mesh) = self.new_ball.get_mesh(ball.radius) {
+                let ball_coord_px = self
+                    .get_window_definition()
+                    .coord_to_px(&ball.get_position());
+                canvas.draw(cur_mesh, DrawParam::default().dest(ball_coord_px));
+            }
             //canvas.set_shader(&ggez::graphics::default_shader());
             self.draw_text_on_ball(canvas, &ball)?;
         }

@@ -54,12 +54,7 @@ impl<'a> CellGrid<'a> {
 }
 
 impl<'a> CellGrid<'a> {
-    pub fn new<F: Fn(&Vec2D) -> Vec2D>(
-        world_rect: Rect,
-        cutoff: f32,
-        coord_to_px: F,
-        ctx: Option<&Context>,
-    ) -> Self {
+    pub fn new(world_rect: Rect, cutoff: f32, ctx: Option<&Context>) -> Self {
         let sim_width = world_rect.w;
         let sim_height = world_rect.h;
         let top_left_x = world_rect.x;
@@ -109,7 +104,7 @@ impl<'a> CellGrid<'a> {
 
     pub fn get_cell_indices(&self, position: &Vec2D) -> Option<(usize, usize)> {
         let col = ((position.x - self.grid_origin.0) / self.cell_size_x) as usize;
-        let row = ((position.y - self.grid_origin.1) / self.cell_size_y) as usize;
+        let row = ((self.grid_origin.1 - position.y) / self.cell_size_y) as usize;
 
         if col < self.grid_width && row < self.grid_height {
             Some((row, col))
@@ -186,19 +181,11 @@ impl<'a> CellGrid<'a> {
     pub(crate) fn get_balls_in_neighborhood(&self, i: usize, j: usize) -> Vec<BallCell<'a>> {
         let mut balls = Vec::new();
 
-        for di in -1..=1 {
-            for dj in -1..=1 {
-                let ni = i as isize + di;
-                let nj = j as isize + dj;
-
-                if ni >= 0 && nj >= 0 {
-                    if let Some(cell) = self.get_cell(ni as usize, nj as usize) {
-                        balls.extend(cell.get_balls().cloned());
-                    }
-                }
-            }
-        }
-
+        self.get_neighboring_cells(i, j)
+            .into_iter()
+            .for_each(|cell| {
+                balls.extend(cell.get_balls().cloned());
+            });
         balls
     }
 
@@ -208,8 +195,7 @@ impl<'a> CellGrid<'a> {
         cutoff: f32,
         ctx: Option<&Context>,
     ) -> Self {
-        let coord_to_px = |coord: &Vec2D| Vec2D::zero(); // Placeholder function
-        let mut new_grid = CellGrid::new(new_world, cutoff, coord_to_px, ctx);
+        let mut new_grid = CellGrid::new(new_world, cutoff, ctx);
 
         for row in &mut old_grid.cells {
             for cell in row {
