@@ -1,12 +1,16 @@
 use crate::objects2d::ball_impl::ball_core::Ball2D;
 use crate::objects2d::vec_2d::Vec2D;
+use std::cell::RefCell;
 
 use rand::Rng;
+use rand::prelude::ThreadRng;
 use rand_distr::{Distribution, Normal};
 
 /// Factory for creating Ball2D instances with various configurations
 pub struct BallFactory {
-    next_id: usize,
+    next_id: RefCell<usize>,
+    new_ball_size_idx: RefCell<usize>,
+    rng: RefCell<ThreadRng>,
 }
 
 const FIRST_BALL_ID: usize = 1;
@@ -14,148 +18,149 @@ const FIRST_BALL_ID: usize = 1;
 impl Default for BallFactory {
     fn default() -> Self {
         BallFactory {
-            next_id: FIRST_BALL_ID,
+            next_id: RefCell::new(FIRST_BALL_ID),
+            new_ball_size_idx: RefCell::new(2),
+            rng: RefCell::new(rand::rng()),
         }
     }
 }
+
+const MIN_BALL_SIZE: f32 = 0.15;
+const NUM_BALL_SIZES: usize = 5;
 
 impl BallFactory {
     pub fn new() -> Self {
         Self::default()
     }
 
+    pub fn radius_for_size_idx(size_idx: usize) -> f32 {
+        const BASE_EXPONENT: f32 = 2.0;
+        MIN_BALL_SIZE * BASE_EXPONENT.powi(size_idx as i32)
+    }
+
+    pub(crate) fn mass_for_size_idx(size_idx: usize) -> f32 {
+        let density = 2. / 10.;
+        let radius = Self::radius_for_size_idx(size_idx);
+        1. + density * (radius / MIN_BALL_SIZE - 1.).powf(1.2)
+    }
+
+    pub(crate) fn next_ball_size_idx(&self) {
+        let current_idx = *self.new_ball_size_idx.borrow();
+        *self.new_ball_size_idx.borrow_mut() = (current_idx + 1) % NUM_BALL_SIZES;
+    }
+
+    pub fn create_all_radii() -> Vec<f32> {
+        (0..NUM_BALL_SIZES)
+            .map(|idx| Self::radius_for_size_idx(idx))
+            .collect()
+    }
+
+    pub(crate) fn get_new_ball_size_idx(&self) -> usize {
+        *self.new_ball_size_idx.borrow()
+    }
+
+    pub(crate) fn get_new_ball_radius(&self) -> f32 {
+        Self::radius_for_size_idx(*self.new_ball_size_idx.borrow())
+    }
+
     /// Creates a new ball with specified position and radius
-    pub fn create_basic<'a>(&mut self, pos: impl Into<Vec2D>, radius: f32) -> Ball2D<'a> {
+    pub(crate) fn create_basic(&self, pos: impl Into<Vec2D>, size_idx: usize) -> Ball2D {
         let pos_vec = pos.into();
+        let id = *self.next_id.borrow();
+        *self.next_id.borrow_mut() += 1;
 
-        let ball = Ball2D::new(self.next_id, pos_vec.clone(), radius);
-
-        self.next_id += 1;
-        ball
+        Ball2D::new(id, pos_vec, (size_idx, Self::radius_for_size_idx(size_idx)))
     }
 
     /// Creates a ball with specified mass and initial velocity
-    pub fn create_massive_with_velocity<'a>(
-        &mut self,
+    pub fn create_massive_with_velocity(
+        &self,
         pos: impl Into<Vec2D>,
-        radius: f32,
-        mass: f32,
         initial_velocity: Vec2D,
-    ) -> Ball2D<'a> {
-        let mut ball = self.create_basic(pos, radius);
-        ball.mass = mass;
+    ) -> Ball2D {
+        let size_idx = self.get_new_ball_size_idx();
+        let mut ball = self.create_basic(pos, size_idx);
+        ball.mass = Self::mass_for_size_idx(size_idx);
         ball.v = initial_velocity;
         ball
     }
 
     /// Creates a ball with random properties within specified ranges
-    pub fn create_random<'a>(
-        &mut self,
-        pos_range: (Vec2D, Vec2D),
-        radius_range: (f32, f32),
-        mass_range: (f32, f32),
-        velocity_range: (f32, f32),
-    ) -> Ball2D<'a> {
-        let mut rng = rand::rng();
+    pub fn create_random(&self, pos_range: (&Vec2D, &Vec2D), velocity_range: (f32, f32)) -> Ball2D {
+        let mut rng = self.rng.borrow_mut();
 
-        // Random position within bounds
+        let min_x = f32::min(pos_range.0.x, pos_range.1.x);
+        let max_x = f32::max(pos_range.0.x, pos_range.1.x);
+        let min_y = f32::min(pos_range.0.y, pos_range.1.y);
+        let max_y = f32::max(pos_range.0.y, pos_range.1.y);
+
         let pos = Vec2D::new(
-            rng.random_range(pos_range.0.x..pos_range.1.x),
-            rng.random_range(pos_range.0.y..pos_range.1.y),
+            Rng::random_range(&mut rng, min_x..=max_x),
+            Rng::random_range(&mut rng, min_y..=max_y),
         );
 
-        // Random radius
-        let radius = rng.random_range(radius_range.0..radius_range.1);
+        let velocity = if velocity_range.0 < velocity_range.1 {
+            let speed = Rng::random_range(&mut rng, velocity_range.0..=velocity_range.1);
+            let angle = Rng::random_range(&mut rng, 0.0..std::f32::consts::TAU);
+            Vec2D::new(speed * angle.cos(), speed * angle.sin())
+        } else {
+            Vec2D::zero()
+        };
 
-        // Random mass
-        let mass = rng.random_range(mass_range.0..mass_range.1);
-
-        // Random velocity with random direction
-        let speed = rng.random_range(velocity_range.0..velocity_range.1);
-        let angle = rng.random_range(0.0..std::f32::consts::TAU);
-        let velocity = Vec2D::new(speed * angle.cos(), speed * angle.sin());
-
-        self.create_massive_with_velocity(pos, radius, mass, velocity)
+        self.create_massive_with_velocity(pos, velocity)
     }
 
-    /// Creates a collection of balls with normally distributed properties
-    pub fn create_normal_distribution<'a>(
-        &mut self,
+    /// Creates a collection of balls with normally distributed positions
+    pub fn create_normal_distribution(
+        &self,
         count: usize,
         center_pos: Vec2D,
         pos_std_dev: f32,
-        mean_radius: f32,
-        radius_std_dev: f32,
-        mean_mass: f32,
-        mass_std_dev: f32,
-    ) -> Vec<Ball2D<'a>> {
-        let mut rng = rand::rng();
-        let pos_dist = Normal::new(0.0, pos_std_dev).unwrap();
-        let radius_dist = Normal::new(mean_radius, radius_std_dev).unwrap();
-        let mass_dist = Normal::new(mean_mass, mass_std_dev).unwrap();
+    ) -> Vec<Ball2D> {
+        let mut rng = self.rng.borrow_mut();
+        let pos_dist = Normal::new(center_pos.x, pos_std_dev).unwrap();
+        let pos_dist_y = Normal::new(center_pos.y, pos_std_dev).unwrap();
 
         (0..count)
             .map(|_| {
-                let pos = Vec2D::new(
-                    center_pos.x + pos_dist.sample(&mut rng),
-                    center_pos.y + pos_dist.sample(&mut rng),
-                );
-                let radius = radius_dist.sample(&mut rng).max(0.1); // Ensure positive radius
-                let mass = mass_dist.sample(&mut rng).max(0.1); // Ensure positive mass
-
-                self.create_massive_with_velocity(pos, radius, mass, Vec2D::zero())
+                let pos = Vec2D::new(pos_dist.sample(&mut *rng), pos_dist_y.sample(&mut *rng));
+                self.create_massive_with_velocity(pos, Vec2D::zero())
             })
             .collect()
     }
 
     /// Creates a ball with specified properties and validation
-    pub fn create_validated<'a>(
-        &mut self,
+    pub fn create_validated(
+        &self,
         pos: impl Into<Vec2D>,
-        radius: f32,
-        mass: f32,
         velocity: Vec2D,
-    ) -> Result<Ball2D<'a>, String> {
-        // Validate input parameters
-        if radius <= 0.0 {
-            return Err("Radius must be positive".to_string());
-        }
-        if mass <= 0.0 {
-            return Err("Mass must be positive".to_string());
-        }
+    ) -> Result<Ball2D, String> {
         let pos_vec = pos.into();
         if !pos_vec.is_finite() || !velocity.is_finite() {
             return Err("Position and velocity components must be finite".to_string());
         }
-
-        Ok(self.create_massive_with_velocity(pos_vec, radius, mass, velocity))
+        Ok(self.create_massive_with_velocity(pos_vec, velocity))
     }
 
     /// Creates a static ball (zero initial velocity and high mass)
-    pub fn create_static<'a>(&mut self, pos: impl Into<Vec2D>, radius: f32) -> Ball2D<'a> {
-        self.create_massive_with_velocity(pos, radius, f32::MAX / 2.0, Vec2D::zero())
+    pub fn create_static(&self, pos: impl Into<Vec2D>) -> Ball2D {
+        self.create_massive_with_velocity(pos, Vec2D::zero())
     }
 
     /// Creates a lightweight ball with high velocity
-    pub fn create_projectile<'a>(
-        &mut self,
-        pos: impl Into<Vec2D>,
-        radius: f32,
-        direction: Vec2D,
-        speed: f32,
-    ) -> Ball2D<'a> {
+    pub fn create_projectile(&self, pos: impl Into<Vec2D>, direction: Vec2D, speed: f32) -> Ball2D {
         let velocity = direction.normalize() * speed;
-        self.create_massive_with_velocity(pos, radius, radius * 0.1, velocity)
+        self.create_massive_with_velocity(pos, velocity)
     }
 
     /// Resets the ID counter - useful for testing or when creating new simulation
-    pub fn reset_id_counter(&mut self) {
-        self.next_id = FIRST_BALL_ID;
+    pub fn reset_id_counter(&self) {
+        *self.next_id.borrow_mut() = FIRST_BALL_ID;
     }
 
     /// Get the next available ID without incrementing the counter
     pub fn peek_next_id(&self) -> usize {
-        self.next_id
+        *self.next_id.borrow()
     }
 }
 
@@ -167,12 +172,12 @@ mod tests {
     fn test_basic_ball_creation() {
         let mut factory = BallFactory::new();
         let pos = Vec2D::new(1.0, 2.0);
-        let ball = factory.create_basic(pos.clone(), 1.0);
+        let ball = factory.create_basic(pos.clone(), 0);
 
         assert_eq!(ball.get_id(), 1);
         assert_eq!(*ball.get_position(), pos);
-        assert_eq!(ball.get_radius(), 1.0);
-        assert_eq!(ball.get_mass(), 1.0);
+        assert_eq!(ball.get_radius(), MIN_BALL_SIZE);
+        assert_eq!(ball.get_mass(), BallFactory::mass_for_size_idx(0));
         assert_eq!(*ball.get_velocity(), Vec2D::zero());
     }
 
@@ -181,55 +186,46 @@ mod tests {
         let mut factory = BallFactory::new();
         let pos = Vec2D::new(1.0, 2.0);
         let velocity = Vec2D::new(3.0, 4.0);
-        let ball = factory.create_massive_with_velocity(pos.clone(), 2.0, 5.0, velocity.clone());
+        let ball = factory.create_massive_with_velocity(pos.clone(), velocity.clone());
 
         assert_eq!(ball.get_id(), 1);
         assert_eq!(*ball.get_position(), pos);
-        assert_eq!(ball.get_radius(), 2.0);
-        assert_eq!(ball.get_mass(), 5.0);
         assert_eq!(*ball.get_velocity(), velocity);
     }
 
     #[test]
     fn test_validated_ball_creation() {
-        let mut factory = BallFactory::new();
+        let factory = BallFactory::new();
 
-        // Test invalid radius
         assert!(
             factory
-                .create_validated(Vec2D::zero(), -1.0, 1.0, Vec2D::zero())
+                .create_validated(Vec2D::new(f32::NAN, 0.), Vec2D::zero())
                 .is_err()
         );
 
-        // Test invalid mass
         assert!(
             factory
-                .create_validated(Vec2D::zero(), 1.0, -1.0, Vec2D::zero())
+                .create_validated(Vec2D::zero(), Vec2D::new(f32::NAN, 0.))
                 .is_err()
         );
 
+        let rad_expect = factory.get_new_ball_radius();
         // Test valid parameters
         let ball = factory
-            .create_validated(Vec2D::zero(), 1.0, 1.0, Vec2D::zero())
+            .create_validated(Vec2D::zero(), Vec2D::zero())
             .unwrap();
-        assert_eq!(ball.get_radius(), 1.0);
+        assert_eq!(ball.get_radius(), rad_expect);
     }
 
     #[test]
     fn test_random_ball_creation() {
         let mut factory = BallFactory::new();
-        let pos_range = (Vec2D::new(0.0, 0.0), Vec2D::new(10.0, 10.0));
-        let radius_range = (1.0, 2.0);
-        let mass_range = (1.0, 5.0);
+        let pos_range = (&Vec2D::new(0.0, 0.0), &Vec2D::new(10.0, 10.0));
         let velocity_range = (0.0, 5.0);
-
-        let ball =
-            factory.create_random(pos_range.clone(), radius_range, mass_range, velocity_range);
+        let ball = factory.create_random(pos_range, velocity_range);
 
         // Check if values are within ranges
         assert!(ball.get_position().x >= pos_range.0.x && ball.get_position().x <= pos_range.1.x);
         assert!(ball.get_position().y >= pos_range.0.y && ball.get_position().y <= pos_range.1.y);
-        assert!(ball.get_radius() >= radius_range.0 && ball.get_radius() <= radius_range.1);
-        assert!(ball.get_mass() >= mass_range.0 && ball.get_mass() <= mass_range.1);
     }
 }

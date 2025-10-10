@@ -1,67 +1,20 @@
-use crate::objects2d::Vec2D;
-use ggez::Context;
-use ggez::graphics::{DrawParam, Drawable, Rect, Text, TextFragment};
+use crate::frame::window::{MARGIN_PX_X, MARGIN_PX_Y};
+use crate::objects2d::{Rect, Vec2D};
 
 const LEN_TO_PX: f32 = 1. / 10.; // 50 px are one LEN_SCALE (SIG is about 0.5 to 1 LEN_SCALE)
 
+#[derive(Debug, Clone)]
 pub struct WindowDefinition {
-    pub curs_pos: Vec2D,
-    pub curs_pos_of_txt: Vec2D,
     pub region_px: (f32, f32),
     pub margin_px: (f32, f32),
-    pub ball_status_text_pos: Option<[f32; 2]>,
-    pub txt_cursor: Text,
-    pub last_status_text: String,
-    pub status_text_mesh: Text,
 }
 
 impl WindowDefinition {
-    pub(crate) fn update_cursor_and_text(&mut self, x: f32, y: f32) {
-        let clamped = self.clamp_to_bounds(&Vec2D::new(x, y));
-        self.curs_pos = clamped.clone();
-        let curs_pos_coord = self.px_to_coord(clamped.x, clamped.y);
-
-        let curs_moved_sq = self.curs_pos.dist(&self.curs_pos_of_txt).norm_sq();
-        if curs_moved_sq > (f32::min(self.region_px.0, self.region_px.1) * 0.1) {
-            self.curs_pos_of_txt = self.curs_pos.clone();
-            self.txt_cursor = Text::new(
-                TextFragment::new(format!(
-                    "x: {}, y: {} pos ({:.3},{:.3})",
-                    clamped.x, clamped.y, curs_pos_coord.x, curs_pos_coord.y,
-                ))
-                .scale(20.),
-            );
+    pub fn new(region_px: (f32, f32)) -> Self {
+        WindowDefinition {
+            region_px,
+            margin_px: (MARGIN_PX_X, MARGIN_PX_Y),
         }
-    }
-
-    pub(crate) fn update_status_text(
-        &mut self,
-        ctx: &Context,
-        show: bool,
-        new_txt: String,
-    ) -> Option<(&impl Drawable, impl Into<DrawParam>)> {
-        if show {
-            if new_txt != self.last_status_text {
-                self.last_status_text = new_txt.clone();
-                self.status_text_mesh = Text::new(TextFragment::new(new_txt).scale(30.));
-
-                if self.ball_status_text_pos.is_none() {
-                    if let Some(bounds) = self.status_text_mesh.dimensions(ctx) {
-                        let pos = [self.margin_px.0 * 2.0 + self.region_px.0 - bounds.w, 0.0];
-                        self.ball_status_text_pos = Some(pos);
-                    }
-                }
-            }
-            let text_pos = self.ball_status_text_pos.unwrap_or([0., 0.]);
-            // canvas.draw(
-            //     &self.status_text_mesh,
-            //     DrawParam::default().dest(text_pos),
-            // );
-            return Some((&self.status_text_mesh, DrawParam::default().dest(text_pos)));
-        } else {
-            self.last_status_text = "".to_string();
-        }
-        None
     }
 
     pub fn px_to_coord(&self, px_x: f32, px_y: f32) -> Vec2D {
@@ -81,10 +34,9 @@ impl WindowDefinition {
     }
 
     pub fn coord_to_px_raw(region_px: (f32, f32), margin_px: (f32, f32), coord: &Vec2D) -> Vec2D {
-        Vec2D::new(
-            Self::len_to_px(coord.x) + region_px.0 * 0.5 + margin_px.0,
-            -Self::len_to_px(coord.y) + region_px.1 * 0.5 + margin_px.1,
-        )
+        let x = Self::len_to_px(coord.x) + region_px.0 * 0.5 + margin_px.0;
+        let y = -Self::len_to_px(coord.y) + region_px.1 * 0.5 + margin_px.1;
+        Vec2D::new(x, y)
     }
 
     fn clamp_to_bounds_internal(value: f32, margin: f32, region: f32) -> f32 {
@@ -105,7 +57,7 @@ impl WindowDefinition {
         coord_px * LEN_TO_PX
     }
 
-    pub fn world_region_inset(&self, radius: f32) -> ggez::graphics::Rect {
+    pub fn world_region_inset(&self, radius: f32) -> Rect {
         let tl = self.px_to_coord(self.margin_px.0, self.margin_px.1);
         let w = WindowDefinition::px_to_len(self.region_px.0) - 2.0 * radius;
         let h = WindowDefinition::px_to_len(self.region_px.1) - 2.0 * radius;
@@ -118,7 +70,10 @@ impl WindowDefinition {
         let h = WindowDefinition::px_to_len(self.region_px.1);
         Rect::new(tl.x, tl.y, w, -h)
     }
-
+    pub fn resize(&mut self, width: f32, height: f32) {
+        self.region_px.0 = width - 2. * self.margin_px.0;
+        self.region_px.1 = height - 2. * self.margin_px.1;
+    }
     #[cfg(test)]
     pub fn get_len_to_px() -> f32 {
         LEN_TO_PX
@@ -128,17 +83,9 @@ impl WindowDefinition {
 impl Default for WindowDefinition {
     fn default() -> WindowDefinition {
         WindowDefinition {
-            curs_pos: Vec2D::new(0., 0.),
-            curs_pos_of_txt: Vec2D::new(0., 0.),
+            // curs_pos: Vec2D::new(0., 0.),
             region_px: (100., 100.),
             margin_px: (10., 10.),
-            ball_status_text_pos: None,
-            txt_cursor: Text::new(
-                TextFragment::new(format!("x: {}, y: {} pos ({:.3},{:.3})", 0., 0., 0., 0.,))
-                    .scale(20.0),
-            ),
-            status_text_mesh: Text::new(TextFragment::new("")),
-            last_status_text: "".to_string(),
         }
     }
 }

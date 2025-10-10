@@ -1,7 +1,7 @@
 use crate::frame::{LogStuff, MainContent};
 use crate::objects2d::ball_impl::{Ball2D, Named, get_update_hood_call_cnt};
 
-impl LogStuff for MainContent<'_> {
+impl LogStuff for MainContent {
     fn any_log(&self) -> bool {
         self.show_timings //|| self.show_ball_stats
     }
@@ -49,13 +49,18 @@ impl LogStuff for MainContent<'_> {
         );
     }
 
-    fn status_text(&self, fps: u32, num_balls: usize) -> String {
-        if self.real_data {
+    fn status_text(&self, fps: u32) -> Option<String> {
+        if !self.show_ball_stats {
+            return None;
+        }
+        let num_balls = self.get_number_of_balls();
+        let return_value = if self.real_data {
             self.sim.get_status_text_real(fps, num_balls)
         } else {
             self.sim
                 .get_status_text(fps, num_balls, get_update_hood_call_cnt())
-        }
+        };
+        Some(return_value)
     }
 
     fn format_g(value: f32, precision: usize) -> String {

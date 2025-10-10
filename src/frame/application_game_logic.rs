@@ -1,11 +1,6 @@
-use crate::frame::{GameLogic, LogStuff, MainContent, VerletIntegration};
-use crate::objects2d::Vec2D;
+use crate::frame::{AppResult, GameLogic, LogStuff, MainContent, VerletIntegration};
 use crate::objects2d::ball_impl::verlet::Verlet;
 use crate::objects2d::ball_impl::{Ball2D, BallFactory};
-use crate::timing_monad::TimingMonad;
-use ggez::{GameError, GameResult};
-use rand::distr::Distribution;
-use rand::rng;
 use std::time::Instant;
 
 const DT_GOAL: f32 = 0.01; // 1. / (FPS_GOAL as f32);
@@ -44,20 +39,48 @@ impl Default for GameLogicData {
 }
 
 impl GameLogicData {
-    pub(crate) fn get_ball_factory(&mut self) -> &mut BallFactory {
-        &mut self.ball_factory
+    pub(crate) fn get_ball_factory(&self) -> &BallFactory {
+        &self.ball_factory
     }
 }
 
-impl<'a> GameLogic for MainContent<'a> {
-    fn is_ball_in_region(&self, pt: &Ball2D) -> bool {
-        let world = self.get_window_definition().world_region_inset(pt.radius);
-        let pos = &pt.get_position();
+impl MainContent {
+    fn update_sim_and_move_balls(&mut self, dt: f32, bound_rect: &crate::objects2d::Rect) {
+        let old_positions: Vec<_> = self
+            .get_ball_vec()
+            .iter()
+            .map(|ball| ball.borrow().get_position().clone())
+            .collect();
 
-        pos.x >= f32::min(world.x, world.x + world.w)
-            && pos.x <= f32::max(world.x, world.x + world.w)
-            && pos.y >= f32::min(world.y, world.y + world.h)
-            && pos.y <= f32::max(world.y, world.y + world.h)
+        self.update_sim(dt, bound_rect);
+
+        let updates: Vec<_> = self
+            .get_ball_vec()
+            .iter()
+            .enumerate()
+            .map(|(i, ball_rc)| {
+                let new_pos = ball_rc.borrow().get_position().clone();
+                (ball_rc.clone(), old_positions[i].clone(), new_pos)
+            })
+            .collect();
+
+        for (ball_rc, old_pos, new_pos) in updates {
+            self.cell_grid.move_ball(ball_rc, &old_pos, &new_pos);
+        }
+
+        self.remove_invalid_balls();
+    }
+}
+
+impl GameLogic for MainContent {
+    fn is_ball_in_region(&self, pt: &Ball2D) -> bool {
+        let world = self.world_region_inset(pt.radius);
+        let pos = pt.get_position();
+
+        pos.x >= world.x
+            && pos.x <= (world.x + world.w)
+            && pos.y >= (world.y + world.h)
+            && pos.y <= world.y
     }
 
     fn is_ball_colliding(&self, pt: &Ball2D) -> bool {
@@ -65,39 +88,6 @@ impl<'a> GameLogic for MainContent<'a> {
             .iter()
             .map(|ball_rc| ball_rc.borrow())
             .any(|ball| self.physics.is_colliding(pt, &(*ball)))
-    }
-
-    fn add_candidate_px(&mut self, x_px: f32, y_px: f32) -> GameResult {
-        let ball_pos = self.get_window_definition().px_to_coord(x_px, y_px);
-
-        let ball_v = if self.new_ball.rand_speed {
-            let mut rng = rng();
-            let normal = self.calculate_normal_distribution_of_speed();
-            Vec2D::new(normal.sample(&mut rng), normal.sample(&mut rng))
-        } else {
-            Vec2D::new(0., 0.)
-        };
-        let ball_size = self.new_ball.get_ball_size();
-        let ball_mass = self.new_ball.get_ball_mass();
-
-        let candidate = self
-            .get_game_logic_data()
-            .get_ball_factory()
-            .create_massive_with_velocity(ball_pos, ball_size, ball_mass, ball_v);
-
-        if !self.is_ball_in_region(&candidate) {
-            return Err(GameError::CustomError(
-                "new ball not within region".to_string(),
-            ));
-        }
-        if self.is_ball_colliding(&candidate) {
-            return Err(GameError::CustomError(
-                "new ball colliding with existing ball".to_string(),
-            ));
-        }
-        self.add_candidate_to_vec(candidate);
-        self.sim.clear_energy();
-        Ok(())
     }
 
     fn collect_neighbours_by_cell(&mut self, dt: f32) {
@@ -140,7 +130,8 @@ impl<'a> GameLogic for MainContent<'a> {
         }
     }
 
-    fn simulation_step(&mut self) -> GameResult {
+    fn simulation_step(&mut self) -> AppResult<()> {
+        self.sim.inc_frame_since_draw();
         if self.sim.is_paused() {
             return Ok(());
         }
@@ -152,51 +143,47 @@ impl<'a> GameLogic for MainContent<'a> {
         }
 
         let dt = self.get_game_logic_data().dt_goal;
-        let bound_rect = self.get_window_definition().compute_world_bounds_rect();
+        let bound_rect = self.world_region();
 
+        // timing instrumentation is clearly separated by cfg blocks
+        #[cfg(feature = "measure-time")]
         let mut timer = TimingMonad::new();
 
+        #[cfg(feature = "measure-time")]
         timer.time("collect_neighbours", || self.collect_neighbours_by_cell(dt));
+        #[cfg(not(feature = "measure-time"))]
+        self.collect_neighbours_by_cell(dt);
 
+        // update simulation and move balls (extracted to helper)
+        #[cfg(feature = "measure-time")]
         timer.time("update_sim", || {
-            // Store old positions before update
-            let old_positions: Vec<_> = self
-                .get_ball_vec()
-                .iter()
-                .map(|ball| ball.borrow().get_position().clone())
-                .collect();
-
-            self.update_sim(dt, &bound_rect);
-
-            // Update cell grid with new positions
-            // Update cell grid with new positions
-            let updates: Vec<_> = self
-                .get_ball_vec()
-                .iter()
-                .enumerate()
-                .map(|(i, ball_rc)| {
-                    let new_pos = ball_rc.borrow().get_position().clone();
-                    (ball_rc.clone(), old_positions[i].clone(), new_pos)
-                })
-                .collect();
-
-            for (ball_rc, old_pos, new_pos) in updates {
-                self.cell_grid.move_ball(ball_rc, &old_pos, &new_pos);
-            }
-
-            self.remove_invalid_balls();
+            self.update_sim_and_move_balls(dt, &bound_rect);
         });
+        #[cfg(not(feature = "measure-time"))]
+        {
+            self.update_sim_and_move_balls(dt, &bound_rect);
+        }
 
+        #[cfg(feature = "measure-time")]
         timer.time("calculate_temperature", || {
             let ball_vec = self.get_ball_vec().clone();
             self.sim.calculate_temperature(&ball_vec);
         });
+        #[cfg(not(feature = "measure-time"))]
+        {
+            let ball_vec = self.get_ball_vec().clone();
+            self.sim.calculate_temperature(&ball_vec);
+        }
 
+        #[cfg(feature = "measure-time")]
         self.log_timings(timer);
 
         self.step_count += 1;
         Ok(())
     }
+
+    // Helper to encapsulate the simulation update + cell grid updates + cleanup.
+    // This reduces duplication and keeps measurement-only code simple.
 
     fn init_game_logic() -> GameLogicData {
         GameLogicData {

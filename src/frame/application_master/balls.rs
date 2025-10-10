@@ -1,10 +1,10 @@
 use super::*;
-use crate::frame::GameLogic;
-use rand::{Rng, rng};
+use crate::frame::{AppError, AppResult, GameLogic};
+use rand::rng;
 use rand_distr::{Distribution, Normal};
 
-impl<'a> MainContent<'a> {
-    pub fn add_candidate_to_vec(&mut self, candidate: Ball2D<'a>) {
+impl MainContent {
+    pub fn add_candidate_to_vec(&mut self, candidate: Ball2D) {
         let ball_rc = Rc::new(RefCell::new(candidate));
         self.cell_grid.add_ball(ball_rc.clone());
         self.v_points.push(ball_rc);
@@ -18,29 +18,61 @@ impl<'a> MainContent<'a> {
     pub(crate) fn get_number_of_balls(&self) -> usize {
         self.v_points.len()
     }
-    pub(crate) fn get_ball_vec(&self) -> &Vec<Rc<RefCell<Ball2D<'a>>>> {
+    pub(crate) fn get_ball_vec(&self) -> &Vec<BallCell> {
         &self.v_points
     }
 
-    pub(crate) fn add_cursor_candidate(&mut self) {
-        let Vec2D { x, y } = self.win_definition.curs_pos;
-        self.add_candidate_px(x, y).ok();
-    }
+    // /// Add a new ball candidate at the given position with zero initial velocity.
+    // pub(crate) fn add_cursor_candidate(&mut self, pos: Vec2D) {
+    //     self.add_candidate(pos).ok();
+    // }
     pub(crate) fn add_random_candidates(&mut self, count: usize) {
-        let WindowDefinition {
-            margin_px: (x_min, y_min),
-            region_px: (x_range, y_range),
-            ..
-        } = self.win_definition;
+        let cur_radius = self
+            .get_game_logic_data()
+            .get_ball_factory()
+            .get_new_ball_radius();
+
+        let world = self.world_region_inset(cur_radius);
+        let min_pos = &(world.get_tl().into());
+        let max_pos = &world.get_br().into();
+
         let mut r = rng();
         for _ in 0..count {
-            let x = x_min + r.random_range(0.0..x_range);
-            let y = y_min + r.random_range(0.0..y_range);
-            self.add_candidate_px(x, y).ok();
+            let nu_ball = self
+                .get_game_logic_data()
+                .get_ball_factory()
+                .create_random((min_pos, max_pos), (0.0, 0.0));
+            self.add_candidate_ball(nu_ball).ok();
         }
     }
     pub(crate) fn enable_random_ball_speed(&mut self) {
-        self.new_ball.rand_speed = true;
+        // !todo()
+        // set a boolean which modifies add_random_candidate to use random speeds
+    }
+
+    pub(crate) fn add_candidate(&mut self, pos: Vec2D) -> AppResult {
+        let candidate = {
+            self.get_game_logic_data()
+                .get_ball_factory()
+                .create_massive_with_velocity(pos, Vec2D::zero())
+        };
+        self.add_candidate_ball(candidate)
+    }
+
+    pub(crate) fn add_candidate_ball(&mut self, candidate: Ball2D) -> AppResult {
+        if !self.is_ball_in_region(&candidate) {
+            return Err(AppError::CustomError(
+                "new ball not within region".to_string(),
+            ));
+        }
+        if self.is_ball_colliding(&candidate) {
+            return Err(AppError::CustomError(
+                "new ball colliding with existing ball".to_string(),
+            ));
+        }
+        self.add_candidate_to_vec(candidate);
+        self.sim.clear_energy();
+        Ok(())
     }
 
     pub(crate) fn randomize_speeds(&mut self) {
@@ -67,7 +99,7 @@ impl<'a> MainContent<'a> {
     pub(crate) fn remove_invalid_balls(&mut self) {
         let mut valid_balls = Vec::new();
         self.cell_grid.clear_all_cells();
-        
+
         for ball_rc in &self.v_points {
             let ball = ball_rc.borrow();
             let keep = !ball.get_position().x.is_nan() && !ball.get_position().y.is_nan();
@@ -77,13 +109,24 @@ impl<'a> MainContent<'a> {
                 valid_balls.push(ball_rc.clone());
             }
         }
-        
+
         // Re-add valid balls to grid
         for ball_rc in &valid_balls {
             self.cell_grid.add_ball(ball_rc.clone());
         }
-        
+
         self.v_points = valid_balls;
         self.num_balls = self.v_points.len();
+    }
+
+    pub(crate) fn stop_all_balls(&mut self) {
+        for ball_rc in &self.v_points {
+            let mut ball = ball_rc.borrow_mut();
+            ball.v = Vec2D::new(0., 0.);
+        }
+    }
+
+    pub(crate) fn next_ball_size(&mut self) {
+        self.game_data.get_ball_factory().next_ball_size_idx();
     }
 }

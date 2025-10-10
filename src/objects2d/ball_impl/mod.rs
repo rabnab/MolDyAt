@@ -4,7 +4,7 @@ pub use self::ball_physics::*;
 pub use crate::objects2d::ball_impl::ball_core::Ball2D;
 
 // Module declarations
-mod ball_core;
+pub(crate) mod ball_core;
 mod ball_factory;
 pub(crate) mod ball_physics;
 pub(crate) mod verlet;
@@ -77,17 +77,15 @@ mod tests {
 
     #[test]
     fn test_ball_creation() {
-        let ball =
-            BallFactory::new().create_massive_with_velocity(Vec2D::zero(), 1.0, 1.0, Vec2D::zero());
-        assert_eq!(ball.get_radius(), 1.0);
-        assert_eq!(ball.get_mass(), 1.0);
+        let factory = BallFactory::new();
+        let ball = factory.create_massive_with_velocity(Vec2D::zero(), Vec2D::zero());
         assert_eq!(*ball.get_position(), Vec2D::new(0.0, 0.0));
     }
 
     #[test]
     fn test_named_trait() {
-        let ball =
-            BallFactory::new().create_massive_with_velocity(Vec2D::zero(), 1.0, 1.0, Vec2D::zero());
+        let factory = BallFactory::new();
+        let ball = factory.create_massive_with_velocity(Vec2D::zero(), Vec2D::zero());
         assert!(ball.get_name().starts_with("Ball"));
     }
 }

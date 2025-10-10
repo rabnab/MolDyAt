@@ -1,6 +1,6 @@
+use crate::objects2d::Rect;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::{Ball2D, BallError, BallResult, Named};
-use ggez::graphics::Rect;
 
 //const LJ_SIG: f32 = 5.; // equilibrium distance
 //LJ_SIG in SI units is for Argon 3.4A=3.4E-10m
@@ -10,6 +10,7 @@ const LJ_CUTOFF: f32 = 4. * LJ_SIG; //distance where lenard jones force is < 1e-
 const LJ_EPS: f32 = 1.; // attractive strength
 const SQRT6_OF_TWO: f32 = 1.122462048309372981; // == 2^(1/6)
 
+#[derive(Clone)]
 pub struct PhysicsConstants {
     pub lj_sig: f32,
     pub lj_eps: f32,
@@ -36,6 +37,7 @@ impl Default for PhysicsConstants {
         }
     }
 }
+#[derive(Clone)]
 pub struct BallPhysics {
     constants: PhysicsConstants,
 }
@@ -62,6 +64,7 @@ impl BallPhysics {
         radius + self.get_cutoff_distance()
     }
 
+    /// equilibrium distance of two balls with same radius
     pub(crate) fn equilibrium_of_radius(&self, radius: f32) -> f32 {
         //case: r1==r2 --- SQRT6_OF_TWO * LJ_SIG + 2* rad == dist_equi
         (SQRT6_OF_TWO * self.constants.lj_sig) * 0.5 + radius
@@ -353,16 +356,16 @@ mod tests {
     #[test]
     fn test_is_colliding_detection() {
         let phys = BallPhysics::default();
-        let a = Ball2D::new(1, Vec2D::new(2.0, 3.0), 4.0);
+        let a = Ball2D::new(1, Vec2D::new(2.0, 3.0), (0, 4.0));
 
         let b_pos = Vec2D::new(2.0 + LJ_SIG * 0.99999, 3.0);
-        let b = Ball2D::new(2, b_pos, 6.0);
+        let b = Ball2D::new(2, b_pos, (0, 6.0));
 
         assert!(phys.is_colliding(&a, &b));
 
         let c_radius = 6.0;
         let c_pos = Vec2D::new(2.0, 3.0 + (a.radius + c_radius) + LJ_SIG * 1.00001);
-        let c = Ball2D::new(2, c_pos, c_radius);
+        let c = Ball2D::new(2, c_pos, (0, c_radius));
 
         assert!(!phys.is_colliding(&a, &c));
     }

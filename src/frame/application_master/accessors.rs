@@ -1,35 +1,78 @@
 use super::*;
-use ggez::graphics::Shader;
+use crate::objects2d::Rect;
+use crate::objects2d::ball_impl::BallFactory;
 
-impl<'a> MainContent<'a> {
-    pub(crate) fn get_window_definition(&self) -> &WindowDefinition {
-        &self.win_definition
-    }
-    pub(crate) fn mut_window_definition(&mut self) -> &mut WindowDefinition {
-        &mut self.win_definition
-    }
-
+impl MainContent {
     pub(crate) fn get_game_logic_data(&mut self) -> &mut GameLogicData {
         &mut self.game_data
     }
-    pub(crate) fn plot_type(&self) -> PlotContent {
-        self.show_plot
+
+    pub(crate) fn get_ball_factory(&self) -> &BallFactory {
+        self.game_data.get_ball_factory()
     }
-    pub(crate) fn cycle_plot_content(&mut self) {
-        self.show_plot = match self.show_plot {
-            PlotContent::NONE => PlotContent::EKIN,
-            PlotContent::EKIN => PlotContent::EPOT,
-            PlotContent::EPOT => PlotContent::ETOT,
-            PlotContent::ETOT => PlotContent::ALL,
-            PlotContent::ALL => PlotContent::NONE,
-        };
+
+    pub fn world_region(&self) -> Rect {
+        self.renderer.borrow().get_world_region()
     }
-    pub(crate) fn get_shader(&self) -> Option<Shader> {
-        self.shader.clone()
+
+    pub fn world_region_inset(&self, inner_margin: f32) -> Rect {
+        let world_region = self.world_region();
+        let tl = world_region.get_tl();
+        Rect::new(
+            tl.0 + inner_margin,
+            tl.1 - inner_margin,
+            world_region.w - 2.0 * inner_margin,
+            world_region.h + 2.0 * inner_margin,
+        )
     }
-    pub(crate) fn enable_drawing_cursor(&mut self, repeated: bool) {
-        if !repeated {
-            self.sim.set_draw_cursor(true);
+
+    pub(crate) fn toggle_pause(&mut self) {
+        self.sim.toggle_pause();
+    }
+
+    pub(crate) fn toggle_real_data(&mut self) {
+        self.real_data = !self.real_data;
+    }
+
+    pub(crate) fn toggle_show_ball_stats(&mut self) {
+        self.show_ball_stats = !self.show_ball_stats;
+    }
+
+    pub(crate) fn toggle_stepwise(&mut self) {
+        self.step_by_step = !self.step_by_step;
+    }
+
+    pub(crate) fn toggle_timing_display(&mut self) {
+        self.show_timings = !self.show_timings;
+    }
+
+    /// tells the renderer to resize the window to the given px size
+    /// pauses the sim if it's running, resumes after some time
+    pub(crate) fn resize(&mut self, width_px: f32, height_px: f32) {
+        if !self.sim.is_paused() {
+            self.pause_for_resize()
         }
+        // Resume after 300ms
+        self.renderer.borrow_mut().resize(width_px, height_px);
+    }
+
+    pub(crate) fn increase_speedup(&mut self) {
+        self.sim.increase_speedup();
+    }
+
+    pub(crate) fn decrease_speedup(&mut self) {
+        self.sim.decrease_speedup();
+    }
+
+    pub(crate) fn get_speedup(&self) -> u32 {
+        self.sim.get_speedup()
+    }
+    pub(crate) fn start_frame(&mut self) {
+        self.sim.reset_frame_since_draw();
+        self.update_hood_at_frame_start = self.sim.get_update_hood_cnt();
+    }
+
+    pub(crate) fn end_frame(&mut self) {
+        self.sim.update_hood_cnt(self.update_hood_at_frame_start);
     }
 }

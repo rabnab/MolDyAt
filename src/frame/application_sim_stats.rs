@@ -1,12 +1,8 @@
-use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::Ball2D;
-use ggez::GameResult;
-use ggez::graphics::{Color, DrawMode, MeshBuilder, Rect};
-use ggez::input::keyboard::KeyCode;
-use ggez::mint::Point2;
+use crate::objects2d::{Rect, Vec2D};
 use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::collections::vec_deque::Iter;
-use std::collections::{HashSet, VecDeque};
 use std::rc::Rc;
 
 const PLT_SIZE: usize = 1000;
@@ -33,13 +29,13 @@ pub struct SimStats {
     step: usize,
     pause: bool,
     speedup: u32,
-    draw_cursor: bool,
+
     frames_since_draw: u32,
     v_pot: VecDeque<f32>,
     v_kin: VecDeque<f32>,
     max_neighbours: usize,
     update_hood_cnt: usize,
-    pressed_key: HashSet<KeyCode>,
+
     min_dist_initial: f32,
 }
 
@@ -56,19 +52,11 @@ impl SimStats {
         self.pause
     }
 
-    pub fn set_draw_cursor(&mut self, draw: bool) {
-        self.draw_cursor = draw;
-    }
-
     pub(crate) fn reset_frame_since_draw(&mut self) {
         self.frames_since_draw = 0;
     }
     pub(crate) fn inc_frame_since_draw(&mut self) {
         self.frames_since_draw += 1
-    }
-
-    pub fn draw_cursor(&self) -> bool {
-        self.draw_cursor
     }
 
     pub fn iter_vkin(&self) -> Iter<'_, f32> {
@@ -92,83 +80,15 @@ impl SimStats {
         self.v_pot.clear();
     }
 
-    pub(crate) fn register_key_pressed(&mut self, key: KeyCode) {
-        self.pressed_key.insert(key);
-    }
-
-    pub(crate) fn register_key_released(&mut self, key: KeyCode) {
-        self.pressed_key.remove(&key);
-    }
-
-    pub(crate) fn is_key_pressed(&self, key: KeyCode) -> bool {
-        self.pressed_key.contains(&key)
-    }
-
-    pub(crate) fn set_update_hood_cnt(&mut self, update_hood_cnt: usize) {
-        self.update_hood_cnt = update_hood_cnt;
-    }
-
-    pub fn add_vkin_to_line<F>(
-        &self,
-        mesh_builder: &mut MeshBuilder,
-        to_screen_coords: F,
-    ) -> GameResult
-    where
-        F: Fn(usize, f32) -> Point2<f32>,
-    {
-        Self::add_data_to_line(mesh_builder, to_screen_coords, Color::RED, &self.v_kin)
-    }
-
-    pub fn add_vpot_to_line<F>(
-        &self,
-        mesh_builder: &mut MeshBuilder,
-        to_screen_coords: F,
-    ) -> GameResult
-    where
-        F: Fn(usize, f32) -> Point2<f32>,
-    {
-        Self::add_data_to_line(mesh_builder, to_screen_coords, Color::BLUE, &self.v_pot)
-    }
-
-    pub fn add_vtot_to_line<F>(
-        &self,
-        mesh_builder: &mut MeshBuilder,
-        to_screen_coords: F,
-    ) -> GameResult
-    where
-        F: Fn(usize, f32) -> Point2<f32>,
-    {
-        let data = self
-            .v_kin
-            .iter()
-            .zip(self.v_pot.iter())
-            .map(|(k, p)| -> f32 { k + p })
-            .collect();
-        Self::add_data_to_line(mesh_builder, to_screen_coords, Color::YELLOW, &data)
-    }
-
-    fn add_data_to_line<F>(
-        mesh_builder: &mut MeshBuilder,
-        to_screen_coords: F,
-        color: Color,
-        data: &VecDeque<f32>,
-    ) -> GameResult
-    where
-        F: Fn(usize, f32) -> Point2<f32>,
-    {
-        let mut points: Vec<Point2<f32>> = Vec::with_capacity(data.len());
-        for (i, &value) in data.iter().enumerate() {
-            points.push(to_screen_coords(i, value));
-        }
-        mesh_builder.polyline(DrawMode::stroke(2.0), &points, color)?;
-        Ok(())
-    }
-
     pub(crate) fn get_speedup(&self) -> u32 {
         self.speedup
     }
     pub(crate) fn increase_speedup(&mut self) {
-        self.speedup = self.speedup + 1;
+        self.speedup = if self.speedup < 100 {
+            self.speedup + 1
+        } else {
+            100
+        };
     }
 
     pub(crate) fn decrease_speedup(&mut self) {
@@ -266,6 +186,14 @@ impl SimStats {
         //self.sim.temperature = 0.5 / (/*KB*/ 1. * (3. * self.v_points.len() as f32 - 3.)) * sum_rel_kin;
         self.temperature = sum_rel_kin_doubled / 3. / (v_balls_rc.len() as f32) /* /KB == /1*/
     }
+
+    pub(crate) fn get_update_hood_cnt(&self) -> usize {
+        self.update_hood_cnt
+    }
+
+    pub(crate) fn update_hood_cnt(&mut self, update_hood_at_frame_start: usize) {
+        self.update_hood_cnt = self.get_update_hood_cnt() - update_hood_at_frame_start;
+    }
 }
 
 impl Default for SimStats {
@@ -282,13 +210,11 @@ impl Default for SimStats {
             step: 0,
             pause: false,
             speedup: 1,
-            draw_cursor: false,
             frames_since_draw: 0,
             v_pot: VecDeque::with_capacity(100),
             v_kin: VecDeque::with_capacity(100),
             max_neighbours: 0,
             update_hood_cnt: 0,
-            pressed_key: HashSet::new(),
             min_dist_initial: f32::MAX,
         }
     }

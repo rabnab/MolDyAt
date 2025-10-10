@@ -1,44 +1,34 @@
 use super::cell::{BallCell, Cell, CellBounds};
-use crate::objects2d::Vec2D;
-use ggez::Context;
-use ggez::graphics::{Color, Rect};
+use crate::frame::AppResult;
+use crate::objects2d::{Rect, Vec2D};
 use std::fmt::Debug;
 
-pub struct CellGrid<'a> {
-    cells: Vec<Vec<Cell<'a>>>,
+/// A spatial grid to partition the simulation area into cells for efficient neighbor searching.
+/// Each cell contains a list of balls currently located within its bounds.
+pub struct CellGrid {
+    cells: Vec<Vec<Cell>>,
     cell_size_x: f32,
     cell_size_y: f32,
     grid_width: usize,
     grid_height: usize,
     sim_width: f32,
     sim_height: f32,
+    /// Origin of the grid in world coordinates (top-left corner)
     grid_origin: (f32, f32), // (top-left x, top-left y)
 }
 
-impl Debug for CellGrid<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(
-            f,
-            "CellGrid: {}x{} cells, cell size: ({:.2}, {:.2}), sim size: ({:.2}, {:.2}), origin: ({:.2}, {:.2})",
-            self.grid_height,
-            self.grid_width,
-            self.cell_size_x,
-            self.cell_size_y,
-            self.sim_width,
-            self.sim_height,
-            self.grid_origin.0,
-            self.grid_origin.1
-        )?;
-        for (row_idx, row) in self.cells.iter().enumerate() {
-            for (col_idx, cell) in row.iter().enumerate() {
-                writeln!(f, "Cell ({}, {}): {:?}", row_idx, col_idx, cell)?;
-            }
-        }
-        Ok(())
+impl CellGrid {
+    /// Returns the world rectangle that the grid covers.
+    pub(crate) fn world_rect(&self) -> Rect {
+        let sim_br = (
+            self.grid_origin.0 + self.sim_width,
+            self.grid_origin.1 + self.sim_height,
+        );
+        Rect::from_tl_br(self.grid_origin, sim_br)
     }
 }
 
-impl<'a> CellGrid<'a> {
+impl CellGrid {
     pub(crate) fn default() -> Self {
         Self {
             cells: Vec::new(),
@@ -53,14 +43,14 @@ impl<'a> CellGrid<'a> {
     }
 }
 
-impl<'a> CellGrid<'a> {
-    pub fn new(world_rect: Rect, cutoff: f32, ctx: Option<&Context>) -> Self {
+impl CellGrid {
+    /// Create a new CellGrid covering the specified world rectangle with cells sized based on the cutoff distance.
+    pub fn new(world_rect: Rect, cutoff: f32) -> AppResult<Self> {
         let sim_width = world_rect.w;
         let sim_height = world_rect.h;
-        let top_left_x = world_rect.x;
-        let top_left_y = world_rect.y;
+        let (top_left_x, top_left_y) = world_rect.get_tl();
 
-        let cell_size = 4.0 * cutoff;
+        let cell_size = 2.5 * cutoff;
         let grid_width = (sim_width.abs() / cell_size).ceil() as usize;
         let grid_height = (sim_height.abs() / cell_size).ceil() as usize;
 
@@ -78,8 +68,7 @@ impl<'a> CellGrid<'a> {
                     max_y: top_left_y - (row + 1) as f32 * cell_size_y,
                 };
 
-                let color = Self::get_cell_color(row, col);
-                cell_row.push(Cell::new(bounds, color, ctx));
+                cell_row.push(Cell::new(bounds, row, col, grid_width));
             }
             cells.push(cell_row);
         }
@@ -95,13 +84,20 @@ impl<'a> CellGrid<'a> {
             grid_origin: (top_left_x, top_left_y),
         };
 
-        grid
+        Ok(grid)
     }
 
+    pub(crate) fn get_cell_size(&self) -> (f32, f32) {
+        (self.cell_size_x, self.cell_size_y)
+    }
+
+    /// Get the number of cells in the grid as (rows, columns).
     pub(crate) fn get_grid_size(&self) -> (usize, usize) {
         (self.grid_height, self.grid_width)
     }
 
+    /// Given a position in world coordinates, return the corresponding cell indices (row, column).
+    /// Returns None if the position is outside the grid bounds.
     pub fn get_cell_indices(&self, position: &Vec2D) -> Option<(usize, usize)> {
         let col = ((position.x - self.grid_origin.0) / self.cell_size_x) as usize;
         let row = ((self.grid_origin.1 - position.y) / self.cell_size_y) as usize;
@@ -113,15 +109,16 @@ impl<'a> CellGrid<'a> {
         }
     }
 
-    pub fn get_cell_mut(&mut self, row: usize, col: usize) -> Option<&mut Cell<'a>> {
+    pub fn get_cell_mut(&mut self, row: usize, col: usize) -> Option<&mut Cell> {
         self.cells.get_mut(row)?.get_mut(col)
     }
 
-    pub fn get_cell(&self, row: usize, col: usize) -> Option<&Cell<'a>> {
+    pub fn get_cell(&self, row: usize, col: usize) -> Option<&Cell> {
         self.cells.get(row)?.get(col)
     }
 
-    pub fn move_ball(&mut self, ball: BallCell<'a>, old_pos: &Vec2D, new_pos: &Vec2D) {
+    /// Move a ball from its old position to a new position, updating the cells accordingly.
+    pub fn move_ball(&mut self, ball: BallCell, old_pos: &Vec2D, new_pos: &Vec2D) {
         if let (Some((old_row, old_col)), Some((new_row, new_col))) = (
             self.get_cell_indices(old_pos),
             self.get_cell_indices(new_pos),
@@ -142,7 +139,8 @@ impl<'a> CellGrid<'a> {
         }
     }
 
-    pub fn add_ball(&mut self, ball: BallCell<'a>) {
+    /// Add a ball to the appropriate cell based on its current position.
+    pub fn add_ball(&mut self, ball: BallCell) {
         let position = &ball.borrow().get_position().clone();
         if let Some((row, col)) = self.get_cell_indices(position) {
             if let Some(cell) = self.get_cell_mut(row, col) {
@@ -151,7 +149,8 @@ impl<'a> CellGrid<'a> {
         }
     }
 
-    pub fn get_neighboring_cells(&self, row: usize, col: usize) -> Vec<&Cell<'a>> {
+    /// Get all neighboring cells (including diagonals) for the cell at (row, col).
+    pub fn get_neighboring_cells(&self, row: usize, col: usize) -> Vec<&Cell> {
         let mut neighbors = Vec::new();
 
         for dr in -1..=1 {
@@ -178,7 +177,8 @@ impl<'a> CellGrid<'a> {
         }
     }
 
-    pub(crate) fn get_balls_in_neighborhood(&self, i: usize, j: usize) -> Vec<BallCell<'a>> {
+    /// Get all balls in the neighboring cells of the cell at (row, col), including the cell itself.
+    pub(crate) fn get_balls_in_neighborhood(&self, i: usize, j: usize) -> Vec<BallCell> {
         let mut balls = Vec::new();
 
         self.get_neighboring_cells(i, j)
@@ -189,13 +189,9 @@ impl<'a> CellGrid<'a> {
         balls
     }
 
-    pub(crate) fn resize(
-        old_grid: &mut CellGrid<'a>,
-        new_world: Rect,
-        cutoff: f32,
-        ctx: Option<&Context>,
-    ) -> Self {
-        let mut new_grid = CellGrid::new(new_world, cutoff, ctx);
+    /// Resize the grid to cover a new world rectangle, reassigning all existing balls to their new cells.
+    pub(crate) fn resize(old_grid: &mut CellGrid, new_world: Rect, cutoff: f32) -> AppResult<Self> {
+        let mut new_grid = CellGrid::new(new_world, cutoff)?;
 
         for row in &mut old_grid.cells {
             for cell in row {
@@ -205,21 +201,29 @@ impl<'a> CellGrid<'a> {
             }
         }
 
-        new_grid
+        Ok(new_grid)
     }
+}
 
-    /// Returns a faint background color for a cell based on its row and column.
-    pub fn get_cell_color(row: usize, col: usize) -> Color {
-        // 6 faint pastel colors
-        const COLORS: [Color; 6] = [
-            Color::new(0.8, 0.8, 1.0, 0.15), // faint blue
-            Color::new(0.8, 1.0, 0.8, 0.15), // faint green
-            Color::new(1.0, 0.8, 0.8, 0.15), // faint red
-            Color::new(1.0, 1.0, 0.8, 0.15), // faint yellow
-            Color::new(0.8, 1.0, 1.0, 0.15), // faint cyan
-            Color::new(1.0, 0.8, 1.0, 0.15), // faint magenta
-        ];
-        let idx = (row + col) % COLORS.len();
-        COLORS[idx]
+impl Debug for CellGrid {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(
+            f,
+            "CellGrid: {}x{} cells, cell size: ({:.2}, {:.2}), sim size: ({:.2}, {:.2}), origin: ({:.2}, {:.2})",
+            self.grid_height,
+            self.grid_width,
+            self.cell_size_x,
+            self.cell_size_y,
+            self.sim_width,
+            self.sim_height,
+            self.grid_origin.0,
+            self.grid_origin.1
+        )?;
+        for (row_idx, row) in self.cells.iter().enumerate() {
+            for (col_idx, cell) in row.iter().enumerate() {
+                writeln!(f, "Cell ({}, {}): {:?}", row_idx, col_idx, cell)?;
+            }
+        }
+        Ok(())
     }
 }

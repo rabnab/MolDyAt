@@ -1,21 +1,22 @@
+use crate::objects2d::Rect;
 use crate::objects2d::ball_impl::verlet::Verlet;
 use crate::objects2d::ball_impl::{BallId, Named};
 use crate::objects2d::vec_2d::Vec2D;
 use crate::objects2d::verbose_info::VerboseInfo;
-use ggez::graphics::{Color, Rect};
 use std::collections::VecDeque;
 
 const DEFAULT_TAIL_LENGTH: usize = 0;
 
 const TAIL_RESOLUTION_DELTA_SQ: f32 = 3. * 3.; // minimum squared distance to add new tail point
 
-pub struct Ball2D<'a> {
+pub struct Ball2D {
     pub radius: f32,
+    pub size_idx: usize,
     pos: Vec2D,
     pub(crate) id: BallId,
     pub mass: f32,
     pub v: Vec2D,
-    pub(crate) hood: Verlet<'a>,
+    pub(crate) hood: Verlet,
     pub verbose: VerboseInfo,
     pub braking: bool,
     pub pre_update_pos: Vec2D,
@@ -25,10 +26,11 @@ pub struct Ball2D<'a> {
     pub tail_length: usize,
 }
 
-impl<'a> Default for Ball2D<'a> {
-    fn default() -> Ball2D<'a> {
+impl Default for Ball2D {
+    fn default() -> Ball2D {
         Ball2D {
             radius: 1.,
+            size_idx: usize::MAX,
             pos: Vec2D::zero(),
             id: 0,
             mass: 1.,
@@ -45,12 +47,13 @@ impl<'a> Default for Ball2D<'a> {
     }
 }
 
-impl<'a> Ball2D<'a> {
-    pub fn new(id: BallId, pos: Vec2D, radius: f32) -> Ball2D<'a> {
+impl Ball2D {
+    pub fn new(id: BallId, pos: Vec2D, radius: (usize, f32)) -> Ball2D {
         let mut ball = Ball2D {
             id,
             pos: pos.clone(),
-            radius,
+            radius: radius.1,
+            size_idx: radius.0,
             pre_update_pos: pos.clone(),
             last_update_hood_pos: pos.clone(),
             ..Ball2D::default()
@@ -61,6 +64,10 @@ impl<'a> Ball2D<'a> {
 
     pub fn get_id(&self) -> BallId {
         self.id
+    }
+
+    pub fn get_size_idx(&self) -> usize {
+        self.size_idx
     }
 
     // Basic position and property access methods
@@ -94,17 +101,6 @@ impl<'a> Ball2D<'a> {
 
     pub fn moment(&self) -> Vec2D {
         self.v.scaled(self.mass)
-    }
-
-    pub fn ball_color(&self) -> Option<Color> {
-        if self.verbose.console || self.verbose.lines() {
-            return Some(Color::BLUE);
-        }
-        if self.braking {
-            return Some(Color::YELLOW);
-        }
-
-        None
     }
 
     #[cfg(test)] //Only used in tests
@@ -211,10 +207,8 @@ impl<'a> Ball2D<'a> {
         let dx = self.v.x * dt + 0.5 * self.accel.x * dt * dt;
         let dy = self.v.y * dt + 0.5 * self.accel.y * dt * dt;
 
-        let x0 = bound.x;
-        let x1 = bound.x + bound.w;
-        let y0 = bound.y;
-        let y1 = bound.y + bound.h;
+        let (x0, y0) = (bound.get_tl());
+        let (x1, y1) = (bound.get_br());
 
         let bound_min_x = f32::min(x0, x1) + self.radius;
         let bound_max_x = f32::max(x0, x1) - self.radius;
@@ -256,19 +250,19 @@ impl<'a> Ball2D<'a> {
     }
 }
 
-impl<'a> Named for Ball2D<'a> {
+impl Named for Ball2D {
     fn get_name(&self) -> String {
         format!("Ball{}", self.id)
     }
 }
 
-impl<'a> PartialEq for Ball2D<'a> {
+impl PartialEq for Ball2D {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
     }
 }
 
-impl<'a> core::fmt::Debug for Ball2D<'a> {
+impl core::fmt::Debug for Ball2D {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         f.write_fmt(format_args!("{}: radius/mass {:.3}/{:.3}, pos: ({:.3e},{:.3e}), vel: ({:.3e},{:.3e}), acc: ({:.3e},{:.3e}), brake: {} ",
                              self.get_name(),
@@ -315,12 +309,7 @@ mod tests {
         b.pos = Vec2D::new(0.0, 0.0);
         b.v = Vec2D::new(10.0, 0.0);
         b.set_accel(Vec2D::zero());
-        let bound = Rect {
-            x: -2.0,
-            y: -2.0,
-            w: 4.0,
-            h: 4.0,
-        }; // square from -2..2
+        let bound = Rect::new(-2.0, -2.0, 4.0, 4.0); // square from -2..2
         // Move with dt so that we cross right boundary (max x = 2 - radius = 1)
         b.execute_update_pos(0.2, &bound); // dx = 2.0
         // Expect bounce: position mirrored inside and v.x flipped

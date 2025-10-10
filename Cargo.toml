@@ -1,3 +1,7 @@
+cargo-features = ["profile-rustflags"]
+[unstable]
+profile-rustflags = true
+
 [package]
 name = "rust_thermo"
 version = "0.1.0"
@@ -5,7 +9,8 @@ edition = "2024"
 
 [dependencies]
 dtrace = "0.1.1"
-ggez = "0.9.3"
+ggez = { version = "0.9.3", optional = true }
+wgpu = { version = "0.16", optional = true }
 rand = "0.9.0"
 rand_distr = "0.5.1"
 #rayon = "1.10.0"
@@ -15,5 +20,21 @@ rand_distr = "0.5.1"
 [dev-dependencies]
 float-cmp = "0.10"
 
-[profile.release]
+[features]
+default = ["renderer-ggez"]
+measure-time = []
+renderer-ggez = ["ggez"]
+renderer-wgpu = ["wgpu"]
+
+[profile.dev]
 debug = true
+
+
+[profile.release]
+#debug = true
+codege-units = 1
+lto = "fat"
+rustflags = ["-C", "target-cpu=native"]
+opt-level = 3
+panic = "abort"
+strip = "symbols"
