@@ -1,7 +1,7 @@
 use super::*;
 // use crate::frame::SimulationToggler;
 
-impl<'a> MainContent<'a> {
+impl MainContent {
     pub(crate) fn start_handling_verbosity_input(&mut self) {
         println!("Enter a ball ID (or 'a' to set all balls to verbose) followed by mode ([cmos]):");
         let mut input = String::new();
@@ -34,7 +34,7 @@ impl<'a> MainContent<'a> {
             }
         }
     }
-    fn toggle_ball_internal(ball_found: &mut Ball2D<'a>, mode: &VerboseInfoMode) {
+    fn toggle_ball_internal(ball_found: &mut Ball2D, mode: &VerboseInfoMode) {
         match mode {
             VerboseInfoMode::CONSOLE => ball_found.verbose.toggle_console(),
             VerboseInfoMode::MAIN => ball_found.verbose.toggle_main_neighbour(),
@@ -42,9 +42,7 @@ impl<'a> MainContent<'a> {
             VerboseInfoMode::SPEED => ball_found.verbose.toggle_speed(),
         }
     }
-}
 
-impl<'a> MainContent<'a> {
     pub(crate) fn make_all_verbose(&mut self, mode: VerboseInfoMode) {
         for b in self.v_points.iter() {
             Self::toggle_ball_internal(&mut b.borrow_mut(), &mode);

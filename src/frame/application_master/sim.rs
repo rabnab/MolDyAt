@@ -1,9 +1,8 @@
 use super::*;
 use crate::frame::VerletIntegration;
-use ggez::Context;
-use ggez::graphics::Rect;
+use crate::objects2d::Rect;
 
-impl MainContent<'_> {
+impl MainContent {
     /// Call this when a window resize event is detected to pause the simulation
     pub(crate) fn pause_for_resize(&mut self) {
         self.was_paused_for_resize = true;
@@ -13,20 +12,20 @@ impl MainContent<'_> {
 
     /// Call this periodically (e.g., in the update loop) to check if it's time to unpause
     /// the simulation after a resize event.
-    pub(crate) fn unpause_after_resize(&mut self, ctx: Option<&Context>) {
+    pub(crate) fn unpause_after_resize(&mut self) {
         if let Some(resume_time) = self.resize_resume_at {
             if std::time::Instant::now() >= resume_time {
                 if self.was_paused_for_resize && self.sim.is_paused() {
                     self.sim.toggle_pause();
                 }
 
-                let nu_rect = self.get_window_definition().compute_world_bounds_rect();
+                let nu_rect = self.world_region();
                 let nu_grid = CellGrid::resize(
                     &mut self.cell_grid,
                     nu_rect,
                     self.physics.get_cutoff_distance(),
-                    ctx,
-                );
+                )
+                .expect("Failed to resize CellGrid");
                 self.cell_grid = nu_grid;
                 self.resize_resume_at = None;
                 self.was_paused_for_resize = false;
@@ -35,7 +34,7 @@ impl MainContent<'_> {
     }
 }
 
-impl<'a> VerletIntegration for MainContent<'a> {
+impl VerletIntegration for MainContent {
     fn update_sim(&mut self, dt: f32, bound_rect: &Rect) {
         let mut max_v: f32 = 0.;
         let mut max_id: usize = 0;

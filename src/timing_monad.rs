@@ -1,4 +1,4 @@
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 pub struct TimingMonad {
     timings: Vec<(String, Duration)>,
@@ -11,6 +11,8 @@ impl TimingMonad {
         }
     }
 
+    #[cfg(feature = "measure-time")]
+    #[inline(never)]
     pub fn time<F, R>(&mut self, label: &str, f: F) -> R
     where
         F: FnOnce() -> R,
@@ -22,6 +24,22 @@ impl TimingMonad {
         result
     }
 
+    #[cfg(not(feature = "measure-time"))]
+    #[inline(always)]
+    pub fn time<F, R>(&mut self, _label: &str, f: F) -> R
+    where
+        F: FnOnce() -> R,
+    {
+        f() // Zero overhead
+    }
+    #[cfg(not(feature = "measure-time"))]
+    #[inline(never)]
+    pub fn log(&self) {
+        // Zero overhead
+    }
+
+    #[cfg(feature = "measure-time")]
+    #[inline(never)]
     pub fn time_result<F, R, E>(&mut self, label: &str, f: F) -> Result<R, E>
     where
         F: FnOnce() -> Result<R, E>,
@@ -32,7 +50,8 @@ impl TimingMonad {
         self.timings.push((label.to_string(), duration));
         result
     }
-
+    #[cfg(feature = "measure-time")]
+    #[inline(never)]
     pub fn log(&self) {
         for (label, duration) in &self.timings {
             println!("{}: {:?} ms", label, duration.as_millis());

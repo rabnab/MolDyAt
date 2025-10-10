@@ -8,8 +8,8 @@ use std::rc::{Rc, Weak};
 
 const UPDATE_FREQ: usize = 100;
 
-pub(crate) struct Verlet<'a> {
-    neighbours: Vec<Weak<RefCell<Ball2D<'a>>>>,
+pub(crate) struct Verlet {
+    neighbours: Vec<Weak<RefCell<Ball2D>>>,
     pub nearest: f32,
     pub farthest: f32,
     updates_frequency: usize,
@@ -17,8 +17,8 @@ pub(crate) struct Verlet<'a> {
     num_neighbours: usize,
 }
 
-impl<'a> Default for Verlet<'a> {
-    fn default() -> Verlet<'a> {
+impl Default for Verlet {
+    fn default() -> Verlet {
         Verlet {
             neighbours: Vec::new(),
             nearest: f32::NAN,
@@ -30,7 +30,7 @@ impl<'a> Default for Verlet<'a> {
     }
 }
 
-impl<'a> Verlet<'a> {
+impl Verlet {
     /// Creates a new Verlet integration system with default parameters
     pub fn new() -> Self {
         Self::default()
@@ -47,7 +47,7 @@ impl<'a> Verlet<'a> {
     //     Verlet::default()
     // }
 
-    pub fn get_neighbour_iter(&self) -> impl Iterator<Item = Rc<RefCell<Ball2D<'a>>>> {
+    pub fn get_neighbour_iter(&self) -> impl Iterator<Item = Rc<RefCell<Ball2D>>> {
         self.neighbours
             .iter()
             .filter_map(|weak| weak.upgrade().clone())
@@ -69,7 +69,7 @@ impl<'a> Verlet<'a> {
     // fn add_neighbour_already_sure_was_no_neighbour(&self, ball_rc: Weak<RefCell<Ball2D<'a>>>) {
     //     self.neighbours.borrow_mut().push(ball_rc);
     // }
-    pub fn add_neighbour(&mut self, ball_rc: &Rc<RefCell<Ball2D<'a>>>) -> bool {
+    pub fn add_neighbour(&mut self, ball_rc: &Rc<RefCell<Ball2D>>) -> bool {
         let was_neighbour = self.is_a_neighbour_id(ball_rc.borrow().get_id());
         if !was_neighbour {
             self.neighbours.push(Rc::downgrade(ball_rc));
@@ -113,18 +113,15 @@ impl<'a> Verlet<'a> {
         Self::has_ball_moved_enough(ball, dt, min_movement_threshold)
     }
 
-    pub fn update_hood<'b>(
-        ball: &mut Ball2D<'a>,
+    pub fn update_hood<'neigh>(
+        ball: &mut Ball2D,
         dt: f32,
-        neighbours: impl IntoIterator<Item = &'b BallCell<'a>>,
+        neighbours: impl IntoIterator<Item = &'neigh BallCell>,
         cutoff: f32,
         min_movement_threshold: f32,
-    ) where
-        'a: 'b,
-    {
+    ) {
         let dist_limit_by_v = 0.;
-        //we only check hood every ten updates --> factors 100 and 10
-        //100. * v_sq * dt * dt + eq * eq + 2. * 10. * dt * eq * (self.v.x + self.v.y);
+
         let dist_limit_by_closest = 4. * cutoff;
         let dist_limit = f32::max(dist_limit_by_closest, dist_limit_by_v);
         if ball.verbose.console {
@@ -140,7 +137,9 @@ impl<'a> Verlet<'a> {
         unsafe {
             UPDATE_HOOD_CNT += 1;
         }
+
         ball.last_update_hood_pos = ball.get_position().clone();
+        ball.hood.neighbours.clear();
         for cur_rc in neighbours {
             let cur_ref = cur_rc.borrow();
 
@@ -188,7 +187,7 @@ impl<'a> Verlet<'a> {
     }
 }
 
-impl<'a> core::fmt::Debug for Verlet<'a> {
+impl core::fmt::Debug for Verlet {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         f.write_fmt(format_args!(
             "nearest/farthest {:.3e}/{:.3e} num neighbours {}",
@@ -203,8 +202,8 @@ impl<'a> core::fmt::Debug for Verlet<'a> {
 mod tests {
     use super::*;
 
-    fn make_ball(id: usize, pos: Vec2D) -> Rc<RefCell<Ball2D<'static>>> {
-        let b = Ball2D::new(id, pos, 1.0);
+    fn make_ball(id: usize, pos: Vec2D) -> Rc<RefCell<Ball2D>> {
+        let b = Ball2D::new(id, pos, (0, 1.0));
         Rc::new(RefCell::new(b))
     }
 
@@ -241,7 +240,7 @@ mod tests {
     #[test]
     fn test_needs_update_hood_thresholds() {
         let v = Verlet::new();
-        let mut ball = Ball2D::new(1, Vec2D::zero(), 1.0);
+        let mut ball = Ball2D::new(1, Vec2D::zero(), (0, 1.0));
         ball.last_update_hood_pos = Vec2D::new(0.0, 0.0);
         ball.v = Vec2D::new(1.0, 0.0);
         // With small dt and high threshold -> false
@@ -252,7 +251,7 @@ mod tests {
 
     #[test]
     fn test_has_ball_moved_enough_true() {
-        let mut ball = Ball2D::new(1, Vec2D::zero(), 1.0);
+        let mut ball = Ball2D::new(1, Vec2D::zero(), (0, 1.0));
         ball.last_update_hood_pos = Vec2D::new(0.0, 0.0);
         ball.v = Vec2D::new(3.0, 4.0); // velocity vector
 
@@ -268,7 +267,7 @@ mod tests {
 
     #[test]
     fn test_has_ball_moved_enough_false() {
-        let mut ball = Ball2D::new(1, Vec2D::new(0.1, 0.1), 1.0);
+        let mut ball = Ball2D::new(1, Vec2D::new(0.1, 0.1), (0, 1.0));
         ball.last_update_hood_pos = Vec2D::new(0.0, 0.0);
         ball.v = Vec2D::new(0.1, 0.1);
 
@@ -284,7 +283,7 @@ mod tests {
 
     #[test]
     fn test_has_ball_moved_enough_edge_case() {
-        let mut ball = Ball2D::new(1, Vec2D::new(2., 0.), 1.0);
+        let mut ball = Ball2D::new(1, Vec2D::new(2., 0.), (0, 1.0));
         ball.last_update_hood_pos = Vec2D::new(0.0, 0.0);
         ball.v = Vec2D::new(1.0, 0.0);
 
@@ -301,7 +300,7 @@ mod tests {
 
     #[test]
     fn test_has_ball_moved_enough_zero_threshold() {
-        let mut ball = Ball2D::new(1, Vec2D::zero(), 1.0);
+        let mut ball = Ball2D::new(1, Vec2D::zero(), (0, 1.0));
         ball.last_update_hood_pos = Vec2D::new(0.0, 0.0);
         ball.v = Vec2D::new(0.0, 0.0);
 

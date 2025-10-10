@@ -1,17 +1,34 @@
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::Ball2D;
-use ggez::Context;
-use ggez::graphics::{Color, Mesh};
 use std::cell::RefCell;
 use std::fmt::Debug;
+use std::hash::Hash;
 use std::rc::Rc;
 
-pub type BallCell<'a> = Rc<RefCell<Ball2D<'a>>>;
+pub type BallCell = Rc<RefCell<Ball2D>>;
 
-pub struct Cell<'a> {
-    pub balls: Vec<BallCell<'a>>,
+pub struct Cell {
+    pub balls: Vec<BallCell>,
     pub bounds: CellBounds,
-    pub rect_mesh: Option<Mesh>,
+    pub id: CellId,
+}
+#[derive(Clone, Copy)]
+pub struct CellId {
+    pub row: usize,
+    pub col: usize,
+    pub id: usize,
+}
+
+impl Debug for CellId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}x{})", self.row, self.col)
+    }
+}
+
+impl CellId {
+    pub fn new(row: usize, col: usize, id: usize) -> Self {
+        Self { row, col, id }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -32,34 +49,24 @@ impl Debug for CellBounds {
     }
 }
 
-impl Debug for Cell<'_> {
+impl Debug for Cell {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "balls {} bounds: {:?}", self.balls.len(), self.bounds)
     }
 }
 
-impl<'a> Cell<'a> {
-    pub fn new(bounds: CellBounds, rect_color: Color, ctx: Option<&Context>) -> Self {
-        let rect = ggez::graphics::Rect::new(
-            0.,
-            0.,
-            bounds.max_x - bounds.min_x,
-            bounds.min_y - bounds.max_y,
-        );
-
-        let rect_mesh = ctx.map(|the_ctx| {
-            Mesh::new_rectangle(the_ctx, ggez::graphics::DrawMode::fill(), rect, rect_color)
-                .unwrap()
-        });
+impl Cell {
+    pub fn new(bounds: CellBounds, row: usize, column: usize, num_column: usize) -> Self {
+        let id = CellId::new(row, column, row * num_column + column);
 
         Self {
             balls: Vec::new(),
             bounds,
-            rect_mesh,
+            id,
         }
     }
 
-    pub fn add_ball(&mut self, ball: BallCell<'a>) {
+    pub fn add_ball(&mut self, ball: BallCell) {
         self.balls.push(ball);
     }
 
@@ -67,11 +74,11 @@ impl<'a> Cell<'a> {
         self.balls.retain(|b| b.borrow().get_id() != ball_id);
     }
 
-    pub fn get_balls(&self) -> impl Iterator<Item = &BallCell<'a>> {
+    pub fn get_balls(&self) -> impl Iterator<Item = &BallCell> {
         self.balls.iter()
     }
 
-    pub fn drain_balls(&mut self) -> Vec<BallCell<'a>> {
+    pub fn drain_balls(&mut self) -> Vec<BallCell> {
         self.balls.drain(..).collect()
     }
 
@@ -79,8 +86,8 @@ impl<'a> Cell<'a> {
         Vec2D::new(self.bounds.min_x, self.bounds.min_y)
     }
 
-    pub fn get_rect_mesh(&self) -> Option<&Mesh> {
-        self.rect_mesh.as_ref()
+    pub fn get_bottom_right(&self) -> Vec2D {
+        Vec2D::new(self.bounds.max_x, self.bounds.max_y)
     }
 
     pub fn clear(&mut self) {
