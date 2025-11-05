@@ -94,15 +94,24 @@ impl GameLogic for MainContent {
         if self.step_count % self.get_game_logic_data().neighbour_update_interval == 0 {
             let (rows, cols) = self.cell_grid.get_grid_size();
 
+            // Single reusable buffer to avoid per-cell allocations
+            let mut neighbor_buf: Vec<_> = Vec::new();
+            // reserve some capacity to reduce reallocations; tune as needed
+            neighbor_buf.reserve(30);
+
             for row in 0..rows {
                 for col in 0..cols {
                     if let Some(cell) = self.cell_grid.get_cell(row, col) {
-                        let neighbor_balls = self.cell_grid.get_balls_in_neighborhood(row, col);
+                        neighbor_buf.clear();
+                        self.cell_grid
+                            .collect_balls_into(row, col, &mut neighbor_buf);
+
+                        //let neighbor_balls = self.cell_grid.get_balls_in_neighborhood(row, col);
 
                         for ball_rc in &cell.balls {
                             let ball_radius = { ball_rc.borrow().radius };
 
-                            let neighbors = neighbor_balls.iter().filter(|neighbor| {
+                            let neighbors = neighbor_buf.iter().filter(|neighbor| {
                                 !std::ptr::eq(neighbor.as_ptr(), ball_rc.as_ptr())
                             });
 
@@ -125,6 +134,11 @@ impl GameLogic for MainContent {
                 let ball_pos = ball_rc.borrow().get_position().clone();
                 let mut ball = ball_rc.borrow_mut();
                 ball.hood.update_closeness_stats(&ball_pos);
+                if !ball.verbose.lines() && ball.hood.get_number_of_neighbors() > 100 {
+                    ball.verbose.toggle_other_neighbour();
+                } else if ball.verbose.lines() && ball.hood.get_number_of_neighbors() <= 100 {
+                    ball.verbose.toggle_other_neighbour();
+                }
                 Self::log_closeness_update(&ball);
             }
         }
@@ -172,7 +186,19 @@ impl GameLogic for MainContent {
         #[cfg(not(feature = "measure-time"))]
         {
             let ball_vec = self.get_ball_vec().clone();
-            self.sim.calculate_temperature(&ball_vec);
+            // self.sim.calculate_temperature(&ball_vec);
+            // Hold Ref guards so the borrows stay valid while calculate_temperature_fast runs
+            let mut borrows: Vec<std::cell::Ref<'_, Ball2D>> = Vec::with_capacity(ball_vec.len());
+            for rc in &ball_vec {
+                borrows.push(rc.borrow());
+            }
+
+            // Build a slice of &Ball2D references (no cloning of Ball2D)
+            let mut refs: Vec<&Ball2D> = Vec::with_capacity(borrows.len());
+            for r in &borrows {
+                refs.push(&*r);
+            }
+            self.sim.calculate_temperature_fast(refs.as_slice());
         }
 
         #[cfg(feature = "measure-time")]

@@ -1,3 +1,5 @@
+#![allow(unused_variables)]
+
 use crate::frame::AppResult;
 use crate::frame::application_master::BallCell;
 use crate::frame::renderer::{DrawingBackend, PlotContent, Renderer};

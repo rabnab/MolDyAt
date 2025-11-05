@@ -96,7 +96,7 @@ impl BallPhysics {
     }
 
     fn min_dist_for_const_force(&self) -> f32 {
-        self.constants.lj_sig * 0.5
+        self.constants.lj_sig * 0.75
     }
 
     pub(crate) fn lenard_jones_force(
@@ -119,18 +119,21 @@ impl BallPhysics {
         res
     }
 
-    pub(crate) fn check_min_dist(actual_dist: f32, min_dist: f32) -> BallResult<f32> {
+    pub(crate) fn calculate_min_dist(actual_dist: f32, min_dist: f32) -> BallResult<f32> {
         // let wiggle_room = LJ_SIG*0.1;
         // if actual_dist < 0. {
         //     return Err(BallError::LessThanTwoBalls);
         // }
-        if actual_dist < min_dist || f32::is_nan(min_dist) {
+        if f32::is_nan(min_dist) {
             if actual_dist <= 0. {
                 return Err(BallError::DistanceUnderflow);
             }
             return Ok(actual_dist);
         }
-        Ok(min_dist)
+        if actual_dist <= 0. {
+            return Err(BallError::DistanceUnderflow);
+        }
+        Ok(f32::min(min_dist, actual_dist))
     }
 
     pub fn distance_of_edges(a: &Ball2D, b: &Ball2D) -> f32 {
@@ -255,7 +258,7 @@ impl BallPhysics {
                 Ok(dist_result) => dist_result,
             };*/
 
-            match Self::check_min_dist(center_dist - radius_sum, min_dist) {
+            match Self::calculate_min_dist(center_dist - radius_sum, min_dist) {
                 Ok(min_dist_cur) => {
                     min_dist = min_dist_cur;
                     let lj_force = self.lenard_jones_force(center_dist, radius_sum, ball.id);
@@ -282,7 +285,7 @@ impl BallPhysics {
                 _ => {
                     min_dist = 0.;
                     //maybe use some max_force to repell
-                    let lj_force = -100.;
+                    let lj_force = 100.;
                     let force_to_dist_val = lj_force / center_dist;
                     let local_force = Vec2D::new(
                         dist_vec.x * force_to_dist_val,
@@ -315,8 +318,14 @@ impl BallPhysics {
 mod tests {
     use super::*;
 
-    fn approx(a: f32, b: f32, eps: f32) -> bool {
-        (a - b).abs() <= eps * (1.0 + a.abs().max(b.abs()))
+    fn approx(a: f32, b: f32, eps: f32) {
+        assert!(
+            (a - b).abs() <= eps * (1.0 + a.abs().max(b.abs())),
+            "values not approx equal: {} vs {} with eps {}",
+            a,
+            b,
+            eps
+        );
     }
 
     #[test]
@@ -325,32 +334,26 @@ mod tests {
         // Using default sigma=1 and eps=1 per file constants
         let r_eq = 1.122462048309372981_f32; // 2^(1/6)
         let pot = phys.lenard_jones_potential(r_eq);
-        assert!(
-            approx(pot, -1.0, 1e-5),
-            "potential at equilibrium should be -eps, got {}",
-            pot
-        );
+
+        approx(pot, -1.0, 1e-5);
         let force = phys.lenard_jones_force_pure(r_eq);
-        assert!(
-            approx(force, 0.0, 1e-5),
-            "force at equilibrium should be 0, got {}",
-            force
-        );
+
+        approx(force, 0.0, 1e-5);
     }
 
     #[test]
     fn test_check_min_dist() {
         // When actual <= 0 -> DistanceUnderflow
         assert_eq!(
-            BallPhysics::check_min_dist(0.0, 1.0).unwrap_err(),
+            BallPhysics::calculate_min_dist(0.0, 1.0).unwrap_err(),
             BallError::DistanceUnderflow
         );
         // When actual < min -> returns actual
-        let val = BallPhysics::check_min_dist(0.5, 1.0).unwrap();
-        assert!(approx(val, 0.5, 1e-6));
+        let val = BallPhysics::calculate_min_dist(0.5, 1.0).unwrap();
+        approx(val, 0.5, 1e-6);
         // When actual >= min -> returns min
-        let val2 = BallPhysics::check_min_dist(2.0, 1.0).unwrap();
-        assert!(approx(val2, 1.0, 1e-6));
+        let val2 = BallPhysics::calculate_min_dist(2.0, 1.0).unwrap();
+        approx(val2, 1.0, 1e-6);
     }
 
     #[test]

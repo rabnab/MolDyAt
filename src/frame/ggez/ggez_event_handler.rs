@@ -76,8 +76,8 @@ impl EventHandler for GgezEventHandler {
 
         let status_text = self.application.status_text(fps as u32);
         cur_render.set_physics_engine(self.application.physics.clone());
-        cur_render.draw_frame(&mut backend, cell_grid, status_text)?;
         cur_render.draw_balls(&mut backend, self.application.get_ball_vec().clone())?;
+        cur_render.draw_frame(&mut backend, cell_grid, status_text)?;
 
         cur_render.draw_cursor(
             &mut backend,
@@ -162,7 +162,7 @@ impl EventHandler for GgezEventHandler {
                     self.application.add_candidate(cursor_pos)?;
                     self.renderer.borrow_mut().disable_drawing_cursor();
                 }
-                KeyCode::F5 => self.application.add_random_candidates(10),
+                KeyCode::F5 => self.application.add_random_candidates(100),
                 KeyCode::F1 => self.application.stop_all_balls(),
                 KeyCode::F2 => {
                     let mut small = self

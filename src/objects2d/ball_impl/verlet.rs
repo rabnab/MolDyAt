@@ -73,9 +73,14 @@ impl Verlet {
         let was_neighbour = self.is_a_neighbour_id(ball_rc.borrow().get_id());
         if !was_neighbour {
             self.neighbours.push(Rc::downgrade(ball_rc));
-            self.num_neighbours += 1;
+            // self.num_neighbours += 1;
         }
         was_neighbour
+    }
+
+    fn clear(&mut self) {
+        self.neighbours.clear();
+        self.num_neighbours = 0;
     }
 
     pub fn is_a_neighbour_id(&self, id_other: BallId) -> bool {
@@ -91,7 +96,7 @@ impl Verlet {
                 weak.upgrade()
                     .is_some_and(|ball_rc| ball_rc.borrow().get_id() != remove_id)
             });
-            self.num_neighbours -= 1;
+            // self.num_neighbours -= 1;
             return true;
         }
         false
@@ -162,6 +167,7 @@ impl Verlet {
     }
 
     pub fn update_closeness_stats(&mut self, ball_pos: &Vec2D) {
+        self.num_neighbours = self.neighbours.len();
         let (nearest_sq, farthest_sq) = self
             .neighbours
             .iter()
@@ -322,38 +328,49 @@ mod tests {
         let c = make_ball(2, Vec2D::new(2.0, 0.0));
 
         // Initially zero
+        v.update_closeness_stats(a.borrow().get_position());
         assert_eq!(v.num_neighbours, 0);
 
         // Add a
         v.add_neighbour(&a);
+        v.update_closeness_stats(a.borrow().get_position());
+
         assert_eq!(v.num_neighbours, 1);
 
         // Add b
         v.add_neighbour(&b);
+        v.update_closeness_stats(b.borrow().get_position());
+
         assert_eq!(v.num_neighbours, 2);
 
         // Add c
         v.add_neighbour(&c);
+        v.update_closeness_stats(c.borrow().get_position());
         assert_eq!(v.num_neighbours, 3);
 
         // Add b again (should not increment)
         v.add_neighbour(&b);
+        v.update_closeness_stats(c.borrow().get_position());
         assert_eq!(v.num_neighbours, 3);
 
         // Remove b
         v.remove(b.borrow().get_id());
+        v.update_closeness_stats(c.borrow().get_position());
         assert_eq!(v.num_neighbours, 2);
 
         // Remove a
         v.remove(a.borrow().get_id());
+        v.update_closeness_stats(c.borrow().get_position());
         assert_eq!(v.num_neighbours, 1);
 
         // Remove c
         v.remove(c.borrow().get_id());
+        v.update_closeness_stats(c.borrow().get_position());
         assert_eq!(v.num_neighbours, 0);
 
         // Remove non-existent (should not go negative)
         v.remove(a.borrow().get_id());
+        v.update_closeness_stats(c.borrow().get_position());
         assert_eq!(v.num_neighbours, 0);
     }
 
@@ -365,6 +382,7 @@ mod tests {
 
         v.add_neighbour(&a);
         v.add_neighbour(&b);
+        v.update_closeness_stats(a.borrow().get_position());
         // num_neighbours should match number of valid neighbours
         let count = v
             .neighbours
@@ -375,6 +393,7 @@ mod tests {
 
         // Remove one
         v.remove(a.borrow().get_id());
+        v.update_closeness_stats(a.borrow().get_position());
         let count = v
             .neighbours
             .iter()
