@@ -149,26 +149,6 @@ impl CellGrid {
         }
     }
 
-    /// Get all neighboring cells (including diagonals) for the cell at (row, col).
-    pub fn get_neighboring_cells(&self, row: usize, col: usize) -> Vec<&Cell> {
-        let mut neighbors = Vec::new();
-
-        for dr in -1..=1 {
-            for dc in -1..=1 {
-                let r = row as i32 + dr;
-                let c = col as i32 + dc;
-
-                if r >= 0 && c >= 0 {
-                    if let Some(cell) = self.get_cell(r as usize, c as usize) {
-                        neighbors.push(cell);
-                    }
-                }
-            }
-        }
-
-        neighbors
-    }
-
     pub fn clear_all_cells(&mut self) {
         for row in &mut self.cells {
             for cell in row {
@@ -177,16 +157,35 @@ impl CellGrid {
         }
     }
 
-    /// Get all balls in the neighboring cells of the cell at (row, col), including the cell itself.
-    pub(crate) fn get_balls_in_neighborhood(&self, i: usize, j: usize) -> Vec<BallCell> {
-        let mut balls = Vec::new();
+    /// Iterate over neighbor cells (including self) without allocating.
+    #[inline]
+    pub fn for_each_neighbor<F>(&self, row: usize, col: usize, mut f: F)
+    where
+        F: FnMut(&Cell),
+    {
+        if self.grid_height == 0 || self.grid_width == 0 {
+            return;
+        }
 
-        self.get_neighboring_cells(i, j)
-            .into_iter()
-            .for_each(|cell| {
-                balls.extend(cell.get_balls().cloned());
-            });
-        balls
+        let r_min = row.saturating_sub(1);
+        let c_min = col.saturating_sub(1);
+        let r_max = (row + 1).min(self.grid_height - 1);
+        let c_max = (col + 1).min(self.grid_width - 1);
+
+        for r in r_min..=r_max {
+            let row_ref = &self.cells[r];
+            for c in c_min..=c_max {
+                f(&row_ref[c]);
+            }
+        }
+    }
+
+    /// Collect all balls from the 3x3 neighborhood into the provided `out` buffer.
+    /// Caller should `clear()` the buffer if they want fresh contents each time.
+    pub(crate) fn collect_balls_into(&self, i: usize, j: usize, out: &mut Vec<BallCell>) {
+        self.for_each_neighbor(i, j, |cell| {
+            out.extend(cell.get_balls().cloned());
+        });
     }
 
     /// Resize the grid to cover a new world rectangle, reassigning all existing balls to their new cells.

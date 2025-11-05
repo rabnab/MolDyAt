@@ -13,6 +13,7 @@ impl MainContent {
     pub(crate) fn clear_points(&mut self) {
         self.v_points.clear();
         self.cell_grid.clear_all_cells();
+        self.get_ball_factory().reset_id_counter();
         self.num_balls = 0;
     }
     pub(crate) fn get_number_of_balls(&self) -> usize {
