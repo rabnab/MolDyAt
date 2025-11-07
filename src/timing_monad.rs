@@ -1,4 +1,6 @@
 use std::time::Duration;
+#[cfg(feature = "measure-time")]
+use std::time::Instant;
 
 pub struct TimingMonad {
     timings: Vec<(String, Duration)>,
