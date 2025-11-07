@@ -33,6 +33,9 @@ pub struct GgezRenderer {
     cursor_pos_px: [f32; 2],
     cache: GgezMeshCache,
     physics: Option<BallPhysics>,
+    string_elems: usize,
+    glyph_elems: usize,
+    ball_elems: usize,
 }
 
 impl GgezRenderer {
@@ -62,6 +65,9 @@ impl GgezRenderer {
             txt_cursor: format!("x: {}, y: {} pos ({:.3},{:.3})", 0., 0., 0., 0.,),
             cache,
             physics: None,
+            string_elems: 0,
+            glyph_elems: 0,
+            ball_elems: 0,
         }
     }
 }
@@ -224,7 +230,12 @@ impl Renderer for GgezRenderer {
         // 2) draw upper right text
         if let Some(text) = status_text {
             let pos = self.ball_status_text_pos.unwrap_or([0., 0.]);
-            backend.draw_text(text, pos, 30., true, false)?;
+
+            let full_text = format!(
+                "{}\n[Cache: strings {}, glyphs {}, ball labels {}]",
+                text, self.string_elems, self.glyph_elems, self.ball_elems
+            );
+            backend.draw_text(full_text, pos, 30., true, false)?;
         }
 
         Ok(())
@@ -282,12 +293,18 @@ impl GgezRenderer {
     // Move the cache out without cloning (leaves an empty/default cache behind).
     // Ensure GgezMeshCache implements Default (or create a proper empty value).
     pub fn take_cache(&mut self) -> GgezMeshCache {
+        self.string_elems = self.cache.text_cache.len();
+        self.glyph_elems = self.cache.glyph_cache.len();
+        self.ball_elems = self.cache.ball_label_cache.len();
         std::mem::take(&mut self.cache)
     }
 
     // Put cache back after use
     pub fn put_cache(&mut self, cache: GgezMeshCache) {
         self.cache = cache;
+        self.string_elems = self.cache.text_cache.len();
+        self.glyph_elems = self.cache.glyph_cache.len();
+        self.ball_elems = self.cache.ball_label_cache.len();
     }
 
     fn create_ball_meshes(
