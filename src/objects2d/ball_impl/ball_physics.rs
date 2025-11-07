@@ -61,7 +61,7 @@ impl BallPhysics {
     }
 
     pub fn get_min_movement_for_update_hood(&self, radius: f32) -> f32 {
-        radius + self.get_cutoff_distance()
+        radius + 2. * self.get_cutoff_distance()
     }
 
     /// equilibrium distance of two balls with same radius
