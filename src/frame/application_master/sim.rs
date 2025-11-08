@@ -54,11 +54,15 @@ impl VerletIntegration for MainContent {
 
         //update velocities and accel with new positions
         self.sim.reset_min_dist(bound_rect);
+        
+        // Clone v_points reference to avoid simultaneous mut/immut borrow
+        let balls_vec = self.v_points.clone();
+        
         for ball_rc in &mut self.v_points {
             let mut cur = ball_rc.borrow_mut();
             let (min_dist, cur_pot) = self
                 .physics
-                .update_accel_and_speed(&mut *cur, dt, bound_rect);
+                .update_accel_and_speed(&mut *cur, dt, bound_rect, &balls_vec);
 
             //calculate properties
             self.sim.update_min_dist(min_dist);

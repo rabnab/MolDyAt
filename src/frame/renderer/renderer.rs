@@ -73,7 +73,7 @@ pub trait Renderer {
         balls: Vec<BallCell>,
     ) -> AppResult<()> {
         let verbose_balls = get_verbose_balls(&balls);
-        self.draw_verbose_balls(backend, &verbose_balls)?;
+        self.draw_verbose_balls(backend, &verbose_balls, &balls)?;
         // self.draw_all_ball_tails(backend, &balls)?; todo!()
         self.draw_all_balls_symbol(backend, &balls)?;
 
@@ -84,10 +84,11 @@ pub trait Renderer {
         &self,
         backend: &mut dyn DrawingBackend,
         verbose_balls: &[BallCell],
+        all_balls: &[BallCell],
     ) -> AppResult {
         for ball_ref in verbose_balls.iter() {
             let ball = ball_ref.borrow();
-            self.draw_neighbour_lines(backend, &ball)?;
+            self.draw_neighbour_lines(backend, &ball, all_balls)?;
         }
         Ok(())
     }
@@ -95,6 +96,7 @@ pub trait Renderer {
         &self,
         backend: &mut dyn DrawingBackend,
         ball: &Ref<Ball2D>,
+        balls: &[BallCell],
     ) -> AppResult;
 
     fn draw_cursor(&self, backend: &mut dyn DrawingBackend, size_idx: usize) -> AppResult;

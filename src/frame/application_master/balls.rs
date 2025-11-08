@@ -22,6 +22,10 @@ impl MainContent {
     pub(crate) fn get_ball_vec(&self) -> &Vec<BallCell> {
         &self.v_points
     }
+    
+    pub(crate) fn get_ball_vec_mut(&mut self) -> &mut Vec<BallCell> {
+        &mut self.v_points
+    }
 
     // /// Add a new ball candidate at the given position with zero initial velocity.
     // pub(crate) fn add_cursor_candidate(&mut self, pos: Vec2D) {

@@ -131,11 +131,12 @@ impl Renderer for GgezRenderer {
         &self,
         backend: &mut dyn DrawingBackend,
         ball: &Ref<Ball2D>,
+        balls: &[BallCell],
     ) -> AppResult {
         let ball_coord_px = self.window_def.borrow().coord_to_px(&ball.get_position());
 
         let neighbour_info = match &self.physics {
-            Some(physics) => physics.get_neighbour_force_and_pos(ball),
+            Some(physics) => physics.get_neighbour_force_and_pos(ball, balls),
             None => vec![],
         };
         let start: Point2<f32> = ball_coord_px.clone().into();
