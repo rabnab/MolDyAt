@@ -98,33 +98,51 @@ impl GameLogic for MainContent {
             let mut neighbor_buf: Vec<_> = Vec::new();
             // reserve some capacity to reduce reallocations; tune as needed
             neighbor_buf.reserve(30);
+            
+            let cutoff = self.physics.get_cutoff_distance();
 
             for row in 0..rows {
                 for col in 0..cols {
-                    if let Some(cell) = self.cell_grid.get_cell(row, col) {
-                        neighbor_buf.clear();
-                        self.cell_grid
-                            .collect_balls_into(row, col, &mut neighbor_buf);
+                    neighbor_buf.clear();
+                    self.cell_grid
+                        .collect_balls_into(row, col, &mut neighbor_buf);
 
-                        //let neighbor_balls = self.cell_grid.get_balls_in_neighborhood(row, col);
+                    // Clone cell.balls to avoid holding immutable borrow
+                    let cell_balls: Vec<_> = if let Some(cell) = self.cell_grid.get_cell(row, col) {
+                        cell.balls.clone()
+                    } else {
+                        continue;
+                    };
 
-                        for ball_rc in &cell.balls {
-                            let ball_radius = { ball_rc.borrow().radius };
+                    for ball_rc in &cell_balls {
+                        let ball_id = ball_rc.borrow().get_id();
+                        let ball_radius = ball_rc.borrow().radius;
+                        
+                        // Find ball index in v_points
+                        let ball_idx = if let Some(idx) = self.get_ball_vec().iter().position(|b| b.borrow().get_id() == ball_id) {
+                            idx
+                        } else {
+                            continue;
+                        };
+                        
+                        // Get min_movement before taking mutable borrow
+                        let min_movement = self.physics.get_min_movement_for_update_hood(ball_radius);
 
-                            let neighbors = neighbor_buf.iter().filter(|neighbor| {
-                                !std::ptr::eq(neighbor.as_ptr(), ball_rc.as_ptr())
-                            });
+                        let neighbors = neighbor_buf.iter().filter(|neighbor| {
+                            !std::ptr::eq(neighbor.as_ptr(), ball_rc.as_ptr())
+                        });
 
-                            let mut ball = ball_rc.borrow_mut();
+                        // Get mutable access to the entire balls vector
+                        let balls = self.get_ball_vec_mut();
 
-                            Verlet::update_hood(
-                                &mut *ball,
-                                dt,
-                                neighbors,
-                                self.physics.get_cutoff_distance(),
-                                self.physics.get_min_movement_for_update_hood(ball_radius),
-                            );
-                        }
+                        Verlet::update_hood(
+                            ball_idx,
+                            dt,
+                            neighbors,
+                            cutoff,
+                            min_movement,
+                            balls,
+                        );
                     }
                 }
             }
@@ -133,7 +151,8 @@ impl GameLogic for MainContent {
             for ball_rc in self.get_ball_vec().iter() {
                 let ball_pos = ball_rc.borrow().get_position().clone();
                 let mut ball = ball_rc.borrow_mut();
-                ball.hood.update_closeness_stats(&ball_pos);
+                let balls = self.get_ball_vec();
+                ball.hood.update_closeness_stats(&ball_pos, balls);
                 if !ball.verbose.lines() && ball.hood.get_number_of_neighbors() > 100 {
                     ball.verbose.toggle_other_neighbour();
                 } else if ball.verbose.lines() && ball.hood.get_number_of_neighbors() <= 100 {

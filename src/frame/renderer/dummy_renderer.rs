@@ -47,6 +47,7 @@ impl Renderer for DummyRenderer {
         &self,
         backend: &mut dyn DrawingBackend,
         ball: &Ref<Ball2D>,
+        balls: &[BallCell],
     ) -> AppResult {
         todo!()
     }

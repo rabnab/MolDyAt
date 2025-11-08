@@ -104,8 +104,8 @@ impl Ball2D {
     }
 
     #[cfg(test)] //Only used in tests
-    pub fn get_neighbour_names(&self) -> Vec<String> {
-        self.hood.get_neighbour_names()
+    pub fn get_neighbour_names(&self, balls: &[crate::objects2d::ball_cell::cell::BallCell]) -> Vec<String> {
+        self.hood.get_neighbour_names(balls)
     }
 
     // pub fn get_neighbour_force_and_pos(&self) -> Vec<(Vec2D, f32)> {

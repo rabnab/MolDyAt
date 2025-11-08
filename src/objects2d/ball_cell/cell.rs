@@ -2,7 +2,6 @@ use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::Ball2D;
 use std::cell::RefCell;
 use std::fmt::Debug;
-use std::hash::Hash;
 use std::rc::Rc;
 
 pub type BallCell = Rc<RefCell<Ball2D>>;

@@ -267,20 +267,21 @@ mod tests {
 
         // Initial state check
         {
-            let ball1: &Ball2D = &*main_content.v_points[0].borrow();
-            let ball2: &Ball2D = &*main_content.v_points[1].borrow();
-            let ball3: &Ball2D = &*main_content.v_points[2].borrow();
+            let balls = main_content.get_ball_vec();
+            let ball1: &Ball2D = &*balls[0].borrow();
+            let ball2: &Ball2D = &*balls[1].borrow();
+            let ball3: &Ball2D = &*balls[2].borrow();
 
             assert!(
-                ball1.get_neighbour_names().is_empty(),
+                ball1.get_neighbour_names(balls).is_empty(),
                 "Ball 1 should have no neighbours initially"
             );
             assert!(
-                ball2.get_neighbour_names().is_empty(),
+                ball2.get_neighbour_names(balls).is_empty(),
                 "Ball 2 should have no neighbours initially"
             );
             assert!(
-                ball3.get_neighbour_names().is_empty(),
+                ball3.get_neighbour_names(balls).is_empty(),
                 "Ball 3 should have no neighbours initially"
             );
         }
@@ -294,35 +295,36 @@ mod tests {
             main_content.collect_neighbours_by_cell(DT_GOAL);
 
             // After collecting neighbors, Ball1 and Ball2 should be neighbors
-            let ball1: &Ball2D = &*main_content.v_points[0].borrow();
-            let ball2: &Ball2D = &*main_content.v_points[1].borrow();
-            let ball3: &Ball2D = &*main_content.v_points[2].borrow();
+            let balls = main_content.get_ball_vec();
+            let ball1: &Ball2D = &*balls[0].borrow();
+            let ball2: &Ball2D = &*balls[1].borrow();
+            let ball3: &Ball2D = &*balls[2].borrow();
 
-            println!("ball1.neigh: {:?}", ball1.get_neighbour_names());
-            println!("ball2.neigh: {:?}", ball2.get_neighbour_names());
-            println!("ball3.neigh: {:?}", ball3.get_neighbour_names());
+            println!("ball1.neigh: {:?}", ball1.get_neighbour_names(balls));
+            println!("ball2.neigh: {:?}", ball2.get_neighbour_names(balls));
+            println!("ball3.neigh: {:?}", ball3.get_neighbour_names(balls));
 
             assert_eq!(
-                ball1.get_neighbour_names().len(),
+                ball1.get_neighbour_names(balls).len(),
                 1,
                 "Ball 1 should have 1 neighbour"
             );
             assert_eq!(
-                ball2.get_neighbour_names().len(),
+                ball2.get_neighbour_names(balls).len(),
                 2,
                 "Ball 2 should have 1 neighbour"
             );
             assert!(
-                ball1.get_neighbour_names().contains(&ball2.get_name()),
+                ball1.get_neighbour_names(balls).contains(&ball2.get_name()),
                 "Ball 1 should be neighbour of Ball 2"
             );
             assert!(
-                ball2.get_neighbour_names().contains(&ball1.get_name()),
+                ball2.get_neighbour_names(balls).contains(&ball1.get_name()),
                 "Ball 2 should be neighbour of Ball 1"
             );
 
             assert!(
-                ball3.get_neighbour_names().contains(&ball2.get_name()),
+                ball3.get_neighbour_names(balls).contains(&ball2.get_name()),
                 "Ball 3 should have no neighbours because it is far from others"
             );
         }
