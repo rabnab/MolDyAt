@@ -144,7 +144,7 @@ pub(crate) fn is_number_start(ch: char, next_opt: Option<char>) -> bool {
     // Start numbers for: '-' followed by digit or '.', a digit, or '.' followed by digit
     if ch == '-' {
         if let Some(n) = next_opt {
-            return n.is_ascii_digit() || n == '.';
+            return n.is_ascii_digit();
         }
         return false;
     }
