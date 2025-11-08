@@ -46,6 +46,21 @@ impl<'a> GgezBackend<'a> {
         Ok(())
     }
 
+    /// Get cached single-character glyph Text for given char and scale
+    fn get_cached_glyph(&mut self, ch: char, scale: f32) -> Text {
+        let scale_key = scale.to_bits();
+
+        let key = (ch, scale_key);
+        let char_txt = if let Some(tt) = self.cache.glyph_cache.get(&key) {
+            tt.clone()
+        } else {
+            let t = Text::new(TextFragment::new(ch.to_string()).scale(scale));
+            self.cache.glyph_cache.insert(key, t.clone());
+            t
+        };
+        char_txt
+    }
+
     // Return the owned cache back to the caller after rendering
     pub fn into_cache(self) -> GgezMeshCache {
         self.cache
@@ -198,14 +213,7 @@ impl<'a> DrawingBackend for GgezBackend<'a> {
                     }
                     // measure numeric token by summing per-char widths
                     for ch in s.chars() {
-                        let key = (ch, scale_key);
-                        let char_txt = if let Some(tt) = self.cache.glyph_cache.get(&key) {
-                            tt.clone()
-                        } else {
-                            let t = Text::new(TextFragment::new(ch.to_string()).scale(scale));
-                            self.cache.glyph_cache.insert(key, t.clone());
-                            t
-                        };
+                        let char_txt = self.get_cached_glyph(ch, scale);
                         if let Some(r) = char_txt.dimensions(self.ctx) {
                             line_w += r.w;
                         }
@@ -259,7 +267,7 @@ impl<'a> DrawingBackend for GgezBackend<'a> {
         for (li, (line_w, tokens)) in lines_metrics.iter().enumerate() {
             // initial x depends on alignment direction
             let mut x = if align_right { pos[0] - line_w } else { pos[0] };
-            // If align_right is used as bottom/right anchor, interpret pos.y as bottom coordinate.
+            // If align_bottom interpret pos.y as bottom coordinate.
             // So top y should be pos.y - total_h. Otherwise treat pos.y as top.
             let y = if align_bottom {
                 pos[1] - total_h + li as f32 * line_h
@@ -292,14 +300,7 @@ impl<'a> DrawingBackend for GgezBackend<'a> {
                 } else {
                     // numeric token: draw per-char cached Texts
                     for ch in token.chars() {
-                        let key = (ch, scale_key);
-                        let char_txt = if let Some(tt) = self.cache.glyph_cache.get(&key) {
-                            tt.clone()
-                        } else {
-                            let t = Text::new(TextFragment::new(ch.to_string()).scale(scale));
-                            self.cache.glyph_cache.insert(key, t.clone());
-                            t
-                        };
+                        let char_txt = self.get_cached_glyph(ch, scale);
                         let dim = char_txt
                             .dimensions(self.ctx)
                             .unwrap_or(ggez::graphics::Rect::new(0.0, 0.0, 0.0, 0.0));
@@ -374,6 +375,8 @@ impl<'a> DrawingBackend for GgezBackend<'a> {
         Ok(c.finish(self.ctx)?)
     }
 }
+
+impl<'a> GgezBackend<'a> {}
 
 pub struct GgezMeshCache {
     pub cell_mesh: Option<((f32, f32), Mesh)>,
