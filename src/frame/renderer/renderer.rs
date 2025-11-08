@@ -31,7 +31,7 @@ pub trait DrawingBackend {
         windef: &WindowDefinition,
     ) -> AppResult;
     fn draw_boundary_frame(&mut self, margin_px: (f32, f32), region_px: (f32, f32)) -> AppResult;
-    fn dimensions_of_text(&self, text: String, scale: f32) -> Option<crate::objects2d::Rect>;
+    fn dimensions_of_text(&mut self, text: String, scale: f32) -> Option<crate::objects2d::Rect>;
 
     fn draw_text(
         &mut self,
@@ -39,6 +39,7 @@ pub trait DrawingBackend {
         pos: [f32; 2],
         scale: f32,
         align_right: bool,
+        align_bottom: bool,
     ) -> AppResult;
     fn draw_ball_mesh(
         &mut self,
@@ -132,4 +133,26 @@ fn get_verbose_balls(balls: &Vec<BallCell>) -> Vec<BallCell> {
         .filter(|ball| ball.borrow().verbose.lines())
         .cloned()
         .collect()
+}
+
+pub(crate) fn is_number_continue(ch: char) -> bool {
+    // Accept digits, decimal point, exponent letters and sign (+/-) (simple permissive DFA)
+    matches!(ch, '0'..='9' | '.' | 'e' | 'E' | '+' | '-')
+}
+
+pub(crate) fn is_number_start(ch: char, next_opt: Option<char>) -> bool {
+    // Start numbers for: '-' followed by digit or '.', a digit, or '.' followed by digit
+    if ch == '-' {
+        if let Some(n) = next_opt {
+            return n.is_ascii_digit();
+        }
+        return false;
+    }
+    if ch == '.' {
+        if let Some(n) = next_opt {
+            return n.is_ascii_digit();
+        }
+        return false;
+    }
+    ch.is_ascii_digit()
 }

@@ -33,6 +33,9 @@ pub struct GgezRenderer {
     cursor_pos_px: [f32; 2],
     cache: GgezMeshCache,
     physics: Option<BallPhysics>,
+    string_elems: usize,
+    glyph_elems: usize,
+    ball_elems: usize,
 }
 
 impl GgezRenderer {
@@ -42,20 +45,19 @@ impl GgezRenderer {
         ball_mesh: Vec<Mesh>,
         window_def: WindowDefinitionRef,
     ) -> Self {
-        let cache = GgezMeshCache {
-            cell_mesh: None,
-            line_vkin_builder: None,
-            line_vpot_builder: None,
-            line_vtot_builder: None,
-            crosshair_mesh: Some(crosshair_mesh),
-            ball_mesh,
-        };
+        let mut cache = GgezMeshCache::default();
+        cache.crosshair_mesh = Some(crosshair_mesh);
+        cache.ball_mesh = ball_mesh;
 
+        let ball_text_pos = {
+            let windef = window_def.borrow();
+            [windef.margin_px.0 * 2.0 + windef.region_px.0, 0.0]
+        };
         Self {
             show_plot: plot_type,
             window_def,
             shader: None,
-            ball_status_text_pos: None,
+            ball_status_text_pos: Some(ball_text_pos),
             last_status_text: "".to_string(),
             curs_pos_of_txt: Vec2D::zero(),
             draw_cursor: false,
@@ -63,6 +65,9 @@ impl GgezRenderer {
             txt_cursor: format!("x: {}, y: {} pos ({:.3},{:.3})", 0., 0., 0., 0.,),
             cache,
             physics: None,
+            string_elems: 0,
+            glyph_elems: 0,
+            ball_elems: 0,
         }
     }
 }
@@ -201,7 +206,7 @@ impl Renderer for GgezRenderer {
             win_def.margin_px.0 * 2. + win_def.region_px.0,
             win_def.margin_px.1 * 2. + win_def.region_px.1,
         ];
-        backend.draw_text(self.txt_cursor.clone(), txt_cursor_pos, 20., true)?;
+        backend.draw_text(self.txt_cursor.clone(), txt_cursor_pos, 20., true, true)?;
 
         Ok(())
     }
@@ -216,16 +221,21 @@ impl Renderer for GgezRenderer {
         cell_grid: &CellGrid,
         status_text: Option<String>,
     ) -> AppResult<()> {
-        let possible_text = self.update_status_text(backend, status_text);
         let win_def = self.window_def.borrow();
 
         // 1) Draw cell grid and rectangle (short-lived &mut Canvas)
         backend.draw_cell_grid_background(cell_grid, &*win_def)?;
         backend.draw_boundary_frame(win_def.margin_px, win_def.region_px)?;
 
-        // 2) draw lower right text
-        if let Some((text, param)) = possible_text {
-            backend.draw_text(text, param, 30., false)?;
+        // 2) draw upper right text
+        if let Some(text) = status_text {
+            let pos = self.ball_status_text_pos.unwrap_or([0., 0.]);
+
+            let full_text = format!(
+                "{}\n[Cache: strings {}, glyphs {}, ball labels {}]",
+                text, self.string_elems, self.glyph_elems, self.ball_elems
+            );
+            backend.draw_text(full_text, pos, 30., true, false)?;
         }
 
         Ok(())
@@ -249,6 +259,7 @@ impl Renderer for GgezRenderer {
         self.cache.cell_mesh = None;
         let mut win_def = self.window_def.borrow_mut();
         win_def.resize(width, height);
+        self.ball_status_text_pos = Some([win_def.margin_px.0 * 2.0 + win_def.region_px.0, 0.0]);
     }
 
     fn get_world_region(&self) -> crate::objects2d::Rect {
@@ -282,12 +293,18 @@ impl GgezRenderer {
     // Move the cache out without cloning (leaves an empty/default cache behind).
     // Ensure GgezMeshCache implements Default (or create a proper empty value).
     pub fn take_cache(&mut self) -> GgezMeshCache {
+        self.string_elems = self.cache.text_cache.len();
+        self.glyph_elems = self.cache.glyph_cache.len();
+        self.ball_elems = self.cache.ball_label_cache.len();
         std::mem::take(&mut self.cache)
     }
 
     // Put cache back after use
     pub fn put_cache(&mut self, cache: GgezMeshCache) {
         self.cache = cache;
+        self.string_elems = self.cache.text_cache.len();
+        self.glyph_elems = self.cache.glyph_cache.len();
+        self.ball_elems = self.cache.ball_label_cache.len();
     }
 
     fn create_ball_meshes(
@@ -414,40 +431,6 @@ impl GgezRenderer {
             );
         }
         curs_pos_coord
-    }
-
-    pub(crate) fn update_status_text(
-        &mut self,
-        backend: &dyn DrawingBackend,
-        new_txt_opt: Option<String>,
-    ) -> Option<(String, [f32; 2])> {
-        if let Some(new_txt) = new_txt_opt {
-            if new_txt != self.last_status_text {
-                self.last_status_text = new_txt.clone();
-                // self.status_text_mesh = Text::new(TextFragment::new(new_txt.clone()).scale(30.));
-
-                if self.ball_status_text_pos.is_none() {
-                    if let Some(bounds) = backend.dimensions_of_text(new_txt.clone(), 30.) {
-                        let win_def = self.window_def.borrow();
-                        let pos = [
-                            win_def.margin_px.0 * 2.0 + win_def.region_px.0 - bounds.w,
-                            0.0,
-                        ];
-                        self.ball_status_text_pos = Some(pos);
-                    }
-                }
-            }
-            let text_pos = self.ball_status_text_pos.unwrap_or([0., 0.]);
-            // canvas.draw(
-            //     &self.status_text_mesh,
-            //     DrawParam::default().dest(text_pos),
-            // );
-            return Some((new_txt, text_pos));
-        } else {
-            self.last_status_text = "".to_string();
-            self.ball_status_text_pos = None;
-        }
-        None
     }
 
     pub(crate) fn draw_line(

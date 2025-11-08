@@ -4,4 +4,8 @@ mod renderer;
 pub use renderer::DrawingBackend;
 pub use renderer::PlotContent;
 pub use renderer::Renderer;
-pub use renderer::create_dummy_renderer;
+
+#[cfg(test)]
+pub(crate) use renderer::create_dummy_renderer;
+pub(crate) use renderer::is_number_continue;
+pub(crate) use renderer::is_number_start;
