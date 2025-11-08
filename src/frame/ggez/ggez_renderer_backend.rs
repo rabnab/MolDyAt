@@ -9,7 +9,8 @@ use ggez::graphics::{
     Canvas, Color, DrawMode, DrawParam, Drawable, Mesh, MeshBuilder, Rect, Text, TextFragment,
 };
 use ggez::mint::Point2;
-use std::collections::HashMap;
+use lru::LruCache;
+use std::num::NonZeroUsize;
 
 pub struct GgezBackend<'a> {
     ctx: &'a mut Context,
@@ -35,7 +36,7 @@ impl<'a> GgezBackend<'a> {
         } else {
             //create a new one and cache it
             let t = Text::new(TextFragment::new(format!("{id}")).scale(15.0));
-            self.cache.ball_label_cache.insert(id, t.clone());
+            self.cache.ball_label_cache.push(id, t.clone());
             t
         };
 
@@ -55,7 +56,7 @@ impl<'a> GgezBackend<'a> {
             tt.clone()
         } else {
             let t = Text::new(TextFragment::new(ch.to_string()).scale(scale));
-            self.cache.glyph_cache.insert(key, t.clone());
+            self.cache.glyph_cache.push(key, t.clone());
             t
         };
         char_txt
@@ -87,7 +88,6 @@ impl<'a> DrawingBackend for GgezBackend<'a> {
         let mut mesh_builder = MeshBuilder::new();
 
         let (rows, cols) = grid.get_grid_size();
-        let field_size = WindowDefinition::len_to_px(1.0);
 
         for row in 0..rows {
             for col in 0..cols {
@@ -149,7 +149,7 @@ impl<'a> DrawingBackend for GgezBackend<'a> {
             // store in cache for reuse
             self.cache
                 .text_cache
-                .insert((text, scale.to_bits()), txt_mesh.clone());
+                .push((text, scale.to_bits()), txt_mesh.clone());
             return Some(crate::objects2d::Rect {
                 x: ggez_rect.x,
                 y: ggez_rect.y,
@@ -248,7 +248,7 @@ impl<'a> DrawingBackend for GgezBackend<'a> {
                         let t = Text::new(TextFragment::new(s.clone()).scale(scale));
                         // Cache reasonably-sized text tokens to avoid unbounded cache growth
                         if s.len() <= 64 {
-                            self.cache.text_cache.insert(key, t.clone());
+                            self.cache.text_cache.push(key, t.clone());
                         }
                         if let Some(r) = t.dimensions(self.ctx) {
                             line_w += r.w;
@@ -285,13 +285,13 @@ impl<'a> DrawingBackend for GgezBackend<'a> {
                         let t = Text::new(TextFragment::new(token.clone()).scale(scale));
                         // Cache reasonably-sized tokens
                         if token.len() <= 64 {
-                            self.cache.text_cache.insert(key, t.clone());
+                            self.cache.text_cache.push(key, t.clone());
                         }
                         t
                     };
                     let dim = txt
                         .dimensions(self.ctx)
-                        .unwrap_or(ggez::graphics::Rect::new(0.0, 0.0, 0.0, 0.0));
+                        .unwrap_or(Rect::new(0.0, 0.0, 0.0, 0.0));
                     self.canvas
                         .as_mut()
                         .unwrap()
@@ -303,7 +303,7 @@ impl<'a> DrawingBackend for GgezBackend<'a> {
                         let char_txt = self.get_cached_glyph(ch, scale);
                         let dim = char_txt
                             .dimensions(self.ctx)
-                            .unwrap_or(ggez::graphics::Rect::new(0.0, 0.0, 0.0, 0.0));
+                            .unwrap_or(Rect::new(0.0, 0.0, 0.0, 0.0));
                         self.canvas
                             .as_mut()
                             .unwrap()
@@ -388,11 +388,11 @@ pub struct GgezMeshCache {
     pub(super) ball_mesh: Vec<Mesh>,
     // caches for text to avoid re-allocating Text each frame
     // use u32 for scale key via f32::to_bits() to avoid f32 hashing issues
-    pub text_cache: HashMap<(String, u32), Text>,
+    pub text_cache: LruCache<(String, u32), Text>,
     // convenience cache for small per-ball labels keyed by id (scale is fixed in draw_text_on_ball)
-    pub ball_label_cache: HashMap<usize, Text>,
+    pub ball_label_cache: LruCache<usize, Text>,
     // glyph cache for single characters keyed by (char, scale_bits)
-    pub glyph_cache: HashMap<(char, u32), Text>,
+    pub glyph_cache: LruCache<(char, u32), Text>,
 }
 
 impl Default for GgezMeshCache {
@@ -404,9 +404,9 @@ impl Default for GgezMeshCache {
             line_vtot_builder: None,
             crosshair_mesh: None,
             ball_mesh: vec![],
-            text_cache: HashMap::new(),
-            ball_label_cache: HashMap::new(),
-            glyph_cache: HashMap::new(),
+            text_cache: LruCache::new(NonZeroUsize::new(4096).unwrap()),
+            ball_label_cache: LruCache::new(NonZeroUsize::new(500000).unwrap()),
+            glyph_cache: LruCache::new(NonZeroUsize::new(200).unwrap()),
         }
     }
 }
