@@ -61,7 +61,7 @@ impl BallPhysics {
     }
 
     pub fn get_min_movement_for_update_hood(&self, radius: f32) -> f32 {
-        radius + 2. * self.get_cutoff_distance()
+        radius + self.get_cutoff_distance()
     }
 
     /// equilibrium distance of two balls with same radius
@@ -186,7 +186,11 @@ impl BallPhysics {
         //self.update_old_pos();
     }
 
-    pub fn get_neighbour_force_and_pos(&self, ball: &Ball2D, balls: &[Ball2D]) -> Vec<(Vec2D, f32)> {
+    pub fn get_neighbour_force_and_pos(
+        &self,
+        ball: &Ball2D,
+        balls: &[Ball2D],
+    ) -> Vec<(Vec2D, f32)> {
         let ball_pos = ball.get_position().clone();
         let ball_radius = ball.radius;
         ball.hood
@@ -206,7 +210,13 @@ impl BallPhysics {
             .collect()
     }
 
-    pub fn update_accel_and_speed_indexed(&self, ball_idx: usize, balls: &mut [Ball2D], dt: f32, bound: &Rect) -> (f32, f32) {
+    pub fn update_accel_and_speed_indexed(
+        &self,
+        ball_idx: usize,
+        balls: &mut [Ball2D],
+        dt: f32,
+        bound: &Rect,
+    ) -> (f32, f32) {
         let (min_dist, total_force, total_pot) = self.force_indexed(ball_idx, balls);
         let speed_limit = f32::min(bound.w, bound.h) * 0.2;
         
@@ -241,7 +251,7 @@ impl BallPhysics {
     // }
 
     //fn force_by(&self, others: &Vec<Ball2D>)  -> (f32, Vec2D, f32) {
-    
+
     pub(crate) fn force_indexed(&self, ball_idx: usize, balls: &[Ball2D]) -> (f32, Vec2D, f32) {
         let mut force = Vec2D::new(0., 0.);
         let mut min_dist = f32::NAN;
