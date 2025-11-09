@@ -169,12 +169,12 @@ impl Verlet {
                 continue;
             }
             
-            // Calculate distance using split_at_mut to avoid borrow checker issues
+            // Calculate distance using split_at to avoid unnecessary mutability
             let dist = if ball_idx < neighbour_idx {
-                let (left, right) = balls.split_at_mut(neighbour_idx);
+                let (left, right) = balls.split_at(neighbour_idx);
                 BallPhysics::distance_of_edges(&left[ball_idx], &right[0])
             } else {
-                let (left, right) = balls.split_at_mut(ball_idx);
+                let (left, right) = balls.split_at(ball_idx);
                 BallPhysics::distance_of_edges(&right[0], &left[neighbour_idx])
             };
 
