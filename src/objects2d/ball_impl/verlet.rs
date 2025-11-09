@@ -135,10 +135,10 @@ impl Verlet {
         }
 
         // Get ball position and ID for distance calculations
-        let (_ball_pos, ball_id) = {
+        let ball_id = {
             let mut ball = balls[ball_idx].borrow_mut();
             ball.last_update_hood_pos = ball.get_position().clone();
-            (ball.get_position().clone(), ball.get_id())
+            ball.get_id()
         };
 
         // Collect all candidate neighbours from the cell neighbors parameter
