@@ -4,7 +4,7 @@ use crate::objects2d::ball_impl::ball_core::Ball2D;
 use crate::objects2d::ball_impl::{BallPhysics, Named, UPDATE_HOOD_CNT};
 use crate::objects2d::vec_2d::Vec2D;
 
-const UPDATE_FREQ: usize = 100;
+const UPDATE_FREQ: usize = 100000; //basically deactivate update by frequency
 
 pub(crate) struct Verlet {
     neighbours: Vec<usize>,
@@ -115,21 +115,22 @@ impl Verlet {
 
         let dist_limit_by_closest = 4. * cutoff;
         let dist_limit = f32::max(dist_limit_by_closest, dist_limit_by_v);
-        
+
         let this_ball_needs_update = {
             let ball = balls[ball_idx].borrow();
             if ball.verbose.console {
                 application_log::log_update_hood_start(&ball, cutoff);
             }
-            ball.hood.needs_update_hood(&ball, dt, min_movement_threshold)
+            ball.hood
+                .needs_update_hood(&ball, dt, min_movement_threshold)
         };
 
         balls[ball_idx].borrow_mut().hood.updates_since_refresh += 1;
-        
+
         if !this_ball_needs_update {
             return;
         }
-        
+
         unsafe {
             UPDATE_HOOD_CNT += 1;
         }
@@ -146,7 +147,7 @@ impl Verlet {
         for cur_rc in neighbours {
             let cur_ref = cur_rc.borrow();
             let cur_id = cur_ref.get_id();
-            
+
             // Skip self
             if cur_id == ball_id {
                 continue;
@@ -175,12 +176,18 @@ impl Verlet {
             if ball_idx == neighbour_idx {
                 continue;
             }
-            let dist = BallPhysics::distance_of_edges(&balls[ball_idx].borrow(), &balls[neighbour_idx].borrow());
-            
+            let dist = BallPhysics::distance_of_edges(
+                &balls[ball_idx].borrow(),
+                &balls[neighbour_idx].borrow(),
+            );
+
             if dist < dist_limit {
                 // Should be a neighbour
-                let was_already_neighbour = balls[ball_idx].borrow_mut().hood.add_neighbour(neighbour_idx);
-                
+                let was_already_neighbour = balls[ball_idx]
+                    .borrow_mut()
+                    .hood
+                    .add_neighbour(neighbour_idx);
+
                 if !was_already_neighbour {
                     application_log::log_neighbour_add(
                         &balls[ball_idx].borrow(),
@@ -188,9 +195,12 @@ impl Verlet {
                         dist * dist,
                         dist_limit * dist_limit,
                     );
-                    
+
                     // Update the inverse relationship: add ball_idx to the neighbour's list
-                    balls[neighbour_idx].borrow_mut().hood.add_neighbour(ball_idx);
+                    balls[neighbour_idx]
+                        .borrow_mut()
+                        .hood
+                        .add_neighbour(ball_idx);
                 }
             } else {
                 // Should NOT be a neighbour - remove if present
@@ -259,7 +269,7 @@ mod tests {
         let mut v = Verlet::new();
         let a_idx = 0;
         let b_idx = 1;
-        
+
         let was_neigh = v.add_neighbour(b_idx);
         assert!(!was_neigh);
         assert!(v.is_a_neighbour_idx(b_idx));
@@ -278,7 +288,7 @@ mod tests {
         let a = make_ball(0, Vec2D::new(0.0, 0.0));
         let b = make_ball(1, Vec2D::new(3.0, 4.0)); // distance 5
         let balls = vec![a, b];
-        
+
         v.add_neighbour(0);
         v.add_neighbour(1);
         v.update_closeness_stats(&Vec2D::new(0.0, 0.0), &balls);
@@ -291,7 +301,7 @@ mod tests {
         let mut v = Verlet::new();
         // Simulate that the ball was just updated by resetting updates_since_refresh
         v.updates_since_refresh = 0;
-        
+
         let mut ball = Ball2D::new(1, Vec2D::zero(), (0, 1.0));
         ball.last_update_hood_pos = Vec2D::new(0.0, 0.0);
         ball.v = Vec2D::new(1.0, 0.0);
