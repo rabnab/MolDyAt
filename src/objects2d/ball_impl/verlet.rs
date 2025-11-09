@@ -3,6 +3,7 @@ use crate::objects2d::ball_cell::cell::BallCell;
 use crate::objects2d::ball_impl::ball_core::Ball2D;
 use crate::objects2d::ball_impl::{BallPhysics, Named, UPDATE_HOOD_CNT};
 use crate::objects2d::vec_2d::Vec2D;
+use std::collections::HashSet;
 
 const UPDATE_FREQ: usize = 100000; //basically deactivate update by frequency
 
@@ -162,13 +163,12 @@ impl Verlet {
         // Get the current neighbour list - these need to be checked too
         let old_neighbours: Vec<usize> = balls[ball_idx].borrow().hood.neighbours.clone();
 
-        // Merge candidates: existing neighbours + new candidates from cells
-        let mut all_candidates = old_neighbours.clone();
-        for candidate in candidates_from_cells {
-            if !all_candidates.contains(&candidate) {
-                all_candidates.push(candidate);
-            }
-        }
+        // Merge candidates: existing neighbours + new candidates from cells using HashSet for deduplication
+        let mut all_candidates: HashSet<usize> = old_neighbours.iter().copied().collect();
+        all_candidates.extend(candidates_from_cells);
+        
+        // Convert back to Vec for iteration
+        let all_candidates: Vec<usize> = all_candidates.into_iter().collect();
 
         // Now check distance for all candidates and update accordingly
         for &neighbour_idx in &all_candidates {
