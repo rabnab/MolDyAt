@@ -210,14 +210,14 @@ impl BallPhysics {
         let (min_dist, total_force, total_pot) = self.force_indexed(ball_idx, balls);
         let speed_limit = f32::min(bound.w, bound.h) * 0.2;
         
-        let accel = balls[ball_idx].accel_with_speed_limit(&total_force, self.constants.gravity, speed_limit, dt);
-        balls[ball_idx].v.x = balls[ball_idx].v.x + 0.5 * (accel.x + balls[ball_idx].accel.x) * dt;
-        balls[ball_idx].v.y = balls[ball_idx].v.y + 0.5 * (accel.y + balls[ball_idx].accel.y) * dt;
+        let ball = &mut balls[ball_idx];
+        let accel = ball.accel_with_speed_limit(&total_force, self.constants.gravity, speed_limit, dt);
+        ball.v.x = ball.v.x + 0.5 * (accel.x + ball.accel.x) * dt;
+        ball.v.y = ball.v.y + 0.5 * (accel.y + ball.accel.y) * dt;
+        ball.accel = accel;
 
-        balls[ball_idx].accel = accel;
-
-        if balls[ball_idx].verbose.console {
-            println!("updated to  v {:?}  a {:?}", balls[ball_idx].v, balls[ball_idx].accel);
+        if ball.verbose.console {
+            println!("updated to  v {:?}  a {:?}", ball.v, ball.accel);
         }
         (min_dist, total_pot)
     }
