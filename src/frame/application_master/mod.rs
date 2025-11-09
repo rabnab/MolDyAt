@@ -16,7 +16,7 @@ pub struct MainContent {
 
     pub(crate) sim: SimStats,
     pub(crate) num_balls: usize, // consider removing later
-    v_points: Vec<BallCell>,
+    pub(crate) balls: Vec<Ball2D>,
     pub(crate) cell_grid: CellGrid,
     pub(crate) real_data: bool,
     pub(crate) step_by_step: bool,
@@ -30,7 +30,6 @@ pub struct MainContent {
     update_hood_at_frame_start: usize,
 }
 // type alias to shorten signatures (optional)
-pub(crate) type BallCell = Rc<RefCell<Ball2D>>;
 pub(crate) type WindowDefinitionRef = Rc<RefCell<WindowDefinition>>;
 pub(crate) type RendererRef = Rc<RefCell<dyn Renderer>>;
 mod accessors;

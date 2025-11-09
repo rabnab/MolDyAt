@@ -10,7 +10,7 @@ impl MainContent {
         let my_cell_grid = CellGrid::new(world_rect, cutoff)?;
 
         Ok(Self {
-            v_points: Vec::new(),
+            balls: Vec::new(),
             physics: loc_physics,
             cell_grid: my_cell_grid,
 

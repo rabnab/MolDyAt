@@ -1,5 +1,6 @@
-use super::cell::{BallCell, Cell, CellBounds};
+use super::cell::{Cell, CellBounds};
 use crate::frame::AppResult;
+use crate::objects2d::ball_impl::Ball2D;
 use crate::objects2d::{Rect, Vec2D};
 use std::fmt::Debug;
 
@@ -119,27 +120,31 @@ impl CellGrid {
 
     /// Move a ball from its old position to a new position, updating the cells accordingly.
     /// Returns Some((old_cell, new_cell)) if the ball changed cells, None otherwise.
-    pub fn move_ball(&mut self, ball: BallCell, old_pos: &Vec2D, new_pos: &Vec2D) -> Option<((usize, usize), (usize, usize))> {
+    pub fn move_ball(
+        &mut self,
+        ball_idx: usize,
+        balls: &mut [Ball2D],
+        old_pos: &Vec2D,
+        new_pos: &Vec2D,
+    ) -> Option<((usize, usize), (usize, usize))> {
         if let (Some((old_row, old_col)), Some((new_row, new_col))) = (
             self.get_cell_indices(old_pos),
             self.get_cell_indices(new_pos),
         ) {
             if old_row != new_row || old_col != new_col {
-                let ball_id = ball.borrow().get_id();
-
                 // Remove from old cell
                 if let Some(old_cell) = self.get_cell_mut(old_row, old_col) {
-                    old_cell.remove_ball(ball_id);
+                    old_cell.remove_ball(ball_idx);
                 }
 
                 // Add to new cell
                 if let Some(new_cell) = self.get_cell_mut(new_row, new_col) {
-                    new_cell.add_ball(ball.clone());
+                    new_cell.add_ball(ball_idx);
                 }
-                
+
                 // Update the ball's current_cell
-                ball.borrow_mut().current_cell = Some((new_row, new_col));
-                
+                balls[ball_idx].current_cell = Some((new_row, new_col));
+
                 return Some(((old_row, old_col), (new_row, new_col)));
             }
         }
@@ -147,13 +152,13 @@ impl CellGrid {
     }
 
     /// Add a ball to the appropriate cell based on its current position.
-    pub fn add_ball(&mut self, ball: BallCell) {
-        let position = &ball.borrow().get_position().clone();
-        if let Some((row, col)) = self.get_cell_indices(position) {
+    pub fn add_ball(&mut self, ball_idx: usize, balls: &mut [Ball2D]) {
+        let position = balls[ball_idx].get_position().clone();
+        if let Some((row, col)) = self.get_cell_indices(&position) {
             if let Some(cell) = self.get_cell_mut(row, col) {
-                cell.add_ball(ball.clone());
+                cell.add_ball(ball_idx);
                 // Update the ball's current_cell
-                ball.borrow_mut().current_cell = Some((row, col));
+                balls[ball_idx].current_cell = Some((row, col));
             }
         }
     }
@@ -190,22 +195,27 @@ impl CellGrid {
         }
     }
 
-    /// Collect all balls from the 3x3 neighborhood into the provided `out` buffer.
+    /// Collect all ball indices from the 3x3 neighborhood into the provided `out` buffer.
     /// Caller should `clear()` the buffer if they want fresh contents each time.
-    pub(crate) fn collect_balls_into(&self, i: usize, j: usize, out: &mut Vec<BallCell>) {
+    pub(crate) fn collect_ball_indices_into(&self, i: usize, j: usize, out: &mut Vec<usize>) {
         self.for_each_neighbor(i, j, |cell| {
-            out.extend(cell.get_balls().cloned());
+            out.extend_from_slice(cell.get_ball_indices());
         });
     }
 
     /// Resize the grid to cover a new world rectangle, reassigning all existing balls to their new cells.
-    pub(crate) fn resize(old_grid: &mut CellGrid, new_world: Rect, cutoff: f32) -> AppResult<Self> {
+    pub(crate) fn resize(
+        old_grid: &mut CellGrid,
+        new_world: Rect,
+        cutoff: f32,
+        balls: &mut [Ball2D],
+    ) -> AppResult<Self> {
         let mut new_grid = CellGrid::new(new_world, cutoff)?;
 
         for row in &mut old_grid.cells {
             for cell in row {
-                for ball in cell.drain_balls() {
-                    new_grid.add_ball(ball.clone());
+                for ball_idx in cell.drain_balls() {
+                    new_grid.add_ball(ball_idx, balls);
                 }
             }
         }

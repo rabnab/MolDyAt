@@ -1,5 +1,5 @@
 use crate::frame::AppResult;
-use crate::frame::application_master::{BallCell, WindowDefinitionRef};
+use crate::frame::application_master::WindowDefinitionRef;
 use crate::frame::ggez::ggez_renderer_backend::GgezMeshCache;
 use crate::frame::renderer::{DrawingBackend, PlotContent, Renderer};
 use crate::frame::window::window_definition::WindowDefinition;
@@ -130,8 +130,8 @@ impl Renderer for GgezRenderer {
     fn draw_neighbour_lines(
         &self,
         backend: &mut dyn DrawingBackend,
-        ball: &Ref<Ball2D>,
-        balls: &[BallCell],
+        ball: &Ball2D,
+        balls: &[Ball2D],
     ) -> AppResult {
         let ball_coord_px = self.window_def.borrow().coord_to_px(&ball.get_position());
 
@@ -270,9 +270,8 @@ impl Renderer for GgezRenderer {
     fn draw_single_ball(
         &self,
         backend: &mut dyn DrawingBackend,
-        ball_cell: &BallCell,
+        ball: &Ball2D,
     ) -> AppResult {
-        let ball = ball_cell.borrow();
         let ball_coord_px = self.window_def.borrow().coord_to_px(&ball.get_position());
 
         backend.draw_ball_mesh(

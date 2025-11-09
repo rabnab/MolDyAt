@@ -68,7 +68,7 @@ mod tests {
 
         // Ensure the added ball is in the correct position
         {
-            let ball = main_content.v_points[0].borrow();
+            let ball = &main_content.balls[0];
             let ball_pos_px = win_def.coord_to_px(&ball.get_position());
             assert!(
                 approx_eq!(f32, ball_pos_px.x, x_px, ulps = 2),
@@ -267,10 +267,10 @@ mod tests {
 
         // Initial state check
         {
-            let balls = main_content.get_ball_vec();
-            let ball1: &Ball2D = &*balls[0].borrow();
-            let ball2: &Ball2D = &*balls[1].borrow();
-            let ball3: &Ball2D = &*balls[2].borrow();
+            let balls = main_content.get_balls();
+            let ball1: &Ball2D = &balls[0];
+            let ball2: &Ball2D = &balls[1];
+            let ball3: &Ball2D = &balls[2];
 
             assert!(
                 ball1.get_neighbour_names(balls).is_empty(),
@@ -295,10 +295,10 @@ mod tests {
             main_content.collect_neighbours_by_cell(DT_GOAL);
 
             // After collecting neighbors, Ball1 and Ball2 should be neighbors
-            let balls = main_content.get_ball_vec();
-            let ball1: &Ball2D = &*balls[0].borrow();
-            let ball2: &Ball2D = &*balls[1].borrow();
-            let ball3: &Ball2D = &*balls[2].borrow();
+            let balls = main_content.get_balls();
+            let ball1: &Ball2D = &balls[0];
+            let ball2: &Ball2D = &balls[1];
+            let ball3: &Ball2D = &balls[2];
 
             println!("ball1.neigh: {:?}", ball1.get_neighbour_names(balls));
             println!("ball2.neigh: {:?}", ball2.get_neighbour_names(balls));

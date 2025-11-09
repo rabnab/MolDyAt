@@ -47,25 +47,17 @@ impl GameLogicData {
 impl MainContent {
     fn update_sim_and_move_balls(&mut self, dt: f32, bound_rect: &crate::objects2d::Rect) {
         let old_positions: Vec<_> = self
-            .get_ball_vec()
+            .get_balls()
             .iter()
-            .map(|ball| ball.borrow().get_position().clone())
+            .map(|ball| ball.get_position().clone())
             .collect();
 
         self.update_sim(dt, bound_rect);
 
-        let updates: Vec<_> = self
-            .get_ball_vec()
-            .iter()
-            .enumerate()
-            .map(|(i, ball_rc)| {
-                let new_pos = ball_rc.borrow().get_position().clone();
-                (ball_rc.clone(), old_positions[i].clone(), new_pos)
-            })
-            .collect();
-
-        for (ball_rc, old_pos, new_pos) in updates {
-            self.cell_grid.move_ball(ball_rc, &old_pos, &new_pos);
+        // Update cell assignments for balls that moved
+        for (i, old_pos) in old_positions.iter().enumerate() {
+            let new_pos = self.balls[i].get_position().clone();
+            self.cell_grid.move_ball(i, &mut self.balls, old_pos, &new_pos);
         }
 
         self.remove_invalid_balls();
@@ -84,17 +76,15 @@ impl GameLogic for MainContent {
     }
 
     fn is_ball_colliding(&self, pt: &Ball2D) -> bool {
-        self.get_ball_vec()
+        self.get_balls()
             .iter()
-            .map(|ball_rc| ball_rc.borrow())
-            .any(|ball| self.physics.is_colliding(pt, &(*ball)))
+            .any(|ball| self.physics.is_colliding(pt, ball))
     }
 
     fn collect_neighbours_by_cell(&mut self, dt: f32) {
         if self.step_count % self.get_game_logic_data().neighbour_update_interval == 0 {
             // Single reusable buffer to avoid per-cell allocations
-            let mut neighbor_buf: Vec<_> = Vec::new();
-            // reserve some capacity to reduce reallocations; tune as needed
+            let mut neighbor_buf: Vec<usize> = Vec::new();
             neighbor_buf.reserve(30);
             
             let cutoff = self.physics.get_cutoff_distance();
@@ -102,67 +92,65 @@ impl GameLogic for MainContent {
             // Only process cells that have balls (tracked via current_cell)
             // Build set of occupied cells from all balls
             let occupied_cells: std::collections::HashSet<_> = self
-                .get_ball_vec()
+                .get_balls()
                 .iter()
-                .filter_map(|b| b.borrow().current_cell)
+                .filter_map(|b| b.current_cell)
                 .collect();
 
             for (row, col) in occupied_cells {
                 neighbor_buf.clear();
                 self.cell_grid
-                    .collect_balls_into(row, col, &mut neighbor_buf);
+                    .collect_ball_indices_into(row, col, &mut neighbor_buf);
 
-                // Clone cell.balls to avoid holding immutable borrow
-                let cell_balls: Vec<_> = if let Some(cell) = self.cell_grid.get_cell(row, col) {
-                    cell.balls.clone()
+                // Get cell ball indices to avoid borrow issues
+                let cell_ball_indices: Vec<usize> = if let Some(cell) = self.cell_grid.get_cell(row, col) {
+                    cell.get_ball_indices().to_vec()
                 } else {
                     continue;
                 };
 
-                for ball_rc in &cell_balls {
-                    let ball_id = ball_rc.borrow().get_id();
-                    let ball_radius = ball_rc.borrow().radius;
-                    
-                    // Find ball index in v_points
-                    let ball_idx = if let Some(idx) = self.get_ball_vec().iter().position(|b| b.borrow().get_id() == ball_id) {
-                        idx
-                    } else {
-                        continue;
-                    };
-                    
-                    // Get min_movement before taking mutable borrow
+                for &ball_idx in &cell_ball_indices {
+                    let ball_radius = self.balls[ball_idx].radius;
                     let min_movement = self.physics.get_min_movement_for_update_hood(ball_radius);
-
-                    let neighbors = neighbor_buf.iter().filter(|neighbor| {
-                        !std::ptr::eq(neighbor.as_ptr(), ball_rc.as_ptr())
-                    });
-
-                    // Get mutable access to the entire balls vector
-                    let balls = self.get_ball_vec_mut();
 
                     Verlet::update_hood(
                         ball_idx,
                         dt,
-                        neighbors,
+                        &neighbor_buf,
                         cutoff,
                         min_movement,
-                        balls,
+                        &mut self.balls,
                     );
                 }
             }
 
-            // Update stats
-            for ball_rc in self.get_ball_vec().iter() {
-                let ball_pos = ball_rc.borrow().get_position().clone();
-                let mut ball = ball_rc.borrow_mut();
-                let balls = self.get_ball_vec();
-                ball.hood.update_closeness_stats(&ball_pos, balls);
-                if !ball.verbose.lines() && ball.hood.get_number_of_neighbors() > 100 {
-                    ball.verbose.toggle_other_neighbour();
-                } else if ball.verbose.lines() && ball.hood.get_number_of_neighbors() <= 100 {
-                    ball.verbose.toggle_other_neighbour();
+                        // Update stats - we need to avoid simultaneous borrows, so we'll
+            // iterate through and call update_closeness_stats which handles the computation
+            for i in 0..self.balls.len() {
+                // Get position before mutable borrow
+                let ball_pos = self.balls[i].get_position().clone();
+                let verbose_lines = self.balls[i].verbose.lines();
+                
+                // Split to get mutable access to current ball and immutable to all others
+                // We'll pass the full slice - update_closeness_stats only reads from it
+                {
+                    let balls_ptr = self.balls.as_ptr();
+                    let balls_len = self.balls.len();
+                    // Safety: We're only reading from the slice in update_closeness_stats,
+                    // and only mutating the hood field of balls[i]
+                    let balls_slice = unsafe { std::slice::from_raw_parts(balls_ptr, balls_len) };
+                    self.balls[i].hood.update_closeness_stats(&ball_pos, balls_slice);
                 }
-                Self::log_closeness_update(&ball);
+                
+                let num_neighbors = self.balls[i].hood.get_number_of_neighbors();
+                
+                // Toggle verbose if needed
+                if !verbose_lines && num_neighbors > 100 {
+                    self.balls[i].verbose.toggle_other_neighbour();
+                } else if verbose_lines && num_neighbors <= 100 {
+                    self.balls[i].verbose.toggle_other_neighbour();
+                }
+                Self::log_closeness_update(&self.balls[i]);
             }
         }
     }
@@ -203,25 +191,11 @@ impl GameLogic for MainContent {
 
         #[cfg(feature = "measure-time")]
         timer.time("calculate_temperature", || {
-            let ball_vec = self.get_ball_vec().clone();
-            self.sim.calculate_temperature(&ball_vec);
+            self.sim.calculate_temperature_from_balls(&self.balls);
         });
         #[cfg(not(feature = "measure-time"))]
         {
-            let ball_vec = self.get_ball_vec().clone();
-            // self.sim.calculate_temperature(&ball_vec);
-            // Hold Ref guards so the borrows stay valid while calculate_temperature_fast runs
-            let mut borrows: Vec<std::cell::Ref<'_, Ball2D>> = Vec::with_capacity(ball_vec.len());
-            for rc in &ball_vec {
-                borrows.push(rc.borrow());
-            }
-
-            // Build a slice of &Ball2D references (no cloning of Ball2D)
-            let mut refs: Vec<&Ball2D> = Vec::with_capacity(borrows.len());
-            for r in &borrows {
-                refs.push(&*r);
-            }
-            self.sim.calculate_temperature_fast(refs.as_slice());
+            self.sim.calculate_temperature_from_balls(&self.balls);
         }
 
         #[cfg(feature = "measure-time")]
