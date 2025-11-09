@@ -329,4 +329,116 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn test_remove_invalid_balls_clears_neighbor_indices() {
+        let (mut main_content, _win_def) = create_main_content_for_region(500., 500.);
+
+        // Add three balls in a line
+        let ball1_coord = Vec2D::new(3.0, 3.0);
+        let ball2_coord = Vec2D::new(5.5, 5.5);
+        let ball3_coord = Vec2D::new(8.0, 8.0);
+
+        main_content.add_candidate(ball1_coord.clone()).unwrap();
+        main_content.add_candidate(ball2_coord.clone()).unwrap();
+        main_content.add_candidate(ball3_coord.clone()).unwrap();
+
+        // Set up neighbor relationships by running collect_neighbours
+        main_content.step_count = 10;
+        main_content.collect_neighbours_by_cell(DT_GOAL);
+        main_content.collect_neighbours_by_cell(DT_GOAL);
+
+        // Verify initial neighbor relationships exist
+        {
+            let balls = main_content.get_balls();
+            assert!(
+                balls[0].hood.get_neighbour_indices().len() > 0,
+                "Ball 0 should have neighbors before removal"
+            );
+            assert!(
+                balls[1].hood.get_neighbour_indices().len() > 0,
+                "Ball 1 should have neighbors before removal"
+            );
+        }
+
+        // Make ball 1 (middle ball) invalid by setting NaN position
+        main_content.balls[1].set_position(Vec2D::new(f32::NAN, f32::NAN));
+
+        // Remove invalid balls - this should:
+        // 1. Remove ball at index 1
+        // 2. Ball at index 2 moves to index 1
+        // 3. Clear all neighbor lists to prevent stale indices
+        main_content.remove_invalid_balls();
+
+        // Verify the invalid ball was removed
+        assert_eq!(
+            main_content.num_balls, 2,
+            "Should have 2 balls after removing 1 invalid ball"
+        );
+
+        // Verify all neighbor lists are cleared
+        {
+            let balls = main_content.get_balls();
+            for (idx, ball) in balls.iter().enumerate() {
+                assert_eq!(
+                    ball.hood.get_neighbour_indices().len(),
+                    0,
+                    "Ball {} should have no neighbors after remove_invalid_balls",
+                    idx
+                );
+                // Verify last_update_hood_pos is reset to force update
+                assert!(
+                    ball.last_update_hood_pos.x.is_infinite(),
+                    "Ball {} last_update_hood_pos.x should be infinity",
+                    idx
+                );
+                assert!(
+                    ball.last_update_hood_pos.y.is_infinite(),
+                    "Ball {} last_update_hood_pos.y should be infinity",
+                    idx
+                );
+            }
+        }
+
+        // After rebuilding neighbors, verify indices are consistent
+        main_content.collect_neighbours_by_cell(DT_GOAL);
+        main_content.collect_neighbours_by_cell(DT_GOAL);
+
+        // Verify neighbor indices are valid (don't point beyond array bounds)
+        {
+            let balls = main_content.get_balls();
+            let num_balls = balls.len();
+            for (ball_idx, ball) in balls.iter().enumerate() {
+                for &neighbor_idx in ball.hood.get_neighbour_indices() {
+                    assert!(
+                        neighbor_idx < num_balls,
+                        "Ball {} has invalid neighbor index {} (only {} balls exist)",
+                        ball_idx,
+                        neighbor_idx,
+                        num_balls
+                    );
+                    assert_ne!(
+                        neighbor_idx, ball_idx,
+                        "Ball {} should not be its own neighbor",
+                        ball_idx
+                    );
+                }
+            }
+        }
+
+        // Verify we can access neighbors without panic
+        {
+            let balls = main_content.get_balls();
+            for ball in balls {
+                let neighbor_names = ball.get_neighbour_names(balls);
+                // Just verify this doesn't panic - actual neighbor counts may vary
+                println!(
+                    "Ball {} has {} neighbors: {:?}",
+                    ball.get_name(),
+                    neighbor_names.len(),
+                    neighbor_names
+                );
+            }
+        }
+    }
 }

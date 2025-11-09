@@ -109,11 +109,18 @@ impl MainContent {
             keep
         });
 
+        // After retain, all indices have changed. Clear neighbor lists and force update.
+        // This prevents stale indices from causing incorrect lookups or panics.
+        for ball in &mut self.balls {
+            ball.hood.clear_neighbours();
+            ball.current_cell = None;
+            // Reset last_update_hood_pos to infinity to force update_hood on next check
+            ball.last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
+        }
+
         // Rebuild cell grid with valid balls
         self.cell_grid.clear_all_cells();
         for i in 0..self.balls.len() {
-            // Clear current_cell before re-adding
-            self.balls[i].current_cell = None;
             self.cell_grid.add_ball(i, &mut self.balls);
         }
 

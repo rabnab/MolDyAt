@@ -70,7 +70,7 @@ impl Verlet {
         was_neighbour
     }
 
-    fn clear(&mut self) {
+    pub fn clear_neighbours(&mut self) {
         self.neighbours.clear();
         self.num_neighbours = 0;
     }
