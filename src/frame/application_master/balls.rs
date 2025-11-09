@@ -115,7 +115,7 @@ impl MainContent {
             }
         }
 
-        // Re-add valid balls to grid
+        // Re-add valid balls to grid (this will set current_cell)
         for ball_rc in &valid_balls {
             self.cell_grid.add_ball(ball_rc.clone());
         }
