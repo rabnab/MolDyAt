@@ -1,5 +1,6 @@
 use crate::objects2d::Rect;
 use crate::objects2d::Vec2D;
+use crate::objects2d::ball_cell::cell::BallCell;
 use crate::objects2d::ball_impl::{Ball2D, BallError, BallResult, Named};
 
 //const LJ_SIG: f32 = 5.; // equilibrium distance
@@ -158,7 +159,7 @@ impl BallPhysics {
         res
     }
 
-    pub fn update_accel_and_speed(&self, ball: &mut Ball2D, dt: f32, bound: &Rect, balls: &[crate::objects2d::ball_cell::cell::BallCell]) -> (f32, f32) {
+    pub fn update_accel_and_speed(&self, ball: &mut Ball2D, dt: f32, bound: &Rect, balls: &[BallCell]) -> (f32, f32) {
         let (min_dist, total_force, total_pot) = self.force(ball, balls);
         let speed_limit = f32::min(bound.w, bound.h) * 0.2;
         let accel =
@@ -202,7 +203,7 @@ impl BallPhysics {
         //self.update_old_pos();
     }
 
-    pub fn get_neighbour_force_and_pos(&self, ball: &Ball2D, balls: &[crate::objects2d::ball_cell::cell::BallCell]) -> Vec<(Vec2D, f32)> {
+    pub fn get_neighbour_force_and_pos(&self, ball: &Ball2D, balls: &[BallCell]) -> Vec<(Vec2D, f32)> {
         let ball_pos = ball.get_position().clone();
         let ball_radius = ball.radius;
         ball.hood
@@ -242,7 +243,7 @@ impl BallPhysics {
     // }
 
     //fn force_by(&self, others: &Vec<Ball2D>)  -> (f32, Vec2D, f32) {
-    pub(crate) fn force(&self, ball: &Ball2D, balls: &[crate::objects2d::ball_cell::cell::BallCell]) -> (f32, Vec2D, f32) {
+    pub(crate) fn force(&self, ball: &Ball2D, balls: &[BallCell]) -> (f32, Vec2D, f32) {
         let mut force = Vec2D::new(0., 0.);
         let mut min_dist = f32::NAN;
         let mut total_pot = 0.;
