@@ -171,6 +171,10 @@ impl Verlet {
 
         // Now check distance for all candidates and update accordingly
         for &neighbour_idx in &all_candidates {
+            // Explicitly skip self-reference to avoid double borrow panic
+            if ball_idx == neighbour_idx {
+                continue;
+            }
             let dist = BallPhysics::distance_of_edges(&balls[ball_idx].borrow(), &balls[neighbour_idx].borrow());
             
             if dist < dist_limit {
