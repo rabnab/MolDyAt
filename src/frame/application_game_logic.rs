@@ -121,7 +121,6 @@ impl GameLogic for MainContent {
 
                 for ball_rc in &cell_balls {
                     let ball_id = ball_rc.borrow().get_id();
-                    let ball_radius = ball_rc.borrow().radius;
                     
                     // Find ball index in v_points
                     let ball_idx = if let Some(idx) = self.get_ball_vec().iter().position(|b| b.borrow().get_id() == ball_id) {
@@ -131,7 +130,7 @@ impl GameLogic for MainContent {
                     };
                     
                     // Get min_movement before taking mutable borrow
-                    let min_movement = self.physics.get_min_movement_for_update_hood(ball_radius);
+                    let min_movement = self.physics.get_min_movement_for_update_hood();
 
                     let neighbors = neighbor_buf.iter().filter(|neighbor| {
                         !std::ptr::eq(neighbor.as_ptr(), ball_rc.as_ptr())

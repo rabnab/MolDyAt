@@ -61,8 +61,10 @@ impl BallPhysics {
         self.constants.lj_cutoff
     }
 
-    pub fn get_min_movement_for_update_hood(&self, radius: f32) -> f32 {
-        radius + 2. * self.get_cutoff_distance()
+    pub fn get_min_movement_for_update_hood(&self) -> f32 {
+        let cutoff = self.get_cutoff_distance();
+        let cell_size = 2.5 * cutoff;
+        (cell_size - cutoff) / 2.0
     }
 
     /// equilibrium distance of two balls with same radius
@@ -402,5 +404,19 @@ mod tests {
             "Expected attractive (negative) force when farther than equilibrium, got {}",
             f_far
         );
+    }
+
+    #[test]
+    fn test_min_movement_threshold_formula() {
+        let phys = BallPhysics::default();
+        let cutoff = phys.get_cutoff_distance();
+        let cell_size = 2.5 * cutoff;
+        let expected_threshold = (cell_size - cutoff) / 2.0;
+        
+        let actual_threshold = phys.get_min_movement_for_update_hood();
+        
+        approx(actual_threshold, expected_threshold, 1e-6);
+        // Also verify the calculation directly: (2.5 * rc - rc) / 2 = 0.75 * rc
+        approx(actual_threshold, 0.75 * cutoff, 1e-6);
     }
 }
