@@ -97,14 +97,20 @@ impl MainContent {
         Normal::new(0., f32::max(0.3, sig)).expect("Invalid distribution parameters")
     }
     pub(crate) fn remove_invalid_balls(&mut self) {
+        let mut removed_some_balls = false;
         // Remove invalid balls and rebuild cell grid
         self.balls.retain(|ball| {
             let keep = !ball.get_position().x.is_nan() && !ball.get_position().y.is_nan();
             if !keep {
+                removed_some_balls = true;
                 println!("ball {:?} became invalid. removing", ball);
             }
             keep
         });
+
+        if !removed_some_balls {
+            return;
+        }
 
         // After retain, all indices have changed. Clear neighbor lists and force update.
         // This prevents stale indices from causing incorrect lookups or panics.
