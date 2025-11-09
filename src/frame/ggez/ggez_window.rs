@@ -27,7 +27,6 @@ impl GgezWindow {
             margin_px: (MARGIN_PX_X, MARGIN_PX_Y),
             ..Default::default()
         };
-        let world_rect = my_win_definition.compute_world_bounds_rect();
 
         GgezWindow {
             resource_dir,

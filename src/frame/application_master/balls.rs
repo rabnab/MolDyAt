@@ -22,7 +22,7 @@ impl MainContent {
     pub(crate) fn get_balls(&self) -> &[Ball2D] {
         &self.balls
     }
-    
+
     pub(crate) fn get_balls_mut(&mut self) -> &mut [Ball2D] {
         &mut self.balls
     }
@@ -41,7 +41,7 @@ impl MainContent {
         let min_pos = &(world.get_tl().into());
         let max_pos = &world.get_br().into();
 
-        let mut r = rng();
+        //let mut r = rng();
         for _ in 0..count {
             let nu_ball = self
                 .get_game_logic_data()
@@ -89,12 +89,9 @@ impl MainContent {
         }
     }
     pub(crate) fn calculate_normal_distribution_of_speed(&mut self) -> Normal<f32> {
-        let (sx2, sy2) = self
-            .balls
-            .iter()
-            .fold((0., 0.), |(ax, ay), b| {
-                (ax + b.v.x.powi(2), ay + b.v.y.powi(2))
-            });
+        let (sx2, sy2) = self.balls.iter().fold((0., 0.), |(ax, ay), b| {
+            (ax + b.v.x.powi(2), ay + b.v.y.powi(2))
+        });
         let n = self.balls.len() as f32;
         let sig = f32::sqrt(f32::sqrt(sx2 / (n - 1.5) * sy2 / (n - 1.5)));
         Normal::new(0., f32::max(0.3, sig)).expect("Invalid distribution parameters")
