@@ -1,4 +1,5 @@
 use crate::objects2d::Rect;
+use crate::objects2d::ball_cell::cell::BallCell;
 use crate::objects2d::ball_impl::verlet::Verlet;
 use crate::objects2d::ball_impl::{BallId, Named};
 use crate::objects2d::vec_2d::Vec2D;
@@ -104,7 +105,7 @@ impl Ball2D {
     }
 
     #[cfg(test)] //Only used in tests
-    pub fn get_neighbour_names(&self, balls: &[crate::objects2d::ball_cell::cell::BallCell]) -> Vec<String> {
+    pub fn get_neighbour_names(&self, balls: &[BallCell]) -> Vec<String> {
         self.hood.get_neighbour_names(balls)
     }
 
