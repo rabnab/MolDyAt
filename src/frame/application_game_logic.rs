@@ -124,23 +124,36 @@ impl GameLogic for MainContent {
                 }
             }
 
-            // Update stats - we need to avoid simultaneous borrows, so we'll
-            // iterate through and call update_closeness_stats which handles the computation
+            // Update stats - compute neighbor statistics for each ball
+            // We cannot call update_closeness_stats directly due to borrow checker,
+            // so we compute the stats and update each ball separately
             for i in 0..self.balls.len() {
-                // Get position before mutable borrow
                 let ball_pos = self.balls[i].get_position().clone();
                 let verbose_lines = self.balls[i].verbose.lines();
+                let neighbour_indices: Vec<usize> = self.balls[i].hood.get_neighbour_indices().to_vec();
                 
-                // Split to get mutable access to current ball and immutable to all others
-                // We'll pass the full slice - update_closeness_stats only reads from it
-                {
-                    let balls_ptr = self.balls.as_ptr();
-                    let balls_len = self.balls.len();
-                    // Safety: We're only reading from the slice in update_closeness_stats,
-                    // and only mutating the hood field of balls[i]
-                    let balls_slice = unsafe { std::slice::from_raw_parts(balls_ptr, balls_len) };
-                    self.balls[i].hood.update_closeness_stats(&ball_pos, balls_slice);
-                }
+                // Compute nearest and farthest distances from neighbors
+                let (nearest_sq, farthest_sq) = neighbour_indices
+                    .iter()
+                    .filter_map(|&idx| self.balls.get(idx))
+                    .map(|ball| ball_pos.dist(&ball.get_position()).norm_sq())
+                    .fold((f32::INFINITY, f32::NEG_INFINITY), |(min, max), val| {
+                        (min.min(val), max.max(val))
+                    });
+                
+                // Update the ball's hood statistics
+                let ball_hood = &mut self.balls[i].hood;
+                ball_hood.num_neighbours = neighbour_indices.len();
+                ball_hood.nearest = if nearest_sq.is_finite() {
+                    f32::sqrt(nearest_sq)
+                } else {
+                    f32::NAN
+                };
+                ball_hood.farthest = if farthest_sq.is_finite() {
+                    f32::sqrt(farthest_sq)
+                } else {
+                    f32::NAN
+                };
                 
                 let num_neighbors = self.balls[i].hood.get_number_of_neighbors();
                 

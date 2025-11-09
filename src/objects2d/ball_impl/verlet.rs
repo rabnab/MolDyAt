@@ -11,8 +11,8 @@ pub(crate) struct Verlet {
     pub nearest: f32,
     pub farthest: f32,
     updates_frequency: usize,
-    updates_since_refresh: usize,
-    num_neighbours: usize,
+    pub(crate) updates_since_refresh: usize,
+    pub(crate) num_neighbours: usize,
 }
 
 impl Default for Verlet {
