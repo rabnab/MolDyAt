@@ -25,6 +25,8 @@ pub struct Ball2D {
     pub last_update_hood_pos: Vec2D,
     pub tail: VecDeque<Vec2D>,
     pub tail_length: usize,
+    /// The cell this ball currently occupies (row, col). None if not assigned to any cell.
+    pub current_cell: Option<(usize, usize)>,
 }
 
 impl Default for Ball2D {
@@ -44,6 +46,7 @@ impl Default for Ball2D {
             last_update_hood_pos: Vec2D::new(f32::INFINITY, f32::INFINITY),
             tail_length: DEFAULT_TAIL_LENGTH,
             tail: VecDeque::with_capacity(DEFAULT_TAIL_LENGTH),
+            current_cell: None,
         }
     }
 }
@@ -208,8 +211,8 @@ impl Ball2D {
         let dx = self.v.x * dt + 0.5 * self.accel.x * dt * dt;
         let dy = self.v.y * dt + 0.5 * self.accel.y * dt * dt;
 
-        let (x0, y0) = (bound.get_tl());
-        let (x1, y1) = (bound.get_br());
+        let (x0, y0) = bound.get_tl();
+        let (x1, y1) = bound.get_br();
 
         let bound_min_x = f32::min(x0, x1) + self.radius;
         let bound_max_x = f32::max(x0, x1) - self.radius;

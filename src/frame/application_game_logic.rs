@@ -92,8 +92,6 @@ impl GameLogic for MainContent {
 
     fn collect_neighbours_by_cell(&mut self, dt: f32) {
         if self.step_count % self.get_game_logic_data().neighbour_update_interval == 0 {
-            let (rows, cols) = self.cell_grid.get_grid_size();
-
             // Single reusable buffer to avoid per-cell allocations
             let mut neighbor_buf: Vec<_> = Vec::new();
             // reserve some capacity to reduce reallocations; tune as needed
@@ -101,49 +99,55 @@ impl GameLogic for MainContent {
             
             let cutoff = self.physics.get_cutoff_distance();
 
-            for row in 0..rows {
-                for col in 0..cols {
-                    neighbor_buf.clear();
-                    self.cell_grid
-                        .collect_balls_into(row, col, &mut neighbor_buf);
+            // Only process cells that have balls (tracked via current_cell)
+            // Build set of occupied cells from all balls
+            let occupied_cells: std::collections::HashSet<_> = self
+                .get_ball_vec()
+                .iter()
+                .filter_map(|b| b.borrow().current_cell)
+                .collect();
 
-                    // Clone cell.balls to avoid holding immutable borrow
-                    let cell_balls: Vec<_> = if let Some(cell) = self.cell_grid.get_cell(row, col) {
-                        cell.balls.clone()
+            for (row, col) in occupied_cells {
+                neighbor_buf.clear();
+                self.cell_grid
+                    .collect_balls_into(row, col, &mut neighbor_buf);
+
+                // Clone cell.balls to avoid holding immutable borrow
+                let cell_balls: Vec<_> = if let Some(cell) = self.cell_grid.get_cell(row, col) {
+                    cell.balls.clone()
+                } else {
+                    continue;
+                };
+
+                for ball_rc in &cell_balls {
+                    let ball_id = ball_rc.borrow().get_id();
+                    let ball_radius = ball_rc.borrow().radius;
+                    
+                    // Find ball index in v_points
+                    let ball_idx = if let Some(idx) = self.get_ball_vec().iter().position(|b| b.borrow().get_id() == ball_id) {
+                        idx
                     } else {
                         continue;
                     };
+                    
+                    // Get min_movement before taking mutable borrow
+                    let min_movement = self.physics.get_min_movement_for_update_hood(ball_radius);
 
-                    for ball_rc in &cell_balls {
-                        let ball_id = ball_rc.borrow().get_id();
-                        let ball_radius = ball_rc.borrow().radius;
-                        
-                        // Find ball index in v_points
-                        let ball_idx = if let Some(idx) = self.get_ball_vec().iter().position(|b| b.borrow().get_id() == ball_id) {
-                            idx
-                        } else {
-                            continue;
-                        };
-                        
-                        // Get min_movement before taking mutable borrow
-                        let min_movement = self.physics.get_min_movement_for_update_hood(ball_radius);
+                    let neighbors = neighbor_buf.iter().filter(|neighbor| {
+                        !std::ptr::eq(neighbor.as_ptr(), ball_rc.as_ptr())
+                    });
 
-                        let neighbors = neighbor_buf.iter().filter(|neighbor| {
-                            !std::ptr::eq(neighbor.as_ptr(), ball_rc.as_ptr())
-                        });
+                    // Get mutable access to the entire balls vector
+                    let balls = self.get_ball_vec_mut();
 
-                        // Get mutable access to the entire balls vector
-                        let balls = self.get_ball_vec_mut();
-
-                        Verlet::update_hood(
-                            ball_idx,
-                            dt,
-                            neighbors,
-                            cutoff,
-                            min_movement,
-                            balls,
-                        );
-                    }
+                    Verlet::update_hood(
+                        ball_idx,
+                        dt,
+                        neighbors,
+                        cutoff,
+                        min_movement,
+                        balls,
+                    );
                 }
             }
 
