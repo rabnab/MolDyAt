@@ -61,6 +61,12 @@ impl BallPhysics {
         self.constants.lj_cutoff
     }
 
+    /// Returns the minimum movement threshold required before a ball's update hood (region for neighbor search)
+    /// needs to be recalculated. This threshold is set to half the difference between the cell size and the cutoff
+    /// distance, i.e., `(cell_size - cutoff) / 2.0`, which is equivalent to `0.75 * cutoff` when `cell_size = 2.5 * cutoff`.
+    /// The cell size (`2.5 * cutoff`) is chosen to ensure that neighbor searches are efficient and accurate.
+    /// By only updating the hood when a ball moves more than this threshold, unnecessary recalculations are avoided,
+    /// improving performance while maintaining correctness in neighbor detection.
     pub fn get_min_movement_for_update_hood(&self) -> f32 {
         let cutoff = self.get_cutoff_distance();
         let cell_size = 2.5 * cutoff;
