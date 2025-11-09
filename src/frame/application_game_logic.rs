@@ -124,7 +124,7 @@ impl GameLogic for MainContent {
                 }
             }
 
-                        // Update stats - we need to avoid simultaneous borrows, so we'll
+            // Update stats - we need to avoid simultaneous borrows, so we'll
             // iterate through and call update_closeness_stats which handles the computation
             for i in 0..self.balls.len() {
                 // Get position before mutable borrow
