@@ -13,8 +13,8 @@ impl MainContent {
     /// Call this periodically (e.g., in the update loop) to check if it's time to unpause
     /// the simulation after a resize event.
     pub(crate) fn unpause_after_resize(&mut self) {
-        if let Some(resume_time) = self.resize_resume_at {
-            if std::time::Instant::now() >= resume_time {
+        if let Some(resume_time) = self.resize_resume_at
+            && std::time::Instant::now() >= resume_time {
                 if self.was_paused_for_resize && self.sim.is_paused() {
                     self.sim.toggle_pause();
                 }
@@ -31,7 +31,6 @@ impl MainContent {
                 self.resize_resume_at = None;
                 self.was_paused_for_resize = false;
             }
-        }
     }
 }
 

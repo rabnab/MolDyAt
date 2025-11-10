@@ -130,7 +130,7 @@ impl Renderer for GgezRenderer {
         ball: &Ball2D,
         balls: &[Ball2D],
     ) -> AppResult {
-        let ball_coord_px = self.window_def.borrow().coord_to_px(&ball.get_position());
+        let ball_coord_px = self.window_def.borrow().coord_to_px(ball.get_position());
 
         let neighbour_info = match &self.physics {
             Some(physics) => physics.get_neighbour_force_and_pos(ball, balls),
@@ -140,7 +140,6 @@ impl Renderer for GgezRenderer {
         let max_force = neighbour_info
             .iter()
             .map(|info| info.1)
-            .into_iter()
             .reduce(f32::max)
             .unwrap_or(0.);
         for (other_pos, other_force_ref) in neighbour_info.iter() {
@@ -158,7 +157,7 @@ impl Renderer for GgezRenderer {
             } else {
                 Color::from_rgb(64, 64, 64)
             };
-            let end: Point2<f32> = self.window_def.borrow().coord_to_px(&other_pos).into();
+            let end: Point2<f32> = self.window_def.borrow().coord_to_px(other_pos).into();
             // Create a line mesh
             backend.draw_line(&[start, end], 2.0, color_line.to_rgba())?;
         }
@@ -222,7 +221,7 @@ impl Renderer for GgezRenderer {
         let win_def = self.window_def.borrow();
 
         // 1) Draw cell grid and rectangle (short-lived &mut Canvas)
-        backend.draw_cell_grid_background(cell_grid, &*win_def)?;
+        backend.draw_cell_grid_background(cell_grid, &win_def)?;
         backend.draw_boundary_frame(win_def.margin_px, win_def.region_px)?;
 
         // 2) draw upper right text
@@ -240,7 +239,7 @@ impl Renderer for GgezRenderer {
     }
 
     fn finish_frame(&mut self, backend: &mut dyn DrawingBackend) -> AppResult<()> {
-        Ok(backend.finish_frame()?)
+        backend.finish_frame()
     }
 
     fn disable_drawing_cursor(&mut self) {
@@ -265,7 +264,7 @@ impl Renderer for GgezRenderer {
     }
 
     fn draw_single_ball(&self, backend: &mut dyn DrawingBackend, ball: &Ball2D) -> AppResult {
-        let ball_coord_px = self.window_def.borrow().coord_to_px(&ball.get_position());
+        let ball_coord_px = self.window_def.borrow().coord_to_px(ball.get_position());
 
         backend.draw_ball_mesh(
             ball.id,

@@ -51,7 +51,7 @@ impl BallFactory {
 
     pub fn create_all_radii() -> Vec<f32> {
         (0..NUM_BALL_SIZES)
-            .map(|idx| Self::radius_for_size_idx(idx))
+            .map(Self::radius_for_size_idx)
             .collect()
     }
 

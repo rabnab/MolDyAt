@@ -175,11 +175,11 @@ impl fmt::Display for Vec2D {
     }
 }
 
-impl Into<Point2<f32>> for Vec2D {
-    fn into(self) -> Point2<f32> {
+impl From<Vec2D> for Point2<f32> {
+    fn from(val: Vec2D) -> Self {
         Point2 {
-            x: self.x,
-            y: self.y,
+            x: val.x,
+            y: val.y,
         }
     }
 }

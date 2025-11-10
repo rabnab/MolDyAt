@@ -52,14 +52,14 @@ impl<'a> GgezBackend<'a> {
         let scale_key = scale.to_bits();
 
         let key = (ch, scale_key);
-        let char_txt = if let Some(tt) = self.cache.glyph_cache.get(&key) {
+        
+        if let Some(tt) = self.cache.glyph_cache.get(&key) {
             tt.clone()
         } else {
             let t = Text::new(TextFragment::new(ch.to_string()).scale(scale));
             self.cache.glyph_cache.push(key, t.clone());
             t
-        };
-        char_txt
+        }
     }
 
     // Return the owned cache back to the caller after rendering

@@ -106,7 +106,7 @@ impl Window<GgezRenderer> for GgezWindow {
             //.fragment_code(include_str!("objects2d/gradient_frag.wgsl"))
             .vertex_path("/gradient_vert.wgsl")
             .fragment_path("/gradient_frag.wgsl")
-            .build(&mut ctx.gfx)
+            .build(&ctx.gfx)
             .expect("Failed to build shader");
 
         let ball_defs = {

@@ -119,10 +119,10 @@ impl Verlet {
         let this_ball_needs_update = {
             let ball = &balls[ball_idx];
             if ball.verbose.console {
-                application_log::log_update_hood_start(&ball, cutoff);
+                application_log::log_update_hood_start(ball, cutoff);
             }
             ball.hood
-                .needs_update_hood(&ball, dt, min_movement_threshold)
+                .needs_update_hood(ball, dt, min_movement_threshold)
         };
 
         balls[ball_idx].hood.updates_since_refresh += 1;
@@ -228,7 +228,7 @@ impl Verlet {
         let (nearest_sq, farthest_sq) = neighbour_indices
             .iter()
             .filter_map(|&idx| balls.get(idx))
-            .map(|ball| ball_pos.dist(&ball.get_position()).norm_sq())
+            .map(|ball| ball_pos.dist(ball.get_position()).norm_sq())
             .fold((f32::INFINITY, f32::NEG_INFINITY), |(min, max), val| {
                 (min.min(val), max.max(val))
             });

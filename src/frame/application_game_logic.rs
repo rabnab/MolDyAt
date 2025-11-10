@@ -77,7 +77,7 @@ impl GameLogic for MainContent {
     }
 
     fn collect_neighbours_by_cell(&mut self, dt: f32) {
-        if self.step_count % self.get_game_logic_data().neighbour_update_interval == 0 {
+        if self.step_count.is_multiple_of(self.get_game_logic_data().neighbour_update_interval) {
             // Single reusable buffer to avoid per-cell allocations
             let mut neighbor_buf: Vec<usize> = Vec::new();
             neighbor_buf.reserve(30);

@@ -17,7 +17,7 @@ impl MainContent {
                     Some('s') => mode = VerboseInfoMode::Speed,
                     _ => {}
                 }
-                (particle_indicator, _) = input_trimed.split_at(input_trimed.len() - 1).into();
+                (particle_indicator, _) = input_trimed.split_at(input_trimed.len() - 1);
             }
 
             if let Ok(number) = particle_indicator.parse::<usize>() {

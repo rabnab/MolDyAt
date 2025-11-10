@@ -8,7 +8,7 @@ const LJ_SIG: f32 = 1.; // equilibrium distance
 //pub(crate) const LJ_CUTOFF: f32 = 8. * LJ_SIG; //distance where lenard jones force is < 1e-4 (as long as sig>0.1)
 const LJ_CUTOFF: f32 = 4. * LJ_SIG; //distance where lenard jones force is < 1e-4 (as long as sig>0.1)
 const LJ_EPS: f32 = 1.; // attractive strength
-const SQRT6_OF_TWO: f32 = 1.122462048309372981; // == 2^(1/6)
+const SQRT6_OF_TWO: f32 = 1.122_462; // == 2^(1/6)
 
 #[derive(Clone)]
 pub struct PhysicsConstants {
@@ -38,17 +38,11 @@ impl Default for PhysicsConstants {
     }
 }
 #[derive(Clone)]
+#[derive(Default)]
 pub struct BallPhysics {
     constants: PhysicsConstants,
 }
 
-impl Default for BallPhysics {
-    fn default() -> Self {
-        BallPhysics {
-            constants: PhysicsConstants::default(),
-        }
-    }
-}
 
 impl BallPhysics {
     pub fn new(constants: PhysicsConstants) -> Self {
@@ -130,8 +124,8 @@ impl BallPhysics {
     pub(crate) fn lenard_jones_force_pure(&self, dist_btw_balls: f32) -> f32 {
         let quot = self.constants.lj_sig / dist_btw_balls;
         let quot_six = quot.powi(6);
-        let res = 24. * self.constants.lj_eps * quot_six * (2. * quot_six - 1.) / dist_btw_balls;
-        res
+        
+        24. * self.constants.lj_eps * quot_six * (2. * quot_six - 1.) / dist_btw_balls
     }
 
     pub(crate) fn calculate_min_dist(actual_dist: f32, min_dist: f32) -> BallResult<f32> {
@@ -152,21 +146,21 @@ impl BallPhysics {
     }
 
     pub fn distance_of_edges(a: &Ball2D, b: &Ball2D) -> f32 {
-        let center_dist = a.get_position().dist(&b.get_position()).norm();
+        let center_dist = a.get_position().dist(b.get_position()).norm();
         center_dist - (a.radius + b.radius)
     }
 
     pub fn is_colliding(&self, this: &Ball2D, other: &Ball2D) -> bool {
         //use norm_sq to avoid sqrt in norm
         let radius_sum_sq = (this.radius + other.radius/*+ self.constants.lj_sig*/).powi(2);
-        let res = this.get_position().dist(&other.get_position()).norm_sq() < radius_sum_sq;
+        let res = this.get_position().dist(other.get_position()).norm_sq() < radius_sum_sq;
         if res {
             println!(
                 "ball {} at {} is too close to {}: dist = {} sum_rad = {}",
                 this.id,
                 this.get_position(),
                 other.get_position(),
-                this.get_position().dist(&other.get_position()).norm(),
+                this.get_position().dist(other.get_position()).norm(),
                 this.radius + other.radius
             )
         }
@@ -216,7 +210,7 @@ impl BallPhysics {
                 (
                     other.get_position().clone(),
                     self.lenard_jones_force(
-                        ball_pos.dist(&other.get_position()).norm(),
+                        ball_pos.dist(other.get_position()).norm(),
                         ball_radius + other.radius,
                         other.get_id(),
                     ),
@@ -238,8 +232,8 @@ impl BallPhysics {
         let ball = &mut balls[ball_idx];
         let accel =
             ball.accel_with_speed_limit(&total_force, self.constants.gravity, speed_limit, dt);
-        ball.v.x = ball.v.x + 0.5 * (accel.x + ball.accel.x) * dt;
-        ball.v.y = ball.v.y + 0.5 * (accel.y + ball.accel.y) * dt;
+        ball.v.x += 0.5 * (accel.x + ball.accel.x) * dt;
+        ball.v.y += 0.5 * (accel.y + ball.accel.y) * dt;
         ball.accel = accel;
 
         if ball.verbose.console {
