@@ -1,8 +1,8 @@
-# Assistant Prompts for Molecular Lennard-Jones Simulation
+# Copilot Instructions for Molecular Lennard-Jones Simulation
 
 ## Project Overview
 
-This is a **molecular dynamics physics simulation** implementing Lennard-Jones particle interactions with Verlet neighbor lists and spatial partitioning. The simulation is written in Rust and uses the ggez game framework for rendering. It should be possible to switch to a different implementation of renderer e.g. using wgpu directly
+This is a **molecular dynamics physics simulation** implementing Lennard-Jones particle interactions with Verlet neighbor lists and spatial partitioning. The simulation is written in Rust and uses the ggez game framework for rendering. It should be possible to switch to a different implementation of renderer e.g. using wgpu directly.
 
 **Critical Physics Constraint**: Energy conservation is a primary concern. Any changes to physics calculations, collision handling, or integration methods must preserve total system energy. Verify energy conservation when modifying physics code.
 
@@ -112,3 +112,4 @@ This is a **molecular dynamics physics simulation** implementing Lennard-Jones p
 3. **Energy Drift**: Numerical integration errors accumulate; use appropriate timesteps and integration methods
 4. **Neighbor List Staleness**: Update when particles move > threshold distance from last update position
 5. **Radius Awareness**: Many calculations need effective distances accounting for ball radii, not just centers
+
