@@ -283,10 +283,6 @@ impl Renderer for GgezRenderer {
 }
 
 impl GgezRenderer {
-    pub fn get_cached_meshes(self) -> GgezMeshCache {
-        self.cache
-    }
-
     // Move the cache out without cloning (leaves an empty/default cache behind).
     // Ensure GgezMeshCache implements Default (or create a proper empty value).
     pub fn take_cache(&mut self) -> GgezMeshCache {
@@ -336,7 +332,7 @@ impl GgezRenderer {
     }
 
     /// Returns a faint background color for a cell based on its row and column.
-    pub fn get_cell_color(row: usize, col: usize) -> Color {
+    pub(super) fn get_cell_color(row: usize, col: usize) -> Color {
         // 6 faint pastel colors
         const COLORS: [Color; 6] = [
             Color::new(0.8, 0.8, 1.0, 0.15), // faint blue
@@ -400,7 +396,7 @@ impl GgezRenderer {
         Mesh::from_data(ctx, ball_mesh_data)
     }
 
-    pub fn ball_color(&self, ball: &Ball2D) -> Option<Color> {
+    fn ball_color(&self, ball: &Ball2D) -> Option<Color> {
         if ball.verbose.console || ball.verbose.lines() {
             return Some(Color::BLUE);
         }

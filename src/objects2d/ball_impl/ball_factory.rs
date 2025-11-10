@@ -38,7 +38,7 @@ impl BallFactory {
         MIN_BALL_SIZE * BASE_EXPONENT.powi(size_idx as i32)
     }
 
-    pub(crate) fn mass_for_size_idx(size_idx: usize) -> f32 {
+    fn mass_for_size_idx(size_idx: usize) -> f32 {
         let density = 2. / 10.;
         let radius = Self::radius_for_size_idx(size_idx);
         1. + density * (radius / MIN_BALL_SIZE - 1.).powf(1.2)
