@@ -81,11 +81,7 @@ impl Renderer for DummyRenderer {
         self.window_def.borrow().compute_world_bounds_rect()
     }
 
-    fn draw_single_ball(
-        &self,
-        backend: &mut dyn DrawingBackend,
-        ball: &Ball2D,
-    ) -> AppResult {
+    fn draw_single_ball(&self, backend: &mut dyn DrawingBackend, ball: &Ball2D) -> AppResult {
         todo!()
     }
 

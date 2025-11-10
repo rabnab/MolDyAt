@@ -175,7 +175,7 @@ mod tests {
 
     #[test]
     fn test_basic_ball_creation() {
-        let mut factory = BallFactory::new();
+        let factory = BallFactory::new();
         let pos = Vec2D::new(1.0, 2.0);
         let ball = factory.create_basic(pos.clone(), 0);
 
@@ -188,7 +188,7 @@ mod tests {
 
     #[test]
     fn test_massive_ball_creation() {
-        let mut factory = BallFactory::new();
+        let factory = BallFactory::new();
         let pos = Vec2D::new(1.0, 2.0);
         let velocity = Vec2D::new(3.0, 4.0);
         let ball = factory.create_massive_with_velocity(pos.clone(), velocity.clone());
@@ -224,7 +224,7 @@ mod tests {
 
     #[test]
     fn test_random_ball_creation() {
-        let mut factory = BallFactory::new();
+        let factory = BallFactory::new();
         let pos_range = (&Vec2D::new(0.0, 0.0), &Vec2D::new(10.0, 10.0));
         let velocity_range = (0.0, 5.0);
         let ball = factory.create_random(pos_range, velocity_range);

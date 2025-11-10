@@ -54,11 +54,11 @@ impl VerletIntegration for MainContent {
 
         //update velocities and accel with new positions
         self.sim.reset_min_dist(bound_rect);
-        
+
         for i in 0..self.balls.len() {
-            let (min_dist, cur_pot) = self
-                .physics
-                .update_accel_and_speed_indexed(i, &mut self.balls, dt, bound_rect);
+            let (min_dist, cur_pot) =
+                self.physics
+                    .update_accel_and_speed_indexed(i, &mut self.balls, dt, bound_rect);
 
             //calculate properties
             self.sim.update_min_dist(min_dist);

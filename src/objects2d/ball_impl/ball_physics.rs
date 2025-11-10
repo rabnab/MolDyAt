@@ -66,7 +66,7 @@ impl BallPhysics {
     /// The cell size (`2.5 * cutoff`) is chosen to ensure that neighbor searches are efficient and accurate.
     /// By only updating the hood when a ball moves more than this threshold, unnecessary recalculations are avoided,
     /// improving performance while maintaining correctness in neighbor detection.
-    /// 
+    ///
     /// Note: The max_radius parameter accounts for the largest ball in the simulation. Since cutoff is measured
     /// edge-to-edge but ball movement is center-to-center, we need to consider the ball radii when determining
     /// if a neighbor might have entered or left the interaction range.
@@ -234,9 +234,10 @@ impl BallPhysics {
     ) -> (f32, f32) {
         let (min_dist, total_force, total_pot) = self.force_indexed(ball_idx, balls);
         let speed_limit = f32::min(bound.w, bound.h) * 0.2;
-        
+
         let ball = &mut balls[ball_idx];
-        let accel = ball.accel_with_speed_limit(&total_force, self.constants.gravity, speed_limit, dt);
+        let accel =
+            ball.accel_with_speed_limit(&total_force, self.constants.gravity, speed_limit, dt);
         ball.v.x = ball.v.x + 0.5 * (accel.x + ball.accel.x) * dt;
         ball.v.y = ball.v.y + 0.5 * (accel.y + ball.accel.y) * dt;
         ball.accel = accel;
@@ -437,9 +438,9 @@ mod tests {
         let effective_cutoff = cutoff + 2.0 * max_radius;
         let cell_size = 2.5 * effective_cutoff;
         let expected_threshold = (cell_size - effective_cutoff) / 2.0;
-        
+
         let actual_threshold = phys.get_min_movement_for_update_hood(max_radius);
-        
+
         approx(actual_threshold, expected_threshold, 1e-6);
         // Also verify the calculation directly: (2.5 * rc_eff - rc_eff) / 2 = 0.75 * rc_eff
         approx(actual_threshold, 0.75 * effective_cutoff, 1e-6);

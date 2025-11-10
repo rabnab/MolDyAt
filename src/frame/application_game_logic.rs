@@ -51,7 +51,8 @@ impl MainContent {
         // Update cell assignments for balls that moved
         for (i, old_pos) in old_positions.iter().enumerate() {
             let new_pos = self.balls[i].get_position().clone();
-            self.cell_grid.move_ball(i, &mut self.balls, old_pos, &new_pos);
+            self.cell_grid
+                .move_ball(i, &mut self.balls, old_pos, &new_pos);
         }
 
         self.remove_invalid_balls();
@@ -80,7 +81,7 @@ impl GameLogic for MainContent {
             // Single reusable buffer to avoid per-cell allocations
             let mut neighbor_buf: Vec<usize> = Vec::new();
             neighbor_buf.reserve(30);
-            
+
             let cutoff = self.physics.get_cutoff_distance();
 
             // Only process cells that have balls (tracked via current_cell)
@@ -97,11 +98,12 @@ impl GameLogic for MainContent {
                     .collect_ball_indices_into(row, col, &mut neighbor_buf);
 
                 // Get cell ball indices to avoid borrow issues
-                let cell_ball_indices: Vec<usize> = if let Some(cell) = self.cell_grid.get_cell(row, col) {
-                    cell.get_ball_indices().to_vec()
-                } else {
-                    continue;
-                };
+                let cell_ball_indices: Vec<usize> =
+                    if let Some(cell) = self.cell_grid.get_cell(row, col) {
+                        cell.get_ball_indices().to_vec()
+                    } else {
+                        continue;
+                    };
 
                 for &ball_idx in &cell_ball_indices {
                     let max_radius = BallFactory::get_max_radius();
@@ -123,18 +125,19 @@ impl GameLogic for MainContent {
             for i in 0..self.balls.len() {
                 let ball_pos = self.balls[i].get_position().clone();
                 let verbose_lines = self.balls[i].verbose.lines();
-                let neighbour_indices: Vec<usize> = self.balls[i].hood.get_neighbour_indices().to_vec();
-                
+                let neighbour_indices: Vec<usize> =
+                    self.balls[i].hood.get_neighbour_indices().to_vec();
+
                 // Compute stats using the shared utility function
-                let (num_neighbours, nearest, farthest) = 
+                let (num_neighbours, nearest, farthest) =
                     Verlet::compute_neighbor_stats(&ball_pos, &neighbour_indices, &self.balls);
-                
+
                 // Update the ball's hood statistics
                 let ball_hood = &mut self.balls[i].hood;
                 ball_hood.num_neighbours = num_neighbours;
                 ball_hood.nearest = nearest;
                 ball_hood.farthest = farthest;
-                
+
                 // Toggle verbose if needed
                 if !verbose_lines && num_neighbours > 100 {
                     self.balls[i].verbose.toggle_other_neighbour();

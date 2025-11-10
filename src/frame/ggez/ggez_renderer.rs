@@ -264,11 +264,7 @@ impl Renderer for GgezRenderer {
         self.window_def.borrow().compute_world_bounds_rect()
     }
 
-    fn draw_single_ball(
-        &self,
-        backend: &mut dyn DrawingBackend,
-        ball: &Ball2D,
-    ) -> AppResult {
+    fn draw_single_ball(&self, backend: &mut dyn DrawingBackend, ball: &Ball2D) -> AppResult {
         let ball_coord_px = self.window_def.borrow().coord_to_px(&ball.get_position());
 
         backend.draw_ball_mesh(

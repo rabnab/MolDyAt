@@ -65,11 +65,7 @@ pub trait Renderer {
     fn add_vkin_to_line(&mut self, v_kin: &VecDeque<f32>) -> AppResult;
     fn add_vpot_to_line(&mut self, v_pot: &VecDeque<f32>) -> AppResult;
     fn add_vtot_to_line(&mut self, v_kin: &VecDeque<f32>, v_pot: &VecDeque<f32>) -> AppResult;
-    fn draw_balls(
-        &mut self,
-        backend: &mut dyn DrawingBackend,
-        balls: &[Ball2D],
-    ) -> AppResult<()> {
+    fn draw_balls(&mut self, backend: &mut dyn DrawingBackend, balls: &[Ball2D]) -> AppResult<()> {
         let verbose_ball_indices = get_verbose_ball_indices(balls);
         self.draw_verbose_balls(backend, &verbose_ball_indices, balls)?;
         // self.draw_all_ball_tails(backend, &balls)?; todo!()
