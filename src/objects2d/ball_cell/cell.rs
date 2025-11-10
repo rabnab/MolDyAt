@@ -1,13 +1,8 @@
 use crate::objects2d::Vec2D;
-use crate::objects2d::ball_impl::Ball2D;
-use std::cell::RefCell;
 use std::fmt::Debug;
-use std::rc::Rc;
-
-pub type BallCell = Rc<RefCell<Ball2D>>;
 
 pub struct Cell {
-    pub balls: Vec<BallCell>,
+    pub balls: Vec<usize>,
     pub bounds: CellBounds,
     pub id: CellId,
 }
@@ -65,19 +60,19 @@ impl Cell {
         }
     }
 
-    pub fn add_ball(&mut self, ball: BallCell) {
-        self.balls.push(ball);
+    pub fn add_ball(&mut self, ball_idx: usize) {
+        self.balls.push(ball_idx);
     }
 
     pub fn remove_ball(&mut self, ball_id: usize) {
-        self.balls.retain(|b| b.borrow().get_id() != ball_id);
+        self.balls.retain(|&idx| idx != ball_id);
     }
 
-    pub fn get_balls(&self) -> impl Iterator<Item = &BallCell> {
-        self.balls.iter()
+    pub fn get_ball_indices(&self) -> &[usize] {
+        &self.balls
     }
 
-    pub fn drain_balls(&mut self) -> Vec<BallCell> {
+    pub fn drain_balls(&mut self) -> Vec<usize> {
         self.balls.drain(..).collect()
     }
 

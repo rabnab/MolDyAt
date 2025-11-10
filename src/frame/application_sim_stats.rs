@@ -168,6 +168,25 @@ impl SimStats {
         self.v_com = v_com;
     }
 
+    // Calculate temperature from the ball slice directly
+    #[inline]
+    pub(crate) fn calculate_temperature_from_balls(&mut self, v_balls: &[Ball2D]) {
+        let mut sum_rel_kin_doubled: f32 = 0.;
+        let mut max_neighbours: usize = 0;
+        let vcom_x = self.v_com.x;
+        let vcom_y = self.v_com.y;
+
+        for cur in v_balls {
+            let v_abs = &cur.v;
+            let v_rel_x = v_abs.x - vcom_x;
+            let v_rel_y = v_abs.y - vcom_y;
+            sum_rel_kin_doubled += cur.mass * (v_rel_x * v_rel_x + v_rel_y * v_rel_y);
+            max_neighbours = max_neighbours.max(cur.hood.get_number_of_neighbors());
+        }
+        self.max_neighbours = max_neighbours;
+        self.temperature = sum_rel_kin_doubled / 3.0 / (v_balls.len() as f32);
+    }
+
     // alternative faster temperature calculation that avoids Rc<RefCell<...>>
     // Use only if callers can provide a slice of Ball2D (borrowed) to avoid runtime borrow checks.
     #[inline]

@@ -1,13 +1,12 @@
 #![allow(unused_variables)]
 
 use crate::frame::AppResult;
-use crate::frame::application_master::BallCell;
 use crate::frame::renderer::{DrawingBackend, PlotContent, Renderer};
 use crate::frame::window::window_definition::WindowDefinition;
 use crate::objects2d::Rect;
 use crate::objects2d::ball_cell::cell_grid::CellGrid;
 use crate::objects2d::ball_impl::{Ball2D, BallPhysics};
-use std::cell::{Ref, RefCell};
+use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
 
@@ -35,19 +34,12 @@ impl Renderer for DummyRenderer {
     fn add_vtot_to_line(&mut self, v_kin: &VecDeque<f32>, v_pot: &VecDeque<f32>) -> AppResult<()> {
         todo!()
     }
-    fn draw_balls(
-        &mut self,
-        backend: &mut dyn DrawingBackend,
-        balls: Vec<BallCell>,
-    ) -> AppResult<()> {
-        todo!()
-    }
 
     fn draw_neighbour_lines(
         &self,
         backend: &mut dyn DrawingBackend,
-        ball: &Ref<Ball2D>,
-        balls: &[BallCell],
+        ball: &Ball2D,
+        balls: &[Ball2D],
     ) -> AppResult {
         todo!()
     }
@@ -92,7 +84,7 @@ impl Renderer for DummyRenderer {
     fn draw_single_ball(
         &self,
         backend: &mut dyn DrawingBackend,
-        ball_cell: &BallCell,
+        ball: &Ball2D,
     ) -> AppResult {
         todo!()
     }

@@ -5,26 +5,26 @@ use rand_distr::{Distribution, Normal};
 
 impl MainContent {
     pub fn add_candidate_to_vec(&mut self, candidate: Ball2D) {
-        let ball_rc = Rc::new(RefCell::new(candidate));
-        self.cell_grid.add_ball(ball_rc.clone());
-        self.v_points.push(ball_rc);
-        self.num_balls = self.v_points.len();
+        let ball_idx = self.balls.len();
+        self.balls.push(candidate);
+        self.cell_grid.add_ball(ball_idx, &mut self.balls);
+        self.num_balls = self.balls.len();
     }
     pub(crate) fn clear_points(&mut self) {
-        self.v_points.clear();
+        self.balls.clear();
         self.cell_grid.clear_all_cells();
         self.get_ball_factory().reset_id_counter();
         self.num_balls = 0;
     }
     pub(crate) fn get_number_of_balls(&self) -> usize {
-        self.v_points.len()
+        self.balls.len()
     }
-    pub(crate) fn get_ball_vec(&self) -> &Vec<BallCell> {
-        &self.v_points
+    pub(crate) fn get_balls(&self) -> &[Ball2D] {
+        &self.balls
     }
-    
-    pub(crate) fn get_ball_vec_mut(&mut self) -> &mut Vec<BallCell> {
-        &mut self.v_points
+
+    pub(crate) fn get_balls_mut(&mut self) -> &mut [Ball2D] {
+        &mut self.balls
     }
 
     // /// Add a new ball candidate at the given position with zero initial velocity.
@@ -41,7 +41,7 @@ impl MainContent {
         let min_pos = &(world.get_tl().into());
         let max_pos = &world.get_br().into();
 
-        let mut r = rng();
+        //let mut r = rng();
         for _ in 0..count {
             let nu_ball = self
                 .get_game_logic_data()
@@ -83,50 +83,55 @@ impl MainContent {
     pub(crate) fn randomize_speeds(&mut self) {
         let normal = self.calculate_normal_distribution_of_speed();
         let mut r = rng();
-        for ball in &self.v_points {
-            let mut b = ball.borrow_mut();
-            b.v.x = normal.sample(&mut r);
-            b.v.y = normal.sample(&mut r);
+        for ball in &mut self.balls {
+            ball.v.x = normal.sample(&mut r);
+            ball.v.y = normal.sample(&mut r);
         }
     }
     pub(crate) fn calculate_normal_distribution_of_speed(&mut self) -> Normal<f32> {
-        let (sx2, sy2) = self
-            .v_points
-            .iter()
-            .map(|b| b.borrow())
-            .fold((0., 0.), |(ax, ay), b| {
-                (ax + b.v.x.powi(2), ay + b.v.y.powi(2))
-            });
-        let n = self.v_points.len() as f32;
+        let (sx2, sy2) = self.balls.iter().fold((0., 0.), |(ax, ay), b| {
+            (ax + b.v.x.powi(2), ay + b.v.y.powi(2))
+        });
+        let n = self.balls.len() as f32;
         let sig = f32::sqrt(f32::sqrt(sx2 / (n - 1.5) * sy2 / (n - 1.5)));
         Normal::new(0., f32::max(0.3, sig)).expect("Invalid distribution parameters")
     }
     pub(crate) fn remove_invalid_balls(&mut self) {
-        let mut valid_balls = Vec::new();
-        self.cell_grid.clear_all_cells();
-
-        for ball_rc in &self.v_points {
-            let ball = ball_rc.borrow();
+        let mut removed_some_balls = false;
+        // Remove invalid balls and rebuild cell grid
+        self.balls.retain(|ball| {
             let keep = !ball.get_position().x.is_nan() && !ball.get_position().y.is_nan();
             if !keep {
+                removed_some_balls = true;
                 println!("ball {:?} became invalid. removing", ball);
-            } else {
-                valid_balls.push(ball_rc.clone());
             }
+            keep
+        });
+
+        if !removed_some_balls {
+            return;
         }
 
-        // Re-add valid balls to grid (this will set current_cell)
-        for ball_rc in &valid_balls {
-            self.cell_grid.add_ball(ball_rc.clone());
+        // After retain, all indices have changed. Clear neighbor lists and force update.
+        // This prevents stale indices from causing incorrect lookups or panics.
+        for ball in &mut self.balls {
+            ball.hood.clear_neighbours();
+            ball.current_cell = None;
+            // Reset last_update_hood_pos to infinity to force update_hood on next check
+            ball.last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
         }
 
-        self.v_points = valid_balls;
-        self.num_balls = self.v_points.len();
+        // Rebuild cell grid with valid balls
+        self.cell_grid.clear_all_cells();
+        for i in 0..self.balls.len() {
+            self.cell_grid.add_ball(i, &mut self.balls);
+        }
+
+        self.num_balls = self.balls.len();
     }
 
     pub(crate) fn stop_all_balls(&mut self) {
-        for ball_rc in &self.v_points {
-            let mut ball = ball_rc.borrow_mut();
+        for ball in &mut self.balls {
             ball.v = Vec2D::new(0., 0.);
         }
     }

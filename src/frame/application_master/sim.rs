@@ -24,6 +24,7 @@ impl MainContent {
                     &mut self.cell_grid,
                     nu_rect,
                     self.physics.get_cutoff_distance(),
+                    &mut self.balls,
                 )
                 .expect("Failed to resize CellGrid");
                 self.cell_grid = nu_grid;
@@ -44,37 +45,32 @@ impl VerletIntegration for MainContent {
         let mut sum_mass: f32 = 0.;
 
         //update positions
-        for ball_rc in &mut self.v_points {
-            let mut cur = ball_rc.borrow_mut();
-            self.physics.update_positions(&mut *cur, dt, bound_rect);
+        for ball in &mut self.balls {
+            self.physics.update_positions(ball, dt, bound_rect);
         }
-        self.v_points
-            .iter()
-            .for_each(|ball| ball.borrow_mut().update_old_pos());
+        for ball in &mut self.balls {
+            ball.update_old_pos();
+        }
 
         //update velocities and accel with new positions
         self.sim.reset_min_dist(bound_rect);
         
-        // Clone v_points reference to avoid simultaneous mut/immut borrow
-        let balls_vec = self.v_points.clone();
-        
-        for ball_rc in &mut self.v_points {
-            let mut cur = ball_rc.borrow_mut();
+        for i in 0..self.balls.len() {
             let (min_dist, cur_pot) = self
                 .physics
-                .update_accel_and_speed(&mut *cur, dt, bound_rect, &balls_vec);
+                .update_accel_and_speed_indexed(i, &mut self.balls, dt, bound_rect);
 
             //calculate properties
             self.sim.update_min_dist(min_dist);
 
             pot += cur_pot * 0.5; //double counts
-            _v_com += cur.moment();
-            let speed_sq = cur.v.norm_sq();
-            kin += speed_sq * cur.mass * 0.5;
-            sum_mass += cur.mass;
+            _v_com += self.balls[i].moment();
+            let speed_sq = self.balls[i].v.norm_sq();
+            kin += speed_sq * self.balls[i].mass * 0.5;
+            sum_mass += self.balls[i].mass;
             if max_v * max_v < speed_sq {
                 max_v = f32::sqrt(speed_sq);
-                max_id = cur.get_id();
+                max_id = self.balls[i].get_id();
             }
         }
 

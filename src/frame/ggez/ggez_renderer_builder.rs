@@ -62,22 +62,8 @@ impl GgezRendererBuilder {
             self.crosshair_mesh.expect("CrosshairMesh not set"),
             self.ball_mesh.expect("BallMesh not set"),
             self.window_def_ref.expect("WindowDefRef not set"),
-            // self.neighbour_force_and_pos.expect("neighbour_force_and_pos not set"),
         )
     }
-}
-
-fn create_cell_grid_mesh(ctx: &Context, cell_size: (f32, f32)) -> Option<((f32, f32), Mesh)> {
-    None
-    // let rect_mesh = Mesh::new_rectangle(
-    //     ctx,
-    //     DrawMode::fill(),
-    //     ggez::graphics::Rect::new(0.0, 0.0, cell_size.0, cell_size.1),
-    //     Color::WHITE,
-    // )
-    // .unwrap();
-    // let m = ((cell_size.0, cell_size.1), rect_mesh);
-    // Some(m)
 }
 
 fn initialize_ball_meshes(ctx: &Context, radius_equi: Vec<(f32, f32)>) -> Option<Vec<Mesh>> {

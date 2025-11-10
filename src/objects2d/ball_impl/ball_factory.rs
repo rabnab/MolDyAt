@@ -55,6 +55,11 @@ impl BallFactory {
             .collect()
     }
 
+    /// Returns the maximum possible ball radius (for the largest size index)
+    pub fn get_max_radius() -> f32 {
+        Self::radius_for_size_idx(NUM_BALL_SIZES - 1)
+    }
+
     pub(crate) fn get_new_ball_size_idx(&self) -> usize {
         *self.new_ball_size_idx.borrow()
     }

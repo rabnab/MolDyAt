@@ -1,6 +1,5 @@
 use crate::objects2d::Rect;
 use crate::objects2d::Vec2D;
-use crate::objects2d::ball_cell::cell::BallCell;
 use crate::objects2d::ball_impl::{Ball2D, BallError, BallResult, Named};
 
 //const LJ_SIG: f32 = 5.; // equilibrium distance
@@ -61,8 +60,23 @@ impl BallPhysics {
         self.constants.lj_cutoff
     }
 
-    pub fn get_min_movement_for_update_hood(&self, radius: f32) -> f32 {
-        radius + 2. * self.get_cutoff_distance()
+    /// Returns the minimum movement threshold required before a ball's update hood (region for neighbor search)
+    /// needs to be recalculated. This threshold is set to half the difference between the cell size and the cutoff
+    /// distance, i.e., `(cell_size - cutoff) / 2.0`, which is equivalent to `0.75 * cutoff` when `cell_size = 2.5 * cutoff`.
+    /// The cell size (`2.5 * cutoff`) is chosen to ensure that neighbor searches are efficient and accurate.
+    /// By only updating the hood when a ball moves more than this threshold, unnecessary recalculations are avoided,
+    /// improving performance while maintaining correctness in neighbor detection.
+    /// 
+    /// Note: The max_radius parameter accounts for the largest ball in the simulation. Since cutoff is measured
+    /// edge-to-edge but ball movement is center-to-center, we need to consider the ball radii when determining
+    /// if a neighbor might have entered or left the interaction range.
+    pub fn get_min_movement_for_update_hood(&self, max_radius: f32) -> f32 {
+        let cutoff = self.get_cutoff_distance();
+        // The cell size must accommodate the cutoff plus the maximum ball diameter
+        // to ensure all potential neighbors are captured
+        let effective_cutoff = cutoff + 2.0 * max_radius;
+        let cell_size = 2.5 * effective_cutoff;
+        (cell_size - effective_cutoff) / 2.0
     }
 
     /// equilibrium distance of two balls with same radius
@@ -159,22 +173,6 @@ impl BallPhysics {
         res
     }
 
-    pub fn update_accel_and_speed(&self, ball: &mut Ball2D, dt: f32, bound: &Rect, balls: &[BallCell]) -> (f32, f32) {
-        let (min_dist, total_force, total_pot) = self.force(ball, balls);
-        let speed_limit = f32::min(bound.w, bound.h) * 0.2;
-        let accel =
-            ball.accel_with_speed_limit(&total_force, self.constants.gravity, speed_limit, dt);
-        ball.v.x = ball.v.x + 0.5 * (accel.x + ball.accel.x) * dt;
-        ball.v.y = ball.v.y + 0.5 * (accel.y + ball.accel.y) * dt;
-
-        ball.accel = accel;
-
-        if ball.verbose.console {
-            println!("updated to  v {:?}  a {:?}", ball.v, ball.accel);
-        }
-        (min_dist, total_pot)
-    }
-
     pub fn update_positions(&self, ball: &mut Ball2D, dt: f32, bound: &Rect) {
         if ball.verbose.console {
             println!(
@@ -203,15 +201,18 @@ impl BallPhysics {
         //self.update_old_pos();
     }
 
-    pub fn get_neighbour_force_and_pos(&self, ball: &Ball2D, balls: &[BallCell]) -> Vec<(Vec2D, f32)> {
+    pub fn get_neighbour_force_and_pos(
+        &self,
+        ball: &Ball2D,
+        balls: &[Ball2D],
+    ) -> Vec<(Vec2D, f32)> {
         let ball_pos = ball.get_position().clone();
         let ball_radius = ball.radius;
         ball.hood
             .get_neighbour_indices()
             .iter()
             .filter_map(|&idx| balls.get(idx))
-            .map(|rcrefcell| {
-                let other = rcrefcell.borrow();
+            .map(|other| {
                 (
                     other.get_position().clone(),
                     self.lenard_jones_force(
@@ -222,6 +223,28 @@ impl BallPhysics {
                 )
             })
             .collect()
+    }
+
+    pub fn update_accel_and_speed_indexed(
+        &self,
+        ball_idx: usize,
+        balls: &mut [Ball2D],
+        dt: f32,
+        bound: &Rect,
+    ) -> (f32, f32) {
+        let (min_dist, total_force, total_pot) = self.force_indexed(ball_idx, balls);
+        let speed_limit = f32::min(bound.w, bound.h) * 0.2;
+        
+        let ball = &mut balls[ball_idx];
+        let accel = ball.accel_with_speed_limit(&total_force, self.constants.gravity, speed_limit, dt);
+        ball.v.x = ball.v.x + 0.5 * (accel.x + ball.accel.x) * dt;
+        ball.v.y = ball.v.y + 0.5 * (accel.y + ball.accel.y) * dt;
+        ball.accel = accel;
+
+        if ball.verbose.console {
+            println!("updated to  v {:?}  a {:?}", ball.v, ball.accel);
+        }
+        (min_dist, total_pot)
     }
     // ball.hood
     //         .neighbours
@@ -243,35 +266,37 @@ impl BallPhysics {
     // }
 
     //fn force_by(&self, others: &Vec<Ball2D>)  -> (f32, Vec2D, f32) {
-    pub(crate) fn force(&self, ball: &Ball2D, balls: &[BallCell]) -> (f32, Vec2D, f32) {
+
+    pub(crate) fn force_indexed(&self, ball_idx: usize, balls: &[Ball2D]) -> (f32, Vec2D, f32) {
         let mut force = Vec2D::new(0., 0.);
         let mut min_dist = f32::NAN;
         let mut total_pot = 0.;
 
-        for &neighbour_idx in ball.hood.get_neighbour_indices() {
-            if let Some(b_rc) = balls.get(neighbour_idx) {
+        let ball_pos = balls[ball_idx].get_position().clone();
+        let ball_id = balls[ball_idx].id;
+        let ball_radius = balls[ball_idx].radius;
+        let ball_verbose_console = balls[ball_idx].verbose.console;
+        let neighbour_indices = balls[ball_idx].hood.get_neighbour_indices().to_vec();
+
+        for &neighbour_idx in &neighbour_indices {
+            if let Some(b) = balls.get(neighbour_idx) {
                 //from other_ball to this_ball
-                let b = b_rc.borrow();
-                let dist_vec = b.pre_update_pos.dist(&ball.get_position());
+                let dist_vec = b.pre_update_pos.dist(&ball_pos);
                 let center_dist = dist_vec.norm();
-                let radius_sum = b.radius + ball.radius;
+                let radius_sum = b.radius + ball_radius;
                 let edge_dist = center_dist - radius_sum;
-                /*min_dist = match Ball2D::check_min_dist(dist - radius_sum*0.9, min_dist) {
-                    Err(BallError::DistanceUnderflow) | Err(BallError::LessThanTwoBalls) => return(0., Vec2D::new(0.,0.), 0.),
-                    Ok(dist_result) => dist_result,
-                };*/
 
                 match Self::calculate_min_dist(center_dist - radius_sum, min_dist) {
                     Ok(min_dist_cur) => {
                         min_dist = min_dist_cur;
-                        let lj_force = self.lenard_jones_force(center_dist, radius_sum, ball.id);
+                        let lj_force = self.lenard_jones_force(center_dist, radius_sum, ball_id);
                         let force_to_dist_val = lj_force / center_dist;
                         let local_force = Vec2D::new(
                             dist_vec.x * force_to_dist_val,
                             dist_vec.y * force_to_dist_val,
                         );
 
-                        if ball.verbose.console || edge_dist < 0. {
+                        if ball_verbose_console || edge_dist < 0. {
                             println!(
                                 "\t\t {}--force: {} ({},{}) at dist: {}",
                                 b.get_name(),
@@ -295,7 +320,7 @@ impl BallPhysics {
                             dist_vec.y * force_to_dist_val,
                         );
 
-                        if ball.verbose.console || edge_dist < 0. {
+                        if ball_verbose_console || edge_dist < 0. {
                             println!(
                                 "\t\t ball {}--force(max): {:?} at dist: {}",
                                 b.get_name(),
@@ -402,5 +427,21 @@ mod tests {
             "Expected attractive (negative) force when farther than equilibrium, got {}",
             f_far
         );
+    }
+
+    #[test]
+    fn test_min_movement_threshold_formula() {
+        let phys = BallPhysics::default();
+        let cutoff = phys.get_cutoff_distance();
+        let max_radius = 1.0; // Example max radius
+        let effective_cutoff = cutoff + 2.0 * max_radius;
+        let cell_size = 2.5 * effective_cutoff;
+        let expected_threshold = (cell_size - effective_cutoff) / 2.0;
+        
+        let actual_threshold = phys.get_min_movement_for_update_hood(max_radius);
+        
+        approx(actual_threshold, expected_threshold, 1e-6);
+        // Also verify the calculation directly: (2.5 * rc_eff - rc_eff) / 2 = 0.75 * rc_eff
+        approx(actual_threshold, 0.75 * effective_cutoff, 1e-6);
     }
 }

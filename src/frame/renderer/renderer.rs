@@ -1,11 +1,9 @@
 use crate::frame::AppResult;
-use crate::frame::application_master::BallCell;
 use crate::frame::renderer::dummy_renderer::DummyRenderer;
 use crate::frame::window::window_definition::WindowDefinition;
 use crate::objects2d::ball_cell::cell_grid::CellGrid;
 use crate::objects2d::ball_impl::{Ball2D, BallPhysics};
 use ggez::mint::Point2;
-use std::cell::Ref;
 use std::collections::VecDeque;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -70,12 +68,12 @@ pub trait Renderer {
     fn draw_balls(
         &mut self,
         backend: &mut dyn DrawingBackend,
-        balls: Vec<BallCell>,
+        balls: &[Ball2D],
     ) -> AppResult<()> {
-        let verbose_balls = get_verbose_balls(&balls);
-        self.draw_verbose_balls(backend, &verbose_balls, &balls)?;
+        let verbose_ball_indices = get_verbose_ball_indices(balls);
+        self.draw_verbose_balls(backend, &verbose_ball_indices, balls)?;
         // self.draw_all_ball_tails(backend, &balls)?; todo!()
-        self.draw_all_balls_symbol(backend, &balls)?;
+        self.draw_all_balls_symbol(backend, balls)?;
 
         Ok(())
     }
@@ -83,20 +81,20 @@ pub trait Renderer {
     fn draw_verbose_balls(
         &self,
         backend: &mut dyn DrawingBackend,
-        verbose_balls: &[BallCell],
-        all_balls: &[BallCell],
+        verbose_ball_indices: &[usize],
+        all_balls: &[Ball2D],
     ) -> AppResult {
-        for ball_ref in verbose_balls.iter() {
-            let ball = ball_ref.borrow();
-            self.draw_neighbour_lines(backend, &ball, all_balls)?;
+        for &ball_idx in verbose_ball_indices.iter() {
+            let ball = &all_balls[ball_idx];
+            self.draw_neighbour_lines(backend, ball, all_balls)?;
         }
         Ok(())
     }
     fn draw_neighbour_lines(
         &self,
         backend: &mut dyn DrawingBackend,
-        ball: &Ref<Ball2D>,
-        balls: &[BallCell],
+        ball: &Ball2D,
+        balls: &[Ball2D],
     ) -> AppResult;
 
     fn draw_cursor(&self, backend: &mut dyn DrawingBackend, size_idx: usize) -> AppResult;
@@ -113,15 +111,14 @@ pub trait Renderer {
 
     fn resize(&mut self, width: f32, height: f32);
     fn get_world_region(&self) -> crate::objects2d::Rect;
-    fn draw_single_ball(&self, backend: &mut dyn DrawingBackend, ball_cell: &BallCell)
-    -> AppResult;
+    fn draw_single_ball(&self, backend: &mut dyn DrawingBackend, ball: &Ball2D) -> AppResult;
     fn draw_all_balls_symbol(
         &self,
         backend: &mut dyn DrawingBackend,
-        balls: &Vec<BallCell>,
+        balls: &[Ball2D],
     ) -> AppResult {
-        for ball_cell in balls {
-            self.draw_single_ball(backend, ball_cell)?;
+        for ball in balls {
+            self.draw_single_ball(backend, ball)?;
         }
         Ok(())
     }
@@ -129,11 +126,12 @@ pub trait Renderer {
     fn set_physics_engine(&mut self, engine: BallPhysics);
 }
 
-fn get_verbose_balls(balls: &Vec<BallCell>) -> Vec<BallCell> {
+fn get_verbose_ball_indices(balls: &[Ball2D]) -> Vec<usize> {
     balls
         .iter()
-        .filter(|ball| ball.borrow().verbose.lines())
-        .cloned()
+        .enumerate()
+        .filter(|(_, ball)| ball.verbose.lines())
+        .map(|(idx, _)| idx)
         .collect()
 }
 
