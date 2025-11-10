@@ -110,8 +110,8 @@ impl GameLogic for MainContent {
                 };
 
                 for &ball_idx in &cell_ball_indices {
-                    let ball_radius = self.balls[ball_idx].radius;
-                    let min_movement = self.physics.get_min_movement_for_update_hood(ball_radius);
+                    let max_radius = BallFactory::get_max_radius();
+                    let min_movement = self.physics.get_min_movement_for_update_hood(max_radius);
 
                     Verlet::update_hood(
                         ball_idx,

@@ -60,8 +60,23 @@ impl BallPhysics {
         self.constants.lj_cutoff
     }
 
-    pub fn get_min_movement_for_update_hood(&self, radius: f32) -> f32 {
-        radius + self.get_cutoff_distance()
+    /// Returns the minimum movement threshold required before a ball's update hood (region for neighbor search)
+    /// needs to be recalculated. This threshold is set to half the difference between the cell size and the cutoff
+    /// distance, i.e., `(cell_size - cutoff) / 2.0`, which is equivalent to `0.75 * cutoff` when `cell_size = 2.5 * cutoff`.
+    /// The cell size (`2.5 * cutoff`) is chosen to ensure that neighbor searches are efficient and accurate.
+    /// By only updating the hood when a ball moves more than this threshold, unnecessary recalculations are avoided,
+    /// improving performance while maintaining correctness in neighbor detection.
+    /// 
+    /// Note: The max_radius parameter accounts for the largest ball in the simulation. Since cutoff is measured
+    /// edge-to-edge but ball movement is center-to-center, we need to consider the ball radii when determining
+    /// if a neighbor might have entered or left the interaction range.
+    pub fn get_min_movement_for_update_hood(&self, max_radius: f32) -> f32 {
+        let cutoff = self.get_cutoff_distance();
+        // The cell size must accommodate the cutoff plus the maximum ball diameter
+        // to ensure all potential neighbors are captured
+        let effective_cutoff = cutoff + 2.0 * max_radius;
+        let cell_size = 2.5 * effective_cutoff;
+        (cell_size - effective_cutoff) / 2.0
     }
 
     /// equilibrium distance of two balls with same radius
@@ -412,5 +427,21 @@ mod tests {
             "Expected attractive (negative) force when farther than equilibrium, got {}",
             f_far
         );
+    }
+
+    #[test]
+    fn test_min_movement_threshold_formula() {
+        let phys = BallPhysics::default();
+        let cutoff = phys.get_cutoff_distance();
+        let max_radius = 1.0; // Example max radius
+        let effective_cutoff = cutoff + 2.0 * max_radius;
+        let cell_size = 2.5 * effective_cutoff;
+        let expected_threshold = (cell_size - effective_cutoff) / 2.0;
+        
+        let actual_threshold = phys.get_min_movement_for_update_hood(max_radius);
+        
+        approx(actual_threshold, expected_threshold, 1e-6);
+        // Also verify the calculation directly: (2.5 * rc_eff - rc_eff) / 2 = 0.75 * rc_eff
+        approx(actual_threshold, 0.75 * effective_cutoff, 1e-6);
     }
 }
