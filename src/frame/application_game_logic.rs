@@ -22,12 +22,6 @@ impl Timer {
     }
 }
 
-// fn elapsed_since(start: Instant) -> u128 {
-//     let dur = start.elapsed();
-//     let updating_ms = dur.as_millis();
-//     updating_ms
-// }
-
 impl Default for GameLogicData {
     fn default() -> Self {
         GameLogicData {
