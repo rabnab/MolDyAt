@@ -72,10 +72,12 @@ This is a **molecular dynamics physics simulation** implementing Lennard-Jones p
 
 ## Git Workflow
 
-### Commit Messages
-- Use imperative mood: "Fix index invalidation" not "Fixed" or "Fixes"
-- Be specific: "Account for ball radii in min_movement_for_update_hood calculation"
-- Reference issues/PRs when relevant: "Addresses review comment in PR #18"
+### Pull Request Workflow (REQUIRED)
+- **Never commit directly to master** - All changes must go through pull requests
+- Create a feature branch for every change, no matter how small
+- Push your branch and create a pull request for review
+- Wait for CI checks to pass before merging
+- Use "Squash and merge" for cleaner history when appropriate
 
 ### Branch Strategy
 - Feature branches: `feature/master/descriptive-name`
@@ -84,11 +86,19 @@ This is a **molecular dynamics physics simulation** implementing Lennard-Jones p
 - Ensure all tests pass before pushing
 - Run `cargo fmt` before committing
 
+### Commit Messages
+- Use imperative mood: "Fix index invalidation" not "Fixed" or "Fixes"
+- Be specific: "Account for ball radii in min_movement_for_update_hood calculation"
+- Reference issues/PRs when relevant: "Addresses review comment in PR #18"
+
 ### Pull Requests
+- Write clear PR titles and descriptions
+- Link related issues (e.g., "Closes #23" or "Addresses #18")
 - Address all review comments before merging
 - Ensure CI passes (tests, formatting, clippy)
 - Update documentation if public APIs change
 - Verify energy conservation for physics changes
+- Request reviews from relevant team members
 
 ## Performance Considerations
 
