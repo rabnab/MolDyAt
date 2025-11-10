@@ -1,114 +1,56 @@
-# Copilot Instructions for Molecular Lennard-Jones Simulation
+# RustRover/JetBrains Copilot Instructions
 
-## Project Overview
+> **Note**: This file references the main instruction file to avoid duplication.
+>
+> For the complete and authoritative Copilot instructions, see:
+> **[../.github/copilot-instructions.md](../copilot-instructions.md)**
 
-This is a **molecular dynamics physics simulation** implementing Lennard-Jones particle interactions with Verlet neighbor lists and spatial partitioning. The simulation is written in Rust and uses the ggez game framework for rendering. It should be possible to switch to a different implementation of renderer e.g. using wgpu directly.
+## Quick Reference
 
-**Critical Physics Constraint**: Energy conservation is a primary concern. Any changes to physics calculations, collision handling, or integration methods must preserve total system energy. Verify energy conservation when modifying physics code.
+This project is a **molecular dynamics physics simulation** implementing Lennard-Jones particle interactions.
 
-## Build & Toolchain
+### Critical Constraints
+- ⚠️ **Energy conservation is paramount** - verify total energy preservation
+- 🚫 **Never commit directly to master** - always use pull requests
+- 🧪 **Run tests before pushing** - `cargo +nightly test`
+- 🎨 **Format before committing** - `cargo +nightly fmt`
 
-- **Rust Version**: This project uses Rust nightly. Always use the toolchain specified in `rust-toolchain` file
-- **Build Command**: `cargo +nightly build`
-- **Test Command**: `cargo +nightly test`
-- **Format Command**: `cargo +nightly fmt`
-- **Lint Command**: `cargo +nightly clippy -- -D warnings`
+### Essential Commands
+```bash
+# Build
+cargo +nightly build
 
-## Code Quality Standards
+# Test
+cargo +nightly test
 
-### Formatting & Linting
-- **Before every commit**: Run `cargo fmt` to ensure consistent formatting
-- Run `clippy` to catch common mistakes and non-idiomatic code
-- Address all clippy warnings unless there's a documented reason to allow them
-- Optional: Add CI checks for `cargo +nightly fmt -- --check` and `cargo +nightly test`
+# Format
+cargo +nightly fmt
 
-### Safety & Correctness
-- **Avoid `unsafe` code** unless absolutely necessary for performance-critical sections
-- When `unsafe` is required:
-  - Document why it's necessary
-  - Explain the invariants being maintained
-  - Ensure no undefined behavior (aliasing violations, data races, etc.)
-- Prefer borrow checker solutions over unsafe workarounds
-- Index-based references are often safer than raw pointers for spatial structures
+# Lint
+cargo +nightly clippy -- -D warnings
+```
 
-### Testing Strategy
+### Workflow
+1. Create feature branch: `feature/master/descriptive-name`
+2. Make changes and commit
+3. Run `cargo fmt` and `cargo test`
+4. Push branch and create pull request
+5. Wait for CI and review approval
+6. Merge via pull request (never commit directly to master)
 
-**Test Placement**:
-- Unit tests: Place in `src/module_name/tests.rs` or inline with `#[cfg(test)]` for small modules
-- Integration tests: Place in `src/frame/application_master/tests.rs` or similar module-level test files
-- Test files should be next to the code they test for discoverability
+### Key Domain Knowledge
+- **Lennard-Jones Potential**: Attractive/repulsive inter-particle forces
+- **Verlet Neighbor Lists**: Index-based particle tracking for O(N²) → O(N) optimization
+- **Cell Grid**: Spatial partitioning for efficient nearest-neighbor queries
+- **Index Invalidation**: `Vec::retain()`, `Vec::remove()`, `Vec::swap_remove()` invalidate indices
 
-**What to Test**:
-- Physics correctness: Force calculations, collision detection, energy conservation
-- Spatial data structures: Cell grid operations, neighbor list updates, index validity
-- Edge cases: Ball removal/addition, boundary conditions, size variations
-- Performance-critical paths: Ensure optimizations don't break correctness
+### Common Pitfalls
+1. ⚠️ Index invalidation after Vec operations
+2. ⚠️ Aliasing violations (simultaneous mutable/immutable refs)
+3. ⚠️ Energy drift from integration errors
+4. ⚠️ Stale neighbor lists (update when movement > threshold)
+5. ⚠️ Forgetting to account for ball radii in distance calculations
 
-**Test Naming**:
-- Use descriptive names: `test_remove_invalid_balls_clears_neighbor_indices`
-- Group related tests in the same test module
-- Use `#[should_panic]` for expected failure cases
+---
 
-## Domain-Specific Knowledge
-
-### Physics Implementation
-- **Lennard-Jones Potential**: Inter-particle forces with attractive/repulsive components
-- **Verlet Neighbor Lists**: Use indices (`Vec<usize>`) to track nearby particles, reducing O(N²) checks
-- **Cutoff Distances**: Interactions beyond cutoff are ignored; account for particle radii in cutoff calculations
-- **Movement Thresholds**: Neighbor lists rebuild when particles move beyond threshold (typically 0.75 × effective_cutoff)
-- **Energy Conservation**: Total energy (kinetic + potential) should remain constant in isolated systems
-
-### Spatial Data Structures
-- **Cell Grid**: Divides space into cells for efficient nearest-neighbor queries
-- **Index-Based References**: Cells store `Vec<usize>` indices into main ball vector (`v_points`)
-- **Index Invalidation**: Operations like `Vec::retain()` invalidate indices; rebuild dependent structures
-- **Neighbor List Consistency**: When balls are removed, clear all neighbor lists and force rebuild
-
-### Ball Management
-- **Size Classes**: 5 different ball sizes with radii: `MIN_BALL_SIZE × 2^idx` (max ≈ 2.4)
-- **Direct Ownership**: Balls stored in `Vec<Ball2D>` (not `Rc<RefCell<>>`) for performance
-- **Validity**: Balls with NaN positions are invalid and should be removed
-- **State Consistency**: When modifying ball positions or removing balls, update spatial structures (cell grid, neighbor lists)
-
-## Git Workflow
-
-### Commit Messages
-- Use imperative mood: "Fix index invalidation" not "Fixed" or "Fixes"
-- Be specific: "Account for ball radii in min_movement_for_update_hood calculation"
-- Reference issues/PRs when relevant: "Addresses review comment in PR #18"
-
-### Branch Strategy
-- Feature branches: `feature/master/descriptive-name`
-- Bugfix branches: `bugfix/master/descriptive-name`
-- Keep commits atomic and focused
-- Ensure all tests pass before pushing
-- Run `cargo fmt` before committing
-
-### Pull Requests
-- Address all review comments before merging
-- Ensure CI passes (tests, formatting, clippy)
-- Update documentation if public APIs change
-- Verify energy conservation for physics changes
-
-## Performance Considerations
-
-- **Hot Paths**: Physics calculations, neighbor list updates, collision detection
-- **Profiling**: Use `cargo bench` or profiling tools for performance-critical changes
-- **Allocations**: Minimize allocations in per-frame update loops
-- **Borrowing Patterns**: Prefer split borrows and indexing over Rc/RefCell for better performance
-- **SIMD Opportunities**: Consider vectorization for bulk operations (if using nightly features)
-
-## Documentation
-
-- Add doc comments (`///`) for public APIs and complex algorithms
-- Explain non-obvious design decisions in code comments
-- Document invariants that must be maintained (especially for unsafe code)
-- Update README.md for significant architectural changes
-
-## Common Pitfalls
-
-1. **Index Invalidation**: After `Vec::retain()`, `Vec::remove()`, or `Vec::swap_remove()`, all indices may be invalid
-2. **Aliasing Violations**: Don't create immutable and mutable references to same data simultaneously
-3. **Energy Drift**: Numerical integration errors accumulate; use appropriate timesteps and integration methods
-4. **Neighbor List Staleness**: Update when particles move > threshold distance from last update position
-5. **Radius Awareness**: Many calculations need effective distances accounting for ball radii, not just centers
+**📖 For complete instructions, see: [copilot-instructions.md](../copilot-instructions.md)**

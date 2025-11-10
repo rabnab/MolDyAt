@@ -6,10 +6,13 @@ This repository is configured to work with GitHub Copilot across multiple platfo
 
 ```
 .github/
-├── copilot-instructions.md      # Main instructions file (for GitHub Copilot Web & Mobile)
+├── copilot-instructions.md      # Main instructions file (source of truth)
+├── README.md                     # This file - explains the setup
 └── instructions/
-    └── Common_rules             # RustRover/JetBrains IDE instructions (same content)
+    └── Common_rules             # RustRover quick reference (links to main file)
 ```
+
+The `Common_rules` file provides a quick reference for RustRover users but references the main `copilot-instructions.md` for complete details, avoiding duplication.
 
 ## Platform Support
 
@@ -27,19 +30,22 @@ This repository is configured to work with GitHub Copilot across multiple platfo
 - **Location**: `.github/instructions/Common_rules`
 - **Status**: Configured
 - **Access**: Loaded via JetBrains Copilot plugin
-- **Note**: This file contains the same content as `copilot-instructions.md`
+- **Note**: This file provides a quick reference and links to the main `copilot-instructions.md` for complete details
 
 ## Updating Instructions
 
 When updating Copilot instructions:
 
-1. **Edit the main file**: `.github/copilot-instructions.md`
-2. **Sync to RustRover**: Copy the content to `.github/instructions/Common_rules`
+1. **Edit the main file**: `.github/copilot-instructions.md` (source of truth)
+2. **RustRover users automatically get updates**: The `Common_rules` file references the main file
+3. **No manual syncing required**: The reference-based approach eliminates duplication
 
-Or use this PowerShell command to sync:
-```powershell
-Copy-Item .github\copilot-instructions.md .github\instructions\Common_rules
-```
+### Important Workflow Rules
+
+⚠️ **Always use pull requests** - Never commit directly to master  
+✅ **Create a feature branch** for all changes  
+✅ **Run tests and formatting** before pushing  
+✅ **Wait for CI and reviews** before merging
 
 ## GitHub Copilot Features
 
