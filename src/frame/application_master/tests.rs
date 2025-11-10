@@ -155,8 +155,6 @@ mod tests {
     fn test_resize_event() {
         let (mut main_content, win_def) = create_main_content();
 
-        let _old_world = main_content.cell_grid.world_rect();
-
         let new_width = 300.0;
         let new_height = 200.0;
 

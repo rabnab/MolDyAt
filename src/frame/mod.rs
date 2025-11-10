@@ -4,7 +4,6 @@ pub(crate) mod application_log;
 mod application_master;
 mod application_sim_stats;
 pub(crate) mod ggez;
-// mod new_ball_def;  // Entire file is commented out - not currently used
 mod renderer;
 pub(crate) mod window;
 
