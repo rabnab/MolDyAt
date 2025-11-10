@@ -119,10 +119,10 @@ impl Verlet {
         let this_ball_needs_update = {
             let ball = &balls[ball_idx];
             if ball.verbose.console {
-                application_log::log_update_hood_start(&ball, cutoff);
+                application_log::log_update_hood_start(ball, cutoff);
             }
             ball.hood
-                .needs_update_hood(&ball, dt, min_movement_threshold)
+                .needs_update_hood(ball, dt, min_movement_threshold)
         };
 
         balls[ball_idx].hood.updates_since_refresh += 1;
@@ -157,7 +157,7 @@ impl Verlet {
         // Merge candidates: existing neighbours + new candidates from cells using HashSet for deduplication
         let mut all_candidates: HashSet<usize> = old_neighbours.iter().copied().collect();
         all_candidates.extend(candidates_from_cells);
-        
+
         // Convert back to Vec for iteration
         let all_candidates: Vec<usize> = all_candidates.into_iter().collect();
 
@@ -167,7 +167,7 @@ impl Verlet {
             if ball_idx == neighbour_idx {
                 continue;
             }
-            
+
             // Calculate distance using split_at to avoid unnecessary mutability
             let dist = if ball_idx < neighbour_idx {
                 let (left, right) = balls.split_at(neighbour_idx);
@@ -179,9 +179,7 @@ impl Verlet {
 
             if dist < dist_limit {
                 // Should be a neighbour
-                let was_already_neighbour = balls[ball_idx]
-                    .hood
-                    .add_neighbour(neighbour_idx);
+                let was_already_neighbour = balls[ball_idx].hood.add_neighbour(neighbour_idx);
 
                 if !was_already_neighbour {
                     // Log using split_at to get immutable refs
@@ -204,9 +202,7 @@ impl Verlet {
                     }
 
                     // Update the inverse relationship: add ball_idx to the neighbour's list
-                    balls[neighbour_idx]
-                        .hood
-                        .add_neighbour(ball_idx);
+                    balls[neighbour_idx].hood.add_neighbour(ball_idx);
                 }
             } else {
                 // Should NOT be a neighbour - remove if present
@@ -232,7 +228,7 @@ impl Verlet {
         let (nearest_sq, farthest_sq) = neighbour_indices
             .iter()
             .filter_map(|&idx| balls.get(idx))
-            .map(|ball| ball_pos.dist(&ball.get_position()).norm_sq())
+            .map(|ball| ball_pos.dist(ball.get_position()).norm_sq())
             .fold((f32::INFINITY, f32::NEG_INFINITY), |(min, max), val| {
                 (min.min(val), max.max(val))
             });
@@ -252,9 +248,9 @@ impl Verlet {
     }
 
     pub fn update_closeness_stats(&mut self, ball_pos: &Vec2D, balls: &[Ball2D]) {
-        let (num_neighbours, nearest, farthest) = 
+        let (num_neighbours, nearest, farthest) =
             Self::compute_neighbor_stats(ball_pos, &self.neighbours, balls);
-        
+
         self.num_neighbours = num_neighbours;
         self.nearest = nearest;
         self.farthest = farthest;

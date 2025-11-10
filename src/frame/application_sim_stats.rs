@@ -11,7 +11,7 @@ const PLT_STEP: usize = 100;
 const _U_KG: f32 = 1.66E-27;
 const _MASS_SCALE_KG: f32 = 39.948 * _U_KG; //6.6E-26kg mass of Ar
 const ENERGY_SCALE_J: f32 = 122. * KBOLTZMANN_J_P_K; //energy scale for Ar at 122K
-const LEN_SCALE_M: f32 = 3.33729598E-9 / 6.; // about 0.5nm reason -- f32::cbrt(6.631E-26/1.784)/6; //density 1.784 kg/m³
+const LEN_SCALE_M: f32 = 3.337_296E-9 / 6.; // about 0.5nm reason -- f32::cbrt(6.631E-26/1.784)/6; //density 1.784 kg/m³
 const TIME_SCALE: f32 = 3.48235E-11; //=f32::sqrt(MASS_SCALE_KG/ ENERGY_SCALE_J)*LEN_SCALE_M; //0.35ns
 const TIME_SCALE_NS: f32 = 3.48235E-2; //=f32::sqrt(MASS_SCALE_KG/ ENERGY_SCALE_J)*LEN_SCALE_M; //0.35ns
 const KBOLTZMANN_J_P_K: f32 = 1.380649E-23;
@@ -150,7 +150,7 @@ impl SimStats {
     pub fn update(&mut self, kin: f32, pot: f32, max_id: usize, max_v: f32, dt: f32, v_com: Vec2D) {
         self.energy_kin = kin;
         self.energy_pot = pot;
-        if (self.step % PLT_STEP) == 0 {
+        if self.step.is_multiple_of(PLT_STEP) {
             if self.v_pot.len() >= PLT_SIZE {
                 self.v_pot.pop_front();
             }

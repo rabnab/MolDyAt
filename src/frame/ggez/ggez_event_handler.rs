@@ -45,7 +45,7 @@ impl EventHandler for GgezEventHandler {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
         self.application.unpause_after_resize();
 
-        let update_hood_cnt = self.application.start_frame();
+        self.application.start_frame();
         while ctx.time.check_update_time(
             crate::frame::application_master::FPS_GOAL * self.application.get_speedup(),
         ) {

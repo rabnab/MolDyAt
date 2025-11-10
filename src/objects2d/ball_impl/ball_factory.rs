@@ -38,7 +38,7 @@ impl BallFactory {
         MIN_BALL_SIZE * BASE_EXPONENT.powi(size_idx as i32)
     }
 
-    pub(crate) fn mass_for_size_idx(size_idx: usize) -> f32 {
+    fn mass_for_size_idx(size_idx: usize) -> f32 {
         let density = 2. / 10.;
         let radius = Self::radius_for_size_idx(size_idx);
         1. + density * (radius / MIN_BALL_SIZE - 1.).powf(1.2)
@@ -50,9 +50,7 @@ impl BallFactory {
     }
 
     pub fn create_all_radii() -> Vec<f32> {
-        (0..NUM_BALL_SIZES)
-            .map(|idx| Self::radius_for_size_idx(idx))
-            .collect()
+        (0..NUM_BALL_SIZES).map(Self::radius_for_size_idx).collect()
     }
 
     /// Returns the maximum possible ball radius (for the largest size index)
@@ -175,7 +173,7 @@ mod tests {
 
     #[test]
     fn test_basic_ball_creation() {
-        let mut factory = BallFactory::new();
+        let factory = BallFactory::new();
         let pos = Vec2D::new(1.0, 2.0);
         let ball = factory.create_basic(pos.clone(), 0);
 
@@ -188,7 +186,7 @@ mod tests {
 
     #[test]
     fn test_massive_ball_creation() {
-        let mut factory = BallFactory::new();
+        let factory = BallFactory::new();
         let pos = Vec2D::new(1.0, 2.0);
         let velocity = Vec2D::new(3.0, 4.0);
         let ball = factory.create_massive_with_velocity(pos.clone(), velocity.clone());
@@ -224,7 +222,7 @@ mod tests {
 
     #[test]
     fn test_random_ball_creation() {
-        let mut factory = BallFactory::new();
+        let factory = BallFactory::new();
         let pos_range = (&Vec2D::new(0.0, 0.0), &Vec2D::new(10.0, 10.0));
         let velocity_range = (0.0, 5.0);
         let ball = factory.create_random(pos_range, velocity_range);

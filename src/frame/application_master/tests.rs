@@ -139,7 +139,7 @@ mod tests {
             ball_coord_px.y + ball_radius_px * 2.2,
         );
         main_content.add_candidate(ball_coord).unwrap();
-        main_content.make_all_verbose(VerboseInfoMode::CONSOLE);
+        main_content.make_all_verbose(VerboseInfoMode::Console);
         main_content.simulation_step().unwrap();
 
         // Validate that the balls' velocities, positions, and energies are updated correctly
@@ -154,8 +154,6 @@ mod tests {
     #[test]
     fn test_resize_event() {
         let (mut main_content, win_def) = create_main_content();
-
-        let old_world = main_content.cell_grid.world_rect();
 
         let new_width = 300.0;
         let new_height = 200.0;
@@ -221,7 +219,7 @@ mod tests {
 
     #[test]
     fn test_coord_trafo_idempotent() {
-        let (mut main_content, win_def) = create_main_content_for_region(500., 500.);
+        let (_main_content, win_def) = create_main_content_for_region(500., 500.);
         let test_coord = Vec2D::new(18., 234.);
         let vec = win_def.coord_to_px(&test_coord);
         let res_coord = win_def.px_to_coord(vec.x, vec.y);
@@ -242,7 +240,7 @@ mod tests {
 
     #[test]
     fn test_collect_neighbours() {
-        let (mut main_content, win_def) = create_main_content_for_region(500., 500.);
+        let (mut main_content, _win_def) = create_main_content_for_region(500., 500.);
 
         // Add balls to the system
         // let x1 = 80.0;

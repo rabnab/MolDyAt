@@ -130,23 +130,22 @@ impl CellGrid {
         if let (Some((old_row, old_col)), Some((new_row, new_col))) = (
             self.get_cell_indices(old_pos),
             self.get_cell_indices(new_pos),
-        ) {
-            if old_row != new_row || old_col != new_col {
-                // Remove from old cell
-                if let Some(old_cell) = self.get_cell_mut(old_row, old_col) {
-                    old_cell.remove_ball(ball_idx);
-                }
-
-                // Add to new cell
-                if let Some(new_cell) = self.get_cell_mut(new_row, new_col) {
-                    new_cell.add_ball(ball_idx);
-                }
-
-                // Update the ball's current_cell
-                balls[ball_idx].current_cell = Some((new_row, new_col));
-
-                return Some(((old_row, old_col), (new_row, new_col)));
+        ) && (old_row != new_row || old_col != new_col)
+        {
+            // Remove from old cell
+            if let Some(old_cell) = self.get_cell_mut(old_row, old_col) {
+                old_cell.remove_ball(ball_idx);
             }
+
+            // Add to new cell
+            if let Some(new_cell) = self.get_cell_mut(new_row, new_col) {
+                new_cell.add_ball(ball_idx);
+            }
+
+            // Update the ball's current_cell
+            balls[ball_idx].current_cell = Some((new_row, new_col));
+
+            return Some(((old_row, old_col), (new_row, new_col)));
         }
         None
     }
@@ -154,12 +153,12 @@ impl CellGrid {
     /// Add a ball to the appropriate cell based on its current position.
     pub fn add_ball(&mut self, ball_idx: usize, balls: &mut [Ball2D]) {
         let position = balls[ball_idx].get_position().clone();
-        if let Some((row, col)) = self.get_cell_indices(&position) {
-            if let Some(cell) = self.get_cell_mut(row, col) {
-                cell.add_ball(ball_idx);
-                // Update the ball's current_cell
-                balls[ball_idx].current_cell = Some((row, col));
-            }
+        if let Some((row, col)) = self.get_cell_indices(&position)
+            && let Some(cell) = self.get_cell_mut(row, col)
+        {
+            cell.add_ball(ball_idx);
+            // Update the ball's current_cell
+            balls[ball_idx].current_cell = Some((row, col));
         }
     }
 

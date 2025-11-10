@@ -13,24 +13,24 @@ impl MainContent {
     /// Call this periodically (e.g., in the update loop) to check if it's time to unpause
     /// the simulation after a resize event.
     pub(crate) fn unpause_after_resize(&mut self) {
-        if let Some(resume_time) = self.resize_resume_at {
-            if std::time::Instant::now() >= resume_time {
-                if self.was_paused_for_resize && self.sim.is_paused() {
-                    self.sim.toggle_pause();
-                }
-
-                let nu_rect = self.world_region();
-                let nu_grid = CellGrid::resize(
-                    &mut self.cell_grid,
-                    nu_rect,
-                    self.physics.get_cutoff_distance(),
-                    &mut self.balls,
-                )
-                .expect("Failed to resize CellGrid");
-                self.cell_grid = nu_grid;
-                self.resize_resume_at = None;
-                self.was_paused_for_resize = false;
+        if let Some(resume_time) = self.resize_resume_at
+            && std::time::Instant::now() >= resume_time
+        {
+            if self.was_paused_for_resize && self.sim.is_paused() {
+                self.sim.toggle_pause();
             }
+
+            let nu_rect = self.world_region();
+            let nu_grid = CellGrid::resize(
+                &mut self.cell_grid,
+                nu_rect,
+                self.physics.get_cutoff_distance(),
+                &mut self.balls,
+            )
+            .expect("Failed to resize CellGrid");
+            self.cell_grid = nu_grid;
+            self.resize_resume_at = None;
+            self.was_paused_for_resize = false;
         }
     }
 }
@@ -54,11 +54,11 @@ impl VerletIntegration for MainContent {
 
         //update velocities and accel with new positions
         self.sim.reset_min_dist(bound_rect);
-        
+
         for i in 0..self.balls.len() {
-            let (min_dist, cur_pot) = self
-                .physics
-                .update_accel_and_speed_indexed(i, &mut self.balls, dt, bound_rect);
+            let (min_dist, cur_pot) =
+                self.physics
+                    .update_accel_and_speed_indexed(i, &mut self.balls, dt, bound_rect);
 
             //calculate properties
             self.sim.update_min_dist(min_dist);

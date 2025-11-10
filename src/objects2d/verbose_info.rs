@@ -1,3 +1,4 @@
+#[derive(Default)]
 pub(crate) struct VerboseInfo {
     pub(crate) console: bool,
     main_neighbour: bool,
@@ -6,21 +7,10 @@ pub(crate) struct VerboseInfo {
 }
 
 pub enum VerboseInfoMode {
-    CONSOLE,
-    MAIN,
-    OTHER,
-    SPEED,
-}
-
-impl Default for VerboseInfo {
-    fn default() -> Self {
-        Self {
-            console: false,
-            main_neighbour: false,
-            other_neighbour: false,
-            speed: false,
-        }
-    }
+    Console,
+    Main,
+    Other,
+    Speed,
 }
 
 impl VerboseInfo {
