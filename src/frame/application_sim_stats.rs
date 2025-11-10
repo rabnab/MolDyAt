@@ -1,9 +1,7 @@
 use crate::objects2d::ball_impl::Ball2D;
 use crate::objects2d::{Rect, Vec2D};
-use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::collections::vec_deque::Iter;
-use std::rc::Rc;
 
 const PLT_SIZE: usize = 1000;
 const PLT_STEP: usize = 100;
@@ -205,25 +203,6 @@ impl SimStats {
         }
         self.max_neighbours = max_neighbours;
         self.temperature = sum_rel_kin_doubled / 3.0 / (v_balls.len() as f32);
-    }
-
-    pub(crate) fn calculate_temperature(&mut self, v_balls_rc: &Vec<Rc<RefCell<Ball2D>>>) {
-        let mut sum_rel_kin_doubled: f32 = 0.;
-        let mut max_neighbours: usize = 0;
-
-        for ball_rc in v_balls_rc {
-            let cur = ball_rc.borrow();
-            let v_abs = &cur.v;
-            let v_rel_x = v_abs.x - self.v_com.x;
-            let v_rel_y = v_abs.y - self.v_com.y;
-            sum_rel_kin_doubled += cur.mass * (v_rel_x * v_rel_x + v_rel_y * v_rel_y);
-
-            let cur_num_neighbour = cur.hood.get_number_of_neighbors();
-            max_neighbours = max_neighbours.max(cur_num_neighbour);
-        }
-        self.max_neighbours = max_neighbours;
-        //self.sim.temperature = 0.5 / (/*KB*/ 1. * (3. * self.v_points.len() as f32 - 3.)) * sum_rel_kin;
-        self.temperature = sum_rel_kin_doubled / 3. / (v_balls_rc.len() as f32) /* /KB == /1*/
     }
 
     pub(crate) fn get_update_hood_cnt(&self) -> usize {
