@@ -35,7 +35,7 @@ impl GgezWindow {
     }
 }
 impl Window<GgezRenderer> for GgezWindow {
-    fn set_title(&mut self, title: &str) {
+    fn set_title(&mut self, _title: &str) {
         // Implementation for setting the window title
     }
 
@@ -43,7 +43,7 @@ impl Window<GgezRenderer> for GgezWindow {
         todo!()
     }
 
-    fn set_size(&mut self, width: u32, height: u32) {
+    fn set_size(&mut self, _width: u32, _height: u32) {
         // Implementation for setting the window size
     }
 
@@ -53,7 +53,7 @@ impl Window<GgezRenderer> for GgezWindow {
         (win_def.region_px.0 as u32, win_def.region_px.1 as u32)
     }
 
-    fn set_fullscreen(&mut self, fullscreen: bool) {
+    fn set_fullscreen(&mut self, _fullscreen: bool) {
         todo!()
     }
 
@@ -69,11 +69,11 @@ impl Window<GgezRenderer> for GgezWindow {
         todo!()
     }
 
-    fn set_cursor_visible(&mut self, visible: bool) {
+    fn set_cursor_visible(&mut self, _visible: bool) {
         todo!()
     }
 
-    fn set_cursor_position(&mut self, pos: Point2D) {
+    fn set_cursor_position(&mut self, _pos: Point2D) {
         todo!()
     }
 

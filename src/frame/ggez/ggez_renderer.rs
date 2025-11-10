@@ -19,15 +19,12 @@ const LINE_THICKNESS: f32 = 2.0;
 const CROSSHAIR_COLOR: Color = Color::WHITE;
 
 pub struct GgezRenderer {
-    pub(super) show_plot: PlotContent,
-
-    pub(super) shader: Option<Shader>,
-
-    pub ball_status_text_pos: Option<[f32; 2]>,
-
-    pub last_status_text: String,
-    pub txt_cursor: String,
-    pub curs_pos_of_txt: Vec2D,
+    show_plot: PlotContent,
+    shader: Option<Shader>,
+    ball_status_text_pos: Option<[f32; 2]>,
+    last_status_text: String,
+    txt_cursor: String,
+    curs_pos_of_txt: Vec2D,
     window_def: WindowDefinitionRef,
     draw_cursor: bool,
     cursor_pos_px: [f32; 2],
