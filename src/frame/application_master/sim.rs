@@ -14,23 +14,24 @@ impl MainContent {
     /// the simulation after a resize event.
     pub(crate) fn unpause_after_resize(&mut self) {
         if let Some(resume_time) = self.resize_resume_at
-            && std::time::Instant::now() >= resume_time {
-                if self.was_paused_for_resize && self.sim.is_paused() {
-                    self.sim.toggle_pause();
-                }
-
-                let nu_rect = self.world_region();
-                let nu_grid = CellGrid::resize(
-                    &mut self.cell_grid,
-                    nu_rect,
-                    self.physics.get_cutoff_distance(),
-                    &mut self.balls,
-                )
-                .expect("Failed to resize CellGrid");
-                self.cell_grid = nu_grid;
-                self.resize_resume_at = None;
-                self.was_paused_for_resize = false;
+            && std::time::Instant::now() >= resume_time
+        {
+            if self.was_paused_for_resize && self.sim.is_paused() {
+                self.sim.toggle_pause();
             }
+
+            let nu_rect = self.world_region();
+            let nu_grid = CellGrid::resize(
+                &mut self.cell_grid,
+                nu_rect,
+                self.physics.get_cutoff_distance(),
+                &mut self.balls,
+            )
+            .expect("Failed to resize CellGrid");
+            self.cell_grid = nu_grid;
+            self.resize_resume_at = None;
+            self.was_paused_for_resize = false;
+        }
     }
 }
 

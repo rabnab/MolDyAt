@@ -50,9 +50,7 @@ impl BallFactory {
     }
 
     pub fn create_all_radii() -> Vec<f32> {
-        (0..NUM_BALL_SIZES)
-            .map(Self::radius_for_size_idx)
-            .collect()
+        (0..NUM_BALL_SIZES).map(Self::radius_for_size_idx).collect()
     }
 
     /// Returns the maximum possible ball radius (for the largest size index)

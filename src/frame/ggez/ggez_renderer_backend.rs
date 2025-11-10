@@ -52,7 +52,7 @@ impl<'a> GgezBackend<'a> {
         let scale_key = scale.to_bits();
 
         let key = (ch, scale_key);
-        
+
         if let Some(tt) = self.cache.glyph_cache.get(&key) {
             tt.clone()
         } else {

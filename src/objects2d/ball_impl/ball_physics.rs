@@ -37,12 +37,10 @@ impl Default for PhysicsConstants {
         }
     }
 }
-#[derive(Clone)]
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct BallPhysics {
     constants: PhysicsConstants,
 }
-
 
 impl BallPhysics {
     pub fn new(constants: PhysicsConstants) -> Self {
@@ -124,7 +122,7 @@ impl BallPhysics {
     pub(crate) fn lenard_jones_force_pure(&self, dist_btw_balls: f32) -> f32 {
         let quot = self.constants.lj_sig / dist_btw_balls;
         let quot_six = quot.powi(6);
-        
+
         24. * self.constants.lj_eps * quot_six * (2. * quot_six - 1.) / dist_btw_balls
     }
 

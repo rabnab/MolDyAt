@@ -59,6 +59,75 @@ impl MainContent {
     }
 }
 
+impl MainContent {
+    /// Update neighbor hood for all balls in occupied cells
+    fn update_neighbor_hoods_for_occupied_cells(&mut self, dt: f32, neighbor_buf: &mut Vec<usize>) {
+        let cutoff = self.physics.get_cutoff_distance();
+
+        // Build set of occupied cells from all balls
+        let occupied_cells: std::collections::HashSet<_> = self
+            .get_balls()
+            .iter()
+            .filter_map(|b| b.current_cell)
+            .collect();
+
+        for (row, col) in occupied_cells {
+            neighbor_buf.clear();
+            self.cell_grid
+                .collect_ball_indices_into(row, col, neighbor_buf);
+
+            // Get cell ball indices to avoid borrow issues
+            let cell_ball_indices: Vec<usize> =
+                if let Some(cell) = self.cell_grid.get_cell(row, col) {
+                    cell.get_ball_indices().to_vec()
+                } else {
+                    continue;
+                };
+
+            for &ball_idx in &cell_ball_indices {
+                let max_radius = BallFactory::get_max_radius();
+                let min_movement = self.physics.get_min_movement_for_update_hood(max_radius);
+
+                Verlet::update_hood(
+                    ball_idx,
+                    dt,
+                    neighbor_buf,
+                    cutoff,
+                    min_movement,
+                    &mut self.balls,
+                );
+            }
+        }
+    }
+
+    /// Update neighbor statistics for all balls
+    fn update_neighbor_statistics(&mut self) {
+        for i in 0..self.balls.len() {
+            let ball_pos = self.balls[i].get_position().clone();
+            let verbose_lines = self.balls[i].verbose.lines();
+            let neighbour_indices: Vec<usize> = self.balls[i].hood.get_neighbour_indices().to_vec();
+
+            // Compute stats using the shared utility function
+            let (num_neighbours, nearest, farthest) =
+                Verlet::compute_neighbor_stats(&ball_pos, &neighbour_indices, &self.balls);
+
+            // Update the ball's hood statistics
+            let ball_hood = &mut self.balls[i].hood;
+            ball_hood.num_neighbours = num_neighbours;
+            ball_hood.nearest = nearest;
+            ball_hood.farthest = farthest;
+
+            // Toggle verbose if needed
+            if !verbose_lines && num_neighbours > 100 {
+                self.balls[i].verbose.toggle_other_neighbour();
+            } else if verbose_lines && num_neighbours <= 100 {
+                self.balls[i].verbose.toggle_other_neighbour();
+            }
+            Self::log_closeness_update(&self.balls[i]);
+        }
+    }
+}
+
 impl GameLogic for MainContent {
     fn is_ball_in_region(&self, pt: &Ball2D) -> bool {
         let world = self.world_region_inset(pt.radius);
@@ -77,75 +146,15 @@ impl GameLogic for MainContent {
     }
 
     fn collect_neighbours_by_cell(&mut self, dt: f32) {
-        if self.step_count.is_multiple_of(self.get_game_logic_data().neighbour_update_interval) {
+        if self
+            .step_count
+            .is_multiple_of(self.get_game_logic_data().neighbour_update_interval)
+        {
             // Single reusable buffer to avoid per-cell allocations
-            let mut neighbor_buf: Vec<usize> = Vec::new();
-            neighbor_buf.reserve(30);
+            let mut neighbor_buf: Vec<usize> = Vec::with_capacity(30);
 
-            let cutoff = self.physics.get_cutoff_distance();
-
-            // Only process cells that have balls (tracked via current_cell)
-            // Build set of occupied cells from all balls
-            let occupied_cells: std::collections::HashSet<_> = self
-                .get_balls()
-                .iter()
-                .filter_map(|b| b.current_cell)
-                .collect();
-
-            for (row, col) in occupied_cells {
-                neighbor_buf.clear();
-                self.cell_grid
-                    .collect_ball_indices_into(row, col, &mut neighbor_buf);
-
-                // Get cell ball indices to avoid borrow issues
-                let cell_ball_indices: Vec<usize> =
-                    if let Some(cell) = self.cell_grid.get_cell(row, col) {
-                        cell.get_ball_indices().to_vec()
-                    } else {
-                        continue;
-                    };
-
-                for &ball_idx in &cell_ball_indices {
-                    let max_radius = BallFactory::get_max_radius();
-                    let min_movement = self.physics.get_min_movement_for_update_hood(max_radius);
-
-                    Verlet::update_hood(
-                        ball_idx,
-                        dt,
-                        &neighbor_buf,
-                        cutoff,
-                        min_movement,
-                        &mut self.balls,
-                    );
-                }
-            }
-
-            // Update stats - compute neighbor statistics for each ball
-            // We use Verlet::compute_neighbor_stats to avoid code duplication
-            for i in 0..self.balls.len() {
-                let ball_pos = self.balls[i].get_position().clone();
-                let verbose_lines = self.balls[i].verbose.lines();
-                let neighbour_indices: Vec<usize> =
-                    self.balls[i].hood.get_neighbour_indices().to_vec();
-
-                // Compute stats using the shared utility function
-                let (num_neighbours, nearest, farthest) =
-                    Verlet::compute_neighbor_stats(&ball_pos, &neighbour_indices, &self.balls);
-
-                // Update the ball's hood statistics
-                let ball_hood = &mut self.balls[i].hood;
-                ball_hood.num_neighbours = num_neighbours;
-                ball_hood.nearest = nearest;
-                ball_hood.farthest = farthest;
-
-                // Toggle verbose if needed
-                if !verbose_lines && num_neighbours > 100 {
-                    self.balls[i].verbose.toggle_other_neighbour();
-                } else if verbose_lines && num_neighbours <= 100 {
-                    self.balls[i].verbose.toggle_other_neighbour();
-                }
-                Self::log_closeness_update(&self.balls[i]);
-            }
+            self.update_neighbor_hoods_for_occupied_cells(dt, &mut neighbor_buf);
+            self.update_neighbor_statistics();
         }
     }
 
