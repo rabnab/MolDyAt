@@ -125,42 +125,26 @@ impl GameLogic for MainContent {
             }
 
             // Update stats - compute neighbor statistics for each ball
-            // We cannot call update_closeness_stats directly due to borrow checker,
-            // so we compute the stats and update each ball separately
+            // We use Verlet::compute_neighbor_stats to avoid code duplication
             for i in 0..self.balls.len() {
                 let ball_pos = self.balls[i].get_position().clone();
                 let verbose_lines = self.balls[i].verbose.lines();
                 let neighbour_indices: Vec<usize> = self.balls[i].hood.get_neighbour_indices().to_vec();
                 
-                // Compute nearest and farthest distances from neighbors
-                let (nearest_sq, farthest_sq) = neighbour_indices
-                    .iter()
-                    .filter_map(|&idx| self.balls.get(idx))
-                    .map(|ball| ball_pos.dist(&ball.get_position()).norm_sq())
-                    .fold((f32::INFINITY, f32::NEG_INFINITY), |(min, max), val| {
-                        (min.min(val), max.max(val))
-                    });
+                // Compute stats using the shared utility function
+                let (num_neighbours, nearest, farthest) = 
+                    Verlet::compute_neighbor_stats(&ball_pos, &neighbour_indices, &self.balls);
                 
                 // Update the ball's hood statistics
                 let ball_hood = &mut self.balls[i].hood;
-                ball_hood.num_neighbours = neighbour_indices.len();
-                ball_hood.nearest = if nearest_sq.is_finite() {
-                    f32::sqrt(nearest_sq)
-                } else {
-                    f32::NAN
-                };
-                ball_hood.farthest = if farthest_sq.is_finite() {
-                    f32::sqrt(farthest_sq)
-                } else {
-                    f32::NAN
-                };
-                
-                let num_neighbors = self.balls[i].hood.get_number_of_neighbors();
+                ball_hood.num_neighbours = num_neighbours;
+                ball_hood.nearest = nearest;
+                ball_hood.farthest = farthest;
                 
                 // Toggle verbose if needed
-                if !verbose_lines && num_neighbors > 100 {
+                if !verbose_lines && num_neighbours > 100 {
                     self.balls[i].verbose.toggle_other_neighbour();
-                } else if verbose_lines && num_neighbors <= 100 {
+                } else if verbose_lines && num_neighbours <= 100 {
                     self.balls[i].verbose.toggle_other_neighbour();
                 }
                 Self::log_closeness_update(&self.balls[i]);

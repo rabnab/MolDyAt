@@ -221,30 +221,43 @@ impl Verlet {
         balls[ball_idx].hood.updates_since_refresh = 0;
     }
 
-    pub fn update_closeness_stats(&mut self, ball_pos: &Vec2D, balls: &[Ball2D]) {
-        self.num_neighbours = self.neighbours.len();
-        let (nearest_sq, farthest_sq) = self
-            .neighbours
+    /// Compute neighbor statistics from a list of indices and ball positions.
+    /// Returns (num_neighbours, nearest, farthest) as a tuple.
+    pub fn compute_neighbor_stats(
+        ball_pos: &Vec2D,
+        neighbour_indices: &[usize],
+        balls: &[Ball2D],
+    ) -> (usize, f32, f32) {
+        let num_neighbours = neighbour_indices.len();
+        let (nearest_sq, farthest_sq) = neighbour_indices
             .iter()
             .filter_map(|&idx| balls.get(idx))
-            .map(|ball| {
-                let d = ball_pos.dist(&ball.get_position()).norm_sq();
-                d
-            })
+            .map(|ball| ball_pos.dist(&ball.get_position()).norm_sq())
             .fold((f32::INFINITY, f32::NEG_INFINITY), |(min, max), val| {
                 (min.min(val), max.max(val))
             });
 
-        self.nearest = if nearest_sq.is_finite() {
+        let nearest = if nearest_sq.is_finite() {
             f32::sqrt(nearest_sq)
         } else {
             f32::NAN
         };
-        self.farthest = if nearest_sq.is_finite() {
+        let farthest = if farthest_sq.is_finite() {
             f32::sqrt(farthest_sq)
         } else {
             f32::NAN
         };
+
+        (num_neighbours, nearest, farthest)
+    }
+
+    pub fn update_closeness_stats(&mut self, ball_pos: &Vec2D, balls: &[Ball2D]) {
+        let (num_neighbours, nearest, farthest) = 
+            Self::compute_neighbor_stats(ball_pos, &self.neighbours, balls);
+        
+        self.num_neighbours = num_neighbours;
+        self.nearest = nearest;
+        self.farthest = farthest;
     }
 }
 
