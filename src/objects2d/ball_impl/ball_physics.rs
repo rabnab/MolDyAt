@@ -39,7 +39,7 @@ impl Default for PhysicsConstants {
 }
 #[derive(Clone, Default)]
 pub struct BallPhysics {
-    constants: PhysicsConstants,
+    pub constants: PhysicsConstants,
 }
 
 impl BallPhysics {

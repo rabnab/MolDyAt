@@ -2,6 +2,9 @@ use super::*;
 use crate::frame::VerletIntegration;
 use crate::objects2d::Rect;
 
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
+
 impl MainContent {
     /// Call this when a window resize event is detected to pause the simulation
     pub(crate) fn pause_for_resize(&mut self) {
@@ -44,33 +47,97 @@ impl VerletIntegration for MainContent {
         let mut _v_com: Vec2D = Vec2D::new(0., 0.);
         let mut sum_mass: f32 = 0.;
 
-        //update positions
-        for ball in &mut self.balls {
-            self.physics.update_positions(ball, dt, bound_rect);
+        // Update positions - can be parallelized as each ball is independent
+        #[cfg(feature = "parallel")]
+        {
+            self.balls
+                .par_iter_mut()
+                .for_each(|ball| self.physics.update_positions(ball, dt, bound_rect));
         }
-        for ball in &mut self.balls {
-            ball.update_old_pos();
+        #[cfg(not(feature = "parallel"))]
+        {
+            for ball in &mut self.balls {
+                self.physics.update_positions(ball, dt, bound_rect);
+            }
         }
 
-        //update velocities and accel with new positions
+        // Update old positions - can be parallelized
+        #[cfg(feature = "parallel")]
+        {
+            self.balls
+                .par_iter_mut()
+                .for_each(|ball| ball.update_old_pos());
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            for ball in &mut self.balls {
+                ball.update_old_pos();
+            }
+        }
+
+        // Reset min_dist before velocity/accel updates
         self.sim.reset_min_dist(bound_rect);
 
-        for i in 0..self.balls.len() {
-            let (min_dist, cur_pot) =
-                self.physics
-                    .update_accel_and_speed_indexed(i, &mut self.balls, dt, bound_rect);
+        // Update velocities and acceleration with new positions
+        // Parallel version: compute forces in parallel, then apply updates
+        #[cfg(feature = "parallel")]
+        {
+            // Phase 1: Compute forces in parallel (read-only)
+            let force_results: Vec<(f32, Vec2D, f32)> = (0..self.balls.len())
+                .into_par_iter()
+                .map(|i| self.physics.force_indexed(i, &self.balls))
+                .collect();
 
-            //calculate properties
-            self.sim.update_min_dist(min_dist);
+            // Phase 2: Apply updates and collect statistics
+            let speed_limit = f32::min(bound_rect.w, bound_rect.h) * 0.2;
+            for (i, (min_dist, total_force, cur_pot)) in force_results.iter().enumerate() {
+                let ball = &mut self.balls[i];
+                let accel = ball.accel_with_speed_limit(
+                    total_force,
+                    self.physics.constants.gravity,
+                    speed_limit,
+                    dt,
+                );
+                ball.v.x += 0.5 * (accel.x + ball.accel.x) * dt;
+                ball.v.y += 0.5 * (accel.y + ball.accel.y) * dt;
+                ball.accel = accel;
 
-            pot += cur_pot * 0.5; //double counts
-            _v_com += self.balls[i].moment();
-            let speed_sq = self.balls[i].v.norm_sq();
-            kin += speed_sq * self.balls[i].mass * 0.5;
-            sum_mass += self.balls[i].mass;
-            if max_v * max_v < speed_sq {
-                max_v = f32::sqrt(speed_sq);
-                max_id = self.balls[i].get_id();
+                if ball.verbose.console {
+                    println!("updated to  v {:?}  a {:?}", ball.v, ball.accel);
+                }
+
+                // Accumulate statistics
+                self.sim.update_min_dist(*min_dist);
+                pot += cur_pot * 0.5; // double counts
+                _v_com += ball.moment();
+                let speed_sq = ball.v.norm_sq();
+                kin += speed_sq * ball.mass * 0.5;
+                sum_mass += ball.mass;
+                if max_v * max_v < speed_sq {
+                    max_v = f32::sqrt(speed_sq);
+                    max_id = ball.get_id();
+                }
+            }
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            for i in 0..self.balls.len() {
+                let (min_dist, cur_pot) =
+                    self.physics
+                        .update_accel_and_speed_indexed(i, &mut self.balls, dt, bound_rect);
+
+                //calculate properties
+                self.sim.update_min_dist(min_dist);
+
+                pot += cur_pot * 0.5; //double counts
+                _v_com += self.balls[i].moment();
+                let speed_sq = self.balls[i].v.norm_sq();
+                kin += speed_sq * self.balls[i].mass * 0.5;
+                sum_mass += self.balls[i].mass;
+                if max_v * max_v < speed_sq {
+                    max_v = f32::sqrt(speed_sq);
+                    max_id = self.balls[i].get_id();
+                }
             }
         }
 
