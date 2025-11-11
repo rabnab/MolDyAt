@@ -27,7 +27,7 @@ pub fn force_indexed_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2
     let mut min_dist = f32::NAN;
     let mut total_pot = 0.;
 
-    let ball_pos = balls[ball_idx].get_position().clone();
+    let ball_pos = balls[ball_idx].get_position();
     let ball_radius = balls[ball_idx].radius;
     let ball_verbose_console = balls[ball_idx].verbose.console;
     let neighbour_indices = balls[ball_idx].hood.get_neighbour_indices();
