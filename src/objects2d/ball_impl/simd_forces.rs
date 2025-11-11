@@ -82,7 +82,7 @@ pub fn force_indexed_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2
 
             // Lennard-Jones force calculation: 24 * eps * (sig/r)^6 * (2*(sig/r)^6 - 1) / r
             let quot = f32x4::splat(lj_sig) / dist_for_force;
-            let quot_six = quot * quot * quot * quot * quot * quot; // r^6
+            let quot_six = quot * quot * quot * quot * quot * quot; // (sig/r)^6
             let lj_force = f32x4::splat(24. * lj_eps)
                 * quot_six
                 * (f32x4::splat(2.) * quot_six - f32x4::splat(1.))
