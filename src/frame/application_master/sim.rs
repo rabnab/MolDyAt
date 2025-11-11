@@ -74,7 +74,11 @@ impl MainContent {
         }
     }
 
-    /// Compute forces for all balls in parallel using SIMD if available
+    /// Compute forces for all balls in parallel.
+    ///
+    /// # Feature requirements
+    /// - This method is only available when the `parallel` feature is enabled.
+    /// - If the `simd` feature is also enabled, SIMD acceleration will be used for force computation.
     #[cfg(feature = "parallel")]
     fn compute_forces_parallel(&self) -> Vec<ForceResult> {
         #[cfg(feature = "simd")]

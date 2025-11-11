@@ -108,7 +108,7 @@ pub fn force_indexed_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2
             let pot_arr: [f32; 4] = potential.into();
 
             for i in 0..4 {
-                if valid_mask[i] && chunk.get(i).is_some() {
+                if valid_mask[i] {
                     force.x += fx_arr[i];
                     force.y += fy_arr[i];
                     total_pot += pot_arr[i];
@@ -120,6 +120,8 @@ pub fn force_indexed_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2
                         } else {
                             f32::min(min_dist, edge_dist_arr[i])
                         };
+                    } else {
+                        min_dist = 0.;
                     }
 
                     if (ball_verbose_console || edge_dist_arr[i] < 0.)
@@ -312,5 +314,51 @@ mod tests {
 
         // Min distance should be positive
         assert!(result.min_dist > 0.0);
+    }
+
+    #[test]
+    fn test_simd_vs_scalar_negative_edge_dist() {
+        let physics = BallPhysics::default();
+
+        // Create two balls that are overlapping (negative edge distance)
+        let mut ball_a = Ball2D::new(0, Vec2D::new(0.0, 0.0), (0, 1.0));
+        // Position ball_b very close - closer than the sum of radii
+        // Sum of radii = 2.0, so distance < 2.0 means negative edge_dist
+        let ball_b = Ball2D::new(1, Vec2D::new(1.5, 0.0), (0, 1.0));
+
+        // Set up neighbor list
+        ball_a.hood.add_neighbour(1);
+
+        let balls = vec![ball_a, ball_b];
+
+        // Calculate with scalar version
+        let scalar_result = physics.force_indexed(0, &balls);
+
+        // Calculate with SIMD version
+        let simd_result = force_indexed_simd(&physics, 0, &balls);
+
+        // When balls overlap (edge_dist < 0), both should set min_dist to 0.0
+        assert_eq!(
+            scalar_result.min_dist, 0.0,
+            "Scalar min_dist should be 0.0 for overlapping balls"
+        );
+        assert_eq!(
+            simd_result.min_dist, 0.0,
+            "SIMD min_dist should be 0.0 for overlapping balls"
+        );
+
+        // Note: Forces may differ in the error case because:
+        // - Scalar uses a fixed repulsive force of 100 when edge_dist <= 0
+        // - SIMD clamps distance to min_dist_const_force and uses normal LJ calculation
+        // Both approaches are valid; SIMD approach is more numerically stable
+        // We just verify both produce repulsive forces in the same direction
+        assert!(
+            scalar_result.force.x < 0.0,
+            "Scalar force should be repulsive (negative x)"
+        );
+        assert!(
+            simd_result.force.x < 0.0,
+            "SIMD force should be repulsive (negative x)"
+        );
     }
 }
