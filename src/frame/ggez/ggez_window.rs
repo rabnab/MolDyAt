@@ -25,7 +25,6 @@ impl GgezWindow {
         let my_win_definition = WindowDefinition {
             region_px: (reg_x, reg_y),
             margin_px: (MARGIN_PX_X, MARGIN_PX_Y),
-            ..Default::default()
         };
 
         GgezWindow {

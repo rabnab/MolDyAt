@@ -1,11 +1,11 @@
 mod dummy_renderer;
-mod renderer;
+mod renderer_core;
 
-pub use renderer::DrawingBackend;
-pub use renderer::PlotContent;
-pub use renderer::Renderer;
+pub use renderer_core::DrawingBackend;
+pub use renderer_core::PlotContent;
+pub use renderer_core::Renderer;
 
 #[cfg(test)]
-pub(crate) use renderer::create_dummy_renderer;
-pub(crate) use renderer::is_number_continue;
-pub(crate) use renderer::is_number_start;
+pub(crate) use renderer_core::create_dummy_renderer;
+pub(crate) use renderer_core::is_number_continue;
+pub(crate) use renderer_core::is_number_start;
