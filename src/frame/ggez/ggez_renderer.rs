@@ -42,9 +42,11 @@ impl GgezRenderer {
         ball_mesh: Vec<Mesh>,
         window_def: WindowDefinitionRef,
     ) -> Self {
-        let mut cache = GgezMeshCache::default();
-        cache.crosshair_mesh = Some(crosshair_mesh);
-        cache.ball_mesh = ball_mesh;
+        let cache = GgezMeshCache {
+            crosshair_mesh: Some(crosshair_mesh),
+            ball_mesh,
+            ..Default::default()
+        };
 
         let ball_text_pos = {
             let windef = window_def.borrow();
@@ -79,11 +81,11 @@ impl Renderer for GgezRenderer {
     }
     fn cycle_plot_content(&mut self) {
         self.show_plot = match self.show_plot {
-            PlotContent::NONE => PlotContent::EKIN,
-            PlotContent::EKIN => PlotContent::EPOT,
-            PlotContent::EPOT => PlotContent::ETOT,
-            PlotContent::ETOT => PlotContent::ALL,
-            PlotContent::ALL => PlotContent::NONE,
+            PlotContent::None => PlotContent::Ekin,
+            PlotContent::Ekin => PlotContent::Epot,
+            PlotContent::Epot => PlotContent::Etot,
+            PlotContent::Etot => PlotContent::All,
+            PlotContent::All => PlotContent::None,
         };
     }
 

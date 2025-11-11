@@ -233,13 +233,13 @@ impl Ball2D {
 
     pub fn set_position(&mut self, new_pos: Vec2D) {
         let end_pos = self.tail.back();
-        if end_pos.is_none() {
-            self.tail.push_back(new_pos.clone());
-        } else {
-            let dist = end_pos.unwrap().dist(&new_pos);
+        if let Some(last_pos) = end_pos {
+            let dist = last_pos.dist(&new_pos);
             if dist.norm_sq() > TAIL_RESOLUTION_DELTA_SQ {
                 self.tail.push_back(new_pos.clone());
             }
+        } else {
+            self.tail.push_back(new_pos.clone());
         }
         if self.tail.len() > self.tail_length {
             self.tail.pop_front();

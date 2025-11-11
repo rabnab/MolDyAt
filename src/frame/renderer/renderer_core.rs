@@ -8,11 +8,11 @@ use std::collections::VecDeque;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlotContent {
-    NONE,
-    EKIN,
-    EPOT,
-    ETOT,
-    ALL,
+    None,
+    Ekin,
+    Epot,
+    Etot,
+    All,
 }
 
 pub fn create_dummy_renderer(win_def: WindowDefinition) -> impl Renderer {

@@ -1,4 +1,8 @@
 cargo-features = ["profile-rustflags"]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("parallel"))'] }
+
 [unstable]
 profile-rustflags = true
 
@@ -14,7 +18,7 @@ wgpu = { version = "0.16.3", optional = true }
 rand = "0.9.0"
 rand_distr = "0.5.1"
 lru = "0.16.2"
-#rayon = "1.10.0"
+rayon = "1.10.0"
 #winit = "0.30.5"
 #winit = "0.30.5"
 
@@ -22,7 +26,8 @@ lru = "0.16.2"
 float-cmp = "0.10"
 
 [features]
-default = ["renderer-ggez"]
+default = ["renderer-ggez", "parallel"]
+parallel = []
 measure-time = []
 renderer-ggez = ["ggez"]
 renderer-wgpu = ["wgpu"]

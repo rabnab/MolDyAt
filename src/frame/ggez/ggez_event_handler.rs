@@ -142,8 +142,9 @@ impl EventHandler for GgezEventHandler {
     }
 
     fn key_up_event(&mut self, _ctx: &mut Context, input: KeyInput) -> Result<(), GameError> {
-        match input.keycode {
-            Some(key) => match key {
+        // Handle keycode if present
+        if let Some(key) = input.keycode {
+            match key {
                 KeyCode::H => MainContent::print_help_message(),
                 KeyCode::D => self.application.toggle_real_data(),
                 KeyCode::S => self.application.toggle_stepwise(),
@@ -183,8 +184,7 @@ impl EventHandler for GgezEventHandler {
                 }
                 // todo() KeyCode::LShift => self.application.new_ball.rand_speed = false,
                 _ => {} // No action required for unmatched keys
-            },
-            None => {} // No keycode provided
+            }
         }
         Ok(())
     }

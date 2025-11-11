@@ -23,9 +23,7 @@ impl LogStuff for MainContent {
         const HELP_OPTION_SPACE: &str = "SPACE - Pause or resume the simulation.";
 
         println!(
-            "{}",
-            format!(
-                "{header}\n\
+            "{header}\n\
              {opt_h}\n\
              {opt_d}\n\
              {opt_s}\n\
@@ -35,17 +33,16 @@ impl LogStuff for MainContent {
              {opt_b}\n\
              {opt_v}\n\
              {opt_space}",
-                header = HELP_KEYS_INFO,
-                opt_h = HELP_OPTION_H,
-                opt_d = HELP_OPTION_D,
-                opt_s = HELP_OPTION_S,
-                opt_t = HELP_OPTION_T,
-                opt_plus = HELP_OPTION_INCREASE_SPEED,
-                opt_minus = HELP_OPTION_DECREASE_SPEED,
-                opt_b = HELP_OPTION_B,
-                opt_v = HELP_OPTION_V,
-                opt_space = HELP_OPTION_SPACE,
-            )
+            header = HELP_KEYS_INFO,
+            opt_h = HELP_OPTION_H,
+            opt_d = HELP_OPTION_D,
+            opt_s = HELP_OPTION_S,
+            opt_t = HELP_OPTION_T,
+            opt_plus = HELP_OPTION_INCREASE_SPEED,
+            opt_minus = HELP_OPTION_DECREASE_SPEED,
+            opt_b = HELP_OPTION_B,
+            opt_v = HELP_OPTION_V,
+            opt_space = HELP_OPTION_SPACE,
         );
     }
 

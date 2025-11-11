@@ -24,7 +24,7 @@ pub struct GgezRendererBuilder {
 impl Default for GgezRendererBuilder {
     fn default() -> Self {
         Self {
-            show_plot: PlotContent::NONE,
+            show_plot: PlotContent::None,
             crosshair_mesh: None,
             ball_mesh: None,
             window_def_ref: None,

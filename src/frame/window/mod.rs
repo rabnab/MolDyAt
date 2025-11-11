@@ -1,7 +1,7 @@
-mod window;
+mod window_core;
 pub mod window_definition;
 
-pub use window::Window;
+pub use window_core::Window;
 
 pub struct Point2D(pub f32, pub f32);
 pub enum WindowEvent {/* ... */}

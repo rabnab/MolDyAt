@@ -37,9 +37,22 @@ impl Default for PhysicsConstants {
         }
     }
 }
+
+/// Result of force calculation for a ball, including minimum distance to neighbors,
+/// total force vector, and total potential energy from interactions.
+#[derive(Clone, Debug)]
+pub struct ForceResult {
+    /// Minimum edge-to-edge distance to the nearest neighbor
+    pub min_dist: f32,
+    /// Total force vector acting on the ball from all neighbors
+    pub force: Vec2D,
+    /// Total potential energy from all neighbor interactions
+    pub potential_energy: f32,
+}
+
 #[derive(Clone, Default)]
 pub struct BallPhysics {
-    constants: PhysicsConstants,
+    pub constants: PhysicsConstants,
 }
 
 impl BallPhysics {
@@ -224,12 +237,12 @@ impl BallPhysics {
         dt: f32,
         bound: &Rect,
     ) -> (f32, f32) {
-        let (min_dist, total_force, total_pot) = self.force_indexed(ball_idx, balls);
+        let result = self.force_indexed(ball_idx, balls);
         let speed_limit = f32::min(bound.w, bound.h) * 0.2;
 
         let ball = &mut balls[ball_idx];
         let accel =
-            ball.accel_with_speed_limit(&total_force, self.constants.gravity, speed_limit, dt);
+            ball.accel_with_speed_limit(&result.force, self.constants.gravity, speed_limit, dt);
         ball.v.x += 0.5 * (accel.x + ball.accel.x) * dt;
         ball.v.y += 0.5 * (accel.y + ball.accel.y) * dt;
         ball.accel = accel;
@@ -237,7 +250,7 @@ impl BallPhysics {
         if ball.verbose.console {
             println!("updated to  v {:?}  a {:?}", ball.v, ball.accel);
         }
-        (min_dist, total_pot)
+        (result.min_dist, result.potential_energy)
     }
     // ball.hood
     //         .neighbours
@@ -260,7 +273,7 @@ impl BallPhysics {
 
     //fn force_by(&self, others: &Vec<Ball2D>)  -> (f32, Vec2D, f32) {
 
-    pub(crate) fn force_indexed(&self, ball_idx: usize, balls: &[Ball2D]) -> (f32, Vec2D, f32) {
+    pub(crate) fn force_indexed(&self, ball_idx: usize, balls: &[Ball2D]) -> ForceResult {
         let mut force = Vec2D::new(0., 0.);
         let mut min_dist = f32::NAN;
         let mut total_pot = 0.;
@@ -328,7 +341,11 @@ impl BallPhysics {
                 };
             }
         }
-        (min_dist, force, total_pot)
+        ForceResult {
+            min_dist,
+            force,
+            potential_energy: total_pot,
+        }
     }
 
     // pub fn clear_hood(&mut self) {

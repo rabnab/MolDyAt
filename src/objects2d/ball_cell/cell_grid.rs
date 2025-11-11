@@ -188,8 +188,8 @@ impl CellGrid {
 
         for r in r_min..=r_max {
             let row_ref = &self.cells[r];
-            for c in c_min..=c_max {
-                f(&row_ref[c]);
+            for cell in row_ref.iter().take(c_max + 1).skip(c_min) {
+                f(cell);
             }
         }
     }
