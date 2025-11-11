@@ -50,9 +50,10 @@ impl VerletIntegration for MainContent {
         // Update positions - can be parallelized as each ball is independent
         #[cfg(feature = "parallel")]
         {
+            let physics = &self.physics;
             self.balls
                 .par_iter_mut()
-                .for_each(|ball| self.physics.update_positions(ball, dt, bound_rect));
+                .for_each(|ball| physics.update_positions(ball, dt, bound_rect));
         }
         #[cfg(not(feature = "parallel"))]
         {
