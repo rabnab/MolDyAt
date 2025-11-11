@@ -122,19 +122,18 @@ pub fn force_indexed_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2
                         };
                     }
 
-                    if ball_verbose_console || edge_dist_arr[i] < 0. {
-                        if let Some(&neighbour_idx) = chunk.get(i) {
-                            if let Some(b) = balls.get(neighbour_idx) {
-                                println!(
-                                    "\t\t {}--force: {} ({},{}) at dist: {}",
-                                    b.get_name(),
-                                    f32::sqrt(fx_arr[i] * fx_arr[i] + fy_arr[i] * fy_arr[i]),
-                                    fx_arr[i],
-                                    fy_arr[i],
-                                    edge_dist_arr[i]
-                                );
-                            }
-                        }
+                    if (ball_verbose_console || edge_dist_arr[i] < 0.)
+                        && let Some(&neighbour_idx) = chunk.get(i)
+                        && let Some(b) = balls.get(neighbour_idx)
+                    {
+                        println!(
+                            "\t\t {}--force: {} ({},{}) at dist: {}",
+                            b.get_name(),
+                            f32::sqrt(fx_arr[i] * fx_arr[i] + fy_arr[i] * fy_arr[i]),
+                            fx_arr[i],
+                            fy_arr[i],
+                            edge_dist_arr[i]
+                        );
                     }
                 }
             }
