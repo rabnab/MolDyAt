@@ -101,6 +101,48 @@ impl MainContent {
         }
     }
 
+    /// Apply a single force result to a ball and collect statistics
+    fn apply_single_force_and_collect_stats(
+        &mut self,
+        ball_idx: usize,
+        result: &ForceResult,
+        dt: f32,
+        speed_limit: f32,
+        pot: &mut f32,
+        kin: &mut f32,
+        _v_com: &mut Vec2D,
+        sum_mass: &mut f32,
+        max_v: &mut f32,
+        max_id: &mut usize,
+    ) {
+        let ball = &mut self.balls[ball_idx];
+        let accel = ball.accel_with_speed_limit(
+            &result.force,
+            self.physics.constants.gravity,
+            speed_limit,
+            dt,
+        );
+        ball.v.x += 0.5 * (accel.x + ball.accel.x) * dt;
+        ball.v.y += 0.5 * (accel.y + ball.accel.y) * dt;
+        ball.accel = accel;
+
+        if ball.verbose.console {
+            println!("updated to  v {:?}  a {:?}", ball.v, ball.accel);
+        }
+
+        // Accumulate statistics
+        self.sim.update_min_dist(result.min_dist);
+        *pot += result.potential_energy * 0.5; // double counts
+        *_v_com += ball.moment();
+        let speed_sq = ball.v.norm_sq();
+        *kin += speed_sq * ball.mass * 0.5;
+        *sum_mass += ball.mass;
+        if *max_v * *max_v < speed_sq {
+            *max_v = f32::sqrt(speed_sq);
+            *max_id = ball.get_id();
+        }
+    }
+
     /// Apply force results and collect statistics
     fn apply_forces_and_collect_stats(
         &mut self,
@@ -116,32 +158,18 @@ impl MainContent {
     ) {
         let speed_limit = f32::min(bound_rect.w, bound_rect.h) * 0.2;
         for (i, result) in force_results.iter().enumerate() {
-            let ball = &mut self.balls[i];
-            let accel = ball.accel_with_speed_limit(
-                &result.force,
-                self.physics.constants.gravity,
-                speed_limit,
+            self.apply_single_force_and_collect_stats(
+                i,
+                result,
                 dt,
+                speed_limit,
+                pot,
+                kin,
+                _v_com,
+                sum_mass,
+                max_v,
+                max_id,
             );
-            ball.v.x += 0.5 * (accel.x + ball.accel.x) * dt;
-            ball.v.y += 0.5 * (accel.y + ball.accel.y) * dt;
-            ball.accel = accel;
-
-            if ball.verbose.console {
-                println!("updated to  v {:?}  a {:?}", ball.v, ball.accel);
-            }
-
-            // Accumulate statistics
-            self.sim.update_min_dist(result.min_dist);
-            *pot += result.potential_energy * 0.5; // double counts
-            *_v_com += ball.moment();
-            let speed_sq = ball.v.norm_sq();
-            *kin += speed_sq * ball.mass * 0.5;
-            *sum_mass += ball.mass;
-            if *max_v * *max_v < speed_sq {
-                *max_v = f32::sqrt(speed_sq);
-                *max_id = ball.get_id();
-            }
         }
     }
 
@@ -161,33 +189,18 @@ impl MainContent {
         let speed_limit = f32::min(bound_rect.w, bound_rect.h) * 0.2;
         for i in 0..self.balls.len() {
             let result = force_indexed_simd(&self.physics, i, &self.balls);
-
-            let ball = &mut self.balls[i];
-            let accel = ball.accel_with_speed_limit(
-                &result.force,
-                self.physics.constants.gravity,
-                speed_limit,
+            self.apply_single_force_and_collect_stats(
+                i,
+                &result,
                 dt,
+                speed_limit,
+                pot,
+                kin,
+                _v_com,
+                sum_mass,
+                max_v,
+                max_id,
             );
-            ball.v.x += 0.5 * (accel.x + ball.accel.x) * dt;
-            ball.v.y += 0.5 * (accel.y + ball.accel.y) * dt;
-            ball.accel = accel;
-
-            if ball.verbose.console {
-                println!("updated to  v {:?}  a {:?}", ball.v, ball.accel);
-            }
-
-            // Accumulate statistics
-            self.sim.update_min_dist(result.min_dist);
-            *pot += result.potential_energy * 0.5; // double counts
-            *_v_com += ball.moment();
-            let speed_sq = ball.v.norm_sq();
-            *kin += speed_sq * ball.mass * 0.5;
-            *sum_mass += ball.mass;
-            if *max_v * *max_v < speed_sq {
-                *max_v = f32::sqrt(speed_sq);
-                *max_id = ball.get_id();
-            }
         }
     }
 
