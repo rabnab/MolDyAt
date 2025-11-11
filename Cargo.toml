@@ -1,7 +1,7 @@
 cargo-features = ["profile-rustflags"]
 
 [lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("parallel"))'] }
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("parallel", "simd"))'] }
 
 [unstable]
 profile-rustflags = true
@@ -19,6 +19,8 @@ rand = "0.9.0"
 rand_distr = "0.5.1"
 lru = "0.16.2"
 rayon = "1.10.0"
+wide = "0.7.33"
+multiversion = "0.7.4"
 #winit = "0.30.5"
 #winit = "0.30.5"
 
@@ -26,8 +28,9 @@ rayon = "1.10.0"
 float-cmp = "0.10"
 
 [features]
-default = ["renderer-ggez", "parallel"]
+default = ["renderer-ggez", "parallel", "simd"]
 parallel = []
+simd = []
 measure-time = []
 renderer-ggez = ["ggez"]
 renderer-wgpu = ["wgpu"]

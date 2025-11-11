@@ -6,6 +6,9 @@ use crate::objects2d::ball_impl::ForceResult;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
+#[cfg(feature = "simd")]
+use crate::objects2d::ball_impl::simd_forces::force_indexed_simd;
+
 impl MainContent {
     /// Call this when a window resize event is detected to pause the simulation
     pub(crate) fn pause_for_resize(&mut self) {
@@ -85,6 +88,13 @@ impl VerletIntegration for MainContent {
         #[cfg(feature = "parallel")]
         {
             // Phase 1: Compute forces in parallel (read-only)
+            #[cfg(feature = "simd")]
+            let force_results: Vec<ForceResult> = (0..self.balls.len())
+                .into_par_iter()
+                .map(|i| force_indexed_simd(&self.physics, i, &self.balls))
+                .collect();
+
+            #[cfg(not(feature = "simd"))]
             let force_results: Vec<ForceResult> = (0..self.balls.len())
                 .into_par_iter()
                 .map(|i| self.physics.force_indexed(i, &self.balls))
@@ -123,22 +133,64 @@ impl VerletIntegration for MainContent {
         }
         #[cfg(not(feature = "parallel"))]
         {
-            for i in 0..self.balls.len() {
-                let (min_dist, cur_pot) =
-                    self.physics
-                        .update_accel_and_speed_indexed(i, &mut self.balls, dt, bound_rect);
+            #[cfg(feature = "simd")]
+            {
+                // Non-parallel SIMD version
+                let speed_limit = f32::min(bound_rect.w, bound_rect.h) * 0.2;
+                for i in 0..self.balls.len() {
+                    let result = force_indexed_simd(&self.physics, i, &self.balls);
 
-                //calculate properties
-                self.sim.update_min_dist(min_dist);
+                    let ball = &mut self.balls[i];
+                    let accel = ball.accel_with_speed_limit(
+                        &result.force,
+                        self.physics.constants.gravity,
+                        speed_limit,
+                        dt,
+                    );
+                    ball.v.x += 0.5 * (accel.x + ball.accel.x) * dt;
+                    ball.v.y += 0.5 * (accel.y + ball.accel.y) * dt;
+                    ball.accel = accel;
 
-                pot += cur_pot * 0.5; //double counts
-                _v_com += self.balls[i].moment();
-                let speed_sq = self.balls[i].v.norm_sq();
-                kin += speed_sq * self.balls[i].mass * 0.5;
-                sum_mass += self.balls[i].mass;
-                if max_v * max_v < speed_sq {
-                    max_v = f32::sqrt(speed_sq);
-                    max_id = self.balls[i].get_id();
+                    if ball.verbose.console {
+                        println!("updated to  v {:?}  a {:?}", ball.v, ball.accel);
+                    }
+
+                    // Accumulate statistics
+                    self.sim.update_min_dist(result.min_dist);
+                    pot += result.potential_energy * 0.5; // double counts
+                    _v_com += ball.moment();
+                    let speed_sq = ball.v.norm_sq();
+                    kin += speed_sq * ball.mass * 0.5;
+                    sum_mass += ball.mass;
+                    if max_v * max_v < speed_sq {
+                        max_v = f32::sqrt(speed_sq);
+                        max_id = ball.get_id();
+                    }
+                }
+            }
+
+            #[cfg(not(feature = "simd"))]
+            {
+                for i in 0..self.balls.len() {
+                    let (min_dist, cur_pot) = self.physics.update_accel_and_speed_indexed(
+                        i,
+                        &mut self.balls,
+                        dt,
+                        bound_rect,
+                    );
+
+                    //calculate properties
+                    self.sim.update_min_dist(min_dist);
+
+                    pot += cur_pot * 0.5; //double counts
+                    _v_com += self.balls[i].moment();
+                    let speed_sq = self.balls[i].v.norm_sq();
+                    kin += speed_sq * self.balls[i].mass * 0.5;
+                    sum_mass += self.balls[i].mass;
+                    if max_v * max_v < speed_sq {
+                        max_v = f32::sqrt(speed_sq);
+                        max_id = self.balls[i].get_id();
+                    }
                 }
             }
         }

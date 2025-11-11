@@ -9,6 +9,9 @@ mod ball_factory;
 pub(crate) mod ball_physics;
 pub(crate) mod verlet;
 
+#[cfg(feature = "simd")]
+pub(crate) mod simd_forces;
+
 static mut UPDATE_HOOD_CNT: usize = 0;
 
 /// get the count of how often update_hood was actually collecting the neighbors
