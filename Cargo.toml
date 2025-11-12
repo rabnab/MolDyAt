@@ -1,4 +1,3 @@
-cargo-features = ["profile-rustflags"]
 
 [lints.rust]
 # Add any custom lints here if needed
