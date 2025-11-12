@@ -106,33 +106,63 @@ pub fn force_indexed_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2
 
             for i in 0..4 {
                 if valid_mask[i] {
-                    force.x += fx_arr[i];
-                    force.y += fy_arr[i];
-                    total_pot += pot_arr[i];
-
-                    // Update min_dist
-                    if edge_dist_arr[i] > 0. {
+                    // If overlapping, use fixed repulsive force (match scalar behavior)
+                    if edge_dist_arr[i] <= 0. {
+                        // Get direction vector from ball to neighbor
+                        if let Some(&neighbour_idx) = chunk.get(i)
+                            && let Some(b) = balls.get(neighbour_idx)
+                        {
+                            let dist_vec = b.pre_update_pos.dist(&ball_pos);
+                            let center_dist = dist_vec.norm();
+                            // Avoid division by zero
+                            let force_to_dist_val = if center_dist > 0. {
+                                100.0 / center_dist
+                            } else {
+                                0.0
+                            };
+                            let local_force_x = dist_vec.x * force_to_dist_val;
+                            let local_force_y = dist_vec.y * force_to_dist_val;
+                            force.x += local_force_x;
+                            force.y += local_force_y;
+                            // Potential: can set to zero or leave as is (scalar sets to zero)
+                            // total_pot += 0.0;
+                            min_dist = 0.;
+                            if ball_verbose_console || edge_dist_arr[i] < 0. {
+                                let local_force_norm = f32::sqrt(local_force_x * local_force_x + local_force_y * local_force_y);
+                                println!(
+                                    "\t\t {}--force: {} ({},{}) at dist: {}",
+                                    b.get_name(),
+                                    local_force_norm,
+                                    local_force_x,
+                                    local_force_y,
+                                    edge_dist_arr[i]
+                                );
+                            }
+                        }
+                    } else {
+                        // Normal Lennard-Jones force
+                        force.x += fx_arr[i];
+                        force.y += fy_arr[i];
+                        total_pot += pot_arr[i];
+                        // Update min_dist
                         min_dist = if f32::is_nan(min_dist) {
                             edge_dist_arr[i]
                         } else {
                             f32::min(min_dist, edge_dist_arr[i])
                         };
-                    } else {
-                        min_dist = 0.;
-                    }
-
-                    if (ball_verbose_console || edge_dist_arr[i] < 0.)
-                        && let Some(&neighbour_idx) = chunk.get(i)
-                        && let Some(b) = balls.get(neighbour_idx)
-                    {
-                        println!(
-                            "\t\t {}--force: {} ({},{}) at dist: {}",
-                            b.get_name(),
-                            f32::sqrt(fx_arr[i] * fx_arr[i] + fy_arr[i] * fy_arr[i]),
-                            fx_arr[i],
-                            fy_arr[i],
-                            edge_dist_arr[i]
-                        );
+                        if (ball_verbose_console || edge_dist_arr[i] < 0.)
+                            && let Some(&neighbour_idx) = chunk.get(i)
+                            && let Some(b) = balls.get(neighbour_idx)
+                        {
+                            println!(
+                                "\t\t {}--force: {} ({},{}) at dist: {}",
+                                b.get_name(),
+                                f32::sqrt(fx_arr[i] * fx_arr[i] + fy_arr[i] * fy_arr[i]),
+                                fx_arr[i],
+                                fy_arr[i],
+                                edge_dist_arr[i]
+                            );
+                        }
                     }
                 }
             }
