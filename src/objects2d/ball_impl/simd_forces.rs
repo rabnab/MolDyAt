@@ -12,15 +12,12 @@
 
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::{Ball2D, BallPhysics, ForceResult, Named};
-
-#[cfg(feature = "simd")]
 use wide::f32x4;
 
 /// Calculate Lennard-Jones forces for multiple ball pairs using SIMD
 ///
 /// This function processes multiple neighbor interactions simultaneously using SIMD instructions.
 /// It automatically selects the best available SIMD implementation based on CPU features.
-#[cfg(feature = "simd")]
 #[multiversion::multiversion(targets("x86_64+avx2+fma", "x86_64+sse2", "aarch64+neon"))]
 pub fn force_indexed_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2D]) -> ForceResult {
     let mut force = Vec2D::new(0., 0.);
@@ -202,13 +199,6 @@ pub fn force_indexed_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2
         force,
         potential_energy: total_pot,
     }
-}
-
-/// Scalar fallback for when SIMD is disabled
-#[cfg(not(feature = "simd"))]
-pub fn force_indexed_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2D]) -> ForceResult {
-    // Fall back to the original implementation
-    physics.force_indexed(ball_idx, balls)
 }
 
 #[cfg(test)]

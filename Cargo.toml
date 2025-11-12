@@ -1,10 +1,7 @@
 cargo-features = ["profile-rustflags"]
 
 [lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("parallel", "simd"))'] }
-
-[unstable]
-profile-rustflags = true
+# Add any custom lints here if needed
 
 [package]
 name = "rust_thermo"
@@ -12,7 +9,6 @@ version = "0.1.1"
 edition = "2024"
 
 [dependencies]
-#dtrace = "0.1.1"
 ggez = { version = "0.9.3", optional = true }
 wgpu = { version = "0.16.3", optional = true }
 rand = "0.9.0"
@@ -21,6 +17,7 @@ lru = "0.16.2"
 rayon = "1.10.0"
 wide = "0.8.2"
 multiversion = "0.8.0"
+num_cpus = "1.16"
 #winit = "0.30.5"
 #winit = "0.30.5"
 
@@ -28,15 +25,13 @@ multiversion = "0.8.0"
 float-cmp = "0.10"
 
 [features]
-default = ["renderer-ggez", "parallel", "simd"]
-parallel = []
-simd = []
+default = ["renderer-ggez"]
 measure-time = []
 renderer-ggez = ["ggez"]
 renderer-wgpu = ["wgpu"]
 
 [profile.dev]
-opt-level = 2
+#opt-level = 2
 debug = true
 overflow-checks = true
 debug-assertions = true

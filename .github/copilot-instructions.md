@@ -9,6 +9,11 @@ This is a **molecular dynamics physics simulation** implementing Lennard-Jones p
 ## Build & Toolchain
 
 - **Rust Version**: This project uses Rust nightly. Always use the toolchain specified in `rust-toolchain` file
+- **Development builds**: only use --release for performance testing, not for development
+- **Dependencies**: Managed via Cargo.toml. Use `cargo update` to update dependencies, but review changes for
+  compatibility.
+- **CI/CD**: Set up continuous integration to run tests, formatting checks, and clippy on every pull request.
+- **When to test**: only test when .rs, .toml or .lock files change
 - **Build Command**: `cargo +nightly build`
 - **Test Command**: `cargo +nightly test`
 - **Format Command**: `cargo +nightly fmt`

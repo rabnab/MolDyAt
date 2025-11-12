@@ -7,10 +7,8 @@ pub use crate::objects2d::ball_impl::ball_core::Ball2D;
 pub(crate) mod ball_core;
 mod ball_factory;
 pub(crate) mod ball_physics;
-pub(crate) mod verlet;
-
-#[cfg(feature = "simd")]
 pub(crate) mod simd_forces;
+pub(crate) mod verlet;
 
 static mut UPDATE_HOOD_CNT: usize = 0;
 

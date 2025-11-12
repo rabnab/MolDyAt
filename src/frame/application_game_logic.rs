@@ -1,10 +1,8 @@
 use crate::frame::{AppResult, GameLogic, LogStuff, MainContent, VerletIntegration};
 use crate::objects2d::ball_impl::verlet::Verlet;
 use crate::objects2d::ball_impl::{Ball2D, BallFactory};
-use std::time::Instant;
-
-#[cfg(feature = "parallel")]
 use rayon::prelude::*;
+use std::time::Instant;
 
 const DT_GOAL: f32 = 0.01; // 1. / (FPS_GOAL as f32);
 
@@ -105,74 +103,44 @@ impl MainContent {
 
     /// Update neighbor statistics for all balls
     fn update_neighbor_statistics(&mut self) {
-        #[cfg(feature = "parallel")]
-        {
-            // Compute statistics in parallel (read-only phase)
-            let stats: Vec<(usize, f32, f32, bool, bool)> = (0..self.balls.len())
-                .into_par_iter()
-                .map(|i| {
-                    let ball = &self.balls[i];
-                    let ball_pos = ball.get_position().clone();
-                    let verbose_lines = ball.verbose.lines();
-                    let neighbour_indices: Vec<usize> = ball.hood.get_neighbour_indices().to_vec();
+        // Compute statistics in parallel (read-only phase)
+        let stats: Vec<(usize, f32, f32, bool, bool)> = (0..self.balls.len())
+            .into_par_iter()
+            .map(|i| {
+                let ball = &self.balls[i];
+                let ball_pos = ball.get_position().clone();
+                let verbose_lines = ball.verbose.lines();
+                let neighbour_indices: Vec<usize> = ball.hood.get_neighbour_indices().to_vec();
 
-                    let (num_neighbours, nearest, farthest) =
-                        Verlet::compute_neighbor_stats(&ball_pos, &neighbour_indices, &self.balls);
-
-                    let should_toggle = (!verbose_lines && num_neighbours > 100)
-                        || (verbose_lines && num_neighbours <= 100);
-
-                    (
-                        num_neighbours,
-                        nearest,
-                        farthest,
-                        should_toggle,
-                        verbose_lines,
-                    )
-                })
-                .collect();
-
-            // Apply updates sequentially (mutation phase)
-            for (i, (num_neighbours, nearest, farthest, should_toggle, _verbose_lines)) in
-                stats.iter().enumerate()
-            {
-                let ball_hood = &mut self.balls[i].hood;
-                ball_hood.num_neighbours = *num_neighbours;
-                ball_hood.nearest = *nearest;
-                ball_hood.farthest = *farthest;
-
-                if *should_toggle {
-                    self.balls[i].verbose.toggle_other_neighbour();
-                }
-                Self::log_closeness_update(&self.balls[i]);
-            }
-        }
-        #[cfg(not(feature = "parallel"))]
-        {
-            for i in 0..self.balls.len() {
-                let ball_pos = self.balls[i].get_position().clone();
-                let verbose_lines = self.balls[i].verbose.lines();
-                let neighbour_indices: Vec<usize> =
-                    self.balls[i].hood.get_neighbour_indices().to_vec();
-
-                // Compute stats using the shared utility function
                 let (num_neighbours, nearest, farthest) =
                     Verlet::compute_neighbor_stats(&ball_pos, &neighbour_indices, &self.balls);
 
-                // Update the ball's hood statistics
-                let ball_hood = &mut self.balls[i].hood;
-                ball_hood.num_neighbours = num_neighbours;
-                ball_hood.nearest = nearest;
-                ball_hood.farthest = farthest;
+                let should_toggle = (!verbose_lines && num_neighbours > 100)
+                    || (verbose_lines && num_neighbours <= 100);
 
-                // Toggle verbose if needed
-                if !verbose_lines && num_neighbours > 100 {
-                    self.balls[i].verbose.toggle_other_neighbour();
-                } else if verbose_lines && num_neighbours <= 100 {
-                    self.balls[i].verbose.toggle_other_neighbour();
-                }
-                Self::log_closeness_update(&self.balls[i]);
+                (
+                    num_neighbours,
+                    nearest,
+                    farthest,
+                    should_toggle,
+                    verbose_lines,
+                )
+            })
+            .collect();
+
+        // Apply updates sequentially (mutation phase)
+        for (i, (num_neighbours, nearest, farthest, should_toggle, _verbose_lines)) in
+            stats.iter().enumerate()
+        {
+            let ball_hood = &mut self.balls[i].hood;
+            ball_hood.num_neighbours = *num_neighbours;
+            ball_hood.nearest = *nearest;
+            ball_hood.farthest = *farthest;
+
+            if *should_toggle {
+                self.balls[i].verbose.toggle_other_neighbour();
             }
+            Self::log_closeness_update(&self.balls[i]);
         }
     }
 }

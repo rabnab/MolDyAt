@@ -11,13 +11,13 @@ This is a molecular dynamics simulation of a Lennard-Jones gas in a finite box
 ## Features
 
 ### Performance Optimizations
-* **Parallelization**: Multi-threaded physics calculations using Rayon
-* **SIMD Vectorization**: CPU SIMD instructions for 2-4× speedup on force calculations
+
+* **Parallelization**: Multi-threaded physics calculations using Rayon (always enabled)
+* **SIMD Vectorization**: CPU SIMD instructions for 2-4× speedup on force calculations (always enabled)
   - SSE2 (4-wide) for x86/x86_64
   - AVX2 (8-wide) for modern x86_64 CPUs
   - NEON (4-wide) for ARM/Apple Silicon
 * **Spatial Partitioning**: Cell grid with Verlet neighbor lists for efficient collision detection
-* **Combined Performance**: Up to 48× speedup on modern CPUs
 
 ### Building
 
@@ -26,20 +26,7 @@ This is a molecular dynamics simulation of a Lennard-Jones gas in a finite box
 cargo +nightly build --release
 ```
 
-**Without SIMD:**
-```bash
-cargo +nightly build --release --no-default-features --features renderer-ggez,parallel
-```
-
-**Without parallelization:**
-```bash
-cargo +nightly build --release --no-default-features --features renderer-ggez,simd
-```
-
-**Minimal build (no optimizations):**
-```bash
-cargo +nightly build --release --no-default-features --features renderer-ggez
-```
+**Note:** Parallelization and SIMD are always enabled and cannot be disabled.
 
 ### Testing
 ```bash
@@ -47,8 +34,9 @@ cargo +nightly test
 ```
 
 ### Documentation
-* [Parallel Implementation](PARALLEL_IMPLEMENTATION.md)
-* [SIMD Implementation](SIMD_IMPLEMENTATION.md)
+
+* [Performance Optimization Guide](PERFORMANCE_OPTIMIZATION.md) - Comprehensive guide covering parallelization, SIMD,
+  and performance characteristics
 
 ## Future Plans
 * use openGL with shaders for pretty output
