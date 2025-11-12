@@ -140,10 +140,10 @@ In `application_game_logic.rs`:
 
 ```rust
 // Compute statistics in parallel (read-only phase)
-let stats: Vec<_ > = (0..self .balls.len())
-.into_par_iter()
-.map( | i| { /* compute per-ball stats */ })
-.collect();
+let stats: Vec<_> = (0..self.balls.len())
+    .into_par_iter()
+    .map(|i| { /* compute per-ball stats */ })
+    .collect();
 ```
 
 ### Thread Pool Configuration
