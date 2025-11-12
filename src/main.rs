@@ -36,7 +36,7 @@ fn init(resource_dir: PathBuf, reg_x: f32, reg_y: f32) -> AppResult<GgezWindow> 
 fn init_rayon() {
     use rayon::ThreadPoolBuilder;
 
-    let num_cpus = num_cpus::get();
+    let num_cpus = num_cpus::get() - 2;
     ThreadPoolBuilder::new()
         .num_threads(num_cpus)
         .thread_name(|i| format!("rayon-worker-{}", i))
