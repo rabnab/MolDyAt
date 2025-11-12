@@ -1,0 +1,3 @@
+# rust-toolchain.toml (recommended)
+toolchain = "nightly"                    # or "nightly-2025-01-01" or "1.78.0"
+components = ["rustfmt", "clippy", "rust-src", "llvm-tools-preview"]       # optional components to install

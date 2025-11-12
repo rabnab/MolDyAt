@@ -9,6 +9,11 @@ This is a **molecular dynamics physics simulation** implementing Lennard-Jones p
 ## Build & Toolchain
 
 - **Rust Version**: This project uses Rust nightly. Always use the toolchain specified in `rust-toolchain` file
+- **Development builds**: only use --release for performance testing, not for development
+- **Dependencies**: Managed via Cargo.toml. Use `cargo update` to update dependencies, but review changes for
+  compatibility.
+- **CI/CD**: Set up continuous integration to run tests, formatting checks, and clippy on every pull request.
+- **When to test**: only test when .rs, .toml or .lock files change
 - **Build Command**: `cargo +nightly build`
 - **Test Command**: `cargo +nightly test`
 - **Format Command**: `cargo +nightly fmt`
@@ -31,7 +36,38 @@ This is a **molecular dynamics physics simulation** implementing Lennard-Jones p
 - Prefer borrow checker solutions over unsafe workarounds
 - Index-based references are often safer than raw pointers for spatial structures
 
-### Testing Strategy
+### Coding Best Practices
+
+- **Builder Pattern for Dependency Injection**: For structs with dependencies unchanged after initialization, use the
+  Builder pattern to make dependencies explicit and improve testability.
+- **Prefer Immutability**: Use immutable data wherever possible, especially in physics and spatial structures, to reduce
+  bugs and improve code clarity.
+- **Explicit Error Handling**: Use `Result` and `Option` for error-prone operations. Avoid panics in library code;
+  propagate errors with context.
+- **Minimize Allocation in Hot Paths**: Pre-allocate vectors and buffers for per-frame operations. Avoid frequent heap
+  allocations in update loops.
+- **Leverage Rust’s Type System for Safety**: Use newtype wrappers for units (e.g., `struct Energy(f64)`) and enums for
+  state machines and ball types.
+- **Use Consts and Statics for Physical Constants**: Define simulation constants as `const` or `static` to avoid magic
+  numbers.
+- **Document Invariants and Algorithms**: Add doc comments explaining invariants and algorithms, especially for physics
+  and index validity.
+- **Limit Scope of Unsafe Code**: Encapsulate unsafe code in private functions/modules and expose only safe APIs.
+- **Favor Small, Focused Functions**: Break complex logic into small, testable functions.
+- **Use Iterators and Functional Patterns**: Prefer iterator combinators (`map`, `filter`, `fold`) over manual loops.
+- **Profile and Benchmark Regularly**: Use `cargo bench` and flamegraph to identify and optimize bottlenecks.
+- **Avoid Global State**: Pass dependencies explicitly; avoid global mutable state.
+- **Thread Safety and Concurrency**: Use `Send`/`Sync` bounds and document thread safety if parallelism is introduced.
+- **Consistent Naming Conventions**: Use descriptive, consistent names following Rust guidelines.
+- **Unit and Integration Test Coverage**: Cover all critical paths with tests; use property-based testing for physics
+  invariants if possible.
+- **Avoid Premature Optimization**: Write clear, correct code first; optimize after profiling.
+- **Use Feature Flags for Optional Functionality**: Use Cargo features for truly optional components (e.g., alternate
+  renderers). SIMD and parallelization are now core features and cannot be disabled.
+- **Code Review Discipline**: Require code review for all changes and address all comments before merging.
+- **Continuous Integration Enforcement**: Automate formatting, linting, and testing in CI to enforce standards.
+
+## Testing Strategy
 
 **Test Placement**:
 - Unit tests: Place in `src/module_name/tests.rs` or inline with `#[cfg(test)]` for small modules
@@ -122,4 +158,3 @@ This is a **molecular dynamics physics simulation** implementing Lennard-Jones p
 3. **Energy Drift**: Numerical integration errors accumulate; use appropriate timesteps and integration methods
 4. **Neighbor List Staleness**: Update when particles move > threshold distance from last update position
 5. **Radius Awareness**: Many calculations need effective distances accounting for ball radii, not just centers
-
