@@ -62,8 +62,8 @@ This is a **molecular dynamics physics simulation** implementing Lennard-Jones p
 - **Unit and Integration Test Coverage**: Cover all critical paths with tests; use property-based testing for physics
   invariants if possible.
 - **Avoid Premature Optimization**: Write clear, correct code first; optimize after profiling.
-- **Use Feature Flags for Optional Functionality**: Use Cargo features for optional components (e.g., SIMD, alternate
-  renderers).
+- **Use Feature Flags for Optional Functionality**: Use Cargo features for truly optional components (e.g., alternate
+  renderers). SIMD and parallelization are now core features and cannot be disabled.
 - **Code Review Discipline**: Require code review for all changes and address all comments before merging.
 - **Continuous Integration Enforcement**: Automate formatting, linting, and testing in CI to enforce standards.
 
