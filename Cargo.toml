@@ -30,7 +30,7 @@ renderer-ggez = ["ggez"]
 renderer-wgpu = ["wgpu"]
 
 [profile.dev]
-#opt-level = 2
+opt-level = 2
 debug = true
 overflow-checks = true
 debug-assertions = true
