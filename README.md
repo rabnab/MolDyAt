@@ -15,7 +15,7 @@ This is a molecular dynamics simulation of a Lennard-Jones gas in a finite box
 * **Parallelization**: Multi-threaded physics calculations using Rayon (always enabled)
 * **SIMD Vectorization**: CPU SIMD instructions for 2-4× speedup on force calculations (always enabled)
   - SSE2 (4-wide) for x86/x86_64
-  - AVX2 (8-wide) for modern x86_64 CPUs
+  - AVX2 (4-wide with FMA) for modern x86_64 CPUs
   - NEON (4-wide) for ARM/Apple Silicon
 * **Spatial Partitioning**: Cell grid with Verlet neighbor lists for efficient collision detection
 
