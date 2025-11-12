@@ -86,7 +86,9 @@ pub fn force_indexed_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2
                 / dist_for_force;
 
             // Force direction: force / center_dist
-            let force_to_dist = lj_force / center_dist;
+            // Avoid division by zero: if center_dist is 0, use a small epsilon to prevent Inf/NaN
+            let safe_center_dist = center_dist.max(f32x4::splat(1e-10));
+            let force_to_dist = lj_force / safe_center_dist;
 
             // Calculate force components
             let fx = dx_vec * force_to_dist;
@@ -218,6 +220,18 @@ pub fn force_indexed_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2
                         local_force_x,
                         local_force_y,
                         edge_dist
+                    );
+                }
+            } else {
+                // center_dist == 0: Two balls at exactly the same position
+                // This is a physics error that should not occur in normal simulation
+                // Set min_dist to 0 to indicate collision/error state
+                min_dist = 0.;
+                if ball_verbose_console {
+                    println!(
+                        "\t\t WARNING: ball {} and {} are at exactly the same position (center_dist = 0)",
+                        balls[ball_idx].get_name(),
+                        b.get_name()
                     );
                 }
             }
