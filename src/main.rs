@@ -10,8 +10,6 @@ mod frame;
 mod objects2d;
 mod timing_monad;
 
-use rayon;
-
 #[cfg(feature = "renderer-ggez")]
 use crate::frame::ggez::ggez_window::GgezWindow;
 #[cfg(feature = "renderer-ggez")]
