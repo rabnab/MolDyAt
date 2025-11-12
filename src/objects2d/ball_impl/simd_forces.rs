@@ -3,12 +3,12 @@
 //! This module provides vectorized implementations of Lennard-Jones force calculations
 //! using CPU SIMD instructions for improved performance. It includes:
 //! - SSE2 (4-wide) for x86/x86_64 processors
-//! - AVX2 (8-wide) for modern x86_64 processors
+//! - AVX2 (4-wide, with FMA) for modern x86_64 processors (note: not 8-wide)
 //! - NEON (4-wide) for ARM processors (M1/M2 Macs)
 //! - Scalar fallback for unsupported architectures
 //!
-//! The implementation uses runtime CPU feature detection to automatically select
-//! the best available implementation.
+//! Note: All SIMD implementations are currently 4-wide. AVX2 uses FMA for improved precision/performance, but does not use 8-wide vectorization yet.
+//! 8-wide AVX2 support is a planned future optimization (see PERFORMANCE_OPTIMIZATION.md line 548).
 
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::{Ball2D, BallPhysics, ForceResult, Named};
