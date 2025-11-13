@@ -1,14 +1,14 @@
 use crate::frame::application_master::MainContent;
-use crate::frame::energy_plot::{EnergyPlotWindow, SharedEnergyData, EnergyData};
+use crate::frame::energy_plot::{EnergyData, EnergyPlotWindow, SharedEnergyData};
 use crate::frame::ggez::ggez_renderer::GgezRenderer;
 use crate::frame::ggez::ggez_renderer_backend::GgezBackend;
 use crate::frame::renderer::Renderer;
 use crate::frame::{GameLogic, LogStuff};
 use crate::objects2d::Vec2D;
+use ggez::Context;
 use ggez::event::winit_event::{ElementState, Event, KeyboardInput, WindowEvent};
 use ggez::event::{MouseButton, process_event};
 use ggez::input::keyboard::{KeyCode, KeyInput, KeyMods};
-use ggez::Context;
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
@@ -49,7 +49,10 @@ impl CustomEventLoop {
         self.pressed_keys.contains(&key)
     }
 
-    fn toggle_energy_window(&mut self, window_target: &winit::event_loop::EventLoopWindowTarget<()>) {
+    fn toggle_energy_window(
+        &mut self,
+        window_target: &winit::event_loop::EventLoopWindowTarget<()>,
+    ) {
         if self.energy_window.is_none() {
             // Create and open energy window
             let mut window = EnergyPlotWindow::new(self.energy_data.clone());
@@ -92,11 +95,11 @@ impl CustomEventLoop {
             match event {
                 Event::WindowEvent { event, window_id } => {
                     // Check if this event is for the energy window
-                    if let Some(energy_window) = &mut self.energy_window {
-                        if energy_window.window_id() == Some(window_id) {
-                            self.handle_energy_window_event(event);
-                            return;
-                        }
+                    if let Some(energy_window) = &mut self.energy_window
+                        && energy_window.window_id() == Some(window_id)
+                    {
+                        self.handle_energy_window_event(event);
+                        return;
                     }
                     // Otherwise, handle as main window event
                     self.handle_window_event(&mut ctx, event, control_flow, window_target);
@@ -159,11 +162,13 @@ impl CustomEventLoop {
                     }
                 }
             }
-            WindowEvent::MouseInput { state, button, .. } => {
-                if let ElementState::Pressed = state {
-                    let pos = ctx.mouse.position();
-                    let _ = self.handle_mouse_button_down(ctx, button, pos.x, pos.y);
-                }
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button,
+                ..
+            } => {
+                let pos = ctx.mouse.position();
+                let _ = self.handle_mouse_button_down(ctx, button, pos.x, pos.y);
             }
             WindowEvent::CursorMoved { position, .. } => {
                 let (x, y) = (position.x as f32, position.y as f32);
@@ -195,10 +200,14 @@ impl CustomEventLoop {
         // Update energy data for the energy plot window
         {
             let mut energy_data = self.energy_data.lock().unwrap();
-            energy_data.v_kin.push_back(self.application.sim.get_kinetic_energy());
-            energy_data.v_pot.push_back(self.application.sim.get_potential_energy());
+            energy_data
+                .v_kin
+                .push_back(self.application.sim.get_kinetic_energy());
+            energy_data
+                .v_pot
+                .push_back(self.application.sim.get_potential_energy());
             energy_data.time = self.application.sim.get_time();
-            
+
             // Limit buffer size to prevent unbounded growth
             const MAX_ENERGY_SAMPLES: usize = 1000;
             if energy_data.v_kin.len() > MAX_ENERGY_SAMPLES {
@@ -234,7 +243,10 @@ impl CustomEventLoop {
         cur_render.set_physics_engine(self.application.physics.clone());
         let _ = cur_render.draw_balls(&mut backend, self.application.get_balls());
         let _ = cur_render.draw_frame(&mut backend, cell_grid, status_text);
-        let _ = cur_render.draw_cursor(&mut backend, self.application.get_ball_factory().get_new_ball_size_idx());
+        let _ = cur_render.draw_cursor(
+            &mut backend,
+            self.application.get_ball_factory().get_new_ball_size_idx(),
+        );
         let _ = cur_render.finish_frame(&mut backend);
 
         let cache = backend.into_cache();
@@ -250,7 +262,12 @@ impl CustomEventLoop {
         ggez::timer::yield_now();
     }
 
-    fn handle_key_down(&mut self, _ctx: &mut Context, input: KeyInput, repeated: bool) -> ggez::GameResult {
+    fn handle_key_down(
+        &mut self,
+        _ctx: &mut Context,
+        input: KeyInput,
+        repeated: bool,
+    ) -> ggez::GameResult {
         if let Some(key) = input.keycode {
             match key {
                 KeyCode::Space => self.application.toggle_pause(),
@@ -266,7 +283,12 @@ impl CustomEventLoop {
         Ok(())
     }
 
-    fn handle_key_up(&mut self, _ctx: &mut Context, input: KeyInput, window_target: &winit::event_loop::EventLoopWindowTarget<()>) -> ggez::GameResult {
+    fn handle_key_up(
+        &mut self,
+        _ctx: &mut Context,
+        input: KeyInput,
+        window_target: &winit::event_loop::EventLoopWindowTarget<()>,
+    ) -> ggez::GameResult {
         if let Some(key) = input.keycode {
             match key {
                 KeyCode::Tab => self.toggle_energy_window(window_target),
@@ -289,8 +311,16 @@ impl CustomEventLoop {
                 KeyCode::F5 => self.application.add_random_candidates(100),
                 KeyCode::F1 => self.application.stop_all_balls(),
                 KeyCode::F2 => {
-                    let mut small = self.application.get_game_logic_data().get_ball_factory().create_basic(Vec2D::zero(), 2);
-                    let mut large = self.application.get_game_logic_data().get_ball_factory().create_basic(Vec2D::zero(), 4);
+                    let mut small = self
+                        .application
+                        .get_game_logic_data()
+                        .get_ball_factory()
+                        .create_basic(Vec2D::zero(), 2);
+                    let mut large = self
+                        .application
+                        .get_game_logic_data()
+                        .get_ball_factory()
+                        .create_basic(Vec2D::zero(), 4);
                     small.v = Vec2D::new(0.1, 0.);
                     large.v = Vec2D::new(0., 0.1);
                     self.application.add_candidate_to_vec(small);
@@ -302,7 +332,13 @@ impl CustomEventLoop {
         Ok(())
     }
 
-    fn handle_mouse_button_down(&mut self, _ctx: &mut Context, button: MouseButton, _x: f32, _y: f32) -> ggez::GameResult {
+    fn handle_mouse_button_down(
+        &mut self,
+        _ctx: &mut Context,
+        button: MouseButton,
+        _x: f32,
+        _y: f32,
+    ) -> ggez::GameResult {
         if let MouseButton::Right = button {
             self.application.next_ball_size();
         }

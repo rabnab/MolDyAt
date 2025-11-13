@@ -1,8 +1,8 @@
 use super::energy_data::SharedEnergyData;
+use std::rc::Rc;
 use winit::dpi::LogicalSize;
 use winit::event_loop::EventLoopWindowTarget;
 use winit::window::{Window, WindowBuilder, WindowId};
-use std::rc::Rc;
 
 const DEFAULT_WIDTH: u32 = 640;
 const DEFAULT_HEIGHT: u32 = 360;

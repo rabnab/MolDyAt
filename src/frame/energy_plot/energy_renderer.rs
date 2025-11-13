@@ -18,7 +18,7 @@ impl EnergyPlotRenderer {
     /// Generate a text-based visualization of the energy plot
     pub fn render_to_string(&self) -> String {
         let data = self.energy_data.lock().unwrap();
-        
+
         if data.v_kin.is_empty() && data.v_pot.is_empty() {
             return self.render_waiting_message();
         }
@@ -31,9 +31,12 @@ impl EnergyPlotRenderer {
         // Render the plot
         output.push_str(&self.render_ascii_plot(&data.v_kin, &data.v_pot));
 
-        output.push_str("\n");
+        output.push('\n');
         output.push_str("───────────────────────────────────────────────────────────────\n");
-        output.push_str(&format!("  Ekin (*)  Epot (+)  Etot (=)  |  Time: {:.2}\n", data.time));
+        output.push_str(&format!(
+            "  Ekin (*)  Epot (+)  Etot (=)  |  Time: {:.2}\n",
+            data.time
+        ));
         output.push_str("───────────────────────────────────────────────────────────────\n");
         output.push_str("\n  Press Esc or close window to hide | Tab to return to main\n");
         output.push_str("═══════════════════════════════════════════════════════════════\n");
@@ -57,9 +60,10 @@ impl EnergyPlotRenderer {
         let mut grid = vec![vec![' '; PLOT_WIDTH]; PLOT_HEIGHT];
 
         // Draw axes
-        for y in 0..PLOT_HEIGHT {
-            grid[y][0] = '│';
+        for row in grid.iter_mut().take(PLOT_HEIGHT) {
+            row[0] = '│';
         }
+        #[allow(clippy::needless_range_loop)]
         for x in 0..PLOT_WIDTH {
             grid[PLOT_HEIGHT - 1][x] = '─';
         }
@@ -94,7 +98,7 @@ impl EnergyPlotRenderer {
         output
     }
 
-    fn plot_data(&self, grid: &mut Vec<Vec<char>>, data: &VecDeque<f32>, symbol: char) {
+    fn plot_data(&self, grid: &mut [Vec<char>], data: &VecDeque<f32>, symbol: char) {
         if data.is_empty() {
             return;
         }
@@ -136,7 +140,7 @@ mod tests {
         let energy_data = Arc::new(Mutex::new(crate::frame::energy_plot::EnergyData::new()));
         let renderer = EnergyPlotRenderer::new(energy_data);
         let output = renderer.render_to_string();
-        
+
         // Should show waiting message when no data
         assert!(output.contains("Waiting for simulation data"));
         assert!(output.contains("ENERGY PLOT"));
@@ -145,7 +149,7 @@ mod tests {
     #[test]
     fn test_render_with_data() {
         let energy_data = Arc::new(Mutex::new(crate::frame::energy_plot::EnergyData::new()));
-        
+
         // Add some energy data
         {
             let mut data = energy_data.lock().unwrap();
@@ -160,7 +164,7 @@ mod tests {
 
         let renderer = EnergyPlotRenderer::new(energy_data);
         let output = renderer.render_to_string();
-        
+
         // Should show energy plot
         assert!(output.contains("ENERGY PLOT"));
         assert!(output.contains("Time: 1.50"));
@@ -173,7 +177,7 @@ mod tests {
     #[test]
     fn test_render_only_kinetic() {
         let energy_data = Arc::new(Mutex::new(crate::frame::energy_plot::EnergyData::new()));
-        
+
         {
             let mut data = energy_data.lock().unwrap();
             data.v_kin.push_back(10.0);
@@ -182,7 +186,7 @@ mod tests {
 
         let renderer = EnergyPlotRenderer::new(energy_data);
         let output = renderer.render_to_string();
-        
+
         assert!(output.contains("Time: 0.50"));
         assert!(!output.contains("Waiting for simulation data"));
     }
@@ -190,7 +194,7 @@ mod tests {
     #[test]
     fn test_render_only_potential() {
         let energy_data = Arc::new(Mutex::new(crate::frame::energy_plot::EnergyData::new()));
-        
+
         {
             let mut data = energy_data.lock().unwrap();
             data.v_pot.push_back(5.0);
@@ -199,7 +203,7 @@ mod tests {
 
         let renderer = EnergyPlotRenderer::new(energy_data);
         let output = renderer.render_to_string();
-        
+
         assert!(output.contains("Time: 0.50"));
         assert!(!output.contains("Waiting for simulation data"));
     }
@@ -209,7 +213,7 @@ mod tests {
         let energy_data = Arc::new(Mutex::new(crate::frame::energy_plot::EnergyData::new()));
         let renderer = EnergyPlotRenderer::new(energy_data);
         let output = renderer.render_to_string();
-        
+
         assert!(output.contains("═══════════════════════"));
         assert!(output.contains("Add some balls to see the energy plot!"));
         assert!(output.contains("Press F5 in the main window"));

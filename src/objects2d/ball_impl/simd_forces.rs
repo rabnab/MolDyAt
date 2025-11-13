@@ -130,7 +130,9 @@ pub fn force_indexed_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2
                             // total_pot += 0.0;
                             min_dist = 0.;
                             if ball_verbose_console || edge_dist_arr[i] < 0. {
-                                let local_force_norm = f32::sqrt(local_force_x * local_force_x + local_force_y * local_force_y);
+                                let local_force_norm = f32::sqrt(
+                                    local_force_x * local_force_x + local_force_y * local_force_y,
+                                );
                                 println!(
                                     "\t\t {}--force: {} ({},{}) at dist: {}",
                                     b.get_name(),

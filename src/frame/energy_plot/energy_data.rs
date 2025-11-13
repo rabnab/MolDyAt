@@ -97,7 +97,7 @@ mod tests {
     #[test]
     fn test_shared_energy_data_thread_safety() {
         let shared_data = Arc::new(Mutex::new(EnergyData::new()));
-        
+
         // Add data through the mutex
         {
             let mut data = shared_data.lock().unwrap();
