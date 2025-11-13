@@ -125,3 +125,93 @@ impl EnergyPlotRenderer {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn test_renderer_new() {
+        let energy_data = Arc::new(Mutex::new(crate::frame::energy_plot::EnergyData::new()));
+        let renderer = EnergyPlotRenderer::new(energy_data);
+        let output = renderer.render_to_string();
+        
+        // Should show waiting message when no data
+        assert!(output.contains("Waiting for simulation data"));
+        assert!(output.contains("ENERGY PLOT"));
+    }
+
+    #[test]
+    fn test_render_with_data() {
+        let energy_data = Arc::new(Mutex::new(crate::frame::energy_plot::EnergyData::new()));
+        
+        // Add some energy data
+        {
+            let mut data = energy_data.lock().unwrap();
+            data.v_kin.push_back(10.0);
+            data.v_kin.push_back(20.0);
+            data.v_kin.push_back(30.0);
+            data.v_pot.push_back(5.0);
+            data.v_pot.push_back(10.0);
+            data.v_pot.push_back(15.0);
+            data.time = 1.5;
+        }
+
+        let renderer = EnergyPlotRenderer::new(energy_data);
+        let output = renderer.render_to_string();
+        
+        // Should show energy plot
+        assert!(output.contains("ENERGY PLOT"));
+        assert!(output.contains("Time: 1.50"));
+        assert!(output.contains("Ekin (*)"));
+        assert!(output.contains("Epot (+)"));
+        assert!(output.contains("Etot (=)"));
+        assert!(!output.contains("Waiting for simulation data"));
+    }
+
+    #[test]
+    fn test_render_only_kinetic() {
+        let energy_data = Arc::new(Mutex::new(crate::frame::energy_plot::EnergyData::new()));
+        
+        {
+            let mut data = energy_data.lock().unwrap();
+            data.v_kin.push_back(10.0);
+            data.time = 0.5;
+        }
+
+        let renderer = EnergyPlotRenderer::new(energy_data);
+        let output = renderer.render_to_string();
+        
+        assert!(output.contains("Time: 0.50"));
+        assert!(!output.contains("Waiting for simulation data"));
+    }
+
+    #[test]
+    fn test_render_only_potential() {
+        let energy_data = Arc::new(Mutex::new(crate::frame::energy_plot::EnergyData::new()));
+        
+        {
+            let mut data = energy_data.lock().unwrap();
+            data.v_pot.push_back(5.0);
+            data.time = 0.5;
+        }
+
+        let renderer = EnergyPlotRenderer::new(energy_data);
+        let output = renderer.render_to_string();
+        
+        assert!(output.contains("Time: 0.50"));
+        assert!(!output.contains("Waiting for simulation data"));
+    }
+
+    #[test]
+    fn test_waiting_message_format() {
+        let energy_data = Arc::new(Mutex::new(crate::frame::energy_plot::EnergyData::new()));
+        let renderer = EnergyPlotRenderer::new(energy_data);
+        let output = renderer.render_to_string();
+        
+        assert!(output.contains("═══════════════════════"));
+        assert!(output.contains("Add some balls to see the energy plot!"));
+        assert!(output.contains("Press F5 in the main window"));
+    }
+}

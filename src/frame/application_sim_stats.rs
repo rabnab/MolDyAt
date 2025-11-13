@@ -263,4 +263,47 @@ mod tests {
         assert_eq!(default_sim_stats.energy_pot, 0.);
         assert_eq!(default_sim_stats.energy_kin, 0.);
     }
+
+    #[test]
+    fn test_get_kinetic_energy() {
+        let mut stats = SimStats::default();
+        assert_eq!(stats.get_kinetic_energy(), 0.0);
+        
+        stats.energy_kin = 42.5;
+        assert_eq!(stats.get_kinetic_energy(), 42.5);
+    }
+
+    #[test]
+    fn test_get_potential_energy() {
+        let mut stats = SimStats::default();
+        assert_eq!(stats.get_potential_energy(), 0.0);
+        
+        stats.energy_pot = 17.3;
+        assert_eq!(stats.get_potential_energy(), 17.3);
+    }
+
+    #[test]
+    fn test_get_time() {
+        let mut stats = SimStats::default();
+        assert_eq!(stats.get_time(), 0.0);
+        
+        stats.time = 123.456;
+        assert_eq!(stats.get_time(), 123.456);
+    }
+
+    #[test]
+    fn test_energy_getters_independence() {
+        let mut stats = SimStats::default();
+        stats.energy_kin = 10.0;
+        stats.energy_pot = 20.0;
+        stats.time = 5.0;
+        
+        assert_eq!(stats.get_kinetic_energy(), 10.0);
+        assert_eq!(stats.get_potential_energy(), 20.0);
+        assert_eq!(stats.get_time(), 5.0);
+        
+        // Verify getters don't modify state
+        assert_eq!(stats.get_kinetic_energy(), 10.0);
+        assert_eq!(stats.get_potential_energy(), 20.0);
+    }
 }
