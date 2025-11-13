@@ -1,4 +1,5 @@
 use crate::frame::application_master::MainContent;
+use crate::frame::energy_plot::{EnergyPlotWindow, SharedEnergyData, EnergyData};
 use crate::frame::ggez::ggez_renderer::GgezRenderer;
 use crate::frame::ggez::ggez_renderer_backend::GgezBackend;
 use crate::frame::renderer::Renderer;
@@ -11,6 +12,7 @@ use ggez::Context;
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 use winit::event_loop::{ControlFlow, EventLoop};
 
 pub struct CustomEventLoop {
@@ -18,15 +20,20 @@ pub struct CustomEventLoop {
     pressed_keys: HashSet<KeyCode>,
     renderer: Rc<RefCell<GgezRenderer>>,
     cursor_pos: Vec2D,
+    energy_window: Option<EnergyPlotWindow>,
+    energy_data: SharedEnergyData,
 }
 
 impl CustomEventLoop {
     pub fn new(application: MainContent, renderer: Rc<RefCell<GgezRenderer>>) -> Self {
+        let energy_data = Arc::new(Mutex::new(EnergyData::new()));
         Self {
             application,
             pressed_keys: HashSet::new(),
             renderer,
             cursor_pos: Vec2D::zero(),
+            energy_window: None,
+            energy_data,
         }
     }
 
