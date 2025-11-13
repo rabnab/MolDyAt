@@ -1,3 +1,4 @@
+use super::StatsAccumulator;
 use super::*;
 use crate::frame::VerletIntegration;
 use crate::objects2d::Rect;
@@ -71,12 +72,7 @@ impl MainContent {
         result: &ForceResult,
         dt: f32,
         speed_limit: f32,
-        pot: &mut f32,
-        kin: &mut f32,
-        _v_com: &mut Vec2D,
-        sum_mass: &mut f32,
-        max_v: &mut f32,
-        max_id: &mut usize,
+        stats_accumulator: &mut StatsAccumulator,
     ) {
         let ball = &mut self.balls[ball_idx];
         let accel = ball.accel_with_speed_limit(
@@ -95,14 +91,15 @@ impl MainContent {
 
         // Accumulate statistics
         self.sim.update_min_dist(result.min_dist);
-        *pot += result.potential_energy * 0.5; // double counts
-        *_v_com += ball.moment();
+
+        stats_accumulator.pot += result.potential_energy * 0.5; // double counts
+        stats_accumulator.v_com += ball.moment();
         let speed_sq = ball.v.norm_sq();
-        *kin += speed_sq * ball.mass * 0.5;
-        *sum_mass += ball.mass;
-        if *max_v * *max_v < speed_sq {
-            *max_v = f32::sqrt(speed_sq);
-            *max_id = ball.get_id();
+        stats_accumulator.kin += speed_sq * ball.mass * 0.5;
+        stats_accumulator.sum_mass += ball.mass;
+        if stats_accumulator.max_v * stats_accumulator.max_v < speed_sq {
+            stats_accumulator.max_v = f32::sqrt(speed_sq);
+            stats_accumulator.max_id = ball.get_id();
         }
     }
 
@@ -112,12 +109,7 @@ impl MainContent {
         force_results: &[ForceResult],
         dt: f32,
         bound_rect: &Rect,
-        pot: &mut f32,
-        kin: &mut f32,
-        _v_com: &mut Vec2D,
-        sum_mass: &mut f32,
-        max_v: &mut f32,
-        max_id: &mut usize,
+        stats_accumulator: &mut StatsAccumulator,
     ) {
         let speed_limit = f32::min(bound_rect.w, bound_rect.h) * 0.2;
         for (i, result) in force_results.iter().enumerate() {
@@ -126,12 +118,7 @@ impl MainContent {
                 result,
                 dt,
                 speed_limit,
-                pot,
-                kin,
-                _v_com,
-                sum_mass,
-                max_v,
-                max_id,
+                stats_accumulator,
             );
         }
     }
@@ -139,12 +126,14 @@ impl MainContent {
 
 impl VerletIntegration for MainContent {
     fn update_sim(&mut self, dt: f32, bound_rect: &Rect) {
-        let mut max_v: f32 = 0.;
-        let mut max_id: usize = 0;
-        let mut pot: f32 = 0.;
-        let mut kin: f32 = 0.;
-        let mut _v_com: Vec2D = Vec2D::new(0., 0.);
-        let mut sum_mass: f32 = 0.;
+        let mut stats_accumulator = StatsAccumulator {
+            pot: 0.,
+            kin: 0.,
+            v_com: Vec2D::zero(),
+            sum_mass: 0.,
+            max_v: 0.,
+            max_id: 0,
+        };
 
         // Update positions in parallel
         self.update_positions(dt, bound_rect);
@@ -157,19 +146,12 @@ impl VerletIntegration for MainContent {
 
         // Compute forces in parallel with SIMD, then apply updates
         let force_results = self.compute_forces();
-        self.apply_forces_and_collect_stats(
-            &force_results,
-            dt,
-            bound_rect,
-            &mut pot,
-            &mut kin,
-            &mut _v_com,
-            &mut sum_mass,
-            &mut max_v,
-            &mut max_id,
-        );
+        self.apply_forces_and_collect_stats(&force_results, dt, bound_rect, &mut stats_accumulator);
 
-        self.sim
-            .update(kin, pot, max_id, max_v, dt, _v_com.scaled(1. / sum_mass));
+        stats_accumulator.v_com = stats_accumulator
+            .v_com
+            .scaled(1. / stats_accumulator.sum_mass);
+
+        self.sim.update(dt, stats_accumulator);
     }
 }

@@ -48,7 +48,7 @@ pub fn force_indexed_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2
             // Gather data for 4 neighbors
             for (i, &neighbour_idx) in chunk.iter().enumerate() {
                 if let Some(b) = balls.get(neighbour_idx) {
-                    let dist_vec = b.pre_update_pos.dist(&ball_pos);
+                    let dist_vec = b.pre_update_pos.dist(ball_pos);
                     dx[i] = dist_vec.x;
                     dy[i] = dist_vec.y;
                     radii[i] = b.radius;
@@ -114,7 +114,7 @@ pub fn force_indexed_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2
                         if let Some(&neighbour_idx) = chunk.get(i)
                             && let Some(b) = balls.get(neighbour_idx)
                         {
-                            let dist_vec = b.pre_update_pos.dist(&ball_pos);
+                            let dist_vec = b.pre_update_pos.dist(ball_pos);
                             let center_dist = dist_vec.norm();
                             // Avoid division by zero
                             let force_to_dist_val = if center_dist > 0. {
@@ -176,7 +176,7 @@ pub fn force_indexed_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2
     // Process remaining neighbors with scalar code
     for &neighbour_idx in &neighbour_indices[remainder_start..] {
         if let Some(b) = balls.get(neighbour_idx) {
-            let dist_vec = b.pre_update_pos.dist(&ball_pos);
+            let dist_vec = b.pre_update_pos.dist(ball_pos);
             let center_dist = dist_vec.norm();
             let radius_sum = b.radius + ball_radius;
             let edge_dist = center_dist - radius_sum;

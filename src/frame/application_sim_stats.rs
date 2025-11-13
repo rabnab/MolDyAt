@@ -1,3 +1,4 @@
+use crate::frame::application_master::StatsAccumulator;
 use crate::objects2d::ball_impl::Ball2D;
 use crate::objects2d::{Rect, Vec2D};
 use std::collections::VecDeque;
@@ -145,25 +146,25 @@ impl SimStats {
         )
     }
 
-    pub fn update(&mut self, kin: f32, pot: f32, max_id: usize, max_v: f32, dt: f32, v_com: Vec2D) {
-        self.energy_kin = kin;
-        self.energy_pot = pot;
+    pub fn update(&mut self, dt: f32, stats_acumulator: StatsAccumulator) {
+        self.energy_kin = stats_acumulator.kin;
+        self.energy_pot = stats_acumulator.pot;
         if self.step.is_multiple_of(PLT_STEP) {
             if self.v_pot.len() >= PLT_SIZE {
                 self.v_pot.pop_front();
             }
-            self.v_pot.push_back(pot);
+            self.v_pot.push_back(stats_acumulator.pot);
             if self.v_kin.len() >= PLT_SIZE {
                 self.v_kin.pop_front();
             }
-            self.v_kin.push_back(kin);
+            self.v_kin.push_back(stats_acumulator.kin);
         }
 
-        self.max_v = max_v;
-        self.max_id = max_id;
+        self.max_v = stats_acumulator.max_v;
+        self.max_id = stats_acumulator.max_id;
         self.time += dt;
         self.step += 1;
-        self.v_com = v_com;
+        self.v_com = stats_acumulator.v_com;
     }
 
     // Calculate temperature from the ball slice directly
