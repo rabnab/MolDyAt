@@ -90,7 +90,15 @@ impl CustomEventLoop {
             process_event(&mut ctx, &mut event);
 
             match event {
-                Event::WindowEvent { event, .. } => {
+                Event::WindowEvent { event, window_id } => {
+                    // Check if this event is for the energy window
+                    if let Some(energy_window) = &mut self.energy_window {
+                        if energy_window.window_id() == Some(window_id) {
+                            self.handle_energy_window_event(event);
+                            return;
+                        }
+                    }
+                    // Otherwise, handle as main window event
                     self.handle_window_event(&mut ctx, event, control_flow, window_target);
                 }
                 Event::MainEventsCleared => {
@@ -99,6 +107,21 @@ impl CustomEventLoop {
                 _ => {}
             }
         });
+    }
+
+    fn handle_energy_window_event(&mut self, event: WindowEvent) {
+        match event {
+            WindowEvent::CloseRequested => {
+                // Close the energy window
+                self.energy_window = None;
+            }
+            WindowEvent::Resized(size) => {
+                if let Some(window) = &mut self.energy_window {
+                    window.handle_resize(size.width, size.height);
+                }
+            }
+            _ => {}
+        }
     }
 
     fn handle_window_event(
