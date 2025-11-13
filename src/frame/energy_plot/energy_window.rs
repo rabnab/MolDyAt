@@ -113,34 +113,40 @@ impl EnergyPlotWindow {
                 *pixel = 0xFF000000; // Black (ARGB format)
             }
 
-            // Render text-based energy plot
+            // Get status text and energy data status
+            let (status_text, has_data) = {
+                let data = self.energy_data.lock().unwrap();
+                let status = data.status_text.clone();
+                let has_data = !data.v_kin.is_empty() || !data.v_pot.is_empty();
+                (status, has_data)
+            };
+
+            // Render text-based energy plot to console/stdout
             let renderer = EnergyPlotRenderer::new(self.energy_data.clone());
-            let _text = renderer.render_to_string();
+            let text = renderer.render_to_string(status_text.as_deref());
 
-            // For now, just clear to a dark gray to show the window is working
-            // Full text rendering would require a text rasterizer
-            let bg_color = 0xFF1A1A1A; // Dark gray
-            for pixel in buffer.iter_mut() {
-                *pixel = bg_color;
-            }
+            // Print ASCII art to stdout (console window)
+            println!("\x1B[2J\x1B[1;1H{}", text); // Clear screen and print at top
 
-            // Draw a simple indicator that we have data
-            let data = self.energy_data.lock().unwrap();
-            if !data.v_kin.is_empty() {
-                // Draw a green indicator in top-left corner if we have data
-                let indicator_size = 20;
-                for y in 10..10 + indicator_size {
-                    for x in 10..10 + indicator_size {
-                        if x < width as usize && y < height as usize {
-                            let idx = y * width as usize + x;
-                            if idx < buffer.len() {
-                                buffer[idx] = 0xFF00FF00; // Green
-                            }
+            // For visual feedback in the window, show a simple colored indicator
+            // Green = has data, Yellow = waiting for data
+            let indicator_color = if has_data { 0xFF00FF00 } else { 0xFFFFFF00 };
+
+            // Draw indicator in center
+            let center_x = (width / 2) as usize;
+            let center_y = (height / 2) as usize;
+            let indicator_size = 40;
+
+            for y in center_y.saturating_sub(indicator_size)..center_y + indicator_size {
+                for x in center_x.saturating_sub(indicator_size)..center_x + indicator_size {
+                    if x < width as usize && y < height as usize {
+                        let idx = y * width as usize + x;
+                        if idx < buffer.len() {
+                            buffer[idx] = indicator_color;
                         }
                     }
                 }
             }
-            drop(data);
 
             buffer.present()?;
         }

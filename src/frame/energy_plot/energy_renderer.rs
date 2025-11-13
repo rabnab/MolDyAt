@@ -15,8 +15,8 @@ impl EnergyPlotRenderer {
         Self { energy_data }
     }
 
-    /// Generate a text-based visualization of the energy plot
-    pub fn render_to_string(&self) -> String {
+    /// Generate a text-based visualization of the energy plot with optional status text
+    pub fn render_to_string(&self, status_text: Option<&str>) -> String {
         let data = self.energy_data.lock().unwrap();
 
         if data.v_kin.is_empty() && data.v_pot.is_empty() {
@@ -27,6 +27,12 @@ impl EnergyPlotRenderer {
         output.push_str("═══════════════════════════════════════════════════════════════\n");
         output.push_str("                        ENERGY PLOT 🐾\n");
         output.push_str("═══════════════════════════════════════════════════════════════\n\n");
+
+        // Add status text if provided
+        if let Some(status) = status_text {
+            output.push_str(status);
+            output.push_str("\n\n");
+        }
 
         // Render the plot
         output.push_str(&self.render_ascii_plot(&data.v_kin, &data.v_pot));
@@ -139,7 +145,7 @@ mod tests {
     fn test_renderer_new() {
         let energy_data = Arc::new(Mutex::new(crate::frame::energy_plot::EnergyData::new()));
         let renderer = EnergyPlotRenderer::new(energy_data);
-        let output = renderer.render_to_string();
+        let output = renderer.render_to_string(None);
 
         // Should show waiting message when no data
         assert!(output.contains("Waiting for simulation data"));
@@ -163,7 +169,7 @@ mod tests {
         }
 
         let renderer = EnergyPlotRenderer::new(energy_data);
-        let output = renderer.render_to_string();
+        let output = renderer.render_to_string(None);
 
         // Should show energy plot
         assert!(output.contains("ENERGY PLOT"));
@@ -185,7 +191,7 @@ mod tests {
         }
 
         let renderer = EnergyPlotRenderer::new(energy_data);
-        let output = renderer.render_to_string();
+        let output = renderer.render_to_string(None);
 
         assert!(output.contains("Time: 0.50"));
         assert!(!output.contains("Waiting for simulation data"));
@@ -202,7 +208,7 @@ mod tests {
         }
 
         let renderer = EnergyPlotRenderer::new(energy_data);
-        let output = renderer.render_to_string();
+        let output = renderer.render_to_string(None);
 
         assert!(output.contains("Time: 0.50"));
         assert!(!output.contains("Waiting for simulation data"));
@@ -212,10 +218,30 @@ mod tests {
     fn test_waiting_message_format() {
         let energy_data = Arc::new(Mutex::new(crate::frame::energy_plot::EnergyData::new()));
         let renderer = EnergyPlotRenderer::new(energy_data);
-        let output = renderer.render_to_string();
+        let output = renderer.render_to_string(None);
 
         assert!(output.contains("═══════════════════════"));
         assert!(output.contains("Add some balls to see the energy plot!"));
         assert!(output.contains("Press F5 in the main window"));
+    }
+
+    #[test]
+    fn test_render_with_status_text() {
+        let energy_data = Arc::new(Mutex::new(crate::frame::energy_plot::EnergyData::new()));
+
+        {
+            let mut data = energy_data.lock().unwrap();
+            data.v_kin.push_back(10.0);
+            data.v_pot.push_back(5.0);
+            data.time = 1.0;
+        }
+
+        let renderer = EnergyPlotRenderer::new(energy_data);
+        let status = "fps 60 time: 1.0\n#Balls: 100";
+        let output = renderer.render_to_string(Some(status));
+
+        assert!(output.contains("fps 60"));
+        assert!(output.contains("#Balls: 100"));
+        assert!(output.contains("ENERGY PLOT"));
     }
 }

@@ -107,9 +107,10 @@ impl CustomEventLoop {
                 Event::RedrawRequested(window_id) => {
                     // Check if redraw is for energy window
                     if let Some(energy_window) = &mut self.energy_window
-                        && energy_window.window_id() == Some(window_id) {
-                            let _ = energy_window.render();
-                        }
+                        && energy_window.window_id() == Some(window_id)
+                    {
+                        let _ = energy_window.render();
+                    }
                     // Otherwise it's for the main window, ggez handles it
                 }
                 Event::MainEventsCleared => {
@@ -216,6 +217,10 @@ impl CustomEventLoop {
                 .push_back(self.application.sim.get_potential_energy());
             energy_data.time = self.application.sim.get_time();
 
+            // Update status text for the energy window
+            let fps = ctx.time.fps();
+            energy_data.status_text = self.application.status_text(fps as u32);
+
             // Limit buffer size to prevent unbounded growth
             const MAX_ENERGY_SAMPLES: usize = 1000;
             if energy_data.v_kin.len() > MAX_ENERGY_SAMPLES {
@@ -237,20 +242,19 @@ impl CustomEventLoop {
             self.application.increase_speedup();
         }
 
-        // Draw
+        // Draw main window (without status text - now shown in energy window)
         let _ = ctx.gfx.begin_frame();
 
-        let fps = ctx.time.fps();
         let cell_grid = &self.application.cell_grid;
 
         let mut cur_render = self.renderer.borrow_mut();
         let cache = cur_render.take_cache();
         let mut backend = GgezBackend::new(ctx, cache);
 
-        let status_text = self.application.status_text(fps as u32);
+        // Don't pass status_text - it's now in the energy window for better performance
         cur_render.set_physics_engine(self.application.physics.clone());
         let _ = cur_render.draw_balls(&mut backend, self.application.get_balls());
-        let _ = cur_render.draw_frame(&mut backend, cell_grid, status_text);
+        let _ = cur_render.draw_frame(&mut backend, cell_grid, None);
         let _ = cur_render.draw_cursor(
             &mut backend,
             self.application.get_ball_factory().get_new_ball_size_idx(),

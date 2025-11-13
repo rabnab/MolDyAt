@@ -7,6 +7,7 @@ pub struct EnergyData {
     pub v_kin: VecDeque<f32>,
     pub v_pot: VecDeque<f32>,
     pub time: f32,
+    pub status_text: Option<String>,
 }
 
 impl EnergyData {
@@ -15,6 +16,7 @@ impl EnergyData {
             v_kin: VecDeque::with_capacity(1000),
             v_pot: VecDeque::with_capacity(1000),
             time: 0.0,
+            status_text: None,
         }
     }
 
