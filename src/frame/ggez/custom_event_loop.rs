@@ -169,6 +169,28 @@ impl CustomEventLoop {
 
         self.application.end_frame();
 
+        // Update energy data for the energy plot window
+        {
+            let mut energy_data = self.energy_data.lock().unwrap();
+            energy_data.v_kin.push_back(self.application.sim.get_kinetic_energy());
+            energy_data.v_pot.push_back(self.application.sim.get_potential_energy());
+            energy_data.time = self.application.sim.get_time();
+            
+            // Limit buffer size to prevent unbounded growth
+            const MAX_ENERGY_SAMPLES: usize = 1000;
+            if energy_data.v_kin.len() > MAX_ENERGY_SAMPLES {
+                energy_data.v_kin.pop_front();
+            }
+            if energy_data.v_pot.len() > MAX_ENERGY_SAMPLES {
+                energy_data.v_pot.pop_front();
+            }
+        }
+
+        // Request redraw for energy window if it exists
+        if let Some(window) = &self.energy_window {
+            window.request_redraw();
+        }
+
         if self.is_key_pressed(KeyCode::Minus) {
             self.application.decrease_speedup();
         } else if self.is_key_pressed(KeyCode::Equals) {

@@ -238,16 +238,24 @@ impl Default for SimStats {
     }
 }
 
+impl SimStats {
+    pub(crate) fn get_kinetic_energy(&self) -> f32 {
+        self.energy_kin
+    }
+
+    pub(crate) fn get_potential_energy(&self) -> f32 {
+        self.energy_pot
+    }
+
+    pub(crate) fn get_time(&self) -> f32 {
+        self.time
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     //use float_cmp::approx_eq;
-
-    impl SimStats {
-        pub(crate) fn get_kinetic_energy(&self) -> f32 {
-            self.energy_kin
-        }
-    }
 
     #[test]
     fn test_defaults() {
