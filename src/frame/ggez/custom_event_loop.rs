@@ -49,8 +49,33 @@ impl CustomEventLoop {
         self.pressed_keys.contains(&key)
     }
 
+    fn toggle_energy_window(&mut self, window_target: &winit::event_loop::EventLoopWindowTarget<()>) {
+        if self.energy_window.is_none() {
+            // Create and open energy window
+            let mut window = EnergyPlotWindow::new(self.energy_data.clone());
+            if let Err(e) = window.create(window_target) {
+                eprintln!("Failed to create energy window: {}", e);
+                return;
+            }
+            self.energy_window = Some(window);
+        } else if let Some(window) = &self.energy_window {
+            if window.is_open() {
+                // Close the window
+                self.energy_window = None;
+            } else {
+                // Reopen if closed
+                let mut window = EnergyPlotWindow::new(self.energy_data.clone());
+                if let Err(e) = window.create(window_target) {
+                    eprintln!("Failed to create energy window: {}", e);
+                    return;
+                }
+                self.energy_window = Some(window);
+            }
+        }
+    }
+
     pub fn run(mut self, mut ctx: Context, event_loop: EventLoop<()>) {
-        event_loop.run(move |mut event, _window_target, control_flow| {
+        event_loop.run(move |mut event, window_target, control_flow| {
             if ctx.quit_requested {
                 ctx.continuing = false;
             }
@@ -66,7 +91,7 @@ impl CustomEventLoop {
 
             match event {
                 Event::WindowEvent { event, .. } => {
-                    self.handle_window_event(&mut ctx, event, control_flow);
+                    self.handle_window_event(&mut ctx, event, control_flow, window_target);
                 }
                 Event::MainEventsCleared => {
                     self.update_and_draw(&mut ctx);
@@ -81,6 +106,7 @@ impl CustomEventLoop {
         ctx: &mut Context,
         event: WindowEvent,
         _control_flow: &mut ControlFlow,
+        window_target: &winit::event_loop::EventLoopWindowTarget<()>,
     ) {
         match event {
             WindowEvent::CloseRequested => {
@@ -106,7 +132,7 @@ impl CustomEventLoop {
                         let _ = self.handle_key_down(ctx, key_input, false);
                     }
                     ElementState::Released => {
-                        let _ = self.handle_key_up(ctx, key_input);
+                        let _ = self.handle_key_up(ctx, key_input, window_target);
                     }
                 }
             }
@@ -195,9 +221,10 @@ impl CustomEventLoop {
         Ok(())
     }
 
-    fn handle_key_up(&mut self, _ctx: &mut Context, input: KeyInput) -> ggez::GameResult {
+    fn handle_key_up(&mut self, _ctx: &mut Context, input: KeyInput, window_target: &winit::event_loop::EventLoopWindowTarget<()>) -> ggez::GameResult {
         if let Some(key) = input.keycode {
             match key {
+                KeyCode::Tab => self.toggle_energy_window(window_target),
                 KeyCode::H => MainContent::print_help_message(),
                 KeyCode::D => self.application.toggle_real_data(),
                 KeyCode::S => self.application.toggle_stepwise(),
