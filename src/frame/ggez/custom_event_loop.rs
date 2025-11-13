@@ -104,6 +104,14 @@ impl CustomEventLoop {
                     // Otherwise, handle as main window event
                     self.handle_window_event(&mut ctx, event, control_flow, window_target);
                 }
+                Event::RedrawRequested(window_id) => {
+                    // Check if redraw is for energy window
+                    if let Some(energy_window) = &mut self.energy_window
+                        && energy_window.window_id() == Some(window_id) {
+                            let _ = energy_window.render();
+                        }
+                    // Otherwise it's for the main window, ggez handles it
+                }
                 Event::MainEventsCleared => {
                     self.update_and_draw(&mut ctx);
                 }
