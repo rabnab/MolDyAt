@@ -399,11 +399,8 @@ mod tests {
             "SIMD min_dist should be 0.0 for overlapping balls"
         );
 
-        // Note: Forces may differ in the error case because:
-        // - Scalar uses a fixed repulsive force of 100 when edge_dist <= 0
-        // - SIMD clamps distance to min_dist_const_force and uses normal LJ calculation
-        // Both approaches are valid; SIMD approach is more numerically stable
-        // We just verify both produce repulsive forces in the same direction
+        // Both scalar and SIMD now use max_force when edge_dist <= 0
+        // They should produce the same repulsive forces in the same direction
         assert!(
             scalar_result.force.x < 0.0,
             "Scalar force should be repulsive (negative x)"
