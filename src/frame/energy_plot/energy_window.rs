@@ -1,0 +1,461 @@
+use super::energy_data::{DisplayMode, SharedEnergyData};
+use super::energy_renderer::EnergyPlotRenderer;
+use softbuffer::{Context, Surface};
+use std::num::NonZeroU32;
+use std::rc::Rc;
+use winit::dpi::LogicalSize;
+use winit::event_loop::EventLoopWindowTarget;
+use winit::window::{Window, WindowBuilder, WindowId};
+
+const DEFAULT_WIDTH: u32 = 1024; // Reduced by 20% from 1280
+const DEFAULT_HEIGHT: u32 = 576; // Reduced by 20% from 720
+
+// Text rendering constants - reduced by 20% from doubled size (1.6x original)
+const CHAR_WIDTH: u32 = 13; // Reduced from 16 (was 8 original)
+const CHAR_HEIGHT: u32 = 19; // Reduced from 24 (was 12 original)
+const TOP_MARGIN: u32 = 16; // Reduced from 20 (was 10 original)
+
+// Base line count without status text
+// Header (3) + empty (1) + plot (30) + empty (1) + separator (1) +
+// legend (1) + separator (1) + empty (1) + help (1) + footer (1) = 41 lines
+const BASE_LINES: u32 = 41;
+
+// Status text adds approximately 9-10 lines (fps, balls, maxNeig, TotalE, Ekin, Epot, Temp, maxV, vCOM)
+const STATUS_TEXT_LINES: u32 = 10;
+
+// Calculate minimum heights
+const MIN_HEIGHT_WITHOUT_STATUS: u32 = TOP_MARGIN + BASE_LINES * CHAR_HEIGHT;
+const MIN_HEIGHT_WITH_STATUS: u32 = TOP_MARGIN + (BASE_LINES + STATUS_TEXT_LINES) * CHAR_HEIGHT;
+
+/// Energy plot window - a separate OS window for displaying energy plots
+pub struct EnergyPlotWindow {
+    pub window: Option<Rc<Window>>,
+    surface: Option<Surface>,
+    energy_data: SharedEnergyData,
+    display_mode: DisplayMode,
+    has_status_text: bool,
+}
+
+impl EnergyPlotWindow {
+    pub fn new(energy_data: SharedEnergyData, display_mode: DisplayMode) -> Self {
+        Self {
+            window: None,
+            surface: None,
+            energy_data,
+            display_mode,
+            has_status_text: false,
+        }
+    }
+
+    pub fn create(
+        &mut self,
+        window_target: &EventLoopWindowTarget<()>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let title = format!("Energy Plot 🐾 — {}", self.display_mode.as_str());
+
+        // Determine initial height based on whether status text is available
+        let initial_height = {
+            let data = self.energy_data.lock().unwrap();
+            if data.status_text.is_some() {
+                MIN_HEIGHT_WITH_STATUS
+            } else {
+                MIN_HEIGHT_WITHOUT_STATUS
+            }
+        };
+
+        let window = Rc::new(
+            WindowBuilder::new()
+                .with_title(title)
+                .with_inner_size(LogicalSize::new(DEFAULT_WIDTH, initial_height))
+                .with_resizable(true)
+                .with_min_inner_size(LogicalSize::new(512, 288)) // Reduced by 20% from 640x360
+                .build(window_target)?,
+        );
+
+        // Create softbuffer context and surface
+        // SAFETY: We own the window and it's valid for the lifetime of the context
+        let context = unsafe { Context::new(window.as_ref())? };
+        // SAFETY: We own the context and window, and they're valid for the lifetime of the surface
+        let surface = unsafe { Surface::new(&context, window.as_ref())? };
+
+        self.window = Some(window);
+        self.surface = Some(surface);
+        Ok(())
+    }
+
+    pub fn is_open(&self) -> bool {
+        self.window.is_some()
+    }
+
+    pub fn close(&mut self) {
+        self.window = None;
+    }
+
+    pub fn window_id(&self) -> Option<WindowId> {
+        self.window.as_ref().map(|w| w.id())
+    }
+
+    pub fn focus(&self) {
+        if let Some(window) = &self.window {
+            window.focus_window();
+        }
+    }
+
+    pub fn request_redraw(&self) {
+        if let Some(window) = &self.window {
+            window.request_redraw();
+        }
+    }
+
+    pub fn handle_resize(&mut self, _width: u32, _height: u32) {
+        self.request_redraw();
+    }
+
+    pub fn get_dimensions(&self) -> (u32, u32) {
+        if let Some(window) = &self.window {
+            let size = window.inner_size();
+            (size.width, size.height)
+        } else {
+            (DEFAULT_WIDTH, DEFAULT_HEIGHT)
+        }
+    }
+
+    pub fn get_energy_data(&self) -> &SharedEnergyData {
+        &self.energy_data
+    }
+
+    pub fn get_display_mode(&self) -> DisplayMode {
+        self.display_mode
+    }
+
+    pub fn set_display_mode(&mut self, mode: DisplayMode) {
+        self.display_mode = mode;
+        // Update window title
+        if let Some(window) = &self.window {
+            window.set_title(&format!("Energy Plot 🐾 — {}", mode.as_str()));
+        }
+    }
+
+    pub fn cycle_display_mode(&mut self) {
+        self.display_mode = self.display_mode.next();
+        // Update window title
+        if let Some(window) = &self.window {
+            window.set_title(&format!("Energy Plot 🐾 — {}", self.display_mode.as_str()));
+        }
+    }
+
+    pub fn render(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        if let (Some(window), Some(surface)) = (&self.window, &mut self.surface) {
+            // Check if status_text presence has changed and resize window if needed
+            let current_has_status = {
+                let data = self.energy_data.lock().unwrap();
+                data.status_text.is_some()
+            };
+
+            if current_has_status != self.has_status_text {
+                self.has_status_text = current_has_status;
+
+                // Resize window to appropriate height
+                let new_height = if current_has_status {
+                    MIN_HEIGHT_WITH_STATUS
+                } else {
+                    MIN_HEIGHT_WITHOUT_STATUS
+                };
+
+                let current_size = window.inner_size();
+                window.set_inner_size(LogicalSize::new(current_size.width, new_height));
+            }
+
+            let size = window.inner_size();
+            let width = size.width;
+            let height = size.height;
+
+            if width == 0 || height == 0 {
+                return Ok(());
+            }
+
+            surface.resize(
+                NonZeroU32::new(width).unwrap(),
+                NonZeroU32::new(height).unwrap(),
+            )?;
+
+            let mut buffer = surface.buffer_mut()?;
+
+            // Clear to dark background
+            let bg_color = 0xFF0A0A0A;
+            for pixel in buffer.iter_mut() {
+                *pixel = bg_color;
+            }
+
+            // Get status text and render to colored string
+            let (text, color_map) = {
+                let data = self.energy_data.lock().unwrap();
+                let status = data.status_text.clone();
+                drop(data);
+
+                let renderer = EnergyPlotRenderer::new(self.energy_data.clone());
+                renderer.render_to_colored_string(status.as_deref(), self.display_mode)
+            };
+
+            // Render text to pixels using colors
+            Self::render_colored_text_to_buffer(
+                &mut buffer,
+                width as usize,
+                height as usize,
+                &text,
+                &color_map,
+            );
+
+            buffer.present()?;
+        }
+        Ok(())
+    }
+
+    /// Colored bitmap font renderer - renders text with per-character colors
+    fn render_colored_text_to_buffer(
+        buffer: &mut [u32],
+        width: usize,
+        height: usize,
+        text: &str,
+        color_map: &[Vec<u32>],
+    ) {
+        const CHAR_WIDTH: usize = 16; // Doubled from 8
+        const CHAR_HEIGHT: usize = 24; // Doubled from 12
+
+        let mut y = 20; // Doubled from 10
+        for (line_idx, line) in text.lines().enumerate() {
+            if y + CHAR_HEIGHT >= height {
+                break;
+            }
+
+            let mut x = 20; // Doubled from 10
+            for (char_idx, ch) in line.chars().enumerate() {
+                if x + CHAR_WIDTH >= width {
+                    break;
+                }
+
+                // Get color for this character from color map
+                let color = if line_idx < color_map.len() && char_idx < color_map[line_idx].len() {
+                    color_map[line_idx][char_idx]
+                } else {
+                    0xFFCCCCCC // Default text color
+                };
+
+                // Render character using bitmap font with color (2x scaled)
+                Self::draw_char_scaled(buffer, width, x, y, ch, color);
+
+                x += CHAR_WIDTH;
+            }
+
+            y += CHAR_HEIGHT;
+        }
+    }
+
+    /// Simple bitmap font renderer - renders text as pixels
+    fn render_text_to_buffer(buffer: &mut [u32], width: usize, height: usize, text: &str) {
+        const CHAR_WIDTH: usize = 13; // Reduced by 20% from 16
+        const CHAR_HEIGHT: usize = 19; // Reduced by 20% from 24
+        const TEXT_COLOR: u32 = 0xFFCCCCCC;
+
+        let mut y = 16; // Reduced by 20% from 20
+        for line in text.lines() {
+            if y + CHAR_HEIGHT >= height {
+                break;
+            }
+
+            let mut x = 16; // Reduced by 20% from 20
+            for ch in line.chars() {
+                if x + CHAR_WIDTH >= width {
+                    break;
+                }
+
+                // Render actual character using bitmap font (1.6x scaled)
+                Self::draw_char_scaled(buffer, width, x, y, ch, TEXT_COLOR);
+
+                x += CHAR_WIDTH;
+            }
+
+            y += CHAR_HEIGHT;
+        }
+    }
+
+    /// Draw a character using a simple 8x8 bitmap font scaled to ~1.6x (13x19)
+    fn draw_char_scaled(
+        buffer: &mut [u32],
+        width: usize,
+        x: usize,
+        y: usize,
+        ch: char,
+        color: u32,
+    ) {
+        let glyph = Self::get_glyph(ch);
+
+        // Target size is 13x19, source is 8x8
+        // Use simple nearest-neighbor scaling
+        const TARGET_WIDTH: usize = 13;
+        const TARGET_HEIGHT: usize = 19;
+        const SOURCE_SIZE: usize = 8;
+
+        for ty in 0..TARGET_HEIGHT {
+            for tx in 0..TARGET_WIDTH {
+                // Map target pixel to source pixel
+                let sx = (tx * SOURCE_SIZE) / TARGET_WIDTH;
+                let sy = (ty * SOURCE_SIZE) / TARGET_HEIGHT;
+
+                if sy < SOURCE_SIZE && sx < SOURCE_SIZE {
+                    let row = glyph[sy];
+                    if row & (1 << (7 - sx)) != 0 {
+                        let px = x + tx;
+                        let py = y + ty;
+                        let idx = py * width + px;
+                        if idx < buffer.len() {
+                            buffer[idx] = color;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Get 8x8 bitmap for a character
+    fn get_glyph(ch: char) -> &'static [u8; 8] {
+        match ch {
+            ' ' => &[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
+            '!' => &[0x18, 0x18, 0x18, 0x18, 0x18, 0x00, 0x18, 0x00],
+            '"' => &[0x6C, 0x6C, 0x6C, 0x00, 0x00, 0x00, 0x00, 0x00],
+            '#' => &[0x36, 0x36, 0x7F, 0x36, 0x7F, 0x36, 0x36, 0x00],
+            '$' => &[0x0C, 0x3F, 0x68, 0x3E, 0x0B, 0x7E, 0x18, 0x00],
+            '%' => &[0x60, 0x66, 0x0C, 0x18, 0x30, 0x66, 0x06, 0x00],
+            '&' => &[0x38, 0x6C, 0x6C, 0x38, 0x6D, 0x66, 0x3B, 0x00],
+            '\'' => &[0x18, 0x18, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00],
+            '(' => &[0x0C, 0x18, 0x30, 0x30, 0x30, 0x18, 0x0C, 0x00],
+            ')' => &[0x30, 0x18, 0x0C, 0x0C, 0x0C, 0x18, 0x30, 0x00],
+            '*' => &[0x00, 0x18, 0x7E, 0x3C, 0x7E, 0x18, 0x00, 0x00],
+            '+' => &[0x00, 0x18, 0x18, 0x7E, 0x18, 0x18, 0x00, 0x00],
+            ',' => &[0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x18, 0x30],
+            '-' => &[0x00, 0x00, 0x00, 0x7E, 0x00, 0x00, 0x00, 0x00],
+            '.' => &[0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x18, 0x00],
+            '/' => &[0x00, 0x06, 0x0C, 0x18, 0x30, 0x60, 0x00, 0x00],
+            '0' => &[0x3C, 0x66, 0x6E, 0x7E, 0x76, 0x66, 0x3C, 0x00],
+            '1' => &[0x18, 0x38, 0x18, 0x18, 0x18, 0x18, 0x7E, 0x00],
+            '2' => &[0x3C, 0x66, 0x06, 0x0C, 0x18, 0x30, 0x7E, 0x00],
+            '3' => &[0x3C, 0x66, 0x06, 0x1C, 0x06, 0x66, 0x3C, 0x00],
+            '4' => &[0x0C, 0x1C, 0x3C, 0x6C, 0x7E, 0x0C, 0x0C, 0x00],
+            '5' => &[0x7E, 0x60, 0x7C, 0x06, 0x06, 0x66, 0x3C, 0x00],
+            '6' => &[0x1C, 0x30, 0x60, 0x7C, 0x66, 0x66, 0x3C, 0x00],
+            '7' => &[0x7E, 0x06, 0x0C, 0x18, 0x30, 0x30, 0x30, 0x00],
+            '8' => &[0x3C, 0x66, 0x66, 0x3C, 0x66, 0x66, 0x3C, 0x00],
+            '9' => &[0x3C, 0x66, 0x66, 0x3E, 0x06, 0x0C, 0x38, 0x00],
+            ':' => &[0x00, 0x18, 0x18, 0x00, 0x18, 0x18, 0x00, 0x00],
+            ';' => &[0x00, 0x18, 0x18, 0x00, 0x18, 0x18, 0x30, 0x00],
+            '<' => &[0x0C, 0x18, 0x30, 0x60, 0x30, 0x18, 0x0C, 0x00],
+            '=' => &[0x00, 0x00, 0x7E, 0x00, 0x7E, 0x00, 0x00, 0x00],
+            '>' => &[0x30, 0x18, 0x0C, 0x06, 0x0C, 0x18, 0x30, 0x00],
+            '?' => &[0x3C, 0x66, 0x0C, 0x18, 0x18, 0x00, 0x18, 0x00],
+            '@' => &[0x3C, 0x66, 0x6E, 0x6A, 0x6E, 0x60, 0x3C, 0x00],
+            'A' => &[0x3C, 0x66, 0x66, 0x7E, 0x66, 0x66, 0x66, 0x00],
+            'B' => &[0x7C, 0x66, 0x66, 0x7C, 0x66, 0x66, 0x7C, 0x00],
+            'C' => &[0x3C, 0x66, 0x60, 0x60, 0x60, 0x66, 0x3C, 0x00],
+            'D' => &[0x78, 0x6C, 0x66, 0x66, 0x66, 0x6C, 0x78, 0x00],
+            'E' => &[0x7E, 0x60, 0x60, 0x7C, 0x60, 0x60, 0x7E, 0x00],
+            'F' => &[0x7E, 0x60, 0x60, 0x7C, 0x60, 0x60, 0x60, 0x00],
+            'G' => &[0x3C, 0x66, 0x60, 0x6E, 0x66, 0x66, 0x3C, 0x00],
+            'H' => &[0x66, 0x66, 0x66, 0x7E, 0x66, 0x66, 0x66, 0x00],
+            'I' => &[0x7E, 0x18, 0x18, 0x18, 0x18, 0x18, 0x7E, 0x00],
+            'J' => &[0x3E, 0x0C, 0x0C, 0x0C, 0x0C, 0x6C, 0x38, 0x00],
+            'K' => &[0x66, 0x6C, 0x78, 0x70, 0x78, 0x6C, 0x66, 0x00],
+            'L' => &[0x60, 0x60, 0x60, 0x60, 0x60, 0x60, 0x7E, 0x00],
+            'M' => &[0x63, 0x77, 0x7F, 0x6B, 0x6B, 0x63, 0x63, 0x00],
+            'N' => &[0x66, 0x66, 0x76, 0x7E, 0x6E, 0x66, 0x66, 0x00],
+            'O' => &[0x3C, 0x66, 0x66, 0x66, 0x66, 0x66, 0x3C, 0x00],
+            'P' => &[0x7C, 0x66, 0x66, 0x7C, 0x60, 0x60, 0x60, 0x00],
+            'Q' => &[0x3C, 0x66, 0x66, 0x66, 0x6A, 0x6C, 0x36, 0x00],
+            'R' => &[0x7C, 0x66, 0x66, 0x7C, 0x6C, 0x66, 0x66, 0x00],
+            'S' => &[0x3C, 0x66, 0x60, 0x3C, 0x06, 0x66, 0x3C, 0x00],
+            'T' => &[0x7E, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x00],
+            'U' => &[0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x3C, 0x00],
+            'V' => &[0x66, 0x66, 0x66, 0x66, 0x66, 0x3C, 0x18, 0x00],
+            'W' => &[0x63, 0x63, 0x6B, 0x6B, 0x7F, 0x77, 0x63, 0x00],
+            'X' => &[0x66, 0x66, 0x3C, 0x18, 0x3C, 0x66, 0x66, 0x00],
+            'Y' => &[0x66, 0x66, 0x66, 0x3C, 0x18, 0x18, 0x18, 0x00],
+            'Z' => &[0x7E, 0x06, 0x0C, 0x18, 0x30, 0x60, 0x7E, 0x00],
+            '[' => &[0x3C, 0x30, 0x30, 0x30, 0x30, 0x30, 0x3C, 0x00],
+            '\\' => &[0x00, 0x60, 0x30, 0x18, 0x0C, 0x06, 0x00, 0x00],
+            ']' => &[0x3C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x3C, 0x00],
+            '^' => &[0x18, 0x3C, 0x66, 0x00, 0x00, 0x00, 0x00, 0x00],
+            '_' => &[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF],
+            '`' => &[0x30, 0x18, 0x0C, 0x00, 0x00, 0x00, 0x00, 0x00],
+            'a' => &[0x00, 0x00, 0x3C, 0x06, 0x3E, 0x66, 0x3E, 0x00],
+            'b' => &[0x60, 0x60, 0x7C, 0x66, 0x66, 0x66, 0x7C, 0x00],
+            'c' => &[0x00, 0x00, 0x3C, 0x66, 0x60, 0x66, 0x3C, 0x00],
+            'd' => &[0x06, 0x06, 0x3E, 0x66, 0x66, 0x66, 0x3E, 0x00],
+            'e' => &[0x00, 0x00, 0x3C, 0x66, 0x7E, 0x60, 0x3C, 0x00],
+            'f' => &[0x1C, 0x36, 0x30, 0x7C, 0x30, 0x30, 0x30, 0x00],
+            'g' => &[0x00, 0x00, 0x3E, 0x66, 0x66, 0x3E, 0x06, 0x3C],
+            'h' => &[0x60, 0x60, 0x7C, 0x66, 0x66, 0x66, 0x66, 0x00],
+            'i' => &[0x18, 0x00, 0x38, 0x18, 0x18, 0x18, 0x3C, 0x00],
+            'j' => &[0x0C, 0x00, 0x1C, 0x0C, 0x0C, 0x0C, 0x6C, 0x38],
+            'k' => &[0x60, 0x60, 0x66, 0x6C, 0x78, 0x6C, 0x66, 0x00],
+            'l' => &[0x38, 0x18, 0x18, 0x18, 0x18, 0x18, 0x3C, 0x00],
+            'm' => &[0x00, 0x00, 0x66, 0x7F, 0x6B, 0x6B, 0x63, 0x00],
+            'n' => &[0x00, 0x00, 0x7C, 0x66, 0x66, 0x66, 0x66, 0x00],
+            'o' => &[0x00, 0x00, 0x3C, 0x66, 0x66, 0x66, 0x3C, 0x00],
+            'p' => &[0x00, 0x00, 0x7C, 0x66, 0x66, 0x7C, 0x60, 0x60],
+            'q' => &[0x00, 0x00, 0x3E, 0x66, 0x66, 0x3E, 0x06, 0x07],
+            'r' => &[0x00, 0x00, 0x6C, 0x76, 0x60, 0x60, 0x60, 0x00],
+            's' => &[0x00, 0x00, 0x3E, 0x60, 0x3C, 0x06, 0x7C, 0x00],
+            't' => &[0x30, 0x30, 0x7C, 0x30, 0x30, 0x36, 0x1C, 0x00],
+            'u' => &[0x00, 0x00, 0x66, 0x66, 0x66, 0x66, 0x3E, 0x00],
+            'v' => &[0x00, 0x00, 0x66, 0x66, 0x66, 0x3C, 0x18, 0x00],
+            'w' => &[0x00, 0x00, 0x63, 0x6B, 0x6B, 0x7F, 0x36, 0x00],
+            'x' => &[0x00, 0x00, 0x66, 0x3C, 0x18, 0x3C, 0x66, 0x00],
+            'y' => &[0x00, 0x00, 0x66, 0x66, 0x66, 0x3E, 0x06, 0x3C],
+            'z' => &[0x00, 0x00, 0x7E, 0x0C, 0x18, 0x30, 0x7E, 0x00],
+            '{' => &[0x0E, 0x18, 0x18, 0x70, 0x18, 0x18, 0x0E, 0x00],
+            '|' => &[0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x00],
+            '}' => &[0x70, 0x18, 0x18, 0x0E, 0x18, 0x18, 0x70, 0x00],
+            '~' => &[0x31, 0x6B, 0x46, 0x00, 0x00, 0x00, 0x00, 0x00],
+            '─' => &[0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0x00],
+            '│' => &[0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18],
+            '└' => &[0x00, 0x00, 0x00, 0xFF, 0x18, 0x18, 0x18, 0x18],
+            '═' => &[0x00, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0x00, 0x00],
+            '🐾' => &[0x6C, 0xFE, 0xFE, 0x7C, 0x38, 0x10, 0x00, 0x00], // Simplified paw print
+            _ => &[0x3C, 0x42, 0x99, 0xA1, 0xA1, 0x99, 0x42, 0x3C],    // Unknown char (face)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_height_constants_calculation() {
+        // Verify height calculations are correct (reduced by 20% from doubled = 1.6x original)
+        assert_eq!(MIN_HEIGHT_WITHOUT_STATUS, 16 + 41 * 19); // Reduced: was 20 + 41 * 24
+        assert_eq!(MIN_HEIGHT_WITHOUT_STATUS, 795); // Reduced: was 1004
+
+        assert_eq!(MIN_HEIGHT_WITH_STATUS, 16 + (41 + 10) * 19); // Reduced: was 20 + (41 + 10) * 24
+        assert_eq!(MIN_HEIGHT_WITH_STATUS, 985); // Reduced: was 1244
+
+        // Difference should be STATUS_TEXT_LINES * CHAR_HEIGHT
+        assert_eq!(
+            MIN_HEIGHT_WITH_STATUS - MIN_HEIGHT_WITHOUT_STATUS,
+            STATUS_TEXT_LINES * CHAR_HEIGHT
+        );
+        assert_eq!(MIN_HEIGHT_WITH_STATUS - MIN_HEIGHT_WITHOUT_STATUS, 190); // Reduced: was 240
+    }
+
+    #[test]
+    fn test_energy_plot_window_new() {
+        use crate::frame::energy_plot::EnergyData;
+        use std::sync::{Arc, Mutex};
+
+        let energy_data = Arc::new(Mutex::new(EnergyData::new()));
+        let window = EnergyPlotWindow::new(energy_data, DisplayMode::All);
+
+        assert!(!window.is_open());
+        assert!(!window.has_status_text);
+        assert_eq!(window.get_display_mode(), DisplayMode::All);
+    }
+}

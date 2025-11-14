@@ -1,7 +1,7 @@
 use crate::frame::AppError;
 use ggez::GameError;
 
-mod ggez_event_handler;
+pub(crate) mod custom_event_loop;
 mod ggez_renderer;
 mod ggez_renderer_backend;
 mod ggez_renderer_builder;

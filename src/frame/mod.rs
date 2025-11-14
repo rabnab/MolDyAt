@@ -3,6 +3,7 @@ mod application_game_logic;
 pub(crate) mod application_log;
 mod application_master;
 mod application_sim_stats;
+pub(crate) mod energy_plot;
 pub(crate) mod ggez;
 mod renderer;
 pub(crate) mod window;

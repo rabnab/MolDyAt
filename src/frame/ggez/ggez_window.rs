@@ -1,6 +1,6 @@
 use crate::frame::MainContent;
 use crate::frame::application_master::WindowDefinitionRef;
-use crate::frame::ggez::ggez_event_handler::GgezEventHandler;
+use crate::frame::ggez::custom_event_loop::CustomEventLoop;
 use crate::frame::ggez::ggez_renderer::GgezRenderer;
 use crate::frame::ggez::ggez_renderer_builder::GgezRendererBuilder;
 use crate::frame::window::window_definition::WindowDefinition;
@@ -131,8 +131,8 @@ impl Window<GgezRenderer> for GgezWindow {
 
         // rend_ref.borrow_mut().initialize(&ctx, application.cell_grid.get_cell_size());
 
-        let event_handler = GgezEventHandler::new(application, rend_ref.clone());
+        let custom_loop = CustomEventLoop::new(application, rend_ref.clone());
 
-        ggez::event::run(ctx, event_loop, event_handler);
+        custom_loop.run(ctx, event_loop);
     }
 }

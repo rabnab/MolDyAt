@@ -1,3 +1,4 @@
+use crate::frame::application_master::StatsAccumulator;
 use crate::objects2d::ball_impl::Ball2D;
 use crate::objects2d::{Rect, Vec2D};
 use std::collections::VecDeque;
@@ -129,7 +130,8 @@ impl SimStats {
 
     pub(crate) fn get_status_text(&self, fps: u32, num_balls: usize, hood_cnt: usize) -> String {
         format!(
-            "fps {} time: {:.1} ({})\n#Balls: {} #hoodCnt: {}/{}\nmaxNeig: {}\nTotalE: {:.3E}\nTemp: {:.3}\nmaxV: {:.2}\nvCOM: {}",
+            "fps {} time: {:.1} ({})\n#Balls: {} #hoodCnt: {}/{}\nmaxNeig: {}\n\
+                TotalE: {:.3E}\nEkin: {:.3E}\nEpot: {:.3E}\nTemp: {:.3}\nmaxV: {:.2}\nvCOM: {}",
             fps,
             self.time,
             self.speedup,
@@ -138,6 +140,8 @@ impl SimStats {
             hood_cnt,
             self.max_neighbours,
             self.energy_pot + self.energy_kin,
+            self.energy_kin,
+            self.energy_pot,
             self.temperature,
             self.max_v,
             //self.sim.min_dist,
@@ -145,25 +149,25 @@ impl SimStats {
         )
     }
 
-    pub fn update(&mut self, kin: f32, pot: f32, max_id: usize, max_v: f32, dt: f32, v_com: Vec2D) {
-        self.energy_kin = kin;
-        self.energy_pot = pot;
+    pub fn update(&mut self, dt: f32, stats_acumulator: StatsAccumulator) {
+        self.energy_kin = stats_acumulator.kin;
+        self.energy_pot = stats_acumulator.pot;
         if self.step.is_multiple_of(PLT_STEP) {
             if self.v_pot.len() >= PLT_SIZE {
                 self.v_pot.pop_front();
             }
-            self.v_pot.push_back(pot);
+            self.v_pot.push_back(stats_acumulator.pot);
             if self.v_kin.len() >= PLT_SIZE {
                 self.v_kin.pop_front();
             }
-            self.v_kin.push_back(kin);
+            self.v_kin.push_back(stats_acumulator.kin);
         }
 
-        self.max_v = max_v;
-        self.max_id = max_id;
+        self.max_v = stats_acumulator.max_v;
+        self.max_id = stats_acumulator.max_id;
         self.time += dt;
         self.step += 1;
-        self.v_com = v_com;
+        self.v_com = stats_acumulator.v_com;
     }
 
     // Calculate temperature from the ball slice directly
@@ -202,7 +206,11 @@ impl SimStats {
             max_neighbours = max_neighbours.max(cur.hood.get_number_of_neighbors());
         }
         self.max_neighbours = max_neighbours;
-        self.temperature = sum_rel_kin_doubled / 3.0 / (v_balls.len() as f32);
+        // For 2D: (1/2) * m * v² per degree of freedom
+        // Total kinetic energy in COM frame = (1/2) * sum(m * v_rel²)
+        // Temperature = (2 * KE) / (2 * N * k_B) = KE / (N * k_B)
+        //self.temperature = sum_rel_kin_doubled / 3.0 / (v_balls.len() as f32);
+        self.temperature = sum_rel_kin_doubled / 2.0 / (v_balls.len() as f32);
     }
 
     pub(crate) fn get_update_hood_cnt(&self) -> usize {
@@ -238,21 +246,72 @@ impl Default for SimStats {
     }
 }
 
+impl SimStats {
+    pub(crate) fn get_kinetic_energy(&self) -> f32 {
+        self.energy_kin
+    }
+
+    pub(crate) fn get_potential_energy(&self) -> f32 {
+        self.energy_pot
+    }
+
+    pub(crate) fn get_time(&self) -> f32 {
+        self.time
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     //use float_cmp::approx_eq;
-
-    impl SimStats {
-        pub(crate) fn get_kinetic_energy(&self) -> f32 {
-            self.energy_kin
-        }
-    }
 
     #[test]
     fn test_defaults() {
         let default_sim_stats = SimStats::default();
         assert_eq!(default_sim_stats.energy_pot, 0.);
         assert_eq!(default_sim_stats.energy_kin, 0.);
+    }
+
+    #[test]
+    fn test_get_kinetic_energy() {
+        let mut stats = SimStats::default();
+        assert_eq!(stats.get_kinetic_energy(), 0.0);
+
+        stats.energy_kin = 42.5;
+        assert_eq!(stats.get_kinetic_energy(), 42.5);
+    }
+
+    #[test]
+    fn test_get_potential_energy() {
+        let mut stats = SimStats::default();
+        assert_eq!(stats.get_potential_energy(), 0.0);
+
+        stats.energy_pot = 17.3;
+        assert_eq!(stats.get_potential_energy(), 17.3);
+    }
+
+    #[test]
+    fn test_get_time() {
+        let mut stats = SimStats::default();
+        assert_eq!(stats.get_time(), 0.0);
+
+        stats.time = 123.456;
+        assert_eq!(stats.get_time(), 123.456);
+    }
+
+    #[test]
+    fn test_energy_getters_independence() {
+        let mut stats = SimStats::default();
+        stats.energy_kin = 10.0;
+        stats.energy_pot = 20.0;
+        stats.time = 5.0;
+
+        assert_eq!(stats.get_kinetic_energy(), 10.0);
+        assert_eq!(stats.get_potential_energy(), 20.0);
+        assert_eq!(stats.get_time(), 5.0);
+
+        // Verify getters don't modify state
+        assert_eq!(stats.get_kinetic_energy(), 10.0);
+        assert_eq!(stats.get_potential_energy(), 20.0);
     }
 }

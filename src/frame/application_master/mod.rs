@@ -29,6 +29,16 @@ pub struct MainContent {
     was_paused_for_resize: bool,
     update_hood_at_frame_start: usize,
 }
+
+pub struct StatsAccumulator {
+    pub(crate) pot: f32,
+    pub(crate) kin: f32,
+    pub(crate) v_com: Vec2D,
+    sum_mass: f32,
+    pub(crate) max_v: f32,
+    pub(crate) max_id: usize,
+}
+
 // type alias to shorten signatures (optional)
 pub(crate) type WindowDefinitionRef = Rc<RefCell<WindowDefinition>>;
 pub(crate) type RendererRef = Rc<RefCell<dyn Renderer>>;
