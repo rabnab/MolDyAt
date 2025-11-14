@@ -32,14 +32,28 @@ fn init(resource_dir: PathBuf, reg_x: f32, reg_y: f32) -> AppResult<GgezWindow> 
     Ok(GgezWindow::new(resource_dir, reg_x, reg_y))
 }
 
-/// Initialize Rayon thread pool with explicit configuration
+/// Initialize Rayon thread pool for parallel physics computations.
+///
+/// Rayon is used for:
+/// - Parallel force calculations (main performance bottleneck)
+/// - Parallel position updates
+/// - Parallel neighbor statistics gathering
+///
+/// # Thread Count
+/// Uses (CPU cores - 2) to leave headroom for:
+/// - Main rendering thread
+/// - OS/background processes
+///
+/// This prevents CPU saturation and maintains UI responsiveness.
 fn init_rayon() {
     use rayon::ThreadPoolBuilder;
 
-    let num_cpus = num_cpus::get() - 2;
+    const RESERVED_THREADS: usize = 2; // Reserve for main thread + OS
+    let num_cpus = num_cpus::get().saturating_sub(RESERVED_THREADS).max(1);
+
     ThreadPoolBuilder::new()
         .num_threads(num_cpus)
-        .thread_name(|i| format!("rayon-worker-{}", i))
+        .thread_name(|i| format!("rayon-worker-{}", i)) // Named threads for easier profiling
         .build_global()
         .expect("Failed to initialize Rayon thread pool");
 

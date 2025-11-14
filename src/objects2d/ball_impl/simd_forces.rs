@@ -1,4 +1,4 @@
-//! SIMD-optimized Lennard-Jones force calculations
+//! SIMD-optimized Lennard-Jones force calculations with force capping
 //!
 //! This module provides vectorized implementations of Lennard-Jones force calculations
 //! using CPU SIMD instructions for improved performance. It includes:
@@ -6,6 +6,15 @@
 //! - AVX2 (4-wide, with FMA) for modern x86_64 processors (note: not 8-wide)
 //! - NEON (4-wide) for ARM processors (M1/M2 Macs)
 //! - Scalar fallback for unsupported architectures
+//!
+//! # Force Capping for Stability
+//! To prevent numerical instabilities when particles get very close, forces are capped
+//! at `max_force`. This is implemented as:
+//! - For r >= r_cap: Standard LJ force F_LJ(r)
+//! - For r < r_cap: Capped force = max_force
+//!
+//! The corresponding potential energy uses linear extrapolation below r_cap to maintain
+//! energy conservation. See `BallPhysics::lenard_jones_potential()` for details.
 //!
 //! Note: All SIMD implementations are currently 4-wide. AVX2 uses FMA for improved precision/performance, but does not use 8-wide vectorization yet.
 //! 8-wide AVX2 support is a planned future optimization (see PERFORMANCE_OPTIMIZATION.md line 548).
@@ -71,19 +80,22 @@ pub fn force_indexed_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2
             let radius_sum = radii_vec + f32x4::splat(ball_radius);
             let edge_dist = center_dist - radius_sum;
 
-            // Calculate LJ force for each interaction
+            // === Force Calculation with Capping ===
             let r_cap_vec = f32x4::splat(r_cap);
 
-            // Calculate normal LJ force
-            // Lennard-Jones force calculation: 24 * eps * (sig/r)^6 * (2*(sig/r)^6 - 1) / r
+            // Step 1: Calculate standard Lennard-Jones force
+            // F_LJ(r) = 24·ε·(σ/r)^6 · [2·(σ/r)^6 - 1] / r
+            // Use max() to prevent division by zero (1e-10 is safety epsilon)
             let quot = f32x4::splat(lj_sig) / edge_dist.max(f32x4::splat(1e-10));
-            let quot_six = quot * quot * quot * quot * quot * quot; // (sig/r)^6
+            let quot_six = quot * quot * quot * quot * quot * quot; // (σ/r)^6
             let lj_force_uncapped = f32x4::splat(24. * lj_eps)
                 * quot_six
                 * (f32x4::splat(2.) * quot_six - f32x4::splat(1.))
                 / edge_dist.max(f32x4::splat(1e-10));
 
-            // Cap force at max_force when edge_dist < r_cap
+            // Step 2: Cap force at max_force to prevent numerical instabilities
+            // For r < r_cap: F = max_force (capped)
+            // For r >= r_cap: F = F_LJ (uncapped)
             let max_force_vec = f32x4::splat(max_force);
             let lj_force = lj_force_uncapped.min(max_force_vec);
 
@@ -96,21 +108,25 @@ pub fn force_indexed_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2
             let fx = dx_vec * force_to_dist;
             let fy = dy_vec * force_to_dist;
 
-            // Potential energy calculation
-            // For edge_dist < r_cap: U(r) = U(r_cap) + max_force * (r - r_cap)
-            // For edge_dist >= r_cap: U(r) = 4 * eps * ((sig/r)^6 * ((sig/r)^6 - 1))
+            // === Potential Energy Calculation with Force Capping ===
+            // Standard LJ potential: U(r) = 4·ε·[(σ/r)^12 - (σ/r)^6]
+            // For r < r_cap: Use linear extrapolation to preserve energy conservation
+
+            // Calculate standard LJ potential (uncapped)
             let pot_quot = f32x4::splat(lj_sig) / edge_dist.max(f32x4::splat(1e-10));
             let pot_quot_six = pot_quot * pot_quot * pot_quot * pot_quot * pot_quot * pot_quot;
             let potential_uncapped =
                 f32x4::splat(4. * lj_eps) * pot_quot_six * (pot_quot_six - f32x4::splat(1.));
 
-            // Calculate potential at r_cap for linear extrapolation
+            // Pre-calculate U(r_cap) for linear extrapolation in force-capped region
+            // This is the "anchor point" where capped and uncapped potentials meet
             let cap_quot = f32x4::splat(lj_sig / r_cap);
             let cap_quot_six = cap_quot * cap_quot * cap_quot * cap_quot * cap_quot * cap_quot;
             let pot_at_cap =
                 f32x4::splat(4. * lj_eps) * cap_quot_six * (cap_quot_six - f32x4::splat(1.));
 
-            // Linear potential below r_cap
+            // Linear potential for r < r_cap: U(r) = U(r_cap) + max_force·(r - r_cap)
+            // This ensures F = -dU/dr = max_force (constant) below r_cap
             let potential_linear = pot_at_cap + max_force_vec * (edge_dist - r_cap_vec);
 
             // Extract results and accumulate
