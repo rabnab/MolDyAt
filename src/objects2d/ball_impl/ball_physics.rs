@@ -111,15 +111,16 @@ impl BallPhysics {
         //    4 LJ_EPS 1/2 * (-1/2)
         //    - LJ_EPS
 
-        if dist_btw_balls < self.r_cap {
+        let r_cap = self.get_force_cap_distance();
+        if dist_btw_balls < r_cap {
             // Below cap distance: linear potential
-            let quot = self.constants.lj_sig / self.r_cap;
+            let quot = self.constants.lj_sig / r_cap;
             let quot_six = quot.powi(6);
             let pot_at_cap = 4. * self.constants.lj_eps * quot_six * (quot_six - 1.);
 
             // Potential is linear: U(r) = U(r_cap) + max_force * (r - r_cap)
             // Note: force is positive (repulsive), so potential increases as r decreases
-            return pot_at_cap + self.constants.max_force * (dist_btw_balls - self.r_cap);
+            return pot_at_cap + self.constants.max_force * (dist_btw_balls - r_cap);
         }
 
         let quot = self.constants.lj_sig / dist_btw_balls;
@@ -197,8 +198,9 @@ impl BallPhysics {
         _id: usize,
     ) -> f32 {
         let dist = dist_of_balls - radius_sum;
+        let r_cap = self.get_force_cap_distance();
 
-        if dist < self.r_cap {
+        if dist < r_cap {
             // Force is constant at max_force below cap distance
             self.constants.max_force
         } else {
