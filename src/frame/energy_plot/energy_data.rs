@@ -1,6 +1,40 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
+/// Energy display mode - controls which energy traces are shown
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
+pub enum DisplayMode {
+    #[default]
+    Pot = 0,   // Potential energy only
+    Kin = 1,   // Kinetic energy only
+    Total = 2, // Total energy only
+    All = 3,   // All three traces
+}
+
+impl DisplayMode {
+    /// Cycle to the next display mode
+    pub fn next(self) -> Self {
+        match self {
+            DisplayMode::Pot => DisplayMode::Kin,
+            DisplayMode::Kin => DisplayMode::Total,
+            DisplayMode::Total => DisplayMode::All,
+            DisplayMode::All => DisplayMode::Pot,
+        }
+    }
+
+    /// Get a short string representation for window title
+    pub fn as_str(self) -> &'static str {
+        match self {
+            DisplayMode::Pot => "pot",
+            DisplayMode::Kin => "kin",
+            DisplayMode::Total => "total",
+            DisplayMode::All => "all",
+        }
+    }
+}
+
+
 /// Shared energy data structure for communication between main simulation and energy plot window
 #[derive(Clone)]
 pub struct EnergyData {

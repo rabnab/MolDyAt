@@ -54,25 +54,30 @@ impl CustomEventLoop {
         window_target: &winit::event_loop::EventLoopWindowTarget<()>,
     ) {
         if self.energy_window.is_none() {
-            // Create and open energy window
-            let mut window = EnergyPlotWindow::new(self.energy_data.clone());
+            // Create and open energy window with default mode
+            let mut window = EnergyPlotWindow::new(
+                self.energy_data.clone(),
+                crate::frame::energy_plot::DisplayMode::default(),
+            );
             if let Err(e) = window.create(window_target) {
                 eprintln!("Failed to create energy window: {}", e);
                 return;
             }
             self.energy_window = Some(window);
-        } else if let Some(window) = &self.energy_window {
+        } else if let Some(window) = &mut self.energy_window {
             if window.is_open() {
-                // Close the window
-                self.energy_window = None;
+                // Cycle display mode instead of closing
+                window.cycle_display_mode();
+                window.request_redraw();
             } else {
-                // Reopen if closed
-                let mut window = EnergyPlotWindow::new(self.energy_data.clone());
-                if let Err(e) = window.create(window_target) {
+                // Reopen if closed with last mode
+                let last_mode = window.get_display_mode();
+                let mut new_window = EnergyPlotWindow::new(self.energy_data.clone(), last_mode);
+                if let Err(e) = new_window.create(window_target) {
                     eprintln!("Failed to create energy window: {}", e);
                     return;
                 }
-                self.energy_window = Some(window);
+                self.energy_window = Some(new_window);
             }
         }
     }

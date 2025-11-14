@@ -1,4 +1,4 @@
-use super::energy_data::SharedEnergyData;
+use super::energy_data::{DisplayMode, SharedEnergyData};
 use super::energy_renderer::EnergyPlotRenderer;
 use softbuffer::{Context, Surface};
 use std::num::NonZeroU32;
@@ -15,14 +15,16 @@ pub struct EnergyPlotWindow {
     pub window: Option<Rc<Window>>,
     surface: Option<Surface>,
     energy_data: SharedEnergyData,
+    display_mode: DisplayMode,
 }
 
 impl EnergyPlotWindow {
-    pub fn new(energy_data: SharedEnergyData) -> Self {
+    pub fn new(energy_data: SharedEnergyData, display_mode: DisplayMode) -> Self {
         Self {
             window: None,
             surface: None,
             energy_data,
+            display_mode,
         }
     }
 
@@ -30,9 +32,10 @@ impl EnergyPlotWindow {
         &mut self,
         window_target: &EventLoopWindowTarget<()>,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        let title = format!("Energy Plot 🐾 — {}", self.display_mode.as_str());
         let window = Rc::new(
             WindowBuilder::new()
-                .with_title("Energy Plot 🐾")
+                .with_title(title)
                 .with_inner_size(LogicalSize::new(DEFAULT_WIDTH, DEFAULT_HEIGHT))
                 .with_resizable(true)
                 .with_min_inner_size(LogicalSize::new(320, 180))
@@ -91,6 +94,26 @@ impl EnergyPlotWindow {
         &self.energy_data
     }
 
+    pub fn get_display_mode(&self) -> DisplayMode {
+        self.display_mode
+    }
+
+    pub fn set_display_mode(&mut self, mode: DisplayMode) {
+        self.display_mode = mode;
+        // Update window title
+        if let Some(window) = &self.window {
+            window.set_title(&format!("Energy Plot 🐾 — {}", mode.as_str()));
+        }
+    }
+
+    pub fn cycle_display_mode(&mut self) {
+        self.display_mode = self.display_mode.next();
+        // Update window title
+        if let Some(window) = &self.window {
+            window.set_title(&format!("Energy Plot 🐾 — {}", self.display_mode.as_str()));
+        }
+    }
+
     pub fn render(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         if let (Some(window), Some(surface)) = (&self.window, &mut self.surface) {
             let size = window.inner_size();
@@ -121,7 +144,7 @@ impl EnergyPlotWindow {
                 drop(data);
 
                 let renderer = EnergyPlotRenderer::new(self.energy_data.clone());
-                renderer.render_to_string(status.as_deref())
+                renderer.render_to_string(status.as_deref(), self.display_mode)
             };
 
             // Render text to pixels using simple 8x8 bitmap font
