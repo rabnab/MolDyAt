@@ -10,12 +10,29 @@ use winit::window::{Window, WindowBuilder, WindowId};
 const DEFAULT_WIDTH: u32 = 640;
 const DEFAULT_HEIGHT: u32 = 360;
 
+// Text rendering constants
+const CHAR_HEIGHT: u32 = 12;
+const TOP_MARGIN: u32 = 10;
+
+// Base line count without status text
+// Header (3) + empty (1) + plot (30) + empty (1) + separator (1) +
+// legend (1) + separator (1) + empty (1) + help (1) + footer (1) = 41 lines
+const BASE_LINES: u32 = 41;
+
+// Status text adds approximately 7-8 lines
+const STATUS_TEXT_LINES: u32 = 8;
+
+// Calculate minimum heights
+const MIN_HEIGHT_WITHOUT_STATUS: u32 = TOP_MARGIN + BASE_LINES * CHAR_HEIGHT;
+const MIN_HEIGHT_WITH_STATUS: u32 = TOP_MARGIN + (BASE_LINES + STATUS_TEXT_LINES) * CHAR_HEIGHT;
+
 /// Energy plot window - a separate OS window for displaying energy plots
 pub struct EnergyPlotWindow {
     pub window: Option<Rc<Window>>,
     surface: Option<Surface>,
     energy_data: SharedEnergyData,
     display_mode: DisplayMode,
+    has_status_text: bool,
 }
 
 impl EnergyPlotWindow {
@@ -25,6 +42,7 @@ impl EnergyPlotWindow {
             surface: None,
             energy_data,
             display_mode,
+            has_status_text: false,
         }
     }
 
@@ -33,10 +51,21 @@ impl EnergyPlotWindow {
         window_target: &EventLoopWindowTarget<()>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let title = format!("Energy Plot 🐾 — {}", self.display_mode.as_str());
+
+        // Determine initial height based on whether status text is available
+        let initial_height = {
+            let data = self.energy_data.lock().unwrap();
+            if data.status_text.is_some() {
+                MIN_HEIGHT_WITH_STATUS
+            } else {
+                MIN_HEIGHT_WITHOUT_STATUS
+            }
+        };
+
         let window = Rc::new(
             WindowBuilder::new()
                 .with_title(title)
-                .with_inner_size(LogicalSize::new(DEFAULT_WIDTH, DEFAULT_HEIGHT))
+                .with_inner_size(LogicalSize::new(DEFAULT_WIDTH, initial_height))
                 .with_resizable(true)
                 .with_min_inner_size(LogicalSize::new(320, 180))
                 .build(window_target)?,
@@ -116,6 +145,26 @@ impl EnergyPlotWindow {
 
     pub fn render(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         if let (Some(window), Some(surface)) = (&self.window, &mut self.surface) {
+            // Check if status_text presence has changed and resize window if needed
+            let current_has_status = {
+                let data = self.energy_data.lock().unwrap();
+                data.status_text.is_some()
+            };
+
+            if current_has_status != self.has_status_text {
+                self.has_status_text = current_has_status;
+
+                // Resize window to appropriate height
+                let new_height = if current_has_status {
+                    MIN_HEIGHT_WITH_STATUS
+                } else {
+                    MIN_HEIGHT_WITHOUT_STATUS
+                };
+
+                let current_size = window.inner_size();
+                window.set_inner_size(LogicalSize::new(current_size.width, new_height));
+            }
+
             let size = window.inner_size();
             let width = size.width;
             let height = size.height;
@@ -352,5 +401,40 @@ impl EnergyPlotWindow {
             '🐾' => &[0x6C, 0xFE, 0xFE, 0x7C, 0x38, 0x10, 0x00, 0x00], // Simplified paw print
             _ => &[0x3C, 0x42, 0x99, 0xA1, 0xA1, 0x99, 0x42, 0x3C],    // Unknown char (face)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_height_constants_calculation() {
+        // Verify height calculations are correct
+        assert_eq!(MIN_HEIGHT_WITHOUT_STATUS, 10 + 41 * 12);
+        assert_eq!(MIN_HEIGHT_WITHOUT_STATUS, 502);
+
+        assert_eq!(MIN_HEIGHT_WITH_STATUS, 10 + (41 + 8) * 12);
+        assert_eq!(MIN_HEIGHT_WITH_STATUS, 598);
+
+        // Difference should be STATUS_TEXT_LINES * CHAR_HEIGHT
+        assert_eq!(
+            MIN_HEIGHT_WITH_STATUS - MIN_HEIGHT_WITHOUT_STATUS,
+            STATUS_TEXT_LINES * CHAR_HEIGHT
+        );
+        assert_eq!(MIN_HEIGHT_WITH_STATUS - MIN_HEIGHT_WITHOUT_STATUS, 96);
+    }
+
+    #[test]
+    fn test_energy_plot_window_new() {
+        use crate::frame::energy_plot::EnergyData;
+        use std::sync::{Arc, Mutex};
+
+        let energy_data = Arc::new(Mutex::new(EnergyData::new()));
+        let window = EnergyPlotWindow::new(energy_data, DisplayMode::All);
+
+        assert!(!window.is_open());
+        assert!(!window.has_status_text);
+        assert_eq!(window.get_display_mode(), DisplayMode::All);
     }
 }
