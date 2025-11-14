@@ -27,6 +27,15 @@ This is a **molecular dynamics physics simulation** implementing Lennard-Jones p
 - Address all clippy warnings unless there's a documented reason to allow them
 - Optional: Add CI checks for `cargo +nightly fmt -- --check` and `cargo +nightly test`
 
+### Line Endings
+- **Always use LF (Unix-style) line endings** for all source files
+- **RustRover Configuration**:
+  1. Go to `File` → `Settings` (or `Ctrl+Alt+S` on Windows)
+  2. Navigate to `Editor` → `Code Style`
+  3. Under `Line separator`, select `Unix and macOS (\n)`
+  4. Click `Apply` and `OK`
+  5. Alternatively, set per-project: Right-click project root → `Line Separators` → `LF - Unix and macOS (\n)`
+
 ### Safety & Correctness
 - **Avoid `unsafe` code** unless absolutely necessary for performance-critical sections
 - When `unsafe` is required:
