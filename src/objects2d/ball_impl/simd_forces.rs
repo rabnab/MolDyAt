@@ -31,7 +31,8 @@ pub fn force_indexed_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2
 
     let lj_sig = physics.constants.lj_sig;
     let lj_eps = physics.constants.lj_eps;
-    let min_dist_const_force = physics.constants.lj_sig * 0.75;
+    let max_force = physics.constants.max_force;
+    let r_cap = physics.get_force_cap_distance();
 
     // Process neighbors in chunks of 4 for SIMD
     let chunks = neighbour_indices.chunks(4);
@@ -71,19 +72,20 @@ pub fn force_indexed_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2
             let edge_dist = center_dist - radius_sum;
 
             // Calculate LJ force for each interaction
-            let mut dist_for_force = edge_dist;
-            let min_dist_vec = f32x4::splat(min_dist_const_force);
+            let r_cap_vec = f32x4::splat(r_cap);
 
-            // Clamp distance to min_dist_const_force
-            dist_for_force = dist_for_force.max(min_dist_vec);
-
+            // Calculate normal LJ force
             // Lennard-Jones force calculation: 24 * eps * (sig/r)^6 * (2*(sig/r)^6 - 1) / r
-            let quot = f32x4::splat(lj_sig) / dist_for_force;
+            let quot = f32x4::splat(lj_sig) / edge_dist.max(f32x4::splat(1e-10));
             let quot_six = quot * quot * quot * quot * quot * quot; // (sig/r)^6
-            let lj_force = f32x4::splat(24. * lj_eps)
+            let lj_force_uncapped = f32x4::splat(24. * lj_eps)
                 * quot_six
                 * (f32x4::splat(2.) * quot_six - f32x4::splat(1.))
-                / dist_for_force;
+                / edge_dist.max(f32x4::splat(1e-10));
+
+            // Cap force at max_force when edge_dist < r_cap
+            let max_force_vec = f32x4::splat(max_force);
+            let lj_force = lj_force_uncapped.min(max_force_vec);
 
             // Force direction: force / center_dist
             // Avoid division by zero: if center_dist is 0, use a small epsilon to prevent Inf/NaN
@@ -94,17 +96,29 @@ pub fn force_indexed_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2
             let fx = dx_vec * force_to_dist;
             let fy = dy_vec * force_to_dist;
 
-            // Potential energy: 4 * eps * (quot^6 * (quot^6 - 1))
-            let pot_quot = f32x4::splat(lj_sig) / edge_dist.max(min_dist_vec);
+            // Potential energy calculation
+            // For edge_dist < r_cap: U(r) = U(r_cap) + max_force * (r - r_cap)
+            // For edge_dist >= r_cap: U(r) = 4 * eps * ((sig/r)^6 * ((sig/r)^6 - 1))
+            let pot_quot = f32x4::splat(lj_sig) / edge_dist.max(f32x4::splat(1e-10));
             let pot_quot_six = pot_quot * pot_quot * pot_quot * pot_quot * pot_quot * pot_quot;
-            let potential =
+            let potential_uncapped =
                 f32x4::splat(4. * lj_eps) * pot_quot_six * (pot_quot_six - f32x4::splat(1.));
+
+            // Calculate potential at r_cap for linear extrapolation
+            let cap_quot = f32x4::splat(lj_sig / r_cap);
+            let cap_quot_six = cap_quot * cap_quot * cap_quot * cap_quot * cap_quot * cap_quot;
+            let pot_at_cap =
+                f32x4::splat(4. * lj_eps) * cap_quot_six * (cap_quot_six - f32x4::splat(1.));
+
+            // Linear potential below r_cap
+            let potential_linear = pot_at_cap + max_force_vec * (edge_dist - r_cap_vec);
 
             // Extract results and accumulate
             let fx_arr: [f32; 4] = fx.into();
             let fy_arr: [f32; 4] = fy.into();
             let edge_dist_arr: [f32; 4] = edge_dist.into();
-            let pot_arr: [f32; 4] = potential.into();
+            let pot_uncapped_arr: [f32; 4] = potential_uncapped.into();
+            let pot_linear_arr: [f32; 4] = potential_linear.into();
 
             for i in 0..4 {
                 if valid_mask[i] {
@@ -118,7 +132,7 @@ pub fn force_indexed_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2
                             let center_dist = dist_vec.norm();
                             // Avoid division by zero
                             let force_to_dist_val = if center_dist > 0. {
-                                100.0 / center_dist
+                                max_force / center_dist
                             } else {
                                 0.0
                             };
@@ -144,10 +158,18 @@ pub fn force_indexed_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2
                             }
                         }
                     } else {
-                        // Normal Lennard-Jones force
+                        // Normal force application
                         force.x += fx_arr[i];
                         force.y += fy_arr[i];
-                        total_pot += pot_arr[i];
+
+                        // Select correct potential based on distance
+                        let pot = if edge_dist_arr[i] < r_cap {
+                            pot_linear_arr[i]
+                        } else {
+                            pot_uncapped_arr[i]
+                        };
+                        total_pot += pot;
+
                         // Update min_dist
                         min_dist = if f32::is_nan(min_dist) {
                             edge_dist_arr[i]
@@ -182,12 +204,8 @@ pub fn force_indexed_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2
             let edge_dist = center_dist - radius_sum;
 
             if center_dist > 0. {
-                let dist_for_force = f32::max(edge_dist, min_dist_const_force);
-
-                // Lennard-Jones force
-                let quot = lj_sig / dist_for_force;
-                let quot_six = quot.powi(6);
-                let lj_force = 24. * lj_eps * quot_six * (2. * quot_six - 1.) / dist_for_force;
+                // Calculate force using physics helper
+                let lj_force = physics.lenard_jones_force(center_dist, radius_sum, b.get_id());
 
                 let force_to_dist_val = lj_force / center_dist;
                 let local_force_x = dist_vec.x * force_to_dist_val;
@@ -197,9 +215,7 @@ pub fn force_indexed_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2
                 force.y += local_force_y;
 
                 // Potential
-                let pot_quot = lj_sig / f32::max(edge_dist, min_dist_const_force);
-                let pot_quot_six = pot_quot.powi(6);
-                total_pot += 4. * lj_eps * pot_quot_six * (pot_quot_six - 1.);
+                total_pot += physics.lenard_jones_potential(edge_dist);
 
                 // Update min_dist
                 if edge_dist > 0. {

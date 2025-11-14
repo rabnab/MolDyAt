@@ -30,7 +30,7 @@ impl Default for PhysicsConstants {
             gravity: 0.0,
             //gravity: 1.0,
             damping: 1.0,
-            max_force: 1000.0,
+            max_force: 100.0,
             //softening: 0.01,
             softening: 0.0,
             lj_cutoff: LJ_CUTOFF, // Standard cutoff for L-J potential 2.5
@@ -100,14 +100,16 @@ impl BallPhysics {
         //    4 LJ_EPS 1/2 * (-1/2)
         //    - LJ_EPS
 
-        if dist_btw_balls < self.min_dist_for_const_force() {
-            let quot = self.constants.lj_sig / self.min_dist_for_const_force();
+        let r_cap = self.get_force_cap_distance();
+        if dist_btw_balls < r_cap {
+            // Below cap distance: linear potential
+            let quot = self.constants.lj_sig / r_cap;
             let quot_six = quot.powi(6);
-            let pot_at_min_dist = 4. * self.constants.lj_eps * quot_six * (quot_six - 1.);
+            let pot_at_cap = 4. * self.constants.lj_eps * quot_six * (quot_six - 1.);
 
-            let force_at_min_dist = self.lenard_jones_force_pure(self.min_dist_for_const_force());
-            return pot_at_min_dist
-                + (dist_btw_balls - self.min_dist_for_const_force()) * force_at_min_dist;
+            // Potential is linear: U(r) = U(r_cap) + max_force * (r - r_cap)
+            // Note: force is positive (repulsive), so potential increases as r decreases
+            return pot_at_cap + self.constants.max_force * (dist_btw_balls - r_cap);
         }
 
         let quot = self.constants.lj_sig / dist_btw_balls;
@@ -115,8 +117,34 @@ impl BallPhysics {
         4. * self.constants.lj_eps * quot_six * (quot_six - 1.)
     }
 
-    fn min_dist_for_const_force(&self) -> f32 {
-        self.constants.lj_sig * 0.75
+    /// Calculate the distance at which the LJ force equals max_force
+    /// Uses binary search to find the distance where |F_LJ(r)| = max_force
+    pub(crate) fn get_force_cap_distance(&self) -> f32 {
+        let max_force = self.constants.max_force;
+        let lj_sig = self.constants.lj_sig;
+
+        // Start search from a very small distance to sigma
+        let mut r_low = lj_sig * 0.1;
+        let mut r_high = lj_sig * 2.0;
+
+        // Binary search for distance where force equals max_force
+        for _ in 0..50 {
+            let r_mid = (r_low + r_high) / 2.0;
+            let force = self.lenard_jones_force_pure(r_mid).abs();
+
+            if (force - max_force).abs() < 0.001 * max_force {
+                return r_mid;
+            }
+
+            if force > max_force {
+                r_low = r_mid;
+            } else {
+                r_high = r_mid;
+            }
+        }
+
+        // Return the midpoint if we don't converge
+        (r_low + r_high) / 2.0
     }
 
     pub(crate) fn lenard_jones_force(
@@ -126,12 +154,16 @@ impl BallPhysics {
         _id: usize,
     ) -> f32 {
         let dist = dist_of_balls - radius_sum;
-        if dist < self.min_dist_for_const_force() {
-            self.lenard_jones_force_pure(self.min_dist_for_const_force())
+        let r_cap = self.get_force_cap_distance();
+
+        if dist < r_cap {
+            // Force is constant at max_force below cap distance
+            self.constants.max_force
         } else {
             self.lenard_jones_force_pure(dist)
         }
     }
+
     pub(crate) fn lenard_jones_force_pure(&self, dist_btw_balls: f32) -> f32 {
         let quot = self.constants.lj_sig / dist_btw_balls;
         let quot_six = quot.powi(6);
@@ -453,5 +485,70 @@ mod tests {
         approx(actual_threshold, expected_threshold, 1e-6);
         // Also verify the calculation directly: (2.5 * rc_eff - rc_eff) / 2 = 0.75 * rc_eff
         approx(actual_threshold, 0.75 * effective_cutoff, 1e-6);
+    }
+
+    #[test]
+    fn test_force_cap_at_max_force() {
+        let phys = BallPhysics::default();
+        let max_force = phys.constants.max_force;
+        let r_cap = phys.get_force_cap_distance();
+
+        // At r_cap, force should be approximately max_force
+        let force_at_cap = phys.lenard_jones_force_pure(r_cap);
+        approx(force_at_cap, max_force, 1e-2);
+
+        // Below r_cap, force should be capped at max_force
+        let r_below_cap = r_cap * 0.5;
+        let force_below = phys.lenard_jones_force(r_below_cap, 0.0, 0);
+        approx(force_below, max_force, 1e-6);
+
+        // Well below r_cap, force should still be capped
+        let r_very_small = r_cap * 0.1;
+        let force_very_small = phys.lenard_jones_force(r_very_small, 0.0, 0);
+        approx(force_very_small, max_force, 1e-6);
+    }
+
+    #[test]
+    fn test_potential_linear_below_cap() {
+        let phys = BallPhysics::default();
+        let max_force = phys.constants.max_force;
+        let r_cap = phys.get_force_cap_distance();
+
+        // Get potential at r_cap
+        let pot_at_cap = phys.lenard_jones_potential(r_cap);
+
+        // Check potential at a distance below r_cap
+        let r_below = r_cap * 0.8;
+        let pot_below = phys.lenard_jones_potential(r_below);
+
+        // Expected potential: U(r) = U(r_cap) + max_force * (r - r_cap)
+        let expected_pot = pot_at_cap + max_force * (r_below - r_cap);
+        approx(pot_below, expected_pot, 1e-4);
+
+        // Check another point
+        let r_below2 = r_cap * 0.5;
+        let pot_below2 = phys.lenard_jones_potential(r_below2);
+        let expected_pot2 = pot_at_cap + max_force * (r_below2 - r_cap);
+        approx(pot_below2, expected_pot2, 1e-4);
+    }
+
+    #[test]
+    fn test_force_not_capped_above_threshold() {
+        let phys = BallPhysics::default();
+        let max_force = phys.constants.max_force;
+        let r_cap = phys.get_force_cap_distance();
+
+        // Above r_cap, force should follow normal LJ formula
+        let r_above = r_cap * 2.0;
+        let force_above = phys.lenard_jones_force(r_above, 0.0, 0);
+        let force_pure = phys.lenard_jones_force_pure(r_above);
+
+        // Force should be less than max_force
+        assert!(
+            force_above < max_force,
+            "Force above cap distance should be less than max_force"
+        );
+        // Force should match pure LJ formula
+        approx(force_above, force_pure, 1e-6);
     }
 }
