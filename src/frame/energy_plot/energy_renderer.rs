@@ -9,6 +9,7 @@ pub const COLOR_KINETIC: u32 = 0xFF00DDFF; // Cyan for kinetic energy
 pub const COLOR_POTENTIAL: u32 = 0xFFFF6B00; // Orange for potential energy
 pub const COLOR_TOTAL: u32 = 0xFF00FF88; // Green for total energy
 pub const COLOR_AXIS: u32 = 0xFF666666; // Gray for axes
+pub const COLOR_ZERO_LINE: u32 = 0xFF888888; // Lighter gray for zero reference line
 pub const COLOR_TEXT: u32 = 0xFFCCCCCC; // Light gray for text
 pub const COLOR_TITLE: u32 = 0xFFFFFFFF; // White for title
 pub const COLOR_LEGEND_KIN: u32 = COLOR_KINETIC;
@@ -237,7 +238,27 @@ impl EnergyPlotRenderer {
         }
         grid[PLOT_HEIGHT - 1][0] = ColoredChar::new('└', COLOR_AXIS);
 
-        // Plot based on display mode
+        // Calculate zero line position if zero is visible in the plot range (for later use)
+        let zero_y_opt = if min_val <= 0.0 && max_val >= 0.0 {
+            let normalized = (0.0 - min_val) / range;
+            let zero_y = ((1.0 - normalized) * (PLOT_HEIGHT - 2) as f32) as usize;
+            Some(zero_y.min(PLOT_HEIGHT - 2))
+        } else {
+            None
+        };
+
+        // Draw zero reference line BEFORE plotting data (so data can overwrite it)
+        if let Some(zero_y) = zero_y_opt {
+            // Draw horizontal zero line across the plot
+            for x in 1..PLOT_WIDTH {
+                // Only draw on empty spaces (energy lines will overwrite this)
+                grid[zero_y][x] = ColoredChar::new('·', COLOR_ZERO_LINE);
+            }
+            // Add tick mark on Y-axis for zero
+            grid[zero_y][0] = ColoredChar::new('┼', COLOR_ZERO_LINE);
+        }
+
+        // Plot based on display mode (these will overwrite the zero line)
         match display_mode {
             DisplayMode::Pot => {
                 if !v_pot.is_empty() {
@@ -322,10 +343,13 @@ impl EnergyPlotRenderer {
             let mut line = String::new();
             let mut colors = Vec::new();
 
-            // Add Y-axis label on the left (every few rows)
+            // Add Y-axis label on the left (every few rows + zero if visible)
             let label = if i == 0 {
                 format!("{:8.2e} ", max_val)
-            } else if i == PLOT_HEIGHT / 2 {
+            } else if Some(i) == zero_y_opt {
+                // Show zero label at zero line
+                "   0.00e+0 ".to_string()
+            } else if i == PLOT_HEIGHT / 2 && Some(i) != zero_y_opt {
                 format!("{:8.2e} ", (max_val + min_val) / 2.0)
             } else if i == PLOT_HEIGHT - 1 {
                 format!("{:8.2e} ", min_val)
@@ -432,7 +456,8 @@ impl EnergyPlotRenderer {
             let y = y.min(PLOT_HEIGHT - 2);
 
             let x = i + 1;
-            if grid[y][x].ch == ' ' || grid[y][x].ch == '─' {
+            // Allow overwriting space, bottom axis, or zero line (·)
+            if grid[y][x].ch == ' ' || grid[y][x].ch == '─' || grid[y][x].ch == '·' {
                 grid[y][x] = ColoredChar::new(symbol, color);
             }
         }
