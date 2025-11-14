@@ -134,10 +134,10 @@ impl BallPhysics {
         let max_force = constants.max_force;
         let lj_sig = constants.lj_sig;
         let lj_eps = constants.lj_eps;
-        
+
         // Initial guess: start somewhere between 0.1*sigma and sigma
         let mut r = lj_sig * 0.5;
-        
+
         // Newton's method: r_new = r - f(r)/f'(r)
         // where f(r) = F_LJ(r) - max_force
         // F_LJ(r) = 24*eps*(sig/r)^6 * (2*(sig/r)^6 - 1) / r
@@ -145,44 +145,44 @@ impl BallPhysics {
             let quot = lj_sig / r;
             let quot_six = quot.powi(6);
             let quot_twelve = quot_six * quot_six;
-            
+
             // Force: F = 24*eps*quot_six*(2*quot_six - 1)/r
             let force = 24.0 * lj_eps * quot_six * (2.0 * quot_six - 1.0) / r;
-            
+
             // Derivative: dF/dr = -24*eps*(14*quot_twelve - 7*quot_six)/r^2
             let force_derivative = -24.0 * lj_eps * (14.0 * quot_twelve - 7.0 * quot_six) / (r * r);
-            
+
             // Newton step
             let delta = (force - max_force) / force_derivative;
             r -= delta;
-            
+
             // Check convergence
             if delta.abs() < 1e-6 * r {
                 return r;
             }
         }
-        
+
         // Fallback to binary search if Newton's method doesn't converge
         let mut r_low = lj_sig * 0.1;
         let mut r_high = lj_sig; // Force root is below sigma
-        
+
         for _ in 0..50 {
             let r_mid = (r_low + r_high) / 2.0;
             let quot = lj_sig / r_mid;
             let quot_six = quot.powi(6);
             let force = (24.0 * lj_eps * quot_six * (2.0 * quot_six - 1.0) / r_mid).abs();
-            
+
             if (force - max_force).abs() < 0.001 * max_force {
                 return r_mid;
             }
-            
+
             if force > max_force {
                 r_low = r_mid;
             } else {
                 r_high = r_mid;
             }
         }
-        
+
         (r_low + r_high) / 2.0
     }
 
