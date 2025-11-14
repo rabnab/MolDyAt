@@ -137,6 +137,30 @@ impl CustomEventLoop {
                     window.handle_resize(size.width, size.height);
                 }
             }
+            WindowEvent::KeyboardInput {
+                input:
+                    KeyboardInput {
+                        virtual_keycode: Some(keycode),
+                        state: ElementState::Pressed,
+                        ..
+                    },
+                ..
+            } => {
+                match keycode {
+                    KeyCode::Escape => {
+                        // Close energy window on Escape
+                        self.energy_window = None;
+                    }
+                    KeyCode::Tab => {
+                        // Cycle display mode on Tab
+                        if let Some(window) = &mut self.energy_window {
+                            window.cycle_display_mode();
+                            window.request_redraw();
+                        }
+                    }
+                    _ => {}
+                }
+            }
             _ => {}
         }
     }
