@@ -2,9 +2,29 @@
 
 ## Project Overview
 
-This is a **molecular dynamics physics simulation** implementing Lennard-Jones particle interactions with Verlet neighbor lists and spatial partitioning. The simulation is written in Rust and uses the ggez game framework for rendering. It should be possible to switch to a different implementation of renderer e.g. using wgpu directly.
+This is a **molecular dynamics physics simulation** implementing Lennard-Jones particle interactions with Verlet neighbor lists, spatial partitioning, and force capping. The simulation is written in Rust and uses the ggez game framework for rendering.
 
-**Critical Physics Constraint**: Energy conservation is a primary concern. Any changes to physics calculations, collision handling, or integration methods must preserve total system energy. Verify energy conservation when modifying physics code.
+**Critical Physics Constraint**: Energy conservation is the primary concern. Any changes to physics calculations (especially force capping, collision handling, or integration methods) must preserve total system energy. Verify energy conservation when modifying physics code - the force cap feature uses a linear potential extrapolation beyond `r_cap` to maintain energy continuity.
+
+## Architecture Overview
+
+### Core Components
+- **MainContent** (`src/frame/application_master/`): Central simulation controller using `Rc<RefCell<dyn Renderer>>` pattern for renderer abstraction
+- **Ball2D** (`src/objects2d/ball_impl/`): Direct `Vec<Ball2D>` ownership (not `Rc<RefCell<>>`), optimized for performance
+- **BallPhysics** (`src/objects2d/ball_impl/ball_physics.rs`): Physics engine with configurable `max_force` cap and cached `r_cap` distance
+- **CellGrid** (`src/objects2d/ball_cell/`): Spatial partitioning with index-based (`Vec<usize>`) cell references to main ball vector
+- **Verlet Lists** (`src/objects2d/ball_impl/verlet.rs`): Index-based neighbor tracking, rebuilt when movement exceeds threshold
+- **SIMD Forces** (`src/objects2d/ball_impl/simd_forces.rs`): Multi-platform vectorization using `multiversion` crate
+
+### Renderer Architecture
+- **Trait-based** (`src/frame/renderer/`): `Renderer` trait allows swapping backends (currently ggez, wgpu planned)
+- **Backend pattern**: `GgezRenderer` + `GgezBackend` separate rendering logic from framework-specific code
+- **Caching**: Mesh caching system via `take_cache()`/`put_cache()` to minimize allocations
+
+### Key Data Flows
+1. **Physics Step**: `simulation_step()` → `compute_forces_parallel()` → `force_indexed_simd()` (parallel over balls) → `update_positions()` (parallel)
+2. **Neighbor Updates**: When ball moves > threshold → clear all neighbor lists → rebuild via `collect_neighbours_by_cell()`
+3. **Index Invalidation**: Ball removal via `Vec::retain()` → invalidates all indices → triggers full neighbor list rebuild
 
 ## Build & Toolchain
 
@@ -98,10 +118,13 @@ This is a **molecular dynamics physics simulation** implementing Lennard-Jones p
 
 ### Physics Implementation
 - **Lennard-Jones Potential**: Inter-particle forces with attractive/repulsive components
+- **Force Capping**: When edge distance `< r_cap`, force is capped at `max_force` with linear potential `U(r) = U(r_cap) + max_force * (r - r_cap)` to preserve energy
+- **r_cap Calculation**: Cached distance where LJ force equals `max_force`, computed via Newton's method in `calculate_force_cap_distance()`
 - **Verlet Neighbor Lists**: Use indices (`Vec<usize>`) to track nearby particles, reducing O(N²) checks
 - **Cutoff Distances**: Interactions beyond cutoff are ignored; account for particle radii in cutoff calculations
 - **Movement Thresholds**: Neighbor lists rebuild when particles move beyond threshold (typically 0.75 × effective_cutoff)
 - **Energy Conservation**: Total energy (kinetic + potential) should remain constant in isolated systems
+- **Parallel Force Computation**: Uses Rayon's `par_iter()` with read-only neighbor access for thread safety
 
 ### Spatial Data Structures
 - **Cell Grid**: Divides space into cells for efficient nearest-neighbor queries
@@ -167,3 +190,4 @@ This is a **molecular dynamics physics simulation** implementing Lennard-Jones p
 3. **Energy Drift**: Numerical integration errors accumulate; use appropriate timesteps and integration methods
 4. **Neighbor List Staleness**: Update when particles move > threshold distance from last update position
 5. **Radius Awareness**: Many calculations need effective distances accounting for ball radii, not just centers
+6. **Force Cap Energy**: When modifying force capping, maintain linear potential extrapolation to preserve energy conservation
