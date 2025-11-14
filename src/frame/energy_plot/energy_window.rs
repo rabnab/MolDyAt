@@ -137,22 +137,68 @@ impl EnergyPlotWindow {
                 *pixel = bg_color;
             }
 
-            // Get status text and render ASCII to string
-            let text = {
+            // Get status text and render to colored string
+            let (text, color_map) = {
                 let data = self.energy_data.lock().unwrap();
                 let status = data.status_text.clone();
                 drop(data);
 
                 let renderer = EnergyPlotRenderer::new(self.energy_data.clone());
-                renderer.render_to_string(status.as_deref(), self.display_mode)
+                renderer.render_to_colored_string(status.as_deref(), self.display_mode)
             };
 
-            // Render text to pixels using simple 8x8 bitmap font
-            Self::render_text_to_buffer(&mut buffer, width as usize, height as usize, &text);
+            // Render text to pixels using colors
+            Self::render_colored_text_to_buffer(
+                &mut buffer,
+                width as usize,
+                height as usize,
+                &text,
+                &color_map,
+            );
 
             buffer.present()?;
         }
         Ok(())
+    }
+
+    /// Colored bitmap font renderer - renders text with per-character colors
+    fn render_colored_text_to_buffer(
+        buffer: &mut [u32],
+        width: usize,
+        height: usize,
+        text: &str,
+        color_map: &[Vec<u32>],
+    ) {
+        const CHAR_WIDTH: usize = 8;
+        const CHAR_HEIGHT: usize = 12;
+
+        let mut y = 10;
+        for (line_idx, line) in text.lines().enumerate() {
+            if y + CHAR_HEIGHT >= height {
+                break;
+            }
+
+            let mut x = 10;
+            for (char_idx, ch) in line.chars().enumerate() {
+                if x + CHAR_WIDTH >= width {
+                    break;
+                }
+
+                // Get color for this character from color map
+                let color = if line_idx < color_map.len() && char_idx < color_map[line_idx].len() {
+                    color_map[line_idx][char_idx]
+                } else {
+                    0xFFCCCCCC // Default text color
+                };
+
+                // Render character using bitmap font with color
+                Self::draw_char(buffer, width, x, y, ch, color);
+
+                x += CHAR_WIDTH;
+            }
+
+            y += CHAR_HEIGHT;
+        }
     }
 
     /// Simple bitmap font renderer - renders text as pixels
