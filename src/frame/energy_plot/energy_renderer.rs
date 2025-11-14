@@ -221,17 +221,25 @@ impl EnergyPlotRenderer {
             return;
         }
 
-        // Sample data to fit width
-        let step = (data.len() as f32 / (PLOT_WIDTH - 2) as f32).max(1.0);
+        // Calculate how many data points map to each pixel column
+        let step = data.len() as f32 / (PLOT_WIDTH - 2) as f32;
 
         for i in 0..(PLOT_WIDTH - 2) {
-            let data_idx = (i as f32 * step) as usize;
-            if data_idx >= data.len() {
+            // Find all data points that map to this pixel column
+            let start_idx = (i as f32 * step) as usize;
+            let end_idx = ((i + 1) as f32 * step).ceil() as usize;
+            let end_idx = end_idx.min(data.len());
+
+            if start_idx >= data.len() {
                 break;
             }
 
-            let value = data[data_idx];
-            let normalized = (value - min_val) / range;
+            // Average all data points that map to this pixel position
+            let sum: f32 = data.range(start_idx..end_idx).sum();
+            let count = (end_idx - start_idx) as f32;
+            let avg_value = sum / count;
+
+            let normalized = (avg_value - min_val) / range;
             let y = ((1.0 - normalized) * (PLOT_HEIGHT - 2) as f32) as usize;
             let y = y.min(PLOT_HEIGHT - 2);
 
