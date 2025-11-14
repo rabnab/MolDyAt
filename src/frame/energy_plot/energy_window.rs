@@ -357,3 +357,38 @@ impl EnergyPlotWindow {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_height_constants_calculation() {
+        // Verify height calculations are correct
+        assert_eq!(MIN_HEIGHT_WITHOUT_STATUS, 10 + 41 * 12);
+        assert_eq!(MIN_HEIGHT_WITHOUT_STATUS, 502);
+
+        assert_eq!(MIN_HEIGHT_WITH_STATUS, 10 + (41 + 8) * 12);
+        assert_eq!(MIN_HEIGHT_WITH_STATUS, 598);
+
+        // Difference should be STATUS_TEXT_LINES * CHAR_HEIGHT
+        assert_eq!(
+            MIN_HEIGHT_WITH_STATUS - MIN_HEIGHT_WITHOUT_STATUS,
+            STATUS_TEXT_LINES * CHAR_HEIGHT
+        );
+        assert_eq!(MIN_HEIGHT_WITH_STATUS - MIN_HEIGHT_WITHOUT_STATUS, 96);
+    }
+
+    #[test]
+    fn test_energy_plot_window_new() {
+        use crate::frame::energy_plot::EnergyData;
+        use std::sync::{Arc, Mutex};
+
+        let energy_data = Arc::new(Mutex::new(EnergyData::new()));
+        let window = EnergyPlotWindow::new(energy_data, DisplayMode::All);
+
+        assert!(!window.is_open());
+        assert!(!window.has_status_text);
+        assert_eq!(window.get_display_mode(), DisplayMode::All);
+    }
+}
