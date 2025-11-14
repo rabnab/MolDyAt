@@ -7,12 +7,13 @@ use winit::dpi::LogicalSize;
 use winit::event_loop::EventLoopWindowTarget;
 use winit::window::{Window, WindowBuilder, WindowId};
 
-const DEFAULT_WIDTH: u32 = 640;
-const DEFAULT_HEIGHT: u32 = 360;
+const DEFAULT_WIDTH: u32 = 1280; // Doubled from 640
+const DEFAULT_HEIGHT: u32 = 720; // Doubled from 360
 
-// Text rendering constants
-const CHAR_HEIGHT: u32 = 12;
-const TOP_MARGIN: u32 = 10;
+// Text rendering constants - doubled from original
+const CHAR_WIDTH: u32 = 16; // Doubled from 8
+const CHAR_HEIGHT: u32 = 24; // Doubled from 12
+const TOP_MARGIN: u32 = 20; // Doubled from 10
 
 // Base line count without status text
 // Header (3) + empty (1) + plot (30) + empty (1) + separator (1) +
@@ -218,16 +219,16 @@ impl EnergyPlotWindow {
         text: &str,
         color_map: &[Vec<u32>],
     ) {
-        const CHAR_WIDTH: usize = 8;
-        const CHAR_HEIGHT: usize = 12;
+        const CHAR_WIDTH: usize = 16; // Doubled from 8
+        const CHAR_HEIGHT: usize = 24; // Doubled from 12
 
-        let mut y = 10;
+        let mut y = 20; // Doubled from 10
         for (line_idx, line) in text.lines().enumerate() {
             if y + CHAR_HEIGHT >= height {
                 break;
             }
 
-            let mut x = 10;
+            let mut x = 20; // Doubled from 10
             for (char_idx, ch) in line.chars().enumerate() {
                 if x + CHAR_WIDTH >= width {
                     break;
@@ -240,8 +241,8 @@ impl EnergyPlotWindow {
                     0xFFCCCCCC // Default text color
                 };
 
-                // Render character using bitmap font with color
-                Self::draw_char(buffer, width, x, y, ch, color);
+                // Render character using bitmap font with color (2x scaled)
+                Self::draw_char_scaled(buffer, width, x, y, ch, color);
 
                 x += CHAR_WIDTH;
             }
@@ -252,24 +253,24 @@ impl EnergyPlotWindow {
 
     /// Simple bitmap font renderer - renders text as pixels
     fn render_text_to_buffer(buffer: &mut [u32], width: usize, height: usize, text: &str) {
-        const CHAR_WIDTH: usize = 8;
-        const CHAR_HEIGHT: usize = 12;
+        const CHAR_WIDTH: usize = 16; // Doubled from 8
+        const CHAR_HEIGHT: usize = 24; // Doubled from 12
         const TEXT_COLOR: u32 = 0xFFCCCCCC;
 
-        let mut y = 10;
+        let mut y = 20; // Doubled from 10
         for line in text.lines() {
             if y + CHAR_HEIGHT >= height {
                 break;
             }
 
-            let mut x = 10;
+            let mut x = 20; // Doubled from 10
             for ch in line.chars() {
                 if x + CHAR_WIDTH >= width {
                     break;
                 }
 
-                // Render actual character using bitmap font
-                Self::draw_char(buffer, width, x, y, ch, TEXT_COLOR);
+                // Render actual character using bitmap font (2x scaled)
+                Self::draw_char_scaled(buffer, width, x, y, ch, TEXT_COLOR);
 
                 x += CHAR_WIDTH;
             }
@@ -278,18 +279,31 @@ impl EnergyPlotWindow {
         }
     }
 
-    /// Draw a character using a simple 8x8 bitmap font
-    fn draw_char(buffer: &mut [u32], width: usize, x: usize, y: usize, ch: char, color: u32) {
+    /// Draw a character using a simple 8x8 bitmap font scaled 2x to 16x16
+    fn draw_char_scaled(
+        buffer: &mut [u32],
+        width: usize,
+        x: usize,
+        y: usize,
+        ch: char,
+        color: u32,
+    ) {
         let glyph = Self::get_glyph(ch);
 
+        // Draw each pixel as a 2x2 block for 2x scaling
         for (dy, &row) in glyph.iter().enumerate() {
             for dx in 0..8 {
                 if row & (1 << (7 - dx)) != 0 {
-                    let px = x + dx;
-                    let py = y + dy;
-                    let idx = py * width + px;
-                    if idx < buffer.len() {
-                        buffer[idx] = color;
+                    // Draw 2x2 pixel block
+                    for scale_y in 0..2 {
+                        for scale_x in 0..2 {
+                            let px = x + (dx * 2) + scale_x;
+                            let py = y + (dy * 2) + scale_y;
+                            let idx = py * width + px;
+                            if idx < buffer.len() {
+                                buffer[idx] = color;
+                            }
+                        }
                     }
                 }
             }
@@ -410,19 +424,19 @@ mod tests {
 
     #[test]
     fn test_height_constants_calculation() {
-        // Verify height calculations are correct
-        assert_eq!(MIN_HEIGHT_WITHOUT_STATUS, 10 + 41 * 12);
-        assert_eq!(MIN_HEIGHT_WITHOUT_STATUS, 502);
+        // Verify height calculations are correct (doubled from original)
+        assert_eq!(MIN_HEIGHT_WITHOUT_STATUS, 20 + 41 * 24); // Doubled: was 10 + 41 * 12
+        assert_eq!(MIN_HEIGHT_WITHOUT_STATUS, 1004); // Doubled: was 502
 
-        assert_eq!(MIN_HEIGHT_WITH_STATUS, 10 + (41 + 8) * 12);
-        assert_eq!(MIN_HEIGHT_WITH_STATUS, 598);
+        assert_eq!(MIN_HEIGHT_WITH_STATUS, 20 + (41 + 8) * 24); // Doubled: was 10 + (41 + 8) * 12
+        assert_eq!(MIN_HEIGHT_WITH_STATUS, 1196); // Doubled: was 598
 
         // Difference should be STATUS_TEXT_LINES * CHAR_HEIGHT
         assert_eq!(
             MIN_HEIGHT_WITH_STATUS - MIN_HEIGHT_WITHOUT_STATUS,
             STATUS_TEXT_LINES * CHAR_HEIGHT
         );
-        assert_eq!(MIN_HEIGHT_WITH_STATUS - MIN_HEIGHT_WITHOUT_STATUS, 96);
+        assert_eq!(MIN_HEIGHT_WITH_STATUS - MIN_HEIGHT_WITHOUT_STATUS, 192); // Doubled: was 96
     }
 
     #[test]
