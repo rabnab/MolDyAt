@@ -1,8 +1,8 @@
 use super::energy_data::SharedEnergyData;
 use std::collections::VecDeque;
 
-const PLOT_WIDTH: usize = 60;
-const PLOT_HEIGHT: usize = 20;
+const PLOT_WIDTH: usize = 80;
+const PLOT_HEIGHT: usize = 30;
 
 /// Simple text-based renderer for the energy plot window
 /// This provides a working implementation while full graphical rendering is being developed
@@ -24,9 +24,11 @@ impl EnergyPlotRenderer {
         }
 
         let mut output = String::new();
-        output.push_str("═══════════════════════════════════════════════════════════════\n");
-        output.push_str("                        ENERGY PLOT 🐾\n");
-        output.push_str("═══════════════════════════════════════════════════════════════\n\n");
+        output.push_str(
+            "═══════════════════════════════════════════════════════════════════════════════════\n",
+        );
+        output.push_str("                              ENERGY PLOT 🐾\n");
+        output.push_str("═══════════════════════════════════════════════════════════════════════════════════\n\n");
 
         // Add status text if provided
         if let Some(status) = status_text {
@@ -34,36 +36,56 @@ impl EnergyPlotRenderer {
             output.push_str("\n\n");
         }
 
-        // Render the plot
-        output.push_str(&self.render_ascii_plot(&data.v_kin, &data.v_pot));
+        // Render the plot with axis labels
+        output.push_str(&self.render_ascii_plot_with_axes(&data.v_kin, &data.v_pot));
 
         output.push('\n');
-        output.push_str("───────────────────────────────────────────────────────────────\n");
+        output.push_str(
+            "───────────────────────────────────────────────────────────────────────────────────\n",
+        );
         output.push_str(&format!(
             "  Ekin (*)  Epot (+)  Etot (=)  |  Time: {:.2}\n",
             data.time
         ));
-        output.push_str("───────────────────────────────────────────────────────────────\n");
+        output.push_str(
+            "───────────────────────────────────────────────────────────────────────────────────\n",
+        );
         output.push_str("\n  Press Esc or close window to hide | Tab to return to main\n");
-        output.push_str("═══════════════════════════════════════════════════════════════\n");
+        output.push_str(
+            "═══════════════════════════════════════════════════════════════════════════════════\n",
+        );
 
         output
     }
 
     fn render_waiting_message(&self) -> String {
         let mut output = String::new();
-        output.push_str("═══════════════════════════════════════════════════════════════\n");
-        output.push_str("                        ENERGY PLOT 🐾\n");
-        output.push_str("═══════════════════════════════════════════════════════════════\n\n");
-        output.push_str("                 Waiting for simulation data...\n\n");
-        output.push_str("           Add some balls to see the energy plot!\n");
-        output.push_str("                (Press F5 in the main window)\n\n");
-        output.push_str("═══════════════════════════════════════════════════════════════\n");
+        output.push_str(
+            "═══════════════════════════════════════════════════════════════════════════════════\n",
+        );
+        output.push_str("                              ENERGY PLOT 🐾\n");
+        output.push_str("═══════════════════════════════════════════════════════════════════════════════════\n\n");
+        output.push_str("                        Waiting for simulation data...\n\n");
+        output.push_str("                  Add some balls to see the energy plot!\n");
+        output.push_str("                       (Press F5 in the main window)\n\n");
+        output.push_str(
+            "═══════════════════════════════════════════════════════════════════════════════════\n",
+        );
         output
     }
 
-    fn render_ascii_plot(&self, v_kin: &VecDeque<f32>, v_pot: &VecDeque<f32>) -> String {
+    fn render_ascii_plot_with_axes(&self, v_kin: &VecDeque<f32>, v_pot: &VecDeque<f32>) -> String {
         let mut grid = vec![vec![' '; PLOT_WIDTH]; PLOT_HEIGHT];
+
+        // Calculate min/max for all data combined for meaningful scaling
+        let all_values: Vec<f32> = v_kin.iter().chain(v_pot.iter()).copied().collect();
+        if all_values.is_empty() {
+            return String::new();
+        }
+
+        let min_val = all_values.iter().copied().fold(f32::INFINITY, f32::min);
+        let max_val = all_values.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+        let range = (max_val - min_val).max(0.001);
 
         // Draw axes
         for row in grid.iter_mut().take(PLOT_HEIGHT) {
@@ -77,42 +99,60 @@ impl EnergyPlotRenderer {
 
         // Plot kinetic energy
         if !v_kin.is_empty() {
-            self.plot_data(&mut grid, v_kin, '*');
+            self.plot_data_scaled(&mut grid, v_kin, '*', min_val, range);
         }
 
         // Plot potential energy
         if !v_pot.is_empty() {
-            self.plot_data(&mut grid, v_pot, '+');
+            self.plot_data_scaled(&mut grid, v_pot, '+', min_val, range);
         }
 
         // Plot total energy
         if !v_kin.is_empty() && !v_pot.is_empty() {
             let v_tot: VecDeque<f32> = v_kin.iter().zip(v_pot.iter()).map(|(k, p)| k + p).collect();
-            self.plot_data(&mut grid, &v_tot, '=');
+            self.plot_data_scaled(&mut grid, &v_tot, '=', min_val, range);
         }
 
-        // Convert grid to string
+        // Convert grid to string with Y-axis labels
         let mut output = String::new();
-        for row in &grid {
-            output.push_str("  ");
+        for (i, row) in grid.iter().enumerate() {
+            // Add Y-axis label on the left (every few rows)
+            if i == 0 {
+                output.push_str(&format!("{:8.2e} ", max_val));
+            } else if i == PLOT_HEIGHT / 2 {
+                output.push_str(&format!("{:8.2e} ", (max_val + min_val) / 2.0));
+            } else if i == PLOT_HEIGHT - 1 {
+                output.push_str(&format!("{:8.2e} ", min_val));
+            } else {
+                output.push_str("           ");
+            }
+
             for &ch in row {
                 output.push(ch);
             }
             output.push('\n');
         }
 
+        // Add X-axis labels
+        let data_len = v_kin.len().max(v_pot.len());
+        output.push_str("           ");
+        output.push_str(&format!("0{:>width$}", data_len, width = PLOT_WIDTH - 2));
+        output.push_str(" (samples)\n");
+
         output
     }
 
-    fn plot_data(&self, grid: &mut [Vec<char>], data: &VecDeque<f32>, symbol: char) {
+    fn plot_data_scaled(
+        &self,
+        grid: &mut [Vec<char>],
+        data: &VecDeque<f32>,
+        symbol: char,
+        min_val: f32,
+        range: f32,
+    ) {
         if data.is_empty() {
             return;
         }
-
-        // Find min/max for scaling
-        let min_val = data.iter().copied().fold(f32::INFINITY, f32::min);
-        let max_val = data.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-        let range = (max_val - min_val).max(0.001);
 
         // Sample data to fit width
         let step = (data.len() as f32 / (PLOT_WIDTH - 2) as f32).max(1.0);
@@ -135,7 +175,6 @@ impl EnergyPlotRenderer {
         }
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;

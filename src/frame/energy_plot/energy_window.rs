@@ -108,48 +108,74 @@ impl EnergyPlotWindow {
 
             let mut buffer = surface.buffer_mut()?;
 
-            // Clear to black background
+            // Clear to dark background
+            let bg_color = 0xFF0A0A0A;
             for pixel in buffer.iter_mut() {
-                *pixel = 0xFF000000; // Black (ARGB format)
+                *pixel = bg_color;
             }
 
-            // Get status text and energy data status
-            let (status_text, has_data) = {
+            // Get status text and render ASCII to string
+            let text = {
                 let data = self.energy_data.lock().unwrap();
                 let status = data.status_text.clone();
-                let has_data = !data.v_kin.is_empty() || !data.v_pot.is_empty();
-                (status, has_data)
+                drop(data);
+
+                let renderer = EnergyPlotRenderer::new(self.energy_data.clone());
+                renderer.render_to_string(status.as_deref())
             };
 
-            // Render text-based energy plot to console/stdout
-            let renderer = EnergyPlotRenderer::new(self.energy_data.clone());
-            let text = renderer.render_to_string(status_text.as_deref());
-
-            // Print ASCII art to stdout (console window)
-            println!("\x1B[2J\x1B[1;1H{}", text); // Clear screen and print at top
-
-            // For visual feedback in the window, show a simple colored indicator
-            // Green = has data, Yellow = waiting for data
-            let indicator_color = if has_data { 0xFF00FF00 } else { 0xFFFFFF00 };
-
-            // Draw indicator in center
-            let center_x = (width / 2) as usize;
-            let center_y = (height / 2) as usize;
-            let indicator_size = 40;
-
-            for y in center_y.saturating_sub(indicator_size)..center_y + indicator_size {
-                for x in center_x.saturating_sub(indicator_size)..center_x + indicator_size {
-                    if x < width as usize && y < height as usize {
-                        let idx = y * width as usize + x;
-                        if idx < buffer.len() {
-                            buffer[idx] = indicator_color;
-                        }
-                    }
-                }
-            }
+            // Render text to pixels using simple 8x8 bitmap font
+            Self::render_text_to_buffer(&mut buffer, width as usize, height as usize, &text);
 
             buffer.present()?;
         }
         Ok(())
+    }
+
+    /// Simple bitmap font renderer - renders text as pixels
+    fn render_text_to_buffer(buffer: &mut [u32], width: usize, height: usize, text: &str) {
+        const CHAR_WIDTH: usize = 8;
+        const CHAR_HEIGHT: usize = 12;
+        const TEXT_COLOR: u32 = 0xFFCCCCCC;
+
+        let mut y = 10;
+        for line in text.lines() {
+            if y + CHAR_HEIGHT >= height {
+                break;
+            }
+
+            let mut x = 10;
+            for ch in line.chars() {
+                if x + CHAR_WIDTH >= width {
+                    break;
+                }
+
+                // Simple character rendering - just draw filled rectangles for visible characters
+                if ch != ' ' {
+                    Self::draw_char(buffer, width, x, y, TEXT_COLOR);
+                }
+
+                x += CHAR_WIDTH;
+            }
+
+            y += CHAR_HEIGHT;
+        }
+    }
+
+    /// Draw a simple character block
+    fn draw_char(buffer: &mut [u32], width: usize, x: usize, y: usize, color: u32) {
+        const CHAR_WIDTH: usize = 7;
+        const CHAR_HEIGHT: usize = 11;
+
+        for dy in 0..CHAR_HEIGHT {
+            for dx in 0..CHAR_WIDTH {
+                let px = x + dx;
+                let py = y + dy;
+                let idx = py * width + px;
+                if idx < buffer.len() {
+                    buffer[idx] = color;
+                }
+            }
+        }
     }
 }
