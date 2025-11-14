@@ -456,9 +456,24 @@ impl EnergyPlotRenderer {
             let y = y.min(PLOT_HEIGHT - 2);
 
             let x = i + 1;
-            // Allow overwriting space, bottom axis, or zero line (·)
-            if grid[y][x].ch == ' ' || grid[y][x].ch == '─' || grid[y][x].ch == '·' {
+            let current_char = grid[y][x].ch;
+
+            // Determine if we should draw at this position
+            let should_draw = current_char == ' ' || current_char == '─' || current_char == '·';
+
+            // Check if there's already an energy line here (overlap case)
+            let is_energy_overlap = matches!(current_char, '*' | '+' | '=');
+
+            if should_draw {
+                // First energy line at this position
                 grid[y][x] = ColoredChar::new(symbol, color);
+            } else if is_energy_overlap {
+                // Overlap detected - alternate between characters based on x position
+                // This creates a dashed effect showing both lines
+                if x % 2 == 0 {
+                    grid[y][x] = ColoredChar::new(symbol, color);
+                }
+                // else: keep the existing character (alternating pattern)
             }
         }
     }
