@@ -20,8 +20,8 @@ const TOP_MARGIN: u32 = 20; // Doubled from 10
 // legend (1) + separator (1) + empty (1) + help (1) + footer (1) = 41 lines
 const BASE_LINES: u32 = 41;
 
-// Status text adds approximately 7-8 lines
-const STATUS_TEXT_LINES: u32 = 8;
+// Status text adds approximately 9-10 lines (fps, balls, maxNeig, TotalE, Ekin, Epot, Temp, maxV, vCOM)
+const STATUS_TEXT_LINES: u32 = 10;
 
 // Calculate minimum heights
 const MIN_HEIGHT_WITHOUT_STATUS: u32 = TOP_MARGIN + BASE_LINES * CHAR_HEIGHT;
@@ -428,15 +428,15 @@ mod tests {
         assert_eq!(MIN_HEIGHT_WITHOUT_STATUS, 20 + 41 * 24); // Doubled: was 10 + 41 * 12
         assert_eq!(MIN_HEIGHT_WITHOUT_STATUS, 1004); // Doubled: was 502
 
-        assert_eq!(MIN_HEIGHT_WITH_STATUS, 20 + (41 + 8) * 24); // Doubled: was 10 + (41 + 8) * 12
-        assert_eq!(MIN_HEIGHT_WITH_STATUS, 1196); // Doubled: was 598
+        assert_eq!(MIN_HEIGHT_WITH_STATUS, 20 + (41 + 10) * 24); // Updated: now 10 lines (was 8)
+        assert_eq!(MIN_HEIGHT_WITH_STATUS, 1244); // Updated: was 1196
 
         // Difference should be STATUS_TEXT_LINES * CHAR_HEIGHT
         assert_eq!(
             MIN_HEIGHT_WITH_STATUS - MIN_HEIGHT_WITHOUT_STATUS,
             STATUS_TEXT_LINES * CHAR_HEIGHT
         );
-        assert_eq!(MIN_HEIGHT_WITH_STATUS - MIN_HEIGHT_WITHOUT_STATUS, 192); // Doubled: was 96
+        assert_eq!(MIN_HEIGHT_WITH_STATUS - MIN_HEIGHT_WITHOUT_STATUS, 240); // Updated: was 192
     }
 
     #[test]

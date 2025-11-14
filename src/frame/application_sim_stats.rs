@@ -130,7 +130,8 @@ impl SimStats {
 
     pub(crate) fn get_status_text(&self, fps: u32, num_balls: usize, hood_cnt: usize) -> String {
         format!(
-            "fps {} time: {:.1} ({})\n#Balls: {} #hoodCnt: {}/{}\nmaxNeig: {}\nTotalE: {:.3E}\nTemp: {:.3}\nmaxV: {:.2}\nvCOM: {}",
+            "fps {} time: {:.1} ({})\n#Balls: {} #hoodCnt: {}/{}\nmaxNeig: {}\n\
+                TotalE: {:.3E}\nEkin: {:.3E}\nEpot: {:.3E}\nTemp: {:.3}\nmaxV: {:.2}\nvCOM: {}",
             fps,
             self.time,
             self.speedup,
@@ -139,6 +140,8 @@ impl SimStats {
             hood_cnt,
             self.max_neighbours,
             self.energy_pot + self.energy_kin,
+            self.energy_kin,
+            self.energy_pot,
             self.temperature,
             self.max_v,
             //self.sim.min_dist,
@@ -203,7 +206,11 @@ impl SimStats {
             max_neighbours = max_neighbours.max(cur.hood.get_number_of_neighbors());
         }
         self.max_neighbours = max_neighbours;
-        self.temperature = sum_rel_kin_doubled / 3.0 / (v_balls.len() as f32);
+        // For 2D: (1/2) * m * v² per degree of freedom
+        // Total kinetic energy in COM frame = (1/2) * sum(m * v_rel²)
+        // Temperature = (2 * KE) / (2 * N * k_B) = KE / (N * k_B)
+        //self.temperature = sum_rel_kin_doubled / 3.0 / (v_balls.len() as f32);
+        self.temperature = sum_rel_kin_doubled / 2.0 / (v_balls.len() as f32);
     }
 
     pub(crate) fn get_update_hood_cnt(&self) -> usize {
