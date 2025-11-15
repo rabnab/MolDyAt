@@ -239,11 +239,7 @@ impl BallPhysics {
         self.r_cap
     }
 
-    pub(crate) fn lenard_jones_force(
-        &self,
-        edge_dist: f32,
-        _id: usize,
-    ) -> f32 {
+    pub(crate) fn lenard_jones_force(&self, edge_dist: f32, _id: usize) -> f32 {
         let r_cap = self.get_force_cap_distance();
 
         if edge_dist < r_cap {
@@ -344,10 +340,7 @@ impl BallPhysics {
                 let edge_dist = center_dist - (ball_radius + other.radius);
                 (
                     other.get_position().clone(),
-                    self.lenard_jones_force(
-                        edge_dist,
-                        other.get_id(),
-                    ),
+                    self.lenard_jones_force(edge_dist, other.get_id()),
                 )
             })
             .collect()
@@ -942,12 +935,12 @@ mod tests {
 
         // Test distances above r_cap
         let test_distances = vec![
-            r_cap * 1.0,   // At r_cap
-            r_cap * 1.1,   // 10% above
-            r_cap * 1.5,   // 50% above
-            r_cap * 2.0,   // 2x r_cap
-            1.122462,      // Equilibrium (2^(1/6))
-            r_cap * 3.0,   // 3x r_cap
+            r_cap * 1.0, // At r_cap
+            r_cap * 1.1, // 10% above
+            r_cap * 1.5, // 50% above
+            r_cap * 2.0, // 2x r_cap
+            1.122462,    // Equilibrium (2^(1/6))
+            r_cap * 3.0, // 3x r_cap
         ];
 
         println!("Distance (r) | Force (F) | Potential (U) | Capped?");
@@ -1045,7 +1038,10 @@ mod tests {
         let slope_below = (u_at - u_below) / (r_cap - r_below);
         let slope_above = (u_above - u_at) / (r_above - r_cap);
 
-        println!("Slope below r_cap: {:.4} (should be ≈ -max_force = {:.4})", slope_below, -max_force);
+        println!(
+            "Slope below r_cap: {:.4} (should be ≈ -max_force = {:.4})",
+            slope_below, -max_force
+        );
         println!("Slope above r_cap: {:.4}", slope_above);
 
         // Below r_cap: slope should be -max_force (linear region)
@@ -1060,5 +1056,46 @@ mod tests {
         );
 
         println!("✓ Potential is continuous at r_cap boundary");
+    }
+
+    #[test]
+    fn test_overlapping_balls_force_capped() {
+        // Test that overlapping balls (negative edge distance) have force properly capped
+        // This addresses the issue where edge_dist = -0.40344 was producing force = 1840
+        let phys = BallPhysics::default();
+        let max_force = phys.constants.max_force;
+
+        println!("\n=== Testing Force Capping for Overlapping Balls ===");
+
+        // Test with the specific case from the user's log: edge_dist = -0.40344
+        let edge_dist = -0.40344;
+        let force = phys.lenard_jones_force(edge_dist, 0);
+
+        println!(
+            "Edge dist: {:.5}, Force: {:.4}, Max force: {:.1}",
+            edge_dist, force, max_force
+        );
+
+        // Force should be capped at max_force, not some huge value like 1840
+        assert_eq!(
+            force, max_force,
+            "Force at edge_dist={} should be capped at max_force={}, but got {}",
+            edge_dist, max_force, force
+        );
+
+        // Test several negative distances to ensure consistent capping
+        println!("\nTesting various negative edge distances:");
+        for mult in [0.1, 0.5, 1.0, 2.0, 10.0] {
+            let dist = -mult;
+            let f = phys.lenard_jones_force(dist, 0);
+            println!("  edge_dist = {:.2}: force = {:.1}", dist, f);
+            assert_eq!(
+                f, max_force,
+                "Force at edge_dist={} should be capped at {}, got {}",
+                dist, max_force, f
+            );
+        }
+
+        println!("✓ All overlapping ball forces correctly capped at max_force");
     }
 }
