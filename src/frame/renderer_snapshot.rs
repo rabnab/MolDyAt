@@ -6,27 +6,52 @@
 //! This module provides a framework-independent snapshot of the simulation state
 //! for rendering. It contains only positions, colors (as RGBA arrays), and neighbor
 //! information, using only standard Rust types.
+//!
+//! # Design: Array-of-Structures
+//!
+//! This module uses an **array-of-structures** design (single `Vec<BallRenderData>`)
+//! rather than **structure-of-arrays** (separate vectors for each field).
+//!
+//! Rationale:
+//! - **Type safety**: Impossible to have inconsistent vector lengths.
+//! - **Simplicity**: Data for each ball is grouped together logically.
+//! - **Access pattern**: Rendering typically needs all fields (position, color, radius)
+//!   together for each ball, so SoA cache benefits don't apply.
+//! - **Immutability**: Snapshots are immutable after creation, so no need for
+//!   partial field updates that might benefit from SoA.
 
 use crate::objects2d::Vec2D;
 use std::time::Instant;
 
+/// Rendering data for a single ball.
+///
+/// Contains all information needed to render one ball, including visual appearance
+/// and neighbor relationships for visualization.
+#[derive(Clone, Debug)]
+pub struct BallRenderData {
+    /// Ball position in 2D space
+    pub position: Vec2D,
+
+    /// Ball color as RGBA [r, g, b, a] in range [0.0, 1.0]
+    /// NOT ggez::Color to maintain framework independence
+    pub color: [f32; 4],
+
+    /// Ball radius for rendering (must be positive and finite)
+    pub radius: f32,
+
+    /// Indices of this ball's neighbors in the snapshot
+    /// Used for visualizing neighbor relationships
+    pub neighbors: Vec<usize>,
+}
+
 /// A snapshot of simulation state for rendering.
+///
 /// Contains only the data needed for visualization, using framework-independent types.
+/// Uses array-of-structures design to guarantee consistency and simplify ball data access.
 #[derive(Clone)]
 pub struct RendererSnapshot {
-    /// Ball positions (x, y) for rendering
-    pub positions: Vec<Vec2D>,
-
-    /// Ball colors as RGBA [r, g, b, a] in range [0.0, 1.0]
-    /// NOT ggez::Color to maintain framework independence
-    pub colors: Vec<[f32; 4]>,
-
-    /// Ball radii for rendering (needed for circle drawing)
-    pub radii: Vec<f32>,
-
-    /// Neighbor relationships for visualization
-    /// neighbor_info[i] contains indices of neighbors of ball i
-    pub neighbor_info: Vec<Vec<usize>>,
+    /// All balls in the simulation with their rendering data
+    pub balls: Vec<BallRenderData>,
 
     /// Simulation step counter (for display)
     pub simulation_step: u64,
@@ -39,10 +64,7 @@ impl RendererSnapshot {
     /// Creates a new empty snapshot
     pub fn new() -> Self {
         Self {
-            positions: Vec::new(),
-            colors: Vec::new(),
-            radii: Vec::new(),
-            neighbor_info: Vec::new(),
+            balls: Vec::new(),
             simulation_step: 0,
             created_at: Instant::now(),
         }
@@ -51,10 +73,7 @@ impl RendererSnapshot {
     /// Creates a snapshot with pre-allocated capacity
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            positions: Vec::with_capacity(capacity),
-            colors: Vec::with_capacity(capacity),
-            radii: Vec::with_capacity(capacity),
-            neighbor_info: Vec::with_capacity(capacity),
+            balls: Vec::with_capacity(capacity),
             simulation_step: 0,
             created_at: Instant::now(),
         }
@@ -62,12 +81,12 @@ impl RendererSnapshot {
 
     /// Returns the number of balls in this snapshot
     pub fn len(&self) -> usize {
-        self.positions.len()
+        self.balls.len()
     }
 
     /// Returns true if the snapshot contains no balls
     pub fn is_empty(&self) -> bool {
-        self.positions.is_empty()
+        self.balls.is_empty()
     }
 }
 
@@ -117,9 +136,7 @@ mod tests {
     fn test_snapshot_with_capacity() {
         let snapshot = RendererSnapshot::with_capacity(100);
         assert_eq!(snapshot.len(), 0);
-        assert_eq!(snapshot.positions.capacity(), 100);
-        assert_eq!(snapshot.colors.capacity(), 100);
-        assert_eq!(snapshot.radii.capacity(), 100);
+        assert_eq!(snapshot.balls.capacity(), 100);
     }
 
     #[test]

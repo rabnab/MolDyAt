@@ -1,6 +1,6 @@
 use crate::frame::MainContent;
 use crate::frame::renderer_snapshot::{
-    RendererSnapshot, get_special_ball_color, size_class_to_rgba,
+    BallRenderData, RendererSnapshot, get_special_ball_color, size_class_to_rgba,
 };
 use std::sync::Arc;
 
@@ -9,12 +9,10 @@ impl MainContent {
     /// This snapshot contains all data needed for rendering: positions, colors, radii, and neighbors.
     pub fn create_snapshot(&self) -> RendererSnapshot {
         let ball_count = self.balls.len();
-        let mut snapshot = RendererSnapshot::with_capacity(ball_count);
+        let mut balls = Vec::with_capacity(ball_count);
 
-        // Extract positions, colors, and radii
+        // Create BallRenderData for each ball
         for ball in &self.balls {
-            snapshot.positions.push(ball.get_position().clone());
-
             // Determine color: special colors (verbose/braking) override size class color
             let color = get_special_ball_color(
                 ball.verbose.console || ball.verbose.lines(),
@@ -22,17 +20,19 @@ impl MainContent {
             )
             .unwrap_or_else(|| size_class_to_rgba(ball.get_size_idx()));
 
-            snapshot.colors.push(color);
-            snapshot.radii.push(ball.get_radius());
+            balls.push(BallRenderData {
+                position: ball.get_position().clone(),
+                color,
+                radius: ball.get_radius(),
+                neighbors: ball.hood.get_neighbour_indices().to_vec(),
+            });
         }
 
-        // Collect neighbor information
-        snapshot.neighbor_info = self.collect_all_neighbors();
-
-        snapshot.simulation_step = self.step_count as u64;
-        snapshot.created_at = std::time::Instant::now();
-
-        snapshot
+        RendererSnapshot {
+            balls,
+            simulation_step: self.step_count as u64,
+            created_at: std::time::Instant::now(),
+        }
     }
 
     /// Publish current snapshot to the snapshot slot for renderer consumption
@@ -141,9 +141,7 @@ mod tests {
 
         let snapshot = snapshot.as_ref().unwrap();
         assert_eq!(snapshot.len(), 10);
-        assert_eq!(snapshot.positions.len(), 10);
-        assert_eq!(snapshot.colors.len(), 10);
-        assert_eq!(snapshot.radii.len(), 10);
+        assert_eq!(snapshot.balls.len(), 10);
     }
 
     #[test]
@@ -203,8 +201,8 @@ mod tests {
         let snapshot = main_content.create_snapshot();
 
         // All neighbor indices should be valid (< ball count)
-        for (i, neighbors) in snapshot.neighbor_info.iter().enumerate() {
-            for &neighbor_idx in neighbors {
+        for (i, ball_data) in snapshot.balls.iter().enumerate() {
+            for &neighbor_idx in &ball_data.neighbors {
                 assert!(
                     neighbor_idx < snapshot.len(),
                     "Ball {} has invalid neighbor index {}",
@@ -221,14 +219,18 @@ mod tests {
         let snapshot = main_content.create_snapshot();
 
         // All radii should be positive
-        for (i, &radius) in snapshot.radii.iter().enumerate() {
+        for (i, ball_data) in snapshot.balls.iter().enumerate() {
             assert!(
-                radius > 0.0,
+                ball_data.radius > 0.0,
                 "Ball {} has non-positive radius {}",
                 i,
-                radius
+                ball_data.radius
             );
-            assert!(radius.is_finite(), "Ball {} has non-finite radius", i);
+            assert!(
+                ball_data.radius.is_finite(),
+                "Ball {} has non-finite radius",
+                i
+            );
         }
     }
 
@@ -238,9 +240,17 @@ mod tests {
         let snapshot = main_content.create_snapshot();
 
         // All positions should have finite coordinates
-        for (i, pos) in snapshot.positions.iter().enumerate() {
-            assert!(pos.x.is_finite(), "Ball {} has non-finite x position", i);
-            assert!(pos.y.is_finite(), "Ball {} has non-finite y position", i);
+        for (i, ball_data) in snapshot.balls.iter().enumerate() {
+            assert!(
+                ball_data.position.x.is_finite(),
+                "Ball {} has non-finite x position",
+                i
+            );
+            assert!(
+                ball_data.position.y.is_finite(),
+                "Ball {} has non-finite y position",
+                i
+            );
         }
     }
 }
