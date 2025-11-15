@@ -29,6 +29,12 @@ use std::time::Instant;
 /// and neighbor relationships for visualization.
 #[derive(Clone, Debug)]
 pub struct BallRenderData {
+    /// Ball ID for debugging and tracking
+    pub id: usize,
+
+    /// Ball size index (0-4 for different size classes)
+    pub size_idx: usize,
+
     /// Ball position in 2D space
     pub position: Vec2D,
 
@@ -56,6 +62,24 @@ pub struct RendererSnapshot {
     /// Simulation step counter (for display)
     pub simulation_step: u64,
 
+    /// Kinetic energy of the system
+    pub kinetic_energy: f32,
+
+    /// Potential energy of the system
+    pub potential_energy: f32,
+
+    /// Simulation time
+    pub time: f32,
+
+    /// Status text for display (ball count, FPS, etc.)
+    pub status_text: Option<String>,
+
+    /// Cell grid world bounds (for rendering the grid)
+    pub cell_grid_bounds: crate::objects2d::Rect,
+
+    /// Current ball size index for cursor display
+    pub cursor_ball_size_idx: usize,
+
     /// Timestamp for debugging
     pub created_at: Instant,
 }
@@ -66,6 +90,12 @@ impl RendererSnapshot {
         Self {
             balls: Vec::new(),
             simulation_step: 0,
+            kinetic_energy: 0.0,
+            potential_energy: 0.0,
+            time: 0.0,
+            status_text: None,
+            cell_grid_bounds: crate::objects2d::Rect::new(0.0, 0.0, 0.0, 0.0),
+            cursor_ball_size_idx: 0,
             created_at: Instant::now(),
         }
     }
@@ -75,6 +105,12 @@ impl RendererSnapshot {
         Self {
             balls: Vec::with_capacity(capacity),
             simulation_step: 0,
+            kinetic_energy: 0.0,
+            potential_energy: 0.0,
+            time: 0.0,
+            status_text: None,
+            cell_grid_bounds: crate::objects2d::Rect::new(0.0, 0.0, 0.0, 0.0),
+            cursor_ball_size_idx: 0,
             created_at: Instant::now(),
         }
     }
@@ -87,6 +123,11 @@ impl RendererSnapshot {
     /// Returns true if the snapshot contains no balls
     pub fn is_empty(&self) -> bool {
         self.balls.is_empty()
+    }
+
+    /// Returns the total energy (kinetic + potential)
+    pub fn total_energy(&self) -> f32 {
+        self.kinetic_energy + self.potential_energy
     }
 }
 

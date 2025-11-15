@@ -277,6 +277,26 @@ impl Renderer for GgezRenderer {
 
         Ok(())
     }
+
+    fn draw_balls_from_snapshot_data(
+        &self,
+        backend: &mut dyn DrawingBackend,
+        snapshot: &crate::frame::renderer_snapshot::RendererSnapshot,
+    ) -> AppResult {
+        // Draw balls from snapshot data
+        for ball in &snapshot.balls {
+            let ball_coord_px = self.window_def.borrow().coord_to_px(&ball.position);
+
+            backend.draw_ball_mesh(
+                ball.id,
+                ball.size_idx,
+                [ball_coord_px.x, ball_coord_px.y],
+                false,
+            )?;
+        }
+
+        Ok(())
+    }
 }
 
 impl GgezRenderer {

@@ -85,6 +85,15 @@ impl Renderer for DummyRenderer {
         todo!()
     }
 
+    fn draw_balls_from_snapshot_data(
+        &self,
+        backend: &mut dyn DrawingBackend,
+        snapshot: &crate::frame::renderer_snapshot::RendererSnapshot,
+    ) -> AppResult {
+        // Dummy implementation - does nothing
+        Ok(())
+    }
+
     fn set_physics_engine(&mut self, engine: BallPhysics) {
         todo!()
     }
