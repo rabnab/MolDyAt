@@ -241,18 +241,16 @@ impl BallPhysics {
 
     pub(crate) fn lenard_jones_force(
         &self,
-        dist_of_balls: f32,
-        radius_sum: f32,
+        edge_dist: f32,
         _id: usize,
     ) -> f32 {
-        let dist = dist_of_balls - radius_sum;
         let r_cap = self.get_force_cap_distance();
 
-        if dist < r_cap {
+        if edge_dist < r_cap {
             // Force is constant at max_force below cap distance
             self.constants.max_force
         } else {
-            self.lenard_jones_force_pure(dist)
+            self.lenard_jones_force_pure(edge_dist)
         }
     }
 
@@ -342,11 +340,12 @@ impl BallPhysics {
             .iter()
             .filter_map(|&idx| balls.get(idx))
             .map(|other| {
+                let center_dist = ball_pos.dist(other.get_position()).norm();
+                let edge_dist = center_dist - (ball_radius + other.radius);
                 (
                     other.get_position().clone(),
                     self.lenard_jones_force(
-                        ball_pos.dist(other.get_position()).norm(),
-                        ball_radius + other.radius,
+                        edge_dist,
                         other.get_id(),
                     ),
                 )
@@ -416,10 +415,10 @@ impl BallPhysics {
                 let radius_sum = b.radius + ball_radius;
                 let edge_dist = center_dist - radius_sum;
 
-                match Self::calculate_min_dist(center_dist - radius_sum, min_dist) {
+                match Self::calculate_min_dist(edge_dist, min_dist) {
                     Ok(min_dist_cur) => {
                         min_dist = min_dist_cur;
-                        let lj_force = self.lenard_jones_force(center_dist, radius_sum, ball_id);
+                        let lj_force = self.lenard_jones_force(edge_dist, ball_id);
                         let force_to_dist_val = lj_force / center_dist;
                         let local_force = Vec2D::new(
                             dist_vec.x * force_to_dist_val,
@@ -460,7 +459,7 @@ impl BallPhysics {
                         }
 
                         force += local_force;
-                        total_pot += self.lenard_jones_potential(center_dist - radius_sum);
+                        total_pot += self.lenard_jones_potential(edge_dist);
                     }
                 };
             }
@@ -546,7 +545,7 @@ mod tests {
         for i in -30..30 {
             let r = i as f32 * r_eq * 0.1;
             let f = phys.lenard_jones_force_pure(r);
-            let f2 = phys.lenard_jones_force(r, 0.0, 0);
+            let f2 = phys.lenard_jones_force(r, 0);
             println!("r {r}  force: {f} eff: {f2}");
         }
 
@@ -591,12 +590,12 @@ mod tests {
 
         // Below r_cap, force should be capped at max_force
         let r_below_cap = r_cap * 0.5;
-        let force_below = phys.lenard_jones_force(r_below_cap, 0.0, 0);
+        let force_below = phys.lenard_jones_force(r_below_cap, 0);
         approx(force_below, max_force, 1e-6);
 
         // Well below r_cap, force should still be capped
         let r_very_small = r_cap * 0.1;
-        let force_very_small = phys.lenard_jones_force(r_very_small, 0.0, 0);
+        let force_very_small = phys.lenard_jones_force(r_very_small, 0);
         approx(force_very_small, max_force, 1e-6);
     }
 
@@ -632,7 +631,7 @@ mod tests {
 
         // Above r_cap, force should follow normal LJ formula
         let r_above = r_cap * 2.0;
-        let force_above = phys.lenard_jones_force(r_above, 0.0, 0);
+        let force_above = phys.lenard_jones_force(r_above, 0);
         let force_pure = phys.lenard_jones_force_pure(r_above);
 
         // Force should be less than max_force
@@ -956,7 +955,7 @@ mod tests {
 
         for &r in &test_distances {
             let force_pure = phys.lenard_jones_force_pure(r);
-            let force_capped = phys.lenard_jones_force(r, 0.0, 0);
+            let force_capped = phys.lenard_jones_force(r, 0);
             let potential = phys.lenard_jones_potential(r);
             let is_capped = r < r_cap;
 

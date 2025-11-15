@@ -221,7 +221,7 @@ pub fn force_indexed_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2
 
             if center_dist > 0. {
                 // Calculate force using physics helper
-                let lj_force = physics.lenard_jones_force(center_dist, radius_sum, b.get_id());
+                let lj_force = physics.lenard_jones_force(edge_dist, b.get_id());
 
                 let force_to_dist_val = lj_force / center_dist;
                 let local_force_x = dist_vec.x * force_to_dist_val;
