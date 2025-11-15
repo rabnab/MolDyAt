@@ -227,8 +227,10 @@ impl Ball2D {
         let bound_max_x = f32::max(x0, x1) - self.radius;
         let bound_min_y = f32::min(y0, y1) + self.radius;
         let bound_max_y = f32::max(y0, y1) - self.radius;
-        let (x, vx, wall_px) = self.update_x_and_handle_left_right_boundary(dx, bound_min_x, bound_max_x);
-        let (y, vy, wall_py) = self.update_y_and_handle_top_bottom_boundary(dy, bound_min_y, bound_max_y);
+        let (x, vx, wall_px) =
+            self.update_x_and_handle_left_right_boundary(dx, bound_min_x, bound_max_x);
+        let (y, vy, wall_py) =
+            self.update_y_and_handle_top_bottom_boundary(dy, bound_min_y, bound_max_y);
 
         self.set_position(Vec2D::new(x, y));
         self.v = Vec2D::new(vx, vy);
@@ -239,7 +241,7 @@ impl Ball2D {
                 old_pos, self.pos, dt, self.v, self.accel
             );
         }
-        
+
         (wall_px, wall_py)
     }
 

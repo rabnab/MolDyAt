@@ -41,15 +41,16 @@ impl MainContent {
     /// Update all ball positions and return total momentum transferred to walls
     fn update_positions(&mut self, dt: f32, bound_rect: &Rect) -> (f32, f32) {
         let physics = &self.physics;
-        let wall_momentum: Vec<(f32, f32)> = self.balls
+        let wall_momentum: Vec<(f32, f32)> = self
+            .balls
             .par_iter_mut()
             .map(|ball| physics.update_positions(ball, dt, bound_rect))
             .collect();
-        
+
         // Sum up total wall momentum
         let total_wall_px: f32 = wall_momentum.iter().map(|(px, _)| px).sum();
         let total_wall_py: f32 = wall_momentum.iter().map(|(_, py)| py).sum();
-        
+
         (total_wall_px, total_wall_py)
     }
 
@@ -144,7 +145,7 @@ impl VerletIntegration for MainContent {
 
         // Update positions in parallel and collect wall momentum
         let (wall_px, wall_py) = self.update_positions(dt, bound_rect);
-        
+
         // Store wall momentum for tracking
         self.sim.wall_momentum_x += wall_px;
         self.sim.wall_momentum_y += wall_py;

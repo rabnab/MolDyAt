@@ -36,7 +36,7 @@ pub struct SimStats {
     update_hood_cnt: usize,
 
     min_dist_initial: f32,
-    
+
     // Wall momentum tracking
     pub wall_momentum_x: f32,
     pub wall_momentum_y: f32,

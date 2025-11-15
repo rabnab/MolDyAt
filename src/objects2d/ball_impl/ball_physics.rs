@@ -322,7 +322,7 @@ impl BallPhysics {
         }
         //TODO check if it is true that this should only be done later
         //self.update_old_pos();
-        
+
         (wall_px, wall_py)
     }
 
