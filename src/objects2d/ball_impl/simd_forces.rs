@@ -13,8 +13,8 @@
 //! - For r >= r_cap: Standard LJ force F_LJ(r)
 //! - For r < r_cap: Capped force = max_force
 //!
-//! The corresponding potential energy uses linear extrapolation below r_cap to maintain
-//! energy conservation. See `BallPhysics::lenard_jones_potential()` for details.
+//! The corresponding potential energy uses linear extrapolation U(r) = U(r_cap) - max_force·(r - r_cap)
+//! below r_cap to maintain energy conservation. See `BallPhysics::lenard_jones_potential()` for details.
 //!
 //! Note: All SIMD implementations are currently 4-wide. AVX2 uses FMA for improved precision/performance, but does not use 8-wide vectorization yet.
 //! 8-wide AVX2 support is a planned future optimization (see PERFORMANCE_OPTIMIZATION.md line 548).
@@ -125,9 +125,9 @@ pub fn force_indexed_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2
             let pot_at_cap =
                 f32x4::splat(4. * lj_eps) * cap_quot_six * (cap_quot_six - f32x4::splat(1.));
 
-            // Linear potential for r < r_cap: U(r) = U(r_cap) + max_force·(r - r_cap)
-            // This ensures F = -dU/dr = max_force (constant) below r_cap
-            let potential_linear = pot_at_cap + max_force_vec * (edge_dist - r_cap_vec);
+            // Linear potential for r < r_cap: U(r) = U(r_cap) - max_force·(r - r_cap)
+            // This ensures F = -dU/dr = +max_force (repulsive, constant) below r_cap
+            let potential_linear = pot_at_cap - max_force_vec * (edge_dist - r_cap_vec);
 
             // Extract results and accumulate
             let fx_arr: [f32; 4] = fx.into();

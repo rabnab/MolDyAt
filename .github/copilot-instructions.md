@@ -118,7 +118,7 @@ This is a **molecular dynamics physics simulation** implementing Lennard-Jones p
 
 ### Physics Implementation
 - **Lennard-Jones Potential**: Inter-particle forces with attractive/repulsive components
-- **Force Capping**: When edge distance `< r_cap`, force is capped at `max_force` with linear potential `U(r) = U(r_cap) + max_force * (r - r_cap)` to preserve energy
+- **Force Capping**: When edge distance `< r_cap`, force is capped at `max_force` with linear potential `U(r) = U(r_cap) - max_force * (r - r_cap)` to preserve energy (note the minus sign ensures F = -dU/dr = +max_force repulsive)
 - **r_cap Calculation**: Cached distance where LJ force equals `max_force`, computed via Newton's method in `calculate_force_cap_distance()`
 - **Verlet Neighbor Lists**: Use indices (`Vec<usize>`) to track nearby particles, reducing O(N²) checks
 - **Cutoff Distances**: Interactions beyond cutoff are ignored; account for particle radii in cutoff calculations
