@@ -983,6 +983,6 @@ This design is robust, well-founded in concurrency theory, and directly addresse
 
 **Document version**: 1.0  
 **Related issue**: [#17 - Threaded renderer using latest-only snapshots](https://github.com/rabnab/molecularLenardJones/issues/17)  
-**Author**: GitHub Copilot (Claude Sonnet 4.5)  
+**Author**: AI-assisted documentation  
 **Date**: 2025-11-15
 
