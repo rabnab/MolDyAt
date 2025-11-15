@@ -9,6 +9,24 @@ const DEFAULT_TAIL_LENGTH: usize = 0;
 
 const TAIL_RESOLUTION_DELTA_SQ: f32 = 3. * 3.; // minimum squared distance to add new tail point
 
+/// Information about wall bounces detected during position update.
+/// Bounces are applied as impulses during the velocity update step to preserve Verlet integration.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct BounceInfo {
+    /// Momentum that will be transferred to walls (calculated during velocity update)
+    pub wall_px: f32,
+    pub wall_py: f32,
+    /// Whether the ball bounced off left/right wall during position update
+    pub bounced_x: bool,
+    /// Whether the ball bounced off top/bottom wall during position update
+    pub bounced_y: bool,
+    /// Velocity before bounce (needed for wall momentum calculation)
+    pub v_x_before_bounce: f32,
+    pub v_y_before_bounce: f32,
+    /// Fraction of timestep before collision (0.0 to 1.0)
+    pub collision_time_fraction: f32,
+}
+
 pub struct Ball2D {
     pub radius: f32,
     pub size_idx: usize,
@@ -157,30 +175,40 @@ impl Ball2D {
         dy: f32,
         bound_min_y: f32,
         bound_max_y: f32,
-    ) -> (f32, f32, f32) {
+    ) -> (f32, bool, f32) {
         let newy = self.pos.y + dy;
 
         let mut res_y = newy;
-        let mut res_vy = self.v.y;
-        let mut wall_momentum_y = 0.0;
+        let bounced;
+        let mut collision_fraction = 1.0; // No collision by default (full timestep)
 
         if bound_max_y > newy && newy > bound_min_y {
-            //nothing to do, inside boundary
+            // Inside boundary - no collision
+            bounced = false;
         } else if newy <= bound_min_y {
+            // Hit bottom boundary - calculate collision time
+            let distance_to_boundary = bound_min_y - self.pos.y;
+            if dy.abs() > 1e-10 {
+                collision_fraction = distance_to_boundary / dy;
+                collision_fraction = collision_fraction.clamp(0.0, 1.0);
+            }
+            // Reflect position
             let overy = bound_min_y - newy;
             res_y = bound_min_y + overy;
-            res_vy = -self.v.y;
-            // Momentum change: ball loses 2*m*v_y, wall gains 2*m*v_y
-            wall_momentum_y = 2.0 * self.mass * self.v.y;
+            bounced = true;
         } else {
-            // y is outside top boundary
+            // Hit top boundary - calculate collision time
+            let distance_to_boundary = bound_max_y - self.pos.y;
+            if dy.abs() > 1e-10 {
+                collision_fraction = distance_to_boundary / dy;
+                collision_fraction = collision_fraction.clamp(0.0, 1.0);
+            }
+            // Reflect position
             let overy = newy - bound_max_y;
             res_y = bound_max_y - overy;
-            res_vy = -self.v.y;
-            // Momentum change: ball loses 2*m*v_y, wall gains 2*m*v_y
-            wall_momentum_y = 2.0 * self.mass * self.v.y;
+            bounced = true;
         }
-        (res_y, res_vy, wall_momentum_y)
+        (res_y, bounced, collision_fraction)
     }
 
     fn update_x_and_handle_left_right_boundary(
@@ -188,34 +216,44 @@ impl Ball2D {
         dx: f32,
         bound_min_x: f32,
         bound_max_x: f32,
-    ) -> (f32, f32, f32) {
+    ) -> (f32, bool, f32) {
         let newx = self.pos.x + dx;
 
         let mut res_x = newx;
-        let mut res_vx = self.v.x;
-        let mut wall_momentum_x = 0.0;
+        let bounced;
+        let mut collision_fraction = 1.0; // No collision by default (full timestep)
 
         if bound_max_x > newx && newx > bound_min_x {
-            //nothing to do, inside boundary
+            // Inside boundary - no collision
+            bounced = false;
         } else if newx <= bound_min_x {
+            // Hit left boundary - calculate collision time
+            let distance_to_boundary = bound_min_x - self.pos.x;
+            if dx.abs() > 1e-10 {
+                collision_fraction = distance_to_boundary / dx;
+                collision_fraction = collision_fraction.clamp(0.0, 1.0);
+            }
+            // Reflect position
             let overx = bound_min_x - newx;
             res_x = bound_min_x + overx;
-            res_vx = -self.v.x;
-            // Momentum change: ball loses 2*m*v_x, wall gains 2*m*v_x
-            wall_momentum_x = 2.0 * self.mass * self.v.x;
+            bounced = true;
         } else {
-            // x is outside right boundary
+            // Hit right boundary - calculate collision time
+            let distance_to_boundary = bound_max_x - self.pos.x;
+            if dx.abs() > 1e-10 {
+                collision_fraction = distance_to_boundary / dx;
+                collision_fraction = collision_fraction.clamp(0.0, 1.0);
+            }
+            // Reflect position
             let overx = newx - bound_max_x;
             res_x = bound_max_x - overx;
-            res_vx = -self.v.x;
-            // Momentum change: ball loses 2*m*v_x, wall gains 2*m*v_x
-            wall_momentum_x = 2.0 * self.mass * self.v.x;
+            bounced = true;
         }
 
-        (res_x, res_vx, wall_momentum_x)
+        (res_x, bounced, collision_fraction)
     }
 
-    pub(crate) fn execute_update_pos(&mut self, dt: f32, bound: &Rect) -> (f32, f32) {
+    pub(crate) fn execute_update_pos(&mut self, dt: f32, bound: &Rect) -> BounceInfo {
         let old_pos = self.pos.clone();
         let dx = self.v.x * dt + 0.5 * self.accel.x * dt * dt;
         let dy = self.v.y * dt + 0.5 * self.accel.y * dt * dt;
@@ -227,13 +265,28 @@ impl Ball2D {
         let bound_max_x = f32::max(x0, x1) - self.radius;
         let bound_min_y = f32::min(y0, y1) + self.radius;
         let bound_max_y = f32::max(y0, y1) - self.radius;
-        let (x, vx, wall_px) =
+
+        // Store velocity before any bounces for momentum calculation
+        let v_before = self.v.clone();
+
+        let (x, bounced_x, collision_frac_x) =
             self.update_x_and_handle_left_right_boundary(dx, bound_min_x, bound_max_x);
-        let (y, vy, wall_py) =
+        let (y, bounced_y, collision_frac_y) =
             self.update_y_and_handle_top_bottom_boundary(dy, bound_min_y, bound_max_y);
 
+        // Use the earliest collision time (if both x and y collide, use the earlier one)
+        let collision_time_fraction = if bounced_x && bounced_y {
+            collision_frac_x.min(collision_frac_y)
+        } else if bounced_x {
+            collision_frac_x
+        } else if bounced_y {
+            collision_frac_y
+        } else {
+            1.0
+        };
+
+        // Update position only - velocity will be modified during velocity update step
         self.set_position(Vec2D::new(x, y));
-        self.v = Vec2D::new(vx, vy);
 
         if self.verbose.console {
             println!(
@@ -242,7 +295,15 @@ impl Ball2D {
             );
         }
 
-        (wall_px, wall_py)
+        BounceInfo {
+            wall_px: 0.0, // Will be calculated during velocity update
+            wall_py: 0.0,
+            bounced_x,
+            bounced_y,
+            v_x_before_bounce: v_before.x,
+            v_y_before_bounce: v_before.y,
+            collision_time_fraction,
+        }
     }
 
     pub fn set_position(&mut self, new_pos: Vec2D) {
@@ -328,17 +389,25 @@ mod tests {
         b.set_accel(Vec2D::zero());
         let bound = Rect::new(-2.0, -2.0, 4.0, 4.0); // square from -2..2
         // Move with dt so that we cross right boundary (max x = 2 - radius = 1)
-        b.execute_update_pos(0.2, &bound); // dx = 2.0
-        // Expect bounce: position mirrored inside and v.x flipped
-        assert!(b.pos.x <= 1.0 + 1e-6);
-        assert!(b.v.x <= 0.0);
+        let bounce_info = b.execute_update_pos(0.2, &bound); // dx = 2.0
+        // Expect bounce: position reflected inside, velocity unchanged (bounce handled later)
+        assert!(b.pos.x <= 1.0 + 1e-6, "Position should be reflected");
+        assert!(bounce_info.bounced_x, "Should detect x bounce");
+        assert_eq!(
+            b.v.x, 10.0,
+            "Velocity should be unchanged during position update"
+        );
 
         // Now move towards bottom boundary in y
         b.v = Vec2D::new(0.0, -10.0);
         b.pos = Vec2D::new(0.0, 0.0);
-        b.execute_update_pos(0.2, &bound); // dy = -2.0 -> bounce at y = -1
-        assert!(b.pos.y >= -1.0 - 1e-6);
-        assert!(b.v.y >= 0.0);
+        let bounce_info = b.execute_update_pos(0.2, &bound); // dy = -2.0 -> bounce at y = -1
+        assert!(b.pos.y >= -1.0 - 1e-6, "Position should be reflected");
+        assert!(bounce_info.bounced_y, "Should detect y bounce");
+        assert_eq!(
+            b.v.y, -10.0,
+            "Velocity should be unchanged during position update"
+        );
     }
 
     #[test]

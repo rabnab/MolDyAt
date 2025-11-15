@@ -41,11 +41,15 @@ This is a **molecular dynamics physics simulation** implementing Lennard-Jones p
 
 ## Code Quality Standards
 
-### Formatting & Linting
-- **Before every commit**: Run `cargo fmt` to ensure consistent formatting
-- Run `clippy` to catch common mistakes and non-idiomatic code
+### Formatting & Linting (MANDATORY)
+- **REQUIRED before every commit**: 
+  1. Run `cargo +nightly fmt` to ensure consistent formatting
+  2. Run `cargo +nightly clippy -- -D warnings` to catch all warnings/errors
+  3. Both must pass without errors before committing
 - Address all clippy warnings unless there's a documented reason to allow them
-- Optional: Add CI checks for `cargo +nightly fmt -- --check` and `cargo +nightly test`
+- CI checks enforce: `cargo +nightly fmt -- --check` and `cargo +nightly clippy -- -D warnings`
+- **Never commit code that fails formatting or clippy checks**
+- **Always run formatting and clippy before committing - no exceptions**
 
 ### Line Endings
 - **Always use LF (Unix-style) line endings** for all source files
@@ -64,6 +68,14 @@ This is a **molecular dynamics physics simulation** implementing Lennard-Jones p
   - Ensure no undefined behavior (aliasing violations, data races, etc.)
 - Prefer borrow checker solutions over unsafe workarounds
 - Index-based references are often safer than raw pointers for spatial structures
+
+### Method Length & Maintainability
+- **Keep methods short and focused** - aim for single responsibility
+- If a method exceeds ~50-100 lines, consider splitting it into smaller functions
+- Break complex logic into well-named helper functions for clarity
+- Each function should have a clear, testable purpose
+- When in doubt, prefer multiple small functions over one large function
+- Long methods are harder to test, debug, and maintain
 
 ### Coding Best Practices
 
