@@ -1,5 +1,6 @@
 use crate::objects2d::Rect;
 use crate::objects2d::Vec2D;
+use crate::objects2d::ball_impl::ball_core::BounceInfo;
 use crate::objects2d::ball_impl::{Ball2D, BallError, BallResult, Named};
 
 //const LJ_SIG: f32 = 5.; // equilibrium distance
@@ -296,7 +297,7 @@ impl BallPhysics {
         res
     }
 
-    pub fn update_positions(&self, ball: &mut Ball2D, dt: f32, bound: &Rect) -> (f32, f32) {
+    pub fn update_positions(&self, ball: &mut Ball2D, dt: f32, bound: &Rect) -> BounceInfo {
         if ball.verbose.console {
             println!(
                 "{} ------ [{:.2},{:.2}]",
@@ -308,7 +309,7 @@ impl BallPhysics {
 
         let dt_sub = dt;
         let int_steps: usize = 1;
-        let (wall_px, wall_py) = ball.execute_update_pos(dt_sub, bound);
+        let bounce_info = ball.execute_update_pos(dt_sub, bound);
 
         if ball.verbose.console {
             println!(
@@ -323,7 +324,7 @@ impl BallPhysics {
         //TODO check if it is true that this should only be done later
         //self.update_old_pos();
 
-        (wall_px, wall_py)
+        bounce_info
     }
 
     pub fn get_neighbour_force_and_pos(

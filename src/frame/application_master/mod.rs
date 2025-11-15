@@ -28,6 +28,8 @@ pub struct MainContent {
     resize_resume_at: Option<std::time::Instant>,
     was_paused_for_resize: bool,
     update_hood_at_frame_start: usize,
+    /// Override for speed limit (None = use default calculation, Some(f32::INFINITY) = disable)
+    pub(crate) speed_limit_override: Option<f32>,
 }
 
 pub struct StatsAccumulator {

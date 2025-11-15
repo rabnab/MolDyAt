@@ -3,6 +3,7 @@ use super::*;
 use crate::frame::VerletIntegration;
 use crate::objects2d::Rect;
 use crate::objects2d::ball_impl::ForceResult;
+use crate::objects2d::ball_impl::ball_core::BounceInfo;
 use crate::objects2d::ball_impl::simd_forces::force_indexed_simd;
 use rayon::prelude::*;
 
@@ -38,20 +39,16 @@ impl MainContent {
         }
     }
 
-    /// Update all ball positions and return total momentum transferred to walls
-    fn update_positions(&mut self, dt: f32, bound_rect: &Rect) -> (f32, f32) {
+    /// Update all ball positions and collect bounce information
+    fn update_positions(&mut self, dt: f32, bound_rect: &Rect) -> Vec<BounceInfo> {
         let physics = &self.physics;
-        let wall_momentum: Vec<(f32, f32)> = self
+        let bounce_infos: Vec<BounceInfo> = self
             .balls
             .par_iter_mut()
             .map(|ball| physics.update_positions(ball, dt, bound_rect))
             .collect();
 
-        // Sum up total wall momentum
-        let total_wall_px: f32 = wall_momentum.iter().map(|(px, _)| px).sum();
-        let total_wall_py: f32 = wall_momentum.iter().map(|(_, py)| py).sum();
-
-        (total_wall_px, total_wall_py)
+        bounce_infos
     }
 
     /// Update old positions for all balls
@@ -73,24 +70,69 @@ impl MainContent {
         results
     }
 
-    /// Apply a single force result to a ball and collect statistics
+    /// Apply a single force result to a ball, apply wall bounces, and collect statistics
     fn apply_single_force_and_collect_stats(
         &mut self,
         ball_idx: usize,
         result: &ForceResult,
+        bounce_info: &BounceInfo,
         dt: f32,
         speed_limit: f32,
         stats_accumulator: &mut StatsAccumulator,
-    ) {
+    ) -> (f32, f32) {
         let ball = &mut self.balls[ball_idx];
+
+        let mut wall_px = 0.0;
+        let mut wall_py = 0.0;
+
+        // Compute new acceleration from forces at final position
         let accel = ball.accel_with_speed_limit(
             &result.force,
             self.physics.constants.gravity,
             speed_limit,
             dt,
         );
-        ball.v.x += 0.5 * (accel.x + ball.accel.x) * dt;
-        ball.v.y += 0.5 * (accel.y + ball.accel.y) * dt;
+
+        if bounce_info.bounced_x || bounce_info.bounced_y {
+            // Split timestep: integrate to bounce, apply bounce, integrate remainder
+            let t_collision = bounce_info.collision_time_fraction;
+
+            // Integrate velocity from t=0 to t=t_collision (before bounce)
+            // Use average of old and new acceleration for the pre-bounce period
+            let v_at_collision_x = ball.v.x + 0.5 * (ball.accel.x + accel.x) * dt * t_collision;
+            let v_at_collision_y = ball.v.y + 0.5 * (ball.accel.y + accel.y) * dt * t_collision;
+
+            // Wall receives impulse equal to 2 × m × v_perpendicular (elastic bounce)
+            // This is the momentum transferred TO the wall
+            if bounce_info.bounced_x {
+                wall_px = 2.0 * ball.mass * v_at_collision_x;
+            }
+            if bounce_info.bounced_y {
+                wall_py = 2.0 * ball.mass * v_at_collision_y;
+            }
+
+            // Apply bounce at collision time (velocity reversal)
+            let v_after_bounce_x = if bounce_info.bounced_x {
+                -v_at_collision_x
+            } else {
+                v_at_collision_x
+            };
+            let v_after_bounce_y = if bounce_info.bounced_y {
+                -v_at_collision_y
+            } else {
+                v_at_collision_y
+            };
+
+            // Integrate velocity from t=t_collision to t=dt (after bounce)
+            // Continue with same acceleration for remainder of timestep
+            ball.v.x = v_after_bounce_x + 0.5 * (ball.accel.x + accel.x) * dt * (1.0 - t_collision);
+            ball.v.y = v_after_bounce_y + 0.5 * (ball.accel.y + accel.y) * dt * (1.0 - t_collision);
+        } else {
+            // No bounce - standard Verlet integration
+            ball.v.x += 0.5 * (accel.x + ball.accel.x) * dt;
+            ball.v.y += 0.5 * (accel.y + ball.accel.y) * dt;
+        }
+
         ball.accel = accel;
 
         if ball.verbose.console {
@@ -109,26 +151,39 @@ impl MainContent {
             stats_accumulator.max_v = f32::sqrt(speed_sq);
             stats_accumulator.max_id = ball.get_id();
         }
+
+        (wall_px, wall_py)
     }
 
-    /// Apply force results and collect statistics
+    /// Apply force results, process wall bounces, and collect statistics
     fn apply_forces_and_collect_stats(
         &mut self,
         force_results: &[ForceResult],
+        bounce_infos: &[BounceInfo],
         dt: f32,
         bound_rect: &Rect,
         stats_accumulator: &mut StatsAccumulator,
-    ) {
-        let speed_limit = f32::min(bound_rect.w, bound_rect.h) * 0.2;
+    ) -> (f32, f32) {
+        let speed_limit = self
+            .speed_limit_override
+            .unwrap_or_else(|| f32::min(bound_rect.w, bound_rect.h) * 0.2);
+        let mut total_wall_px = 0.0;
+        let mut total_wall_py = 0.0;
+
         for (i, result) in force_results.iter().enumerate() {
-            self.apply_single_force_and_collect_stats(
+            let (wall_px, wall_py) = self.apply_single_force_and_collect_stats(
                 i,
                 result,
+                &bounce_infos[i],
                 dt,
                 speed_limit,
                 stats_accumulator,
             );
+            total_wall_px += wall_px;
+            total_wall_py += wall_py;
         }
+
+        (total_wall_px, total_wall_py)
     }
 }
 
@@ -143,12 +198,8 @@ impl VerletIntegration for MainContent {
             max_id: 0,
         };
 
-        // Update positions in parallel and collect wall momentum
-        let (wall_px, wall_py) = self.update_positions(dt, bound_rect);
-
-        // Store wall momentum for tracking
-        self.sim.wall_momentum_x += wall_px;
-        self.sim.wall_momentum_y += wall_py;
+        // Update positions in parallel and collect bounce info
+        let bounce_infos = self.update_positions(dt, bound_rect);
 
         // Update old positions in parallel
         self.update_old_positions();
@@ -156,9 +207,19 @@ impl VerletIntegration for MainContent {
         // Reset min_dist before velocity/accel updates
         self.sim.reset_min_dist(bound_rect);
 
-        // Compute forces in parallel with SIMD, then apply updates
+        // Compute forces in parallel with SIMD, then apply updates and bounces
         let force_results = self.compute_forces();
-        self.apply_forces_and_collect_stats(&force_results, dt, bound_rect, &mut stats_accumulator);
+        let (wall_px, wall_py) = self.apply_forces_and_collect_stats(
+            &force_results,
+            &bounce_infos,
+            dt,
+            bound_rect,
+            &mut stats_accumulator,
+        );
+
+        // Store wall momentum for tracking
+        self.sim.wall_momentum_x += wall_px;
+        self.sim.wall_momentum_y += wall_py;
 
         stats_accumulator.v_com = stats_accumulator
             .v_com
