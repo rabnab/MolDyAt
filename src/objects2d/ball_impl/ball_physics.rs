@@ -30,7 +30,7 @@ impl Default for PhysicsConstants {
             gravity: 0.0,
             //gravity: 1.0,
             damping: 1.0,
-            max_force: 1000.0,
+            max_force: 100.0,
             //softening: 0.01,
             softening: 0.0,
             lj_cutoff: LJ_CUTOFF, // Standard cutoff for L-J potential 2.5
@@ -50,14 +50,25 @@ pub struct ForceResult {
     pub potential_energy: f32,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct BallPhysics {
     pub constants: PhysicsConstants,
+    /// Cached distance at which LJ force equals max_force
+    r_cap: f32,
+}
+
+impl Default for BallPhysics {
+    fn default() -> Self {
+        let constants = PhysicsConstants::default();
+        let r_cap = Self::calculate_force_cap_distance(&constants);
+        BallPhysics { constants, r_cap }
+    }
 }
 
 impl BallPhysics {
     pub fn new(constants: PhysicsConstants) -> Self {
-        BallPhysics { constants }
+        let r_cap = Self::calculate_force_cap_distance(&constants);
+        BallPhysics { constants, r_cap }
     }
 
     /// the cutoff distance used for evaluating lenard jones potentail
@@ -90,24 +101,39 @@ impl BallPhysics {
         (SQRT6_OF_TWO * self.constants.lj_sig) * 0.5 + radius
     }
 
+    /// Calculate Lennard-Jones potential energy with force capping.
+    ///
+    /// The standard Lennard-Jones potential is:
+    ///   U(r) = 4·ε·[(σ/r)^12 - (σ/r)^6]
+    ///
+    /// At equilibrium (r = 2^(1/6)·σ), U = -ε (minimum potential energy).
+    ///
+    /// # Force Capping for Energy Conservation
+    /// When r < r_cap (where force would exceed max_force), we use a linear potential:
+    ///   U(r) = U(r_cap) - max_force·(r - r_cap)
+    ///
+    /// This linear extrapolation ensures:
+    /// 1. Energy continuity at r = r_cap: U(r_cap⁻) = U(r_cap⁺)
+    /// 2. Force continuity: F = -dU/dr = +max_force (repulsive) for r < r_cap
+    /// 3. Conservative force field (energy is conserved)
+    ///
+    /// # Arguments
+    /// * `dist_btw_balls` - Edge-to-edge distance between ball surfaces
     pub(crate) fn lenard_jones_potential(&self, dist_btw_balls: f32) -> f32 {
-        //case dist_of_balls = equilibrium_radius*2 and radius_sum=2*radius
-        //dist = SQRT6_OF_TWO LJ_SIG + 2*rad - 2*rad
-        //dist = SQRT6_OF_TWO LJ_SIG
-        //quot = LJ_SIG/dist = 1/SQRT6_OF_TWO
-        //quot_six = 1/2
-        //potential: 4 LJ_EPS 1/2 *(1/2-1)
-        //    4 LJ_EPS 1/2 * (-1/2)
-        //    - LJ_EPS
+        let r_cap = self.get_force_cap_distance();
 
-        if dist_btw_balls < self.min_dist_for_const_force() {
-            let quot = self.constants.lj_sig / self.min_dist_for_const_force();
-            let quot_six = quot.powi(6);
-            let pot_at_min_dist = 4. * self.constants.lj_eps * quot_six * (quot_six - 1.);
+        if dist_btw_balls < r_cap {
+            // Force capping region: use linear potential to preserve energy
+            let quot = self.constants.lj_sig / r_cap; // σ/r_cap
+            let quot_six = quot.powi(6); // (σ/r_cap)^6
 
-            let force_at_min_dist = self.lenard_jones_force_pure(self.min_dist_for_const_force());
-            return pot_at_min_dist
-                + (dist_btw_balls - self.min_dist_for_const_force()) * force_at_min_dist;
+            // Calculate potential at the cap distance
+            let pot_at_cap = 4. * self.constants.lj_eps * quot_six * (quot_six - 1.);
+
+            // Linear extrapolation: U(r) = U(r_cap) - max_force·(r - r_cap)
+            // Since F = -dU/dr, we have F = +max_force (repulsive)
+            // As r decreases, U increases (higher potential at closer distances)
+            return pot_at_cap - self.constants.max_force * (dist_btw_balls - r_cap);
         }
 
         let quot = self.constants.lj_sig / dist_btw_balls;
@@ -115,8 +141,102 @@ impl BallPhysics {
         4. * self.constants.lj_eps * quot_six * (quot_six - 1.)
     }
 
-    fn min_dist_for_const_force(&self) -> f32 {
-        self.constants.lj_sig * 0.75
+    /// Calculate the distance r_cap at which the Lennard-Jones force equals max_force.
+    ///
+    /// This is critical for energy conservation when force capping is enabled. We solve:
+    ///   |F_LJ(r_cap)| = max_force
+    ///
+    /// Where the Lennard-Jones force is:
+    ///   F_LJ(r) = 24·ε·(σ/r)^6 · [2·(σ/r)^6 - 1] / r
+    ///
+    /// # Energy Conservation Strategy
+    /// For r < r_cap, we cap the force at max_force and use a linear potential:
+    ///   U(r) = U(r_cap) - max_force·(r - r_cap)
+    /// This ensures F = -dU/dr = +max_force (repulsive), energy continuity at r_cap, and conservative forces.
+    ///
+    /// # Algorithm
+    /// 1. Try Newton's method for fast convergence (typically 5-10 iterations)
+    /// 2. Fall back to binary search if Newton's method fails to converge
+    ///
+    /// # Returns
+    /// The distance r_cap where |F_LJ(r_cap)| = max_force
+    fn calculate_force_cap_distance(constants: &PhysicsConstants) -> f32 {
+        const NEWTON_MAX_ITERATIONS: usize = 20;
+        const NEWTON_CONVERGENCE_THRESHOLD: f32 = 1e-6;
+        const INITIAL_GUESS_FACTOR: f32 = 0.5; // Start at 0.5·σ
+
+        let max_force = constants.max_force;
+        let lj_sig = constants.lj_sig;
+        let lj_eps = constants.lj_eps;
+
+        // Initial guess: start at σ/2, which is typically in the steep repulsive region
+        let mut r = lj_sig * INITIAL_GUESS_FACTOR;
+
+        // Newton's method: r_new = r - f(r)/f'(r)
+        // where f(r) = F_LJ(r) - max_force
+        // F_LJ(r) = 24·ε·(σ/r)^6 · [2·(σ/r)^6 - 1] / r
+        for iteration in 0..NEWTON_MAX_ITERATIONS {
+            let quot = lj_sig / r; // σ/r
+            let quot_six = quot.powi(6); // (σ/r)^6
+            let quot_twelve = quot_six * quot_six; // (σ/r)^12
+
+            // Calculate Lennard-Jones force magnitude:
+            // F(r) = 24·ε·(σ/r)^6 · [2·(σ/r)^6 - 1] / r
+            let force = 24.0 * lj_eps * quot_six * (2.0 * quot_six - 1.0) / r;
+
+            // Calculate derivative dF/dr using chain rule:
+            // dF/dr = -24·ε·[14·(σ/r)^12 - 7·(σ/r)^6] / r²
+            let force_derivative = -24.0 * lj_eps * (14.0 * quot_twelve - 7.0 * quot_six) / (r * r);
+
+            // Newton step: update r to move closer to the root
+            let delta = (force - max_force) / force_derivative;
+            r -= delta;
+
+            // Check convergence: stop when change is < 0.0001% of r
+            if delta.abs() < NEWTON_CONVERGENCE_THRESHOLD * r {
+                if cfg!(test) || iteration < 5 {
+                    // Newton's method typically converges in 3-5 iterations for good initial guess
+                }
+                return r;
+            }
+        }
+
+        // Fallback: Binary search if Newton's method didn't converge
+        // This is rare but provides robustness for extreme parameter values
+        const BINARY_SEARCH_MAX_ITERATIONS: usize = 50;
+        const BINARY_SEARCH_TOLERANCE: f32 = 0.001; // 0.1% tolerance
+        const SEARCH_RANGE_LOW_FACTOR: f32 = 0.1; // Search from 0.1·σ
+        const SEARCH_RANGE_HIGH_FACTOR: f32 = 1.0; // Search up to 1.0·σ
+
+        let mut r_low = lj_sig * SEARCH_RANGE_LOW_FACTOR;
+        let mut r_high = lj_sig * SEARCH_RANGE_HIGH_FACTOR; // Force root is always below σ
+
+        for _ in 0..BINARY_SEARCH_MAX_ITERATIONS {
+            let r_mid = (r_low + r_high) / 2.0;
+            let quot = lj_sig / r_mid;
+            let quot_six = quot.powi(6);
+            let force = (24.0 * lj_eps * quot_six * (2.0 * quot_six - 1.0) / r_mid).abs();
+
+            // Check if we've found a good enough solution
+            if (force - max_force).abs() < BINARY_SEARCH_TOLERANCE * max_force {
+                return r_mid;
+            }
+
+            // Bisect: force decreases with increasing r
+            if force > max_force {
+                r_low = r_mid; // Force too high, need larger r
+            } else {
+                r_high = r_mid; // Force too low, need smaller r
+            }
+        }
+
+        // Return best estimate even if not fully converged
+        (r_low + r_high) / 2.0
+    }
+
+    /// Get the cached force cap distance
+    pub(crate) fn get_force_cap_distance(&self) -> f32 {
+        self.r_cap
     }
 
     pub(crate) fn lenard_jones_force(
@@ -126,12 +246,16 @@ impl BallPhysics {
         _id: usize,
     ) -> f32 {
         let dist = dist_of_balls - radius_sum;
-        if dist < self.min_dist_for_const_force() {
-            self.lenard_jones_force_pure(self.min_dist_for_const_force())
+        let r_cap = self.get_force_cap_distance();
+
+        if dist < r_cap {
+            // Force is constant at max_force below cap distance
+            self.constants.max_force
         } else {
             self.lenard_jones_force_pure(dist)
         }
     }
+
     pub(crate) fn lenard_jones_force_pure(&self, dist_btw_balls: f32) -> f32 {
         let quot = self.constants.lj_sig / dist_btw_balls;
         let quot_six = quot.powi(6);
@@ -453,5 +577,489 @@ mod tests {
         approx(actual_threshold, expected_threshold, 1e-6);
         // Also verify the calculation directly: (2.5 * rc_eff - rc_eff) / 2 = 0.75 * rc_eff
         approx(actual_threshold, 0.75 * effective_cutoff, 1e-6);
+    }
+
+    #[test]
+    fn test_force_cap_at_max_force() {
+        let phys = BallPhysics::default();
+        let max_force = phys.constants.max_force;
+        let r_cap = phys.get_force_cap_distance();
+
+        // At r_cap, force should be approximately max_force
+        let force_at_cap = phys.lenard_jones_force_pure(r_cap);
+        approx(force_at_cap, max_force, 1e-2);
+
+        // Below r_cap, force should be capped at max_force
+        let r_below_cap = r_cap * 0.5;
+        let force_below = phys.lenard_jones_force(r_below_cap, 0.0, 0);
+        approx(force_below, max_force, 1e-6);
+
+        // Well below r_cap, force should still be capped
+        let r_very_small = r_cap * 0.1;
+        let force_very_small = phys.lenard_jones_force(r_very_small, 0.0, 0);
+        approx(force_very_small, max_force, 1e-6);
+    }
+
+    #[test]
+    fn test_potential_linear_below_cap() {
+        let phys = BallPhysics::default();
+        let max_force = phys.constants.max_force;
+        let r_cap = phys.get_force_cap_distance();
+
+        // Get potential at r_cap
+        let pot_at_cap = phys.lenard_jones_potential(r_cap);
+
+        // Check potential at a distance below r_cap
+        let r_below = r_cap * 0.8;
+        let pot_below = phys.lenard_jones_potential(r_below);
+
+        // Expected potential: U(r) = U(r_cap) - max_force * (r - r_cap)
+        let expected_pot = pot_at_cap - max_force * (r_below - r_cap);
+        approx(pot_below, expected_pot, 1e-4);
+
+        // Check another point
+        let r_below2 = r_cap * 0.5;
+        let pot_below2 = phys.lenard_jones_potential(r_below2);
+        let expected_pot2 = pot_at_cap - max_force * (r_below2 - r_cap);
+        approx(pot_below2, expected_pot2, 1e-4);
+    }
+
+    #[test]
+    fn test_force_not_capped_above_threshold() {
+        let phys = BallPhysics::default();
+        let max_force = phys.constants.max_force;
+        let r_cap = phys.get_force_cap_distance();
+
+        // Above r_cap, force should follow normal LJ formula
+        let r_above = r_cap * 2.0;
+        let force_above = phys.lenard_jones_force(r_above, 0.0, 0);
+        let force_pure = phys.lenard_jones_force_pure(r_above);
+
+        // Force should be less than max_force
+        assert!(
+            force_above < max_force,
+            "Force above cap distance should be less than max_force"
+        );
+        // Force should match pure LJ formula
+        approx(force_above, force_pure, 1e-6);
+    }
+
+    #[test]
+    fn test_energy_conservation_with_force_cap() {
+        // Test that energy is conserved when force capping is active
+        let phys = BallPhysics::default();
+        let r_cap = phys.get_force_cap_distance();
+        let max_force = phys.constants.max_force;
+
+        // Verify force is properly capped at r_cap
+        let force_at_cap = phys.lenard_jones_force_pure(r_cap);
+        approx(force_at_cap, max_force, 1.0); // Within 1 unit (1% for max_force=100)
+
+        // Test linear potential below r_cap
+        let pot_at_cap = phys.lenard_jones_potential(r_cap);
+        let r_below1 = r_cap * 0.9;
+        let r_below2 = r_cap * 0.7;
+
+        let pot_below1 = phys.lenard_jones_potential(r_below1);
+        let pot_below2 = phys.lenard_jones_potential(r_below2);
+
+        // Check linearity: slope should be -max_force
+        // U(r) = U(r_cap) - max_force * (r - r_cap)
+        let expected_pot1 = pot_at_cap - max_force * (r_below1 - r_cap);
+        let expected_pot2 = pot_at_cap - max_force * (r_below2 - r_cap);
+
+        approx(pot_below1, expected_pot1, 1e-4);
+        approx(pot_below2, expected_pot2, 1e-4);
+
+        // Verify the slope between two points in the linear region
+        let delta_r = r_below1 - r_below2;
+        let delta_u = pot_below1 - pot_below2;
+        let slope = delta_u / delta_r;
+
+        // Slope should equal -max_force (since F = -dU/dr and F is constant at +max_force)
+        approx(slope, -max_force, 0.1);
+    }
+
+    #[test]
+    fn test_force_cap_calculation_robustness() {
+        // Test that r_cap calculation works for various parameter combinations
+        let test_cases = vec![
+            (1.0, 1.0, 50.0),  // Standard parameters, lower max_force
+            (1.0, 1.0, 100.0), // Default parameters
+            (1.0, 1.0, 200.0), // Higher max_force
+            (0.5, 1.0, 100.0), // Smaller sigma
+            (2.0, 1.0, 100.0), // Larger sigma
+            (1.0, 0.5, 100.0), // Weaker epsilon
+            (1.0, 2.0, 100.0), // Stronger epsilon
+        ];
+
+        for (lj_sig, lj_eps, max_force) in test_cases {
+            let constants = PhysicsConstants {
+                lj_sig,
+                lj_eps,
+                max_force,
+                ..PhysicsConstants::default()
+            };
+
+            let phys = BallPhysics::new(constants);
+            let r_cap = phys.get_force_cap_distance();
+
+            // r_cap should be positive and less than sigma
+            assert!(
+                r_cap > 0.0,
+                "r_cap must be positive for sig={}, eps={}, F_max={}",
+                lj_sig,
+                lj_eps,
+                max_force
+            );
+            assert!(
+                r_cap < lj_sig,
+                "r_cap should be less than sigma for sig={}, eps={}, F_max={}",
+                lj_sig,
+                lj_eps,
+                max_force
+            );
+
+            // Force at r_cap should approximately equal max_force
+            let force_at_cap = phys.lenard_jones_force_pure(r_cap);
+            let rel_error = (force_at_cap - max_force).abs() / max_force;
+            assert!(
+                rel_error < 0.01, // 1% tolerance
+                "Force at r_cap should equal max_force: got {}, expected {}, error = {}%",
+                force_at_cap,
+                max_force,
+                rel_error * 100.0
+            );
+        }
+    }
+
+    #[test]
+    fn test_energy_conservation_two_balls_integration() {
+        // Integration test: Simulate two interacting balls for 1000 steps
+        // and verify total energy (kinetic + potential) remains constant within numerical error
+
+        use crate::objects2d::ball_impl::ball_factory::BallFactory;
+        use crate::objects2d::ball_impl::simd_forces::force_indexed_simd;
+
+        let phys = BallPhysics::default();
+        let factory = BallFactory::new();
+
+        // Create two balls in close proximity to trigger strong forces
+        // Position them at a distance where force capping will be active
+        let r_cap = phys.get_force_cap_distance();
+        let separation = r_cap * 0.8; // Place them close enough to trigger force cap
+
+        let ball1 = factory.create_basic(Vec2D::new(0.0, 0.0), 2);
+        let radius_sum = ball1.radius * 2.0; // Both balls have same radius
+        let mut ball1 = ball1;
+        let mut ball2 = factory.create_basic(Vec2D::new(separation + radius_sum, 0.0), 2);
+
+        // Give them small initial velocities to make the interaction more interesting
+        ball1.v = Vec2D::new(0.1, 0.05);
+        ball2.v = Vec2D::new(-0.08, -0.03);
+
+        // Initialize pre_update positions
+        ball1.pre_update_pos = ball1.get_position().clone();
+        ball2.pre_update_pos = ball2.get_position().clone();
+
+        // Set up neighbor lists (each ball sees the other)
+        ball1.hood.add_neighbour(1);
+        ball2.hood.add_neighbour(0);
+
+        let mut balls = vec![ball1, ball2];
+
+        // Calculate initial energy
+        let initial_energy = calculate_total_energy(&phys, &balls);
+
+        println!("Initial energy: {:.6}", initial_energy);
+        println!("Initial separation: {:.6}", separation);
+        println!("Force cap distance (r_cap): {:.6}", r_cap);
+
+        // Simulation parameters
+        const DT: f32 = 0.001; // Small timestep for numerical stability
+        const NUM_STEPS: usize = 1000;
+
+        let mut max_energy_error = 0.0f32;
+        let mut energy_at_max_error = 0.0f32;
+
+        // Run simulation
+        for step in 0..NUM_STEPS {
+            // Compute forces using SIMD implementation
+            let force1 = force_indexed_simd(&phys, 0, &balls);
+            let force2 = force_indexed_simd(&phys, 1, &balls);
+
+            // Update velocities (velocity Verlet integration - part 1)
+            let accel1 = Vec2D::new(
+                force1.force.x / balls[0].mass,
+                force1.force.y / balls[0].mass,
+            );
+            let accel2 = Vec2D::new(
+                force2.force.x / balls[1].mass,
+                force2.force.y / balls[1].mass,
+            );
+
+            // Update velocities with half-step acceleration
+            balls[0].v.x += 0.5 * accel1.x * DT;
+            balls[0].v.y += 0.5 * accel1.y * DT;
+            balls[1].v.x += 0.5 * accel2.x * DT;
+            balls[1].v.y += 0.5 * accel2.y * DT;
+
+            // Update positions
+            let new_pos1 = Vec2D::new(
+                balls[0].get_position().x + balls[0].v.x * DT,
+                balls[0].get_position().y + balls[0].v.y * DT,
+            );
+            let new_pos2 = Vec2D::new(
+                balls[1].get_position().x + balls[1].v.x * DT,
+                balls[1].get_position().y + balls[1].v.y * DT,
+            );
+
+            balls[0].set_position(new_pos1.clone());
+            balls[1].set_position(new_pos2.clone());
+            balls[0].pre_update_pos = new_pos1;
+            balls[1].pre_update_pos = new_pos2;
+
+            // Recompute forces at new positions
+            let force1_new = force_indexed_simd(&phys, 0, &balls);
+            let force2_new = force_indexed_simd(&phys, 1, &balls);
+
+            // Complete velocity update with new accelerations (velocity Verlet - part 2)
+            let accel1_new = Vec2D::new(
+                force1_new.force.x / balls[0].mass,
+                force1_new.force.y / balls[0].mass,
+            );
+            let accel2_new = Vec2D::new(
+                force2_new.force.x / balls[1].mass,
+                force2_new.force.y / balls[1].mass,
+            );
+
+            balls[0].v.x += 0.5 * accel1_new.x * DT;
+            balls[0].v.y += 0.5 * accel1_new.y * DT;
+            balls[1].v.x += 0.5 * accel2_new.x * DT;
+            balls[1].v.y += 0.5 * accel2_new.y * DT;
+
+            // Check energy conservation every 100 steps
+            if step % 100 == 0 {
+                let current_energy = calculate_total_energy(&phys, &balls);
+                let energy_error = (current_energy - initial_energy).abs();
+                let rel_error = energy_error / initial_energy.abs();
+
+                if energy_error > max_energy_error {
+                    max_energy_error = energy_error;
+                    energy_at_max_error = current_energy;
+                }
+
+                if step % 200 == 0 {
+                    println!(
+                        "Step {}: Energy = {:.6}, Error = {:.6} ({:.4}%)",
+                        step,
+                        current_energy,
+                        energy_error,
+                        rel_error * 100.0
+                    );
+                }
+            }
+        }
+
+        // Final energy check
+        let final_energy = calculate_total_energy(&phys, &balls);
+        let total_energy_drift = (final_energy - initial_energy).abs();
+        let relative_drift = total_energy_drift / initial_energy.abs();
+
+        println!("\n=== Energy Conservation Results ===");
+        println!("Initial energy:    {:.6}", initial_energy);
+        println!("Final energy:      {:.6}", final_energy);
+        println!(
+            "Max energy error:  {:.6} (at E = {:.6})",
+            max_energy_error, energy_at_max_error
+        );
+        println!("Total drift:       {:.6}", total_energy_drift);
+        println!(
+            "Relative drift:    {:.6}% ({:.2e})",
+            relative_drift * 100.0,
+            relative_drift
+        );
+
+        // Energy should be conserved within numerical precision
+        // For 1000 steps with dt=0.001, we expect some drift due to:
+        // 1. Floating point rounding errors accumulating
+        // 2. Velocity Verlet integration error (O(dt^2))
+        // 3. Force capping discontinuity (though potential is continuous)
+
+        // Accept up to 1% relative error for this test
+        // This is a fairly loose tolerance, but force capping at close distances
+        // can introduce some numerical challenges
+        const MAX_ACCEPTABLE_DRIFT: f32 = 0.01; // 1%
+
+        assert!(
+            relative_drift < MAX_ACCEPTABLE_DRIFT,
+            "Energy drift too large: {:.4}% (max acceptable: {:.4}%). \
+             This indicates energy is not being conserved properly with force capping. \
+             Initial: {:.6}, Final: {:.6}, Drift: {:.6}",
+            relative_drift * 100.0,
+            MAX_ACCEPTABLE_DRIFT * 100.0,
+            initial_energy,
+            final_energy,
+            total_energy_drift
+        );
+
+        println!("✓ Energy conservation test PASSED");
+    }
+
+    /// Helper function to calculate total energy (kinetic + potential) of a system
+    fn calculate_total_energy(phys: &BallPhysics, balls: &[Ball2D]) -> f32 {
+        // Calculate kinetic energy
+        let mut kinetic = 0.0f32;
+        for ball in balls {
+            let speed_sq = ball.v.x * ball.v.x + ball.v.y * ball.v.y;
+            kinetic += 0.5 * ball.mass * speed_sq;
+        }
+
+        // Calculate potential energy (only count each pair once)
+        let mut potential = 0.0f32;
+        for i in 0..balls.len() {
+            for j in (i + 1)..balls.len() {
+                let dist_vec = balls[j].get_position().dist(balls[i].get_position());
+                let center_dist = dist_vec.norm();
+                let edge_dist = center_dist - (balls[i].radius + balls[j].radius);
+
+                // Use the physics engine's potential calculation (includes force capping)
+                let pair_potential = phys.lenard_jones_potential(edge_dist);
+                potential += pair_potential;
+            }
+        }
+
+        kinetic + potential
+    }
+
+    #[test]
+    fn test_lj_force_and_potential_above_rcap() {
+        // Verify that Lennard-Jones calculations are correct for distances >= r_cap
+        let phys = BallPhysics::default();
+        let r_cap = phys.get_force_cap_distance();
+
+        println!("\n=== Testing LJ Calculations Above r_cap ===");
+        println!("r_cap = {:.6}\n", r_cap);
+
+        // Test distances above r_cap
+        let test_distances = vec![
+            r_cap * 1.0,   // At r_cap
+            r_cap * 1.1,   // 10% above
+            r_cap * 1.5,   // 50% above
+            r_cap * 2.0,   // 2x r_cap
+            1.122462,      // Equilibrium (2^(1/6))
+            r_cap * 3.0,   // 3x r_cap
+        ];
+
+        println!("Distance (r) | Force (F) | Potential (U) | Capped?");
+        println!("{}", "-".repeat(65));
+
+        for &r in &test_distances {
+            let force_pure = phys.lenard_jones_force_pure(r);
+            let force_capped = phys.lenard_jones_force(r, 0.0, 0);
+            let potential = phys.lenard_jones_potential(r);
+            let is_capped = r < r_cap;
+
+            println!(
+                "{:12.6} | {:9.4} | {:13.6} | {}",
+                r,
+                force_pure,
+                potential,
+                if is_capped { "YES" } else { "NO" }
+            );
+
+            // Above r_cap, force should NOT be capped
+            if r >= r_cap {
+                approx(force_pure, force_capped, 1e-4);
+            }
+        }
+
+        // Verify F = -dU/dr numerically for distances above r_cap
+        println!("\nVerifying F = -dU/dr above r_cap:");
+        println!("Distance (r) | F (direct) | -dU/dr (numerical) | Error");
+        println!("{}", "-".repeat(70));
+
+        for &r in &test_distances {
+            if r >= r_cap {
+                let dr = 1e-4;
+                let f_direct = phys.lenard_jones_force_pure(r);
+                let u1 = phys.lenard_jones_potential(r - dr / 2.0);
+                let u2 = phys.lenard_jones_potential(r + dr / 2.0);
+                let f_numerical = -(u2 - u1) / dr;
+                let error = (f_direct - f_numerical).abs();
+
+                println!(
+                    "{:12.6} | {:10.4} | {:18.4} | {:.4e}",
+                    r, f_direct, f_numerical, error
+                );
+
+                // They should match very closely
+                approx(f_direct, f_numerical, 0.01);
+            }
+        }
+
+        println!("✓ All LJ calculations above r_cap are correct");
+    }
+
+    #[test]
+    fn test_potential_continuity_at_rcap() {
+        // Verify potential is continuous at the r_cap boundary
+        let phys = BallPhysics::default();
+        let r_cap = phys.get_force_cap_distance();
+        let max_force = phys.constants.max_force;
+
+        println!("\n=== Testing Potential Continuity at r_cap ===");
+
+        // Test continuity of potential at r_cap boundary
+        let r_below = r_cap * 0.9999;
+        let r_above = r_cap * 1.0001;
+
+        let u_below = phys.lenard_jones_potential(r_below);
+        let u_at = phys.lenard_jones_potential(r_cap);
+        let u_above = phys.lenard_jones_potential(r_above);
+
+        println!("r_cap = {:.10}", r_cap);
+        println!("U(r_cap - ε) = {:.10}", u_below);
+        println!("U(r_cap)     = {:.10}", u_at);
+        println!("U(r_cap + ε) = {:.10}", u_above);
+
+        // The potential should be continuous (smooth transition)
+        let diff_below = (u_below - u_at).abs();
+        let diff_above = (u_at - u_above).abs();
+
+        println!("Difference below-at: {:.10e}", diff_below);
+        println!("Difference at-above: {:.10e}", diff_above);
+
+        // Both differences should be very small and similar
+        assert!(
+            diff_below < 0.01,
+            "Discontinuity below r_cap: {}",
+            diff_below
+        );
+        assert!(
+            diff_above < 0.01,
+            "Discontinuity above r_cap: {}",
+            diff_above
+        );
+
+        // The slope should be approximately -max_force
+        let slope_below = (u_at - u_below) / (r_cap - r_below);
+        let slope_above = (u_above - u_at) / (r_above - r_cap);
+
+        println!("Slope below r_cap: {:.4} (should be ≈ -max_force = {:.4})", slope_below, -max_force);
+        println!("Slope above r_cap: {:.4}", slope_above);
+
+        // Below r_cap: slope should be -max_force (linear region)
+        approx(slope_below, -max_force, 1.0);
+
+        // Above r_cap: slope should transition smoothly
+        assert!(
+            (slope_above - slope_below).abs() < 50.0,
+            "Slope discontinuity at r_cap: {} vs {}",
+            slope_below,
+            slope_above
+        );
+
+        println!("✓ Potential is continuous at r_cap boundary");
     }
 }

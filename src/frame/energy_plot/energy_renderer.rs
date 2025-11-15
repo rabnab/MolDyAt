@@ -250,6 +250,8 @@ impl EnergyPlotRenderer {
         // Draw zero reference line BEFORE plotting data (so data can overwrite it)
         if let Some(zero_y) = zero_y_opt {
             // Draw horizontal zero line across the plot
+            // Note: We need the index `x` for being able to assign values in the grid
+            #[allow(clippy::needless_range_loop)]
             for x in 1..PLOT_WIDTH {
                 // Only draw on empty spaces (energy lines will overwrite this)
                 grid[zero_y][x] = ColoredChar::new('·', COLOR_ZERO_LINE);
