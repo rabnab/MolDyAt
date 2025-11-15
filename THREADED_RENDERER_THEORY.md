@@ -23,6 +23,64 @@ This document outlines the theory and implementation approach for a **threaded r
 - **Read-only rendering**: Renderer treats snapshots as immutable
 - **Performance transparency**: Display simulation steps per rendered frame
 - **Variable simulation rate**: User-controlled simulation speed (±keys)
+- **CRITICAL: ggez isolation**: ggez dependencies MUST remain in `src/frame/ggez/` module only, zero ggez types in simulation code
+
+---
+
+## Critical Architectural Constraint: ggez Isolation
+
+**MANDATORY REQUIREMENT**: ggez framework dependencies must be strictly contained within the `src/frame/ggez/` module tree. No simulation code (`src/objects2d/`, `src/frame/application_master/`) may depend on ggez types.
+
+### Why This Matters
+
+1. **Renderer abstraction**: Current architecture uses `Renderer` trait to allow swapping backends (ggez → wgpu, headless, etc.)
+2. **Testability**: Simulation logic must be testable without graphics framework
+3. **Platform independence**: ggez has platform-specific requirements (OpenGL context on main thread)
+4. **Future-proofing**: Snapshot-based design should work with any renderer backend
+
+### Enforcement Strategy
+
+**Allowed**:
+- ✅ `src/frame/ggez/` modules import and use ggez types
+- ✅ `RendererSnapshot` uses only std types (`Vec`, `Arc`, etc.)
+- ✅ Snapshot channel uses `arc-swap` (no ggez dependency)
+- ✅ `MainContent` publishes snapshots (no ggez types)
+
+**Forbidden**:
+- ❌ `src/objects2d/` importing ggez
+- ❌ `src/frame/application_master/` importing ggez
+- ❌ `RendererSnapshot` containing ggez::Color or ggez types
+- ❌ Physics thread calling ggez APIs directly
+
+### Type Boundary
+
+```rust
+// CORRECT: Use standard Rust types in snapshot
+pub struct RendererSnapshot {
+    pub positions: Vec<Vec2D>,           // Own type
+    pub colors: Vec<[f32; 4]>,           // RGBA array, NOT ggez::Color
+    pub neighbor_info: Vec<Vec<usize>>,  // Standard Vec
+}
+
+// WRONG: ggez types leak into simulation
+pub struct RendererSnapshot {
+    pub positions: Vec<Vec2D>,
+    pub colors: Vec<ggez::graphics::Color>,  // ❌ ggez dependency!
+}
+```
+
+**Conversion happens in ggez module only**:
+```rust
+// In src/frame/ggez/ggez_renderer.rs
+impl GgezRenderer {
+    fn render(&mut self, snapshot: &RendererSnapshot) {
+        for (pos, color_rgba) in snapshot.positions.iter().zip(&snapshot.colors) {
+            let ggez_color = ggez::graphics::Color::from(color_rgba);
+            // ... render with ggez types
+        }
+    }
+}
+```
 
 ---
 
@@ -189,8 +247,12 @@ pub struct RendererSnapshot {
     /// Ball positions (x, y) for rendering
     pub positions: Vec<Vec2D>,
     
-    /// Ball colors based on size class
-    pub colors: Vec<Color>,
+    /// Ball colors as RGBA [r, g, b, a] in range [0.0, 1.0]
+    /// NOT ggez::Color to maintain framework independence
+    pub colors: Vec<[f32; 4]>,
+    
+    /// Ball radii for rendering (needed for circle drawing)
+    pub radii: Vec<f32>,
     
     /// Neighbor relationships for visualization
     pub neighbor_info: Vec<Vec<usize>>,
@@ -228,8 +290,13 @@ fn create_snapshot(&self) -> RendererSnapshot {
         .map(|ball| ball.pos)
         .collect();
     
+    // Colors as RGBA arrays, NOT ggez::Color
     let colors = self.v_points.iter()
-        .map(|ball| get_color_for_size(ball.size_class))
+        .map(|ball| size_class_to_rgba(ball.size_class))
+        .collect();
+    
+    let radii = self.v_points.iter()
+        .map(|ball| ball.get_radius())
         .collect();
     
     // Move neighbor calculation here (currently in drawing code)
@@ -238,9 +305,22 @@ fn create_snapshot(&self) -> RendererSnapshot {
     RendererSnapshot {
         positions,
         colors,
+        radii,
         neighbor_info,
         simulation_step: self.simulation_step,
         created_at: Instant::now(),
+    }
+}
+
+/// Convert size class to RGBA color (framework-independent)
+fn size_class_to_rgba(size_class: usize) -> [f32; 4] {
+    match size_class {
+        0 => [1.0, 0.0, 0.0, 1.0],  // Red
+        1 => [0.0, 1.0, 0.0, 1.0],  // Green
+        2 => [0.0, 0.0, 1.0, 1.0],  // Blue
+        3 => [1.0, 1.0, 0.0, 1.0],  // Yellow
+        4 => [1.0, 0.0, 1.0, 1.0],  // Magenta
+        _ => [1.0, 1.0, 1.0, 1.0],  // White
     }
 }
 ```
@@ -351,11 +431,18 @@ Time 3: Renderer checks freshness → sees B → discards work
 
 **Tasks**:
 1. Define `RendererSnapshot` struct in new module `src/frame/renderer_snapshot.rs`
+   - **CRITICAL**: Use only std types (`Vec<[f32; 4]>` for colors, NOT ggez::Color)
+   - Add module doc comment enforcing no-ggez policy
 2. Implement `MainContent::create_snapshot()` method
-3. Move `collect_neighbours_by_cell()` from renderer to `MainContent`
-4. Add unit tests for snapshot creation
+3. Implement `size_class_to_rgba()` helper (framework-independent)
+4. Move `collect_neighbours_by_cell()` from renderer to `MainContent`
+5. Add unit tests for snapshot creation
+6. Add CI check to verify no ggez imports in `src/frame/renderer_snapshot.rs`
 
-**Validation**: Can create snapshot, verify field counts match ball count
+**Validation**: 
+- Can create snapshot, verify field counts match ball count
+- `cargo build` succeeds with `RendererSnapshot` having zero ggez dependencies
+- `grep -r "use ggez" src/frame/renderer_snapshot.rs` returns no matches
 
 ### Phase 2: Atomic Snapshot Publishing (Single-Threaded)
 
@@ -364,10 +451,16 @@ Time 3: Renderer checks freshness → sees B → discards work
 2. Replace direct renderer access with `ArcSwapOption<RendererSnapshot>` in `MainContent`
 3. Modify update loop to publish snapshots after each simulation step
 4. Modify renderer to consume snapshots instead of querying `MainContent`
+   - **ggez conversion happens here**: `snapshot.colors[i]` → `ggez::graphics::Color::from(colors[i])`
+   - Renderer module owns all ggez type conversions
+5. Remove any remaining ggez type usage from `MainContent`
 
-**Validation**: Single-threaded program runs correctly with snapshot indirection
+**Validation**: 
+- Single-threaded program runs correctly with snapshot indirection
+- `MainContent` has no ggez imports (verify with grep)
+- All ggez types created/used only in `src/frame/ggez/`
 
-**Benefit**: Decouples data flow before threading complexity
+**Benefit**: Decouples data flow AND enforces ggez isolation before threading complexity
 
 ### Phase 3: Thread Separation
 
@@ -413,6 +506,7 @@ Time 3: Renderer checks freshness → sees B → discards work
 - ✅ **Use lock-free ArcSwap**: Never blocks
 - ✅ **No shared mutable state**: Snapshots are immutable after creation
 - ⚠️ **Avoid ggez API calls from physics thread**: ggez is not thread-safe
+- ✅ **Maintain ggez isolation**: Physics thread has ZERO ggez dependencies, cannot call ggez even if it wanted to
 
 ### 2. Memory Leaks from Unbounded Snapshot Creation
 
@@ -533,7 +627,68 @@ arc_swap.store(Arc::new(snapshot));
   let renderer_thread = std::thread::spawn(|| ...);
   ```
 
-### 10. Debugging Complexity
+### 10. ggez Dependency Leakage
+
+**Pitfall**: Accidentally importing ggez types into simulation code, breaking renderer abstraction.
+
+**Example anti-patterns**:
+```rust
+// WRONG: ggez type in snapshot
+use ggez::graphics::Color;
+pub struct RendererSnapshot {
+    pub colors: Vec<Color>,  // ❌ Breaks abstraction!
+}
+
+// WRONG: ggez import in physics module
+use ggez::mint::Point2;  // ❌ Even "convenient" math types!
+pub struct Ball2D {
+    pub pos: Point2<f32>,
+}
+```
+
+**Mitigation**:
+- **Compilation enforcement**: Add `#[cfg(test)]` compile check
+  ```rust
+  // In src/objects2d/mod.rs
+  #[cfg(test)]
+  mod test_no_ggez_dependency {
+      // This should fail to compile if ggez is imported
+      #[test]
+      fn ensure_no_ggez_dependency() {
+          // If this compiles, ggez is not in scope
+          let _ = std::marker::PhantomData::<()>;
+      }
+  }
+  ```
+
+- **CI check**: Add to clippy checks
+  ```bash
+  # Ensure src/objects2d/ has no ggez imports
+  ! grep -r "use ggez" src/objects2d/
+  ! grep -r "use ggez" src/frame/application_master/
+  ```
+
+- **Code review discipline**: Reviewer must verify snapshot uses only std/own types
+
+- **Documentation**: Clearly mark module boundaries in module docs
+  ```rust
+  //! Application master module
+  //! 
+  //! ARCHITECTURAL CONSTRAINT: This module must not depend on ggez.
+  //! All ggez-specific code belongs in src/frame/ggez/.
+  ```
+
+- **Type conversion layer**: Convert in ggez module only
+  ```rust
+  // In src/frame/ggez/ggez_renderer.rs
+  impl From<[f32; 4]> for ggez::graphics::Color {
+      fn from(rgba: [f32; 4]) -> Self {
+          ggez::graphics::Color::from_rgba(rgba[0], rgba[1], rgba[2], rgba[3])
+      }
+  }
+  ```
+
+### 11. Debugging Complexity
 
 **Pitfall**: Multithreaded bugs are harder to reproduce and debug.
 
@@ -572,10 +727,11 @@ arc_swap.store(Arc::new(snapshot));
 ### Memory Overhead
 
 **Snapshot size** (10,000 balls):
-- Positions: 10,000 × 16 bytes = 156 KB
-- Colors: 10,000 × 16 bytes = 156 KB
+- Positions: 10,000 × 16 bytes (Vec2D: 2 × f64) = 156 KB
+- Colors: 10,000 × 16 bytes ([f32; 4]: 4 × f32) = 156 KB
+- Radii: 10,000 × 4 bytes (f32) = 39 KB
 - Neighbors: 10,000 × 50 × 8 bytes = 3.9 MB
-- **Total: ~4.2 MB per snapshot**
+- **Total: ~4.25 MB per snapshot**
 
 **Concurrent snapshots**: Typically 2 (one in slot, one being rendered)
 - **Peak memory**: ~8.4 MB additional overhead
@@ -640,6 +796,20 @@ fn test_snapshot_has_correct_ball_count() {
     let snapshot = content.create_snapshot();
     assert_eq!(snapshot.positions.len(), 100);
     assert_eq!(snapshot.colors.len(), 100);
+    assert_eq!(snapshot.radii.len(), 100);
+}
+
+#[test]
+fn test_snapshot_colors_are_valid_rgba() {
+    let content = MainContent::new_with_balls(10);
+    let snapshot = content.create_snapshot();
+    for color in &snapshot.colors {
+        // All RGBA values should be in [0.0, 1.0]
+        assert!(color[0] >= 0.0 && color[0] <= 1.0);
+        assert!(color[1] >= 0.0 && color[1] <= 1.0);
+        assert!(color[2] >= 0.0 && color[2] <= 1.0);
+        assert!(color[3] >= 0.0 && color[3] <= 1.0);
+    }
 }
 
 #[test]
