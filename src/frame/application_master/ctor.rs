@@ -1,6 +1,8 @@
 use super::{BallPhysics, CellGrid, MainContent, RendererRef, SimStats};
 use crate::frame::{AppResult, GameLogic};
 use crate::objects2d::Rect;
+use arc_swap::ArcSwapOption;
+use std::sync::Arc;
 
 impl MainContent {
     pub fn new(world_rect: Rect, renderer: RendererRef) -> AppResult<Self> {
@@ -27,6 +29,7 @@ impl MainContent {
             was_paused_for_resize: false,
             update_hood_at_frame_start: 0,
             speed_limit_override: None,
+            snapshot_slot: Arc::new(ArcSwapOption::from(None)),
         })
     }
 }

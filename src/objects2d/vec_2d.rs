@@ -1,4 +1,3 @@
-use ggez::mint::Point2;
 use std::fmt;
 use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
@@ -175,12 +174,6 @@ impl fmt::Display for Vec2D {
     }
 }
 
-impl From<Vec2D> for Point2<f32> {
-    fn from(val: Vec2D) -> Self {
-        Point2 { x: val.x, y: val.y }
-    }
-}
-
 impl From<[f32; 2]> for Vec2D {
     fn from(coords: [f32; 2]) -> Self {
         Vec2D::new(coords[0], coords[1])
@@ -208,16 +201,6 @@ mod tests {
         let v = Vec2D::from([1.0, 2.0]);
         assert_eq!(v.x, 1.0);
         assert_eq!(v.y, 2.0);
-    }
-
-    #[test]
-    fn test_into_point2() {
-        let x_target: f32 = 4.;
-        let y_target: f32 = 1.234E-9;
-        let v = Vec2D::new(x_target, y_target);
-        let p: Point2<f32> = v.into();
-        assert_eq!(p.x, x_target);
-        assert_eq!(p.y, y_target);
     }
 
     #[test]
