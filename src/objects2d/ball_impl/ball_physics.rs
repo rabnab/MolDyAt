@@ -296,7 +296,7 @@ impl BallPhysics {
         res
     }
 
-    pub fn update_positions(&self, ball: &mut Ball2D, dt: f32, bound: &Rect) {
+    pub fn update_positions(&self, ball: &mut Ball2D, dt: f32, bound: &Rect) -> (f32, f32) {
         if ball.verbose.console {
             println!(
                 "{} ------ [{:.2},{:.2}]",
@@ -308,7 +308,7 @@ impl BallPhysics {
 
         let dt_sub = dt;
         let int_steps: usize = 1;
-        ball.execute_update_pos(dt_sub, bound);
+        let (wall_px, wall_py) = ball.execute_update_pos(dt_sub, bound);
 
         if ball.verbose.console {
             println!(
@@ -322,6 +322,8 @@ impl BallPhysics {
         }
         //TODO check if it is true that this should only be done later
         //self.update_old_pos();
+
+        (wall_px, wall_py)
     }
 
     pub fn get_neighbour_force_and_pos(
