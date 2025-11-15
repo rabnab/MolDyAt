@@ -48,6 +48,7 @@ mod accessors;
 mod balls;
 mod ctor;
 mod sim;
+mod snapshot;
 mod verbose;
 
 #[cfg(test)]
