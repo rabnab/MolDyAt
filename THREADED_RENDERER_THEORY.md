@@ -354,7 +354,7 @@ fn size_class_to_rgba(size_class: usize) -> [f32; 4] {
 
 #### Pitfall 1: Large Memory Allocations per Snapshot
 
-**Problem**: 10,000 balls × (16 bytes position + 16 bytes color + neighbor Vec) = ~300KB per snapshot at 60 FPS = 18 MB/sec allocation rate.
+**Problem**: 10,000 balls × (8 bytes position + 16 bytes color + 4 bytes radius + neighbor Vec) = ~280KB per snapshot (without neighbors) at 60 FPS = ~16.8 MB/sec allocation rate.
 
 **Mitigation strategies**:
 1. **Object pooling**: Reuse `RendererSnapshot` allocations
