@@ -666,7 +666,7 @@ mod tests {
         println!("Final total:      {:.6}", total_final);
 
         // Check if energy drift is concerning
-        // For 1000 balls over 10 steps, we expect some numerical drift
+        // For 1000 balls over 100 steps, we expect some numerical drift
         // but it should be relatively small (< 10%)
         const MAX_ACCEPTABLE_DRIFT: f32 = 0.10; // 10%
 
