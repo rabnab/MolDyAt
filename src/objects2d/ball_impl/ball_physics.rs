@@ -472,6 +472,15 @@ impl BallPhysics {
     // }
 }
 
+// ============================================================================
+// UNIT TESTS
+// ============================================================================
+// Tests are organized into the following categories:
+// - Force and potential calculations (LJ formula, force capping)
+// - Energy conservation (single and multi-particle systems)
+// - Edge cases (overlapping balls, numerical robustness)
+// ============================================================================
+
 #[cfg(test)]
 mod tests {
     use super::*;

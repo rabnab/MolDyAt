@@ -10,6 +10,11 @@ mod tests {
     use std::rc::Rc;
 
     const DT_GOAL: f32 = 0.01; // 1. / (FPS_GOAL as f32);
+
+    // ============================================================================
+    // TEST UTILITIES
+    // ============================================================================
+
     #[test]
     fn test_defaults() {
         let default_win = WindowDefinition::default();
@@ -439,6 +444,10 @@ mod tests {
             }
         }
     }
+
+    // ============================================================================
+    // PHYSICS & ENERGY CONSERVATION TESTS
+    // ============================================================================
 
     #[test]
     fn test_energy_conservation_1000_balls() {
@@ -931,6 +940,10 @@ mod tests {
             relative_drift
         );
     }
+
+    // ============================================================================
+    // WALL BOUNCE & MOMENTUM CONSERVATION TESTS
+    // ============================================================================
 
     #[test]
     fn test_single_ball_wall_bounce_momentum() {
