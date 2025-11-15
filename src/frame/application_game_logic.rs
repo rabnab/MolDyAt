@@ -218,6 +218,9 @@ impl GameLogic for MainContent {
             self.sim.calculate_temperature_from_balls(&self.balls);
         }
 
+        // Publish snapshot for renderer after simulation step completes
+        self.publish_snapshot();
+
         #[cfg(feature = "measure-time")]
         self.log_timings(timer);
 

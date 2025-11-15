@@ -2,6 +2,7 @@ use crate::frame::MainContent;
 use crate::frame::renderer_snapshot::{
     RendererSnapshot, get_special_ball_color, size_class_to_rgba,
 };
+use std::sync::Arc;
 
 impl MainContent {
     /// Creates a renderer snapshot from the current simulation state.
@@ -32,6 +33,17 @@ impl MainContent {
         snapshot.created_at = std::time::Instant::now();
 
         snapshot
+    }
+
+    /// Publish current snapshot to the snapshot slot for renderer consumption
+    pub fn publish_snapshot(&self) {
+        let snapshot = self.create_snapshot();
+        self.snapshot_slot.store(Some(Arc::new(snapshot)));
+    }
+
+    /// Get a clone of the snapshot slot Arc for sharing with renderer
+    pub fn get_snapshot_slot(&self) -> Arc<arc_swap::ArcSwapOption<RendererSnapshot>> {
+        self.snapshot_slot.clone()
     }
 
     /// Collects neighbor indices for all balls

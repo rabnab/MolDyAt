@@ -20,6 +20,7 @@ multiversion = "0.8.0"
 num_cpus = "1.16"
 winit = "0.28.7"
 softbuffer = "0.3.3"
+arc-swap = "1.7"
 #winit = "0.30.5"
 #winit = "0.30.5"
 

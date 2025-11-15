@@ -3,12 +3,15 @@ pub(crate) const FPS_GOAL: u32 = 60;
 use crate::frame::application_game_logic::GameLogicData;
 use crate::frame::application_sim_stats::SimStats;
 use crate::frame::renderer::Renderer;
+use crate::frame::renderer_snapshot::RendererSnapshot;
 use crate::frame::window::window_definition::WindowDefinition;
 use crate::objects2d::ball_cell::cell_grid::CellGrid;
 use crate::objects2d::ball_impl::{Ball2D, BallPhysics};
 use crate::objects2d::{Vec2D, VerboseInfoMode};
+use arc_swap::ArcSwapOption;
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 
 pub struct MainContent {
     renderer: RendererRef,
@@ -30,6 +33,9 @@ pub struct MainContent {
     update_hood_at_frame_start: usize,
     /// Override for speed limit (None = use default calculation, Some(f32::INFINITY) = disable)
     pub(crate) speed_limit_override: Option<f32>,
+
+    /// Snapshot slot for lock-free communication with renderer
+    snapshot_slot: Arc<ArcSwapOption<RendererSnapshot>>,
 }
 
 pub struct StatsAccumulator {
