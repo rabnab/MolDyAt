@@ -71,9 +71,7 @@ mod tests {
     fn create_test_main_content_with_balls(ball_count: usize) -> MainContent {
         let win_def = WindowDefinition::default();
         let world_rect = win_def.compute_world_bounds_rect();
-        let rend_ref = Rc::new(RefCell::new(create_dummy_renderer(win_def.clone())));
-        let mut main_content =
-            MainContent::new(world_rect, rend_ref).expect("Could not create main content");
+        let mut main_content = MainContent::new(world_rect).expect("Could not create main content");
 
         let factory = BallFactory::new();
 

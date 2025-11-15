@@ -1,11 +1,11 @@
-use super::{BallPhysics, CellGrid, MainContent, RendererRef, SimStats};
+use super::{BallPhysics, CellGrid, MainContent, SimStats};
 use crate::frame::{AppResult, GameLogic};
 use crate::objects2d::Rect;
 use arc_swap::ArcSwapOption;
 use std::sync::Arc;
 
 impl MainContent {
-    pub fn new(world_rect: Rect, renderer: RendererRef) -> AppResult<Self> {
+    pub fn new(world_rect: Rect) -> AppResult<Self> {
         let loc_physics = BallPhysics::default();
         let cutoff = loc_physics.get_cutoff_distance();
 
@@ -16,7 +16,7 @@ impl MainContent {
             physics: loc_physics,
             cell_grid: my_cell_grid,
 
-            renderer,
+            world_rect,
             game_data: <Self as GameLogic>::init_game_logic(),
             sim: SimStats::default(),
             num_balls: 0,

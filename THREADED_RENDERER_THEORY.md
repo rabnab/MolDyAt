@@ -27,6 +27,52 @@ This document outlines the theory and implementation approach for a **threaded r
 
 ---
 
+## Critical Architectural Constraint: Main Thread Assignment
+
+**UPDATE (Based on Phase 3 Implementation)**: Physics CANNOT run on the main thread.
+
+### The Constraint
+
+ggez's event loop MUST run on the main thread (platform requirement for macOS/Windows). This forces a specific thread assignment:
+
+- ✅ **Main thread**: ggez event loop (`CustomEventLoop`) + rendering from snapshots
+- ✅ **Spawned worker thread**: Physics simulation (`MainContent`) + snapshot publishing
+- ❌ **NOT possible**: Physics on main thread (ggez event loop blocks continuous execution)
+
+### Why Physics Must Be Spawned
+
+1. **ggez event loop is blocking**: Main thread is consumed by `ggez::event::run()`, which calls `update()` and `draw()` at controlled intervals (60 FPS)
+2. **Physics needs continuous execution**: The simulation should run as fast as possible, not frame-locked to 60 FPS
+3. **Platform requirements**: macOS/Windows require event loops on main thread for OpenGL context management
+4. **Decoupling benefit**: Physics can run faster than rendering without being throttled
+
+### Communication Model
+
+```
+Main Thread (ggez)           Worker Thread (physics)
+─────────────────           ────────────────────────
+Event loop                  while !shutdown.load() {
+  ↓                           simulation_step()
+update() ← snapshot             ↓
+draw() ← snapshot            publish_snapshot()
+  ↓                         }
+User input → commands →
+```
+
+- **Physics → Renderer**: `Arc<ArcSwap<RendererSnapshot>>` (lock-free, latest-only)
+- **Renderer → Physics**: Command channel (user input, pause, add balls) - *to be implemented*
+
+### Consequences for Phase 3+
+
+1. **`MainContent` must be Send**: No `Rc`, `RefCell<ThreadRng>`, or other non-Send types
+2. **User input needs command channel**: Can't call methods on `MainContent` directly anymore
+3. **Energy plot data needs snapshot inclusion**: Can't query `MainContent` from renderer thread
+4. **Shutdown signaling required**: Use `Arc<AtomicBool>` for clean thread termination
+
+See sections below for detailed implementation guidance.
+
+---
+
 ## Critical Architectural Constraint: ggez Isolation
 
 **MANDATORY REQUIREMENT**: ggez framework dependencies must be strictly contained within the `src/frame/ggez/` module tree. No simulation code (`src/objects2d/`, `src/frame/application_master/`) may depend on ggez types.
@@ -465,12 +511,17 @@ Time 3: Renderer checks freshness → sees B → discards work
 ### Phase 3: Thread Separation
 
 **Tasks**:
-1. Extract event loop into separate thread using `std::thread::spawn`
-2. Pass `Arc<ArcSwap<RendererSnapshot>>` to renderer thread
-3. Implement physics loop in main thread that publishes snapshots
-4. Add inter-thread signaling for shutdown
 
-**Validation**: Simulation runs in separate thread, renders smoothly
+1. Make `MainContent` Send-compatible by removing renderer dependency
+2. Spawn physics thread using `std::thread::spawn` (physics runs in worker thread)
+3. Keep ggez event loop on main thread (platform requirement)
+4. Pass `Arc<ArcSwap<RendererSnapshot>>` to both threads for communication
+5. Implement inter-thread signaling for shutdown
+6. Update event loop to consume snapshots instead of running simulation
+
+**Architecture**: Main thread = ggez renderer, Spawned thread = physics simulation
+
+**Validation**: Simulation runs in separate thread, renders smoothly from snapshots
 
 ### Phase 4: Freshness Checking and Performance Display
 
@@ -548,16 +599,26 @@ arc_swap.store(Arc::new(snapshot));
 
 **Pitfall**: ggez `EventHandler` must run on main thread (platform requirement on macOS/Windows).
 
-**Mitigation**:
-- **Option A**: Run renderer on main thread, physics in spawned thread
-  - ✅ Simpler ggez integration
-  - ✅ Avoids platform-specific event loop issues
-  
-- **Option B**: Run both in spawned threads, keep main thread minimal
-  - ⚠️ Requires careful event loop setup
-  - ⚠️ May hit platform limitations
+**Solution** (NOT optional):
 
-**Recommendation**: Option A (renderer on main, physics in worker thread)
+- **REQUIRED**: Run ggez renderer on main thread, physics in spawned thread
+  - ✅ Only viable architecture with ggez
+  - ✅ Main thread: event loop + rendering from snapshots
+  - ✅ Spawned thread: physics simulation + snapshot publishing
+  - ✅ Communication: `Arc<ArcSwapOption<RendererSnapshot>>`
+
+**Why physics CANNOT run on main thread**:
+
+- Main thread is blocked by ggez event loop
+- Event loop calls `update()` and `draw()` at fixed intervals
+- Physics needs to run as fast as possible (not frame-locked)
+- Solution: Move physics to separate thread, communicate via snapshots
+
+**Option B (run both in spawned threads)** is NOT viable:
+
+- ❌ ggez requires main thread for event loop
+- ❌ Would hit platform limitations on macOS/Windows
+- ❌ More complex with no benefit
 
 ### 5. Snapshot Skipping Under High Load
 
@@ -582,7 +643,55 @@ arc_swap.store(Arc::new(snapshot));
 - Renderer grays out or labels stale snapshots
 - Or: Republish same snapshot each render frame when paused (simpler)
 
-### 7. Energy Plot Desynchronization
+### 7. User Input Handling with Threaded Physics
+
+**Pitfall**: With physics in separate thread, how do we handle user input (pause, add balls, etc.)?
+
+**Current Architecture Problem**:
+
+- `CustomEventLoop` has direct access to `MainContent` for user commands
+- Once `MainContent` moves to physics thread, main thread loses access
+- Cannot borrow `MainContent` across threads (not Clone, operations are stateful)
+
+**Mitigation Options**:
+
+1. **Command Channel** (recommended for full decoupling):
+
+   ```rust
+   enum PhysicsCommand {
+       Pause,
+       Resume,
+       AddBall(Vec2D),
+       Clear,
+       SetSpeedLimit(Option<f32>),
+   }
+   let (tx, rx) = mpsc::channel();
+   // Main thread sends commands, physics thread processes
+   ```
+
+   - ✅ Clean separation
+   - ✅ Non-blocking
+   - ❌ More complex
+
+2. **Shared State with Mutex** (simpler but blocking):
+
+   ```rust
+   let shared_state = Arc<Mutex<InteractiveState>>;
+   // Both threads access for pause/add balls/etc.
+   ```
+
+   - ✅ Simpler implementation
+   - ❌ Can block physics thread
+   - ⚠️ Violates lock-free design goal
+
+3. **Hybrid**: Snapshots for rendering, commands for control
+   - Renderer → Physics: Commands via channel
+   - Physics → Renderer: State via snapshots
+   - ✅ Best of both worlds
+
+**Recommendation**: Start with command channel, simplify to Mutex if blocking is acceptable
+
+### 8. Energy Plot Desynchronization
 
 **Pitfall**: Current `EnergyPlot` updates synchronously with rendering. With decoupled threads, energy data may be stale.
 

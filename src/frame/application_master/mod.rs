@@ -2,19 +2,19 @@ pub(crate) const FPS_GOAL: u32 = 60;
 
 use crate::frame::application_game_logic::GameLogicData;
 use crate::frame::application_sim_stats::SimStats;
-use crate::frame::renderer::Renderer;
 use crate::frame::renderer_snapshot::RendererSnapshot;
 use crate::frame::window::window_definition::WindowDefinition;
 use crate::objects2d::ball_cell::cell_grid::CellGrid;
 use crate::objects2d::ball_impl::{Ball2D, BallPhysics};
-use crate::objects2d::{Vec2D, VerboseInfoMode};
+use crate::objects2d::{Rect, Vec2D, VerboseInfoMode};
 use arc_swap::ArcSwapOption;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
 pub struct MainContent {
-    renderer: RendererRef,
+    /// World bounds for physics simulation
+    world_rect: Rect,
     pub(crate) physics: BallPhysics,
 
     pub(crate) sim: SimStats,
@@ -49,7 +49,7 @@ pub struct StatsAccumulator {
 
 // type alias to shorten signatures (optional)
 pub(crate) type WindowDefinitionRef = Rc<RefCell<WindowDefinition>>;
-pub(crate) type RendererRef = Rc<RefCell<dyn Renderer>>;
+
 mod accessors;
 mod balls;
 mod ctor;

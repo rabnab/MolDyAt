@@ -5,6 +5,7 @@ mod application_master;
 mod application_sim_stats;
 pub(crate) mod energy_plot;
 pub(crate) mod ggez;
+pub(crate) mod physics_thread;
 mod renderer;
 pub(crate) mod renderer_snapshot;
 pub(crate) mod window;
