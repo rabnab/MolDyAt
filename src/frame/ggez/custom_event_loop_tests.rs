@@ -26,10 +26,15 @@ mod tests {
         // Verify we can still access snapshots
         std::thread::sleep(std::time::Duration::from_millis(50));
         let snapshot = snapshot_slot.load();
-        assert!(snapshot.is_some(), "Should have snapshot from physics thread");
+        assert!(
+            snapshot.is_some(),
+            "Should have snapshot from physics thread"
+        );
 
         // Cleanup
-        physics_thread.shutdown_and_join().expect("Failed to shutdown");
+        physics_thread
+            .shutdown_and_join()
+            .expect("Failed to shutdown");
     }
 
     #[test]
@@ -50,7 +55,9 @@ mod tests {
             .expect("Failed to send command");
 
         // Cleanup
-        physics_thread.shutdown_and_join().expect("Failed to shutdown");
+        physics_thread
+            .shutdown_and_join()
+            .expect("Failed to shutdown");
     }
 
     #[test]
@@ -82,7 +89,9 @@ mod tests {
         }
 
         // Cleanup
-        physics_thread.shutdown_and_join().expect("Failed to shutdown");
+        physics_thread
+            .shutdown_and_join()
+            .expect("Failed to shutdown");
     }
 
     #[test]
@@ -107,7 +116,9 @@ mod tests {
             .expect("sender2 failed");
 
         // Cleanup
-        physics_thread.shutdown_and_join().expect("Failed to shutdown");
+        physics_thread
+            .shutdown_and_join()
+            .expect("Failed to shutdown");
     }
 
     #[test]
@@ -140,6 +151,8 @@ mod tests {
         assert!(snapshot.is_some(), "Should have snapshot for rendering");
 
         // Cleanup
-        physics_thread.shutdown_and_join().expect("Failed to shutdown");
+        physics_thread
+            .shutdown_and_join()
+            .expect("Failed to shutdown");
     }
 }

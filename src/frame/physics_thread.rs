@@ -8,8 +8,8 @@
 //! All ggez-specific code belongs in src/frame/ggez/.
 
 use crate::frame::{GameLogic, MainContent};
-use crate::objects2d::ball_impl::Ball2D;
 use crate::objects2d::Vec2D;
+use crate::objects2d::ball_impl::Ball2D;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
@@ -218,7 +218,10 @@ impl PhysicsThread {
             PhysicsCommand::StartVerbosityInput => {
                 main_content.start_handling_verbosity_input();
             }
-            PhysicsCommand::Resize { width_px, height_px } => {
+            PhysicsCommand::Resize {
+                width_px,
+                height_px,
+            } => {
                 main_content.resize(width_px, height_px);
             }
         }
@@ -393,11 +396,19 @@ mod tests {
         std::thread::sleep(Duration::from_millis(10));
 
         // Get initial step count
-        let initial_step = snapshot_slot.load().as_ref().map(|s| s.simulation_step).unwrap_or(0);
+        let initial_step = snapshot_slot
+            .load()
+            .as_ref()
+            .map(|s| s.simulation_step)
+            .unwrap_or(0);
 
         // Wait and verify simulation is paused (step count shouldn't change)
         std::thread::sleep(Duration::from_millis(50));
-        let paused_step = snapshot_slot.load().as_ref().map(|s| s.simulation_step).unwrap_or(0);
+        let paused_step = snapshot_slot
+            .load()
+            .as_ref()
+            .map(|s| s.simulation_step)
+            .unwrap_or(0);
 
         assert_eq!(
             initial_step, paused_step,
@@ -411,7 +422,11 @@ mod tests {
 
         // Wait for simulation to run
         std::thread::sleep(Duration::from_millis(50));
-        let resumed_step = snapshot_slot.load().as_ref().map(|s| s.simulation_step).unwrap_or(0);
+        let resumed_step = snapshot_slot
+            .load()
+            .as_ref()
+            .map(|s| s.simulation_step)
+            .unwrap_or(0);
 
         assert!(
             resumed_step > paused_step,
@@ -455,7 +470,10 @@ mod tests {
         // We can't directly check speedup, but we can verify the command channel works
         // by checking that simulation is still running
         let snapshot = snapshot_slot.load();
-        assert!(snapshot.is_some(), "Snapshot should exist after speed commands");
+        assert!(
+            snapshot.is_some(),
+            "Snapshot should exist after speed commands"
+        );
 
         // Shutdown
         physics_thread

@@ -74,6 +74,25 @@ pub trait Renderer {
         Ok(())
     }
 
+    /// Draw balls from snapshot (new threaded architecture)
+    fn draw_balls_from_snapshot(
+        &mut self,
+        backend: &mut dyn DrawingBackend,
+        snapshot: &crate::frame::renderer_snapshot::RendererSnapshot,
+    ) -> AppResult<()> {
+        // For now, just draw ball symbols from snapshot
+        // TODO: Add support for verbose balls, neighbors, etc. from snapshot
+        self.draw_balls_from_snapshot_data(backend, snapshot)?;
+        Ok(())
+    }
+
+    /// Helper to draw ball symbols from snapshot data
+    fn draw_balls_from_snapshot_data(
+        &self,
+        backend: &mut dyn DrawingBackend,
+        snapshot: &crate::frame::renderer_snapshot::RendererSnapshot,
+    ) -> AppResult;
+
     fn draw_verbose_balls(
         &self,
         backend: &mut dyn DrawingBackend,

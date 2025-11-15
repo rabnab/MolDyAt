@@ -1,3 +1,4 @@
+use crate::frame::LogStuff;
 use crate::frame::MainContent;
 use crate::frame::renderer_snapshot::{
     BallRenderData, RendererSnapshot, get_special_ball_color, size_class_to_rgba,
@@ -21,6 +22,8 @@ impl MainContent {
             .unwrap_or_else(|| size_class_to_rgba(ball.get_size_idx()));
 
             balls.push(BallRenderData {
+                id: ball.get_id(),
+                size_idx: ball.get_size_idx(),
                 position: ball.get_position().clone(),
                 color,
                 radius: ball.get_radius(),
@@ -31,6 +34,12 @@ impl MainContent {
         RendererSnapshot {
             balls,
             simulation_step: self.step_count as u64,
+            kinetic_energy: self.sim.get_kinetic_energy(),
+            potential_energy: self.sim.get_potential_energy(),
+            time: self.sim.get_time(),
+            status_text: self.status_text(0), // FPS not available during snapshot creation
+            cell_grid_bounds: self.cell_grid.world_rect(),
+            cursor_ball_size_idx: self.get_ball_factory().get_new_ball_size_idx(),
             created_at: std::time::Instant::now(),
         }
     }
