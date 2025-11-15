@@ -4,6 +4,8 @@ use ggez::GameError;
 use ggez::mint::Point2;
 
 pub(crate) mod custom_event_loop;
+#[cfg(test)]
+mod custom_event_loop_tests;
 mod ggez_renderer;
 mod ggez_renderer_backend;
 mod ggez_renderer_builder;

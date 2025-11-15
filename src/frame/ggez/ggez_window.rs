@@ -126,8 +126,7 @@ impl Window<GgezRenderer> for GgezWindow {
 
         let rend_ref = Rc::new(RefCell::new(renderer));
 
-        let application =
-            MainContent::new(world_rect, rend_ref.clone()).expect("Failed to create MainContent");
+        let application = MainContent::new(world_rect).expect("Failed to create MainContent");
 
         // rend_ref.borrow_mut().initialize(&ctx, application.cell_grid.get_cell_size());
 

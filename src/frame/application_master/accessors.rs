@@ -12,7 +12,7 @@ impl MainContent {
     }
 
     pub fn world_region(&self) -> Rect {
-        self.renderer.borrow().get_world_region()
+        self.world_rect
     }
 
     pub fn world_region_inset(&self, inner_margin: f32) -> Rect {
@@ -52,8 +52,9 @@ impl MainContent {
         if !self.sim.is_paused() {
             self.pause_for_resize()
         }
-        // Resume after 300ms
-        self.renderer.borrow_mut().resize(width_px, height_px);
+        // Update world_rect dimensions - renderer will handle its own resize
+        self.world_rect.w = width_px;
+        self.world_rect.h = height_px;
     }
 
     pub(crate) fn increase_speedup(&mut self) {

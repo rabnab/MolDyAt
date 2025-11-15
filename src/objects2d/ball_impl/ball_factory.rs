@@ -3,24 +3,27 @@ use crate::objects2d::vec_2d::Vec2D;
 use std::cell::RefCell;
 
 use rand::Rng;
-use rand::prelude::ThreadRng;
+use rand::SeedableRng;
+use rand::rngs::StdRng;
 use rand_distr::{Distribution, Normal};
 
 /// Factory for creating Ball2D instances with various configurations
 pub struct BallFactory {
     next_id: RefCell<usize>,
     new_ball_size_idx: RefCell<usize>,
-    rng: RefCell<ThreadRng>,
+    rng: RefCell<StdRng>,
 }
 
 const FIRST_BALL_ID: usize = 1;
 
 impl Default for BallFactory {
     fn default() -> Self {
+        // Use random seed for StdRng (Send-compatible)
+        let seed = rand::rng().random();
         BallFactory {
             next_id: RefCell::new(FIRST_BALL_ID),
             new_ball_size_idx: RefCell::new(2),
-            rng: RefCell::new(rand::rng()),
+            rng: RefCell::new(StdRng::seed_from_u64(seed)),
         }
     }
 }
