@@ -36,6 +36,10 @@ pub struct SimStats {
     update_hood_cnt: usize,
 
     min_dist_initial: f32,
+    
+    // Wall momentum tracking
+    pub wall_momentum_x: f32,
+    pub wall_momentum_y: f32,
 }
 
 impl SimStats {
@@ -242,6 +246,8 @@ impl Default for SimStats {
             max_neighbours: 0,
             update_hood_cnt: 0,
             min_dist_initial: f32::MAX,
+            wall_momentum_x: 0.,
+            wall_momentum_y: 0.,
         }
     }
 }

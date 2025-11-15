@@ -157,11 +157,12 @@ impl Ball2D {
         dy: f32,
         bound_min_y: f32,
         bound_max_y: f32,
-    ) -> (f32, f32) {
+    ) -> (f32, f32, f32) {
         let newy = self.pos.y + dy;
 
         let mut res_y = newy;
         let mut res_vy = self.v.y;
+        let mut wall_momentum_y = 0.0;
 
         if bound_max_y > newy && newy > bound_min_y {
             //nothing to do, inside boundary
@@ -169,13 +170,17 @@ impl Ball2D {
             let overy = bound_min_y - newy;
             res_y = bound_min_y + overy;
             res_vy = -self.v.y;
+            // Momentum change: ball loses 2*m*v_y, wall gains 2*m*v_y
+            wall_momentum_y = 2.0 * self.mass * self.v.y;
         } else {
             // y is outside right boundary
             let overy = newy - bound_max_y;
             res_y = bound_max_y - overy;
             res_vy = -self.v.y;
+            // Momentum change: ball loses 2*m*v_y, wall gains 2*m*v_y
+            wall_momentum_y = 2.0 * self.mass * self.v.y;
         }
-        (res_y, res_vy)
+        (res_y, res_vy, wall_momentum_y)
     }
 
     fn update_x_and_handle_left_right_boundary(
@@ -183,11 +188,12 @@ impl Ball2D {
         dx: f32,
         bound_min_x: f32,
         bound_max_x: f32,
-    ) -> (f32, f32) {
+    ) -> (f32, f32, f32) {
         let newx = self.pos.x + dx;
 
         let mut res_x = newx;
         let mut res_vx = self.v.x;
+        let mut wall_momentum_x = 0.0;
 
         if bound_max_x > newx && newx > bound_min_x {
             //nothing to do, inside boundary
@@ -195,17 +201,21 @@ impl Ball2D {
             let overx = bound_min_x - newx;
             res_x = bound_min_x + overx;
             res_vx = -self.v.x;
+            // Momentum change: ball loses 2*m*v_x, wall gains 2*m*v_x
+            wall_momentum_x = 2.0 * self.mass * self.v.x;
         } else {
             // x is outside right boundary
             let overx = newx - bound_max_x;
             res_x = bound_max_x - overx;
             res_vx = -self.v.x;
+            // Momentum change: ball loses 2*m*v_x, wall gains 2*m*v_x
+            wall_momentum_x = 2.0 * self.mass * self.v.x;
         }
 
-        (res_x, res_vx)
+        (res_x, res_vx, wall_momentum_x)
     }
 
-    pub(crate) fn execute_update_pos(&mut self, dt: f32, bound: &Rect) {
+    pub(crate) fn execute_update_pos(&mut self, dt: f32, bound: &Rect) -> (f32, f32) {
         let old_pos = self.pos.clone();
         let dx = self.v.x * dt + 0.5 * self.accel.x * dt * dt;
         let dy = self.v.y * dt + 0.5 * self.accel.y * dt * dt;
@@ -217,8 +227,8 @@ impl Ball2D {
         let bound_max_x = f32::max(x0, x1) - self.radius;
         let bound_min_y = f32::min(y0, y1) + self.radius;
         let bound_max_y = f32::max(y0, y1) - self.radius;
-        let (x, vx) = self.update_x_and_handle_left_right_boundary(dx, bound_min_x, bound_max_x);
-        let (y, vy) = self.update_y_and_handle_top_bottom_boundary(dy, bound_min_y, bound_max_y);
+        let (x, vx, wall_px) = self.update_x_and_handle_left_right_boundary(dx, bound_min_x, bound_max_x);
+        let (y, vy, wall_py) = self.update_y_and_handle_top_bottom_boundary(dy, bound_min_y, bound_max_y);
 
         self.set_position(Vec2D::new(x, y));
         self.v = Vec2D::new(vx, vy);
@@ -229,6 +239,8 @@ impl Ball2D {
                 old_pos, self.pos, dt, self.v, self.accel
             );
         }
+        
+        (wall_px, wall_py)
     }
 
     pub fn set_position(&mut self, new_pos: Vec2D) {
