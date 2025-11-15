@@ -1,7 +1,7 @@
 use crate::frame::AppError;
+use crate::objects2d::Vec2D;
 use ggez::GameError;
 use ggez::mint::Point2;
-use crate::objects2d::Vec2D;
 
 pub(crate) mod custom_event_loop;
 mod ggez_renderer;
@@ -33,7 +33,7 @@ impl From<AppError> for GameError {
 }
 
 #[cfg(test)]
-mod tests{
+mod tests {
     use super::*;
 
     #[test]

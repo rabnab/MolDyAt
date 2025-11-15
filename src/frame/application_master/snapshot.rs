@@ -59,7 +59,40 @@ impl MainContent {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::frame::MainContent;
+    use crate::frame::renderer::create_dummy_renderer;
     use crate::frame::renderer_snapshot::size_class_to_rgba;
+    use crate::frame::window::window_definition::WindowDefinition;
+    use crate::objects2d::Vec2D;
+    use crate::objects2d::ball_impl::BallFactory;
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    fn create_test_main_content_with_balls(ball_count: usize) -> MainContent {
+        let win_def = WindowDefinition::default();
+        let world_rect = win_def.compute_world_bounds_rect();
+        let rend_ref = Rc::new(RefCell::new(create_dummy_renderer(win_def.clone())));
+        let mut main_content =
+            MainContent::new(world_rect, rend_ref).expect("Could not create main content");
+
+        let factory = BallFactory::new();
+
+        // Add balls
+        for _ in 0..ball_count {
+            let ball =
+                factory.create_random((&Vec2D::new(0.0, 0.0), &Vec2D::new(10.0, 10.0)), (0.0, 1.0));
+            main_content.balls.push(ball);
+        }
+
+        main_content.num_balls = ball_count;
+
+        // Add balls to cell grid
+        for i in 0..main_content.balls.len() {
+            main_content.cell_grid.add_ball(i, &mut main_content.balls);
+        }
+
+        main_content
+    }
 
     #[test]
     fn test_collect_all_neighbors_empty() {
@@ -92,5 +125,122 @@ mod tests {
 
         let normal_color = get_special_ball_color(false, false);
         assert_eq!(normal_color, None); // Use size class color
+    }
+
+    #[test]
+    fn test_publish_snapshot_atomic_storage() {
+        let main_content = create_test_main_content_with_balls(10);
+
+        // Publish a snapshot
+        main_content.publish_snapshot();
+
+        // Verify snapshot was stored
+        let slot = main_content.get_snapshot_slot();
+        let snapshot = slot.load();
+        assert!(snapshot.is_some());
+
+        let snapshot = snapshot.as_ref().unwrap();
+        assert_eq!(snapshot.len(), 10);
+        assert_eq!(snapshot.positions.len(), 10);
+        assert_eq!(snapshot.colors.len(), 10);
+        assert_eq!(snapshot.radii.len(), 10);
+    }
+
+    #[test]
+    fn test_snapshot_slot_sharing() {
+        let main_content = create_test_main_content_with_balls(5);
+
+        // Get two clones of the snapshot slot
+        let slot1 = main_content.get_snapshot_slot();
+        let slot2 = main_content.get_snapshot_slot();
+
+        // Publish snapshot
+        main_content.publish_snapshot();
+
+        // Both slots should see the same snapshot
+        let snap1 = slot1.load();
+        let snap2 = slot2.load();
+
+        assert!(snap1.is_some());
+        assert!(snap2.is_some());
+
+        // Verify they point to the same Arc
+        assert!(Arc::ptr_eq(
+            snap1.as_ref().unwrap(),
+            snap2.as_ref().unwrap()
+        ));
+    }
+
+    #[test]
+    fn test_snapshot_updates_on_republish() {
+        let mut main_content = create_test_main_content_with_balls(5);
+
+        // Publish first snapshot
+        main_content.step_count = 100;
+        main_content.publish_snapshot();
+
+        let slot = main_content.get_snapshot_slot();
+        let snapshot1 = slot.load();
+        assert_eq!(snapshot1.as_ref().unwrap().simulation_step, 100);
+
+        // Update step count and republish
+        main_content.step_count = 200;
+        main_content.publish_snapshot();
+
+        let snapshot2 = slot.load();
+        assert_eq!(snapshot2.as_ref().unwrap().simulation_step, 200);
+
+        // Verify they are different snapshots
+        assert!(!Arc::ptr_eq(
+            snapshot1.as_ref().unwrap(),
+            snapshot2.as_ref().unwrap()
+        ));
+    }
+
+    #[test]
+    fn test_snapshot_neighbor_indices_valid() {
+        let main_content = create_test_main_content_with_balls(20);
+        let snapshot = main_content.create_snapshot();
+
+        // All neighbor indices should be valid (< ball count)
+        for (i, neighbors) in snapshot.neighbor_info.iter().enumerate() {
+            for &neighbor_idx in neighbors {
+                assert!(
+                    neighbor_idx < snapshot.len(),
+                    "Ball {} has invalid neighbor index {}",
+                    i,
+                    neighbor_idx
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_snapshot_radii_positive() {
+        let main_content = create_test_main_content_with_balls(15);
+        let snapshot = main_content.create_snapshot();
+
+        // All radii should be positive
+        for (i, &radius) in snapshot.radii.iter().enumerate() {
+            assert!(
+                radius > 0.0,
+                "Ball {} has non-positive radius {}",
+                i,
+                radius
+            );
+            assert!(radius.is_finite(), "Ball {} has non-finite radius", i);
+        }
+    }
+
+    #[test]
+    fn test_snapshot_positions_finite() {
+        let main_content = create_test_main_content_with_balls(10);
+        let snapshot = main_content.create_snapshot();
+
+        // All positions should have finite coordinates
+        for (i, pos) in snapshot.positions.iter().enumerate() {
+            assert!(pos.x.is_finite(), "Ball {} has non-finite x position", i);
+            assert!(pos.y.is_finite(), "Ball {} has non-finite y position", i);
+        }
     }
 }
