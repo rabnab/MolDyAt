@@ -173,7 +173,7 @@ impl Ball2D {
             // Momentum change: ball loses 2*m*v_y, wall gains 2*m*v_y
             wall_momentum_y = 2.0 * self.mass * self.v.y;
         } else {
-            // y is outside right boundary
+            // y is outside top boundary
             let overy = newy - bound_max_y;
             res_y = bound_max_y - overy;
             res_vy = -self.v.y;
