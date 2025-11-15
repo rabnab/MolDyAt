@@ -727,15 +727,15 @@ pub struct Ball2D {
 ### Memory Overhead
 
 **Snapshot size** (10,000 balls):
-- Positions: 10,000 × 16 bytes (Vec2D: 2 × f64) = 156 KB
+- Positions: 10,000 × 8 bytes (Vec2D: 2 × f32) = 80 KB
 - Colors: 10,000 × 16 bytes ([f32; 4]: 4 × f32) = 156 KB
 - Radii: 10,000 × 4 bytes (f32) = 39 KB
 - Neighbors: 10,000 × 50 × 8 bytes = 3.9 MB
-- **Total: ~4.25 MB per snapshot**
+- **Total: ~4.05 MB per snapshot**
 
 **Concurrent snapshots**: Typically 2 (one in slot, one being rendered)
-- **Peak memory**: ~8.4 MB additional overhead
-- **Allocation rate**: 4.2 MB × 60 FPS = 252 MB/sec
+- **Peak memory**: ~8.1 MB additional overhead
+- **Allocation rate**: 4.05 MB × 60 FPS = 243 MB/sec
 - Modern allocators handle this easily; jemalloc shows ~50ns/allocation
 
 **Optimization if needed**:
