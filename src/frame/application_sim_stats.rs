@@ -116,19 +116,24 @@ impl SimStats {
 
     pub fn get_status_text_real(&self, fps: u32, num_balls: usize, dt: f32) -> String {
         format!(
-            "fps {} time: {:.1}[ns] (dt:{:.4})\n#Balls: {}\nmaxNeig: {}\n\
-                TotalE: {:.3E}[J]\nTemp: {:.2}[K]\nmaxV: {:.2}[m/s]\nvCOM: {}[m/s]",
+            "fps {} | time: {:.1}ns | dt: {:.4}\n\
+             #Balls: {} | maxNeig: {}\n\
+             TotalE: {:.3E}J | Ekin: {:.3E}J\n\
+             Epot: {:.3E}J\n\
+             Temp: {:.2}K | maxV: {:.2}m/s\n\
+             vCOM: ({:.2e}, {:.2e})m/s",
             fps,
             self.time * TIME_SCALE_NS,
             dt,
             num_balls,
-            //self.sim.frames_since_draw,
             self.max_neighbours,
             (self.energy_pot + self.energy_kin) * ENERGY_SCALE_J,
+            self.energy_kin * ENERGY_SCALE_J,
+            self.energy_pot * ENERGY_SCALE_J,
             self.temperature * TEMP_SCALE,
             self.max_v * LEN_SCALE_M / TIME_SCALE,
-            //self.sim.min_dist * LEN_SCALE_M,
-            self.v_com.scaled(LEN_SCALE_M / TIME_SCALE)
+            self.v_com.x * LEN_SCALE_M / TIME_SCALE,
+            self.v_com.y * LEN_SCALE_M / TIME_SCALE
         )
     }
 

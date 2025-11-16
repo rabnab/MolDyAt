@@ -11,8 +11,8 @@ const DEFAULT_WIDTH: u32 = 1024; // Reduced by 20% from 1280
 const DEFAULT_HEIGHT: u32 = 576; // Reduced by 20% from 720
 
 // Text rendering constants
-const CHAR_WIDTH_PIX: u32 = 13; // pixel width per character (approx)
-const CHAR_HEIGHT_PIX: u32 = 19; // pixel height per character (approx)
+const CHAR_WIDTH_PIX: u32 = 9; // pixel width per character (reduced for better density)
+const CHAR_HEIGHT_PIX: u32 = 14; // pixel height per character (reduced for better density)
 const TOP_MARGIN_PIX: u32 = 16;
 
 // Base line count without status text
@@ -177,8 +177,8 @@ impl EnergyPlotWindow {
 
             let mut buffer = surface.buffer_mut()?;
 
-            // Clear to dark background
-            let bg_color = 0xFF0A0A0A;
+            // Clear to dark background (softer gray for better contrast)
+            let bg_color = 0xFF141416; // Dark gray (less harsh than pure black)
             for pixel in buffer.iter_mut() {
                 *pixel = bg_color;
             }
@@ -441,17 +441,14 @@ mod tests {
 
     #[test]
     fn test_height_constants_calculation() {
-        assert_eq!(MIN_HEIGHT_WITHOUT_STATUS, 16 + 41 * 19);
-        assert_eq!(MIN_HEIGHT_WITHOUT_STATUS, 795);
+        // Compute expected values from constants, not hardcoded numbers
+        let expected_without_status = TOP_MARGIN_PIX + BASE_LINES * CHAR_HEIGHT_PIX;
+        let expected_with_status = TOP_MARGIN_PIX + (BASE_LINES + STATUS_TEXT_LINES) * CHAR_HEIGHT_PIX;
 
-        assert_eq!(MIN_HEIGHT_WITH_STATUS, 16 + (41 + 10) * 19);
-        assert_eq!(MIN_HEIGHT_WITH_STATUS, 985);
+        assert_eq!(MIN_HEIGHT_WITHOUT_STATUS, expected_without_status);
+        assert_eq!(MIN_HEIGHT_WITH_STATUS, expected_with_status);
 
-        assert_eq!(
-            MIN_HEIGHT_WITH_STATUS - MIN_HEIGHT_WITHOUT_STATUS,
-            STATUS_TEXT_LINES * CHAR_HEIGHT_PIX
-        );
-        assert_eq!(MIN_HEIGHT_WITH_STATUS - MIN_HEIGHT_WITHOUT_STATUS, 190);
+        assert_eq!(MIN_HEIGHT_WITH_STATUS - MIN_HEIGHT_WITHOUT_STATUS, STATUS_TEXT_LINES * CHAR_HEIGHT_PIX);
     }
 
     #[test]

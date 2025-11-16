@@ -6,14 +6,14 @@ const DEFAULT_PLOT_HEIGHT: usize = 30;
 const HEADER_LINES: usize = 4; // Title + axis label + spacing
 const FOOTER_LINES: usize = 7; // Legend + key hints + spacing
 
-// Color scheme (ARGB format)
-pub const COLOR_KINETIC: u32 = 0xFF00DDFF; // Cyan for kinetic energy
-pub const COLOR_POTENTIAL: u32 = 0xFFFF6B00; // Orange for potential energy
-pub const COLOR_TOTAL: u32 = 0xFF00FF88; // Green for total energy
-pub const COLOR_AXIS: u32 = 0xFF666666; // Gray for axes
-pub const COLOR_ZERO_LINE: u32 = 0xFF888888; // Lighter gray for zero reference line
-pub const COLOR_TEXT: u32 = 0xFFCCCCCC; // Light gray for text
-pub const COLOR_TITLE: u32 = 0xFFFFFFFF; // White for title
+// Color scheme (ARGB format) - improved for better readability
+pub const COLOR_KINETIC: u32 = 0xFF4DCC4D; // Bright green for kinetic energy
+pub const COLOR_POTENTIAL: u32 = 0xFFCC4D4D; // Bright red for potential energy
+pub const COLOR_TOTAL: u32 = 0xFF4D99E6; // Bright blue for total energy
+pub const COLOR_AXIS: u32 = 0xFF4D4D4D; // Darker gray for axes
+pub const COLOR_ZERO_LINE: u32 = 0xFF666666; // Medium gray for zero reference line
+pub const COLOR_TEXT: u32 = 0xFFD9D9D9; // Lighter gray for better contrast
+pub const COLOR_TITLE: u32 = 0xFFE6E6E6; // Soft white for title (less harsh)
 pub const COLOR_LEGEND_KIN: u32 = COLOR_KINETIC;
 pub const COLOR_LEGEND_POT: u32 = COLOR_POTENTIAL;
 pub const COLOR_LEGEND_TOT: u32 = COLOR_TOTAL;
