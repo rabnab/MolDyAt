@@ -69,13 +69,10 @@ impl MainContent {
 mod tests {
     use super::*;
     use crate::frame::MainContent;
-    use crate::frame::renderer::create_dummy_renderer;
     use crate::frame::renderer_snapshot::size_class_to_rgba;
     use crate::frame::window::window_definition::WindowDefinition;
     use crate::objects2d::Vec2D;
     use crate::objects2d::ball_impl::BallFactory;
-    use std::cell::RefCell;
-    use std::rc::Rc;
 
     fn create_test_main_content_with_balls(ball_count: usize) -> MainContent {
         let win_def = WindowDefinition::default();

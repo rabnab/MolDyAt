@@ -357,12 +357,23 @@ impl<'a> DrawingBackend for GgezBackend<'a> {
 
     fn draw_line(
         &mut self,
-        points: &[Point2<f32>; 2],
+        points: &[[f32; 2]; 2],
         width: f32,
         color: (u8, u8, u8, u8),
     ) -> AppResult {
         let ggez_color = Color::from(color);
-        let line = Mesh::new_line(self.ctx, points, width, ggez_color)?;
+        // Convert [f32; 2] to Point2<f32> for ggez
+        let ggez_points: [Point2<f32>; 2] = [
+            Point2 {
+                x: points[0][0],
+                y: points[0][1],
+            },
+            Point2 {
+                x: points[1][0],
+                y: points[1][1],
+            },
+        ];
+        let line = Mesh::new_line(self.ctx, &ggez_points, width, ggez_color)?;
         self.canvas
             .as_mut()
             .unwrap()
