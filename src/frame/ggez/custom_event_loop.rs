@@ -27,6 +27,7 @@ pub struct CustomEventLoop {
     physics_thread: Option<PhysicsThread>,
     command_sender: Option<Sender<PhysicsCommand>>,
     snapshot_slot: Option<Arc<ArcSwapOption<RendererSnapshot>>>,
+    last_processed_step: u64,
 
     // SHARED between both:
     pressed_keys: HashSet<KeyCode>,
@@ -44,6 +45,7 @@ impl CustomEventLoop {
             physics_thread: None,
             command_sender: None,
             snapshot_slot: None,
+            last_processed_step: 0,
             pressed_keys: HashSet::new(),
             renderer,
             cursor_pos: Vec2D::zero(),
@@ -81,6 +83,7 @@ impl CustomEventLoop {
             physics_thread: Some(physics_thread),
             command_sender: Some(command_sender),
             snapshot_slot: Some(snapshot_slot),
+            last_processed_step: 0,
             pressed_keys: HashSet::new(),
             renderer,
             cursor_pos: Vec2D::zero(),
@@ -340,32 +343,45 @@ impl CustomEventLoop {
             // Physics runs in separate thread, we just render from snapshot
             self.render_from_snapshot(ctx);
 
-            // Update energy data from snapshot
+            // Update energy data from snapshot - only once per simulation step
             if let Some(snapshot_slot) = &self.snapshot_slot
                 && let Some(snapshot) = snapshot_slot.load().as_ref()
             {
-                let mut energy_data = self.energy_data.lock().unwrap();
-                energy_data.v_kin.push_back(snapshot.kinetic_energy);
-                energy_data.v_pot.push_back(snapshot.potential_energy);
-                energy_data.time = snapshot.time;
+                // Only update if this is a new simulation step
+                if snapshot.simulation_step > self.last_processed_step {
+                    self.last_processed_step = snapshot.simulation_step;
 
-                // Update status text from snapshot (with current FPS)
-                let fps = ctx.time.fps();
-                if let Some(ref status) = snapshot.status_text {
-                    // Update FPS in status text if it contains "fps"
-                    energy_data.status_text =
-                        Some(status.replace("0 fps", &format!("{} fps", fps as u32)));
-                } else {
-                    energy_data.status_text = None;
-                }
+                    let mut energy_data = self.energy_data.lock().unwrap();
+                    energy_data.v_kin.push_back(snapshot.kinetic_energy);
+                    energy_data.v_pot.push_back(snapshot.potential_energy);
+                    energy_data.time = snapshot.time;
 
-                // Limit buffer size to prevent unbounded growth
-                const MAX_ENERGY_SAMPLES: usize = 1000;
-                if energy_data.v_kin.len() > MAX_ENERGY_SAMPLES {
-                    energy_data.v_kin.pop_front();
-                }
-                if energy_data.v_pot.len() > MAX_ENERGY_SAMPLES {
-                    energy_data.v_pot.pop_front();
+                    // Update status text from snapshot (with current FPS)
+                    let fps = ctx.time.fps();
+                    if let Some(ref status) = snapshot.status_text {
+                        // Update FPS in status text if it contains "fps"
+                        energy_data.status_text =
+                            Some(status.replace("0 fps", &format!("{} fps", fps as u32)));
+                    } else {
+                        energy_data.status_text = None;
+                    }
+
+                    // Limit buffer size to prevent unbounded growth
+                    const MAX_ENERGY_SAMPLES: usize = 1000;
+                    if energy_data.v_kin.len() > MAX_ENERGY_SAMPLES {
+                        energy_data.v_kin.pop_front();
+                    }
+                    if energy_data.v_pot.len() > MAX_ENERGY_SAMPLES {
+                        energy_data.v_pot.pop_front();
+                    }
+
+                    // Release the lock before requesting redraw
+                    drop(energy_data);
+
+                    // Request redraw for energy window if it exists and new data was added
+                    if let Some(window) = &self.energy_window {
+                        window.request_redraw();
+                    }
                 }
             }
         } else {
