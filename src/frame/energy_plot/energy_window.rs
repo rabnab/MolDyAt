@@ -189,14 +189,12 @@ impl EnergyPlotWindow {
             const RIGHT_MARGIN: u32 = 20;
             const TOP_MARGIN: u32 = TOP_MARGIN_PIX;
             const BOTTOM_MARGIN: u32 = 20;
-            const MAX_PLOT_COLS: u32 = 80;
-            const MAX_PLOT_ROWS: u32 = 30;
             let available_width = width.saturating_sub(LEFT_MARGIN + RIGHT_MARGIN);
             let available_height = height.saturating_sub(TOP_MARGIN + BOTTOM_MARGIN);
 
-            // Calculate grid size and clamp to max
-            let cols = (available_width / CHAR_WIDTH_PIX).min(MAX_PLOT_COLS) as usize;
-            let rows = (available_height / CHAR_HEIGHT_PIX).min(MAX_PLOT_ROWS) as usize;
+            // Calculate grid size to fill window, no hard clamp
+            let cols = (available_width / CHAR_WIDTH_PIX) as usize;
+            let rows = (available_height / CHAR_HEIGHT_PIX) as usize;
 
             // Get status text and render to colored string using layout-aware renderer
             let (text, color_map) = {
