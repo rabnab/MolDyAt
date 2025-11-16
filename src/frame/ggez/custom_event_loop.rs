@@ -346,6 +346,9 @@ impl CustomEventLoop {
         let is_stale = if let Some(ref snapshot_arc_after) = *snapshot_guard_after {
             !Arc::ptr_eq(&snapshot_arc_before, snapshot_arc_after)
         } else {
+            // If the snapshot disappears during rendering (very rare), we do NOT treat it as stale.
+            // This preserves legacy behavior: a None snapshot does not trigger early return,
+            // and the frame will still be presented. See CodeQL nitpick for rationale.
             false
         };
 
