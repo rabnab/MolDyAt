@@ -443,12 +443,16 @@ mod tests {
     fn test_height_constants_calculation() {
         // Compute expected values from constants, not hardcoded numbers
         let expected_without_status = TOP_MARGIN_PIX + BASE_LINES * CHAR_HEIGHT_PIX;
-        let expected_with_status = TOP_MARGIN_PIX + (BASE_LINES + STATUS_TEXT_LINES) * CHAR_HEIGHT_PIX;
+        let expected_with_status =
+            TOP_MARGIN_PIX + (BASE_LINES + STATUS_TEXT_LINES) * CHAR_HEIGHT_PIX;
 
         assert_eq!(MIN_HEIGHT_WITHOUT_STATUS, expected_without_status);
         assert_eq!(MIN_HEIGHT_WITH_STATUS, expected_with_status);
 
-        assert_eq!(MIN_HEIGHT_WITH_STATUS - MIN_HEIGHT_WITHOUT_STATUS, STATUS_TEXT_LINES * CHAR_HEIGHT_PIX);
+        assert_eq!(
+            MIN_HEIGHT_WITH_STATUS - MIN_HEIGHT_WITHOUT_STATUS,
+            STATUS_TEXT_LINES * CHAR_HEIGHT_PIX
+        );
     }
 
     #[test]
