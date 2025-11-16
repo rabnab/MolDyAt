@@ -70,7 +70,7 @@ impl CustomEventLoop {
         // Get snapshot slot before moving MainContent to physics thread
         let snapshot_slot = application.get_snapshot_slot();
 
-        // Spawn physics thread
+        // Spawn physics thread (this will print its thread ID)
         let physics_thread = PhysicsThread::spawn(application);
 
         // Get command sender for forwarding user input
@@ -302,10 +302,7 @@ impl CustomEventLoop {
         // Update dummy application's cell grid if bounds changed
         // This ensures the grid rendering matches the actual simulation
         let current_world_rect = self.application.world_region();
-        let bounds_changed = current_world_rect.x != snapshot.cell_grid_bounds.x
-            || current_world_rect.y != snapshot.cell_grid_bounds.y
-            || current_world_rect.w != snapshot.cell_grid_bounds.w
-            || current_world_rect.h != snapshot.cell_grid_bounds.h;
+        let bounds_changed = current_world_rect != snapshot.cell_grid_bounds;
 
         if bounds_changed {
             // Rebuild the dummy application's cell grid with correct bounds

@@ -8,7 +8,6 @@ mod tests {
     use crate::frame::MainContent;
     use crate::frame::physics_thread::PhysicsThread;
     use crate::objects2d::Rect;
-    use std::sync::mpsc;
 
     #[test]
     fn test_can_spawn_physics_thread_separately() {

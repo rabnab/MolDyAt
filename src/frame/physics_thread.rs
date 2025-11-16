@@ -119,6 +119,13 @@ impl PhysicsThread {
         let (command_sender, command_receiver) = mpsc::channel();
 
         let thread_handle = thread::spawn(move || {
+            // Log physics thread startup
+            println!(
+                "Physics thread ID: {:?} - Started!",
+                std::thread::current().id()
+            );
+            println!("Entering physics loop (running as fast as possible)...");
+
             // Physics loop: run simulation as fast as possible
             while !thread_signal.should_shutdown() {
                 // Process all pending commands
@@ -283,7 +290,7 @@ impl Drop for PhysicsThread {
 mod tests {
     use super::*;
     use crate::frame::MainContent;
-    use crate::objects2d::{Rect, Vec2D};
+    use crate::objects2d::Rect;
 
     #[test]
     fn test_shutdown_signal_initial_state() {

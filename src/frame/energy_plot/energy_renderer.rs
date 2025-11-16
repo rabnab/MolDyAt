@@ -3,6 +3,8 @@ use std::collections::VecDeque;
 
 const DEFAULT_PLOT_WIDTH: usize = 80;
 const DEFAULT_PLOT_HEIGHT: usize = 30;
+const HEADER_LINES: usize = 4; // Title + axis label + spacing
+const FOOTER_LINES: usize = 7; // Legend + key hints + spacing
 
 // Color scheme (ARGB format)
 pub const COLOR_KINETIC: u32 = 0xFF00DDFF; // Cyan for kinetic energy
@@ -53,11 +55,10 @@ impl EnergyPlotRenderer {
         self.render_to_colored_string_with_layout(
             status_text,
             display_mode,
-            // estimate a sensible total character width/height matching previous defaults
-            // left label was ~11 + plot width 80 + no status column
+            // Left label width (~11) + plot width
             11 + DEFAULT_PLOT_WIDTH,
-            // header/footer + plot height
-            4 + DEFAULT_PLOT_HEIGHT + 7,
+            // Header + plot height + footer
+            HEADER_LINES + DEFAULT_PLOT_HEIGHT + FOOTER_LINES,
         )
     }
 
@@ -642,20 +643,6 @@ impl EnergyPlotRenderer {
                 // else: keep the existing character (alternating pattern)
             }
         }
-    }
-
-    fn plot_data_scaled(
-        &self,
-        _grid: &mut [Vec<char>],
-        data: &VecDeque<f32>,
-        _symbol: char,
-        _min_val: f32,
-        _range: f32,
-    ) {
-        if data.is_empty() {
-        }
-
-        // backward compat stub - not used in layout-aware rendering
     }
 }
 

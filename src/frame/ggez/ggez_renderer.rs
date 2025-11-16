@@ -138,7 +138,7 @@ impl Renderer for GgezRenderer {
             Some(physics) => physics.get_neighbour_force_and_pos(ball, balls),
             None => vec![],
         };
-        let start: Point2<f32> = ball_coord_px.clone().into();
+        let start: [f32; 2] = [ball_coord_px.x, ball_coord_px.y];
         let max_force = neighbour_info
             .iter()
             .map(|info| info.1)
@@ -159,7 +159,8 @@ impl Renderer for GgezRenderer {
             } else {
                 Color::from_rgb(64, 64, 64)
             };
-            let end: Point2<f32> = self.window_def.borrow().coord_to_px(other_pos).into();
+            let other_pos_px = self.window_def.borrow().coord_to_px(other_pos);
+            let end: [f32; 2] = [other_pos_px.x, other_pos_px.y];
             // Create a line mesh
             backend.draw_line(&[start, end], 2.0, color_line.to_rgba())?;
         }

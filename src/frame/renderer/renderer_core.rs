@@ -3,7 +3,6 @@ use crate::frame::renderer::dummy_renderer::DummyRenderer;
 use crate::frame::window::window_definition::WindowDefinition;
 use crate::objects2d::ball_cell::cell_grid::CellGrid;
 use crate::objects2d::ball_impl::{Ball2D, BallPhysics};
-use ggez::mint::Point2;
 use std::collections::VecDeque;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -50,7 +49,7 @@ pub trait DrawingBackend {
 
     fn draw_line(
         &mut self,
-        points: &[Point2<f32>; 2],
+        points: &[[f32; 2]; 2],
         width: f32,
         color: (u8, u8, u8, u8),
     ) -> AppResult;

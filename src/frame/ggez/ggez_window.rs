@@ -130,7 +130,17 @@ impl Window<GgezRenderer> for GgezWindow {
 
         // rend_ref.borrow_mut().initialize(&ctx, application.cell_grid.get_cell_size());
 
-        let custom_loop = CustomEventLoop::new(application, rend_ref.clone());
+        // Use threaded physics architecture
+        println!("\n========================================");
+        println!("THREADED RENDERER ARCHITECTURE");
+        println!("========================================");
+        println!("Main thread ID: {:?}", std::thread::current().id());
+        println!("Spawning physics thread...");
+        let custom_loop = CustomEventLoop::new_with_physics_thread(application, rend_ref.clone());
+        println!("✓ Physics thread spawned successfully");
+        println!("  - Main thread: Rendering (ggez requirement)");
+        println!("  - Physics thread: Simulation + snapshot publishing");
+        println!("========================================\n");
 
         custom_loop.run(ctx, event_loop);
     }
