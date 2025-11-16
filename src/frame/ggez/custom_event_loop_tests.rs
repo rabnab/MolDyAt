@@ -109,10 +109,10 @@ mod tests {
         // Both can send commands
         use crate::frame::physics_thread::PhysicsCommand;
         sender1
-            .send(PhysicsCommand::IncreaseSpeed)
+            .send(PhysicsCommand::DoubleTimeStep)
             .expect("sender1 failed");
         sender2
-            .send(PhysicsCommand::DecreaseSpeed)
+            .send(PhysicsCommand::HalveTimeStep)
             .expect("sender2 failed");
 
         // Cleanup

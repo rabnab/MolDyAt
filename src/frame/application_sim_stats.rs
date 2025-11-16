@@ -114,13 +114,13 @@ impl SimStats {
         }
     }
 
-    pub fn get_status_text_real(&self, fps: u32, num_balls: usize) -> String {
+    pub fn get_status_text_real(&self, fps: u32, num_balls: usize, dt: f32) -> String {
         format!(
-            "fps {} time: {:.1}[ns] ({})\n#Balls: {}\nmaxNeig: {}\n\
+            "fps {} time: {:.1}[ns] (dt:{:.4})\n#Balls: {}\nmaxNeig: {}\n\
                 TotalE: {:.3E}[J]\nTemp: {:.2}[K]\nmaxV: {:.2}[m/s]\nvCOM: {}[m/s]",
             fps,
             self.time * TIME_SCALE_NS,
-            self.speedup,
+            dt,
             num_balls,
             //self.sim.frames_since_draw,
             self.max_neighbours,
@@ -132,13 +132,19 @@ impl SimStats {
         )
     }
 
-    pub(crate) fn get_status_text(&self, fps: u32, num_balls: usize, hood_cnt: usize) -> String {
+    pub(crate) fn get_status_text(
+        &self,
+        fps: u32,
+        num_balls: usize,
+        hood_cnt: usize,
+        dt: f32,
+    ) -> String {
         format!(
-            "fps {} time: {:.1} ({})\n#Balls: {} #hoodCnt: {}/{}\nmaxNeig: {}\n\
+            "fps {} time: {:.1} (dt:{:.4})\n#Balls: {} #hoodCnt: {}/{}\nmaxNeig: {}\n\
                 TotalE: {:.3E}\nEkin: {:.3E}\nEpot: {:.3E}\nTemp: {:.3}\nmaxV: {:.2}\nvCOM: {}",
             fps,
             self.time,
-            self.speedup,
+            dt,
             num_balls,
             self.update_hood_cnt,
             hood_cnt,

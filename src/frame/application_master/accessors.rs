@@ -78,6 +78,18 @@ impl MainContent {
     pub(crate) fn get_speedup(&self) -> u32 {
         self.sim.get_speedup()
     }
+
+    pub(crate) fn double_time_step(&mut self) {
+        self.game_data.double_time_step();
+    }
+
+    pub(crate) fn halve_time_step(&mut self) {
+        self.game_data.halve_time_step();
+    }
+
+    pub(crate) fn get_time_step(&self) -> f32 {
+        self.game_data.get_time_step()
+    }
     pub(crate) fn start_frame(&mut self) {
         self.sim.reset_frame_since_draw();
         self.update_hood_at_frame_start = self.sim.get_update_hood_cnt();

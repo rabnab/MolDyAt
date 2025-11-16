@@ -46,16 +46,16 @@ impl LogStuff for MainContent {
         );
     }
 
-    fn status_text(&self, fps: u32) -> Option<String> {
+    fn status_text(&self, fps: u32, dt: f32) -> Option<String> {
         if !self.show_ball_stats {
             return None;
         }
         let num_balls = self.get_number_of_balls();
         let return_value = if self.real_data {
-            self.sim.get_status_text_real(fps, num_balls)
+            self.sim.get_status_text_real(fps, num_balls, dt)
         } else {
             self.sim
-                .get_status_text(fps, num_balls, get_update_hood_call_cnt())
+                .get_status_text(fps, num_balls, get_update_hood_call_cnt(), dt)
         };
         Some(return_value)
     }

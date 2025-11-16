@@ -98,9 +98,6 @@ impl EnergyPlotRenderer {
         // Compute status column width based on longest status line
         let status_max_width = status_lines.iter().map(|l| l.len()).max().unwrap_or(0);
 
-        // Keep at least 20 columns for plot (including left label)
-        let min_plot_total = left_label_width + 20;
-
         // Determine status column and gap
         let gap = 2; // spaces between plot and status column
         let status_col_width = if status_max_width == 0 {
@@ -125,7 +122,7 @@ impl EnergyPlotRenderer {
         }
 
         // Generate plot lines and colors sized to plot_width x plot_height
-        let (mut plot_lines, mut plot_colors) = self.render_ascii_plot_with_axes_colored_dims(
+        let (plot_lines, plot_colors) = self.render_ascii_plot_with_axes_colored_dims(
             &data.v_kin,
             &data.v_pot,
             display_mode,
@@ -649,14 +646,13 @@ impl EnergyPlotRenderer {
 
     fn plot_data_scaled(
         &self,
-        grid: &mut [Vec<char>],
+        _grid: &mut [Vec<char>],
         data: &VecDeque<f32>,
-        symbol: char,
-        min_val: f32,
-        range: f32,
+        _symbol: char,
+        _min_val: f32,
+        _range: f32,
     ) {
         if data.is_empty() {
-            return;
         }
 
         // backward compat stub - not used in layout-aware rendering

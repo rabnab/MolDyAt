@@ -37,7 +37,7 @@ impl MainContent {
             kinetic_energy: self.sim.get_kinetic_energy(),
             potential_energy: self.sim.get_potential_energy(),
             time: self.sim.get_time(),
-            status_text: self.status_text(0), // FPS not available during snapshot creation
+            status_text: self.status_text(0, self.game_data.get_time_step()), // FPS not available during snapshot creation
             cell_grid_bounds: self.cell_grid.world_rect(),
             cursor_ball_size_idx: self.get_ball_factory().get_new_ball_size_idx(),
             created_at: std::time::Instant::now(),
