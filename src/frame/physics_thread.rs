@@ -139,7 +139,7 @@ impl PhysicsThread {
 
                 // Optional: Add a small yield to prevent CPU starvation
                 // This can be tuned based on performance requirements
-                // std::thread::yield_now();
+                std::thread::yield_now();
             }
         });
 
