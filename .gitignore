@@ -362,6 +362,9 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 
+# RustRover ignores
+.idea/
+
 # Added by cargo
 
 /target
