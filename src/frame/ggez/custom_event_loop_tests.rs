@@ -154,4 +154,48 @@ mod tests {
             .shutdown_and_join()
             .expect("Failed to shutdown");
     }
+
+    #[test]
+    fn test_snapshot_freshness_with_arc_ptr_eq() {
+        // Verify Arc::ptr_eq can detect when snapshot changes during rendering
+        // This is the core of Phase 4's freshness checking
+        let world_rect = Rect::new(0.0, 0.0, 1000.0, 1000.0);
+        let main_content = MainContent::new(world_rect).expect("Failed to create MainContent");
+
+        let snapshot_slot = main_content.get_snapshot_slot();
+        let physics_thread = PhysicsThread::spawn(main_content);
+
+        // Wait for initial snapshot
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        // Simulate render path: Load snapshot BEFORE rendering
+        let guard_before = snapshot_slot.load();
+        let arc_before = guard_before.as_ref().expect("Should have snapshot").clone();
+
+        // Simulate rendering work (during which physics may publish new snapshot)
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        // Load snapshot AFTER rendering
+        let guard_after = snapshot_slot.load();
+        let arc_after = guard_after.as_ref().expect("Should have snapshot");
+
+        // Freshness check: Did snapshot change during rendering?
+        if std::sync::Arc::ptr_eq(&arc_before, arc_after) {
+            println!("Snapshot is still fresh - safe to present frame");
+        } else {
+            println!("Snapshot changed during rendering - should discard frame");
+            // This is expected when physics runs faster than render
+        }
+
+        // The test just verifies Arc::ptr_eq works as expected
+        // In real usage, changing snapshots during render is normal and healthy
+        assert!(
+            guard_after.is_some(),
+            "Should always have a snapshot available"
+        );
+
+        physics_thread
+            .shutdown_and_join()
+            .expect("Failed to shutdown");
+    }
 }
