@@ -55,7 +55,7 @@ pub enum PhysicsCommand {
     /// Start handling verbosity input
     StartVerbosityInput,
     /// Resize the world region
-    Resize { width_px: f32, height_px: f32 },
+    Resize { world_rect: crate::objects2d::Rect },
 }
 
 /// Shutdown signal shared between threads
@@ -218,11 +218,8 @@ impl PhysicsThread {
             PhysicsCommand::StartVerbosityInput => {
                 main_content.start_handling_verbosity_input();
             }
-            PhysicsCommand::Resize {
-                width_px,
-                height_px,
-            } => {
-                main_content.resize(width_px, height_px);
+            PhysicsCommand::Resize { world_rect } => {
+                main_content.resize(world_rect);
             }
         }
     }
