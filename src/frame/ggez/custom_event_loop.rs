@@ -343,14 +343,23 @@ impl CustomEventLoop {
 
         // PHASE 4: Verify snapshot hasn't changed before presenting
         let snapshot_guard_after = snapshot_slot.load();
-        if let Some(ref snapshot_arc_after) = *snapshot_guard_after
-            && !Arc::ptr_eq(&snapshot_arc_before, snapshot_arc_after)
-        {
-            // Newer snapshot available - discard this frame to prevent stale display
+        let is_stale = if let Some(ref snapshot_arc_after) = *snapshot_guard_after {
+            !Arc::ptr_eq(&snapshot_arc_before, snapshot_arc_after)
+        } else {
+            // If the snapshot disappears during rendering (very rare), we do NOT treat it as stale.
+            // This preserves legacy behavior: a None snapshot does not trigger early return,
+            // and the frame will still be presented. See CodeQL nitpick for rationale.
+            false
+        };
+
+        // CRITICAL: Always call end_frame() to drop SurfaceOutput before returning
+        // Otherwise we get "SurfaceOutput must be dropped before new Surface" panic
+        let _ = ctx.gfx.end_frame();
+
+        if is_stale {
+            // Newer snapshot available - frame was rendered but not presented (skipped)
             return None;
         }
-
-        let _ = ctx.gfx.end_frame();
 
         // Track steps per frame for performance metrics
         let steps_this_frame = snapshot
