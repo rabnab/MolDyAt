@@ -30,6 +30,8 @@ pub struct CustomEventLoop {
     last_processed_step: u64,
     last_step_time: std::time::Instant,
     simulation_fps: f32,
+    last_displayed_step: u64,
+    steps_per_frame: f32,
 
     // SHARED between both:
     pressed_keys: HashSet<KeyCode>,
@@ -50,6 +52,8 @@ impl CustomEventLoop {
             last_processed_step: 0,
             last_step_time: std::time::Instant::now(),
             simulation_fps: 0.0,
+            last_displayed_step: 0,
+            steps_per_frame: 0.0,
             pressed_keys: HashSet::new(),
             renderer,
             cursor_pos: Vec2D::zero(),
@@ -90,6 +94,8 @@ impl CustomEventLoop {
             last_processed_step: 0,
             last_step_time: std::time::Instant::now(),
             simulation_fps: 0.0,
+            last_displayed_step: 0,
+            steps_per_frame: 0.0,
             pressed_keys: HashSet::new(),
             renderer,
             cursor_pos: Vec2D::zero(),
@@ -293,11 +299,15 @@ impl CustomEventLoop {
 
     /// Render from snapshot (new architecture)
     /// This method reads the latest snapshot and renders it without accessing MainContent
+    /// Implements freshness checking to prevent displaying stale frames
     #[allow(dead_code)]
     fn render_from_snapshot(&mut self, ctx: &mut Context) -> Option<()> {
         let snapshot_slot = self.snapshot_slot.as_ref()?;
-        let snapshot = snapshot_slot.load();
-        let snapshot = snapshot.as_ref()?;
+
+        // PHASE 4: Load snapshot BEFORE expensive rendering work
+        let snapshot_guard_before = snapshot_slot.load();
+        let snapshot_arc_before = snapshot_guard_before.as_ref()?.clone();
+        let snapshot = snapshot_arc_before.as_ref();
 
         // Update dummy application's cell grid if bounds changed
         // This ensures the grid rendering matches the actual simulation
@@ -331,7 +341,30 @@ impl CustomEventLoop {
         let cache = backend.into_cache();
         cur_render.put_cache(cache);
 
+        // PHASE 4: Verify snapshot hasn't changed before presenting
+        let snapshot_guard_after = snapshot_slot.load();
+        if let Some(ref snapshot_arc_after) = *snapshot_guard_after
+            && !Arc::ptr_eq(&snapshot_arc_before, snapshot_arc_after)
+        {
+            // Newer snapshot available - discard this frame to prevent stale display
+            return None;
+        }
+
         let _ = ctx.gfx.end_frame();
+
+        // Track steps per frame for performance metrics
+        let steps_this_frame = snapshot
+            .simulation_step
+            .saturating_sub(self.last_displayed_step);
+        if steps_this_frame > 0 {
+            // Smooth with exponential moving average (weight=0.1)
+            if self.steps_per_frame == 0.0 {
+                self.steps_per_frame = steps_this_frame as f32;
+            } else {
+                self.steps_per_frame = self.steps_per_frame * 0.9 + steps_this_frame as f32 * 0.1;
+            }
+            self.last_displayed_step = snapshot.simulation_step;
+        }
 
         Some(())
     }
@@ -372,15 +405,15 @@ impl CustomEventLoop {
                     energy_data.v_pot.push_back(snapshot.potential_energy);
                     energy_data.time = snapshot.time;
 
-                    // Update status text from snapshot (with renderer FPS and simulation FPS)
+                    // Update status text from snapshot (with renderer FPS, simulation FPS, and steps/frame)
                     let renderer_fps = ctx.time.fps();
                     if let Some(ref status) = snapshot.status_text {
-                        // Replace "fps 0" placeholder with combined renderer and simulation FPS
+                        // Replace "fps 0" placeholder with combined renderer, simulation FPS, and steps/frame
                         let updated_status = status.replace(
                             "fps 0",
                             &format!(
-                                "render: {} fps | sim: {:.0} fps",
-                                renderer_fps as u32, self.simulation_fps
+                                "render: {} fps | sim: {:.0} fps | steps/frame: {:.1}",
+                                renderer_fps as u32, self.simulation_fps, self.steps_per_frame
                             ),
                         );
                         energy_data.status_text = Some(updated_status);
