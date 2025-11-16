@@ -29,7 +29,7 @@ pub trait LogStuff {
     fn any_log(&self) -> bool;
     fn print_help_message();
 
-    fn status_text(&self, fps: u32) -> Option<String>;
+    fn status_text(&self, fps: u32, dt: f32) -> Option<String>;
     fn format_g(value: f32, precision: usize) -> String;
     fn log_closeness_update(ball: &Ball2D);
     fn log_timings(&self, timer: TimingMonad);

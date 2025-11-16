@@ -28,6 +28,8 @@ pub struct CustomEventLoop {
     command_sender: Option<Sender<PhysicsCommand>>,
     snapshot_slot: Option<Arc<ArcSwapOption<RendererSnapshot>>>,
     last_processed_step: u64,
+    last_step_time: std::time::Instant,
+    simulation_fps: f32,
 
     // SHARED between both:
     pressed_keys: HashSet<KeyCode>,
@@ -46,6 +48,8 @@ impl CustomEventLoop {
             command_sender: None,
             snapshot_slot: None,
             last_processed_step: 0,
+            last_step_time: std::time::Instant::now(),
+            simulation_fps: 0.0,
             pressed_keys: HashSet::new(),
             renderer,
             cursor_pos: Vec2D::zero(),
@@ -84,6 +88,8 @@ impl CustomEventLoop {
             command_sender: Some(command_sender),
             snapshot_slot: Some(snapshot_slot),
             last_processed_step: 0,
+            last_step_time: std::time::Instant::now(),
+            simulation_fps: 0.0,
             pressed_keys: HashSet::new(),
             renderer,
             cursor_pos: Vec2D::zero(),
@@ -349,6 +355,19 @@ impl CustomEventLoop {
             {
                 // Only update if this is a new simulation step
                 if snapshot.simulation_step > self.last_processed_step {
+                    // Calculate simulation FPS
+                    let now = std::time::Instant::now();
+                    let elapsed = now.duration_since(self.last_step_time).as_secs_f32();
+                    if elapsed > 0.0 {
+                        // Smooth FPS with exponential moving average (weight=0.1)
+                        let instant_fps = 1.0 / elapsed;
+                        self.simulation_fps = if self.simulation_fps == 0.0 {
+                            instant_fps
+                        } else {
+                            self.simulation_fps * 0.9 + instant_fps * 0.1
+                        };
+                    }
+                    self.last_step_time = now;
                     self.last_processed_step = snapshot.simulation_step;
 
                     let mut energy_data = self.energy_data.lock().unwrap();
@@ -356,12 +375,18 @@ impl CustomEventLoop {
                     energy_data.v_pot.push_back(snapshot.potential_energy);
                     energy_data.time = snapshot.time;
 
-                    // Update status text from snapshot (with current FPS)
-                    let fps = ctx.time.fps();
+                    // Update status text from snapshot (with renderer FPS and simulation FPS)
+                    let renderer_fps = ctx.time.fps();
                     if let Some(ref status) = snapshot.status_text {
-                        // Update FPS in status text if it contains "fps"
-                        energy_data.status_text =
-                            Some(status.replace("0 fps", &format!("{} fps", fps as u32)));
+                        // Replace "fps 0" placeholder with combined renderer and simulation FPS
+                        let updated_status = status.replace(
+                            "fps 0",
+                            &format!(
+                                "render: {} fps | sim: {:.0} fps",
+                                renderer_fps as u32, self.simulation_fps
+                            ),
+                        );
+                        energy_data.status_text = Some(updated_status);
                     } else {
                         energy_data.status_text = None;
                     }
@@ -383,6 +408,17 @@ impl CustomEventLoop {
                         window.request_redraw();
                     }
                 }
+            }
+
+            // Handle +/- keys for time step control in threaded mode
+            if self.is_key_pressed(KeyCode::Minus) {
+                let _ = self.send_physics_command(
+                    crate::frame::physics_thread::PhysicsCommand::HalveTimeStep,
+                );
+            } else if self.is_key_pressed(KeyCode::Equals) {
+                let _ = self.send_physics_command(
+                    crate::frame::physics_thread::PhysicsCommand::DoubleTimeStep,
+                );
             }
         } else {
             // LEGACY PATH: Direct MainContent access
@@ -411,7 +447,9 @@ impl CustomEventLoop {
 
                 // Update status text for the energy window
                 let fps = ctx.time.fps();
-                energy_data.status_text = self.application.status_text(fps as u32);
+                energy_data.status_text = self
+                    .application
+                    .status_text(fps as u32, self.application.get_time_step());
 
                 // Limit buffer size to prevent unbounded growth
                 const MAX_ENERGY_SAMPLES: usize = 1000;
@@ -430,16 +468,16 @@ impl CustomEventLoop {
 
             if self.is_key_pressed(KeyCode::Minus)
                 && !self.send_physics_command(
-                    crate::frame::physics_thread::PhysicsCommand::DecreaseSpeed,
+                    crate::frame::physics_thread::PhysicsCommand::HalveTimeStep,
                 )
             {
-                self.application.decrease_speedup();
+                self.application.halve_time_step();
             } else if self.is_key_pressed(KeyCode::Equals)
                 && !self.send_physics_command(
-                    crate::frame::physics_thread::PhysicsCommand::IncreaseSpeed,
+                    crate::frame::physics_thread::PhysicsCommand::DoubleTimeStep,
                 )
             {
-                self.application.increase_speedup();
+                self.application.double_time_step();
             }
 
             // Draw main window (without status text - now shown in energy window)

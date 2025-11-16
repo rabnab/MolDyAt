@@ -37,6 +37,26 @@ impl GameLogicData {
     pub(crate) fn get_ball_factory(&self) -> &BallFactory {
         &self.ball_factory
     }
+
+    pub(crate) fn double_time_step(&mut self) {
+        self.dt_goal *= 2.0;
+        // Clamp to reasonable range to prevent instability
+        if self.dt_goal > 0.16 {
+            self.dt_goal = 0.16;
+        }
+    }
+
+    pub(crate) fn halve_time_step(&mut self) {
+        self.dt_goal *= 0.5;
+        // Clamp to reasonable range
+        if self.dt_goal < 0.000625 {
+            self.dt_goal = 0.000625;
+        }
+    }
+
+    pub(crate) fn get_time_step(&self) -> f32 {
+        self.dt_goal
+    }
 }
 
 impl MainContent {

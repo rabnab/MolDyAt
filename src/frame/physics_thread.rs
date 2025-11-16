@@ -40,10 +40,10 @@ pub enum PhysicsCommand {
     EnableRandomBallSpeed,
     /// Cycle to next ball size
     NextBallSize,
-    /// Increase simulation speed multiplier
-    IncreaseSpeed,
-    /// Decrease simulation speed multiplier
-    DecreaseSpeed,
+    /// Double the simulation time step (faster, less accurate)
+    DoubleTimeStep,
+    /// Halve the simulation time step (slower, more accurate)
+    HalveTimeStep,
     /// Toggle real data display
     ToggleRealData,
     /// Toggle step-by-step mode
@@ -124,7 +124,7 @@ impl PhysicsThread {
                 // Process all pending commands
                 Self::process_commands(&mut main_content, &command_receiver);
 
-                // Run one simulation step
+                // Run one simulation step per iteration
                 let _ = main_content.simulation_step();
 
                 // Publish snapshot for renderer
@@ -197,11 +197,11 @@ impl PhysicsThread {
             PhysicsCommand::NextBallSize => {
                 main_content.next_ball_size();
             }
-            PhysicsCommand::IncreaseSpeed => {
-                main_content.increase_speedup();
+            PhysicsCommand::DoubleTimeStep => {
+                main_content.double_time_step();
             }
-            PhysicsCommand::DecreaseSpeed => {
-                main_content.decrease_speedup();
+            PhysicsCommand::HalveTimeStep => {
+                main_content.halve_time_step();
             }
             PhysicsCommand::ToggleRealData => {
                 main_content.toggle_real_data();
@@ -456,7 +456,7 @@ mod tests {
         // Send commands to increase speed multiple times
         for _ in 0..3 {
             physics_thread
-                .send_command(PhysicsCommand::IncreaseSpeed)
+                .send_command(PhysicsCommand::DoubleTimeStep)
                 .expect("Failed to send increase speed command");
         }
 
