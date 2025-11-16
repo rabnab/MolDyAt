@@ -625,11 +625,17 @@ impl CustomEventLoop {
     }
 
     fn handle_resize(&mut self, _ctx: &mut Context, width: f32, height: f32) -> ggez::GameResult {
+        // Always resize the renderer (it's on the render thread)
+        self.renderer.borrow_mut().resize(width, height);
+
+        // Get the updated world_rect from renderer's WindowDefinition
+        let world_rect = self.renderer.borrow().get_world_region();
+
+        // Send resize command to physics thread or resize application directly
         if !self.send_physics_command(crate::frame::physics_thread::PhysicsCommand::Resize {
-            width_px: width,
-            height_px: height,
+            world_rect,
         }) {
-            self.application.resize(width, height);
+            self.application.resize(world_rect);
         }
         Ok(())
     }

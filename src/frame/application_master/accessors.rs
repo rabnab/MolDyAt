@@ -48,13 +48,23 @@ impl MainContent {
 
     /// tells the renderer to resize the window to the given px size
     /// pauses the sim if it's running, resumes after some time
-    pub(crate) fn resize(&mut self, width_px: f32, height_px: f32) {
+    pub(crate) fn resize(&mut self, world_rect: crate::objects2d::Rect) {
         if !self.sim.is_paused() {
             self.pause_for_resize()
         }
-        // Update world_rect dimensions - renderer will handle its own resize
-        self.world_rect.w = width_px;
-        self.world_rect.h = height_px;
+        // Update world_rect with correctly computed world coordinates
+        self.world_rect = world_rect;
+
+        // Rebuild cell grid with new dimensions
+        let cutoff = self.physics.get_cutoff_distance();
+        self.cell_grid =
+            crate::objects2d::ball_cell::cell_grid::CellGrid::new(self.world_rect, cutoff)
+                .expect("Failed to create cell grid on resize");
+
+        // Re-add all balls to the new cell grid
+        for i in 0..self.balls.len() {
+            self.cell_grid.add_ball(i, &mut self.balls);
+        }
     }
 
     pub(crate) fn increase_speedup(&mut self) {

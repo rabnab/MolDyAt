@@ -10,22 +10,18 @@ use winit::window::{Window, WindowBuilder, WindowId};
 const DEFAULT_WIDTH: u32 = 1024; // Reduced by 20% from 1280
 const DEFAULT_HEIGHT: u32 = 576; // Reduced by 20% from 720
 
-// Text rendering constants - reduced by 20% from doubled size (1.6x original)
-const CHAR_WIDTH: u32 = 13; // Reduced from 16 (was 8 original)
-const CHAR_HEIGHT: u32 = 19; // Reduced from 24 (was 12 original)
-const TOP_MARGIN: u32 = 16; // Reduced from 20 (was 10 original)
+// Text rendering constants
+const CHAR_WIDTH_PIX: u32 = 13; // pixel width per character (approx)
+const CHAR_HEIGHT_PIX: u32 = 19; // pixel height per character (approx)
+const TOP_MARGIN_PIX: u32 = 16;
 
 // Base line count without status text
-// Header (3) + empty (1) + plot (30) + empty (1) + separator (1) +
-// legend (1) + separator (1) + empty (1) + help (1) + footer (1) = 41 lines
 const BASE_LINES: u32 = 41;
-
-// Status text adds approximately 9-10 lines (fps, balls, maxNeig, TotalE, Ekin, Epot, Temp, maxV, vCOM)
 const STATUS_TEXT_LINES: u32 = 10;
 
-// Calculate minimum heights
-const MIN_HEIGHT_WITHOUT_STATUS: u32 = TOP_MARGIN + BASE_LINES * CHAR_HEIGHT;
-const MIN_HEIGHT_WITH_STATUS: u32 = TOP_MARGIN + (BASE_LINES + STATUS_TEXT_LINES) * CHAR_HEIGHT;
+const MIN_HEIGHT_WITHOUT_STATUS: u32 = TOP_MARGIN_PIX + BASE_LINES * CHAR_HEIGHT_PIX;
+const MIN_HEIGHT_WITH_STATUS: u32 =
+    TOP_MARGIN_PIX + (BASE_LINES + STATUS_TEXT_LINES) * CHAR_HEIGHT_PIX;
 
 /// Energy plot window - a separate OS window for displaying energy plots
 pub struct EnergyPlotWindow {
@@ -187,14 +183,27 @@ impl EnergyPlotWindow {
                 *pixel = bg_color;
             }
 
-            // Get status text and render to colored string
+            // Compute character grid dimensions from pixel size and character metrics
+            // Reserve some margins
+            let available_width = if width > 40 { width - 40 } else { width };
+            let available_height = if height > 40 { height - 40 } else { height };
+
+            let cols = (available_width / CHAR_WIDTH_PIX) as usize;
+            let rows = (available_height / CHAR_HEIGHT_PIX) as usize;
+
+            // Get status text and render to colored string using layout-aware renderer
             let (text, color_map) = {
                 let data = self.energy_data.lock().unwrap();
                 let status = data.status_text.clone();
                 drop(data);
 
                 let renderer = EnergyPlotRenderer::new(self.energy_data.clone());
-                renderer.render_to_colored_string(status.as_deref(), self.display_mode)
+                renderer.render_to_colored_string_with_layout(
+                    status.as_deref(),
+                    self.display_mode,
+                    cols.max(20),
+                    rows.max(10),
+                )
             };
 
             // Render text to pixels using colors
@@ -219,16 +228,18 @@ impl EnergyPlotWindow {
         text: &str,
         color_map: &[Vec<u32>],
     ) {
-        const CHAR_WIDTH: usize = 16; // Doubled from 8
-        const CHAR_HEIGHT: usize = 24; // Doubled from 12
+        const CHAR_WIDTH: usize = 13; // pixels
+        const CHAR_HEIGHT: usize = 19; // pixels
+        let left_margin = 10usize;
+        let top_margin = 8usize;
 
-        let mut y = 20; // Doubled from 10
+        let mut y = top_margin;
         for (line_idx, line) in text.lines().enumerate() {
             if y + CHAR_HEIGHT >= height {
                 break;
             }
 
-            let mut x = 20; // Doubled from 10
+            let mut x = left_margin;
             for (char_idx, ch) in line.chars().enumerate() {
                 if x + CHAR_WIDTH >= width {
                     break;
@@ -241,7 +252,7 @@ impl EnergyPlotWindow {
                     0xFFCCCCCC // Default text color
                 };
 
-                // Render character using bitmap font with color (2x scaled)
+                // Render character using bitmap font
                 Self::draw_char_scaled(buffer, width, x, y, ch, color);
 
                 x += CHAR_WIDTH;
@@ -253,23 +264,23 @@ impl EnergyPlotWindow {
 
     /// Simple bitmap font renderer - renders text as pixels
     fn render_text_to_buffer(buffer: &mut [u32], width: usize, height: usize, text: &str) {
-        const CHAR_WIDTH: usize = 13; // Reduced by 20% from 16
-        const CHAR_HEIGHT: usize = 19; // Reduced by 20% from 24
+        const CHAR_WIDTH: usize = 13; // pixels
+        const CHAR_HEIGHT: usize = 19; // pixels
         const TEXT_COLOR: u32 = 0xFFCCCCCC;
 
-        let mut y = 16; // Reduced by 20% from 20
+        let mut y = 16; // top margin
         for line in text.lines() {
             if y + CHAR_HEIGHT >= height {
                 break;
             }
 
-            let mut x = 16; // Reduced by 20% from 20
+            let mut x = 16;
             for ch in line.chars() {
                 if x + CHAR_WIDTH >= width {
                     break;
                 }
 
-                // Render actual character using bitmap font (1.6x scaled)
+                // Render actual character using bitmap font
                 Self::draw_char_scaled(buffer, width, x, y, ch, TEXT_COLOR);
 
                 x += CHAR_WIDTH;
@@ -291,7 +302,6 @@ impl EnergyPlotWindow {
         let glyph = Self::get_glyph(ch);
 
         // Target size is 13x19, source is 8x8
-        // Use simple nearest-neighbor scaling
         const TARGET_WIDTH: usize = 13;
         const TARGET_HEIGHT: usize = 19;
         const SOURCE_SIZE: usize = 8;
@@ -431,19 +441,17 @@ mod tests {
 
     #[test]
     fn test_height_constants_calculation() {
-        // Verify height calculations are correct (reduced by 20% from doubled = 1.6x original)
-        assert_eq!(MIN_HEIGHT_WITHOUT_STATUS, 16 + 41 * 19); // Reduced: was 20 + 41 * 24
-        assert_eq!(MIN_HEIGHT_WITHOUT_STATUS, 795); // Reduced: was 1004
+        assert_eq!(MIN_HEIGHT_WITHOUT_STATUS, 16 + 41 * 19);
+        assert_eq!(MIN_HEIGHT_WITHOUT_STATUS, 795);
 
-        assert_eq!(MIN_HEIGHT_WITH_STATUS, 16 + (41 + 10) * 19); // Reduced: was 20 + (41 + 10) * 24
-        assert_eq!(MIN_HEIGHT_WITH_STATUS, 985); // Reduced: was 1244
+        assert_eq!(MIN_HEIGHT_WITH_STATUS, 16 + (41 + 10) * 19);
+        assert_eq!(MIN_HEIGHT_WITH_STATUS, 985);
 
-        // Difference should be STATUS_TEXT_LINES * CHAR_HEIGHT
         assert_eq!(
             MIN_HEIGHT_WITH_STATUS - MIN_HEIGHT_WITHOUT_STATUS,
-            STATUS_TEXT_LINES * CHAR_HEIGHT
+            STATUS_TEXT_LINES * CHAR_HEIGHT_PIX
         );
-        assert_eq!(MIN_HEIGHT_WITH_STATUS - MIN_HEIGHT_WITHOUT_STATUS, 190); // Reduced: was 240
+        assert_eq!(MIN_HEIGHT_WITH_STATUS - MIN_HEIGHT_WITHOUT_STATUS, 190);
     }
 
     #[test]

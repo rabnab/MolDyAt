@@ -1,8 +1,8 @@
 use super::energy_data::{DisplayMode, SharedEnergyData};
 use std::collections::VecDeque;
 
-const PLOT_WIDTH: usize = 80;
-const PLOT_HEIGHT: usize = 30;
+const DEFAULT_PLOT_WIDTH: usize = 80;
+const DEFAULT_PLOT_HEIGHT: usize = 30;
 
 // Color scheme (ARGB format)
 pub const COLOR_KINETIC: u32 = 0xFF00DDFF; // Cyan for kinetic energy
@@ -44,12 +44,32 @@ impl EnergyPlotRenderer {
         Self { energy_data }
     }
 
-    /// Generate a text-based visualization of the energy plot with optional status text
-    /// Returns tuple of (text, color_map) where color_map contains colors for each character
+    /// Backwards compatible method: use default plot dimensions
     pub fn render_to_colored_string(
         &self,
         status_text: Option<&str>,
         display_mode: DisplayMode,
+    ) -> (String, Vec<Vec<u32>>) {
+        self.render_to_colored_string_with_layout(
+            status_text,
+            display_mode,
+            // estimate a sensible total character width/height matching previous defaults
+            // left label was ~11 + plot width 80 + no status column
+            11 + DEFAULT_PLOT_WIDTH,
+            // header/footer + plot height
+            4 + DEFAULT_PLOT_HEIGHT + 7,
+        )
+    }
+
+    /// New layout-aware renderer: total_cols/total_rows are number of text columns/rows available
+    /// It will place the status text to the right of the plot and ensure the plot fits into the
+    /// visible character grid.
+    pub fn render_to_colored_string_with_layout(
+        &self,
+        status_text: Option<&str>,
+        display_mode: DisplayMode,
+        total_cols: usize,
+        total_rows: usize,
     ) -> (String, Vec<Vec<u32>>) {
         let data = self.energy_data.lock().unwrap();
 
@@ -57,69 +77,216 @@ impl EnergyPlotRenderer {
             return self.render_waiting_message_colored(display_mode);
         }
 
-        let mut lines = Vec::new();
-        let mut color_lines = Vec::new();
+        // Prepare status lines
+        let status_lines: Vec<String> = status_text
+            .map(|s| s.lines().map(|l| l.to_string()).collect())
+            .unwrap_or_default();
 
-        // Title
+        // Layout constants in characters
+        let left_label_width = 11; // e.g. "-1.23e+02 "
+        let header_lines = 4; // title, subtitle, title, empty
+        let footer_lines = 7; // empty, separator, legend, separator, empty, instructions, title
+
+        // Compute available plot height
+        let mut plot_height = if total_rows > header_lines + footer_lines {
+            total_rows - (header_lines + footer_lines)
+        } else {
+            // minimal plot height
+            6
+        };
+
+        // Compute status column width based on longest status line
+        let status_max_width = status_lines.iter().map(|l| l.len()).max().unwrap_or(0);
+
+        // Keep at least 20 columns for plot (including left label)
+        let min_plot_total = left_label_width + 20;
+
+        // Determine status column and gap
+        let gap = 2; // spaces between plot and status column
+        let status_col_width = if status_max_width == 0 {
+            0
+        } else {
+            status_max_width + gap
+        };
+
+        // Compute plot width in characters available for the plot area (excluding left label)
+        let plot_total_available = if total_cols > left_label_width + status_col_width {
+            total_cols - left_label_width - status_col_width
+        } else {
+            // fallback to default plot width
+            DEFAULT_PLOT_WIDTH
+        };
+
+        // Ensure at least a small plot width
+        let plot_width = plot_total_available.max(16);
+        // Ensure plot height is reasonable
+        if plot_height < 6 {
+            plot_height = 6;
+        }
+
+        // Generate plot lines and colors sized to plot_width x plot_height
+        let (mut plot_lines, mut plot_colors) = self.render_ascii_plot_with_axes_colored_dims(
+            &data.v_kin,
+            &data.v_pot,
+            display_mode,
+            plot_width,
+            plot_height,
+        );
+
+        // Compose full text lines: header + plot area with status to the right + footer
+        let mut lines: Vec<String> = Vec::new();
+        let mut color_lines: Vec<Vec<u32>> = Vec::new();
+
+        // Helper to clamp line and colors to total_cols
+        let clamp_to_cols = |mut s: String, mut cols_vec: Vec<u32>| -> (String, Vec<u32>) {
+            if s.chars().count() > total_cols {
+                s = s.chars().take(total_cols).collect();
+            }
+            if cols_vec.len() > s.chars().count() {
+                cols_vec.truncate(s.chars().count());
+            } else if cols_vec.len() < s.chars().count() {
+                // pad colors if missing
+                cols_vec.extend(vec![COLOR_TEXT; s.chars().count() - cols_vec.len()]);
+            }
+            (s, cols_vec)
+        };
+
+        // Title block
         let title_line =
             "═══════════════════════════════════════════════════════════════════════════════════";
-        lines.push(title_line.to_string());
-        color_lines.push(vec![COLOR_TITLE; title_line.len()]);
-
         let subtitle = format!(
             "                         ENERGY PLOT 🐾 — {}",
             display_mode.as_str()
         );
-        lines.push(subtitle.clone());
-        color_lines.push(vec![COLOR_TITLE; subtitle.len()]);
 
-        lines.push(title_line.to_string());
-        color_lines.push(vec![COLOR_TITLE; title_line.len()]);
+        // Push clamped title/subtitle lines
+        let (t0, c0) = clamp_to_cols(
+            title_line.to_string(),
+            vec![COLOR_TITLE; title_line.chars().count()],
+        );
+        lines.push(t0);
+        color_lines.push(c0);
+
+        let (t1, c1) = clamp_to_cols(
+            subtitle.clone(),
+            vec![COLOR_TITLE; subtitle.chars().count()],
+        );
+        lines.push(t1);
+        color_lines.push(c1);
+
+        let (t2, c2) = clamp_to_cols(
+            title_line.to_string(),
+            vec![COLOR_TITLE; title_line.chars().count()],
+        );
+        lines.push(t2);
+        color_lines.push(c2);
 
         lines.push(String::new());
         color_lines.push(vec![]);
 
-        // Add status text if provided
-        if let Some(status) = status_text {
-            for line in status.lines() {
-                lines.push(line.to_string());
-                color_lines.push(vec![COLOR_TEXT; line.len()]);
-            }
-            lines.push(String::new());
-            color_lines.push(vec![]);
+        // Prepare status column strings padded to plot area height + header
+        // We want the status to start just after the header lines
+        let mut status_column: Vec<String> = Vec::new();
+        for _ in 0..(header_lines) {
+            status_column.push(String::new());
+        }
+        // Add status lines
+        for s in &status_lines {
+            status_column.push(s.clone());
+        }
+        // Ensure the status column has same number of rows as plot + header
+        while status_column.len() < header_lines + plot_height {
+            status_column.push(String::new());
         }
 
-        // Render the plot with colors
-        let (plot_lines, plot_colors) =
-            self.render_ascii_plot_with_axes_colored(&data.v_kin, &data.v_pot, display_mode);
-        lines.extend(plot_lines);
-        color_lines.extend(plot_colors);
+        // Now add the plot lines with left labels and append status column to the right
+        // plot_lines is exactly plot_height lines corresponding to the visible grid
+        for (i, plot_line) in plot_lines.iter().enumerate() {
+            let mut full_line = String::new();
+            let mut colors = Vec::new();
 
+            // left label is already part of plot_line (render_ascii returns label + plot chars)
+            full_line.push_str(plot_line);
+            // plot_colors contains a color vector for this line
+            if let Some(pc) = plot_colors.get(i) {
+                colors.extend(pc.iter().copied());
+            }
+
+            // Append status gap and status text if present for this row
+            let status_row = status_column
+                .get(i + header_lines)
+                .cloned()
+                .unwrap_or_default();
+            if status_col_width > 0 {
+                // pad to gap
+                full_line.push_str(&" ".repeat(gap));
+                colors.extend(vec![COLOR_TEXT; gap]);
+
+                // append status text (clamped to status_max_width)
+                let mut s = status_row;
+                if s.len() > status_max_width {
+                    s.truncate(status_max_width);
+                }
+                full_line.push_str(&s);
+                colors.extend(vec![COLOR_TEXT; s.len()]);
+
+                // pad remaining status column space
+                if s.len() < status_max_width {
+                    let rem = status_max_width - s.len();
+                    full_line.push_str(&" ".repeat(rem));
+                    colors.extend(vec![COLOR_TEXT; rem]);
+                }
+            }
+
+            // Clamp to available total columns to avoid overflowing visible area
+            let (clamped_line, clamped_colors) = clamp_to_cols(full_line, colors);
+            lines.push(clamped_line);
+            color_lines.push(clamped_colors);
+        }
+
+        // After plot, add footer lines similar to previous layout
         lines.push(String::new());
         color_lines.push(vec![]);
 
+        // Footer / separator / legend - clamp to available columns
         let separator =
             "───────────────────────────────────────────────────────────────────────────────────";
-        lines.push(separator.to_string());
-        color_lines.push(vec![COLOR_TEXT; separator.len()]);
+        let (sep_s, sep_c) = clamp_to_cols(
+            separator.to_string(),
+            vec![COLOR_TEXT; separator.chars().count()],
+        );
+        lines.push(sep_s);
+        color_lines.push(sep_c);
 
-        // Show legend based on mode with colors
         let (legend_line, legend_colors) = self.create_legend_line(display_mode, data.time);
-        lines.push(legend_line);
-        color_lines.push(legend_colors);
+        let (leg_s, leg_c) = clamp_to_cols(legend_line, legend_colors);
+        lines.push(leg_s);
+        color_lines.push(leg_c);
 
-        lines.push(separator.to_string());
-        color_lines.push(vec![COLOR_TEXT; separator.len()]);
+        let (sep2_s, sep2_c) = clamp_to_cols(
+            separator.to_string(),
+            vec![COLOR_TEXT; separator.chars().count()],
+        );
+        lines.push(sep2_s);
+        color_lines.push(sep2_c);
 
         lines.push(String::new());
         color_lines.push(vec![]);
 
         let instructions = "  Press Esc to close | Tab to cycle mode";
-        lines.push(instructions.to_string());
-        color_lines.push(vec![COLOR_TEXT; instructions.len()]);
+        let (ins_s, ins_c) = clamp_to_cols(
+            instructions.to_string(),
+            vec![COLOR_TEXT; instructions.chars().count()],
+        );
+        lines.push(ins_s);
+        color_lines.push(ins_c);
 
-        lines.push(title_line.to_string());
-        color_lines.push(vec![COLOR_TITLE; title_line.len()]);
+        let (tlast, tlast_c) = clamp_to_cols(
+            title_line.to_string(),
+            vec![COLOR_TITLE; title_line.chars().count()],
+        );
+        lines.push(tlast);
+        color_lines.push(tlast_c);
 
         let output = lines.join("\n");
         (output, color_lines)
@@ -216,47 +383,45 @@ impl EnergyPlotRenderer {
         (output, color_lines)
     }
 
-    fn render_ascii_plot_with_axes_colored(
+    fn render_ascii_plot_with_axes_colored_dims(
         &self,
         v_kin: &VecDeque<f32>,
         v_pot: &VecDeque<f32>,
         display_mode: DisplayMode,
+        plot_width: usize,
+        plot_height: usize,
     ) -> (Vec<String>, Vec<Vec<u32>>) {
-        let mut grid = vec![vec![ColoredChar::space(); PLOT_WIDTH]; PLOT_HEIGHT];
+        let mut grid = vec![vec![ColoredChar::space(); plot_width]; plot_height];
 
         // Calculate min/max based on display mode
         let (min_val, max_val) = self.calculate_min_max(v_kin, v_pot, display_mode);
         let range = (max_val - min_val).max(0.001);
 
         // Draw axes
-        for row in grid.iter_mut().take(PLOT_HEIGHT) {
+        for row in grid.iter_mut().take(plot_height) {
             row[0] = ColoredChar::new('│', COLOR_AXIS);
         }
         #[allow(clippy::needless_range_loop)]
-        for x in 0..PLOT_WIDTH {
-            grid[PLOT_HEIGHT - 1][x] = ColoredChar::new('─', COLOR_AXIS);
+        for x in 0..plot_width {
+            grid[plot_height - 1][x] = ColoredChar::new('─', COLOR_AXIS);
         }
-        grid[PLOT_HEIGHT - 1][0] = ColoredChar::new('└', COLOR_AXIS);
+        grid[plot_height - 1][0] = ColoredChar::new('└', COLOR_AXIS);
 
         // Calculate zero line position if zero is visible in the plot range (for later use)
         let zero_y_opt = if min_val <= 0.0 && max_val >= 0.0 {
             let normalized = (0.0 - min_val) / range;
-            let zero_y = ((1.0 - normalized) * (PLOT_HEIGHT - 2) as f32) as usize;
-            Some(zero_y.min(PLOT_HEIGHT - 2))
+            let zero_y = ((1.0 - normalized) * (plot_height - 2) as f32) as usize;
+            Some(zero_y.min(plot_height - 2))
         } else {
             None
         };
 
         // Draw zero reference line BEFORE plotting data (so data can overwrite it)
         if let Some(zero_y) = zero_y_opt {
-            // Draw horizontal zero line across the plot
-            // Note: We need the index `x` for being able to assign values in the grid
             #[allow(clippy::needless_range_loop)]
-            for x in 1..PLOT_WIDTH {
-                // Only draw on empty spaces (energy lines will overwrite this)
+            for x in 1..plot_width {
                 grid[zero_y][x] = ColoredChar::new('·', COLOR_ZERO_LINE);
             }
-            // Add tick mark on Y-axis for zero
             grid[zero_y][0] = ColoredChar::new('┼', COLOR_ZERO_LINE);
         }
 
@@ -264,7 +429,7 @@ impl EnergyPlotRenderer {
         match display_mode {
             DisplayMode::Pot => {
                 if !v_pot.is_empty() {
-                    self.plot_data_scaled_colored(
+                    self.plot_data_scaled_colored_dims(
                         &mut grid,
                         v_pot,
                         '+',
@@ -276,7 +441,7 @@ impl EnergyPlotRenderer {
             }
             DisplayMode::Kin => {
                 if !v_kin.is_empty() {
-                    self.plot_data_scaled_colored(
+                    self.plot_data_scaled_colored_dims(
                         &mut grid,
                         v_kin,
                         '*',
@@ -290,7 +455,7 @@ impl EnergyPlotRenderer {
                 if !v_kin.is_empty() && !v_pot.is_empty() {
                     let v_tot: VecDeque<f32> =
                         v_kin.iter().zip(v_pot.iter()).map(|(k, p)| k + p).collect();
-                    self.plot_data_scaled_colored(
+                    self.plot_data_scaled_colored_dims(
                         &mut grid,
                         &v_tot,
                         '=',
@@ -301,9 +466,8 @@ impl EnergyPlotRenderer {
                 }
             }
             DisplayMode::All => {
-                // Plot all three traces with different colors
                 if !v_kin.is_empty() {
-                    self.plot_data_scaled_colored(
+                    self.plot_data_scaled_colored_dims(
                         &mut grid,
                         v_kin,
                         '*',
@@ -313,7 +477,7 @@ impl EnergyPlotRenderer {
                     );
                 }
                 if !v_pot.is_empty() {
-                    self.plot_data_scaled_colored(
+                    self.plot_data_scaled_colored_dims(
                         &mut grid,
                         v_pot,
                         '+',
@@ -325,7 +489,7 @@ impl EnergyPlotRenderer {
                 if !v_kin.is_empty() && !v_pot.is_empty() {
                     let v_tot: VecDeque<f32> =
                         v_kin.iter().zip(v_pot.iter()).map(|(k, p)| k + p).collect();
-                    self.plot_data_scaled_colored(
+                    self.plot_data_scaled_colored_dims(
                         &mut grid,
                         &v_tot,
                         '=',
@@ -351,9 +515,9 @@ impl EnergyPlotRenderer {
             } else if Some(i) == zero_y_opt {
                 // Show zero label at zero line
                 "   0.00e+0 ".to_string()
-            } else if i == PLOT_HEIGHT / 2 && Some(i) != zero_y_opt {
+            } else if i == plot_height / 2 && Some(i) != zero_y_opt {
                 format!("{:8.2e} ", (max_val + min_val) / 2.0)
-            } else if i == PLOT_HEIGHT - 1 {
+            } else if i == plot_height - 1 {
                 format!("{:8.2e} ", min_val)
             } else {
                 "           ".to_string()
@@ -371,12 +535,12 @@ impl EnergyPlotRenderer {
             color_lines.push(colors);
         }
 
-        // Add X-axis labels
+        // Add X-axis labels (single line)
         let data_len = v_kin.len().max(v_pot.len());
         let x_label = format!(
             "           0{:>width$} (samples)",
             data_len,
-            width = PLOT_WIDTH - 2
+            width = plot_width - 2
         );
         text_lines.push(x_label.clone());
         color_lines.push(vec![COLOR_TEXT; x_label.len()]);
@@ -422,7 +586,7 @@ impl EnergyPlotRenderer {
         (min_val, max_val)
     }
 
-    fn plot_data_scaled_colored(
+    fn plot_data_scaled_colored_dims(
         &self,
         grid: &mut [Vec<ColoredChar>],
         data: &VecDeque<f32>,
@@ -435,10 +599,13 @@ impl EnergyPlotRenderer {
             return;
         }
 
-        // Calculate how many data points map to each pixel column
-        let step = data.len() as f32 / (PLOT_WIDTH - 2) as f32;
+        let plot_width = grid[0].len();
+        let plot_height = grid.len();
 
-        for i in 0..(PLOT_WIDTH - 2) {
+        // Calculate how many data points map to each pixel column
+        let step = data.len() as f32 / (plot_width - 2) as f32;
+
+        for i in 0..(plot_width - 2) {
             // Find all data points that map to this pixel column
             let start_idx = (i as f32 * step) as usize;
             let end_idx = ((i + 1) as f32 * step).ceil() as usize;
@@ -454,8 +621,8 @@ impl EnergyPlotRenderer {
             let avg_value = sum / count;
 
             let normalized = (avg_value - min_val) / range;
-            let y = ((1.0 - normalized) * (PLOT_HEIGHT - 2) as f32) as usize;
-            let y = y.min(PLOT_HEIGHT - 2);
+            let y = ((1.0 - normalized) * (plot_height - 2) as f32) as usize;
+            let y = y.min(plot_height - 2);
 
             let x = i + 1;
             let current_char = grid[y][x].ch;
@@ -492,35 +659,10 @@ impl EnergyPlotRenderer {
             return;
         }
 
-        // Calculate how many data points map to each pixel column
-        let step = data.len() as f32 / (PLOT_WIDTH - 2) as f32;
-
-        for i in 0..(PLOT_WIDTH - 2) {
-            // Find all data points that map to this pixel column
-            let start_idx = (i as f32 * step) as usize;
-            let end_idx = ((i + 1) as f32 * step).ceil() as usize;
-            let end_idx = end_idx.min(data.len());
-
-            if start_idx >= data.len() {
-                break;
-            }
-
-            // Average all data points that map to this pixel position
-            let sum: f32 = data.range(start_idx..end_idx).sum();
-            let count = (end_idx - start_idx) as f32;
-            let avg_value = sum / count;
-
-            let normalized = (avg_value - min_val) / range;
-            let y = ((1.0 - normalized) * (PLOT_HEIGHT - 2) as f32) as usize;
-            let y = y.min(PLOT_HEIGHT - 2);
-
-            let x = i + 1;
-            if grid[y][x] == ' ' || grid[y][x] == '─' {
-                grid[y][x] = symbol;
-            }
-        }
+        // backward compat stub - not used in layout-aware rendering
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
