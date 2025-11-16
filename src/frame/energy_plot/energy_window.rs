@@ -11,8 +11,8 @@ const DEFAULT_WIDTH: u32 = 1024; // Reduced by 20% from 1280
 const DEFAULT_HEIGHT: u32 = 576; // Reduced by 20% from 720
 
 // Text rendering constants
-const CHAR_WIDTH_PIX: u32 = 9; // pixel width per character (reduced for better density)
-const CHAR_HEIGHT_PIX: u32 = 14; // pixel height per character (reduced for better density)
+const CHAR_WIDTH_PIX: u32 = 12; // pixel width per character (realistic value)
+const CHAR_HEIGHT_PIX: u32 = 18; // pixel height per character (realistic value)
 const TOP_MARGIN_PIX: u32 = 16;
 
 // Base line count without status text
@@ -184,12 +184,19 @@ impl EnergyPlotWindow {
             }
 
             // Compute character grid dimensions from pixel size and character metrics
-            // Reserve some margins
-            let available_width = if width > 40 { width - 40 } else { width };
-            let available_height = if height > 40 { height - 40 } else { height };
+            // Subtract all margins (top, bottom, left, right) for actual plot area
+            const LEFT_MARGIN: u32 = 20;
+            const RIGHT_MARGIN: u32 = 20;
+            const TOP_MARGIN: u32 = TOP_MARGIN_PIX;
+            const BOTTOM_MARGIN: u32 = 20;
+            const MAX_PLOT_COLS: u32 = 80;
+            const MAX_PLOT_ROWS: u32 = 30;
+            let available_width = width.saturating_sub(LEFT_MARGIN + RIGHT_MARGIN);
+            let available_height = height.saturating_sub(TOP_MARGIN + BOTTOM_MARGIN);
 
-            let cols = (available_width / CHAR_WIDTH_PIX) as usize;
-            let rows = (available_height / CHAR_HEIGHT_PIX) as usize;
+            // Calculate grid size and clamp to max
+            let cols = (available_width / CHAR_WIDTH_PIX).min(MAX_PLOT_COLS) as usize;
+            let rows = (available_height / CHAR_HEIGHT_PIX).min(MAX_PLOT_ROWS) as usize;
 
             // Get status text and render to colored string using layout-aware renderer
             let (text, color_map) = {
