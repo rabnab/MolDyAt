@@ -6,14 +6,14 @@ const DEFAULT_PLOT_HEIGHT: usize = 30;
 const HEADER_LINES: usize = 4; // Title + axis label + spacing
 const FOOTER_LINES: usize = 7; // Legend + key hints + spacing
 
-// Color scheme (ARGB format)
-pub const COLOR_KINETIC: u32 = 0xFF00DDFF; // Cyan for kinetic energy
-pub const COLOR_POTENTIAL: u32 = 0xFFFF6B00; // Orange for potential energy
-pub const COLOR_TOTAL: u32 = 0xFF00FF88; // Green for total energy
-pub const COLOR_AXIS: u32 = 0xFF666666; // Gray for axes
-pub const COLOR_ZERO_LINE: u32 = 0xFF888888; // Lighter gray for zero reference line
-pub const COLOR_TEXT: u32 = 0xFFCCCCCC; // Light gray for text
-pub const COLOR_TITLE: u32 = 0xFFFFFFFF; // White for title
+// Color scheme (ARGB format) - improved for better readability
+pub const COLOR_KINETIC: u32 = 0xFF4DCC4D; // Bright green for kinetic energy
+pub const COLOR_POTENTIAL: u32 = 0xFFCC4D4D; // Bright red for potential energy
+pub const COLOR_TOTAL: u32 = 0xFF4D99E6; // Bright blue for total energy
+pub const COLOR_AXIS: u32 = 0xFF4D4D4D; // Darker gray for axes
+pub const COLOR_ZERO_LINE: u32 = 0xFF666666; // Medium gray for zero reference line
+pub const COLOR_TEXT: u32 = 0xFFD9D9D9; // Lighter gray for better contrast
+pub const COLOR_TITLE: u32 = 0xFFE6E6E6; // Soft white for title (less harsh)
 pub const COLOR_LEGEND_KIN: u32 = COLOR_KINETIC;
 pub const COLOR_LEGEND_POT: u32 = COLOR_POTENTIAL;
 pub const COLOR_LEGEND_TOT: u32 = COLOR_TOTAL;
@@ -85,33 +85,22 @@ impl EnergyPlotRenderer {
 
         // Layout constants in characters
         let left_label_width = 11; // e.g. "-1.23e+02 "
-        let header_lines = 4; // title, subtitle, title, empty
-        let footer_lines = 7; // empty, separator, legend, separator, empty, instructions, title
+        let header_lines = 3; // title, subtitle, title
+        let footer_lines = 2; // compact footer: legend+instructions, separator
 
         // Compute available plot height
-        let mut plot_height = if total_rows > header_lines + footer_lines {
-            total_rows - (header_lines + footer_lines)
+        // Dynamically calculate plot height based on window size and status lines
+        let status_lines_count = status_lines.len();
+        let mut plot_height = if total_rows > header_lines + footer_lines + status_lines_count {
+            total_rows - (header_lines + footer_lines + status_lines_count)
         } else {
-            // minimal plot height
             6
         };
 
-        // Compute status column width based on longest status line
-        let status_max_width = status_lines.iter().map(|l| l.len()).max().unwrap_or(0);
-
-        // Determine status column and gap
-        let gap = 2; // spaces between plot and status column
-        let status_col_width = if status_max_width == 0 {
-            0
-        } else {
-            status_max_width + gap
-        };
-
         // Compute plot width in characters available for the plot area (excluding left label)
-        let plot_total_available = if total_cols > left_label_width + status_col_width {
-            total_cols - left_label_width - status_col_width
+        let plot_total_available = if total_cols > left_label_width {
+            total_cols - left_label_width
         } else {
-            // fallback to default plot width
             DEFAULT_PLOT_WIDTH
         };
 
@@ -131,7 +120,7 @@ impl EnergyPlotRenderer {
             plot_height,
         );
 
-        // Compose full text lines: header + plot area with status to the right + footer
+        // Compose full text lines: header + plot area + footer + status below
         let mut lines: Vec<String> = Vec::new();
         let mut color_lines: Vec<Vec<u32>> = Vec::new();
 
@@ -143,7 +132,6 @@ impl EnergyPlotRenderer {
             if cols_vec.len() > s.chars().count() {
                 cols_vec.truncate(s.chars().count());
             } else if cols_vec.len() < s.chars().count() {
-                // pad colors if missing
                 cols_vec.extend(vec![COLOR_TEXT; s.chars().count() - cols_vec.len()]);
             }
             (s, cols_vec)
@@ -156,22 +144,18 @@ impl EnergyPlotRenderer {
             "                         ENERGY PLOT 🐾 — {}",
             display_mode.as_str()
         );
-
-        // Push clamped title/subtitle lines
         let (t0, c0) = clamp_to_cols(
             title_line.to_string(),
             vec![COLOR_TITLE; title_line.chars().count()],
         );
         lines.push(t0);
         color_lines.push(c0);
-
         let (t1, c1) = clamp_to_cols(
             subtitle.clone(),
             vec![COLOR_TITLE; subtitle.chars().count()],
         );
         lines.push(t1);
         color_lines.push(c1);
-
         let (t2, c2) = clamp_to_cols(
             title_line.to_string(),
             vec![COLOR_TITLE; title_line.chars().count()],
@@ -179,74 +163,33 @@ impl EnergyPlotRenderer {
         lines.push(t2);
         color_lines.push(c2);
 
-        lines.push(String::new());
-        color_lines.push(vec![]);
-
-        // Prepare status column strings padded to plot area height + header
-        // We want the status to start just after the header lines
-        let mut status_column: Vec<String> = Vec::new();
-        for _ in 0..(header_lines) {
-            status_column.push(String::new());
-        }
-        // Add status lines
-        for s in &status_lines {
-            status_column.push(s.clone());
-        }
-        // Ensure the status column has same number of rows as plot + header
-        while status_column.len() < header_lines + plot_height {
-            status_column.push(String::new());
-        }
-
-        // Now add the plot lines with left labels and append status column to the right
-        // plot_lines is exactly plot_height lines corresponding to the visible grid
+        // Add plot lines (no status column)
         for (i, plot_line) in plot_lines.iter().enumerate() {
             let mut full_line = String::new();
             let mut colors = Vec::new();
-
-            // left label is already part of plot_line (render_ascii returns label + plot chars)
             full_line.push_str(plot_line);
-            // plot_colors contains a color vector for this line
             if let Some(pc) = plot_colors.get(i) {
                 colors.extend(pc.iter().copied());
             }
-
-            // Append status gap and status text if present for this row
-            let status_row = status_column
-                .get(i + header_lines)
-                .cloned()
-                .unwrap_or_default();
-            if status_col_width > 0 {
-                // pad to gap
-                full_line.push_str(&" ".repeat(gap));
-                colors.extend(vec![COLOR_TEXT; gap]);
-
-                // append status text (clamped to status_max_width)
-                let mut s = status_row;
-                if s.len() > status_max_width {
-                    s.truncate(status_max_width);
-                }
-                full_line.push_str(&s);
-                colors.extend(vec![COLOR_TEXT; s.len()]);
-
-                // pad remaining status column space
-                if s.len() < status_max_width {
-                    let rem = status_max_width - s.len();
-                    full_line.push_str(&" ".repeat(rem));
-                    colors.extend(vec![COLOR_TEXT; rem]);
-                }
-            }
-
-            // Clamp to available total columns to avoid overflowing visible area
             let (clamped_line, clamped_colors) = clamp_to_cols(full_line, colors);
             lines.push(clamped_line);
             color_lines.push(clamped_colors);
         }
 
-        // After plot, add footer lines similar to previous layout
-        lines.push(String::new());
-        color_lines.push(vec![]);
-
-        // Footer / separator / legend - clamp to available columns
+        // Compact footer: legend and instructions on one line, then separator
+        let (legend_line, legend_colors) = self.create_legend_line(display_mode, data.time);
+        let instructions = " | Esc: close | Tab: mode ";
+        let footer = format!("{}{}", legend_line, instructions);
+        let (footer_s, footer_c) = clamp_to_cols(
+            footer,
+            legend_colors
+                .iter()
+                .cloned()
+                .chain(vec![COLOR_TEXT; instructions.len()])
+                .collect(),
+        );
+        lines.push(footer_s);
+        color_lines.push(footer_c);
         let separator =
             "───────────────────────────────────────────────────────────────────────────────────";
         let (sep_s, sep_c) = clamp_to_cols(
@@ -256,35 +199,15 @@ impl EnergyPlotRenderer {
         lines.push(sep_s);
         color_lines.push(sep_c);
 
-        let (legend_line, legend_colors) = self.create_legend_line(display_mode, data.time);
-        let (leg_s, leg_c) = clamp_to_cols(legend_line, legend_colors);
-        lines.push(leg_s);
-        color_lines.push(leg_c);
-
-        let (sep2_s, sep2_c) = clamp_to_cols(
-            separator.to_string(),
-            vec![COLOR_TEXT; separator.chars().count()],
-        );
-        lines.push(sep2_s);
-        color_lines.push(sep2_c);
-
-        lines.push(String::new());
-        color_lines.push(vec![]);
-
-        let instructions = "  Press Esc to close | Tab to cycle mode";
-        let (ins_s, ins_c) = clamp_to_cols(
-            instructions.to_string(),
-            vec![COLOR_TEXT; instructions.chars().count()],
-        );
-        lines.push(ins_s);
-        color_lines.push(ins_c);
-
-        let (tlast, tlast_c) = clamp_to_cols(
-            title_line.to_string(),
-            vec![COLOR_TITLE; title_line.chars().count()],
-        );
-        lines.push(tlast);
-        color_lines.push(tlast_c);
+        // Add status lines below everything else, with smaller font (if supported) or color separation
+        if !status_lines.is_empty() {
+            for s in &status_lines {
+                // Use a different color for status lines to visually separate (simulate smaller font)
+                let (clamped, clamped_c) = clamp_to_cols(s.clone(), vec![COLOR_ZERO_LINE; s.len()]);
+                lines.push(clamped);
+                color_lines.push(clamped_c);
+            }
+        }
 
         let output = lines.join("\n");
         (output, color_lines)
