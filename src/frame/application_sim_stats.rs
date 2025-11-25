@@ -27,7 +27,6 @@ pub struct SimStats {
     time: f32,
     step: usize,
     pause: bool,
-    speedup: u32,
 
     frames_since_draw: u32,
     v_pot: VecDeque<f32>,
@@ -81,25 +80,6 @@ impl SimStats {
     pub fn clear_energy(&mut self) {
         self.v_kin.clear();
         self.v_pot.clear();
-    }
-
-    pub(crate) fn get_speedup(&self) -> u32 {
-        self.speedup
-    }
-    pub(crate) fn increase_speedup(&mut self) {
-        self.speedup = if self.speedup < 100 {
-            self.speedup + 1
-        } else {
-            100
-        };
-    }
-
-    pub(crate) fn decrease_speedup(&mut self) {
-        self.speedup = if self.speedup > 1 {
-            self.speedup - 1
-        } else {
-            1
-        };
     }
 
     pub fn reset_min_dist(&mut self, bound_rect: &Rect) {
@@ -235,6 +215,18 @@ impl SimStats {
     pub(crate) fn update_hood_cnt(&mut self, update_hood_at_frame_start: usize) {
         self.update_hood_cnt = self.get_update_hood_cnt() - update_hood_at_frame_start;
     }
+
+    pub(crate) fn get_kinetic_energy(&self) -> f32 {
+        self.energy_kin
+    }
+
+    pub(crate) fn get_potential_energy(&self) -> f32 {
+        self.energy_pot
+    }
+
+    pub(crate) fn get_time(&self) -> f32 {
+        self.time
+    }
 }
 
 impl Default for SimStats {
@@ -250,7 +242,6 @@ impl Default for SimStats {
             time: 0.,
             step: 0,
             pause: false,
-            speedup: 1,
             frames_since_draw: 0,
             v_pot: VecDeque::with_capacity(100),
             v_kin: VecDeque::with_capacity(100),
@@ -260,20 +251,6 @@ impl Default for SimStats {
             wall_momentum_x: 0.,
             wall_momentum_y: 0.,
         }
-    }
-}
-
-impl SimStats {
-    pub(crate) fn get_kinetic_energy(&self) -> f32 {
-        self.energy_kin
-    }
-
-    pub(crate) fn get_potential_energy(&self) -> f32 {
-        self.energy_pot
-    }
-
-    pub(crate) fn get_time(&self) -> f32 {
-        self.time
     }
 }
 

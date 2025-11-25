@@ -44,6 +44,10 @@ pub enum PhysicsCommand {
     DoubleTimeStep,
     /// Halve the simulation time step (slower, more accurate)
     HalveTimeStep,
+    /// Increase wait time between simulation steps
+    IncreaseWaitTime,
+    /// Decrease wait time between simulation steps
+    DecreaseWaitTime,
     /// Toggle real data display
     ToggleRealData,
     /// Toggle step-by-step mode
@@ -131,6 +135,11 @@ impl PhysicsThread {
                 // Process all pending commands
                 Self::process_commands(&mut main_content, &command_receiver);
 
+                // Get current wait time
+                let wait_time_ms = main_content.get_wait_time();
+                if wait_time_ms > 0 {
+                    std::thread::sleep(std::time::Duration::from_millis(wait_time_ms));
+                }
                 // Run one simulation step per iteration
                 let _ = main_content.simulation_step();
 
@@ -203,6 +212,12 @@ impl PhysicsThread {
             }
             PhysicsCommand::NextBallSize => {
                 main_content.next_ball_size();
+            }
+            PhysicsCommand::IncreaseWaitTime => {
+                main_content.increase_wait_time();
+            }
+            PhysicsCommand::DecreaseWaitTime => {
+                main_content.decrease_wait_time();
             }
             PhysicsCommand::DoubleTimeStep => {
                 main_content.double_time_step();

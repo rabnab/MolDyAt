@@ -30,6 +30,7 @@ impl MainContent {
             update_hood_at_frame_start: 0,
             speed_limit_override: None,
             snapshot_slot: Arc::new(ArcSwapOption::from(None)),
+            wait_time: 0,
         })
     }
 }

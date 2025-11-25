@@ -36,6 +36,8 @@ pub struct MainContent {
 
     /// Snapshot slot for lock-free communication with renderer
     snapshot_slot: Arc<ArcSwapOption<RendererSnapshot>>,
+    /// ms to wait between simulation steps
+    wait_time: u64,
 }
 
 pub struct StatsAccumulator {

@@ -8,6 +8,14 @@ use crate::objects2d::ball_impl::simd_forces::force_indexed_simd;
 use rayon::prelude::*;
 
 impl MainContent {
+    pub(crate) fn increase_wait_time(&mut self) {
+        self.wait_time = (self.wait_time + 1).min(100);
+    }
+
+    pub(crate) fn decrease_wait_time(&mut self) {
+        self.wait_time = self.wait_time.saturating_sub(1);
+    }
+
     /// Call this when a window resize event is detected to pause the simulation
     pub(crate) fn pause_for_resize(&mut self) {
         self.was_paused_for_resize = true;
