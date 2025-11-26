@@ -1,16 +1,16 @@
-use crate::frame::MainContent;
 use crate::frame::application_master::WindowDefinitionRef;
 use crate::frame::ggez::custom_event_loop::CustomEventLoop;
 use crate::frame::ggez::ggez_renderer::GgezRenderer;
 use crate::frame::ggez::ggez_renderer_builder::GgezRendererBuilder;
 use crate::frame::window::window_definition::WindowDefinition;
-use crate::frame::window::{MARGIN_PX_X, MARGIN_PX_Y, Point2D, Window, WindowEvent};
-use crate::objects2d::Rect;
+use crate::frame::window::{Point2D, Window, WindowEvent, MARGIN_PX_X, MARGIN_PX_Y};
+use crate::frame::MainContent;
 use crate::objects2d::ball_impl::{BallFactory, BallPhysics};
-use ggez::ContextBuilder;
+use crate::objects2d::Rect;
 use ggez::conf::{FullscreenType, WindowMode, WindowSetup};
 use ggez::graphics::ShaderBuilder;
 use ggez::input::mouse;
+use ggez::ContextBuilder;
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -124,11 +124,7 @@ impl Window<GgezRenderer> for GgezWindow {
         let world_rect = self.win_definition.borrow().compute_world_bounds_rect();
         let world_rect = Rect::new(world_rect.x, world_rect.y, world_rect.w, world_rect.h);
 
-        let rend_ref = Rc::new(RefCell::new(renderer));
-
         let application = MainContent::new(world_rect).expect("Failed to create MainContent");
-
-        // rend_ref.borrow_mut().initialize(&ctx, application.cell_grid.get_cell_size());
 
         // Use threaded physics architecture
         println!("\n========================================");
@@ -136,7 +132,7 @@ impl Window<GgezRenderer> for GgezWindow {
         println!("========================================");
         println!("Main thread ID: {:?}", std::thread::current().id());
         println!("Spawning physics thread...");
-        let custom_loop = CustomEventLoop::new_with_physics_thread(application, rend_ref.clone());
+        let custom_loop = CustomEventLoop::new(application, renderer);
         println!("✓ Physics thread spawned successfully");
         println!("  - Main thread: Rendering (ggez requirement)");
         println!("  - Physics thread: Simulation + snapshot publishing");

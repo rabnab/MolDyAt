@@ -12,15 +12,12 @@ use ggez::event::winit_event::{ElementState, Event, KeyboardInput, WindowEvent};
 use ggez::event::{process_event, MouseButton};
 use ggez::input::keyboard::{KeyCode, KeyInput, KeyMods};
 use ggez::Context;
-use std::cell::RefCell;
 use std::collections::HashSet;
-use std::rc::Rc;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use winit::event_loop::{ControlFlow, EventLoop};
 
 pub struct CustomEventLoop {
-    // NEW ARCHITECTURE (being added):
     physics_thread: Option<PhysicsThread>,
     command_sender: Option<Sender<PhysicsCommand>>,
     snapshot_slot: Option<Arc<ArcSwapOption<RendererSnapshot>>>,
@@ -31,7 +28,7 @@ pub struct CustomEventLoop {
     steps_per_frame: f32,
     pressed_keys: HashSet<KeyCode>,
     pressed_alt_keys: HashSet<KeyCode>,
-    renderer: Rc<RefCell<GgezRenderer>>,
+    renderer: GgezRenderer,
     cursor_pos: Vec2D,
     energy_window: Option<EnergyPlotWindow>,
 
@@ -40,13 +37,7 @@ pub struct CustomEventLoop {
 }
 
 impl CustomEventLoop {
-    /// New constructor that uses physics thread architecture
-    /// This will eventually replace `new()`
-    #[allow(dead_code)]
-    pub fn new_with_physics_thread(
-        application: MainContent,
-        renderer: Rc<RefCell<GgezRenderer>>,
-    ) -> Self {
+    pub fn new(application: MainContent, renderer: GgezRenderer) -> Self {
         let energy_data = Arc::new(Mutex::new(EnergyData::new()));
 
         // Get snapshot slot before moving MainContent to physics thread
@@ -289,37 +280,30 @@ impl CustomEventLoop {
         let snapshot_arc_before = snapshot_guard_before.as_ref()?.clone();
         let snapshot = snapshot_arc_before.as_ref();
 
-        // Update dummy application's cell grid if bounds changed
-        // This ensures the grid rendering matches the actual simulation
-        // let current_world_rect = self.application.world_region();
-        // let bounds_changed = current_world_rect != snapshot.cell_grid_bounds;
-        //
-        // if bounds_changed {
-        //     // Rebuild the dummy application's cell grid with correct bounds
-        //     self.application.resize(snapshot.cell_grid_bounds);
-        // }
-
         let _ = ctx.gfx.begin_frame();
 
-        let mut cur_render = self.renderer.borrow_mut();
-        let cache = cur_render.take_cache();
+        let cache = self.renderer.take_cache();
         let mut backend = GgezBackend::new(ctx, cache);
 
         // Draw balls from snapshot
-        let _ = cur_render.draw_balls_from_snapshot(&mut backend, snapshot);
+        let _ = self
+            .renderer
+            .draw_balls_from_snapshot(&mut backend, snapshot);
 
         // Draw cell grid and frame (read-only access to application is safe)
         // Cell grid dimensions now match the actual simulation
         let cell_grid = &snapshot.grid_structure;
-        let _ = cur_render.draw_frame(&mut backend, cell_grid, None);
+        let _ = self.renderer.draw_frame(&mut backend, cell_grid, None);
 
         // Draw cursor
-        let _ = cur_render.draw_cursor(&mut backend, snapshot.cursor_ball_size_idx);
+        let _ = self
+            .renderer
+            .draw_cursor(&mut backend, snapshot.cursor_ball_size_idx);
 
-        let _ = cur_render.finish_frame(&mut backend);
+        let _ = self.renderer.finish_frame(&mut backend);
 
         let cache = backend.into_cache();
-        cur_render.put_cache(cache);
+        self.renderer.put_cache(cache);
 
         // PHASE 4: Verify snapshot hasn't changed before presenting
         let snapshot_guard_after = snapshot_slot.load();
@@ -456,7 +440,7 @@ impl CustomEventLoop {
                 KeyCode::Space => self.send_physics_command(
                     crate::frame::physics_thread::PhysicsCommand::TogglePause,
                 ),
-                KeyCode::LControl => self.renderer.borrow_mut().enable_drawing_cursor(repeated),
+                KeyCode::LControl => self.renderer.enable_drawing_cursor(repeated),
                 KeyCode::Escape => self
                     .send_physics_command(crate::frame::physics_thread::PhysicsCommand::ClearBalls),
                 KeyCode::LShift => self.send_physics_command(
@@ -496,7 +480,7 @@ impl CustomEventLoop {
                 KeyCode::T => self.send_physics_command(
                     crate::frame::physics_thread::PhysicsCommand::ToggleTimingDisplay,
                 ),
-                KeyCode::P => self.renderer.borrow_mut().cycle_plot_content(),
+                KeyCode::P => self.renderer.cycle_plot_content(),
                 KeyCode::Equals | KeyCode::Minus => {
                     self.register_key_released(key);
                     self.register_alt_key_released(key);
@@ -515,7 +499,7 @@ impl CustomEventLoop {
                     self.send_physics_command(
                         crate::frame::physics_thread::PhysicsCommand::AddBall(cursor_pos.clone()),
                     );
-                    self.renderer.borrow_mut().disable_drawing_cursor();
+                    self.renderer.disable_drawing_cursor();
                 }
                 KeyCode::F5 => self.send_physics_command(
                     crate::frame::physics_thread::PhysicsCommand::AddRandomBalls(100),
@@ -543,15 +527,15 @@ impl CustomEventLoop {
     }
 
     fn handle_mouse_motion(&mut self, _ctx: &mut Context, x: f32, y: f32) {
-        self.cursor_pos = self.renderer.borrow_mut().update_cursor_and_text(x, y);
+        self.cursor_pos = self.renderer.update_cursor_and_text(x, y);
     }
 
     fn handle_resize(&mut self, _ctx: &mut Context, width: f32, height: f32) -> ggez::GameResult {
         // Always resize the renderer (it's on the render thread)
-        self.renderer.borrow_mut().resize(width, height);
+        self.renderer.resize(width, height);
 
         // Get the updated world_rect from renderer's WindowDefinition
-        let world_rect = self.renderer.borrow().get_world_region();
+        let world_rect = self.renderer.get_world_region();
 
         // Send resize command to physics thread or resize application directly
         self.send_physics_command(crate::frame::physics_thread::PhysicsCommand::Resize {
