@@ -3,7 +3,7 @@ use crate::frame::ggez::custom_event_loop::CustomEventLoop;
 use crate::frame::ggez::ggez_renderer::GgezRenderer;
 use crate::frame::ggez::ggez_renderer_builder::GgezRendererBuilder;
 use crate::frame::window::window_definition::WindowDefinition;
-use crate::frame::window::{Point2D, Window, WindowEvent, MARGIN_PX_X, MARGIN_PX_Y};
+use crate::frame::window::{Window, MARGIN_PX_X, MARGIN_PX_Y};
 use crate::frame::MainContent;
 use crate::objects2d::ball_impl::{BallFactory, BallPhysics};
 use crate::objects2d::Rect;
@@ -34,46 +34,10 @@ impl GgezWindow {
     }
 }
 impl Window<GgezRenderer> for GgezWindow {
-    fn set_title(&mut self, _title: &str) {
-        // Implementation for setting the window title
-    }
-
-    fn get_title(&self) -> &str {
-        todo!()
-    }
-
-    fn set_size(&mut self, _width: u32, _height: u32) {
-        // Implementation for setting the window size
-    }
-
     fn get_size(&self) -> (u32, u32) {
         let win_def = self.win_definition.borrow();
         // Implementation for getting the window size
         (win_def.region_px.0 as u32, win_def.region_px.1 as u32)
-    }
-
-    fn set_fullscreen(&mut self, _fullscreen: bool) {
-        todo!()
-    }
-
-    fn is_fullscreen(&self) -> bool {
-        todo!()
-    }
-
-    fn close(&mut self) {
-        todo!()
-    }
-
-    fn poll_events(&mut self) -> Vec<WindowEvent> {
-        todo!()
-    }
-
-    fn set_cursor_visible(&mut self, _visible: bool) {
-        todo!()
-    }
-
-    fn set_cursor_position(&mut self, _pos: Point2D) {
-        todo!()
     }
 
     fn create_window(&self) {
