@@ -1,8 +1,8 @@
+use crate::frame::renderer_snapshot::{
+    get_special_ball_color, size_class_to_rgba, BallRenderData, RendererSnapshot,
+};
 use crate::frame::LogStuff;
 use crate::frame::MainContent;
-use crate::frame::renderer_snapshot::{
-    BallRenderData, RendererSnapshot, get_special_ball_color, size_class_to_rgba,
-};
 use std::sync::Arc;
 
 impl MainContent {
@@ -41,6 +41,7 @@ impl MainContent {
             cell_grid_bounds: self.cell_grid.world_rect(),
             cursor_ball_size_idx: self.get_ball_factory().get_new_ball_size_idx(),
             created_at: std::time::Instant::now(),
+            grid_structure: self.cell_grid.to_grid_structure(),
         }
     }
 
@@ -68,11 +69,11 @@ impl MainContent {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::frame::MainContent;
     use crate::frame::renderer_snapshot::size_class_to_rgba;
     use crate::frame::window::window_definition::WindowDefinition;
-    use crate::objects2d::Vec2D;
+    use crate::frame::MainContent;
     use crate::objects2d::ball_impl::BallFactory;
+    use crate::objects2d::Vec2D;
 
     fn create_test_main_content_with_balls(ball_count: usize) -> MainContent {
         let win_def = WindowDefinition::default();

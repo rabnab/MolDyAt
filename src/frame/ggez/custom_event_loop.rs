@@ -5,13 +5,13 @@ use crate::frame::ggez::ggez_renderer_backend::GgezBackend;
 use crate::frame::physics_thread::{PhysicsCommand, PhysicsThread};
 use crate::frame::renderer::Renderer;
 use crate::frame::renderer_snapshot::RendererSnapshot;
-use crate::frame::{GameLogic, LogStuff};
+use crate::frame::LogStuff;
 use crate::objects2d::Vec2D;
 use arc_swap::ArcSwapOption;
-use ggez::Context;
 use ggez::event::winit_event::{ElementState, Event, KeyboardInput, WindowEvent};
-use ggez::event::{MouseButton, process_event};
+use ggez::event::{process_event, MouseButton};
 use ggez::input::keyboard::{KeyCode, KeyInput, KeyMods};
+use ggez::Context;
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
@@ -20,9 +20,6 @@ use std::sync::{Arc, Mutex};
 use winit::event_loop::{ControlFlow, EventLoop};
 
 pub struct CustomEventLoop {
-    // OLD ARCHITECTURE (will be removed):
-    pub(crate) application: MainContent,
-
     // NEW ARCHITECTURE (being added):
     physics_thread: Option<PhysicsThread>,
     command_sender: Option<Sender<PhysicsCommand>>,
@@ -43,27 +40,6 @@ pub struct CustomEventLoop {
 }
 
 impl CustomEventLoop {
-    pub fn new(application: MainContent, renderer: Rc<RefCell<GgezRenderer>>) -> Self {
-        let energy_data = Arc::new(Mutex::new(EnergyData::new()));
-        Self {
-            application,
-            physics_thread: None,
-            command_sender: None,
-            snapshot_slot: None,
-            last_processed_step: 0,
-            last_step_time: std::time::Instant::now(),
-            simulation_fps: 0.0,
-            last_displayed_step: 0,
-            steps_per_frame: 0.0,
-            pressed_keys: HashSet::new(),
-            pressed_alt_keys: HashSet::new(),
-            renderer,
-            cursor_pos: Vec2D::zero(),
-            energy_window: None,
-            energy_data,
-        }
-    }
-
     /// New constructor that uses physics thread architecture
     /// This will eventually replace `new()`
     #[allow(dead_code)]
@@ -82,14 +58,7 @@ impl CustomEventLoop {
         // Get command sender for forwarding user input
         let command_sender = physics_thread.get_command_sender();
 
-        // Create a dummy MainContent for compatibility during transition
-        // TODO: Remove this once all references to self.application are eliminated
-        let dummy_world = crate::objects2d::Rect::new(0.0, 0.0, 100.0, 100.0);
-        let dummy_application =
-            MainContent::new(dummy_world).expect("Failed to create dummy MainContent");
-
         Self {
-            application: dummy_application,
             physics_thread: Some(physics_thread),
             command_sender: Some(command_sender),
             snapshot_slot: Some(snapshot_slot),
@@ -132,12 +101,9 @@ impl CustomEventLoop {
 
     /// Send a command to the physics thread if in threaded mode
     /// Returns true if command was sent, false if in legacy mode
-    fn send_physics_command(&self, command: crate::frame::physics_thread::PhysicsCommand) -> bool {
+    fn send_physics_command(&self, command: crate::frame::physics_thread::PhysicsCommand) {
         if let Some(sender) = &self.command_sender {
             let _ = sender.send(command);
-            true
-        } else {
-            false
         }
     }
 
@@ -325,13 +291,13 @@ impl CustomEventLoop {
 
         // Update dummy application's cell grid if bounds changed
         // This ensures the grid rendering matches the actual simulation
-        let current_world_rect = self.application.world_region();
-        let bounds_changed = current_world_rect != snapshot.cell_grid_bounds;
-
-        if bounds_changed {
-            // Rebuild the dummy application's cell grid with correct bounds
-            self.application.resize(snapshot.cell_grid_bounds);
-        }
+        // let current_world_rect = self.application.world_region();
+        // let bounds_changed = current_world_rect != snapshot.cell_grid_bounds;
+        //
+        // if bounds_changed {
+        //     // Rebuild the dummy application's cell grid with correct bounds
+        //     self.application.resize(snapshot.cell_grid_bounds);
+        // }
 
         let _ = ctx.gfx.begin_frame();
 
@@ -344,7 +310,7 @@ impl CustomEventLoop {
 
         // Draw cell grid and frame (read-only access to application is safe)
         // Cell grid dimensions now match the actual simulation
-        let cell_grid = &self.application.cell_grid;
+        let cell_grid = &snapshot.grid_structure;
         let _ = cur_render.draw_frame(&mut backend, cell_grid, None);
 
         // Draw cursor
@@ -396,114 +362,50 @@ impl CustomEventLoop {
         // Tell the timer stuff a frame has happened
         ctx.time.tick();
 
-        // Check if we're in threaded mode (snapshot_slot is Some)
-        if self.snapshot_slot.is_some() {
-            // NEW PATH: Threaded physics with snapshot-based rendering
-            // Physics runs in separate thread, we just render from snapshot
-            self.render_from_snapshot(ctx);
+        // Physics runs in separate thread, we just render from snapshot
+        self.render_from_snapshot(ctx);
 
-            // Update energy data from snapshot - only once per simulation step
-            if let Some(snapshot_slot) = &self.snapshot_slot
-                && let Some(snapshot) = snapshot_slot.load().as_ref()
-            {
-                // Only update if this is a new simulation step
-                if snapshot.simulation_step > self.last_processed_step {
-                    // Calculate simulation FPS
-                    let now = std::time::Instant::now();
-                    let elapsed = now.duration_since(self.last_step_time).as_secs_f32();
-                    if elapsed > 0.0 {
-                        // Smooth FPS with exponential moving average (weight=0.1)
-                        let instant_fps = 1.0 / elapsed;
-                        self.simulation_fps = if self.simulation_fps == 0.0 {
-                            instant_fps
-                        } else {
-                            self.simulation_fps * 0.9 + instant_fps * 0.1
-                        };
-                    }
-                    self.last_step_time = now;
-                    self.last_processed_step = snapshot.simulation_step;
-
-                    let mut energy_data = self.energy_data.lock().unwrap();
-                    energy_data.v_kin.push_back(snapshot.kinetic_energy);
-                    energy_data.v_pot.push_back(snapshot.potential_energy);
-                    energy_data.time = snapshot.time;
-
-                    // Update status text from snapshot (with renderer FPS, simulation FPS, and steps/frame)
-                    let renderer_fps = ctx.time.fps();
-                    if let Some(ref status) = snapshot.status_text {
-                        // Replace "fps 0" placeholder with combined renderer, simulation FPS, and steps/frame
-                        let updated_status = status.replace(
-                            "fps 0",
-                            &format!(
-                                "render: {} fps | sim: {:.0} fps | steps/frame: {:.1}",
-                                renderer_fps as u32, self.simulation_fps, self.steps_per_frame
-                            ),
-                        );
-                        energy_data.status_text = Some(updated_status);
+        // Update energy data from snapshot - only once per simulation step
+        if let Some(snapshot_slot) = &self.snapshot_slot
+            && let Some(snapshot) = snapshot_slot.load().as_ref()
+        {
+            // Only update if this is a new simulation step
+            if snapshot.simulation_step > self.last_processed_step {
+                // Calculate simulation FPS
+                let now = std::time::Instant::now();
+                let elapsed = now.duration_since(self.last_step_time).as_secs_f32();
+                if elapsed > 0.0 {
+                    // Smooth FPS with exponential moving average (weight=0.1)
+                    let instant_fps = 1.0 / elapsed;
+                    self.simulation_fps = if self.simulation_fps == 0.0 {
+                        instant_fps
                     } else {
-                        energy_data.status_text = None;
-                    }
-
-                    // Limit buffer size to prevent unbounded growth
-                    const MAX_ENERGY_SAMPLES: usize = 1000;
-                    if energy_data.v_kin.len() > MAX_ENERGY_SAMPLES {
-                        energy_data.v_kin.pop_front();
-                    }
-                    if energy_data.v_pot.len() > MAX_ENERGY_SAMPLES {
-                        energy_data.v_pot.pop_front();
-                    }
-
-                    // Release the lock before requesting redraw
-                    drop(energy_data);
-
-                    // Request redraw for energy window if it exists and new data was added
-                    if let Some(window) = &self.energy_window {
-                        window.request_redraw();
-                    }
+                        self.simulation_fps * 0.9 + instant_fps * 0.1
+                    };
                 }
-            }
+                self.last_step_time = now;
+                self.last_processed_step = snapshot.simulation_step;
 
-            // Handle +/- keys for time step control in threaded mode
-            if self.is_alt_key_pressed(KeyCode::Minus) {
-                let _ = self.send_physics_command(PhysicsCommand::IncreaseWaitTime);
-            } else if self.is_alt_key_pressed(KeyCode::Equals) {
-                let _ = self.send_physics_command(PhysicsCommand::DecreaseWaitTime);
-            } else if self.is_key_pressed(KeyCode::Minus) {
-                let _ = self.send_physics_command(PhysicsCommand::HalveTimeStep);
-            } else if self.is_key_pressed(KeyCode::Equals) {
-                let _ = self.send_physics_command(PhysicsCommand::DoubleTimeStep);
-            }
-        } else {
-            // LEGACY PATH: Direct MainContent access
-            // Update
-            self.application.unpause_after_resize();
-            self.application.start_frame();
-
-            while ctx
-                .time
-                .check_update_time(crate::frame::application_master::FPS_GOAL)
-            {
-                let _ = self.application.simulation_step();
-            }
-
-            self.application.end_frame();
-
-            // Update energy data for the energy plot window
-            {
                 let mut energy_data = self.energy_data.lock().unwrap();
-                energy_data
-                    .v_kin
-                    .push_back(self.application.sim.get_kinetic_energy());
-                energy_data
-                    .v_pot
-                    .push_back(self.application.sim.get_potential_energy());
-                energy_data.time = self.application.sim.get_time();
+                energy_data.v_kin.push_back(snapshot.kinetic_energy);
+                energy_data.v_pot.push_back(snapshot.potential_energy);
+                energy_data.time = snapshot.time;
 
-                // Update status text for the energy window
-                let fps = ctx.time.fps();
-                energy_data.status_text = self
-                    .application
-                    .status_text(fps as u32, self.application.get_time_step());
+                // Update status text from snapshot (with renderer FPS, simulation FPS, and steps/frame)
+                let renderer_fps = ctx.time.fps();
+                if let Some(ref status) = snapshot.status_text {
+                    // Replace "fps 0" placeholder with combined renderer, simulation FPS, and steps/frame
+                    let updated_status = status.replace(
+                        "fps 0",
+                        &format!(
+                            "render: {} fps | sim: {:.0} fps | steps/frame: {:.1}",
+                            renderer_fps as u32, self.simulation_fps, self.steps_per_frame
+                        ),
+                    );
+                    energy_data.status_text = Some(updated_status);
+                } else {
+                    energy_data.status_text = None;
+                }
 
                 // Limit buffer size to prevent unbounded growth
                 const MAX_ENERGY_SAMPLES: usize = 1000;
@@ -513,50 +415,26 @@ impl CustomEventLoop {
                 if energy_data.v_pot.len() > MAX_ENERGY_SAMPLES {
                     energy_data.v_pot.pop_front();
                 }
+
+                // Release the lock before requesting redraw
+                drop(energy_data);
+
+                // Request redraw for energy window if it exists and new data was added
+                if let Some(window) = &self.energy_window {
+                    window.request_redraw();
+                }
             }
+        }
 
-            // Request redraw for energy window if it exists
-            if let Some(window) = &self.energy_window {
-                window.request_redraw();
-            }
-
-            if self.is_key_pressed(KeyCode::Minus)
-                && !self.send_physics_command(
-                    crate::frame::physics_thread::PhysicsCommand::HalveTimeStep,
-                )
-            {
-                self.application.halve_time_step();
-            } else if self.is_key_pressed(KeyCode::Equals)
-                && !self.send_physics_command(
-                    crate::frame::physics_thread::PhysicsCommand::DoubleTimeStep,
-                )
-            {
-                self.application.double_time_step();
-            }
-
-            // Draw main window (without status text - now shown in energy window)
-            let _ = ctx.gfx.begin_frame();
-
-            let cell_grid = &self.application.cell_grid;
-
-            let mut cur_render = self.renderer.borrow_mut();
-            let cache = cur_render.take_cache();
-            let mut backend = GgezBackend::new(ctx, cache);
-
-            // Don't pass status_text - it's now in the energy window for better performance
-            cur_render.set_physics_engine(self.application.physics.clone());
-            let _ = cur_render.draw_balls(&mut backend, self.application.get_balls());
-            let _ = cur_render.draw_frame(&mut backend, cell_grid, None);
-            let _ = cur_render.draw_cursor(
-                &mut backend,
-                self.application.get_ball_factory().get_new_ball_size_idx(),
-            );
-            let _ = cur_render.finish_frame(&mut backend);
-
-            let cache = backend.into_cache();
-            cur_render.put_cache(cache);
-
-            let _ = ctx.gfx.end_frame();
+        // Handle +/- keys for time step control in threaded mode
+        if self.is_alt_key_pressed(KeyCode::Minus) {
+            self.send_physics_command(PhysicsCommand::IncreaseWaitTime);
+        } else if self.is_alt_key_pressed(KeyCode::Equals) {
+            self.send_physics_command(PhysicsCommand::DecreaseWaitTime);
+        } else if self.is_key_pressed(KeyCode::Minus) {
+            self.send_physics_command(PhysicsCommand::HalveTimeStep);
+        } else if self.is_key_pressed(KeyCode::Equals) {
+            self.send_physics_command(PhysicsCommand::DoubleTimeStep);
         }
 
         // Reset states for next frame (common to both paths)
@@ -575,28 +453,15 @@ impl CustomEventLoop {
     ) -> ggez::GameResult {
         if let Some(key) = input.keycode {
             match key {
-                KeyCode::Space => {
-                    if !self.send_physics_command(
-                        crate::frame::physics_thread::PhysicsCommand::TogglePause,
-                    ) {
-                        self.application.toggle_pause();
-                    }
-                }
+                KeyCode::Space => self.send_physics_command(
+                    crate::frame::physics_thread::PhysicsCommand::TogglePause,
+                ),
                 KeyCode::LControl => self.renderer.borrow_mut().enable_drawing_cursor(repeated),
-                KeyCode::Escape => {
-                    if !self.send_physics_command(
-                        crate::frame::physics_thread::PhysicsCommand::ClearBalls,
-                    ) {
-                        self.application.clear_points();
-                    }
-                }
-                KeyCode::LShift => {
-                    if !self.send_physics_command(
-                        crate::frame::physics_thread::PhysicsCommand::EnableRandomBallSpeed,
-                    ) {
-                        self.application.enable_random_ball_speed();
-                    }
-                }
+                KeyCode::Escape => self
+                    .send_physics_command(crate::frame::physics_thread::PhysicsCommand::ClearBalls),
+                KeyCode::LShift => self.send_physics_command(
+                    crate::frame::physics_thread::PhysicsCommand::EnableRandomBallSpeed,
+                ),
                 KeyCode::Minus | KeyCode::Equals => {
                     if ctx.keyboard.is_key_pressed(KeyCode::LAlt)
                         || ctx.keyboard.is_key_pressed(KeyCode::RAlt)
@@ -622,97 +487,42 @@ impl CustomEventLoop {
             match key {
                 KeyCode::Tab => self.toggle_energy_window(window_target),
                 KeyCode::H => MainContent::print_help_message(),
-                KeyCode::D => {
-                    if !self.send_physics_command(
-                        crate::frame::physics_thread::PhysicsCommand::ToggleRealData,
-                    ) {
-                        self.application.toggle_real_data();
-                    }
-                }
-                KeyCode::S => {
-                    if !self.send_physics_command(
-                        crate::frame::physics_thread::PhysicsCommand::ToggleStepwise,
-                    ) {
-                        self.application.toggle_stepwise();
-                    }
-                }
-                KeyCode::T => {
-                    if !self.send_physics_command(
-                        crate::frame::physics_thread::PhysicsCommand::ToggleTimingDisplay,
-                    ) {
-                        self.application.toggle_timing_display();
-                    }
-                }
+                KeyCode::D => self.send_physics_command(
+                    crate::frame::physics_thread::PhysicsCommand::ToggleRealData,
+                ),
+                KeyCode::S => self.send_physics_command(
+                    crate::frame::physics_thread::PhysicsCommand::ToggleStepwise,
+                ),
+                KeyCode::T => self.send_physics_command(
+                    crate::frame::physics_thread::PhysicsCommand::ToggleTimingDisplay,
+                ),
                 KeyCode::P => self.renderer.borrow_mut().cycle_plot_content(),
                 KeyCode::Equals | KeyCode::Minus => {
                     self.register_key_released(key);
                     self.register_alt_key_released(key);
                 }
-                KeyCode::R => {
-                    if !self.send_physics_command(
-                        crate::frame::physics_thread::PhysicsCommand::RandomizeSpeeds,
-                    ) {
-                        self.application.randomize_speeds();
-                    }
-                }
-                KeyCode::B => {
-                    if !self.send_physics_command(
-                        crate::frame::physics_thread::PhysicsCommand::ToggleBallStats,
-                    ) {
-                        self.application.toggle_show_ball_stats();
-                    }
-                }
-                KeyCode::V => {
-                    if !self.send_physics_command(
-                        crate::frame::physics_thread::PhysicsCommand::StartVerbosityInput,
-                    ) {
-                        self.application.start_handling_verbosity_input();
-                    }
-                }
+                KeyCode::R => self.send_physics_command(
+                    crate::frame::physics_thread::PhysicsCommand::RandomizeSpeeds,
+                ),
+                KeyCode::B => self.send_physics_command(
+                    crate::frame::physics_thread::PhysicsCommand::ToggleBallStats,
+                ),
+                KeyCode::V => self.send_physics_command(
+                    crate::frame::physics_thread::PhysicsCommand::StartVerbosityInput,
+                ),
                 KeyCode::LControl => {
                     let cursor_pos = self.cursor_pos.clone();
-                    if !self.send_physics_command(
+                    self.send_physics_command(
                         crate::frame::physics_thread::PhysicsCommand::AddBall(cursor_pos.clone()),
-                    ) {
-                        let _ = self.application.add_candidate(cursor_pos);
-                    }
+                    );
                     self.renderer.borrow_mut().disable_drawing_cursor();
                 }
-                KeyCode::F5 => {
-                    if !self.send_physics_command(
-                        crate::frame::physics_thread::PhysicsCommand::AddRandomBalls(100),
-                    ) {
-                        self.application.add_random_candidates(100);
-                    }
-                }
-                KeyCode::F1 => {
-                    if !self.send_physics_command(
-                        crate::frame::physics_thread::PhysicsCommand::StopAllBalls,
-                    ) {
-                        self.application.stop_all_balls();
-                    }
-                }
-                KeyCode::F2 => {
-                    // F2: Add two specific balls with velocities
-                    // Note: In threaded mode, we can't easily create balls here
-                    // since we don't have access to BallFactory. Skip for now.
-                    if self.command_sender.is_none() {
-                        let mut small = self
-                            .application
-                            .get_game_logic_data()
-                            .get_ball_factory()
-                            .create_basic(Vec2D::zero(), 2);
-                        let mut large = self
-                            .application
-                            .get_game_logic_data()
-                            .get_ball_factory()
-                            .create_basic(Vec2D::zero(), 4);
-                        small.v = Vec2D::new(0.1, 0.);
-                        large.v = Vec2D::new(0., 0.1);
-                        self.application.add_candidate_to_vec(small);
-                        self.application.add_candidate_to_vec(large);
-                    }
-                }
+                KeyCode::F5 => self.send_physics_command(
+                    crate::frame::physics_thread::PhysicsCommand::AddRandomBalls(100),
+                ),
+                KeyCode::F1 => self.send_physics_command(
+                    crate::frame::physics_thread::PhysicsCommand::StopAllBalls,
+                ),
                 _ => {}
             }
         }
@@ -726,11 +536,8 @@ impl CustomEventLoop {
         _x: f32,
         _y: f32,
     ) -> ggez::GameResult {
-        if let MouseButton::Right = button
-            && !self
-                .send_physics_command(crate::frame::physics_thread::PhysicsCommand::NextBallSize)
-        {
-            self.application.next_ball_size();
+        if MouseButton::Right == button {
+            self.send_physics_command(crate::frame::physics_thread::PhysicsCommand::NextBallSize)
         }
         Ok(())
     }
@@ -747,11 +554,9 @@ impl CustomEventLoop {
         let world_rect = self.renderer.borrow().get_world_region();
 
         // Send resize command to physics thread or resize application directly
-        if !self.send_physics_command(crate::frame::physics_thread::PhysicsCommand::Resize {
+        self.send_physics_command(crate::frame::physics_thread::PhysicsCommand::Resize {
             world_rect,
-        }) {
-            self.application.resize(world_rect);
-        }
+        });
         Ok(())
     }
 }

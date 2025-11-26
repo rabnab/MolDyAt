@@ -1,14 +1,14 @@
-use crate::frame::AppResult;
 use crate::frame::application_master::WindowDefinitionRef;
 use crate::frame::ggez::ggez_renderer_backend::GgezMeshCache;
 use crate::frame::renderer::{DrawingBackend, PlotContent, Renderer};
 use crate::frame::window::window_definition::WindowDefinition;
-use crate::objects2d::Vec2D;
+use crate::frame::AppResult;
 use crate::objects2d::ball_cell::cell_grid::CellGrid;
 use crate::objects2d::ball_impl::{Ball2D, BallPhysics};
-use ggez::Context;
+use crate::objects2d::Vec2D;
 use ggez::graphics::{Color, DrawMode, Mesh, MeshBuilder, Shader};
 use ggez::mint::Point2;
+use ggez::Context;
 use std::cell::Ref;
 use std::collections::VecDeque;
 

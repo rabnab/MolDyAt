@@ -1,6 +1,6 @@
-use crate::frame::AppResult;
 use crate::frame::renderer::dummy_renderer::DummyRenderer;
 use crate::frame::window::window_definition::WindowDefinition;
+use crate::frame::AppResult;
 use crate::objects2d::ball_cell::cell_grid::CellGrid;
 use crate::objects2d::ball_impl::{Ball2D, BallPhysics};
 use std::collections::VecDeque;
@@ -24,7 +24,7 @@ pub trait DrawingBackend {
     /// Draws the cell grid as faint colored rectangles in the background.
     fn draw_cell_grid_background(
         &mut self,
-        grid: &CellGrid,
+        grid_structure: &CellGrid,
         windef: &WindowDefinition,
     ) -> AppResult;
     fn draw_boundary_frame(&mut self, margin_px: (f32, f32), region_px: (f32, f32)) -> AppResult;

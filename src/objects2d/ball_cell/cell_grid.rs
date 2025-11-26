@@ -194,6 +194,24 @@ impl CellGrid {
         }
     }
 
+    pub(crate) fn to_grid_structure(&self) -> Self {
+        let empty_cells = self
+            .cells
+            .iter()
+            .map(|row| row.iter().map(|c| c.empty_clone()).collect())
+            .collect();
+        Self {
+            cells: empty_cells,
+            cell_size_x: self.cell_size_x,
+            cell_size_y: self.cell_size_y,
+            grid_width: self.grid_width,
+            grid_height: self.grid_height,
+            sim_width: self.sim_width,
+            sim_height: self.sim_height,
+            grid_origin: self.grid_origin,
+        }
+    }
+
     /// Collect all ball indices from the 3x3 neighborhood into the provided `out` buffer.
     /// Caller should `clear()` the buffer if they want fresh contents each time.
     pub(crate) fn collect_ball_indices_into(&self, i: usize, j: usize, out: &mut Vec<usize>) {
@@ -243,5 +261,21 @@ impl Debug for CellGrid {
             }
         }
         Ok(())
+    }
+}
+
+impl Clone for CellGrid {
+    fn clone(&self) -> Self {
+        let nu_cells = self.cells.iter().map(|row| row.to_vec()).collect();
+        Self {
+            cells: nu_cells,
+            cell_size_x: self.cell_size_x,
+            cell_size_y: self.cell_size_y,
+            grid_width: self.grid_width,
+            grid_height: self.grid_height,
+            sim_width: self.sim_width,
+            sim_height: self.sim_height,
+            grid_origin: self.grid_origin,
+        }
     }
 }
