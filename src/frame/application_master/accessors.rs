@@ -67,18 +67,6 @@ impl MainContent {
         }
     }
 
-    pub(crate) fn increase_speedup(&mut self) {
-        self.sim.increase_speedup();
-    }
-
-    pub(crate) fn decrease_speedup(&mut self) {
-        self.sim.decrease_speedup();
-    }
-
-    pub(crate) fn get_speedup(&self) -> u32 {
-        self.sim.get_speedup()
-    }
-
     pub(crate) fn double_time_step(&mut self) {
         self.game_data.double_time_step();
     }
@@ -97,5 +85,9 @@ impl MainContent {
 
     pub(crate) fn end_frame(&mut self) {
         self.sim.update_hood_cnt(self.update_hood_at_frame_start);
+    }
+
+    pub(crate) fn get_wait_time(&self) -> u64 {
+        self.wait_time
     }
 }

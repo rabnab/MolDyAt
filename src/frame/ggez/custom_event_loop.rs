@@ -32,12 +32,13 @@ pub struct CustomEventLoop {
     simulation_fps: f32,
     last_displayed_step: u64,
     steps_per_frame: f32,
-
-    // SHARED between both:
     pressed_keys: HashSet<KeyCode>,
+    pressed_alt_keys: HashSet<KeyCode>,
     renderer: Rc<RefCell<GgezRenderer>>,
     cursor_pos: Vec2D,
     energy_window: Option<EnergyPlotWindow>,
+
+    // SHARED between both:
     energy_data: SharedEnergyData,
 }
 
@@ -55,6 +56,7 @@ impl CustomEventLoop {
             last_displayed_step: 0,
             steps_per_frame: 0.0,
             pressed_keys: HashSet::new(),
+            pressed_alt_keys: HashSet::new(),
             renderer,
             cursor_pos: Vec2D::zero(),
             energy_window: None,
@@ -97,6 +99,7 @@ impl CustomEventLoop {
             last_displayed_step: 0,
             steps_per_frame: 0.0,
             pressed_keys: HashSet::new(),
+            pressed_alt_keys: HashSet::new(),
             renderer,
             cursor_pos: Vec2D::zero(),
             energy_window: None,
@@ -112,8 +115,19 @@ impl CustomEventLoop {
         self.pressed_keys.remove(&key);
     }
 
+    pub fn register_alt_key_pressed(&mut self, key: KeyCode) {
+        self.pressed_alt_keys.insert(key);
+    }
+    pub fn register_alt_key_released(&mut self, key: KeyCode) {
+        self.pressed_alt_keys.remove(&key);
+    }
+
     pub fn is_key_pressed(&self, key: KeyCode) -> bool {
         self.pressed_keys.contains(&key)
+    }
+
+    pub fn is_alt_key_pressed(&self, key: KeyCode) -> bool {
+        self.pressed_alt_keys.contains(&key)
     }
 
     /// Send a command to the physics thread if in threaded mode
@@ -450,14 +464,14 @@ impl CustomEventLoop {
             }
 
             // Handle +/- keys for time step control in threaded mode
-            if self.is_key_pressed(KeyCode::Minus) {
-                let _ = self.send_physics_command(
-                    crate::frame::physics_thread::PhysicsCommand::HalveTimeStep,
-                );
+            if self.is_alt_key_pressed(KeyCode::Minus) {
+                let _ = self.send_physics_command(PhysicsCommand::IncreaseWaitTime);
+            } else if self.is_alt_key_pressed(KeyCode::Equals) {
+                let _ = self.send_physics_command(PhysicsCommand::DecreaseWaitTime);
+            } else if self.is_key_pressed(KeyCode::Minus) {
+                let _ = self.send_physics_command(PhysicsCommand::HalveTimeStep);
             } else if self.is_key_pressed(KeyCode::Equals) {
-                let _ = self.send_physics_command(
-                    crate::frame::physics_thread::PhysicsCommand::DoubleTimeStep,
-                );
+                let _ = self.send_physics_command(PhysicsCommand::DoubleTimeStep);
             }
         } else {
             // LEGACY PATH: Direct MainContent access
@@ -465,9 +479,10 @@ impl CustomEventLoop {
             self.application.unpause_after_resize();
             self.application.start_frame();
 
-            while ctx.time.check_update_time(
-                crate::frame::application_master::FPS_GOAL * self.application.get_speedup(),
-            ) {
+            while ctx
+                .time
+                .check_update_time(crate::frame::application_master::FPS_GOAL)
+            {
                 let _ = self.application.simulation_step();
             }
 
@@ -554,7 +569,7 @@ impl CustomEventLoop {
 
     fn handle_key_down(
         &mut self,
-        _ctx: &mut Context,
+        ctx: &mut Context,
         input: KeyInput,
         repeated: bool,
     ) -> ggez::GameResult {
@@ -583,7 +598,13 @@ impl CustomEventLoop {
                     }
                 }
                 KeyCode::Minus | KeyCode::Equals => {
-                    self.register_key_pressed(key);
+                    if ctx.keyboard.is_key_pressed(KeyCode::LAlt)
+                        || ctx.keyboard.is_key_pressed(KeyCode::RAlt)
+                    {
+                        self.register_alt_key_pressed(key);
+                    } else {
+                        self.register_key_pressed(key);
+                    }
                 }
                 _ => {}
             }
@@ -625,6 +646,7 @@ impl CustomEventLoop {
                 KeyCode::P => self.renderer.borrow_mut().cycle_plot_content(),
                 KeyCode::Equals | KeyCode::Minus => {
                     self.register_key_released(key);
+                    self.register_alt_key_released(key);
                 }
                 KeyCode::R => {
                     if !self.send_physics_command(
