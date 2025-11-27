@@ -1,6 +1,7 @@
 use crate::objects2d::Vec2D;
 use std::fmt::Debug;
 
+#[derive(Clone)]
 pub struct Cell {
     pub balls: Vec<usize>,
     pub bounds: CellBounds,
@@ -86,5 +87,12 @@ impl Cell {
 
     pub fn clear(&mut self) {
         self.balls.clear();
+    }
+    pub fn empty_clone(&self) -> Self {
+        Cell {
+            balls: Vec::new(),
+            bounds: self.bounds,
+            id: self.id,
+        }
     }
 }

@@ -1,14 +1,14 @@
-use crate::frame::AppResult;
 use crate::frame::ggez::ggez_renderer::GgezRenderer;
-use crate::frame::renderer::{DrawingBackend, is_number_continue, is_number_start};
+use crate::frame::renderer::{is_number_continue, is_number_start, DrawingBackend};
 use crate::frame::window::window_definition::WindowDefinition;
+use crate::frame::AppResult;
 use crate::objects2d::ball_cell::cell_grid::CellGrid;
-use ggez::Context;
 use ggez::glam::Vec2;
 use ggez::graphics::{
     Canvas, Color, DrawMode, DrawParam, Drawable, Mesh, MeshBuilder, Rect, Text, TextFragment,
 };
 use ggez::mint::Point2;
+use ggez::Context;
 use lru::LruCache;
 use std::num::NonZeroUsize;
 
@@ -72,7 +72,7 @@ impl<'a> DrawingBackend for GgezBackend<'a> {
     /// Draws the cell grid as faint colored rectangles in the background.
     fn draw_cell_grid_background(
         &mut self,
-        grid: &CellGrid,
+        grid_structure: &CellGrid,
         win_def: &WindowDefinition,
     ) -> AppResult {
         {
@@ -87,11 +87,11 @@ impl<'a> DrawingBackend for GgezBackend<'a> {
 
         let mut mesh_builder = MeshBuilder::new();
 
-        let (rows, cols) = grid.get_grid_size();
+        let (rows, cols) = grid_structure.get_grid_size();
 
         for row in 0..rows {
             for col in 0..cols {
-                if let Some(cur_cell) = grid.get_cell(row, col) {
+                if let Some(cur_cell) = grid_structure.get_cell(row, col) {
                     // Alternate colors based on row + col
                     let color = GgezRenderer::get_cell_color(row, col);
 
@@ -105,7 +105,7 @@ impl<'a> DrawingBackend for GgezBackend<'a> {
         }
 
         let m = Mesh::from_data(self.ctx, mesh_builder.build());
-        let s = grid.get_cell_size();
+        let s = grid_structure.get_cell_size();
 
         self.cache.cell_mesh = Some(((s.0, s.1), m));
 

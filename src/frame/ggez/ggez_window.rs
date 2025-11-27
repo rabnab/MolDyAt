@@ -1,16 +1,16 @@
-use crate::frame::MainContent;
 use crate::frame::application_master::WindowDefinitionRef;
 use crate::frame::ggez::custom_event_loop::CustomEventLoop;
 use crate::frame::ggez::ggez_renderer::GgezRenderer;
 use crate::frame::ggez::ggez_renderer_builder::GgezRendererBuilder;
 use crate::frame::window::window_definition::WindowDefinition;
-use crate::frame::window::{MARGIN_PX_X, MARGIN_PX_Y, Point2D, Window, WindowEvent};
-use crate::objects2d::Rect;
+use crate::frame::window::{Window, MARGIN_PX_X, MARGIN_PX_Y};
+use crate::frame::MainContent;
 use crate::objects2d::ball_impl::{BallFactory, BallPhysics};
-use ggez::ContextBuilder;
+use crate::objects2d::Rect;
 use ggez::conf::{FullscreenType, WindowMode, WindowSetup};
 use ggez::graphics::ShaderBuilder;
 use ggez::input::mouse;
+use ggez::ContextBuilder;
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -34,46 +34,10 @@ impl GgezWindow {
     }
 }
 impl Window<GgezRenderer> for GgezWindow {
-    fn set_title(&mut self, _title: &str) {
-        // Implementation for setting the window title
-    }
-
-    fn get_title(&self) -> &str {
-        todo!()
-    }
-
-    fn set_size(&mut self, _width: u32, _height: u32) {
-        // Implementation for setting the window size
-    }
-
     fn get_size(&self) -> (u32, u32) {
         let win_def = self.win_definition.borrow();
         // Implementation for getting the window size
         (win_def.region_px.0 as u32, win_def.region_px.1 as u32)
-    }
-
-    fn set_fullscreen(&mut self, _fullscreen: bool) {
-        todo!()
-    }
-
-    fn is_fullscreen(&self) -> bool {
-        todo!()
-    }
-
-    fn close(&mut self) {
-        todo!()
-    }
-
-    fn poll_events(&mut self) -> Vec<WindowEvent> {
-        todo!()
-    }
-
-    fn set_cursor_visible(&mut self, _visible: bool) {
-        todo!()
-    }
-
-    fn set_cursor_position(&mut self, _pos: Point2D) {
-        todo!()
     }
 
     fn create_window(&self) {
@@ -124,11 +88,7 @@ impl Window<GgezRenderer> for GgezWindow {
         let world_rect = self.win_definition.borrow().compute_world_bounds_rect();
         let world_rect = Rect::new(world_rect.x, world_rect.y, world_rect.w, world_rect.h);
 
-        let rend_ref = Rc::new(RefCell::new(renderer));
-
         let application = MainContent::new(world_rect).expect("Failed to create MainContent");
-
-        // rend_ref.borrow_mut().initialize(&ctx, application.cell_grid.get_cell_size());
 
         // Use threaded physics architecture
         println!("\n========================================");
@@ -136,7 +96,7 @@ impl Window<GgezRenderer> for GgezWindow {
         println!("========================================");
         println!("Main thread ID: {:?}", std::thread::current().id());
         println!("Spawning physics thread...");
-        let custom_loop = CustomEventLoop::new_with_physics_thread(application, rend_ref.clone());
+        let custom_loop = CustomEventLoop::new(application, renderer);
         println!("✓ Physics thread spawned successfully");
         println!("  - Main thread: Rendering (ggez requirement)");
         println!("  - Physics thread: Simulation + snapshot publishing");

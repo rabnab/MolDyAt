@@ -20,6 +20,7 @@
 //! - **Immutability**: Snapshots are immutable after creation, so no need for
 //!   partial field updates that might benefit from SoA.
 
+use crate::objects2d::ball_cell::cell_grid::CellGrid;
 use crate::objects2d::Vec2D;
 use std::time::Instant;
 
@@ -82,6 +83,8 @@ pub struct RendererSnapshot {
 
     /// Timestamp for debugging
     pub created_at: Instant,
+
+    pub grid_structure: CellGrid,
 }
 
 impl RendererSnapshot {
@@ -97,6 +100,7 @@ impl RendererSnapshot {
             cell_grid_bounds: crate::objects2d::Rect::new(0.0, 0.0, 0.0, 0.0),
             cursor_ball_size_idx: 0,
             created_at: Instant::now(),
+            grid_structure: CellGrid::default(),
         }
     }
 
@@ -112,6 +116,7 @@ impl RendererSnapshot {
             cell_grid_bounds: crate::objects2d::Rect::new(0.0, 0.0, 0.0, 0.0),
             cursor_ball_size_idx: 0,
             created_at: Instant::now(),
+            grid_structure: CellGrid::default(),
         }
     }
 
