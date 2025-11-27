@@ -13,6 +13,7 @@ pub const COLOR_TOTAL: u32 = 0xFF4D99E6; // Bright blue for total energy
 pub const COLOR_AXIS: u32 = 0xFF4D4D4D; // Darker gray for axes
 pub const COLOR_ZERO_LINE: u32 = 0xFF666666; // Medium gray for zero reference line
 pub const COLOR_TEXT: u32 = 0xFFD9D9D9; // Lighter gray for better contrast
+pub const COLOR_STATUS_TEXT: u32 = 0xFFA9A9F9; // Lighter gray for better contrast
 pub const COLOR_TITLE: u32 = 0xFFE6E6E6; // Soft white for title (less harsh)
 pub const COLOR_LEGEND_KIN: u32 = COLOR_KINETIC;
 pub const COLOR_LEGEND_POT: u32 = COLOR_POTENTIAL;
@@ -203,7 +204,8 @@ impl EnergyPlotRenderer {
         if !status_lines.is_empty() {
             for s in &status_lines {
                 // Use a different color for status lines to visually separate (simulate smaller font)
-                let (clamped, clamped_c) = clamp_to_cols(s.clone(), vec![COLOR_ZERO_LINE; s.len()]);
+                let (clamped, clamped_c) =
+                    clamp_to_cols(s.clone(), vec![COLOR_STATUS_TEXT; s.len()]);
                 lines.push(clamped);
                 color_lines.push(clamped_c);
             }
