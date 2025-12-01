@@ -17,8 +17,6 @@ pub struct PhysicsConstants {
     pub lj_eps: f32,
     pub lj_cutoff: f32,
     pub gravity: f32,
-    pub damping: f32,
-    pub softening: f32,
     pub max_force: f32,
 }
 
@@ -30,10 +28,8 @@ impl Default for PhysicsConstants {
             //gravity: 9.81,
             gravity: 0.0,
             //gravity: 1.0,
-            damping: 1.0,
             max_force: 100.0,
             //softening: 0.01,
-            softening: 0.0,
             lj_cutoff: LJ_CUTOFF, // Standard cutoff for L-J potential 2.5
         }
     }

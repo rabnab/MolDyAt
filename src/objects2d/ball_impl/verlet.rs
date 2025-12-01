@@ -1,4 +1,4 @@
-use crate::frame::application_log;
+use crate::application::log_util;
 use crate::objects2d::ball_impl::ball_core::Ball2D;
 use crate::objects2d::ball_impl::{BallPhysics, Named, UPDATE_HOOD_CNT};
 use crate::objects2d::vec_2d::Vec2D;
@@ -119,7 +119,7 @@ impl Verlet {
         let this_ball_needs_update = {
             let ball = &balls[ball_idx];
             if ball.verbose.console {
-                application_log::log_update_hood_start(ball, cutoff);
+                log_util::log_update_hood_start(ball, cutoff);
             }
             ball.hood
                 .needs_update_hood(ball, dt, min_movement_threshold)
@@ -185,7 +185,7 @@ impl Verlet {
                     // Log using split_at to get immutable refs
                     if ball_idx < neighbour_idx {
                         let (left, right) = balls.split_at(neighbour_idx);
-                        application_log::log_neighbour_add(
+                        log_util::log_neighbour_add(
                             &left[ball_idx],
                             &right[0],
                             dist * dist,
@@ -193,7 +193,7 @@ impl Verlet {
                         );
                     } else {
                         let (left, right) = balls.split_at(ball_idx);
-                        application_log::log_neighbour_add(
+                        log_util::log_neighbour_add(
                             &right[0],
                             &left[neighbour_idx],
                             dist * dist,

@@ -1,5 +1,5 @@
 use super::cell::{Cell, CellBounds};
-use crate::frame::AppResult;
+use crate::application::AppResult;
 use crate::objects2d::ball_impl::Ball2D;
 use crate::objects2d::{Rect, Vec2D};
 use std::fmt::Debug;
