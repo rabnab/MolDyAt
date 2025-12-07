@@ -8,6 +8,8 @@ const UPDATE_FREQ: usize = 100000; //basically deactivate update by frequency
 
 pub(crate) struct Verlet {
     neighbours: Vec<usize>,
+    force_magnitudes: Vec<f32>,
+    pot_energy: Vec<f32>,
     pub nearest: f32,
     pub farthest: f32,
     updates_frequency: usize,
@@ -19,6 +21,8 @@ impl Default for Verlet {
     fn default() -> Verlet {
         Verlet {
             neighbours: Vec::new(),
+            force_magnitudes: Vec::new(),
+            pot_energy: Vec::new(),
             nearest: f32::NAN,
             farthest: f32::NAN,
             updates_frequency: UPDATE_FREQ,

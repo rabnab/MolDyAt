@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod tests {
+mod test_application_core {
     use crate::application::{GameLogic, MainContent};
     use crate::graphics::window::window_definition::WindowDefinition;
     use crate::objects2d::ball_impl::{Ball2D, Named};
@@ -501,7 +501,7 @@ mod tests {
         }
 
         // Make ball 1 (middle ball) invalid by setting NaN position
-        main_content.balls[1].set_position(Vec2D::new(f32::NAN, f32::NAN));
+        main_content.balls[1].set_position_and_update_tail(Vec2D::new(f32::NAN, f32::NAN));
 
         // Remove invalid balls - this should:
         // 1. Remove ball at index 1
@@ -686,7 +686,7 @@ mod tests {
                     let edge_dist =
                         center_dist - (main_content.balls[i].radius + main_content.balls[j].radius);
 
-                    let pair_potential = main_content.physics.lenard_jones_potential(edge_dist);
+                    let pair_potential = main_content.physics.potential(edge_dist);
                     potential += pair_potential;
                 }
             }
@@ -865,7 +865,7 @@ mod tests {
         let ball1 = factory.create_massive_with_velocity(ball1_pos, ball1_vel);
 
         // Ball 2 just inside cutoff, moving away slowly
-        let initial_separation = cutoff - 0.5; // 0.5 units inside cutoff  
+        let initial_separation = cutoff - 0.5; // 0.5 units inside cutoff
         let ball2_pos = Vec2D::new(initial_separation, 0.0);
         let ball2_vel = Vec2D::new(1.0, 0.0); // Faster velocity to actually move
         let ball2 = factory.create_massive_with_velocity(ball2_pos, ball2_vel);
@@ -909,7 +909,7 @@ mod tests {
             let edge_dist = center_dist - (ball0.radius + ball1.radius);
 
             // Use physics calculation but without cutoff check
-            let pair_potential = main_content.physics.lenard_jones_potential(edge_dist);
+            let pair_potential = main_content.physics.potential(edge_dist);
             potential += pair_potential;
 
             (kinetic, potential, kinetic + potential)

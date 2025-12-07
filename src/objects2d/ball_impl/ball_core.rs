@@ -79,7 +79,7 @@ impl Ball2D {
             last_update_hood_pos: pos.clone(),
             ..Ball2D::default()
         };
-        ball.set_position(pos);
+        ball.set_position_and_update_tail(pos);
         ball
     }
 
@@ -148,18 +148,17 @@ impl Ball2D {
 
         if speed_sq > speed_limit.powi(2) {
             let speed = f32::sqrt(speed_sq);
-            let overspeed = f32::min(speed, speed - speed_limit);
-            let speed_reduction = 0.25 * f32::sqrt(2.) * overspeed;
-            let accel_modification = self.v.scaled(-speed_reduction / dt / speed);
+            let over_speed = f32::min(speed, speed - speed_limit);
+            let speed_reduction = 0.25 * f32::sqrt(2.) * over_speed;
 
-            self.braking = true;
+            // Apply braking acceleration opposite to velocity
+            let accel_modification = self.v.scaled(-speed_reduction / dt / speed);
             accel += accel_modification;
+            self.braking = true;
 
             if self.verbose.console {
-                println!("braking: overspeed {} at speed {:?}", overspeed, self.v);
+                println!("braking: over_speed {} at speed {:?}", over_speed, self.v);
             }
-            // println!("... F_t: {} and limit: {} for speed {}", total_force, speed_limit, self.v);
-            // println!("...... friction_braking:{} and mass: {} accel_res: {:?}", friction_braking, self.mass, accel);
         } else {
             self.braking = false;
         }
@@ -193,8 +192,8 @@ impl Ball2D {
                 collision_fraction = collision_fraction.clamp(0.0, 1.0);
             }
             // Reflect position
-            let overy = bound_min_y - newy;
-            res_y = bound_min_y + overy;
+            let over_y = bound_min_y - newy;
+            res_y = bound_min_y + over_y;
             bounced = true;
         } else {
             // Hit top boundary - calculate collision time
@@ -204,8 +203,8 @@ impl Ball2D {
                 collision_fraction = collision_fraction.clamp(0.0, 1.0);
             }
             // Reflect position
-            let overy = newy - bound_max_y;
-            res_y = bound_max_y - overy;
+            let over_y = newy - bound_max_y;
+            res_y = bound_max_y - over_y;
             bounced = true;
         }
         (res_y, bounced, collision_fraction)
@@ -217,16 +216,16 @@ impl Ball2D {
         bound_min_x: f32,
         bound_max_x: f32,
     ) -> (f32, bool, f32) {
-        let newx = self.pos.x + dx;
+        let new_x = self.pos.x + dx;
 
-        let mut res_x = newx;
+        let mut res_x = new_x;
         let bounced;
         let mut collision_fraction = 1.0; // No collision by default (full timestep)
 
-        if bound_max_x > newx && newx > bound_min_x {
+        if bound_max_x > new_x && new_x > bound_min_x {
             // Inside boundary - no collision
             bounced = false;
-        } else if newx <= bound_min_x {
+        } else if new_x <= bound_min_x {
             // Hit left boundary - calculate collision time
             let distance_to_boundary = bound_min_x - self.pos.x;
             if dx.abs() > 1e-10 {
@@ -234,8 +233,8 @@ impl Ball2D {
                 collision_fraction = collision_fraction.clamp(0.0, 1.0);
             }
             // Reflect position
-            let overx = bound_min_x - newx;
-            res_x = bound_min_x + overx;
+            let over_x = bound_min_x - new_x;
+            res_x = bound_min_x + over_x;
             bounced = true;
         } else {
             // Hit right boundary - calculate collision time
@@ -245,8 +244,8 @@ impl Ball2D {
                 collision_fraction = collision_fraction.clamp(0.0, 1.0);
             }
             // Reflect position
-            let overx = newx - bound_max_x;
-            res_x = bound_max_x - overx;
+            let over_x = new_x - bound_max_x;
+            res_x = bound_max_x - over_x;
             bounced = true;
         }
 
@@ -286,7 +285,7 @@ impl Ball2D {
         };
 
         // Update position only - velocity will be modified during velocity update step
-        self.set_position(Vec2D::new(x, y));
+        self.set_position_and_update_tail(Vec2D::new(x, y));
 
         if self.verbose.console {
             println!(
@@ -306,7 +305,7 @@ impl Ball2D {
         }
     }
 
-    pub fn set_position(&mut self, new_pos: Vec2D) {
+    pub fn set_position_and_update_tail(&mut self, new_pos: Vec2D) {
         let end_pos = self.tail.back();
         if let Some(last_pos) = end_pos {
             let dist = last_pos.dist(&new_pos);

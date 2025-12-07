@@ -4,7 +4,7 @@ use crate::application::VerletIntegration;
 use crate::objects2d::Rect;
 use crate::objects2d::ball_impl::ForceResult;
 use crate::objects2d::ball_impl::ball_core::BounceInfo;
-use crate::objects2d::ball_impl::simd_forces::force_indexed_simd;
+use crate::objects2d::ball_impl::simd_forces::force_simd;
 use rayon::prelude::*;
 
 impl MainContent {
@@ -72,7 +72,7 @@ impl MainContent {
         let balls = &self.balls;
         let results: Vec<ForceResult> = (0..balls.len())
             .into_par_iter()
-            .map(|i| force_indexed_simd(physics, i, balls))
+            .map(|i| force_simd(physics, i, balls))
             .collect();
 
         results

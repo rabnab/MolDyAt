@@ -96,7 +96,7 @@ cores.
 fn compute_forces(&self) -> Vec<ForceResult> {
     (0..self.balls.len())
         .into_par_iter()
-        .map(|i| force_indexed_simd(physics, i, balls))
+        .map(|i| force_simd(physics, i, balls))
         .collect()
 }
 ```
@@ -209,12 +209,12 @@ RustThermo uses the **wide** crate for portable SIMD and **multiversion** for ru
 
 ### Supported SIMD Architectures
 
-The `force_indexed_simd` function in `src/objects2d/ball_impl/simd_forces.rs` uses `#[multiversion]` to provide
+The `force_simd` function in `src/objects2d/ball_impl/simd_forces.rs` uses `#[multiversion]` to provide
 optimized implementations:
 
 ```rust
 #[multiversion(targets("x86_64+avx2+fma", "x86_64+sse2", "aarch64+neon"))]
-fn force_indexed_simd(physics: &BallPhysics, idx: usize, balls: &[Ball2D]) -> ForceResult
+fn force_simd(physics: &BallPhysics, idx: usize, balls: &[Ball2D]) -> ForceResult
 ```
 
 **Dispatched implementations:**
@@ -432,7 +432,7 @@ Note: Add many balls (F5 repeatedly) to see parallel performance benefits
 4. Navigate to Performance → CPU
 5. Observe **all logical cores at 80-100% usage**
 
-**Before many balls:** 1-2 cores at 10-30%  
+**Before many balls:** 1-2 cores at 10-30%
 **After many balls:** 8 cores at 80-100% ✅
 
 ### Method 3: Flamegraph Profiling
@@ -451,7 +451,7 @@ cargo +nightly flamegraph --release -- --verbose
 
 - Multiple `rayon-worker-*` threads visible
 - `compute_forces_parallel` shows up prominently
-- `force_indexed_simd` called from multiple threads
+- `force_simd` called from multiple threads
 - Parallel work distribution across threads
 
 ### Method 4: Performance Logging
@@ -494,9 +494,9 @@ precision.
 
 ### Validation
 
-✅ **All 63 tests pass**, including energy conservation tests  
-✅ **SIMD and scalar produce identical results** (within floating-point epsilon)  
-✅ **Parallel execution maintains determinism** (same order of operations)  
+✅ **All 63 tests pass**, including energy conservation tests
+✅ **SIMD and scalar produce identical results** (within floating-point epsilon)
+✅ **Parallel execution maintains determinism** (same order of operations)
 ✅ **Total energy (kinetic + potential) remains constant** in isolated systems
 
 ### SIMD-Specific Tests
@@ -631,28 +631,28 @@ cargo +nightly bench
 
 ### Problem: "Parallel feature enabled but only 1 core used"
 
-**Cause:** Too few balls (< 500)  
+**Cause:** Too few balls (< 500)
 **Solution:** Press F5 repeatedly to add 1500-2000 balls
 
 ### Problem: "Performance worse with parallel enabled"
 
-**Cause:** Overhead exceeds benefit for small workload  
+**Cause:** Overhead exceeds benefit for small workload
 **Solution:** This is expected for <500 balls; parallel and SIMD are always enabled, so simply add more balls to see the
 benefits
 
 ### Problem: "SIMD feature not detected at runtime"
 
-**Cause:** CPU doesn't support AVX2/SSE2/NEON  
+**Cause:** CPU doesn't support AVX2/SSE2/NEON
 **Solution:** Fallback to scalar is automatic; no action needed
 
 ### Problem: "Flamegraph shows no worker threads"
 
-**Cause:** Insufficient workload or profiling too short  
+**Cause:** Insufficient workload or profiling too short
 **Solution:** Add 2000+ balls and profile for 20+ seconds
 
 ### Problem: "Energy conservation violated"
 
-**Cause:** Bug in force calculation or integration  
+**Cause:** Bug in force calculation or integration
 **Solution:** Run tests (`cargo +nightly test`) and file issue if tests pass but energy still drifts
 
 ---

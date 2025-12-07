@@ -22,7 +22,7 @@ This is a **molecular dynamics physics simulation** implementing Lennard-Jones p
 - **Caching**: Mesh caching system via `take_cache()`/`put_cache()` to minimize allocations
 
 ### Key Data Flows
-1. **Physics Step**: `simulation_step()` → `compute_forces_parallel()` → `force_indexed_simd()` (parallel over balls) → `update_positions()` (parallel)
+1. **Physics Step**: `simulation_step()` → `compute_forces_parallel()` → `force_simd()` (parallel over balls) → `update_positions()` (parallel)
 2. **Neighbor Updates**: When ball moves > threshold → clear all neighbor lists → rebuild via `collect_neighbours_by_cell()`
 3. **Index Invalidation**: Ball removal via `Vec::retain()` → invalidates all indices → triggers full neighbor list rebuild
 
@@ -42,7 +42,7 @@ This is a **molecular dynamics physics simulation** implementing Lennard-Jones p
 ## Code Quality Standards
 
 ### Formatting & Linting (MANDATORY)
-- **REQUIRED before every commit**: 
+- **REQUIRED before every commit**:
   1. Run `cargo +nightly fmt` to ensure consistent formatting
   2. Run `cargo +nightly clippy -- -D warnings` to catch all warnings/errors
   3. Both must pass without errors before committing
