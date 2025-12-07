@@ -1,3 +1,4 @@
+#![feature(portable_simd)]
 #![allow(dead_code)]
 
 #[cfg(all(feature = "renderer-ggez", feature = "renderer-wgpu"))]
