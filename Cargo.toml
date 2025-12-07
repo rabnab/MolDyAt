@@ -16,13 +16,10 @@ rand_distr = "0.5.1"
 lru = "0.16.2"
 rayon = "1.10.0"
 wide = "0.8.2"
-multiversion = "0.8.0"
 num_cpus = "1.16"
 winit = "0.28.7"
 softbuffer = "0.3.3"
 arc-swap = "1.7"
-#winit = "0.30.5"
-#winit = "0.30.5"
 
 [dev-dependencies]
 float-cmp = "0.10"
