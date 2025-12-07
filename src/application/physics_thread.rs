@@ -17,6 +17,7 @@ use std::thread::{self, JoinHandle};
 
 /// Commands that can be sent from the main thread to the physics thread
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum PhysicsCommand {
     /// Pause the simulation
     Pause,
