@@ -1,3 +1,4 @@
+#![feature(portable_simd)]
 #![allow(dead_code)]
 
 #[cfg(all(feature = "renderer-ggez", feature = "renderer-wgpu"))]
@@ -6,17 +7,18 @@ compile_error!("Enable only one renderer feature: either `renderer-ggez` or `ren
 #[cfg(not(any(feature = "renderer-ggez", feature = "renderer-wgpu")))]
 compile_error!("No renderer selected. Enable one of: `renderer-ggez` or `renderer-wgpu`.");
 
-mod frame;
+mod application;
+mod graphics;
 mod objects2d;
 mod timing_monad;
 
 #[cfg(feature = "renderer-ggez")]
-use crate::frame::ggez::ggez_window::GgezWindow;
+use crate::graphics::ggez::ggez_window::GgezWindow;
 #[cfg(feature = "renderer-ggez")]
 use ggez::GameResult;
 
-use crate::frame::AppResult;
-use crate::frame::window::Window;
+use crate::application::AppResult;
+use crate::graphics::window::Window;
 use std::env;
 use std::path;
 use std::path::PathBuf;

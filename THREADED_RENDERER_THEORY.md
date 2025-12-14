@@ -1,6 +1,7 @@
 # Threaded Renderer Theory and Implementation Guide
 
 ## Table of Contents
+
 1. [Overview](#overview)
 2. [Core Concepts](#core-concepts)
 3. [Theoretical Foundation](#theoretical-foundation)
@@ -14,16 +15,21 @@
 
 ## Overview
 
-This document outlines the theory and implementation approach for a **threaded renderer** in the molecularLenardJones simulation. The key innovation is decoupling the physics simulation from rendering using a **latest-only snapshot paradigm**, allowing the simulation to run at maximum speed while the renderer displays the most recent state at monitor refresh rates.
+This document outlines the theory and implementation approach for a **threaded renderer** in the molecularLenardJones
+simulation. The key innovation is decoupling the physics simulation from rendering using a **latest-only snapshot
+paradigm**, allowing the simulation to run at maximum speed while the renderer displays the most recent state at monitor
+refresh rates.
 
 ### Key Goals (from Issue #17)
+
 - **Decoupled execution**: Physics runs independently from rendering thread
 - **Latest-only snapshots**: Renderer always shows the freshest data, skipping outdated frames
 - **Lock-free communication**: Use atomic operations for minimal contention
 - **Read-only rendering**: Renderer treats snapshots as immutable
 - **Performance transparency**: Display simulation steps per rendered frame
 - **Variable simulation rate**: User-controlled simulation speed (±keys)
-- **CRITICAL: ggez isolation**: ggez dependencies MUST remain in `src/frame/ggez/` module only, zero ggez types in simulation code
+- **CRITICAL: ggez isolation**: ggez dependencies MUST remain in `src/frame/ggez/` module only, zero ggez types in
+  simulation code
 
 ---
 
@@ -33,7 +39,8 @@ This document outlines the theory and implementation approach for a **threaded r
 
 ### The Constraint
 
-ggez's event loop MUST run on the main thread (platform requirement for macOS/Windows). This forces a specific thread assignment:
+ggez's event loop MUST run on the main thread (platform requirement for macOS/Windows). This forces a specific thread
+assignment:
 
 - ✅ **Main thread**: ggez event loop (`CustomEventLoop`) + rendering from snapshots
 - ✅ **Spawned worker thread**: Physics simulation (`MainContent`) + snapshot publishing
@@ -41,7 +48,8 @@ ggez's event loop MUST run on the main thread (platform requirement for macOS/Wi
 
 ### Why Physics Must Be Spawned
 
-1. **ggez event loop is blocking**: Main thread is consumed by `ggez::event::run()`, which calls `update()` and `draw()` at controlled intervals (60 FPS)
+1. **ggez event loop is blocking**: Main thread is consumed by `ggez::event::run()`, which calls `update()` and `draw()`
+   at controlled intervals (60 FPS)
 2. **Physics needs continuous execution**: The simulation should run as fast as possible, not frame-locked to 60 FPS
 3. **Platform requirements**: macOS/Windows require event loops on main thread for OpenGL context management
 4. **Decoupling benefit**: Physics can run faster than rendering without being throttled
@@ -75,11 +83,13 @@ See sections below for detailed implementation guidance.
 
 ## Critical Architectural Constraint: ggez Isolation
 
-**MANDATORY REQUIREMENT**: ggez framework dependencies must be strictly contained within the `src/frame/ggez/` module tree. No simulation code (`src/objects2d/`, `src/frame/application_master/`) may depend on ggez types.
+**MANDATORY REQUIREMENT**: ggez framework dependencies must be strictly contained within the `src/frame/ggez/` module
+tree. No simulation code (`src/objects2d/`, `src/frame/application_master/`) may depend on ggez types.
 
 ### Why This Matters
 
-1. **Renderer abstraction**: Current architecture uses `Renderer` trait to allow swapping backends (ggez → wgpu, headless, etc.)
+1. **Renderer abstraction**: Current architecture uses `Renderer` trait to allow swapping backends (ggez → wgpu,
+   headless, etc.)
 2. **Testability**: Simulation logic must be testable without graphics framework
 3. **Platform independence**: ggez has platform-specific requirements (OpenGL context on main thread)
 4. **Future-proofing**: Snapshot-based design should work with any renderer backend
@@ -87,12 +97,14 @@ See sections below for detailed implementation guidance.
 ### Enforcement Strategy
 
 **Allowed**:
+
 - ✅ `src/frame/ggez/` modules import and use ggez types
 - ✅ `RendererSnapshot` uses only std types (`Vec`, `Arc`, etc.)
 - ✅ Snapshot channel uses `arc-swap` (no ggez dependency)
 - ✅ `MainContent` publishes snapshots (no ggez types)
 
 **Forbidden**:
+
 - ❌ `src/objects2d/` importing ggez
 - ❌ `src/frame/application_master/` importing ggez
 - ❌ `RendererSnapshot` containing ggez::Color or ggez types
@@ -116,8 +128,9 @@ pub struct RendererSnapshot {
 ```
 
 **Conversion happens in ggez module only**:
+
 ```rust
-// In src/frame/ggez/ggez_renderer.rs
+// In src/application/ggez/ggez_renderer.rs
 impl GgezRenderer {
     fn render(&mut self, snapshot: &RendererSnapshot) {
         for (pos, color_rgba) in snapshot.positions.iter().zip(&snapshot.colors) {
@@ -134,7 +147,8 @@ impl GgezRenderer {
 
 ### 1. Producer-Consumer Pattern with Latest-Only Semantics
 
-Traditional producer-consumer queues buffer all produced items. In real-time visualization, **old frames are worthless** once a newer frame exists. The latest-only pattern implements:
+Traditional producer-consumer queues buffer all produced items. In real-time visualization, **old frames are worthless**
+once a newer frame exists. The latest-only pattern implements:
 
 ```
 Producer (Physics)          Consumer (Renderer)
@@ -145,16 +159,19 @@ Producer (Physics)          Consumer (Renderer)
   [Snapshot 3] ----Arc----->  (discards 2, renders 3)
 ```
 
-**Theory**: This is a **lossy channel** optimized for latency over completeness. The renderer is a "best-effort visualizer" that prioritizes showing current state over historical accuracy.
+**Theory**: This is a **lossy channel** optimized for latency over completeness. The renderer is a "best-effort
+visualizer" that prioritizes showing current state over historical accuracy.
 
 ### 2. Memory Ordering and Atomic Snapshots
 
 **Challenge**: Transferring complex state between threads without locks.
 
 **Solution**: Use `Arc<RendererSnapshot>` with atomic pointer swap:
+
 - **Arc (Atomic Reference Counting)**: Enables shared ownership, automatically deallocates when both threads release
 - **ArcSwap/AtomicPtr**: Lock-free read/write of Arc pointers using compare-and-swap (CAS) operations
-- **Acquire-Release semantics**: Ensures memory visibility—writes before `store(Release)` are visible after `load(Acquire)`
+- **Acquire-Release semantics**: Ensures memory visibility—writes before `store(Release)` are visible after
+  `load(Acquire)`
 
 ```rust
 // Physics thread (producer)
@@ -165,7 +182,8 @@ shared_slot.store(snapshot, Ordering::Release);
 let snapshot = shared_slot.load(Ordering::Acquire);
 ```
 
-**Why this works**: 
+**Why this works**:
+
 - Arc provides thread-safe reference counting
 - Atomic operations ensure pointer swap is atomic (no torn reads)
 - Release-Acquire ordering creates a "happens-before" relationship, guaranteeing data consistency
@@ -175,18 +193,20 @@ let snapshot = shared_slot.load(Ordering::Acquire);
 **Problem**: Between loading a snapshot and presenting it, physics may publish newer data.
 
 **Solution**: Check snapshot identity before expensive GPU operations:
+
 ```rust
 let snapshot_before = shared_slot.load(Ordering::Acquire);
 // ... prepare meshes, upload to GPU ...
 let snapshot_after = shared_slot.load(Ordering::Acquire);
-if !Arc::ptr_eq(&snapshot_before, &snapshot_after) {
-    // Newer snapshot available, skip this frame
-    return;
+if ! Arc::ptr_eq( & snapshot_before, & snapshot_after) {
+// Newer snapshot available, skip this application
+return;
 }
-// Present frame
+// Present application
 ```
 
-**Theory**: This implements **optimistic concurrency control**—assume data remains stable, verify before committing work. Minimizes lock contention while preventing stale frames.
+**Theory**: This implements **optimistic concurrency control**—assume data remains stable, verify before committing
+work. Minimizes lock contention while preventing stale frames.
 
 ---
 
@@ -195,6 +215,7 @@ if !Arc::ptr_eq(&snapshot_before, &snapshot_after) {
 ### Thread Architecture Models
 
 #### Current Architecture (Single-Threaded Event Loop)
+
 ```
 ┌─────────────────────────────────────┐
 │   Main Thread (ggez Event Loop)     │
@@ -206,11 +227,13 @@ Total: 25ms → 40 FPS max
 ```
 
 **Limitations**:
+
 - Rendering blocks physics computation
 - Frame rate caps simulation speed
 - VSync stalls can cascade to physics
 
 #### Proposed Architecture (Decoupled Threads)
+
 ```
 ┌──────────────────────┐     ┌─────────────────────────┐
 │   Physics Thread     │────▶│   Renderer Thread       │
@@ -226,6 +249,7 @@ Total: 25ms → 40 FPS max
 ```
 
 **Advantages**:
+
 - Physics runs at CPU speed (limited by computation, not VSync)
 - Renderer operates at monitor refresh rate (smooth 60Hz)
 - Throughput increase: 2000 steps/sec vs 40 steps/sec (50× improvement)
@@ -233,22 +257,26 @@ Total: 25ms → 40 FPS max
 ### Lock-Free Data Structures
 
 **Why lock-free matters**:
+
 - **Locks cause blocking**: If renderer holds lock during GPU upload, physics stalls
 - **Priority inversion**: Low-priority renderer can block high-priority physics
 - **Deadlock risk**: Multiple locks introduce ordering dependencies
 
 **ArcSwap guarantees** (from `arc-swap` crate):
+
 - **Wait-free reads**: `load()` never blocks, always completes in bounded time
 - **Lock-free writes**: `store()` may retry CAS but never blocks on locks
 - **Memory safety**: Dropping old Arc only when all readers finish (automatic via ref counting)
 
 **Alternative: Triple Buffering**
+
 ```
 ┌─────┐  ┌─────┐  ┌─────┐
 │ Buf1│  │Buf2 │  │Buf3 │
 └─────┘  └─────┘  └─────┘
   Write    Read    Swap
 ```
+
 - Physics writes to one buffer while renderer reads another
 - Triple buffer eliminates tearing, but ArcSwap is simpler and more flexible
 
@@ -263,11 +291,13 @@ Rust's atomic ordering options (from least to most restrictive):
 5. **SeqCst**: Sequential consistency—total global order (expensive)
 
 **Our choice: Acquire-Release**
+
 - `store(Release)`: All snapshot field writes visible to subsequent `load(Acquire)`
 - `load(Acquire)`: Ensures we read fully-constructed snapshot
 - Cheaper than SeqCst, sufficient for single-writer/single-reader
 
 **Memory model visualization**:
+
 ```
 Physics Thread              Memory                Renderer Thread
 ───────────────────────────────────────────────────────────────
@@ -288,30 +318,32 @@ store(snapshot, Release) ──▶│  [Complete]  │
 ### Snapshot Design
 
 **RendererSnapshot structure**:
+
 ```rust
 pub struct RendererSnapshot {
     /// Ball positions (x, y) for rendering
     pub positions: Vec<Vec2D>,
-    
+
     /// Ball colors as RGBA [r, g, b, a] in range [0.0, 1.0]
     /// NOT ggez::Color to maintain framework independence
     pub colors: Vec<[f32; 4]>,
-    
+
     /// Ball radii for rendering (needed for circle drawing)
     pub radii: Vec<f32>,
-    
+
     /// Neighbor relationships for visualization
     pub neighbor_info: Vec<Vec<usize>>,
-    
+
     /// Simulation step counter (for display)
     pub simulation_step: u64,
-    
+
     /// Timestamp for debugging
     pub created_at: Instant,
 }
 ```
 
 **Design rationale**:
+
 - **Compact**: Only rendering-essential data (no velocities, forces, masses)
 - **Indexed**: `neighbor_info[i]` contains indices into `positions` array
 - **Immutable**: All fields use owned data (Vec), no references to physics state
@@ -320,6 +352,7 @@ pub struct RendererSnapshot {
 ### Data Extraction from Physics State
 
 **Current state** (in `MainContent`):
+
 ```rust
 pub struct MainContent {
     v_points: Vec<Ball2D>,          // Main ball storage
@@ -330,24 +363,25 @@ pub struct MainContent {
 ```
 
 **Extraction strategy**:
+
 ```rust
 fn create_snapshot(&self) -> RendererSnapshot {
     let positions = self.v_points.iter()
         .map(|ball| ball.pos)
         .collect();
-    
+
     // Colors as RGBA arrays, NOT ggez::Color
     let colors = self.v_points.iter()
         .map(|ball| size_class_to_rgba(ball.size_class))
         .collect();
-    
+
     let radii = self.v_points.iter()
         .map(|ball| ball.get_radius())
         .collect();
-    
+
     // Move neighbor calculation here (currently in drawing code)
     let neighbor_info = self.collect_all_neighbors();
-    
+
     RendererSnapshot {
         positions,
         colors,
@@ -371,62 +405,66 @@ fn size_class_to_rgba(size_class: usize) -> [f32; 4] {
 }
 ```
 
-**Critical change**: Move `collect_neighbours_by_cell()` from render path to physics loop—calculated once per simulation step, not per frame.
+**Critical change**: Move `collect_neighbours_by_cell()` from render path to physics loop—calculated once per simulation
+step, not per frame.
 
 ### Advantages for This Simulation
 
 1. **High Update Rate**: Molecular dynamics benefits from frequent timesteps
-   - Current: ~40 steps/sec (limited by rendering)
-   - Proposed: ~2000 steps/sec (limited by computation)
-   - Better energy conservation from smaller dt
+    - Current: ~40 steps/sec (limited by rendering)
+    - Proposed: ~2000 steps/sec (limited by computation)
+    - Better energy conservation from smaller dt
 
 2. **Expensive Neighbor Calculation**: Verlet list updates are costly
-   - Current: May run multiple times per simulation step if rendering is slow
-   - Proposed: Exactly once per step, amortized over multiple rendered frames
+    - Current: May run multiple times per simulation step if rendering is slow
+    - Proposed: Exactly once per step, amortized over multiple rendered frames
 
 3. **Variable Workload**: Force calculations vary with particle count/density
-   - Threaded approach isolates physics timing from rendering timing
-   - Worst-case physics frame doesn't drop render FPS
+    - Threaded approach isolates physics timing from rendering timing
+    - Worst-case physics frame doesn't drop render FPS
 
 4. **Debug Visualization**: Can display "simulation steps per frame"
-   - Immediate feedback on simulation performance
-   - User can adjust simulation rate to target hardware
+    - Immediate feedback on simulation performance
+    - User can adjust simulation rate to target hardware
 
 5. **Future GPU Physics**: Decoupling enables offloading physics to GPU
-   - Current architecture tightly couples CPU physics with ggez renderer
-   - Snapshot abstraction allows swapping physics backend
+    - Current architecture tightly couples CPU physics with ggez renderer
+    - Snapshot abstraction allows swapping physics backend
 
 ### Pitfalls Specific to This Simulation
 
 #### Pitfall 1: Large Memory Allocations per Snapshot
 
-**Problem**: 10,000 balls × (8 bytes position + 16 bytes color + 4 bytes radius + neighbor Vec) = ~280KB per snapshot (without neighbors) at 60 FPS = ~16.8 MB/sec allocation rate.
+**Problem**: 10,000 balls × (8 bytes position + 16 bytes color + 4 bytes radius + neighbor Vec) = ~280KB per snapshot (
+without neighbors) at 60 FPS = ~16.8 MB/sec allocation rate.
 
 **Mitigation strategies**:
+
 1. **Object pooling**: Reuse `RendererSnapshot` allocations
    ```rust
    struct SnapshotPool {
        free_list: Arc<Mutex<Vec<Box<RendererSnapshot>>>>,
    }
    ```
-   
+
 2. **Batch allocation**: Pre-allocate Vec capacities to avoid incremental growth
    ```rust
    let mut positions = Vec::with_capacity(self.v_points.len());
    ```
 
 3. **Incremental updates** (advanced): Only send changed ball positions
-   - Complexity: Requires diffing algorithm and versioning
-   - Probably not worth it for first implementation
+    - Complexity: Requires diffing algorithm and versioning
+    - Probably not worth it for first implementation
 
 4. **Accept the cost**: Modern allocators (jemalloc) are fast; 18 MB/sec is manageable
-   - Profile first, optimize if allocation shows up in flamegraph
+    - Profile first, optimize if allocation shows up in flamegraph
 
 #### Pitfall 2: Neighbor Info Size Explosion
 
 **Problem**: Each ball may have 50+ neighbors. 10,000 balls × 50 neighbors × 8 bytes = 4 MB per snapshot.
 
 **Options**:
+
 1. **Full fidelity**: `Vec<Vec<usize>>` (simplest, easiest to debug)
 2. **Flattened**: `Vec<usize>` with offset indices (saves indirection)
    ```rust
@@ -444,13 +482,15 @@ fn size_class_to_rgba(size_class: usize) -> [f32; 4] {
 
 **Problem**: Ball indices may change between snapshots (due to `Vec::retain()` removing invalid balls).
 
-**Non-issue for rendering**: Each snapshot is self-contained with its own index space. Renderer doesn't track ball identity across frames.
+**Non-issue for rendering**: Each snapshot is self-contained with its own index space. Renderer doesn't track ball
+identity across frames.
 
 **Caution**: If adding features like "click to track ball", need stable ball IDs (not indices).
 
 #### Pitfall 4: Snapshot Freshness Race Condition
 
 **Scenario**:
+
 ```
 Time 0: Renderer loads snapshot A
 Time 1: Physics publishes snapshot B
@@ -459,6 +499,7 @@ Time 3: Renderer checks freshness → sees B → discards work
 ```
 
 **Mitigation**: This is **expected behavior**, not a bug. Renderer should:
+
 - Keep preparation work cheap to minimize wasted effort
 - Accept that under high physics rate, some frames will be skipped
 - Log skip rate for debugging (excessive skips indicate over-aggressive physics)
@@ -476,16 +517,18 @@ Time 3: Renderer checks freshness → sees B → discards work
 ### Phase 1: Snapshot Structure and Extraction
 
 **Tasks**:
+
 1. Define `RendererSnapshot` struct in new module `src/frame/renderer_snapshot.rs`
-   - **CRITICAL**: Use only std types (`Vec<[f32; 4]>` for colors, NOT ggez::Color)
-   - Add module doc comment enforcing no-ggez policy
+    - **CRITICAL**: Use only std types (`Vec<[f32; 4]>` for colors, NOT ggez::Color)
+    - Add module doc comment enforcing no-ggez policy
 2. Implement `MainContent::create_snapshot()` method
 3. Implement `size_class_to_rgba()` helper (framework-independent)
 4. Move `collect_neighbours_by_cell()` from renderer to `MainContent`
 5. Add unit tests for snapshot creation
 6. Add CI check to verify no ggez imports in `src/frame/renderer_snapshot.rs`
 
-**Validation**: 
+**Validation**:
+
 - Can create snapshot, verify field counts match ball count
 - `cargo build` succeeds with `RendererSnapshot` having zero ggez dependencies
 - `grep -r "use ggez" src/frame/renderer_snapshot.rs` returns no matches
@@ -493,15 +536,17 @@ Time 3: Renderer checks freshness → sees B → discards work
 ### Phase 2: Atomic Snapshot Publishing (Single-Threaded)
 
 **Tasks**:
+
 1. Add `arc-swap` dependency to `Cargo.toml`
 2. Replace direct renderer access with `ArcSwapOption<RendererSnapshot>` in `MainContent`
 3. Modify update loop to publish snapshots after each simulation step
 4. Modify renderer to consume snapshots instead of querying `MainContent`
-   - **ggez conversion happens here**: `snapshot.colors[i]` → `ggez::graphics::Color::from(colors[i])`
-   - Renderer module owns all ggez type conversions
+    - **ggez conversion happens here**: `snapshot.colors[i]` → `ggez::graphics::Color::from(colors[i])`
+    - Renderer module owns all ggez type conversions
 5. Remove any remaining ggez type usage from `MainContent`
 
-**Validation**: 
+**Validation**:
+
 - Single-threaded program runs correctly with snapshot indirection
 - `MainContent` has no ggez imports (verify with grep)
 - All ggez types created/used only in `src/frame/ggez/`
@@ -526,6 +571,7 @@ Time 3: Renderer checks freshness → sees B → discards work
 ### Phase 4: Freshness Checking and Performance Display
 
 **Tasks**:
+
 1. Implement snapshot identity check before present
 2. Add `simulation_step` tracking and display
 3. Add simulation rate control (±keys for steps per frame)
@@ -536,6 +582,7 @@ Time 3: Renderer checks freshness → sees B → discards work
 ### Phase 5: Optimization and Tuning
 
 **Tasks**:
+
 1. Profile allocation rate (use `heaptrack` or `valgrind --tool=massif`)
 2. Optimize snapshot creation if needed (pooling, flattening)
 3. Tune simulation rate limits to prevent runaway CPU usage
@@ -550,10 +597,12 @@ Time 3: Renderer checks freshness → sees B → discards work
 ### 1. Deadlock and Blocking
 
 **Pitfall**: Using `Mutex` or `RwLock` around snapshot can cause:
+
 - Renderer blocks physics during long GPU uploads
 - Physics blocks renderer during force calculation
 
-**Mitigation**: 
+**Mitigation**:
+
 - ✅ **Use lock-free ArcSwap**: Never blocks
 - ✅ **No shared mutable state**: Snapshots are immutable after creation
 - ⚠️ **Avoid ggez API calls from physics thread**: ggez is not thread-safe
@@ -564,11 +613,13 @@ Time 3: Renderer checks freshness → sees B → discards work
 **Pitfall**: Physics produces snapshots faster than renderer consumes, memory grows unbounded.
 
 **Mitigation**:
+
 - **ArcSwap overwrites previous snapshot**: Old snapshot dropped when refcount → 0
 - **Automatic cleanup**: Renderer holds 1 reference, slot holds 1, old snapshot has 0 → dealloc
 - **Monitor memory**: Add metrics for snapshot creation rate vs consumption rate
 
 **Formula**: Max memory = size_of::<RendererSnapshot> × (1 + concurrency_factor)
+
 - Typical: 2× snapshots in memory (one in slot, one being rendered)
 
 ### 3. Torn Reads / Data Races
@@ -576,11 +627,13 @@ Time 3: Renderer checks freshness → sees B → discards work
 **Pitfall**: Renderer reads snapshot while physics is constructing it.
 
 **Mitigation**:
+
 - ✅ **Build snapshot locally, then publish atomically**: Snapshot is fully constructed before `Arc::new`
 - ✅ **Acquire-Release semantics**: Ensures all writes visible after atomic load
 - ⚠️ **Never publish partially-initialized snapshot**
 
 **Anti-pattern to avoid**:
+
 ```rust
 // WRONG: Building snapshot in-place in shared location
 let snapshot = arc_swap.load();
@@ -588,6 +641,7 @@ snapshot.positions.push(...);  // DATA RACE!
 ```
 
 **Correct pattern**:
+
 ```rust
 // RIGHT: Build locally, publish atomically
 let mut snapshot = RendererSnapshot::new();
@@ -602,10 +656,10 @@ arc_swap.store(Arc::new(snapshot));
 **Solution** (NOT optional):
 
 - **REQUIRED**: Run ggez renderer on main thread, physics in spawned thread
-  - ✅ Only viable architecture with ggez
-  - ✅ Main thread: event loop + rendering from snapshots
-  - ✅ Spawned thread: physics simulation + snapshot publishing
-  - ✅ Communication: `Arc<ArcSwapOption<RendererSnapshot>>`
+    - ✅ Only viable architecture with ggez
+    - ✅ Main thread: event loop + rendering from snapshots
+    - ✅ Spawned thread: physics simulation + snapshot publishing
+    - ✅ Communication: `Arc<ArcSwapOption<RendererSnapshot>>`
 
 **Why physics CANNOT run on main thread**:
 
@@ -625,10 +679,12 @@ arc_swap.store(Arc::new(snapshot));
 **Pitfall**: If physics runs at 2000 Hz and renderer at 60 Hz, 1933/2000 snapshots are dropped.
 
 **Is this a problem?** No, it's the intended design!
+
 - **Goal**: Show latest state, not every state
 - **Analogy**: Camera with 60 FPS recording a 2000 Hz vibration—you see motion blur, not individual oscillations
 
 **When it IS a problem**:
+
 - User wants to "see every collision" (not possible at high simulation rates)
 - Debugging requires single-stepping (add pause/step controls)
 
@@ -639,6 +695,7 @@ arc_swap.store(Arc::new(snapshot));
 **Pitfall**: If simulation pauses, renderer keeps displaying old snapshot with stale timestamp.
 
 **Mitigation**:
+
 - Add "is_paused" flag to snapshot
 - Renderer grays out or labels stale snapshots
 - Or: Republish same snapshot each render frame when paused (simpler)
@@ -669,9 +726,9 @@ arc_swap.store(Arc::new(snapshot));
    // Main thread sends commands, physics thread processes
    ```
 
-   - ✅ Clean separation
-   - ✅ Non-blocking
-   - ❌ More complex
+    - ✅ Clean separation
+    - ✅ Non-blocking
+    - ❌ More complex
 
 2. **Shared State with Mutex** (simpler but blocking):
 
@@ -680,22 +737,24 @@ arc_swap.store(Arc::new(snapshot));
    // Both threads access for pause/add balls/etc.
    ```
 
-   - ✅ Simpler implementation
-   - ❌ Can block physics thread
-   - ⚠️ Violates lock-free design goal
+    - ✅ Simpler implementation
+    - ❌ Can block physics thread
+    - ⚠️ Violates lock-free design goal
 
 3. **Hybrid**: Snapshots for rendering, commands for control
-   - Renderer → Physics: Commands via channel
-   - Physics → Renderer: State via snapshots
-   - ✅ Best of both worlds
+    - Renderer → Physics: Commands via channel
+    - Physics → Renderer: State via snapshots
+    - ✅ Best of both worlds
 
 **Recommendation**: Start with command channel, simplify to Mutex if blocking is acceptable
 
 ### 8. Energy Plot Desynchronization
 
-**Pitfall**: Current `EnergyPlot` updates synchronously with rendering. With decoupled threads, energy data may be stale.
+**Pitfall**: Current `EnergyPlot` updates synchronously with rendering. With decoupled threads, energy data may be
+stale.
 
 **Mitigation**:
+
 - **Include energy data in snapshot**:
   ```rust
   pub struct RendererSnapshot {
@@ -711,6 +770,7 @@ arc_swap.store(Arc::new(snapshot));
 **Pitfall**: Renderer thread exits, physics thread keeps running and panics trying to access dropped resources.
 
 **Mitigation**:
+
 - Use `AtomicBool` for shutdown signal
 - Physics thread checks flag each iteration:
   ```rust
@@ -727,6 +787,7 @@ arc_swap.store(Arc::new(snapshot));
 **Pitfall**: Windows/macOS require OpenGL context on main thread.
 
 **Mitigation**:
+
 - Test on all target platforms early
 - Use conditional compilation if needed:
   ```rust
@@ -741,6 +802,7 @@ arc_swap.store(Arc::new(snapshot));
 **Pitfall**: Accidentally importing ggez types into simulation code, breaking renderer abstraction.
 
 **Example anti-patterns**:
+
 ```rust
 // WRONG: ggez type in snapshot
 use ggez::graphics::Color;
@@ -756,6 +818,7 @@ pub struct Ball2D {
 ```
 
 **Mitigation**:
+
 - **Compilation enforcement**: Add `#[cfg(test)]` compile check
   ```rust
   // In src/objects2d/mod.rs
@@ -774,7 +837,7 @@ pub struct Ball2D {
   ```bash
   # Ensure src/objects2d/ has no ggez imports
   ! grep -r "use ggez" src/objects2d/
-  ! grep -r "use ggez" src/frame/application_master/
+  ! grep -r "use ggez" src/application/core/
   ```
 
 - **Code review discipline**: Reviewer must verify snapshot uses only std/own types
@@ -784,12 +847,12 @@ pub struct Ball2D {
   //! Application master module
   //! 
   //! ARCHITECTURAL CONSTRAINT: This module must not depend on ggez.
-  //! All ggez-specific code belongs in src/frame/ggez/.
+  //! All ggez-specific code belongs in src/application/ggez/.
   ```
 
 - **Type conversion layer**: Convert in ggez module only
   ```rust
-  // In src/frame/ggez/ggez_renderer.rs
+  // In src/application/ggez/ggez_renderer.rs
   impl From<[f32; 4]> for ggez::graphics::Color {
       fn from(rgba: [f32; 4]) -> Self {
           ggez::graphics::Color::from_rgba(rgba[0], rgba[1], rgba[2], rgba[3])
@@ -802,6 +865,7 @@ pub struct Ball2D {
 **Pitfall**: Multithreaded bugs are harder to reproduce and debug.
 
 **Mitigation**:
+
 - **Extensive logging**: Log snapshot creation, consumption, skipping
 - **Thread names**: Use `std::thread::Builder` to name threads
 - **Sanitizers**: Run with ThreadSanitizer (`RUSTFLAGS="-Z sanitizer=thread"`)
@@ -821,14 +885,17 @@ pub struct Ball2D {
 ### Expected Performance Gains
 
 **Baseline** (current single-threaded):
+
 - 1000 balls: ~60 simulation steps/sec (render-limited)
 - 10,000 balls: ~20 simulation steps/sec (render-limited)
 
 **Projected** (threaded renderer):
+
 - 1000 balls: ~5000 simulation steps/sec (physics-limited, ~83× speedup)
 - 10,000 balls: ~500 simulation steps/sec (physics-limited, ~25× speedup)
 
 **Factors**:
+
 - Physics loop is ~0.2ms for 1000 balls, ~2ms for 10,000 balls
 - Rendering is ~8ms regardless (mesh generation + GPU upload)
 - Decoupling allows physics to reach CPU limits
@@ -836,6 +903,7 @@ pub struct Ball2D {
 ### Memory Overhead
 
 **Snapshot size** (10,000 balls):
+
 - Positions: 10,000 × 8 bytes (Vec2D: 2 × f32) = 80 KB
 - Colors: 10,000 × 16 bytes ([f32; 4]: 4 × f32) = 156 KB
 - Radii: 10,000 × 4 bytes (f32) = 39 KB
@@ -843,11 +911,13 @@ pub struct Ball2D {
 - **Total: ~4.05 MB per snapshot**
 
 **Concurrent snapshots**: Typically 2 (one in slot, one being rendered)
+
 - **Peak memory**: ~8.1 MB additional overhead
 - **Allocation rate**: 4.05 MB × 60 FPS = 243 MB/sec
 - Modern allocators handle this easily; jemalloc shows ~50ns/allocation
 
 **Optimization if needed**:
+
 - Reduce neighbor cutoff for visualization (don't need all neighbors)
 - Use object pooling to reuse allocations
 - Flatten neighbor Vec (saves pointer indirection)
@@ -855,12 +925,14 @@ pub struct Ball2D {
 ### CPU Usage
 
 **Current**: 1 core, 60% utilization (waiting on VSync)
-**Projected**: 
+**Projected**:
+
 - Physics thread: 1 core, 100% utilization
 - Renderer thread: 1 core, 50% utilization (waiting on VSync)
 - **Total**: ~1.5 cores
 
 **Adaptive throttling** (optional):
+
 ```rust
 if average_steps_per_frame > 100 {
     // Physics is way ahead, sleep to reduce CPU
@@ -871,23 +943,28 @@ if average_steps_per_frame > 100 {
 ### Cache Efficiency
 
 **Benefit**: Physics thread has better cache locality
+
 - Iterates over `v_points` multiple times per step without renderer interrupting
 - CPU cache stays hot on Ball2D data
 
 **Cost**: Snapshot creation copies data (cold cache for renderer)
+
 - Acceptable tradeoff: copying 4 MB is ~5ms on modern CPU with L3 cache
 
 ### SIMD and Parallelization
 
 **Current SIMD usage** (in `simd_forces.rs`):
+
 - Operates on `&[Ball2D]` directly
 
 **With snapshots**:
+
 - Physics thread still uses SIMD on original `v_points`
 - Snapshot creation is simple memcpy-style loop (could vectorize if needed)
 - No performance loss on physics side
 
 **Rayon parallelization**:
+
 - Force computation uses `par_iter()` on `v_points`
 - Snapshot creation could parallelize position/color extraction if profiling shows benefit
 
@@ -898,6 +975,7 @@ if average_steps_per_frame > 100 {
 ### Unit Tests
 
 **Snapshot Creation** (`src/frame/renderer_snapshot.rs`):
+
 ```rust
 #[test]
 fn test_snapshot_has_correct_ball_count() {
@@ -935,6 +1013,7 @@ fn test_neighbor_indices_valid() {
 ```
 
 **Atomic Operations** (`src/frame/snapshot_channel.rs`):
+
 ```rust
 #[test]
 fn test_arc_swap_publish_and_load() {
@@ -950,12 +1029,13 @@ fn test_arc_swap_publish_and_load() {
 ### Integration Tests
 
 **Threaded Execution** (`src/frame/application_master/tests.rs`):
+
 ```rust
 #[test]
 fn test_physics_thread_publishes_snapshots() {
     let (tx, rx) = std::sync::mpsc::channel();
     let snapshot_slot = Arc::new(ArcSwapOption::from(None));
-    
+
     let physics_slot = snapshot_slot.clone();
     let physics_thread = std::thread::spawn(move || {
         for i in 0..10 {
@@ -965,13 +1045,13 @@ fn test_physics_thread_publishes_snapshots() {
         }
         tx.send(()).unwrap();
     });
-    
+
     // Simulate renderer thread
     std::thread::sleep(Duration::from_millis(50));
     let snapshot = snapshot_slot.load();
     assert!(snapshot.is_some());
     assert!(snapshot.unwrap().simulation_step >= 5);
-    
+
     rx.recv().unwrap();
     physics_thread.join().unwrap();
 }
@@ -980,6 +1060,7 @@ fn test_physics_thread_publishes_snapshots() {
 ### Property-Based Tests
 
 **Snapshot Consistency** (using `proptest`):
+
 ```rust
 proptest! {
     #[test]
@@ -1004,6 +1085,7 @@ proptest! {
 ### Performance Tests
 
 **Snapshot Creation Benchmark** (using `criterion`):
+
 ```rust
 fn bench_snapshot_creation(c: &mut Criterion) {
     let content = MainContent::new_with_balls(10_000);
@@ -1020,12 +1102,13 @@ fn bench_snapshot_creation(c: &mut Criterion) {
 ### Stress Tests
 
 **High Update Rate**:
+
 ```rust
 #[test]
 fn test_high_publication_rate() {
     let snapshot_slot = Arc::new(ArcSwapOption::from(None));
     let physics_slot = snapshot_slot.clone();
-    
+
     // Physics publishes at 1000 Hz
     let physics_thread = std::thread::spawn(move || {
         for i in 0..10_000 {
@@ -1034,7 +1117,7 @@ fn test_high_publication_rate() {
             std::thread::sleep(Duration::from_micros(1000));
         }
     });
-    
+
     // Renderer consumes at 60 Hz
     let mut frames_rendered = 0;
     for _ in 0..60 {
@@ -1043,7 +1126,7 @@ fn test_high_publication_rate() {
         }
         std::thread::sleep(Duration::from_millis(16));
     }
-    
+
     physics_thread.join().unwrap();
     assert!(frames_rendered >= 55); // Allow some dropped frames
 }
@@ -1065,33 +1148,41 @@ fn test_high_publication_rate() {
 
 ## Conclusion
 
-The threaded renderer architecture represents a fundamental shift from a **frame-driven** to a **simulation-driven** model. By decoupling physics from rendering:
+The threaded renderer architecture represents a fundamental shift from a **frame-driven** to a **simulation-driven**
+model. By decoupling physics from rendering:
 
 1. **Performance**: Simulation runs 10-100× faster (limited by CPU, not VSync)
 2. **Responsiveness**: Rendering stays smooth at 60 FPS regardless of simulation complexity
 3. **Scalability**: Architecture supports future enhancements (GPU physics, remote rendering)
 
-The **latest-only snapshot paradigm** is crucial—it acknowledges that in real-time visualization, **current state matters more than historical completeness**. This aligns with the goals of molecular dynamics: explore equilibrium behavior, not replay every microsecond.
+The **latest-only snapshot paradigm** is crucial—it acknowledges that in real-time visualization, **current state
+matters more than historical completeness**. This aligns with the goals of molecular dynamics: explore equilibrium
+behavior, not replay every microsecond.
 
 **Key success factors**:
+
 - Lock-free communication (ArcSwap) for minimal contention
 - Immutable snapshots for safe cross-thread sharing
 - Freshness verification to prevent stale frame presentation
 - Comprehensive testing to catch threading bugs early
 
 **Next steps** (implementation order):
+
 1. Define snapshot structure and extraction logic
 2. Add atomic snapshot publishing (single-threaded validation)
 3. Separate threads (enable parallel execution)
 4. Add performance metrics and UI controls
 5. Optimize based on profiling data
 
-This design is robust, well-founded in concurrency theory, and directly addresses the performance bottleneck in the current architecture. The pitfalls are well-understood with clear mitigations, and the testing strategy ensures correctness before and after threading changes.
+This design is robust, well-founded in concurrency theory, and directly addresses the performance bottleneck in the
+current architecture. The pitfalls are well-understood with clear mitigations, and the testing strategy ensures
+correctness before and after threading changes.
 
 ---
 
 **Document version**: 1.0  
-**Related issue**: [#17 - Threaded renderer using latest-only snapshots](https://github.com/rabnab/molecularLenardJones/issues/17)  
+**Related issue
+**: [#17 - Threaded renderer using latest-only snapshots](https://github.com/rabnab/molecularLenardJones/issues/17)  
 **Author**: AI-assisted documentation  
 **Date**: 2025-11-15
 

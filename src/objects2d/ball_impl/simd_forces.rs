@@ -20,32 +20,42 @@
 //! 8-wide AVX2 support is a planned future optimization (see PERFORMANCE_OPTIMIZATION.md line 548).
 
 use crate::objects2d::Vec2D;
-use crate::objects2d::ball_impl::{Ball2D, BallPhysics, ForceResult, Named};
-use wide::f32x4;
+use crate::objects2d::ball_impl::{Ball2D, BallPhysics, ForceResult};
+use std::simd::prelude::SimdFloat;
+use std::simd::{StdFloat, f32x4};
 
 /// Calculate Lennard-Jones forces for multiple ball pairs using SIMD
 ///
 /// This function processes multiple neighbor interactions simultaneously using SIMD instructions.
-/// It automatically selects the best available SIMD implementation based on CPU features.
-#[multiversion::multiversion(targets("x86_64+avx2+fma", "x86_64+sse2", "aarch64+neon"))]
-pub fn force_indexed_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2D]) -> ForceResult {
+pub fn force_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2D]) -> ForceResult {
     let mut force = Vec2D::new(0., 0.);
     let mut min_dist = f32::NAN;
     let mut total_pot = 0.;
 
     let ball_pos = balls[ball_idx].get_position();
     let ball_radius = balls[ball_idx].radius;
-    let ball_verbose_console = balls[ball_idx].verbose.console;
     let neighbour_indices = balls[ball_idx].hood.get_neighbour_indices();
 
     let lj_sig = physics.constants.lj_sig;
     let lj_eps = physics.constants.lj_eps;
-    let max_force = physics.constants.max_force;
     let r_cap = physics.get_force_cap_distance();
 
     // Process neighbors in chunks of 4 for SIMD
     let chunks = neighbour_indices.chunks(4);
     let remainder_start = (neighbour_indices.len() / 4) * 4;
+
+    // Pre-calculate U(r_cap) for linear extrapolation in force-capped region
+    // This is the "anchor point" where capped and uncapped potentials meet
+
+    let pot_at_cap = {
+        let cap_quot = lj_sig / r_cap;
+        let cap_quot_six = cap_quot * cap_quot * cap_quot * cap_quot * cap_quot * cap_quot;
+        4. * lj_eps * cap_quot_six * (cap_quot_six - 1.)
+    };
+    let pot_at_cap_vec = f32x4::splat(pot_at_cap);
+
+    let max_force_vec = f32x4::splat(physics.constants.max_force);
+    let r_cap_vec = f32x4::splat(r_cap);
 
     for chunk in chunks {
         if chunk.len() == 4 {
@@ -53,17 +63,16 @@ pub fn force_indexed_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2
             let mut dx = [0.0f32; 4];
             let mut dy = [0.0f32; 4];
             let mut radii = [0.0f32; 4];
-            let mut valid_mask = [true; 4];
 
             // Gather data for 4 neighbors
             for (i, &neighbour_idx) in chunk.iter().enumerate() {
-                if let Some(b) = balls.get(neighbour_idx) {
-                    let dist_vec = b.pre_update_pos.dist(ball_pos);
+                if let Some(neighbour) = balls.get(neighbour_idx) {
+                    let dist_vec = neighbour.pre_update_pos.dist(ball_pos);
                     dx[i] = dist_vec.x;
                     dy[i] = dist_vec.y;
-                    radii[i] = b.radius;
+                    radii[i] = neighbour.radius;
                 } else {
-                    valid_mask[i] = false;
+                    panic!("Invalid neighbor index in SIMD force calculation");
                 }
             }
 
@@ -79,29 +88,19 @@ pub fn force_indexed_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2
             // Calculate edge distances
             let radius_sum = radii_vec + f32x4::splat(ball_radius);
             let edge_dist = center_dist - radius_sum;
+            let edge_dist_cap = edge_dist.simd_max(f32x4::splat(r_cap));
 
             // === Force Calculation with Capping ===
-            let r_cap_vec = f32x4::splat(r_cap);
+            //let r_cap_vec = f32x4::splat(r_cap);
 
             // Step 1: Calculate standard Lennard-Jones force
             // F_LJ(r) = 24·ε·(σ/r)^6 · [2·(σ/r)^6 - 1] / r
             // Use max() to prevent division by zero (1e-10 is safety epsilon)
-            let quot = f32x4::splat(lj_sig) / edge_dist.max(f32x4::splat(1e-10));
-            let quot_six = quot * quot * quot * quot * quot * quot; // (σ/r)^6
-            let lj_force_uncapped = f32x4::splat(24. * lj_eps)
-                * quot_six
-                * (f32x4::splat(2.) * quot_six - f32x4::splat(1.))
-                / edge_dist.max(f32x4::splat(1e-10));
-
-            // Step 2: Cap force at max_force to prevent numerical instabilities
-            // For r < r_cap: F = max_force (capped)
-            // For r >= r_cap: F = F_LJ (uncapped)
-            let max_force_vec = f32x4::splat(max_force);
-            let lj_force = lj_force_uncapped.min(max_force_vec);
+            let lj_force = physics.force_simd(edge_dist_cap);
 
             // Force direction: force / center_dist
             // Avoid division by zero: if center_dist is 0, use a small epsilon to prevent Inf/NaN
-            let safe_center_dist = center_dist.max(f32x4::splat(1e-10));
+            let safe_center_dist = center_dist.simd_max(f32x4::splat(1e-10));
             let force_to_dist = lj_force / safe_center_dist;
 
             // Calculate force components
@@ -111,103 +110,29 @@ pub fn force_indexed_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2
             // === Potential Energy Calculation with Force Capping ===
             // Standard LJ potential: U(r) = 4·ε·[(σ/r)^12 - (σ/r)^6]
             // For r < r_cap: Use linear extrapolation to preserve energy conservation
-
-            // Calculate standard LJ potential (uncapped)
-            let pot_quot = f32x4::splat(lj_sig) / edge_dist.max(f32x4::splat(1e-10));
+            // Calculate standard LJ potential (with capping)
+            let pot_quot = f32x4::splat(lj_sig) / edge_dist.simd_max(f32x4::splat(1e-10));
             let pot_quot_six = pot_quot * pot_quot * pot_quot * pot_quot * pot_quot * pot_quot;
             let potential_uncapped =
                 f32x4::splat(4. * lj_eps) * pot_quot_six * (pot_quot_six - f32x4::splat(1.));
-
-            // Pre-calculate U(r_cap) for linear extrapolation in force-capped region
-            // This is the "anchor point" where capped and uncapped potentials meet
-            let cap_quot = f32x4::splat(lj_sig / r_cap);
-            let cap_quot_six = cap_quot * cap_quot * cap_quot * cap_quot * cap_quot * cap_quot;
-            let pot_at_cap =
-                f32x4::splat(4. * lj_eps) * cap_quot_six * (cap_quot_six - f32x4::splat(1.));
-
             // Linear potential for r < r_cap: U(r) = U(r_cap) - max_force·(r - r_cap)
             // This ensures F = -dU/dr = +max_force (repulsive, constant) below r_cap
-            let potential_linear = pot_at_cap - max_force_vec * (edge_dist - r_cap_vec);
+            let potential_linear = f32x4::simd_max(
+                pot_at_cap_vec - max_force_vec * (edge_dist - r_cap_vec),
+                pot_at_cap_vec,
+            );
 
-            // Extract results and accumulate
-            let fx_arr: [f32; 4] = fx.into();
-            let fy_arr: [f32; 4] = fy.into();
-            let edge_dist_arr: [f32; 4] = edge_dist.into();
-            let pot_uncapped_arr: [f32; 4] = potential_uncapped.into();
-            let pot_linear_arr: [f32; 4] = potential_linear.into();
+            let potential_used = f32x4::simd_min(potential_linear, potential_uncapped);
 
-            for i in 0..4 {
-                if valid_mask[i] {
-                    // If overlapping, use fixed repulsive force (match scalar behavior)
-                    if edge_dist_arr[i] <= 0. {
-                        // Get direction vector from ball to neighbor
-                        if let Some(&neighbour_idx) = chunk.get(i)
-                            && let Some(b) = balls.get(neighbour_idx)
-                        {
-                            let dist_vec = b.pre_update_pos.dist(ball_pos);
-                            let center_dist = dist_vec.norm();
-                            // Avoid division by zero
-                            let force_to_dist_val = if center_dist > 0. {
-                                max_force / center_dist
-                            } else {
-                                0.0
-                            };
-                            let local_force_x = dist_vec.x * force_to_dist_val;
-                            let local_force_y = dist_vec.y * force_to_dist_val;
-                            force.x += local_force_x;
-                            force.y += local_force_y;
-                            // Potential: can set to zero or leave as is (scalar sets to zero)
-                            // total_pot += 0.0;
-                            min_dist = 0.;
-                            if ball_verbose_console || edge_dist_arr[i] < 0. {
-                                let local_force_norm = f32::sqrt(
-                                    local_force_x * local_force_x + local_force_y * local_force_y,
-                                );
-                                println!(
-                                    "\t\t {}--force: {} ({},{}) at dist: {}",
-                                    b.get_name(),
-                                    local_force_norm,
-                                    local_force_x,
-                                    local_force_y,
-                                    edge_dist_arr[i]
-                                );
-                            }
-                        }
-                    } else {
-                        // Normal force application
-                        force.x += fx_arr[i];
-                        force.y += fy_arr[i];
-
-                        // Select correct potential based on distance
-                        let pot = if edge_dist_arr[i] < r_cap {
-                            pot_linear_arr[i]
-                        } else {
-                            pot_uncapped_arr[i]
-                        };
-                        total_pot += pot;
-
-                        // Update min_dist
-                        min_dist = if f32::is_nan(min_dist) {
-                            edge_dist_arr[i]
-                        } else {
-                            f32::min(min_dist, edge_dist_arr[i])
-                        };
-                        if (ball_verbose_console || edge_dist_arr[i] < 0.)
-                            && let Some(&neighbour_idx) = chunk.get(i)
-                            && let Some(b) = balls.get(neighbour_idx)
-                        {
-                            println!(
-                                "\t\t {}--force: {} ({},{}) at dist: {}",
-                                b.get_name(),
-                                f32::sqrt(fx_arr[i] * fx_arr[i] + fy_arr[i] * fy_arr[i]),
-                                fx_arr[i],
-                                fy_arr[i],
-                                edge_dist_arr[i]
-                            );
-                        }
-                    }
-                }
-            }
+            force.x += fx.reduce_sum();
+            force.y += fy.reduce_sum();
+            total_pot += potential_used.reduce_sum();
+            let min_dist_of_chunk = edge_dist.reduce_min();
+            min_dist = if f32::is_nan(min_dist) {
+                min_dist_of_chunk
+            } else {
+                f32::min(min_dist, min_dist_of_chunk)
+            };
         }
     }
 
@@ -219,55 +144,35 @@ pub fn force_indexed_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2
             let radius_sum = b.radius + ball_radius;
             let edge_dist = center_dist - radius_sum;
 
-            if center_dist > 0. {
-                // Calculate force using physics helper
-                let lj_force = physics.lenard_jones_force(edge_dist, b.get_id());
+            if center_dist < 0. {
+                continue; // Skip self-interaction or invalid distance
+            }
 
-                let force_to_dist_val = lj_force / center_dist;
-                let local_force_x = dist_vec.x * force_to_dist_val;
-                let local_force_y = dist_vec.y * force_to_dist_val;
+            let lj_force = physics.force(edge_dist);
 
-                force.x += local_force_x;
-                force.y += local_force_y;
+            // Force direction: force / center_dist
+            // Avoid division by zero: if center_dist is 0, use a small epsilon to prevent Inf/NaN
+            let safe_center_dist = center_dist.max(1e-10);
+            let force_to_dist = lj_force / safe_center_dist;
 
-                // Potential
-                total_pot += physics.lenard_jones_potential(edge_dist);
+            // Calculate force components
+            let fx = dist_vec.x * force_to_dist;
+            let fy = dist_vec.y * force_to_dist;
 
-                // Update min_dist
-                if edge_dist > 0. {
-                    min_dist = if f32::is_nan(min_dist) {
-                        edge_dist
-                    } else {
-                        f32::min(min_dist, edge_dist)
-                    };
+            force.x += fx;
+            force.y += fy;
+
+            total_pot += physics.potential(edge_dist);
+
+            // Update min_dist
+            if edge_dist > 0. {
+                min_dist = if f32::is_nan(min_dist) {
+                    edge_dist
                 } else {
-                    min_dist = 0.;
-                }
-
-                if ball_verbose_console || edge_dist < 0. {
-                    let local_force_norm =
-                        f32::sqrt(local_force_x * local_force_x + local_force_y * local_force_y);
-                    println!(
-                        "\t\t {}--force: {} ({},{}) at dist: {}",
-                        b.get_name(),
-                        local_force_norm,
-                        local_force_x,
-                        local_force_y,
-                        edge_dist
-                    );
-                }
+                    f32::min(min_dist, edge_dist)
+                };
             } else {
-                // center_dist == 0: Two balls at exactly the same position
-                // This is a physics error that should not occur in normal simulation
-                // Set min_dist to 0 to indicate collision/error state
                 min_dist = 0.;
-                if ball_verbose_console {
-                    println!(
-                        "\t\t WARNING: ball {} and {} are at exactly the same position (center_dist = 0)",
-                        balls[ball_idx].get_name(),
-                        b.get_name()
-                    );
-                }
             }
         }
     }
@@ -296,71 +201,6 @@ mod tests {
     }
 
     #[test]
-    fn test_simd_vs_scalar_single_pair() {
-        let physics = BallPhysics::default();
-
-        // Create two balls at a specific distance
-        let mut ball_a = Ball2D::new(0, Vec2D::new(0.0, 0.0), (0, 1.0));
-        let ball_b = Ball2D::new(1, Vec2D::new(3.0, 0.0), (0, 1.0));
-
-        // Set up neighbor list
-        ball_a.hood.add_neighbour(1);
-
-        let balls = vec![ball_a, ball_b];
-
-        // Calculate with scalar version
-        let scalar_result = physics.force_indexed(0, &balls);
-
-        // Calculate with SIMD version
-        let simd_result = force_indexed_simd(&physics, 0, &balls);
-
-        // Results should match within floating point precision
-        approx(scalar_result.force.x, simd_result.force.x, 1e-5);
-        approx(scalar_result.force.y, simd_result.force.y, 1e-5);
-        approx(
-            scalar_result.potential_energy,
-            simd_result.potential_energy,
-            1e-5,
-        );
-        approx(scalar_result.min_dist, simd_result.min_dist, 1e-5);
-    }
-
-    #[test]
-    fn test_simd_vs_scalar_multiple_neighbors() {
-        let physics = BallPhysics::default();
-
-        // Create a ball with 8 neighbors (tests both SIMD chunks and remainder)
-        let mut ball_a = Ball2D::new(0, Vec2D::new(0.0, 0.0), (0, 1.0));
-
-        // Add 8 neighbors in a circle
-        for i in 1..=8 {
-            ball_a.hood.add_neighbour(i);
-        }
-
-        let mut balls = vec![ball_a];
-        for i in 1..=8 {
-            let angle = (i as f32) * std::f32::consts::PI * 2.0 / 8.0;
-            let x = 3.0 * angle.cos();
-            let y = 3.0 * angle.sin();
-            balls.push(Ball2D::new(i, Vec2D::new(x, y), (0, 1.0)));
-        }
-
-        // Calculate with both methods
-        let scalar_result = physics.force_indexed(0, &balls);
-        let simd_result = force_indexed_simd(&physics, 0, &balls);
-
-        // Results should match within floating point precision
-        approx(scalar_result.force.x, simd_result.force.x, 1e-4);
-        approx(scalar_result.force.y, simd_result.force.y, 1e-4);
-        approx(
-            scalar_result.potential_energy,
-            simd_result.potential_energy,
-            1e-4,
-        );
-        approx(scalar_result.min_dist, simd_result.min_dist, 1e-5);
-    }
-
-    #[test]
     fn test_simd_energy_conservation() {
         let physics = BallPhysics::default();
 
@@ -371,7 +211,7 @@ mod tests {
         ball_a.hood.add_neighbour(1);
         let balls = vec![ball_a, ball_b];
 
-        let result = force_indexed_simd(&physics, 0, &balls);
+        let result = force_simd(&physics, 0, &balls);
 
         // Force should be finite
         assert!(result.force.x.is_finite());
@@ -399,17 +239,10 @@ mod tests {
 
         let balls = vec![ball_a, ball_b];
 
-        // Calculate with scalar version
-        let scalar_result = physics.force_indexed(0, &balls);
-
         // Calculate with SIMD version
-        let simd_result = force_indexed_simd(&physics, 0, &balls);
+        let simd_result = force_simd(&physics, 0, &balls);
 
         // When balls overlap (edge_dist < 0), both should set min_dist to 0.0
-        assert_eq!(
-            scalar_result.min_dist, 0.0,
-            "Scalar min_dist should be 0.0 for overlapping balls"
-        );
         assert_eq!(
             simd_result.min_dist, 0.0,
             "SIMD min_dist should be 0.0 for overlapping balls"
@@ -418,12 +251,90 @@ mod tests {
         // Both scalar and SIMD now use max_force when edge_dist <= 0
         // They should produce the same repulsive forces in the same direction
         assert!(
-            scalar_result.force.x < 0.0,
-            "Scalar force should be repulsive (negative x)"
-        );
-        assert!(
             simd_result.force.x < 0.0,
             "SIMD force should be repulsive (negative x)"
         );
+    }
+
+    #[test]
+    fn test_simd_potential_energy_correctness() {
+        let physics = BallPhysics::default();
+
+        // Test Case 1: Single neighbor at various distances
+        // We'll verify that the SIMD potential matches the scalar physics.potential() method
+        let test_distances = vec![
+            0.5,      // Very close (force-capped region)
+            0.8,      // Still in capped region
+            1.0,      // Near sigma
+            1.122462, // Equilibrium distance (2^(1/6) * sigma)
+            2.0,      // Beyond equilibrium
+            3.0,      // Far away
+        ];
+
+        for &center_dist in &test_distances {
+            let mut ball_a = Ball2D::new(0, Vec2D::new(0.0, 0.0), (0, 1.0));
+            let ball_b = Ball2D::new(1, Vec2D::new(center_dist, 0.0), (0, 1.0));
+
+            ball_a.hood.add_neighbour(1);
+            let balls = vec![ball_a, ball_b];
+
+            // Calculate edge distance
+            let edge_dist = center_dist - 2.0; // Both radii = 1.0
+
+            // Get SIMD result
+            let simd_result = force_simd(&physics, 0, &balls);
+
+            // Calculate expected potential using scalar method
+            let expected_potential = physics.potential(edge_dist);
+
+            // Verify SIMD potential matches scalar potential
+            approx(simd_result.potential_energy, expected_potential, 1e-5);
+        }
+
+        // Test Case 2: Multiple neighbors
+        // Verify that total potential is the sum of individual pair potentials
+        let mut ball_a = Ball2D::new(0, Vec2D::new(0.0, 0.0), (0, 1.0));
+        let ball_b = Ball2D::new(1, Vec2D::new(2.5, 0.0), (0, 1.0));
+        let ball_c = Ball2D::new(2, Vec2D::new(0.0, 3.0), (0, 1.0));
+        let ball_d = Ball2D::new(3, Vec2D::new(3.5, 3.5), (0, 1.0));
+
+        ball_a.hood.add_neighbour(1);
+        ball_a.hood.add_neighbour(2);
+        ball_a.hood.add_neighbour(3);
+
+        let balls = vec![ball_a, ball_b, ball_c, ball_d];
+
+        let simd_result = force_simd(&physics, 0, &balls);
+
+        // Calculate expected total potential manually
+        let edge_dist_ab = 2.5 - 2.0; // 0.5
+        let edge_dist_ac = 3.0 - 2.0; // 1.0
+        let edge_dist_ad = ((3.5 * 3.5 + 3.5 * 3.5) as f32).sqrt() - 2.0; // ~2.95
+
+        let expected_total = physics.potential(edge_dist_ab)
+            + physics.potential(edge_dist_ac)
+            + physics.potential(edge_dist_ad);
+
+        approx(simd_result.potential_energy, expected_total, 1e-4);
+
+        // Test Case 3: Verify force-capped region uses linear potential
+        // When edge_dist < r_cap, potential should follow linear extrapolation
+        let r_cap = physics.get_force_cap_distance();
+        let edge_dist_capped = r_cap * 0.5; // Well below r_cap
+
+        let mut ball_a = Ball2D::new(0, Vec2D::new(0.0, 0.0), (0, 1.0));
+        let ball_b = Ball2D::new(1, Vec2D::new(edge_dist_capped + 2.0, 0.0), (0, 1.0));
+
+        ball_a.hood.add_neighbour(1);
+        let balls = vec![ball_a, ball_b];
+
+        let simd_result = force_simd(&physics, 0, &balls);
+
+        // Expected linear potential: U(r) = U(r_cap) - max_force·(r - r_cap)
+        let pot_at_cap = physics.constants.pot_at_cap;
+        let max_force = physics.constants.max_force;
+        let expected_linear_pot = pot_at_cap - max_force * (edge_dist_capped - r_cap);
+
+        approx(simd_result.potential_energy, expected_linear_pot, 1e-4);
     }
 }
