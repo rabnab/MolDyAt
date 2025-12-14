@@ -21,13 +21,30 @@ impl MainContent {
             )
             .unwrap_or_else(|| size_class_to_rgba(ball.get_size_idx()));
 
+            // Calculate force magnitudes for each neighbor (for visualization only)
+            let neighbors: Vec<(usize, f32)> = ball
+                .hood
+                .get_neighbour_indices()
+                .iter()
+                .filter_map(|&neighbor_idx| {
+                    self.balls.get(neighbor_idx).map(|neighbor| {
+                        let center_dist = ball.get_position().dist(neighbor.get_position()).norm();
+                        let edge_dist = center_dist - (ball.get_radius() + neighbor.get_radius());
+                        let force_magnitude = self.physics.force(edge_dist);
+                        (neighbor_idx, force_magnitude)
+                    })
+                })
+                .collect();
+
             balls.push(BallRenderData {
                 id: ball.get_id(),
                 size_idx: ball.get_size_idx(),
                 position: ball.get_position().clone(),
                 color,
                 radius: ball.get_radius(),
-                neighbors: ball.hood.get_neighbour_indices().to_vec(),
+                show_neighbor_lines: ball.verbose.lines(),
+                show_main_neighbors_only: ball.verbose.is_main(),
+                neighbors,
             });
         }
 
