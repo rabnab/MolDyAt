@@ -79,8 +79,7 @@ pub trait Renderer {
         backend: &mut dyn DrawingBackend,
         snapshot: &crate::application::renderer_snapshot::RendererSnapshot,
     ) -> AppResult<()> {
-        // For now, just draw ball symbols from snapshot
-        // TODO: Add support for verbose balls, neighbors, etc. from snapshot
+        // Draw ball symbols and neighbor lines from snapshot
         self.draw_balls_from_snapshot_data(backend, snapshot)?;
         Ok(())
     }

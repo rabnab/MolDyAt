@@ -46,9 +46,16 @@ pub struct BallRenderData {
     /// Ball radius for rendering (must be positive and finite)
     pub radius: f32,
 
-    /// Indices of this ball's neighbors in the snapshot
-    /// Used for visualizing neighbor relationships
-    pub neighbors: Vec<usize>,
+    /// Whether to draw neighbor lines for this ball (verbose mode)
+    pub show_neighbor_lines: bool,
+
+    /// Whether this ball shows only main neighbors (stronger forces)
+    pub show_main_neighbors_only: bool,
+
+    /// Indices of this ball's neighbors in the snapshot with force magnitudes
+    /// Each entry is (neighbor_index, force_magnitude)
+    /// Used for visualizing neighbor relationships with color-coded force strength
+    pub neighbors: Vec<(usize, f32)>,
 }
 
 /// A snapshot of simulation state for rendering.
