@@ -24,7 +24,7 @@ impl MainContent {
             step_by_step: false,
             step_count: 0,
             show_timings: false,
-            show_ball_stats: false,
+            show_ball_stats: true,
             resize_resume_at: None,
             was_paused_for_resize: false,
             update_hood_at_frame_start: 0,
