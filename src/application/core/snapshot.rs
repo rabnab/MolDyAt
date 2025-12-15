@@ -27,7 +27,7 @@ impl MainContent {
                 // Use cached force magnitudes from last physics step
                 self.cached_force_results[ball_idx].neighbor_forces.clone()
             } else {
-                // Fallback: no cached data available (shouldn't happen in normal operation)
+                // Fallback: no cached data available (e.g., during initial snapshots before first physics step)
                 Vec::new()
             };
 
