@@ -239,6 +239,7 @@ impl Renderer for GgezRenderer {
         }
         backend.draw_line_batch()?;
 
+
         // Then, draw balls from snapshot data (on top of lines)
         for ball in &snapshot.balls {
             let ball_coord_px = self.window_def.borrow().coord_to_px(&ball.position);
@@ -249,6 +250,56 @@ impl Renderer for GgezRenderer {
                 [ball_coord_px.x, ball_coord_px.y],
                 false,
             )?;
+        }
+
+        Ok(())
+    }
+
+    /// Draw neighbor lines for a ball from snapshot data
+    /// This replicates the logic from draw_neighbour_lines but uses snapshot data
+    fn draw_neighbor_lines_from_snapshot(
+        &self,
+        backend: &mut dyn DrawingBackend,
+        ball: &crate::application::renderer_snapshot::BallRenderData,
+        all_balls: &[crate::application::renderer_snapshot::BallRenderData],
+    ) -> AppResult {
+        let ball_coord_px = self.window_def.borrow().coord_to_px(&ball.position);
+        let start: [f32; 2] = [ball_coord_px.x, ball_coord_px.y];
+
+        // Find max force to determine main neighbors
+        let max_force = ball
+            .neighbors
+            .iter()
+            .map(|(_, force)| *force)
+            .reduce(f32::max)
+            .unwrap_or(0.0);
+
+        // Draw lines to neighbors
+        for (neighbor_idx, force_magnitude) in &ball.neighbors {
+            let is_main = *force_magnitude > 0.5 * max_force;
+
+            // Skip non-main neighbors if this ball only shows main neighbors
+            if ball.show_main_neighbors_only && !is_main {
+                continue;
+            }
+
+            // Determine line color based on force magnitude
+            let color_line = if *force_magnitude > 0.0 {
+                if is_main {
+                    Color::CYAN
+                } else {
+                    Color::from_rgb(128, 128, 128)
+                }
+            } else {
+                Color::from_rgb(64, 64, 64)
+            };
+
+            // Get neighbor position and draw line
+            if let Some(neighbor) = all_balls.get(*neighbor_idx) {
+                let neighbor_pos_px = self.window_def.borrow().coord_to_px(&neighbor.position);
+                let end: [f32; 2] = [neighbor_pos_px.x, neighbor_pos_px.y];
+                backend.draw_line(&[start, end], 2.0, color_line.to_rgba())?;
+            }
         }
 
         Ok(())
