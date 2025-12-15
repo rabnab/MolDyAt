@@ -4,7 +4,7 @@
 		"ghcr.io/devcontainers/features/rust:1": {
 			"version": "latest",
 			"profile": "minimal",
-			"targets": "x86_64-unknown-redox,x86_64-unknown-uefi",
+			"targets": "wasm32-unknown-unknown",
 			"components": "rust-analyzer,rust-src,rustfmt,clippy"
 		}
 	},
