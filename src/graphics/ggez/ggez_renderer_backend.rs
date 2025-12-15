@@ -381,6 +381,44 @@ impl<'a> DrawingBackend for GgezBackend<'a> {
         Ok(())
     }
 
+    fn begin_line_batch(&mut self) {
+        self.cache.neighbor_lines_builder = Some(MeshBuilder::new());
+    }
+
+    fn add_line_to_batch(
+        &mut self,
+        points: &[[f32; 2]; 2],
+        width: f32,
+        color: (u8, u8, u8, u8),
+    ) -> AppResult {
+        let ggez_color = Color::from(color);
+        let ggez_points: [Point2<f32>; 2] = [
+            Point2 {
+                x: points[0][0],
+                y: points[0][1],
+            },
+            Point2 {
+                x: points[1][0],
+                y: points[1][1],
+            },
+        ];
+        if let Some(builder) = &mut self.cache.neighbor_lines_builder {
+            builder.line(&ggez_points, width, ggez_color)?;
+        }
+        Ok(())
+    }
+
+    fn draw_line_batch(&mut self) -> AppResult {
+        if let Some(builder) = self.cache.neighbor_lines_builder.take() {
+            let mesh = Mesh::from_data(self.ctx, builder.build());
+            self.canvas
+                .as_mut()
+                .unwrap()
+                .draw(&mesh, DrawParam::default());
+        }
+        Ok(())
+    }
+
     fn finish_frame(&mut self) -> AppResult {
         let c = self.canvas.take().expect("canvas already taken");
         Ok(c.finish(self.ctx)?)
@@ -395,6 +433,7 @@ pub struct GgezMeshCache {
     pub line_vkin_builder: Option<MeshBuilder>,
     pub line_vpot_builder: Option<MeshBuilder>,
     pub line_vtot_builder: Option<MeshBuilder>,
+    pub neighbor_lines_builder: Option<MeshBuilder>,
     pub(super) crosshair_mesh: Option<Mesh>,
     pub(super) ball_mesh: Vec<Mesh>,
     // caches for text to avoid re-allocating Text each application
@@ -413,6 +452,7 @@ impl Default for GgezMeshCache {
             line_vkin_builder: None,
             line_vpot_builder: None,
             line_vtot_builder: None,
+            neighbor_lines_builder: None,
             crosshair_mesh: None,
             ball_mesh: vec![],
             text_cache: LruCache::new(NonZeroUsize::new(4096).unwrap()),

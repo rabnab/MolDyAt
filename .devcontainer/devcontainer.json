@@ -1,0 +1,12 @@
+{
+	"image": "mcr.microsoft.com/devcontainers/universal:2",
+	"features": {
+		"ghcr.io/devcontainers/features/rust:1": {
+			"version": "latest",
+			"profile": "minimal",
+			"targets": "wasm32-unknown-unknown",
+			"components": "rust-analyzer,rust-src,rustfmt,clippy"
+		}
+	},
+	"postCreateCommand": "sudo apt-get update && sudo apt-get install -y libudev-dev"
+}

@@ -171,6 +171,9 @@ pub struct ForceResult {
     pub force: Vec2D,
     /// Total potential energy from all neighbor interactions
     pub potential_energy: f32,
+    /// Per-neighbor force magnitudes for visualization (neighbor_idx, force_magnitude)
+    /// Only populated when needed for rendering neighbor lines
+    pub neighbor_forces: Vec<(usize, f32)>,
 }
 
 #[derive(Clone)]
