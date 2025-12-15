@@ -13,7 +13,7 @@ impl MainContent {
         let mut balls = Vec::with_capacity(ball_count);
 
         // Create BallRenderData for each ball
-        for ball in &self.balls {
+        for (ball_idx, ball) in self.balls.iter().enumerate() {
             // Determine color: special colors (verbose/braking) override size class color
             let color = get_special_ball_color(
                 ball.verbose.console || ball.verbose.lines(),
@@ -21,20 +21,15 @@ impl MainContent {
             )
             .unwrap_or_else(|| size_class_to_rgba(ball.get_size_idx()));
 
-            // Calculate force magnitudes for each neighbor (for visualization only)
-            let neighbors: Vec<(usize, f32)> = ball
-                .hood
-                .get_neighbour_indices()
-                .iter()
-                .filter_map(|&neighbor_idx| {
-                    self.balls.get(neighbor_idx).map(|neighbor| {
-                        let center_dist = ball.get_position().dist(neighbor.get_position()).norm();
-                        let edge_dist = center_dist - (ball.get_radius() + neighbor.get_radius());
-                        let force_magnitude = self.physics.force(edge_dist);
-                        (neighbor_idx, force_magnitude)
-                    })
-                })
-                .collect();
+            // Reuse force magnitudes from cached SIMD computation (if available)
+            // This avoids wasteful recalculation of forces that were already computed
+            let neighbors: Vec<(usize, f32)> = if ball_idx < self.cached_force_results.len() {
+                // Use cached force magnitudes from last physics step
+                self.cached_force_results[ball_idx].neighbor_forces.clone()
+            } else {
+                // Fallback: no cached data available (shouldn't happen in normal operation)
+                Vec::new()
+            };
 
             balls.push(BallRenderData {
                 id: ball.get_id(),
@@ -224,7 +219,7 @@ mod tests {
 
         // All neighbor indices should be valid (< ball count)
         for (i, ball_data) in snapshot.balls.iter().enumerate() {
-            for &neighbor_idx in &ball_data.neighbors {
+            for &(neighbor_idx, _force) in &ball_data.neighbors {
                 assert!(
                     neighbor_idx < snapshot.len(),
                     "Ball {} has invalid neighbor index {}",

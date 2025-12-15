@@ -305,7 +305,9 @@ impl Renderer for GgezRenderer {
 
         Ok(())
     }
+}
 
+impl GgezRenderer {
     /// Draw neighbor lines for a ball from snapshot data
     /// This replicates the logic from draw_neighbour_lines but uses snapshot data
     fn draw_neighbor_lines_from_snapshot(
@@ -355,9 +357,7 @@ impl Renderer for GgezRenderer {
 
         Ok(())
     }
-}
 
-impl GgezRenderer {
     // Move the cache out without cloning (leaves an empty/default cache behind).
     // Ensure GgezMeshCache implements Default (or create a proper empty value).
     pub fn take_cache(&mut self) -> GgezMeshCache {

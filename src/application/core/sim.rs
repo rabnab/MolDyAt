@@ -217,6 +217,10 @@ impl VerletIntegration for MainContent {
 
         // Compute forces in parallel with SIMD, then apply updates and bounces
         let force_results = self.compute_forces();
+
+        // Cache force results for reuse in rendering (avoid recalculating forces)
+        self.cached_force_results = force_results.clone();
+
         let (wall_px, wall_py) = self.apply_forces_and_collect_stats(
             &force_results,
             &bounce_infos,

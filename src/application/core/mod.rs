@@ -4,7 +4,7 @@ use crate::application::game_logic::GameLogicData;
 use crate::application::renderer_snapshot::RendererSnapshot;
 use crate::application::sim_stats::SimStats;
 use crate::objects2d::ball_cell::cell_grid::CellGrid;
-use crate::objects2d::ball_impl::{Ball2D, BallPhysics};
+use crate::objects2d::ball_impl::{Ball2D, BallPhysics, ForceResult};
 use crate::objects2d::{Rect, Vec2D, VerboseInfoMode};
 use arc_swap::ArcSwapOption;
 use std::sync::Arc;
@@ -35,6 +35,8 @@ pub struct MainContent {
     snapshot_slot: Arc<ArcSwapOption<RendererSnapshot>>,
     /// ms to wait between simulation steps
     wait_time: u64,
+    /// Cached force results from last physics step for reuse in rendering
+    cached_force_results: Vec<ForceResult>,
 }
 
 pub struct StatsAccumulator {

@@ -31,6 +31,7 @@ pub fn force_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2D]) -> F
     let mut force = Vec2D::new(0., 0.);
     let mut min_dist = f32::NAN;
     let mut total_pot = 0.;
+    let mut neighbor_forces = Vec::new();
 
     let ball_pos = balls[ball_idx].get_position();
     let ball_radius = balls[ball_idx].radius;
@@ -133,6 +134,12 @@ pub fn force_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2D]) -> F
             } else {
                 f32::min(min_dist, min_dist_of_chunk)
             };
+
+            // Store per-neighbor force magnitudes for visualization
+            let lj_force_array: [f32; 4] = lj_force.to_array();
+            for (i, &neighbour_idx) in chunk.iter().enumerate() {
+                neighbor_forces.push((neighbour_idx, lj_force_array[i]));
+            }
         }
     }
 
@@ -164,6 +171,9 @@ pub fn force_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2D]) -> F
 
             total_pot += physics.potential(edge_dist);
 
+            // Store per-neighbor force magnitude for visualization
+            neighbor_forces.push((neighbour_idx, lj_force));
+
             // Update min_dist
             if edge_dist > 0. {
                 min_dist = if f32::is_nan(min_dist) {
@@ -181,6 +191,7 @@ pub fn force_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2D]) -> F
         min_dist,
         force,
         potential_energy: total_pot,
+        neighbor_forces,
     }
 }
 
