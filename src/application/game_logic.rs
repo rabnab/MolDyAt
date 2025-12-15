@@ -133,8 +133,9 @@ impl MainContent {
                 let (num_neighbours, nearest, farthest) =
                     Verlet::compute_neighbor_stats(&ball_pos, &neighbour_indices, &self.balls);
 
-                let should_toggle = (!verbose_lines && num_neighbours > 100)
-                    || (verbose_lines && num_neighbours <= 100);
+                let should_toggle = !verbose_lines && num_neighbours > 100
+                    //|| (verbose_lines && num_neighbours <= 100)
+                    ;
 
                 (
                     num_neighbours,

@@ -126,88 +126,6 @@ impl Renderer for GgezRenderer {
         Ok(())
     }
 
-    fn draw_neighbour_lines(
-        &self,
-        backend: &mut dyn DrawingBackend,
-        ball: &Ball2D,
-        balls: &[Ball2D],
-    ) -> AppResult {
-        let ball_coord_px = self.window_def.borrow().coord_to_px(ball.get_position());
-
-        let neighbour_info = match &self.physics {
-            Some(physics) => physics.get_neighbour_force_and_pos(ball, balls),
-            None => vec![],
-        };
-        let start: [f32; 2] = [ball_coord_px.x, ball_coord_px.y];
-        let max_force = neighbour_info
-            .iter()
-            .map(|info| info.1)
-            .reduce(f32::max)
-            .unwrap_or(0.);
-        for (other_pos, other_force_ref) in neighbour_info.iter() {
-            let other_force = *other_force_ref;
-            let is_main = other_force > 0.5 * max_force;
-            if ball.verbose.is_main() && !is_main {
-                continue;
-            }
-            let color_line = if other_force > 0. {
-                if is_main {
-                    Color::CYAN
-                } else {
-                    Color::from_rgb(128, 128, 128)
-                }
-            } else {
-                Color::from_rgb(64, 64, 64)
-            };
-            let other_pos_px = self.window_def.borrow().coord_to_px(other_pos);
-            let end: [f32; 2] = [other_pos_px.x, other_pos_px.y];
-            // Create a line mesh
-            backend.draw_line(&[start, end], 2.0, color_line.to_rgba())?;
-        }
-        Ok(())
-    }
-
-    fn add_neighbour_lines_to_batch(
-        &self,
-        backend: &mut dyn DrawingBackend,
-        ball: &Ball2D,
-        balls: &[Ball2D],
-    ) -> AppResult {
-        let ball_coord_px = self.window_def.borrow().coord_to_px(ball.get_position());
-
-        let neighbour_info = match &self.physics {
-            Some(physics) => physics.get_neighbour_force_and_pos(ball, balls),
-            None => vec![],
-        };
-        let start: [f32; 2] = [ball_coord_px.x, ball_coord_px.y];
-        let max_force = neighbour_info
-            .iter()
-            .map(|info| info.1)
-            .reduce(f32::max)
-            .unwrap_or(0.);
-        for (other_pos, other_force_ref) in neighbour_info.iter() {
-            let other_force = *other_force_ref;
-            let is_main = other_force > 0.5 * max_force;
-            if ball.verbose.is_main() && !is_main {
-                continue;
-            }
-            let color_line = if other_force > 0. {
-                if is_main {
-                    Color::CYAN
-                } else {
-                    Color::from_rgb(128, 128, 128)
-                }
-            } else {
-                Color::from_rgb(64, 64, 64)
-            };
-            let other_pos_px = self.window_def.borrow().coord_to_px(other_pos);
-            let end: [f32; 2] = [other_pos_px.x, other_pos_px.y];
-            // Add to batch instead of drawing immediately
-            backend.add_line_to_batch(&[start, end], 2.0, color_line.to_rgba())?;
-        }
-        Ok(())
-    }
-
     // todo!()
     // fn draw_all_ball_tails(
     //     &self,
@@ -307,30 +225,19 @@ impl Renderer for GgezRenderer {
         self.window_def.borrow().compute_world_bounds_rect()
     }
 
-    fn draw_single_ball(&self, backend: &mut dyn DrawingBackend, ball: &Ball2D) -> AppResult {
-        let ball_coord_px = self.window_def.borrow().coord_to_px(ball.get_position());
-
-        backend.draw_ball_mesh(
-            ball.id,
-            ball.size_idx,
-            [ball_coord_px.x, ball_coord_px.y],
-            false,
-        )?;
-
-        Ok(())
-    }
-
     fn draw_balls_from_snapshot_data(
         &self,
         backend: &mut dyn DrawingBackend,
         snapshot: &crate::application::renderer_snapshot::RendererSnapshot,
     ) -> AppResult {
-        // First, draw neighbor lines for verbose balls
+        // Batch all neighbor lines for efficient rendering
+        backend.begin_line_batch();
         for ball in &snapshot.balls {
             if ball.show_neighbor_lines {
-                self.draw_neighbor_lines_from_snapshot(backend, ball, &snapshot.balls)?;
+                self.add_neighbor_lines_from_snapshot_to_batch(backend, ball, &snapshot.balls)?;
             }
         }
+        backend.draw_line_batch()?;
 
         // Then, draw balls from snapshot data (on top of lines)
         for ball in &snapshot.balls {
@@ -349,9 +256,8 @@ impl Renderer for GgezRenderer {
 }
 
 impl GgezRenderer {
-    /// Draw neighbor lines for a ball from snapshot data
-    /// This replicates the logic from draw_neighbour_lines but uses snapshot data
-    fn draw_neighbor_lines_from_snapshot(
+    /// Add neighbor lines to batch for a ball from snapshot data (batched mode - efficient)
+    fn add_neighbor_lines_from_snapshot_to_batch(
         &self,
         backend: &mut dyn DrawingBackend,
         ball: &crate::application::renderer_snapshot::BallRenderData,
@@ -368,7 +274,7 @@ impl GgezRenderer {
             .reduce(f32::max)
             .unwrap_or(0.0);
 
-        // Draw lines to neighbors
+        // Add lines to batch
         for (neighbor_idx, force_magnitude) in &ball.neighbors {
             let is_main = *force_magnitude > 0.5 * max_force;
 
@@ -388,11 +294,11 @@ impl GgezRenderer {
                 Color::from_rgb(64, 64, 64)
             };
 
-            // Get neighbor position and draw line
+            // Get neighbor position and add line to batch
             if let Some(neighbor) = all_balls.get(*neighbor_idx) {
                 let neighbor_pos_px = self.window_def.borrow().coord_to_px(&neighbor.position);
                 let end: [f32; 2] = [neighbor_pos_px.x, neighbor_pos_px.y];
-                backend.draw_line(&[start, end], 2.0, color_line.to_rgba())?;
+                backend.add_line_to_batch(&[start, end], 2.0, color_line.to_rgba())?;
             }
         }
 

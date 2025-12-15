@@ -2,7 +2,7 @@ use crate::application::AppResult;
 use crate::graphics::renderer::dummy_renderer::DummyRenderer;
 use crate::graphics::window::window_definition::WindowDefinition;
 use crate::objects2d::ball_cell::cell_grid::CellGrid;
-use crate::objects2d::ball_impl::{Ball2D, BallPhysics};
+use crate::objects2d::ball_impl::BallPhysics;
 use std::collections::VecDeque;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -78,14 +78,6 @@ pub trait Renderer {
     fn add_vkin_to_line(&mut self, v_kin: &VecDeque<f32>) -> AppResult;
     fn add_vpot_to_line(&mut self, v_pot: &VecDeque<f32>) -> AppResult;
     fn add_vtot_to_line(&mut self, v_kin: &VecDeque<f32>, v_pot: &VecDeque<f32>) -> AppResult;
-    fn draw_balls(&mut self, backend: &mut dyn DrawingBackend, balls: &[Ball2D]) -> AppResult<()> {
-        let verbose_ball_indices = get_verbose_ball_indices(balls);
-        self.draw_verbose_balls(backend, &verbose_ball_indices, balls)?;
-        // self.draw_all_ball_tails(backend, &balls)?; todo!()
-        self.draw_all_balls_symbol(backend, balls)?;
-
-        Ok(())
-    }
 
     /// Draw balls from snapshot (new threaded architecture)
     fn draw_balls_from_snapshot(
@@ -105,36 +97,6 @@ pub trait Renderer {
         snapshot: &crate::application::renderer_snapshot::RendererSnapshot,
     ) -> AppResult;
 
-    fn draw_verbose_balls(
-        &self,
-        backend: &mut dyn DrawingBackend,
-        verbose_ball_indices: &[usize],
-        all_balls: &[Ball2D],
-    ) -> AppResult {
-        // Batch all neighbor lines for efficient rendering
-        backend.begin_line_batch();
-        for &ball_idx in verbose_ball_indices.iter() {
-            let ball = &all_balls[ball_idx];
-            self.add_neighbour_lines_to_batch(backend, ball, all_balls)?;
-        }
-        backend.draw_line_batch()?;
-        Ok(())
-    }
-    fn draw_neighbour_lines(
-        &self,
-        backend: &mut dyn DrawingBackend,
-        ball: &Ball2D,
-        balls: &[Ball2D],
-    ) -> AppResult;
-
-    /// Add neighbor lines to batch instead of drawing immediately (for performance)
-    fn add_neighbour_lines_to_batch(
-        &self,
-        backend: &mut dyn DrawingBackend,
-        ball: &Ball2D,
-        balls: &[Ball2D],
-    ) -> AppResult;
-
     fn draw_cursor(&self, backend: &mut dyn DrawingBackend, size_idx: usize) -> AppResult;
     fn draw_plot(&mut self) -> AppResult;
     fn draw_frame(
@@ -149,28 +111,8 @@ pub trait Renderer {
 
     fn resize(&mut self, width: f32, height: f32);
     fn get_world_region(&self) -> crate::objects2d::Rect;
-    fn draw_single_ball(&self, backend: &mut dyn DrawingBackend, ball: &Ball2D) -> AppResult;
-    fn draw_all_balls_symbol(
-        &self,
-        backend: &mut dyn DrawingBackend,
-        balls: &[Ball2D],
-    ) -> AppResult {
-        for ball in balls {
-            self.draw_single_ball(backend, ball)?;
-        }
-        Ok(())
-    }
 
     fn set_physics_engine(&mut self, engine: BallPhysics);
-}
-
-fn get_verbose_ball_indices(balls: &[Ball2D]) -> Vec<usize> {
-    balls
-        .iter()
-        .enumerate()
-        .filter(|(_, ball)| ball.verbose.lines())
-        .map(|(idx, _)| idx)
-        .collect()
 }
 
 pub(crate) fn is_number_continue(ch: char) -> bool {
