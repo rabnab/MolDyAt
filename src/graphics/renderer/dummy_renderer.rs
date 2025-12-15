@@ -44,6 +44,15 @@ impl Renderer for DummyRenderer {
         todo!()
     }
 
+    fn add_neighbour_lines_to_batch(
+        &self,
+        backend: &mut dyn DrawingBackend,
+        ball: &Ball2D,
+        balls: &[Ball2D],
+    ) -> AppResult {
+        todo!()
+    }
+
     fn draw_cursor(&self, backend: &mut dyn DrawingBackend, size_idx: usize) -> AppResult {
         todo!()
     }

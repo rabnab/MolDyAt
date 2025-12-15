@@ -167,6 +167,47 @@ impl Renderer for GgezRenderer {
         Ok(())
     }
 
+    fn add_neighbour_lines_to_batch(
+        &self,
+        backend: &mut dyn DrawingBackend,
+        ball: &Ball2D,
+        balls: &[Ball2D],
+    ) -> AppResult {
+        let ball_coord_px = self.window_def.borrow().coord_to_px(ball.get_position());
+
+        let neighbour_info = match &self.physics {
+            Some(physics) => physics.get_neighbour_force_and_pos(ball, balls),
+            None => vec![],
+        };
+        let start: [f32; 2] = [ball_coord_px.x, ball_coord_px.y];
+        let max_force = neighbour_info
+            .iter()
+            .map(|info| info.1)
+            .reduce(f32::max)
+            .unwrap_or(0.);
+        for (other_pos, other_force_ref) in neighbour_info.iter() {
+            let other_force = *other_force_ref;
+            let is_main = other_force > 0.5 * max_force;
+            if ball.verbose.is_main() && !is_main {
+                continue;
+            }
+            let color_line = if other_force > 0. {
+                if is_main {
+                    Color::CYAN
+                } else {
+                    Color::from_rgb(128, 128, 128)
+                }
+            } else {
+                Color::from_rgb(64, 64, 64)
+            };
+            let other_pos_px = self.window_def.borrow().coord_to_px(other_pos);
+            let end: [f32; 2] = [other_pos_px.x, other_pos_px.y];
+            // Add to batch instead of drawing immediately
+            backend.add_line_to_batch(&[start, end], 2.0, color_line.to_rgba())?;
+        }
+        Ok(())
+    }
+
     // todo!()
     // fn draw_all_ball_tails(
     //     &self,

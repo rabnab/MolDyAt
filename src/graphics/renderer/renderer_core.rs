@@ -54,6 +54,20 @@ pub trait DrawingBackend {
         color: (u8, u8, u8, u8),
     ) -> AppResult;
 
+    /// Begin batching lines for efficient rendering (clears previous batch)
+    fn begin_line_batch(&mut self);
+
+    /// Add a line to the current batch
+    fn add_line_to_batch(
+        &mut self,
+        points: &[[f32; 2]; 2],
+        width: f32,
+        color: (u8, u8, u8, u8),
+    ) -> AppResult;
+
+    /// Draw all batched lines as a single mesh
+    fn draw_line_batch(&mut self) -> AppResult;
+
     fn finish_frame(&mut self) -> AppResult;
 }
 
@@ -97,13 +111,24 @@ pub trait Renderer {
         verbose_ball_indices: &[usize],
         all_balls: &[Ball2D],
     ) -> AppResult {
+        // Batch all neighbor lines for efficient rendering
+        backend.begin_line_batch();
         for &ball_idx in verbose_ball_indices.iter() {
             let ball = &all_balls[ball_idx];
-            self.draw_neighbour_lines(backend, ball, all_balls)?;
+            self.add_neighbour_lines_to_batch(backend, ball, all_balls)?;
         }
+        backend.draw_line_batch()?;
         Ok(())
     }
     fn draw_neighbour_lines(
+        &self,
+        backend: &mut dyn DrawingBackend,
+        ball: &Ball2D,
+        balls: &[Ball2D],
+    ) -> AppResult;
+
+    /// Add neighbor lines to batch instead of drawing immediately (for performance)
+    fn add_neighbour_lines_to_batch(
         &self,
         backend: &mut dyn DrawingBackend,
         ball: &Ball2D,
