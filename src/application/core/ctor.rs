@@ -31,6 +31,7 @@ impl MainContent {
             speed_limit_override: None,
             snapshot_slot: Arc::new(ArcSwapOption::from(None)),
             wait_time: 0,
+            cached_force_results: Vec::new(),
         })
     }
 }

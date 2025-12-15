@@ -5,7 +5,7 @@ use crate::graphics::renderer::{DrawingBackend, PlotContent, Renderer};
 use crate::graphics::window::window_definition::WindowDefinition;
 use crate::objects2d::Rect;
 use crate::objects2d::ball_cell::cell_grid::CellGrid;
-use crate::objects2d::ball_impl::{Ball2D, BallPhysics};
+use crate::objects2d::ball_impl::BallPhysics;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
@@ -32,15 +32,6 @@ impl Renderer for DummyRenderer {
     }
 
     fn add_vtot_to_line(&mut self, v_kin: &VecDeque<f32>, v_pot: &VecDeque<f32>) -> AppResult<()> {
-        todo!()
-    }
-
-    fn draw_neighbour_lines(
-        &self,
-        backend: &mut dyn DrawingBackend,
-        ball: &Ball2D,
-        balls: &[Ball2D],
-    ) -> AppResult {
         todo!()
     }
 
@@ -79,10 +70,6 @@ impl Renderer for DummyRenderer {
 
     fn get_world_region(&self) -> Rect {
         self.window_def.borrow().compute_world_bounds_rect()
-    }
-
-    fn draw_single_ball(&self, backend: &mut dyn DrawingBackend, ball: &Ball2D) -> AppResult {
-        todo!()
     }
 
     fn draw_balls_from_snapshot_data(
