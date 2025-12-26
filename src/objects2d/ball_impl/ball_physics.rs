@@ -8,8 +8,6 @@ use std::simd::prelude::SimdFloat;
 //const LJ_SIG: f32 = 5.; // equilibrium distance
 //LJ_SIG in SI units is for Argon 3.4A=3.4E-10m
 const LJ_SIG: f32 = 1.; // equilibrium distance
-//pub(crate) const LJ_CUTOFF: f32 = 8. * LJ_SIG; //distance where lenard jones force is < 1e-4 (as long as sig>0.1)
-const LJ_CUTOFF: f32 = 4. * LJ_SIG; //distance where lenard jones force is < 1e-4 (as long as sig>0.1)
 const LJ_EPS: f32 = 1.; // attractive strength
 const MAX_FORCE: f32 = 100.0; // max repulsive force to cap at
 const SQRT6_OF_TWO: f32 = 1.122_462; // == 2^(1/6)
@@ -154,7 +152,7 @@ impl Default for PhysicsConstants {
             //gravity: 1.0,
             max_force: MAX_FORCE,
             //softening: 0.01,
-            lj_cutoff: LJ_CUTOFF, // Standard cutoff for L-J potential 2.5
+            lj_cutoff: 4. * LJ_SIG, // Standard cutoff for L-J potential 2.5
             pot_at_cap,
             r_cap,
         }
