@@ -42,12 +42,19 @@ impl MainContent {
         let max_pos = &world.get_br().into();
 
         //let mut r = rng();
-        for _ in 0..count {
+        let mut balls_added = 0;
+        let max_attempts = count * 4;
+        for _ in 0..max_attempts {
             let nu_ball = self
                 .get_game_logic_data()
                 .get_ball_factory()
                 .create_random((min_pos, max_pos), (0.0, 0.0));
-            self.add_candidate_ball(nu_ball).ok();
+            if self.add_candidate_ball(nu_ball).is_ok() {
+                balls_added += 1;
+                if balls_added >= count {
+                    break;
+                }
+            }
         }
     }
     pub(crate) fn enable_random_ball_speed(&mut self) {
