@@ -43,8 +43,13 @@ impl GgezRendererBuilder {
         self
     }
 
-    pub fn context(mut self, ctx: &Context, sizes: Vec<(f32, f32)>) -> Self {
-        self.ball_mesh = initialize_ball_meshes(ctx, sizes);
+    pub fn context_and_ball_def(
+        mut self,
+        ctx: &Context,
+        cutoff: f32,
+        sizes: Vec<(f32, f32)>,
+    ) -> Self {
+        self.ball_mesh = initialize_ball_meshes(ctx, cutoff, sizes);
         self.crosshair_mesh = initialize_crosshair_mesh(ctx);
         // self.cell_mesh = create_cell_grid_mesh(ctx, (10., 10.));
         self
@@ -65,11 +70,22 @@ impl GgezRendererBuilder {
     }
 }
 
-fn initialize_ball_meshes(ctx: &Context, radius_equi: Vec<(f32, f32)>) -> Option<Vec<Mesh>> {
+fn initialize_ball_meshes(
+    ctx: &Context,
+    cutoff: f32,
+    radius_equi: Vec<(f32, f32)>,
+) -> Option<Vec<Mesh>> {
     let ball_meshes: Vec<Mesh> = radius_equi
         .iter()
         .map(|&radius| {
-            create_ball_mesh(ctx, radius.0, radius.1, CIRCLE_TOLERANCE, STROKE_THICKNESS)
+            create_ball_mesh(
+                ctx,
+                radius.0,
+                radius.1,
+                cutoff,
+                CIRCLE_TOLERANCE,
+                STROKE_THICKNESS,
+            )
         })
         .collect();
     Some(ball_meshes)
@@ -80,6 +96,7 @@ fn create_ball_mesh(
     ctx: &Context,
     ball_size: f32,
     ball_eq_radius: f32,
+    cutoff: f32,
     tolerance: f32,
     stroke_thickness: f32,
 ) -> Mesh {
@@ -109,7 +126,6 @@ fn create_ball_mesh(
 
     // Outer stroked circle
 
-    let cutoff = 4_f32;
     builder
         .circle(
             DrawMode::stroke(stroke_thickness),
