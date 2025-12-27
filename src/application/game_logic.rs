@@ -113,6 +113,7 @@ impl MainContent {
                     neighbor_buf,
                     cutoff,
                     min_movement,
+                    max_radius,
                     &mut self.balls,
                 );
             }
