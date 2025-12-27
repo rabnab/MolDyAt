@@ -113,11 +113,16 @@ impl Verlet {
         neighbours: &[usize],
         cutoff: f32,
         min_movement_threshold: f32,
+        max_radius: f32,
         balls: &mut [Ball2D],
     ) {
         let dist_limit_by_v = 0.;
 
-        let dist_limit_by_closest = 4. * cutoff;
+        // Effective cutoff accounts for ball radii: when checking edge-to-edge distance,
+        // we need to add the radii of both balls to the LJ cutoff distance.
+        // Using 2 * max_radius ensures we capture all possible interactions.
+        let effective_cutoff = cutoff + 2.0 * max_radius;
+        let dist_limit_by_closest = effective_cutoff;
         let dist_limit = f32::max(dist_limit_by_closest, dist_limit_by_v);
 
         let this_ball_needs_update = {
@@ -464,5 +469,85 @@ mod tests {
         v.update_closeness_stats(&balls[0].get_position(), &balls);
         let count = v.neighbours.len();
         assert_eq!(v.num_neighbours, count);
+    }
+
+    #[test]
+    fn test_update_hood_respects_effective_cutoff() {
+        // Test that update_hood only includes neighbors within effective cutoff
+        use crate::objects2d::ball_impl::ball_factory::BallFactory;
+
+        let cutoff = 4.0; // LJ interaction cutoff
+        let max_radius = BallFactory::get_max_radius(); // ~2.4
+        let effective_cutoff = cutoff + 2.0 * max_radius; // Should be ~8.8
+
+        // Create three balls: one at origin, one within range, one beyond range
+        let mut ball0 = make_ball(0, Vec2D::new(0.0, 0.0));
+        let mut ball1 = make_ball(1, Vec2D::new(effective_cutoff * 0.8, 0.0)); // Within range
+        let mut ball2 = make_ball(2, Vec2D::new(effective_cutoff * 1.2, 0.0)); // Beyond range
+
+        // Initialize last_update_hood_pos to trigger update
+        ball0.last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
+        ball1.last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
+        ball2.last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
+
+        let mut balls = vec![ball0, ball1, ball2];
+
+        // All balls are candidates (simulate what cell grid provides)
+        let candidates = vec![1, 2];
+
+        // Update hood for ball 0
+        Verlet::update_hood(0, 0.01, &candidates, cutoff, 0.1, max_radius, &mut balls);
+
+        // Ball 0 should have ball 1 as neighbor (within range) but not ball 2 (beyond range)
+        let neighbors = &balls[0].hood.neighbours;
+        assert!(
+            neighbors.contains(&1),
+            "Ball 1 should be a neighbor (distance {} < effective_cutoff {})",
+            effective_cutoff * 0.8,
+            effective_cutoff
+        );
+        assert!(
+            !neighbors.contains(&2),
+            "Ball 2 should NOT be a neighbor (distance {} > effective_cutoff {})",
+            effective_cutoff * 1.2,
+            effective_cutoff
+        );
+    }
+
+    #[test]
+    fn test_update_hood_removes_distant_neighbors() {
+        // Test that neighbors moving beyond effective cutoff are removed
+        use crate::objects2d::ball_impl::ball_factory::BallFactory;
+
+        let cutoff = 4.0;
+        let max_radius = BallFactory::get_max_radius();
+        let effective_cutoff = cutoff + 2.0 * max_radius;
+
+        // Create two balls initially close together
+        let mut ball0 = make_ball(0, Vec2D::new(0.0, 0.0));
+        let mut ball1 = make_ball(1, Vec2D::new(1.0, 0.0));
+
+        ball0.last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
+        ball1.last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
+
+        let mut balls = vec![ball0, ball1];
+
+        // Initial update - ball 1 should be a neighbor
+        Verlet::update_hood(0, 0.01, &[1], cutoff, 0.1, max_radius, &mut balls);
+        assert!(
+            balls[0].hood.neighbours.contains(&1),
+            "Ball 1 should initially be a neighbor"
+        );
+
+        // Move ball 1 far away (beyond effective cutoff)
+        balls[1].set_position_and_update_tail(Vec2D::new(effective_cutoff * 1.5, 0.0));
+        balls[0].last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
+
+        // Update again - ball 1 should be removed
+        Verlet::update_hood(0, 0.01, &[1], cutoff, 0.1, max_radius, &mut balls);
+        assert!(
+            !balls[0].hood.neighbours.contains(&1),
+            "Ball 1 should be removed after moving beyond effective cutoff"
+        );
     }
 }
