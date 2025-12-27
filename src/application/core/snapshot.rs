@@ -21,7 +21,6 @@ impl MainContent {
             )
             .unwrap_or_else(|| size_class_to_rgba(ball.get_size_idx()));
 
-
             // Reuse force magnitudes from cached SIMD computation (if available)
             // This avoids wasteful recalculation of forces that were already computed
             let neighbors: Vec<(usize, f32)> = if ball_idx < self.cached_force_results.len() {
@@ -31,7 +30,6 @@ impl MainContent {
                 // Fallback: no cached data available (e.g., during initial snapshots before first physics step)
                 Vec::new()
             };
-
 
             balls.push(BallRenderData {
                 id: ball.get_id(),
