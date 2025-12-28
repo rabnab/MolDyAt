@@ -174,10 +174,10 @@ impl GameLogic for MainContent {
             && pos.y <= world.y
     }
 
-    fn is_ball_colliding(&self, pt: &Ball2D) -> bool {
+    fn is_ball_colliding(&self, pt: &Ball2D, margin: f32) -> bool {
         self.get_balls()
             .iter()
-            .any(|ball| self.physics.is_colliding(pt, ball))
+            .any(|ball| self.physics.is_colliding(pt, ball, margin))
     }
 
     fn collect_neighbours_by_cell(&mut self, dt: f32) {

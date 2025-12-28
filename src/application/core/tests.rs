@@ -353,7 +353,7 @@ mod test_application_core {
         );
 
         assert!(
-            main_content.is_ball_colliding(&colliding_ball),
+            main_content.is_ball_colliding(&colliding_ball, 0.),
             "Collision not detected"
         );
     }

@@ -322,9 +322,9 @@ impl BallPhysics {
         center_dist - (a.radius + b.radius)
     }
 
-    pub fn is_colliding(&self, this: &Ball2D, other: &Ball2D) -> bool {
+    pub fn is_colliding(&self, this: &Ball2D, other: &Ball2D, margin: f32) -> bool {
         //use norm_sq to avoid sqrt in norm
-        let radius_sum_sq = (this.radius + other.radius/*+ self.constants.lj_sig*/).powi(2);
+        let radius_sum_sq = (this.radius + other.radius/*+ self.constants.lj_sig*/+margin).powi(2);
         let balls_collide =
             this.get_position().dist(other.get_position()).norm_sq() < radius_sum_sq;
         if balls_collide {
@@ -437,13 +437,13 @@ mod tests {
         let b_pos = Vec2D::new(2.0 + LJ_SIG * 0.99999, 3.0);
         let b = Ball2D::new(2, b_pos, (0, 6.0));
 
-        assert!(phys.is_colliding(&a, &b));
+        assert!(phys.is_colliding(&a, &b, 0.));
 
         let c_radius = 6.0;
         let c_pos = Vec2D::new(2.0, 3.0 + (a.radius + c_radius) + LJ_SIG * 1.00001);
         let c = Ball2D::new(2, c_pos, (0, c_radius));
 
-        assert!(!phys.is_colliding(&a, &c));
+        assert!(!phys.is_colliding(&a, &c, 0.));
     }
 
     #[test]
