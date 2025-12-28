@@ -49,7 +49,8 @@ impl MainContent {
                 .get_game_logic_data()
                 .get_ball_factory()
                 .create_random((min_pos, max_pos), (0.0, 0.0));
-            if self.add_candidate_ball(nu_ball).is_ok() {
+            let margin = nu_ball.get_radius() * 0.5;
+            if self.add_candidate_ball(nu_ball, margin).is_ok() {
                 balls_added += 1;
                 if balls_added >= count {
                     break;
@@ -68,16 +69,16 @@ impl MainContent {
                 .get_ball_factory()
                 .create_massive_with_velocity(pos, Vec2D::zero())
         };
-        self.add_candidate_ball(candidate)
+        self.add_candidate_ball(candidate, 0.)
     }
 
-    pub(crate) fn add_candidate_ball(&mut self, candidate: Ball2D) -> AppResult {
+    pub(crate) fn add_candidate_ball(&mut self, candidate: Ball2D, margin: f32) -> AppResult {
         if !self.is_ball_in_region(&candidate) {
             return Err(AppError::CustomError(
                 "new ball not within region".to_string(),
             ));
         }
-        if self.is_ball_colliding(&candidate) {
+        if self.is_ball_colliding(&candidate, margin) {
             return Err(AppError::CustomError(
                 "new ball colliding with existing ball".to_string(),
             ));
