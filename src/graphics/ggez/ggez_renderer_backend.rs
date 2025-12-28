@@ -1,6 +1,6 @@
 use crate::application::AppResult;
 use crate::graphics::ggez::ggez_renderer::GgezRenderer;
-use crate::graphics::renderer::{DrawingBackend, is_number_continue, is_number_start};
+use crate::graphics::renderer::{BallType, DrawingBackend, is_number_continue, is_number_start};
 use crate::graphics::window::window_definition::WindowDefinition;
 use crate::objects2d::ball_cell::cell_grid::CellGrid;
 use ggez::Context;
@@ -322,22 +322,23 @@ impl<'a> DrawingBackend for GgezBackend<'a> {
         id: usize,
         size_idx: usize,
         pos: [f32; 2],
-        white: bool,
+        ball_type: BallType,
     ) -> AppResult {
-        let ball_mesh = &self.cache.ball_mesh;
-
         let draw_param = DrawParam::default()
             .dest(pos)
             //.scale(Vec2::new(radius, radius))
             ;
-        self.canvas.as_mut().unwrap().draw(
-            ball_mesh.get(size_idx).unwrap_or(&ball_mesh[0]),
-            if white {
-                draw_param.color(Color::WHITE)
-            } else {
-                draw_param
-            },
-        );
+
+        let ball_mesh = match ball_type {
+            BallType::Normal => &self.cache.ball_mesh,
+            BallType::Cursor => &self.cache.cursor_mesh,
+            BallType::HoodUpdated => &self.cache.hood_updated_mesh,
+        };
+
+        self.canvas
+            .as_mut()
+            .unwrap()
+            .draw(ball_mesh.get(size_idx).unwrap_or(&ball_mesh[0]), draw_param);
 
         self.draw_text_on_ball(id, pos)?;
 
@@ -355,14 +356,11 @@ impl<'a> DrawingBackend for GgezBackend<'a> {
         Ok(())
     }
 
-    fn draw_line(
-        &mut self,
-        points: &[[f32; 2]; 2],
-        width: f32,
-        color: (u8, u8, u8, u8),
-    ) -> AppResult {
-        let ggez_color = Color::from(color);
-        // Convert [f32; 2] to Point2<f32> for ggez
+    fn begin_tail_batch(&mut self) {
+        self.cache.tail_lines_builder = Some(MeshBuilder::new());
+    }
+
+    fn add_tail_line_to_batch(&mut self, points: &[[f32; 2]; 2], width: f32) -> AppResult {
         let ggez_points: [Point2<f32>; 2] = [
             Point2 {
                 x: points[0][0],
@@ -373,11 +371,20 @@ impl<'a> DrawingBackend for GgezBackend<'a> {
                 y: points[1][1],
             },
         ];
-        let line = Mesh::new_line(self.ctx, &ggez_points, width, ggez_color)?;
-        self.canvas
-            .as_mut()
-            .unwrap()
-            .draw(&line, DrawParam::default());
+        if let Some(builder) = &mut self.cache.tail_lines_builder {
+            builder.line(&ggez_points, width, Color::YELLOW)?;
+        }
+        Ok(())
+    }
+
+    fn draw_tail_batch(&mut self) -> AppResult {
+        if let Some(builder) = self.cache.tail_lines_builder.take() {
+            let mesh = Mesh::from_data(self.ctx, builder.build());
+            self.canvas
+                .as_mut()
+                .unwrap()
+                .draw(&mesh, DrawParam::default());
+        }
         Ok(())
     }
 
@@ -434,8 +441,11 @@ pub struct GgezMeshCache {
     pub line_vpot_builder: Option<MeshBuilder>,
     pub line_vtot_builder: Option<MeshBuilder>,
     pub neighbor_lines_builder: Option<MeshBuilder>,
+    pub tail_lines_builder: Option<MeshBuilder>,
     pub(super) crosshair_mesh: Option<Mesh>,
     pub(super) ball_mesh: Vec<Mesh>,
+    pub(super) cursor_mesh: Vec<Mesh>,
+    pub(super) hood_updated_mesh: Vec<Mesh>,
     // caches for text to avoid re-allocating Text each application
     // use u32 for scale key via f32::to_bits() to avoid f32 hashing issues
     pub text_cache: LruCache<(String, u32), Text>,
@@ -453,8 +463,11 @@ impl Default for GgezMeshCache {
             line_vpot_builder: None,
             line_vtot_builder: None,
             neighbor_lines_builder: None,
+            tail_lines_builder: None,
             crosshair_mesh: None,
             ball_mesh: vec![],
+            cursor_mesh: vec![],
+            hood_updated_mesh: vec![],
             text_cache: LruCache::new(NonZeroUsize::new(4096).unwrap()),
             ball_label_cache: LruCache::new(NonZeroUsize::new(500000).unwrap()),
             glyph_cache: LruCache::new(NonZeroUsize::new(200).unwrap()),

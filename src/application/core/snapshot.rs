@@ -40,6 +40,10 @@ impl MainContent {
                 show_neighbor_lines: ball.verbose.lines(),
                 show_main_neighbors_only: ball.verbose.is_main(),
                 neighbors,
+                update_counter: ball.get_update_counter(),
+                tail: ball
+                    .get_tail_positions()
+                    .map_or(Vec::new(), |tail| tail.iter().cloned().collect()),
             });
         }
 

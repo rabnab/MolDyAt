@@ -134,7 +134,11 @@ impl Verlet {
                 .needs_update_hood(ball, dt, min_movement_threshold)
         };
 
-        balls[ball_idx].hood.updates_since_refresh += 1;
+        {
+            let ball = &mut balls[ball_idx];
+            ball.hood.updates_since_refresh += 1;
+            ball.decrement_update_counter();
+        }
 
         if !this_ball_needs_update {
             return;
@@ -148,6 +152,7 @@ impl Verlet {
         {
             let ball = &mut balls[ball_idx];
             ball.last_update_hood_pos = ball.get_position().clone();
+            ball.reset_update_counter();
         };
 
         // Collect all candidate neighbours from the cell neighbors parameter

@@ -211,8 +211,10 @@ impl BallPhysics {
         // The cell size must accommodate the cutoff plus the maximum ball diameter
         // to ensure all potential neighbors are captured
         let effective_cutoff = cutoff + 2.0 * max_radius;
-        let cell_size = 2.5 * effective_cutoff;
-        (cell_size - effective_cutoff) / 2.0
+        //RK 2025-12-28: i think this is wrong:
+        //let cell_size = 2.5 * effective_cutoff;
+        //(cell_size - effective_cutoff) / 2.0
+        effective_cutoff * 0.5
     }
 
     /// equilibrium distance of two balls with same radius

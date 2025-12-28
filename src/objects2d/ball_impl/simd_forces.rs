@@ -42,9 +42,8 @@ pub fn force_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2D]) -> F
     let r_cap = physics.get_force_cap_distance();
 
     // Process neighbors in chunks of 4 for SIMD
-    let chunks = neighbour_indices.chunks(4);
-    let remainder_start = (neighbour_indices.len() / 4) * 4;
-
+    let chunks = neighbour_indices.chunks_exact(4);
+    let unchunked = chunks.remainder();
     // Pre-calculate U(r_cap) for linear extrapolation in force-capped region
     // This is the "anchor point" where capped and uncapped potentials meet
 
@@ -59,92 +58,90 @@ pub fn force_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2D]) -> F
     let r_cap_vec = f32x4::splat(r_cap);
 
     for chunk in chunks {
-        if chunk.len() == 4 {
-            // SIMD path: process 4 neighbors at once
-            let mut dx = [0.0f32; 4];
-            let mut dy = [0.0f32; 4];
-            let mut radii = [0.0f32; 4];
+        // SIMD path: process 4 neighbors at once
+        let mut dx = [0.0f32; 4];
+        let mut dy = [0.0f32; 4];
+        let mut radii = [0.0f32; 4];
 
-            // Gather data for 4 neighbors
-            for (i, &neighbour_idx) in chunk.iter().enumerate() {
-                if let Some(neighbour) = balls.get(neighbour_idx) {
-                    let dist_vec = neighbour.pre_update_pos.dist(ball_pos);
-                    dx[i] = dist_vec.x;
-                    dy[i] = dist_vec.y;
-                    radii[i] = neighbour.radius;
-                } else {
-                    panic!("Invalid neighbor index in SIMD force calculation");
-                }
-            }
-
-            // Load into SIMD vectors
-            let dx_vec = f32x4::from(dx);
-            let dy_vec = f32x4::from(dy);
-            let radii_vec = f32x4::from(radii);
-
-            // Calculate distances: sqrt(dx^2 + dy^2)
-            let center_dist_sq = dx_vec * dx_vec + dy_vec * dy_vec;
-            let center_dist = center_dist_sq.sqrt();
-
-            // Calculate edge distances
-            let radius_sum = radii_vec + f32x4::splat(ball_radius);
-            let edge_dist = center_dist - radius_sum;
-            let edge_dist_cap = edge_dist.simd_max(f32x4::splat(r_cap));
-
-            // === Force Calculation with Capping ===
-            //let r_cap_vec = f32x4::splat(r_cap);
-
-            // Step 1: Calculate standard Lennard-Jones force
-            // F_LJ(r) = 24·ε·(σ/r)^6 · [2·(σ/r)^6 - 1] / r
-            // Use max() to prevent division by zero (1e-10 is safety epsilon)
-            let lj_force = physics.force_simd(edge_dist_cap);
-
-            // Force direction: force / center_dist
-            // Avoid division by zero: if center_dist is 0, use a small epsilon to prevent Inf/NaN
-            let safe_center_dist = center_dist.simd_max(f32x4::splat(1e-10));
-            let force_to_dist = lj_force / safe_center_dist;
-
-            // Calculate force components
-            let fx = dx_vec * force_to_dist;
-            let fy = dy_vec * force_to_dist;
-
-            // === Potential Energy Calculation with Force Capping ===
-            // Standard LJ potential: U(r) = 4·ε·[(σ/r)^12 - (σ/r)^6]
-            // For r < r_cap: Use linear extrapolation to preserve energy conservation
-            // Calculate standard LJ potential (with capping)
-            let pot_quot = f32x4::splat(lj_sig) / edge_dist.simd_max(f32x4::splat(1e-10));
-            let pot_quot_six = pot_quot * pot_quot * pot_quot * pot_quot * pot_quot * pot_quot;
-            let potential_uncapped =
-                f32x4::splat(4. * lj_eps) * pot_quot_six * (pot_quot_six - f32x4::splat(1.));
-            // Linear potential for r < r_cap: U(r) = U(r_cap) - max_force·(r - r_cap)
-            // This ensures F = -dU/dr = +max_force (repulsive, constant) below r_cap
-            let potential_linear = f32x4::simd_max(
-                pot_at_cap_vec - max_force_vec * (edge_dist - r_cap_vec),
-                pot_at_cap_vec,
-            );
-
-            let potential_used = f32x4::simd_min(potential_linear, potential_uncapped);
-
-            force.x += fx.reduce_sum();
-            force.y += fy.reduce_sum();
-            total_pot += potential_used.reduce_sum();
-            let min_dist_of_chunk = edge_dist.reduce_min();
-            min_dist = if f32::is_nan(min_dist) {
-                min_dist_of_chunk
+        // Gather data for 4 neighbors
+        for (i, &neighbour_idx) in chunk.iter().enumerate() {
+            if let Some(neighbour) = balls.get(neighbour_idx) {
+                let dist_vec = neighbour.pre_update_pos.dist(ball_pos);
+                dx[i] = dist_vec.x;
+                dy[i] = dist_vec.y;
+                radii[i] = neighbour.radius;
             } else {
-                f32::min(min_dist, min_dist_of_chunk)
-            };
-
-            // Store per-neighbor force magnitudes for visualization
-            let lj_force_array: [f32; 4] = lj_force.to_array();
-            for (i, &neighbour_idx) in chunk.iter().enumerate() {
-                neighbor_forces.push((neighbour_idx, lj_force_array[i]));
+                panic!("Invalid neighbor index in SIMD force calculation");
             }
+        }
+
+        // Load into SIMD vectors
+        let dx_vec = f32x4::from(dx);
+        let dy_vec = f32x4::from(dy);
+        let radii_vec = f32x4::from(radii);
+
+        // Calculate distances: sqrt(dx^2 + dy^2)
+        let center_dist_sq = dx_vec * dx_vec + dy_vec * dy_vec;
+        let center_dist = center_dist_sq.sqrt();
+
+        // Calculate edge distances
+        let radius_sum = radii_vec + f32x4::splat(ball_radius);
+        let edge_dist = center_dist - radius_sum;
+        let edge_dist_cap = edge_dist.simd_max(f32x4::splat(r_cap));
+
+        // === Force Calculation with Capping ===
+        //let r_cap_vec = f32x4::splat(r_cap);
+
+        // Step 1: Calculate standard Lennard-Jones force
+        // F_LJ(r) = 24·ε·(σ/r)^6 · [2·(σ/r)^6 - 1] / r
+        // Use max() to prevent division by zero (1e-10 is safety epsilon)
+        let lj_force = physics.force_simd(edge_dist_cap);
+
+        // Force direction: force / center_dist
+        // Avoid division by zero: if center_dist is 0, use a small epsilon to prevent Inf/NaN
+        let safe_center_dist = center_dist.simd_max(f32x4::splat(1e-10));
+        let force_to_dist = lj_force / safe_center_dist;
+
+        // Calculate force components
+        let fx = dx_vec * force_to_dist;
+        let fy = dy_vec * force_to_dist;
+
+        // === Potential Energy Calculation with Force Capping ===
+        // Standard LJ potential: U(r) = 4·ε·[(σ/r)^12 - (σ/r)^6]
+        // For r < r_cap: Use linear extrapolation to preserve energy conservation
+        // Calculate standard LJ potential (with capping)
+        let pot_quot = f32x4::splat(lj_sig) / edge_dist.simd_max(f32x4::splat(1e-10));
+        let pot_quot_six = pot_quot * pot_quot * pot_quot * pot_quot * pot_quot * pot_quot;
+        let potential_uncapped =
+            f32x4::splat(4. * lj_eps) * pot_quot_six * (pot_quot_six - f32x4::splat(1.));
+        // Linear potential for r < r_cap: U(r) = U(r_cap) - max_force·(r - r_cap)
+        // This ensures F = -dU/dr = +max_force (repulsive, constant) below r_cap
+        let potential_linear = f32x4::simd_max(
+            pot_at_cap_vec - max_force_vec * (edge_dist - r_cap_vec),
+            pot_at_cap_vec,
+        );
+
+        let potential_used = f32x4::simd_min(potential_linear, potential_uncapped);
+
+        force.x += fx.reduce_sum();
+        force.y += fy.reduce_sum();
+        total_pot += potential_used.reduce_sum();
+        let min_dist_of_chunk = edge_dist.reduce_min();
+        min_dist = if f32::is_nan(min_dist) {
+            min_dist_of_chunk
+        } else {
+            f32::min(min_dist, min_dist_of_chunk)
+        };
+
+        // Store per-neighbor force magnitudes for visualization
+        let lj_force_array: [f32; 4] = lj_force.abs().to_array();
+        for (i, &neighbour_idx) in chunk.iter().enumerate() {
+            neighbor_forces.push((neighbour_idx, lj_force_array[i]));
         }
     }
 
     // Process remaining neighbors with scalar code
-    for &neighbour_idx in &neighbour_indices[remainder_start..] {
+    for &neighbour_idx in unchunked {
         if let Some(b) = balls.get(neighbour_idx) {
             let dist_vec = b.pre_update_pos.dist(ball_pos);
             let center_dist = dist_vec.norm();
@@ -172,7 +169,7 @@ pub fn force_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2D]) -> F
             total_pot += physics.potential(edge_dist);
 
             // Store per-neighbor force magnitude for visualization
-            neighbor_forces.push((neighbour_idx, lj_force));
+            neighbor_forces.push((neighbour_idx, lj_force.abs()));
 
             // Update min_dist
             if edge_dist > 0. {
