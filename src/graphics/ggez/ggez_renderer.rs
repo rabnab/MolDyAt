@@ -1,7 +1,7 @@
 use crate::application::AppResult;
 use crate::graphics::ggez::WindowDefinitionRef;
 use crate::graphics::ggez::ggez_renderer_backend::GgezMeshCache;
-use crate::graphics::renderer::{DrawingBackend, PlotContent, Renderer};
+use crate::graphics::renderer::{BallType, DrawingBackend, PlotContent, Renderer};
 use crate::graphics::window::window_definition::WindowDefinition;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_cell::cell_grid::CellGrid;
@@ -36,15 +36,23 @@ pub struct GgezRenderer {
 }
 
 impl GgezRenderer {
+    /// Creates a new GgezRenderer instance
+    /// # Arguments
+    /// * `plot_type` - The type of plot to display
+    /// * `crosshair_mesh` - Pre-created mesh for the crosshair
+    /// * `ball_meshes` - Pre-created meshes for balls (normal, cursor, hood updated)
+    /// * `window_def` - Reference to the window definition used for rendering
     pub(crate) fn new(
         plot_type: PlotContent,
         crosshair_mesh: Mesh,
-        ball_mesh: Vec<Mesh>,
+        ball_meshes: (Vec<Mesh>, Vec<Mesh>, Vec<Mesh>),
         window_def: WindowDefinitionRef,
     ) -> Self {
         let cache = GgezMeshCache {
             crosshair_mesh: Some(crosshair_mesh),
-            ball_mesh,
+            ball_mesh: ball_meshes.0,
+            cursor_mesh: ball_meshes.1,
+            hood_updated_mesh: ball_meshes.2,
             ..Default::default()
         };
 
@@ -155,7 +163,7 @@ impl Renderer for GgezRenderer {
 
     fn draw_cursor(&self, backend: &mut dyn DrawingBackend, size_idx: usize) -> AppResult {
         if self.draw_cursor {
-            backend.draw_ball_mesh(0, size_idx, self.cursor_pos_px, true)?;
+            backend.draw_ball_mesh(0, size_idx, self.cursor_pos_px, BallType::Cursor)?;
         } else {
             backend.draw_cross_hair(self.cursor_pos_px)?;
         }
@@ -230,6 +238,26 @@ impl Renderer for GgezRenderer {
         backend: &mut dyn DrawingBackend,
         snapshot: &crate::application::renderer_snapshot::RendererSnapshot,
     ) -> AppResult {
+        // Batch all tail lines for efficient rendering
+        backend.begin_tail_batch();
+        for ball in &snapshot.balls {
+            if !ball.tail.is_empty() {
+                ball.tail
+                    .iter()
+                    .zip(ball.tail.iter().skip(1))
+                    .for_each(|(start_pos, end_pos)| {
+                        let start_px = self.window_def.borrow().coord_to_px(start_pos);
+                        let end_px = self.window_def.borrow().coord_to_px(end_pos);
+                        let start: [f32; 2] = [start_px.x, start_px.y];
+                        let end: [f32; 2] = [end_px.x, end_px.y];
+                        let width = 1.0;
+                        // Ignore errors in tail line batching
+                        backend.add_tail_line_to_batch(&[start, end], width).ok();
+                    });
+            }
+        }
+        backend.draw_tail_batch()?;
+
         // Batch all neighbor lines for efficient rendering
         backend.begin_line_batch();
         for ball in &snapshot.balls {
@@ -247,7 +275,11 @@ impl Renderer for GgezRenderer {
                 ball.id,
                 ball.size_idx,
                 [ball_coord_px.x, ball_coord_px.y],
-                false,
+                if ball.update_counter > 0 {
+                    BallType::HoodUpdated
+                } else {
+                    BallType::Normal
+                },
             )?;
         }
 

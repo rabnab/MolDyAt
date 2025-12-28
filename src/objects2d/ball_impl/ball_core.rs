@@ -5,9 +5,9 @@ use crate::objects2d::vec_2d::Vec2D;
 use crate::objects2d::verbose_info::VerboseInfo;
 use std::collections::VecDeque;
 
-const DEFAULT_TAIL_LENGTH: usize = 0;
+const DEFAULT_TAIL_LENGTH: usize = 1000;
 
-const TAIL_RESOLUTION_DELTA_SQ: f32 = 3. * 3.; // minimum squared distance to add new tail point
+const TAIL_RESOLUTION_DELTA_SQ: f32 = 1. * 1.; // minimum squared distance to add new tail point
 
 /// Information about wall bounces detected during position update.
 /// Bounces are applied as impulses during the velocity update step to preserve Verlet integration.
@@ -42,6 +42,7 @@ pub struct Ball2D {
     pub last_update_hood_pos: Vec2D,
     pub tail: VecDeque<Vec2D>,
     pub tail_length: usize,
+    pub show_update_count: usize,
     /// The cell this ball currently occupies (row, col). None if not assigned to any cell.
     pub current_cell: Option<(usize, usize)>,
 }
@@ -63,6 +64,7 @@ impl Default for Ball2D {
             last_update_hood_pos: Vec2D::new(f32::INFINITY, f32::INFINITY),
             tail_length: DEFAULT_TAIL_LENGTH,
             tail: VecDeque::with_capacity(DEFAULT_TAIL_LENGTH),
+            show_update_count: 0,
             current_cell: None,
         }
     }
@@ -118,6 +120,21 @@ impl Ball2D {
     // Core state methods
     pub fn is_braking(&self) -> bool {
         self.braking
+    }
+
+    pub fn reset_update_counter(&mut self) {
+        self.show_update_count = 200;
+        self.tail.clear();
+    }
+
+    pub fn decrement_update_counter(&mut self) {
+        if self.show_update_count > 0 {
+            self.show_update_count -= 1;
+        }
+    }
+
+    pub fn get_update_counter(&self) -> usize {
+        self.show_update_count
     }
 
     pub fn moment(&self) -> Vec2D {

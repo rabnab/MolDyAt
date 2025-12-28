@@ -14,6 +14,12 @@ pub enum PlotContent {
     All,
 }
 
+pub enum BallType {
+    Cursor,
+    Normal,
+    HoodUpdated,
+}
+
 pub fn create_dummy_renderer(win_def: WindowDefinition) -> impl Renderer {
     DummyRenderer {
         window_def: std::rc::Rc::new(std::cell::RefCell::new(win_def)),
@@ -43,16 +49,9 @@ pub trait DrawingBackend {
         id: usize,
         size_idx: usize,
         pos: [f32; 2],
-        white: bool,
+        ball_type: BallType,
     ) -> AppResult;
     fn draw_cross_hair(&mut self, pos: [f32; 2]) -> AppResult;
-
-    fn draw_line(
-        &mut self,
-        points: &[[f32; 2]; 2],
-        width: f32,
-        color: (u8, u8, u8, u8),
-    ) -> AppResult;
 
     /// Begin batching lines for efficient rendering (clears previous batch)
     fn begin_line_batch(&mut self);
@@ -67,6 +66,10 @@ pub trait DrawingBackend {
 
     /// Draw all batched lines as a single mesh
     fn draw_line_batch(&mut self) -> AppResult;
+
+    fn begin_tail_batch(&mut self);
+    fn add_tail_line_to_batch(&mut self, points: &[[f32; 2]; 2], width: f32) -> AppResult;
+    fn draw_tail_batch(&mut self) -> AppResult;
 
     fn finish_frame(&mut self) -> AppResult;
 }
