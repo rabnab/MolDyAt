@@ -238,25 +238,33 @@ impl Renderer for GgezRenderer {
         backend: &mut dyn DrawingBackend,
         snapshot: &crate::application::renderer_snapshot::RendererSnapshot,
     ) -> AppResult {
-        // Batch all tail lines for efficient rendering
-        backend.begin_tail_batch();
-        for ball in &snapshot.balls {
-            if !ball.tail.is_empty() {
-                ball.tail
-                    .iter()
-                    .zip(ball.tail.iter().skip(1))
-                    .for_each(|(start_pos, end_pos)| {
+        // Batch all tail lines for efficient rendering.
+        // Skip tail batching entirely if no ball has a tail.
+        let has_any_tails = snapshot.balls.iter().any(|b| !b.tail.is_empty());
+        if has_any_tails {
+            backend.begin_tail_batch();
+            for ball in &snapshot.balls {
+                let tail_len = ball.tail.len();
+                if tail_len > 1 {
+                    // Limit the number of tail segments per ball to avoid excessive per-frame work.
+                    // This takes only the most recent segments near the end of the tail.
+                    let max_segments = 200usize.min(tail_len - 1);
+                    let start_index = tail_len - (max_segments + 1);
+                    for window in ball.tail[start_index..].windows(2) {
+                        let start_pos = &window[0];
+                        let end_pos = &window[1];
                         let start_px = self.window_def.borrow().coord_to_px(start_pos);
                         let end_px = self.window_def.borrow().coord_to_px(end_pos);
                         let start: [f32; 2] = [start_px.x, start_px.y];
                         let end: [f32; 2] = [end_px.x, end_px.y];
                         let width = 1.0;
-                        // Ignore errors in tail line batching
-                        backend.add_tail_line_to_batch(&[start, end], width).ok();
-                    });
+                        // Propagate any errors in tail line batching instead of silently ignoring them.
+                        backend.add_tail_line_to_batch(&[start, end], width)?;
+                    }
+                }
             }
+            backend.draw_tail_batch()?;
         }
-        backend.draw_tail_batch()?;
 
         // Batch all neighbor lines for efficient rendering
         backend.begin_line_batch();
