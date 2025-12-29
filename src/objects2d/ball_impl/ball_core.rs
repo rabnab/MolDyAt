@@ -122,6 +122,12 @@ impl Ball2D {
         self.braking
     }
 
+    /// Reset the "show update" counter after a neighborhood (Verlet list) update.
+    ///
+    /// This also clears the tail so that the rendered trajectory only represents
+    /// movement **since the last neighborhood update**, not the full history.
+    /// Callers relying on long-lived trajectory visuals should be aware that
+    /// invoking this method will drop the existing tail points.
     pub fn reset_update_counter(&mut self) {
         self.show_update_count = 200;
         self.tail.clear();
