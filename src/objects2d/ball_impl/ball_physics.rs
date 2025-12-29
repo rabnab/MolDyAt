@@ -196,25 +196,54 @@ impl BallPhysics {
         self.constants.lj_cutoff
     }
 
-    /// Returns the minimum movement threshold required before a ball's update hood (region for neighbor search)
-    /// needs to be recalculated. This threshold is set to half the difference between the cell size and the cutoff
-    /// distance, i.e., `(cell_size - cutoff) / 2.0`, which is equivalent to `0.75 * cutoff` when `cell_size = 2.5 * cutoff`.
-    /// The cell size (`2.5 * cutoff`) is chosen to ensure that neighbor searches are efficient and accurate.
-    /// By only updating the hood when a ball moves more than this threshold, unnecessary recalculations are avoided,
-    /// improving performance while maintaining correctness in neighbor detection.
+    /// Returns the minimum movement threshold (skin depth) before a ball's neighbor list must be updated.
     ///
-    /// Note: The max_radius parameter accounts for the largest ball in the simulation. Since cutoff is measured
-    /// edge-to-edge but ball movement is center-to-center, we need to consider the ball radii when determining
-    /// if a neighbor might have entered or left the interaction range.
+    /// # Verlet List Skin Depth Calculation
+    ///
+    /// The threshold is based on the difference between the cell grid size and the effective interaction range:
+    ///
+    /// ```text
+    /// skin_depth = (cell_size - effective_cutoff) / 2
+    /// ```
+    ///
+    /// Where:
+    /// - `cell_size = 2.5 * LJ_cutoff` (defined in CellGrid::new, uses LJ cutoff only)
+    /// - `effective_cutoff = LJ_cutoff + 2 * max_radius` (interaction range accounting for ball radii)
+    ///
+    /// This gives:
+    /// ```text
+    /// skin_depth = (2.5 * LJ_cutoff - (LJ_cutoff + 2 * max_radius)) / 2
+    ///            = (1.5 * LJ_cutoff - 2 * max_radius) / 2
+    ///            = 0.75 * LJ_cutoff - max_radius
+    /// ```
+    ///
+    /// # Rationale
+    ///
+    /// When a ball moves more than `skin_depth` from its last update position, it could have:
+    /// 1. Entered interaction range of a ball in an adjacent cell
+    /// 2. Left interaction range of a current neighbor
+    ///
+    /// The factor of 2 accounts for relative motion: if ball A moves `skin_depth` and ball B moves
+    /// `skin_depth` in opposite directions, their relative displacement is `2 * skin_depth`, which
+    /// equals the full buffer `(cell_size - effective_cutoff)`.
+    ///
+    /// # Parameters
+    /// - `max_radius`: Largest ball radius in the simulation (affects effective interaction range)
+    ///
+    /// # Returns
+    /// Movement threshold in simulation units. When exceeded, neighbor list rebuild is triggered.
     pub fn get_min_movement_for_update_hood(&self, max_radius: f32) -> f32 {
         let cutoff = self.get_cutoff_distance();
-        // The cell size must accommodate the cutoff plus the maximum ball diameter
-        // to ensure all potential neighbors are captured
+
+        // Cell grid size is based on LJ cutoff alone (see CellGrid::new)
+        let cell_size = 2.5 * cutoff;
+
+        // Effective interaction cutoff includes ball radii (edge-to-edge → center-to-center)
         let effective_cutoff = cutoff + 2.0 * max_radius;
-        //RK 2025-12-28: i think this is wrong:
-        //let cell_size = 2.5 * effective_cutoff;
-        //(cell_size - effective_cutoff) / 2.0
-        effective_cutoff * 0.5
+
+        // Skin depth: half the buffer between cell size and interaction range
+        // This is the standard Verlet list update criterion
+        (cell_size - effective_cutoff) / 2.0
     }
 
     /// equilibrium distance of two balls with same radius
@@ -477,12 +506,20 @@ mod tests {
         let phys = BallPhysics::default();
         let cutoff = phys.get_cutoff_distance();
         let max_radius = 1.0; // Example max radius
+
+        // The correct formula based on cell_size = 2.5 * cutoff (from CellGrid)
+        // and effective_cutoff = cutoff + 2 * max_radius
+        let cell_size = 2.5 * cutoff;
         let effective_cutoff = cutoff + 2.0 * max_radius;
-        let expected_threshold = 0.5 * effective_cutoff;
+        let expected_threshold = (cell_size - effective_cutoff) / 2.0;
+
+        // This simplifies to: 0.75 * cutoff - max_radius
+        let expected_simplified = 0.75 * cutoff - max_radius;
 
         let actual_threshold = phys.get_min_movement_for_update_hood(max_radius);
 
         approx(actual_threshold, expected_threshold, 1e-6);
+        approx(actual_threshold, expected_simplified, 1e-6);
     }
 
     #[test]
