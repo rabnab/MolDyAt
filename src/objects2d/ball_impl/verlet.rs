@@ -487,8 +487,17 @@ mod tests {
 
         // Create three balls: one at origin, one within range, one beyond range
         let mut ball0 = make_ball(0, Vec2D::new(0.0, 0.0));
-        let mut ball1 = make_ball(1, Vec2D::new(effective_cutoff * 0.8, 0.0)); // Within range
-        let mut ball2 = make_ball(2, Vec2D::new(effective_cutoff * 1.2, 0.0)); // Beyond range
+
+        // Position balls at specific center-to-center distances
+        // Note: make_ball creates balls with radius 1.0, and distance check uses edge-to-edge distance
+        // Edge-to-edge distance = center_distance - 2*radius
+        // For edge distance to be within effective_cutoff: center_distance - 2.0 < effective_cutoff
+        // So: center_distance < effective_cutoff + 2.0
+        let ball_radius = 1.0;
+        let dist1 = effective_cutoff * 0.8 + 2.0 * ball_radius; // Edge within range
+        let dist2 = effective_cutoff * 1.2 + 2.0 * ball_radius; // Edge beyond range
+        let mut ball1 = make_ball(1, Vec2D::new(dist1, 0.0));
+        let mut ball2 = make_ball(2, Vec2D::new(dist2, 0.0));
 
         // Initialize last_update_hood_pos to trigger update
         ball0.last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
@@ -508,13 +517,13 @@ mod tests {
         assert!(
             neighbors.contains(&1),
             "Ball 1 should be a neighbor (distance {} < effective_cutoff {})",
-            effective_cutoff * 0.8,
+            dist1,
             effective_cutoff
         );
         assert!(
             !neighbors.contains(&2),
             "Ball 2 should NOT be a neighbor (distance {} > effective_cutoff {})",
-            effective_cutoff * 1.2,
+            dist2,
             effective_cutoff
         );
     }
