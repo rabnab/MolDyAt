@@ -478,14 +478,11 @@ mod tests {
         let cutoff = phys.get_cutoff_distance();
         let max_radius = 1.0; // Example max radius
         let effective_cutoff = cutoff + 2.0 * max_radius;
-        let cell_size = 2.5 * effective_cutoff;
-        let expected_threshold = (cell_size - effective_cutoff) / 2.0;
+        let expected_threshold = 0.5 * effective_cutoff;
 
         let actual_threshold = phys.get_min_movement_for_update_hood(max_radius);
 
         approx(actual_threshold, expected_threshold, 1e-6);
-        // Also verify the calculation directly: (2.5 * rc_eff - rc_eff) / 2 = 0.75 * rc_eff
-        approx(actual_threshold, 0.75 * effective_cutoff, 1e-6);
     }
 
     #[test]

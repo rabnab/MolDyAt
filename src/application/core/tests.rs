@@ -450,7 +450,7 @@ mod test_application_core {
             );
             assert_eq!(
                 ball2.get_neighbour_names(balls).len(),
-                2,
+                1,
                 "Ball 2 should have 1 neighbour"
             );
             assert!(
@@ -463,7 +463,7 @@ mod test_application_core {
             );
 
             assert!(
-                ball3.get_neighbour_names(balls).contains(&ball2.get_name()),
+                !ball3.get_neighbour_names(balls).contains(&ball2.get_name()),
                 "Ball 3 should have no neighbours because it is far from others"
             );
         }
