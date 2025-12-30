@@ -210,10 +210,15 @@ impl BallPhysics {
         skin_thickness * 0.5
     }
 
+    pub(crate) fn equilibrium_edge_distance(&self) -> f32 {
+        //case: r1==r2 --- SQRT6_OF_TWO * LJ_SIG + 2* rad == dist_equi
+        SQRT6_OF_TWO * self.constants.lj_sig
+    }
+
     /// equilibrium distance of two balls with same radius
     pub(crate) fn equilibrium_of_radius(&self, radius: f32) -> f32 {
         //case: r1==r2 --- SQRT6_OF_TWO * LJ_SIG + 2* rad == dist_equi
-        (SQRT6_OF_TWO * self.constants.lj_sig) * 0.5 + radius
+        self.equilibrium_edge_distance() * 0.5 + radius
     }
 
     pub(crate) fn force(&self, edge_dist: f32) -> f32 {
@@ -316,21 +321,7 @@ impl BallPhysics {
     }
 
     pub fn is_colliding(&self, this: &Ball2D, other: &Ball2D, margin: f32) -> bool {
-        //use norm_sq to avoid sqrt in norm
-        let radius_sum_sq = (this.radius + other.radius/*+ self.constants.lj_sig*/+margin).powi(2);
-        let balls_collide =
-            this.get_position().dist(other.get_position()).norm_sq() < radius_sum_sq;
-        if balls_collide {
-            println!(
-                "ball {} at {} is too close to {}: dist = {} sum_rad = {}",
-                this.id,
-                this.get_position(),
-                other.get_position(),
-                this.get_position().dist(other.get_position()).norm(),
-                this.radius + other.radius
-            )
-        }
-        balls_collide
+        this.get_edge_distance(other) < margin
     }
 
     pub fn update_positions(&self, ball: &mut Ball2D, dt: f32, bound: &Rect) -> BounceInfo {
