@@ -64,9 +64,12 @@ impl MainContent {
         }
 
         self.collect_neighbours_by_cell(time_step);
+
+        #[cfg(debug_assertions)]
         self.output_ten_closest_balls();
     }
 
+    #[cfg(debug_assertions)]
     pub(crate) fn output_ten_closest_balls(&self) {
         // Collect all neighbor pairs with their distances
         let mut pairs: Vec<(usize, usize, f32)> = Vec::new();
