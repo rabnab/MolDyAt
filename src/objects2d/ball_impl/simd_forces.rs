@@ -31,7 +31,15 @@ pub fn force_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2D]) -> F
     let mut force = Vec2D::new(0., 0.);
     let mut min_dist = f32::NAN;
     let mut total_pot = 0.;
-    let mut neighbor_forces = Vec::new();
+
+    // Optimization: Only collect neighbor forces if visualization is enabled for this ball
+    // This avoids expensive allocations and vector pushes in the hot path
+    let collect_neighbor_forces = balls[ball_idx].verbose.lines();
+    let mut neighbor_forces = if collect_neighbor_forces {
+        Vec::with_capacity(balls[ball_idx].hood.get_number_of_neighbors())
+    } else {
+        Vec::new()
+    };
 
     let ball_pos = balls[ball_idx].get_position();
     let ball_radius = balls[ball_idx].radius;
@@ -134,9 +142,11 @@ pub fn force_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2D]) -> F
         };
 
         // Store per-neighbor force magnitudes for visualization
-        let lj_force_array: [f32; 4] = lj_force.abs().to_array();
-        for (i, &neighbour_idx) in chunk.iter().enumerate() {
-            neighbor_forces.push((neighbour_idx, lj_force_array[i]));
+        if collect_neighbor_forces {
+            let lj_force_array: [f32; 4] = lj_force.abs().to_array();
+            for (i, &neighbour_idx) in chunk.iter().enumerate() {
+                neighbor_forces.push((neighbour_idx, lj_force_array[i]));
+            }
         }
     }
 
@@ -169,8 +179,9 @@ pub fn force_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2D]) -> F
             total_pot += physics.potential(edge_dist);
 
             // Store per-neighbor force magnitude for visualization
-            neighbor_forces.push((neighbour_idx, lj_force.abs()));
-
+            if collect_neighbor_forces {
+                neighbor_forces.push((neighbour_idx, lj_force.abs()));
+            }
             // Update min_dist
             if edge_dist > 0. {
                 min_dist = if f32::is_nan(min_dist) {
