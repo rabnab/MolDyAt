@@ -38,7 +38,7 @@ impl MainContent {
             let nu_grid = CellGrid::resize(
                 &mut self.cell_grid,
                 nu_rect,
-                self.physics.get_cutoff_distance(),
+                self.physics.get_cutoff_and_skin(),
                 max_radius,
                 &mut self.balls,
             )
