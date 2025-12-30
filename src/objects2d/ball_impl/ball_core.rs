@@ -119,8 +119,7 @@ impl Ball2D {
 
     pub fn get_edge_distance(&self, other: &Ball2D) -> f32 {
         let center_dist = self.get_position().dist(other.get_position()).norm();
-        let edge_dist = center_dist - (self.radius + other.radius);
-        edge_dist
+        center_dist - (self.radius + other.radius)
     }
 
     // Core state methods
