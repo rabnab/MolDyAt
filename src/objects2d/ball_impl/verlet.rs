@@ -110,25 +110,23 @@ impl Verlet {
         ball_idx: usize,
         dt: f32,
         neighbours: &[usize],
-        cutoff: f32,
+        cutoff_and_skin: f32,
         min_movement_threshold: f32,
         balls: &mut [Ball2D],
     ) {
         let dist_limit_by_v = 0.;
-        // Reconstruct the skin from the threshold: skin = 2 * threshold
-        let skin = 2.0 * min_movement_threshold;
 
         // The search radius (Verlet radius) is cutoff + skin
         // Note: Since physics uses edge-to-edge distance, we don't need to add ball radii here
         // if 'cutoff' is the edge-distance cutoff.
-        let effective_cutoff = cutoff + skin;
+        let effective_cutoff = cutoff_and_skin;
         let dist_limit_by_closest = effective_cutoff;
         let dist_limit = f32::max(dist_limit_by_closest, dist_limit_by_v);
 
         let this_ball_needs_update = {
             let ball = &balls[ball_idx];
             if ball.verbose.console {
-                log_util::log_update_hood_start(ball, cutoff);
+                log_util::log_update_hood_start(ball, cutoff_and_skin);
             }
             ball.hood
                 .needs_update_hood(ball, dt, min_movement_threshold)

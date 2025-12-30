@@ -196,18 +196,19 @@ impl BallPhysics {
         self.constants.lj_cutoff
     }
 
+    /// A skin of 1.0 is usually a good balance.
+    /// If you want it dynamic, you could use 0.2 * self.get_cutoff_distance()
+    pub fn get_skin_thickness(&self) -> f32 {
+        0.2 * self.get_cutoff_distance()
+    }
+
     /// Returns the minimum movement threshold required before a ball's update hood needs to be recalculated.
     /// We define a fixed "skin" thickness for the Verlet list buffer.
     /// The neighbor list radius is [cutoff + skin](http://_vscodecontentref_/5).
     /// The update threshold must be `skin / 2` to ensure no particle can cross the skin buffer
     /// without triggering an update.
     pub fn get_min_movement_for_update_hood(&self, _max_radius: f32) -> f32 {
-        // A skin of 1.0 is usually a good balance.
-        // If you want it dynamic, you could use 0.2 * self.get_cutoff_distance()
-        let skin_thickness: f32 = 0.2 * self.get_cutoff_distance();
-
-        // Threshold is half the skin thickness
-        skin_thickness * 0.5
+        self.get_skin_thickness() * 0.5
     }
 
     pub(crate) fn equilibrium_edge_distance(&self) -> f32 {

@@ -91,7 +91,7 @@ impl LogStuff for MainContent {
 }
 
 pub fn log_update_hood_start(ball: &crate::objects2d::ball_impl::Ball2D, cutoff: f32) {
-    println!("update_hood: {:?} dist_lim: {} ", ball, cutoff,);
+    println!("update_hood: {:?} cutoff_and_skin: {} ", ball, cutoff,);
 }
 
 pub fn log_neighbour_add(

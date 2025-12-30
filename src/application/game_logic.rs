@@ -83,7 +83,8 @@ impl MainContent {
 
     /// Update neighbor hood for all balls in occupied cells
     fn update_neighbor_hoods_for_occupied_cells(&mut self, dt: f32, neighbor_buf: &mut Vec<usize>) {
-        let cutoff = self.physics.get_cutoff_distance();
+        let cutoff_and_skin =
+            self.physics.get_cutoff_distance() + self.physics.get_skin_thickness();
 
         // Build set of occupied cells from all balls
         let occupied_cells: std::collections::HashSet<_> = self
@@ -113,7 +114,7 @@ impl MainContent {
                     ball_idx,
                     dt,
                     neighbor_buf,
-                    cutoff,
+                    cutoff_and_skin,
                     min_movement,
                     &mut self.balls,
                 );
