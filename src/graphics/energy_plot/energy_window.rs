@@ -11,17 +11,19 @@ const DEFAULT_WIDTH: u32 = 1024; // Reduced by 20% from 1280
 const DEFAULT_HEIGHT: u32 = 576; // Reduced by 20% from 720
 
 // Text rendering constants
-const CHAR_WIDTH_PIX: u32 = 12; // pixel width per character (realistic value)
-const CHAR_HEIGHT_PIX: u32 = 18; // pixel height per character (realistic value)
-const TOP_MARGIN_PIX: u32 = 16;
+const CHAR_WIDTH_PIX: u32 = 13; // pixel width per character (realistic value)
+const CHAR_HEIGHT_PIX: u32 = 19; // pixel height per character (realistic value)
+const MARGIN_LEFT: u32 = 10;
+const MARGIN_TOP: u32 = 8;
+const MARGIN_RIGHT: u32 = 10;
+const MARGIN_BOTTOM: u32 = 10;
 
 // Base line count without status text
 const BASE_LINES: u32 = 41;
 const STATUS_TEXT_LINES: u32 = 10;
 
-const MIN_HEIGHT_WITHOUT_STATUS: u32 = TOP_MARGIN_PIX + BASE_LINES * CHAR_HEIGHT_PIX;
-const MIN_HEIGHT_WITH_STATUS: u32 =
-    TOP_MARGIN_PIX + (BASE_LINES + STATUS_TEXT_LINES) * CHAR_HEIGHT_PIX;
+const MIN_HEIGHT_WITHOUT_STATUS: u32 = MARGIN_TOP + BASE_LINES * CHAR_HEIGHT_PIX;
+const MIN_HEIGHT_WITH_STATUS: u32 = MARGIN_TOP + (BASE_LINES + STATUS_TEXT_LINES) * CHAR_HEIGHT_PIX;
 
 /// Energy plot window - a separate OS window for displaying energy plots
 pub struct EnergyPlotWindow {
@@ -185,12 +187,9 @@ impl EnergyPlotWindow {
 
             // Compute character grid dimensions from pixel size and character metrics
             // Subtract all margins (top, bottom, left, right) for actual plot area
-            const LEFT_MARGIN: u32 = 20;
-            const RIGHT_MARGIN: u32 = 20;
-            const TOP_MARGIN: u32 = TOP_MARGIN_PIX;
-            const BOTTOM_MARGIN: u32 = 20;
-            let available_width = width.saturating_sub(LEFT_MARGIN + RIGHT_MARGIN);
-            let available_height = height.saturating_sub(TOP_MARGIN + BOTTOM_MARGIN);
+
+            let available_width = width.saturating_sub(MARGIN_LEFT + MARGIN_RIGHT);
+            let available_height = height.saturating_sub(MARGIN_TOP + MARGIN_BOTTOM);
 
             // Calculate grid size to fill window, no hard clamp
             let cols = (available_width / CHAR_WIDTH_PIX) as usize;
@@ -233,20 +232,20 @@ impl EnergyPlotWindow {
         text: &str,
         color_map: &[Vec<u32>],
     ) {
-        const CHAR_WIDTH: usize = 13; // pixels
-        const CHAR_HEIGHT: usize = 19; // pixels
-        let left_margin = 10usize;
-        let top_margin = 8usize;
+        let left_margin = MARGIN_LEFT as usize;
+        let top_margin = MARGIN_TOP as usize;
+        let char_width = CHAR_WIDTH_PIX as usize;
+        let char_height = CHAR_HEIGHT_PIX as usize;
 
         let mut y = top_margin;
         for (line_idx, line) in text.lines().enumerate() {
-            if y + CHAR_HEIGHT >= height {
+            if y + char_height >= height {
                 break;
             }
 
             let mut x = left_margin;
             for (char_idx, ch) in line.chars().enumerate() {
-                if x + CHAR_WIDTH >= width {
+                if x + char_width >= width {
                     break;
                 }
 
@@ -260,38 +259,40 @@ impl EnergyPlotWindow {
                 // Render character using bitmap font
                 Self::draw_char_scaled(buffer, width, x, y, ch, color);
 
-                x += CHAR_WIDTH;
+                x += char_width;
             }
 
-            y += CHAR_HEIGHT;
+            y += char_height;
         }
     }
 
     /// Simple bitmap font renderer - renders text as pixels
     fn render_text_to_buffer(buffer: &mut [u32], width: usize, height: usize, text: &str) {
-        const CHAR_WIDTH: usize = 13; // pixels
-        const CHAR_HEIGHT: usize = 19; // pixels
         const TEXT_COLOR: u32 = 0xFFCCCCCC;
+        let left_margin = MARGIN_LEFT as usize;
+        let top_margin = MARGIN_TOP as usize;
+        let char_width = CHAR_WIDTH_PIX as usize;
+        let char_height = CHAR_HEIGHT_PIX as usize;
 
-        let mut y = 16; // top margin
+        let mut y = top_margin; // top margin
         for line in text.lines() {
-            if y + CHAR_HEIGHT >= height {
+            if y + char_height >= height {
                 break;
             }
 
-            let mut x = 16;
+            let mut x = left_margin;
             for ch in line.chars() {
-                if x + CHAR_WIDTH >= width {
+                if x + char_width >= width {
                     break;
                 }
 
                 // Render actual character using bitmap font
                 Self::draw_char_scaled(buffer, width, x, y, ch, TEXT_COLOR);
 
-                x += CHAR_WIDTH;
+                x += char_width;
             }
 
-            y += CHAR_HEIGHT;
+            y += char_height;
         }
     }
 
@@ -307,15 +308,19 @@ impl EnergyPlotWindow {
         let glyph = Self::get_glyph(ch);
 
         // Target size is 13x19, source is 8x8
-        const TARGET_WIDTH: usize = 13;
-        const TARGET_HEIGHT: usize = 19;
+        let target_width = CHAR_WIDTH_PIX as usize;
+        let target_height = CHAR_HEIGHT_PIX as usize;
         const SOURCE_SIZE: usize = 8;
 
-        for ty in 0..TARGET_HEIGHT {
-            for tx in 0..TARGET_WIDTH {
+        for ty in 0..target_height {
+            // Optimization: Calculate source Y once per row
+            let sy = (ty * SOURCE_SIZE) / target_height;
+            if sy >= SOURCE_SIZE {
+                continue;
+            }
+            for tx in 0..target_width {
                 // Map target pixel to source pixel
-                let sx = (tx * SOURCE_SIZE) / TARGET_WIDTH;
-                let sy = (ty * SOURCE_SIZE) / TARGET_HEIGHT;
+                let sx = (tx * SOURCE_SIZE) / target_width;
 
                 if sy < SOURCE_SIZE && sx < SOURCE_SIZE {
                     let row = glyph[sy];
@@ -447,9 +452,8 @@ mod tests {
     #[test]
     fn test_height_constants_calculation() {
         // Compute expected values from constants, not hardcoded numbers
-        let expected_without_status = TOP_MARGIN_PIX + BASE_LINES * CHAR_HEIGHT_PIX;
-        let expected_with_status =
-            TOP_MARGIN_PIX + (BASE_LINES + STATUS_TEXT_LINES) * CHAR_HEIGHT_PIX;
+        let expected_without_status = MARGIN_TOP + BASE_LINES * CHAR_HEIGHT_PIX;
+        let expected_with_status = MARGIN_TOP + (BASE_LINES + STATUS_TEXT_LINES) * CHAR_HEIGHT_PIX;
 
         assert_eq!(MIN_HEIGHT_WITHOUT_STATUS, expected_without_status);
         assert_eq!(MIN_HEIGHT_WITH_STATUS, expected_with_status);
