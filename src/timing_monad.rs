@@ -56,7 +56,7 @@ impl TimingMonad {
     #[inline(never)]
     pub fn log(&self) {
         for (label, duration) in &self.timings {
-            println!("{}: {:?} ms", label, duration.as_millis());
+            println!("{}: {:?} ns", label, duration.as_nanos());
         }
     }
 }
