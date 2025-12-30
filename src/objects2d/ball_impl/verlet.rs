@@ -115,11 +115,13 @@ impl Verlet {
         balls: &mut [Ball2D],
     ) {
         let dist_limit_by_v = 0.;
+        // Reconstruct the skin from the threshold: skin = 2 * threshold
+        let skin = 2.0 * min_movement_threshold;
 
-        // Effective cutoff accounts for ball radii: when checking edge-to-edge distance,
-        // we need to add the radii of both balls to the LJ cutoff distance.
-        // Using 2 * max_radius ensures we capture all possible interactions.
-        let effective_cutoff = cutoff + 2.0 * max_radius;
+        // The search radius (Verlet radius) is cutoff + skin
+        // Note: Since physics uses edge-to-edge distance, we don't need to add ball radii here
+        // if 'cutoff' is the edge-distance cutoff.
+        let effective_cutoff = cutoff + skin;
         let dist_limit_by_closest = effective_cutoff;
         let dist_limit = f32::max(dist_limit_by_closest, dist_limit_by_v);
 

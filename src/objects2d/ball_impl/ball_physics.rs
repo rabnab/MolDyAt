@@ -196,54 +196,18 @@ impl BallPhysics {
         self.constants.lj_cutoff
     }
 
-    /// Returns the minimum movement threshold (skin depth) before a ball's neighbor list must be updated.
-    ///
-    /// # Verlet List Skin Depth Calculation
-    ///
-    /// The threshold is based on the difference between the cell grid size and the effective interaction range:
-    ///
-    /// ```text
-    /// skin_depth = (cell_size - effective_cutoff) / 2
-    /// ```
-    ///
-    /// Where:
-    /// - `cell_size = 2.5 * LJ_cutoff` (defined in CellGrid::new, uses LJ cutoff only)
-    /// - `effective_cutoff = LJ_cutoff + 2 * max_radius` (interaction range accounting for ball radii)
-    ///
-    /// This gives:
-    /// ```text
-    /// skin_depth = (2.5 * LJ_cutoff - (LJ_cutoff + 2 * max_radius)) / 2
-    ///            = (1.5 * LJ_cutoff - 2 * max_radius) / 2
-    ///            = 0.75 * LJ_cutoff - max_radius
-    /// ```
-    ///
-    /// # Rationale
-    ///
-    /// When a ball moves more than `skin_depth` from its last update position, it could have:
-    /// 1. Entered interaction range of a ball in an adjacent cell
-    /// 2. Left interaction range of a current neighbor
-    ///
-    /// The factor of 2 accounts for relative motion: if ball A moves `skin_depth` and ball B moves
-    /// `skin_depth` in opposite directions, their relative displacement is `2 * skin_depth`, which
-    /// equals the full buffer `(cell_size - effective_cutoff)`.
-    ///
-    /// # Parameters
-    /// - `max_radius`: Largest ball radius in the simulation (affects effective interaction range)
-    ///
-    /// # Returns
-    /// Movement threshold in simulation units. When exceeded, neighbor list rebuild is triggered.
-    pub fn get_min_movement_for_update_hood(&self, max_radius: f32) -> f32 {
-        let cutoff = self.get_cutoff_distance();
+    /// Returns the minimum movement threshold required before a ball's update hood needs to be recalculated.
+    /// We define a fixed "skin" thickness for the Verlet list buffer.
+    /// The neighbor list radius is [cutoff + skin](http://_vscodecontentref_/5).
+    /// The update threshold must be `skin / 2` to ensure no particle can cross the skin buffer
+    /// without triggering an update.
+    pub fn get_min_movement_for_update_hood(&self, _max_radius: f32) -> f32 {
+        // A skin of 1.0 is usually a good balance.
+        // If you want it dynamic, you could use 0.2 * self.get_cutoff_distance()
+        let skin_thickness: f32 = 0.2 * self.get_cutoff_distance();
 
-        // Cell grid size is based on LJ cutoff alone (see CellGrid::new)
-        let cell_size = 2.5 * cutoff;
-
-        // Effective interaction cutoff includes ball radii (edge-to-edge → center-to-center)
-        let effective_cutoff = cutoff + 2.0 * max_radius;
-
-        // Skin depth: half the buffer between cell size and interaction range
-        // This is the standard Verlet list update criterion
-        (cell_size - effective_cutoff) / 2.0
+        // Threshold is half the skin thickness
+        skin_thickness * 0.5
     }
 
     pub(crate) fn equilibrium_edge_distance(&self) -> f32 {
