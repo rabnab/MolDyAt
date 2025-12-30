@@ -71,15 +71,6 @@ impl MainContent {
     pub fn get_snapshot_slot(&self) -> Arc<arc_swap::ArcSwapOption<RendererSnapshot>> {
         self.snapshot_slot.clone()
     }
-
-    /// Collects neighbor indices for all balls
-    /// Returns a Vec where neighbor_info[i] contains indices of ball i's neighbors
-    pub(crate) fn collect_all_neighbors(&self) -> Vec<Vec<usize>> {
-        self.balls
-            .iter()
-            .map(|ball| ball.hood.get_neighbour_indices().to_vec())
-            .collect()
-    }
 }
 
 #[cfg(test)]
