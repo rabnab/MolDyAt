@@ -52,11 +52,12 @@ impl TimingMonad {
         self.timings.push((label.to_string(), duration));
         result
     }
+
     #[cfg(feature = "measure-time")]
     #[inline(never)]
     pub fn log(&self) {
         for (label, duration) in &self.timings {
-            println!("{}: {:?} ns", label, duration.as_nanos());
+            println!("{}: {:?} µs", label, duration.as_nanos() / 1000);
         }
     }
 }
