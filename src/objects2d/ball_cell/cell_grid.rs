@@ -46,12 +46,18 @@ impl CellGrid {
 
 impl CellGrid {
     /// Create a new CellGrid covering the specified world rectangle with cells sized based on the cutoff distance.
-    pub fn new(world_rect: Rect, cutoff: f32) -> AppResult<Self> {
+    pub fn new(world_rect: Rect, cutoff: f32, max_radius: f32) -> AppResult<Self> {
         let sim_width = world_rect.w;
         let sim_height = world_rect.h;
         let (top_left_x, top_left_y) = world_rect.get_tl();
 
-        let cell_size = 2.5 * cutoff;
+        // Cell size must be large enough to contain the interaction radius (cutoff + skin)
+        // plus the diameter of the largest ball (2 * max_radius) to ensure that
+        // checking 3x3 neighbors covers all potential interactions.
+        // Skin is assumed to be 0.2 * cutoff (matching BallPhysics).
+        let skin = 0.2 * cutoff;
+        let cell_size = cutoff + skin + 2.0 * max_radius;
+
         let grid_width = (sim_width.abs() / cell_size).ceil() as usize;
         let grid_height = (sim_height.abs() / cell_size).ceil() as usize;
 
@@ -225,9 +231,10 @@ impl CellGrid {
         old_grid: &mut CellGrid,
         new_world: Rect,
         cutoff: f32,
+        max_radius: f32,
         balls: &mut [Ball2D],
     ) -> AppResult<Self> {
-        let mut new_grid = CellGrid::new(new_world, cutoff)?;
+        let mut new_grid = CellGrid::new(new_world, cutoff, max_radius)?;
 
         for row in &mut old_grid.cells {
             for cell in row {

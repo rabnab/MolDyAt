@@ -2,9 +2,9 @@ use super::StatsAccumulator;
 use super::*;
 use crate::application::VerletIntegration;
 use crate::objects2d::Rect;
-use crate::objects2d::ball_impl::ForceResult;
 use crate::objects2d::ball_impl::ball_core::BounceInfo;
 use crate::objects2d::ball_impl::simd_forces::force_simd;
+use crate::objects2d::ball_impl::{BallFactory, ForceResult};
 use rayon::prelude::*;
 
 impl MainContent {
@@ -33,11 +33,13 @@ impl MainContent {
                 self.sim.toggle_pause();
             }
 
+            let max_radius = BallFactory::get_max_radius();
             let nu_rect = self.world_region();
             let nu_grid = CellGrid::resize(
                 &mut self.cell_grid,
                 nu_rect,
                 self.physics.get_cutoff_distance(),
+                max_radius,
                 &mut self.balls,
             )
             .expect("Failed to resize CellGrid");

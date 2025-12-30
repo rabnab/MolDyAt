@@ -1,6 +1,7 @@
 use super::{BallPhysics, CellGrid, MainContent, SimStats};
 use crate::application::{AppResult, GameLogic};
 use crate::objects2d::Rect;
+use crate::objects2d::ball_impl::BallFactory;
 use arc_swap::ArcSwapOption;
 use std::sync::Arc;
 
@@ -8,8 +9,9 @@ impl MainContent {
     pub fn new(world_rect: Rect) -> AppResult<Self> {
         let loc_physics = BallPhysics::default();
         let cutoff = loc_physics.get_cutoff_distance();
+        let max_radius = BallFactory::get_max_radius();
 
-        let my_cell_grid = CellGrid::new(world_rect, cutoff)?;
+        let my_cell_grid = CellGrid::new(world_rect, cutoff, max_radius)?;
 
         Ok(Self {
             balls: Vec::new(),

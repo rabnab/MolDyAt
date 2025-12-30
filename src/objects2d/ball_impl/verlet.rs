@@ -113,15 +113,16 @@ impl Verlet {
         neighbours: &[usize],
         cutoff: f32,
         min_movement_threshold: f32,
-        max_radius: f32,
         balls: &mut [Ball2D],
     ) {
         let dist_limit_by_v = 0.;
+        // Reconstruct the skin from the threshold: skin = 2 * threshold
+        let skin = 2.0 * min_movement_threshold;
 
-        // Effective cutoff accounts for ball radii: when checking edge-to-edge distance,
-        // we need to add the radii of both balls to the LJ cutoff distance.
-        // Using 2 * max_radius ensures we capture all possible interactions.
-        let effective_cutoff = cutoff + 2.0 * max_radius;
+        // The search radius (Verlet radius) is cutoff + skin
+        // Note: Since physics uses edge-to-edge distance, we don't need to add ball radii here
+        // if 'cutoff' is the edge-distance cutoff.
+        let effective_cutoff = cutoff + skin;
         let dist_limit_by_closest = effective_cutoff;
         let dist_limit = f32::max(dist_limit_by_closest, dist_limit_by_v);
 
@@ -510,7 +511,7 @@ mod tests {
         let candidates = vec![1, 2];
 
         // Update hood for ball 0
-        Verlet::update_hood(0, 0.01, &candidates, cutoff, 0.1, max_radius, &mut balls);
+        Verlet::update_hood(0, 0.01, &candidates, cutoff, 0.1, &mut balls);
 
         // Ball 0 should have ball 1 as neighbor (within range) but not ball 2 (beyond range)
         let neighbors = &balls[0].hood.neighbours;
@@ -547,7 +548,7 @@ mod tests {
         let mut balls = vec![ball0, ball1];
 
         // Initial update - ball 1 should be a neighbor
-        Verlet::update_hood(0, 0.01, &[1], cutoff, 0.1, max_radius, &mut balls);
+        Verlet::update_hood(0, 0.01, &[1], cutoff, 0.1, &mut balls);
         assert!(
             balls[0].hood.neighbours.contains(&1),
             "Ball 1 should initially be a neighbor"
@@ -558,7 +559,7 @@ mod tests {
         balls[0].last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
 
         // Update again - ball 1 should be removed
-        Verlet::update_hood(0, 0.01, &[1], cutoff, 0.1, max_radius, &mut balls);
+        Verlet::update_hood(0, 0.01, &[1], cutoff, 0.1, &mut balls);
         assert!(
             !balls[0].hood.neighbours.contains(&1),
             "Ball 1 should be removed after moving beyond effective cutoff"
