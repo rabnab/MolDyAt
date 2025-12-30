@@ -37,6 +37,11 @@ cargo +nightly test
 
 * [Performance Optimization Guide](PERFORMANCE_OPTIMIZATION.md) - Comprehensive guide covering parallelization, SIMD,
   and performance characteristics
+* [Copilot Instructions](.github/copilot-instructions.md) - Guidelines for working with GitHub Copilot on this project
+
+## Contributing
+
+Want to contribute? Check out our [Contributing Guide](CONTRIBUTING.md) for development workflow, code quality standards, and how to submit pull requests.
 
 ## Future Plans
 * use openGL with shaders for pretty output
