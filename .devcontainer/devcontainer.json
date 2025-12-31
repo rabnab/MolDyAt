@@ -1,12 +1,29 @@
 {
-	"image": "mcr.microsoft.com/devcontainers/universal:2",
+	"name": "Rust Thermo",
+	"image": "mcr.microsoft.com/devcontainers/base:ubuntu-22.04",
+	"remoteUser": "vscode",
 	"features": {
 		"ghcr.io/devcontainers/features/rust:1": {
-			"version": "latest",
-			"profile": "minimal",
-			"targets": "wasm32-unknown-unknown",
+			"version": "nightly",
 			"components": "rust-analyzer,rust-src,rustfmt,clippy"
+		},
+		"ghcr.io/devcontainers/features/apt-packages:1": {
+			"packages": "libudev-dev"
 		}
 	},
-	"postCreateCommand": "sudo apt-get update && sudo apt-get install -y libudev-dev"
+	"mounts": [
+		"type=cache,target=/home/vscode/.cargo/registry",
+		"type=cache,target=/home/vscode/.cargo/git"
+	],
+	"containerEnv": {
+		"RUSTUP_TOOLCHAIN": "nightly"
+	},
+	"customizations": {
+		"vscode": {
+			"settings": {
+				"rust-analyzer.checkOnSave.command": "clippy",
+				"rust-analyzer.cargo.targetDir": "/tmp/ra-target"
+			}
+		}
+	}
 }
