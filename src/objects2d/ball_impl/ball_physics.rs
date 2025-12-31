@@ -8,8 +8,6 @@ use std::simd::prelude::SimdFloat;
 //const LJ_SIG: f32 = 5.; // equilibrium distance
 //LJ_SIG in SI units is for Argon 3.4A=3.4E-10m
 const LJ_SIG: f32 = 1.; // equilibrium distance
-//pub(crate) const LJ_CUTOFF: f32 = 8. * LJ_SIG; //distance where lenard jones force is < 1e-4 (as long as sig>0.1)
-const LJ_CUTOFF: f32 = 4. * LJ_SIG; //distance where lenard jones force is < 1e-4 (as long as sig>0.1)
 const LJ_EPS: f32 = 1.; // attractive strength
 const MAX_FORCE: f32 = 100.0; // max repulsive force to cap at
 const SQRT6_OF_TWO: f32 = 1.122_462; // == 2^(1/6)
@@ -28,7 +26,7 @@ pub struct PhysicsConstants {
 
 impl PhysicsConstants {
     #[cfg(test)]
-    fn new(lj_sig: f32, lj_eps: f32, max_force: f32) -> Self {
+    fn new_for_test(lj_sig: f32, lj_eps: f32, max_force: f32) -> Self {
         let r_cap = Self::calculate_force_cap_distance(lj_sig, lj_eps, max_force);
         let pot_at_cap = {
             let cap_quot = lj_sig / r_cap;
@@ -154,7 +152,7 @@ impl Default for PhysicsConstants {
             //gravity: 1.0,
             max_force: MAX_FORCE,
             //softening: 0.01,
-            lj_cutoff: LJ_CUTOFF, // Standard cutoff for L-J potential 2.5
+            lj_cutoff: 4. * LJ_SIG, // Standard cutoff for L-J potential 2.5
             pot_at_cap,
             r_cap,
         }
@@ -183,7 +181,7 @@ pub struct BallPhysics {
 
 impl Default for BallPhysics {
     fn default() -> Self {
-        let constants = PhysicsConstants::default();
+        let constants: PhysicsConstants = PhysicsConstants::default();
         BallPhysics { constants }
     }
 }
@@ -198,29 +196,34 @@ impl BallPhysics {
         self.constants.lj_cutoff
     }
 
-    /// Returns the minimum movement threshold required before a ball's update hood (region for neighbor search)
-    /// needs to be recalculated. This threshold is set to half the difference between the cell size and the cutoff
-    /// distance, i.e., `(cell_size - cutoff) / 2.0`, which is equivalent to `0.75 * cutoff` when `cell_size = 2.5 * cutoff`.
-    /// The cell size (`2.5 * cutoff`) is chosen to ensure that neighbor searches are efficient and accurate.
-    /// By only updating the hood when a ball moves more than this threshold, unnecessary recalculations are avoided,
-    /// improving performance while maintaining correctness in neighbor detection.
-    ///
-    /// Note: The max_radius parameter accounts for the largest ball in the simulation. Since cutoff is measured
-    /// edge-to-edge but ball movement is center-to-center, we need to consider the ball radii when determining
-    /// if a neighbor might have entered or left the interaction range.
-    pub fn get_min_movement_for_update_hood(&self, max_radius: f32) -> f32 {
-        let cutoff = self.get_cutoff_distance();
-        // The cell size must accommodate the cutoff plus the maximum ball diameter
-        // to ensure all potential neighbors are captured
-        let effective_cutoff = cutoff + 2.0 * max_radius;
-        let cell_size = 2.5 * effective_cutoff;
-        (cell_size - effective_cutoff) / 2.0
+    /// A skin of 1.0 is usually a good balance.
+    /// If you want it dynamic, you could use 0.2 * self.get_cutoff_distance()
+    pub fn get_skin_thickness(&self) -> f32 {
+        2.0 * self.get_cutoff_distance()
+    }
+
+    pub fn get_cutoff_and_skin(&self) -> f32 {
+        self.get_cutoff_distance() + self.get_skin_thickness()
+    }
+
+    /// Returns the minimum movement threshold required before a ball's update hood needs to be recalculated.
+    /// We define a fixed "skin" thickness for the Verlet list buffer.
+    /// The neighbor list radius is [cutoff + skin](http://_vscodecontentref_/5).
+    /// The update threshold must be `skin / 2` to ensure no particle can cross the skin buffer
+    /// without triggering an update.
+    pub fn get_min_movement_for_update_hood(&self, _max_radius: f32) -> f32 {
+        self.get_skin_thickness() * 0.5
+    }
+
+    pub(crate) fn equilibrium_edge_distance(&self) -> f32 {
+        //case: r1==r2 --- SQRT6_OF_TWO * LJ_SIG + 2* rad == dist_equi
+        SQRT6_OF_TWO * self.constants.lj_sig
     }
 
     /// equilibrium distance of two balls with same radius
     pub(crate) fn equilibrium_of_radius(&self, radius: f32) -> f32 {
         //case: r1==r2 --- SQRT6_OF_TWO * LJ_SIG + 2* rad == dist_equi
-        (SQRT6_OF_TWO * self.constants.lj_sig) * 0.5 + radius
+        self.equilibrium_edge_distance() * 0.5 + radius
     }
 
     pub(crate) fn force(&self, edge_dist: f32) -> f32 {
@@ -322,22 +325,8 @@ impl BallPhysics {
         center_dist - (a.radius + b.radius)
     }
 
-    pub fn is_colliding(&self, this: &Ball2D, other: &Ball2D) -> bool {
-        //use norm_sq to avoid sqrt in norm
-        let radius_sum_sq = (this.radius + other.radius/*+ self.constants.lj_sig*/).powi(2);
-        let balls_collide =
-            this.get_position().dist(other.get_position()).norm_sq() < radius_sum_sq;
-        if balls_collide {
-            println!(
-                "ball {} at {} is too close to {}: dist = {} sum_rad = {}",
-                this.id,
-                this.get_position(),
-                other.get_position(),
-                this.get_position().dist(other.get_position()).norm(),
-                this.radius + other.radius
-            )
-        }
-        balls_collide
+    pub fn is_colliding(&self, this: &Ball2D, other: &Ball2D, margin: f32) -> bool {
+        this.get_edge_distance(other) < margin
     }
 
     pub fn update_positions(&self, ball: &mut Ball2D, dt: f32, bound: &Rect) -> BounceInfo {
@@ -437,13 +426,13 @@ mod tests {
         let b_pos = Vec2D::new(2.0 + LJ_SIG * 0.99999, 3.0);
         let b = Ball2D::new(2, b_pos, (0, 6.0));
 
-        assert!(phys.is_colliding(&a, &b));
+        assert!(phys.is_colliding(&a, &b, 0.));
 
         let c_radius = 6.0;
         let c_pos = Vec2D::new(2.0, 3.0 + (a.radius + c_radius) + LJ_SIG * 1.00001);
         let c = Ball2D::new(2, c_pos, (0, c_radius));
 
-        assert!(!phys.is_colliding(&a, &c));
+        assert!(!phys.is_colliding(&a, &c, 0.));
     }
 
     #[test]
@@ -477,15 +466,21 @@ mod tests {
         let phys = BallPhysics::default();
         let cutoff = phys.get_cutoff_distance();
         let max_radius = 1.0; // Example max radius
-        let effective_cutoff = cutoff + 2.0 * max_radius;
-        let cell_size = 2.5 * effective_cutoff;
-        let expected_threshold = (cell_size - effective_cutoff) / 2.0;
+
+        // New logic: skin-based Verlet lists
+        // skin_thickness = 2.0 * cutoff
+        // cutoff_and_skin = cutoff + skin_thickness = 3.0 * cutoff
+        // min_movement = skin_thickness / 2 = cutoff
+        let skin_thickness = phys.get_skin_thickness();
+        let expected_threshold = skin_thickness / 2.0;
+
+        // This simplifies to: cutoff (since skin_thickness = 2.0 * cutoff)
+        let expected_simplified = cutoff;
 
         let actual_threshold = phys.get_min_movement_for_update_hood(max_radius);
 
         approx(actual_threshold, expected_threshold, 1e-6);
-        // Also verify the calculation directly: (2.5 * rc_eff - rc_eff) / 2 = 0.75 * rc_eff
-        approx(actual_threshold, 0.75 * effective_cutoff, 1e-6);
+        approx(actual_threshold, expected_simplified, 1e-6);
     }
 
     #[test]
@@ -596,7 +591,7 @@ mod tests {
         ];
 
         for (lj_sig, lj_eps, max_force) in test_cases {
-            let constants = PhysicsConstants::new(lj_sig, lj_eps, max_force);
+            let constants = PhysicsConstants::new_for_test(lj_sig, lj_eps, max_force);
             println!(
                 "Testing force cap calculation for sig={}, eps={}, F_max={}",
                 lj_sig, lj_eps, max_force

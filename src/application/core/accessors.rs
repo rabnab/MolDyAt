@@ -1,5 +1,6 @@
 use super::*;
 use crate::objects2d::Rect;
+use crate::objects2d::ball_cell::cell_grid;
 use crate::objects2d::ball_impl::BallFactory;
 
 impl MainContent {
@@ -56,10 +57,11 @@ impl MainContent {
         self.world_rect = world_rect;
 
         // Rebuild cell grid with new dimensions
-        let cutoff = self.physics.get_cutoff_distance();
-        self.cell_grid =
-            crate::objects2d::ball_cell::cell_grid::CellGrid::new(self.world_rect, cutoff)
-                .expect("Failed to create cell grid on resize");
+        let cutoff_and_skin =
+            self.physics.get_cutoff_distance() + self.physics.get_skin_thickness();
+        let max_radius = BallFactory::get_max_radius();
+        self.cell_grid = cell_grid::CellGrid::new(self.world_rect, cutoff_and_skin, max_radius)
+            .expect("Failed to create cell grid on resize");
 
         // Re-add all balls to the new cell grid
         for i in 0..self.balls.len() {

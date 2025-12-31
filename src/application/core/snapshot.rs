@@ -21,7 +21,6 @@ impl MainContent {
             )
             .unwrap_or_else(|| size_class_to_rgba(ball.get_size_idx()));
 
-
             // Reuse force magnitudes from cached SIMD computation (if available)
             // This avoids wasteful recalculation of forces that were already computed
             let neighbors: Vec<(usize, f32)> = if ball_idx < self.cached_force_results.len() {
@@ -32,7 +31,6 @@ impl MainContent {
                 Vec::new()
             };
 
-
             balls.push(BallRenderData {
                 id: ball.get_id(),
                 size_idx: ball.get_size_idx(),
@@ -42,6 +40,10 @@ impl MainContent {
                 show_neighbor_lines: ball.verbose.lines(),
                 show_main_neighbors_only: ball.verbose.is_main(),
                 neighbors,
+                update_counter: ball.get_update_counter(),
+                tail: ball
+                    .get_tail_positions()
+                    .map_or(Vec::new(), |tail| tail.iter().cloned().collect()),
             });
         }
 
@@ -68,15 +70,6 @@ impl MainContent {
     /// Get a clone of the snapshot slot Arc for sharing with renderer
     pub fn get_snapshot_slot(&self) -> Arc<arc_swap::ArcSwapOption<RendererSnapshot>> {
         self.snapshot_slot.clone()
-    }
-
-    /// Collects neighbor indices for all balls
-    /// Returns a Vec where neighbor_info[i] contains indices of ball i's neighbors
-    pub(crate) fn collect_all_neighbors(&self) -> Vec<Vec<usize>> {
-        self.balls
-            .iter()
-            .map(|ball| ball.hood.get_neighbour_indices().to_vec())
-            .collect()
     }
 }
 

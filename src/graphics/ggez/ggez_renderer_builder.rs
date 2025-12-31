@@ -2,7 +2,7 @@ use crate::graphics::ggez::WindowDefinitionRef;
 use crate::graphics::ggez::ggez_renderer::{
     CIRCLE_TOLERANCE, CROSSHAIR_SIZE, GgezRenderer, STROKE_THICKNESS,
 };
-use crate::graphics::renderer::PlotContent;
+use crate::graphics::renderer::{BallType, PlotContent};
 use crate::graphics::window::window_definition::WindowDefinition;
 use crate::objects2d::Vec2D;
 use ggez::Context;
@@ -14,6 +14,8 @@ pub struct GgezRendererBuilder {
     crosshair_mesh: Option<Mesh>,
     window_def_ref: Option<WindowDefinitionRef>,
     ball_mesh: Option<Vec<Mesh>>,
+    cursor_mesh: Option<Vec<Mesh>>,
+    hood_updated_mesh: Option<Vec<Mesh>>,
     // cell_mesh: Option<((f32, f32), Mesh)>,
     // neighbour_force_and_pos: Option<
     //     fn(&crate::objects2d::ball_impl::ball_core::Ball2D) -> Vec<(crate::objects2d::Vec2D, f32)>,
@@ -26,6 +28,8 @@ impl Default for GgezRendererBuilder {
             show_plot: PlotContent::None,
             crosshair_mesh: None,
             ball_mesh: None,
+            cursor_mesh: None,
+            hood_updated_mesh: None,
             window_def_ref: None,
             // neighbour_force_and_pos: None,
             // cell_mesh: None,
@@ -43,8 +47,15 @@ impl GgezRendererBuilder {
         self
     }
 
-    pub fn context(mut self, ctx: &Context, sizes: Vec<(f32, f32)>) -> Self {
-        self.ball_mesh = initialize_ball_meshes(ctx, sizes);
+    pub fn context_and_ball_def(
+        mut self,
+        ctx: &Context,
+        cutoff: f32,
+        sizes: Vec<(f32, f32)>,
+    ) -> Self {
+        self.ball_mesh = initialize_ball_meshes(ctx, cutoff, sizes.clone(), BallType::Normal);
+        self.cursor_mesh = initialize_ball_meshes(ctx, cutoff, sizes.clone(), BallType::Cursor);
+        self.hood_updated_mesh = initialize_ball_meshes(ctx, cutoff, sizes, BallType::HoodUpdated);
         self.crosshair_mesh = initialize_crosshair_mesh(ctx);
         // self.cell_mesh = create_cell_grid_mesh(ctx, (10., 10.));
         self
@@ -59,17 +70,38 @@ impl GgezRendererBuilder {
         GgezRenderer::new(
             self.show_plot,
             self.crosshair_mesh.expect("CrosshairMesh not set"),
-            self.ball_mesh.expect("BallMesh not set"),
+            (
+                self.ball_mesh.expect("BallMesh not set"),
+                self.cursor_mesh.expect("CursorMesh not set"),
+                self.hood_updated_mesh.expect("HoodUpdatedMesh not set"),
+            ),
             self.window_def_ref.expect("WindowDefRef not set"),
         )
     }
 }
 
-fn initialize_ball_meshes(ctx: &Context, radius_equi: Vec<(f32, f32)>) -> Option<Vec<Mesh>> {
+fn initialize_ball_meshes(
+    ctx: &Context,
+    cutoff: f32,
+    radius_equi: Vec<(f32, f32)>,
+    ball_type: BallType,
+) -> Option<Vec<Mesh>> {
     let ball_meshes: Vec<Mesh> = radius_equi
         .iter()
         .map(|&radius| {
-            create_ball_mesh(ctx, radius.0, radius.1, CIRCLE_TOLERANCE, STROKE_THICKNESS)
+            create_ball_mesh(
+                ctx,
+                radius.0,
+                radius.1,
+                cutoff,
+                CIRCLE_TOLERANCE,
+                STROKE_THICKNESS,
+                match ball_type {
+                    BallType::Normal => Color::RED,
+                    BallType::Cursor => Color::WHITE,
+                    BallType::HoodUpdated => Color::from_rgb(50, 100, 200),
+                },
+            )
         })
         .collect();
     Some(ball_meshes)
@@ -80,8 +112,10 @@ fn create_ball_mesh(
     ctx: &Context,
     ball_size: f32,
     ball_eq_radius: f32,
+    cutoff: f32,
     tolerance: f32,
     stroke_thickness: f32,
+    core_color: Color,
 ) -> Mesh {
     let mut builder = MeshBuilder::new();
 
@@ -92,7 +126,7 @@ fn create_ball_mesh(
             Vec2D::new(0.0, 0.0),
             WindowDefinition::len_to_px(ball_size),
             tolerance,
-            Color::RED,
+            core_color,
         )
         .unwrap();
 
@@ -109,7 +143,6 @@ fn create_ball_mesh(
 
     // Outer stroked circle
 
-    let cutoff = 4_f32;
     builder
         .circle(
             DrawMode::stroke(stroke_thickness),

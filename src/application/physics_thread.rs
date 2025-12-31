@@ -191,10 +191,10 @@ impl PhysicsThread {
                 main_content.toggle_pause();
             }
             PhysicsCommand::AddBall(pos) => {
-                let _ = main_content.add_candidate(pos);
+                let _ = main_content.add_candidate_at_pos(pos);
             }
             PhysicsCommand::AddBallWithVelocity(ball) => {
-                let _ = main_content.add_candidate_ball(ball);
+                let _ = main_content.add_candidate_ball(ball, 0.);
             }
             PhysicsCommand::AddRandomBalls(count) => {
                 main_content.add_random_candidates(count);

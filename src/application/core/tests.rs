@@ -61,7 +61,7 @@ mod test_application_core {
         let coord = win_def.px_to_coord(x_px, y_px);
 
         main_content
-            .add_candidate(coord)
+            .add_candidate_at_pos(coord)
             .expect("Could not add candidate");
 
         assert_eq!(main_content.num_balls, 1);
@@ -90,7 +90,7 @@ mod test_application_core {
             let invalid_y_px = -10.0;
             let coord = win_def.px_to_coord(invalid_x_px, invalid_y_px);
             main_content
-                .add_candidate(coord)
+                .add_candidate_at_pos(coord)
                 .expect_err("Could not add candidate");
             assert_eq!(main_content.num_balls, 1, "Ball added out of valid region");
         }
@@ -133,12 +133,14 @@ mod test_application_core {
             .get_new_ball_radius();
         let ball_radius_px = WindowDefinition::len_to_px(ball_radius);
         let ball_coord = win_def.px_to_coord(ball_coord_px.x, ball_coord_px.y);
-        main_content.add_candidate(ball_coord.clone()).unwrap();
+        main_content
+            .add_candidate_at_pos(ball_coord.clone())
+            .unwrap();
         let ball_coord = win_def.px_to_coord(
             ball_coord_px.x + ball_radius_px * 2.2,
             ball_coord_px.y + ball_radius_px * 2.2,
         );
-        main_content.add_candidate(ball_coord).unwrap();
+        main_content.add_candidate_at_pos(ball_coord).unwrap();
         main_content.make_all_verbose(VerboseInfoMode::Console);
         main_content.simulation_step().unwrap();
 
@@ -333,7 +335,7 @@ mod test_application_core {
             .get_new_ball_radius();
         let ball_coord = win_def.px_to_coord(ball_coord_px.x, ball_coord_px.y);
         main_content
-            .add_candidate(ball_coord.clone())
+            .add_candidate_at_pos(ball_coord.clone())
             .expect(format!("could not add ball at {:?}", ball_coord).as_str());
 
         let ball_coord = win_def.px_to_coord(ball_coord_px.x, ball_coord_px.y);
@@ -353,7 +355,7 @@ mod test_application_core {
         );
 
         assert!(
-            main_content.is_ball_colliding(&colliding_ball),
+            main_content.is_ball_colliding(&colliding_ball, 0.),
             "Collision not detected"
         );
     }
@@ -400,9 +402,15 @@ mod test_application_core {
             ball1_coord, ball2_coord, ball3_coord
         );
 
-        main_content.add_candidate(ball1_coord.clone()).unwrap();
-        main_content.add_candidate(ball2_coord.clone()).unwrap();
-        main_content.add_candidate(ball3_coord.clone()).unwrap();
+        main_content
+            .add_candidate_at_pos(ball1_coord.clone())
+            .unwrap();
+        main_content
+            .add_candidate_at_pos(ball2_coord.clone())
+            .unwrap();
+        main_content
+            .add_candidate_at_pos(ball3_coord.clone())
+            .unwrap();
 
         // Initial state check
         {
@@ -450,7 +458,7 @@ mod test_application_core {
             );
             assert_eq!(
                 ball2.get_neighbour_names(balls).len(),
-                2,
+                1,
                 "Ball 2 should have 1 neighbour"
             );
             assert!(
@@ -463,7 +471,7 @@ mod test_application_core {
             );
 
             assert!(
-                ball3.get_neighbour_names(balls).contains(&ball2.get_name()),
+                !ball3.get_neighbour_names(balls).contains(&ball2.get_name()),
                 "Ball 3 should have no neighbours because it is far from others"
             );
         }
@@ -478,9 +486,15 @@ mod test_application_core {
         let ball2_coord = Vec2D::new(5.5, 5.5);
         let ball3_coord = Vec2D::new(8.0, 8.0);
 
-        main_content.add_candidate(ball1_coord.clone()).unwrap();
-        main_content.add_candidate(ball2_coord.clone()).unwrap();
-        main_content.add_candidate(ball3_coord.clone()).unwrap();
+        main_content
+            .add_candidate_at_pos(ball1_coord.clone())
+            .unwrap();
+        main_content
+            .add_candidate_at_pos(ball2_coord.clone())
+            .unwrap();
+        main_content
+            .add_candidate_at_pos(ball3_coord.clone())
+            .unwrap();
 
         // Set up neighbor relationships by running collect_neighbours
         main_content.step_count = 10;
@@ -1337,7 +1351,9 @@ mod test_application_core {
 
         // Add a ball so we have something in the snapshot
         let pos = Vec2D::new(0.0, 0.0);
-        main_content.add_candidate(pos).expect("Failed to add ball");
+        main_content
+            .add_candidate_at_pos(pos)
+            .expect("Failed to add ball");
 
         println!("\n=== Physics Thread Snapshot Publishing Test ===");
 

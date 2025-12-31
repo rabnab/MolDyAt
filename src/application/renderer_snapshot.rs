@@ -56,6 +56,10 @@ pub struct BallRenderData {
     /// Each entry is (neighbor_index, force_magnitude)
     /// Used for visualizing neighbor relationships with color-coded force strength
     pub neighbors: Vec<(usize, f32)>,
+
+    /// Additional fields can be added as needed for rendering
+    pub update_counter: usize,
+    pub(crate) tail: Vec<Vec2D>,
 }
 
 /// A snapshot of simulation state for rendering.

@@ -1,7 +1,7 @@
 use crate::application::AppResult;
 use crate::graphics::ggez::WindowDefinitionRef;
 use crate::graphics::ggez::ggez_renderer_backend::GgezMeshCache;
-use crate::graphics::renderer::{DrawingBackend, PlotContent, Renderer};
+use crate::graphics::renderer::{BallType, DrawingBackend, PlotContent, Renderer};
 use crate::graphics::window::window_definition::WindowDefinition;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_cell::cell_grid::CellGrid;
@@ -36,15 +36,23 @@ pub struct GgezRenderer {
 }
 
 impl GgezRenderer {
+    /// Creates a new GgezRenderer instance
+    /// # Arguments
+    /// * `plot_type` - The type of plot to display
+    /// * `crosshair_mesh` - Pre-created mesh for the crosshair
+    /// * `ball_meshes` - Pre-created meshes for balls (normal, cursor, hood updated)
+    /// * `window_def` - Reference to the window definition used for rendering
     pub(crate) fn new(
         plot_type: PlotContent,
         crosshair_mesh: Mesh,
-        ball_mesh: Vec<Mesh>,
+        ball_meshes: (Vec<Mesh>, Vec<Mesh>, Vec<Mesh>),
         window_def: WindowDefinitionRef,
     ) -> Self {
         let cache = GgezMeshCache {
             crosshair_mesh: Some(crosshair_mesh),
-            ball_mesh,
+            ball_mesh: ball_meshes.0,
+            cursor_mesh: ball_meshes.1,
+            hood_updated_mesh: ball_meshes.2,
             ..Default::default()
         };
 
@@ -155,7 +163,7 @@ impl Renderer for GgezRenderer {
 
     fn draw_cursor(&self, backend: &mut dyn DrawingBackend, size_idx: usize) -> AppResult {
         if self.draw_cursor {
-            backend.draw_ball_mesh(0, size_idx, self.cursor_pos_px, true)?;
+            backend.draw_ball_mesh(0, size_idx, self.cursor_pos_px, BallType::Cursor)?;
         } else {
             backend.draw_cross_hair(self.cursor_pos_px)?;
         }
@@ -230,6 +238,34 @@ impl Renderer for GgezRenderer {
         backend: &mut dyn DrawingBackend,
         snapshot: &crate::application::renderer_snapshot::RendererSnapshot,
     ) -> AppResult {
+        // Batch all tail lines for efficient rendering.
+        // Skip tail batching entirely if no ball has a tail.
+        let has_any_tails = snapshot.balls.iter().any(|b| !b.tail.is_empty());
+        if has_any_tails {
+            backend.begin_tail_batch();
+            for ball in &snapshot.balls {
+                let tail_len = ball.tail.len();
+                if tail_len > 1 {
+                    // Limit the number of tail segments per ball to avoid excessive per-frame work.
+                    // This takes only the most recent segments near the end of the tail.
+                    let max_segments = 200usize.min(tail_len - 1);
+                    let start_index = tail_len - (max_segments + 1);
+                    for window in ball.tail[start_index..].windows(2) {
+                        let start_pos = &window[0];
+                        let end_pos = &window[1];
+                        let start_px = self.window_def.borrow().coord_to_px(start_pos);
+                        let end_px = self.window_def.borrow().coord_to_px(end_pos);
+                        let start: [f32; 2] = [start_px.x, start_px.y];
+                        let end: [f32; 2] = [end_px.x, end_px.y];
+                        let width = 1.0;
+                        // Propagate any errors in tail line batching instead of silently ignoring them.
+                        backend.add_tail_line_to_batch(&[start, end], width)?;
+                    }
+                }
+            }
+            backend.draw_tail_batch()?;
+        }
+
         // Batch all neighbor lines for efficient rendering
         backend.begin_line_batch();
         for ball in &snapshot.balls {
@@ -239,7 +275,6 @@ impl Renderer for GgezRenderer {
         }
         backend.draw_line_batch()?;
 
-
         // Then, draw balls from snapshot data (on top of lines)
         for ball in &snapshot.balls {
             let ball_coord_px = self.window_def.borrow().coord_to_px(&ball.position);
@@ -248,58 +283,12 @@ impl Renderer for GgezRenderer {
                 ball.id,
                 ball.size_idx,
                 [ball_coord_px.x, ball_coord_px.y],
-                false,
-            )?;
-        }
-
-        Ok(())
-    }
-
-    /// Draw neighbor lines for a ball from snapshot data
-    /// This replicates the logic from draw_neighbour_lines but uses snapshot data
-    fn draw_neighbor_lines_from_snapshot(
-        &self,
-        backend: &mut dyn DrawingBackend,
-        ball: &crate::application::renderer_snapshot::BallRenderData,
-        all_balls: &[crate::application::renderer_snapshot::BallRenderData],
-    ) -> AppResult {
-        let ball_coord_px = self.window_def.borrow().coord_to_px(&ball.position);
-        let start: [f32; 2] = [ball_coord_px.x, ball_coord_px.y];
-
-        // Find max force to determine main neighbors
-        let max_force = ball
-            .neighbors
-            .iter()
-            .map(|(_, force)| *force)
-            .reduce(f32::max)
-            .unwrap_or(0.0);
-
-        // Draw lines to neighbors
-        for (neighbor_idx, force_magnitude) in &ball.neighbors {
-            let is_main = *force_magnitude > 0.5 * max_force;
-
-            // Skip non-main neighbors if this ball only shows main neighbors
-            if ball.show_main_neighbors_only && !is_main {
-                continue;
-            }
-
-            // Determine line color based on force magnitude
-            let color_line = if *force_magnitude > 0.0 {
-                if is_main {
-                    Color::CYAN
+                if ball.update_counter > 0 {
+                    BallType::HoodUpdated
                 } else {
-                    Color::from_rgb(128, 128, 128)
-                }
-            } else {
-                Color::from_rgb(64, 64, 64)
-            };
-
-            // Get neighbor position and draw line
-            if let Some(neighbor) = all_balls.get(*neighbor_idx) {
-                let neighbor_pos_px = self.window_def.borrow().coord_to_px(&neighbor.position);
-                let end: [f32; 2] = [neighbor_pos_px.x, neighbor_pos_px.y];
-                backend.draw_line(&[start, end], 2.0, color_line.to_rgba())?;
-            }
+                    BallType::Normal
+                },
+            )?;
         }
 
         Ok(())
