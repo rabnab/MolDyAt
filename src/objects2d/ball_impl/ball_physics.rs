@@ -199,7 +199,7 @@ impl BallPhysics {
     /// A skin of 1.0 is usually a good balance.
     /// If you want it dynamic, you could use 0.2 * self.get_cutoff_distance()
     pub fn get_skin_thickness(&self) -> f32 {
-        2.0 * self.get_cutoff_distance()
+        0.2 * self.get_cutoff_distance()
     }
 
     pub fn get_cutoff_and_skin(&self) -> f32 {
