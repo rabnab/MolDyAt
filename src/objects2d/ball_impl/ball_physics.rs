@@ -467,14 +467,15 @@ mod tests {
         let cutoff = phys.get_cutoff_distance();
         let max_radius = 1.0; // Example max radius
 
-        // The correct formula based on cell_size = 2.5 * cutoff (from CellGrid)
-        // and effective_cutoff = cutoff + 2 * max_radius
-        let cell_size = 2.5 * cutoff;
-        let effective_cutoff = cutoff + 2.0 * max_radius;
-        let expected_threshold = (cell_size - effective_cutoff) / 2.0;
+        // New logic: skin-based Verlet lists
+        // skin_thickness = 2.0 * cutoff
+        // cutoff_and_skin = cutoff + skin_thickness = 3.0 * cutoff
+        // min_movement = skin_thickness / 2 = cutoff
+        let skin_thickness = phys.get_skin_thickness();
+        let expected_threshold = skin_thickness / 2.0;
 
-        // This simplifies to: 0.75 * cutoff - max_radius
-        let expected_simplified = 0.75 * cutoff - max_radius;
+        // This simplifies to: cutoff (since skin_thickness = 2.0 * cutoff)
+        let expected_simplified = cutoff;
 
         let actual_threshold = phys.get_min_movement_for_update_hood(max_radius);
 

@@ -475,12 +475,13 @@ mod tests {
 
     #[test]
     fn test_update_hood_respects_effective_cutoff() {
-        // Test that update_hood only includes neighbors within effective cutoff
-        use crate::objects2d::ball_impl::ball_factory::BallFactory;
+        // Test that update_hood only includes neighbors within cutoff_and_skin (Verlet radius)
+        use crate::objects2d::ball_impl::BallPhysics;
 
-        let cutoff = 4.0; // LJ interaction cutoff
-        let max_radius = BallFactory::get_max_radius(); // ~2.4
-        let effective_cutoff = cutoff + 2.0 * max_radius; // Should be ~8.8
+        let physics = BallPhysics::default();
+        let cutoff = physics.get_cutoff_distance(); // 4.0
+        let skin_thickness = physics.get_skin_thickness(); // 2.0 * cutoff = 8.0
+        let cutoff_and_skin = cutoff + skin_thickness; // 12.0
 
         // Create three balls: one at origin, one within range, one beyond range
         let mut ball0 = make_ball(0, Vec2D::new(0.0, 0.0));
@@ -488,11 +489,11 @@ mod tests {
         // Position balls at specific center-to-center distances
         // Note: make_ball creates balls with radius 1.0, and distance check uses edge-to-edge distance
         // Edge-to-edge distance = center_distance - 2*radius
-        // For edge distance to be within effective_cutoff: center_distance - 2.0 < effective_cutoff
-        // So: center_distance < effective_cutoff + 2.0
+        // For edge distance to be within cutoff_and_skin: center_distance - 2.0 < cutoff_and_skin
+        // So: center_distance < cutoff_and_skin + 2.0
         let ball_radius = 1.0;
-        let dist1 = effective_cutoff * 0.8 + 2.0 * ball_radius; // Edge within range
-        let dist2 = effective_cutoff * 1.2 + 2.0 * ball_radius; // Edge beyond range
+        let dist1 = cutoff_and_skin * 0.8 + 2.0 * ball_radius; // Edge within range
+        let dist2 = cutoff_and_skin * 1.2 + 2.0 * ball_radius; // Edge beyond range
         let mut ball1 = make_ball(1, Vec2D::new(dist1, 0.0));
         let mut ball2 = make_ball(2, Vec2D::new(dist2, 0.0));
 
@@ -506,33 +507,34 @@ mod tests {
         // All balls are candidates (simulate what cell grid provides)
         let candidates = vec![1, 2];
 
-        // Update hood for ball 0
-        Verlet::update_hood(0, 0.01, &candidates, cutoff, 0.1, &mut balls);
+        // Update hood for ball 0 using cutoff_and_skin as the Verlet radius
+        Verlet::update_hood(0, 0.01, &candidates, cutoff_and_skin, 0.1, &mut balls);
 
         // Ball 0 should have ball 1 as neighbor (within range) but not ball 2 (beyond range)
         let neighbors = &balls[0].hood.neighbours;
         assert!(
             neighbors.contains(&1),
-            "Ball 1 should be a neighbor (distance {} < effective_cutoff {})",
-            dist1,
-            effective_cutoff
+            "Ball 1 should be a neighbor (edge distance {} < cutoff_and_skin {})",
+            dist1 - 2.0 * ball_radius,
+            cutoff_and_skin
         );
         assert!(
             !neighbors.contains(&2),
-            "Ball 2 should NOT be a neighbor (distance {} > effective_cutoff {})",
-            dist2,
-            effective_cutoff
+            "Ball 2 should NOT be a neighbor (edge distance {} > cutoff_and_skin {})",
+            dist2 - 2.0 * ball_radius,
+            cutoff_and_skin
         );
     }
 
     #[test]
     fn test_update_hood_removes_distant_neighbors() {
-        // Test that neighbors moving beyond effective cutoff are removed
-        use crate::objects2d::ball_impl::ball_factory::BallFactory;
+        // Test that neighbors moving beyond cutoff_and_skin are removed
+        use crate::objects2d::ball_impl::BallPhysics;
 
-        let cutoff = 4.0;
-        let max_radius = BallFactory::get_max_radius();
-        let effective_cutoff = cutoff + 2.0 * max_radius;
+        let physics = BallPhysics::default();
+        let cutoff = physics.get_cutoff_distance(); // 4.0
+        let skin_thickness = physics.get_skin_thickness(); // 8.0
+        let cutoff_and_skin = cutoff + skin_thickness; // 12.0
 
         // Create two balls initially close together
         let mut ball0 = make_ball(0, Vec2D::new(0.0, 0.0));
@@ -544,21 +546,22 @@ mod tests {
         let mut balls = vec![ball0, ball1];
 
         // Initial update - ball 1 should be a neighbor
-        Verlet::update_hood(0, 0.01, &[1], cutoff, 0.1, &mut balls);
+        Verlet::update_hood(0, 0.01, &[1], cutoff_and_skin, 0.1, &mut balls);
         assert!(
             balls[0].hood.neighbours.contains(&1),
             "Ball 1 should initially be a neighbor"
         );
 
-        // Move ball 1 far away (beyond effective cutoff)
-        balls[1].set_position_and_update_tail(Vec2D::new(effective_cutoff * 1.5, 0.0));
+        // Move ball 1 far away (beyond cutoff_and_skin + 2*radius for edge distance)
+        // Edge distance needs to exceed cutoff_and_skin, so center distance > cutoff_and_skin + 2*radius
+        balls[1].set_position_and_update_tail(Vec2D::new(cutoff_and_skin + 2.0 + 0.5, 0.0));
         balls[0].last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
 
         // Update again - ball 1 should be removed
-        Verlet::update_hood(0, 0.01, &[1], cutoff, 0.1, &mut balls);
+        Verlet::update_hood(0, 0.01, &[1], cutoff_and_skin, 0.1, &mut balls);
         assert!(
             !balls[0].hood.neighbours.contains(&1),
-            "Ball 1 should be removed after moving beyond effective cutoff"
+            "Ball 1 should be removed after moving beyond cutoff_and_skin"
         );
     }
 }
