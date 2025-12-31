@@ -86,38 +86,35 @@ impl MainContent {
         let cutoff_and_skin =
             self.physics.get_cutoff_distance() + self.physics.get_skin_thickness();
 
-        // Build set of occupied cells from all balls
-        let occupied_cells: std::collections::HashSet<_> = self
-            .get_balls()
-            .iter()
-            .filter_map(|b| b.current_cell)
-            .collect();
+        let max_radius = BallFactory::get_max_radius();
+        let min_movement = self.physics.get_min_movement_for_update_hood(max_radius);
 
-        for (row, col) in occupied_cells {
-            neighbor_buf.clear();
-            self.cell_grid
-                .collect_ball_indices_into(row, col, neighbor_buf);
+        let (grid_rows, grid_cols) = self.cell_grid.get_grid_size();
 
-            // Get cell ball indices to avoid borrow issues
-            let cell_ball_indices: Vec<usize> =
-                if let Some(cell) = self.cell_grid.get_cell(row, col) {
-                    cell.get_ball_indices().to_vec()
+        for row in 0..grid_rows {
+            for col in 0..grid_cols {
+                // Get cell ball indices to avoid borrow issues
+                let cell_ball_indices = if let Some(cell) = self.cell_grid.get_cell(row, col) {
+                    cell.get_ball_indices()
                 } else {
                     continue;
                 };
 
-            for &ball_idx in &cell_ball_indices {
-                let max_radius = BallFactory::get_max_radius();
-                let min_movement = self.physics.get_min_movement_for_update_hood(max_radius);
+                neighbor_buf.clear();
 
-                Verlet::update_hood(
-                    ball_idx,
-                    dt,
-                    neighbor_buf,
-                    cutoff_and_skin,
-                    min_movement,
-                    &mut self.balls,
-                );
+                self.cell_grid
+                    .collect_ball_indices_into(row, col, neighbor_buf);
+
+                for &ball_idx in cell_ball_indices {
+                    Verlet::update_hood(
+                        ball_idx,
+                        dt,
+                        neighbor_buf,
+                        cutoff_and_skin,
+                        min_movement,
+                        &mut self.balls,
+                    );
+                }
             }
         }
     }
@@ -189,9 +186,12 @@ impl GameLogic for MainContent {
         {
             // Single reusable buffer to avoid per-cell allocations
             let mut neighbor_buf: Vec<usize> = Vec::with_capacity(30);
-
-            self.update_neighbor_hoods_for_occupied_cells(dt, &mut neighbor_buf);
-            self.update_neighbor_statistics();
+            let mut timer = TimingMonad::new();
+            timer.time("update neighbours", || {
+                self.update_neighbor_hoods_for_occupied_cells(dt, &mut neighbor_buf)
+            });
+            timer.time("update statistics", || self.update_neighbor_statistics());
+            self.log_timings(timer);
         }
     }
 
