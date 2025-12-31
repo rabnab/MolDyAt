@@ -1,7 +1,11 @@
 use super::*;
-use crate::application::{AppError, AppResult, GameLogic};
+use crate::{
+    application::{AppError, AppResult, GameLogic},
+    objects2d::ball_impl::Named,
+};
 use rand::rng;
 use rand_distr::{Distribution, Normal};
+use std::cmp::Ordering;
 
 impl MainContent {
     pub fn add_candidate_to_vec(&mut self, candidate: Ball2D) {
@@ -32,6 +36,7 @@ impl MainContent {
     //     self.add_candidate(pos).ok();
     // }
     pub(crate) fn add_random_candidates(&mut self, count: usize) {
+        let time_step = self.get_game_logic_data().get_time_step();
         let cur_radius = self
             .get_game_logic_data()
             .get_ball_factory()
@@ -42,35 +47,91 @@ impl MainContent {
         let max_pos = &world.get_br().into();
 
         //let mut r = rng();
-        for _ in 0..count {
+        let mut balls_added = 0;
+        let max_attempts = count * 4;
+        for _ in 0..max_attempts {
             let nu_ball = self
                 .get_game_logic_data()
                 .get_ball_factory()
                 .create_random((min_pos, max_pos), (0.0, 0.0));
-            self.add_candidate_ball(nu_ball).ok();
+            let margin = self.physics.equilibrium_edge_distance();
+            if self.add_candidate_ball(nu_ball, margin).is_ok() {
+                balls_added += 1;
+                if balls_added >= count {
+                    break;
+                }
+            }
         }
+
+        self.collect_neighbours_by_cell(time_step);
+
+        #[cfg(debug_assertions)]
+        self.output_ten_closest_balls();
     }
+
+    #[cfg(debug_assertions)]
+    pub(crate) fn output_ten_closest_balls(&self) {
+        // Collect all neighbor pairs with their distances
+        let mut pairs: Vec<(usize, usize, f32)> = Vec::new();
+
+        for (i, ball) in self.balls.iter().enumerate() {
+            for &neighbor_idx in ball.hood.get_neighbour_indices() {
+                // Only count each pair once (i < neighbor_idx)
+                if i < neighbor_idx {
+                    let other = &self.balls[neighbor_idx];
+                    let distance = ball.get_edge_distance(other);
+                    pairs.push((i, neighbor_idx, distance));
+                }
+            }
+        }
+
+        // Sort by distance (closest first)
+        pairs.sort_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(Ordering::Equal));
+
+        // Output the 10 closest pairs
+        let count = pairs.len().min(10);
+        println!("\n=== {} Closest Ball Pairs ===", count);
+        for (idx, &(i, j, dist)) in pairs.iter().take(10).enumerate() {
+            let ball_i = &self.balls[i];
+            let ball_j = &self.balls[j];
+            println!(
+                "{}. Ball {} (r={:.2}) at ({:.2}, {:.2}) <-> Ball {} (r={:.2}) at ({:.2}, {:.2}) | distance: {:.4}",
+                idx + 1,
+                ball_i.get_name(),
+                ball_i.get_radius(),
+                ball_i.get_position().x,
+                ball_i.get_position().y,
+                ball_j.get_name(),
+                ball_j.get_radius(),
+                ball_j.get_position().x,
+                ball_j.get_position().y,
+                dist,
+            );
+        }
+        println!("=================================\n");
+    }
+
     pub(crate) fn enable_random_ball_speed(&mut self) {
         // !todo()
         // set a boolean which modifies add_random_candidate to use random speeds
     }
 
-    pub(crate) fn add_candidate(&mut self, pos: Vec2D) -> AppResult {
+    pub(crate) fn add_candidate_at_pos(&mut self, pos: Vec2D) -> AppResult {
         let candidate = {
             self.get_game_logic_data()
                 .get_ball_factory()
                 .create_massive_with_velocity(pos, Vec2D::zero())
         };
-        self.add_candidate_ball(candidate)
+        self.add_candidate_ball(candidate, 0.)
     }
 
-    pub(crate) fn add_candidate_ball(&mut self, candidate: Ball2D) -> AppResult {
+    pub(crate) fn add_candidate_ball(&mut self, candidate: Ball2D, margin: f32) -> AppResult {
         if !self.is_ball_in_region(&candidate) {
             return Err(AppError::CustomError(
                 "new ball not within region".to_string(),
             ));
         }
-        if self.is_ball_colliding(&candidate) {
+        if self.is_ball_colliding(&candidate, margin) {
             return Err(AppError::CustomError(
                 "new ball colliding with existing ball".to_string(),
             ));

@@ -372,3 +372,4 @@ FodyWeavers.xsd
 # added myself
 
 Cargo.lock
+flamegraph.svg

@@ -71,18 +71,19 @@ impl Window<GgezRenderer> for GgezWindow {
             .fragment_path("/gradient_frag.wgsl")
             .build(&ctx.gfx)
             .expect("Failed to build shader");
-
+        let ball_physics = BallPhysics::default();
         let ball_defs = {
             let all_radii = BallFactory::create_all_radii();
-            let ball_physics = BallPhysics::default();
+
             all_radii
                 .into_iter()
                 .map(|r| (r, ball_physics.equilibrium_of_radius(r)))
                 .collect()
         };
+        let cutoff = ball_physics.get_cutoff_distance();
 
         let renderer = GgezRendererBuilder::new()
-            .context(&ctx, ball_defs)
+            .context_and_ball_def(&ctx, cutoff, ball_defs)
             .window_def_ref(self.win_definition.clone())
             .build();
         let world_rect = self.win_definition.borrow().compute_world_bounds_rect();

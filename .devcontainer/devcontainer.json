@@ -1,12 +1,31 @@
 {
-	"image": "mcr.microsoft.com/devcontainers/universal:2",
-	"features": {
-		"ghcr.io/devcontainers/features/rust:1": {
-			"version": "latest",
-			"profile": "minimal",
-			"targets": "wasm32-unknown-unknown",
-			"components": "rust-analyzer,rust-src,rustfmt,clippy"
+	"name": "Molecular Lennard-Jones Simulation",
+	"image": "mcr.microsoft.com/devcontainers/rust:1-bookworm",
+	"features": {},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"rust-lang.rust-analyzer",
+				"vadimcn.vscode-lldb"
+			],
+			"settings": {
+				"rust-analyzer.numThreads": 2,
+				"rust-analyzer.procMacro.enable": false,
+				"rust-analyzer.cargo.buildScripts.enable": false,
+				"files.watcherExclude": {
+					"**/target/**": true
+				}
+			}
 		}
 	},
-	"postCreateCommand": "sudo apt-get update && sudo apt-get install -y libudev-dev"
+	"containerEnv": {
+		"CARGO_REGISTRIES_CRATES_IO_PROTOCOL": "sparse",
+		"CARGO_NET_GIT_FETCH_WITH_CLI": "true"
+	},
+	"mounts": [
+		"type=volume,source=cargo-registry-cache,target=/usr/local/cargo/registry",
+		"type=volume,source=cargo-git-cache,target=/usr/local/cargo/git"
+	],
+	"postCreateCommand": "bash .devcontainer/post-create.sh",
+	"remoteUser": "vscode"
 }
