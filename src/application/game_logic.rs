@@ -122,20 +122,28 @@ impl MainContent {
     /// Update neighbor statistics for all balls
     fn update_neighbor_statistics(&mut self) {
         // Compute statistics in parallel (read-only phase)
-        let stats: Vec<(usize, f32, f32, bool, bool)> = (0..self.balls.len())
+        // Only compute stats for balls with dirty hoods
+        let stats: Vec<(usize, usize, f32, f32, bool, bool)> = (0..self.balls.len())
             .into_par_iter()
             .map(|i| {
                 let ball = &self.balls[i];
+
+                // Skip computation for clean hoods
+                if !ball.hood.hood_dirty {
+                    return (i, 0, f32::NAN, f32::NAN, false, false);
+                }
+
                 let ball_pos = ball.get_position().clone();
                 let verbose_lines = ball.verbose.lines();
-                let neighbour_indices: Vec<usize> = ball.hood.get_neighbour_indices().to_vec();
+                let neighbour_indices = ball.hood.get_neighbour_indices();
 
                 let (num_neighbours, nearest, farthest) =
-                    Verlet::compute_neighbor_stats(&ball_pos, &neighbour_indices, &self.balls);
+                    Verlet::compute_neighbor_stats(&ball_pos, neighbour_indices, &self.balls);
 
                 let should_toggle = !verbose_lines && num_neighbours > 100;
 
                 (
+                    i,
                     num_neighbours,
                     nearest,
                     farthest,
@@ -146,18 +154,23 @@ impl MainContent {
             .collect();
 
         // Apply updates sequentially (mutation phase)
-        for (i, (num_neighbours, nearest, farthest, should_toggle, _verbose_lines)) in
-            stats.iter().enumerate()
+        for (i, num_neighbours, nearest, farthest, should_toggle, _verbose_lines) in
+            stats.into_iter()
         {
-            let ball_hood = &mut self.balls[i].hood;
-            ball_hood.num_neighbours = *num_neighbours;
-            ball_hood.nearest = *nearest;
-            ball_hood.farthest = *farthest;
+            // Only update if the hood was dirty (num_neighbours won't be 0 for dirty hoods since we skip)
+            if self.balls[i].hood.hood_dirty {
+                let ball_hood = &mut self.balls[i].hood;
+                ball_hood.num_neighbours = num_neighbours;
+                ball_hood.nearest = nearest;
+                ball_hood.farthest = farthest;
+                // Reset the dirty flag after computing stats
+                ball_hood.hood_dirty = false;
 
-            if *should_toggle {
-                self.balls[i].verbose.toggle_other_neighbour();
+                if should_toggle {
+                    self.balls[i].verbose.toggle_other_neighbour();
+                }
+                Self::log_closeness_update(&self.balls[i]);
             }
-            Self::log_closeness_update(&self.balls[i]);
         }
     }
 }

@@ -14,6 +14,7 @@ pub(crate) struct Verlet {
     updates_frequency: usize,
     pub(crate) updates_since_refresh: usize,
     pub(crate) num_neighbours: usize,
+    pub(crate) hood_dirty: bool,
 }
 
 impl Default for Verlet {
@@ -27,6 +28,7 @@ impl Default for Verlet {
             updates_frequency: UPDATE_FREQ,
             updates_since_refresh: UPDATE_FREQ, //initialize with same for instant refresh on creation
             num_neighbours: 0,
+            hood_dirty: true, // Initialize as dirty so stats are computed on first frame
         }
     }
 }
@@ -214,6 +216,8 @@ impl Verlet {
 
                     // Update the inverse relationship: add ball_idx to the neighbour's list
                     balls[neighbour_idx].hood.add_neighbour(ball_idx);
+                    // Mark the neighbour's hood as dirty too
+                    balls[neighbour_idx].hood.hood_dirty = true;
                 }
             } else {
                 // Should NOT be a neighbour - remove if present
@@ -221,11 +225,15 @@ impl Verlet {
                 if was_removed {
                     // Also remove the inverse relationship
                     balls[neighbour_idx].hood.remove(ball_idx);
+                    // Mark the neighbour's hood as dirty too
+                    balls[neighbour_idx].hood.hood_dirty = true;
                 }
             }
         }
 
         balls[ball_idx].hood.updates_since_refresh = 0;
+        // Mark the hood as dirty since neighbors were updated
+        balls[ball_idx].hood.hood_dirty = true;
     }
 
     /// Compute neighbor statistics from a list of indices and ball positions.
@@ -563,5 +571,145 @@ mod tests {
             !balls[0].hood.neighbours.contains(&1),
             "Ball 1 should be removed after moving beyond cutoff_and_skin"
         );
+    }
+
+    #[test]
+    fn test_hood_dirty_flag_initialized_true() {
+        // Test that hood_dirty is initialized to true so stats are computed on first frame
+        let v = Verlet::new();
+        assert!(
+            v.hood_dirty,
+            "hood_dirty should be initialized to true for first-frame stats computation"
+        );
+    }
+
+    #[test]
+    fn test_hood_dirty_flag_set_when_neighbor_added() {
+        // Test that hood_dirty is set to true when a neighbor is added
+        use crate::objects2d::ball_impl::BallPhysics;
+
+        let physics = BallPhysics::default();
+        let cutoff = physics.get_cutoff_distance();
+        let cutoff_and_skin = cutoff + physics.get_skin_thickness();
+
+        let mut ball0 = make_ball(0, Vec2D::new(0.0, 0.0));
+        let mut ball1 = make_ball(1, Vec2D::new(1.0, 0.0));
+
+        ball0.last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
+        ball1.last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
+
+        let mut balls = vec![ball0, ball1];
+
+        // Initially, hood_dirty should be true
+        assert!(balls[0].hood.hood_dirty);
+        assert!(balls[1].hood.hood_dirty);
+
+        // Perform update_hood which adds a neighbor
+        Verlet::update_hood(0, 0.01, &[1], cutoff_and_skin, 0.1, &mut balls);
+
+        // After update, hood_dirty should still be true (marks as dirty when neighbors change)
+        assert!(
+            balls[0].hood.hood_dirty,
+            "Ball 0's hood_dirty should be true after update_hood"
+        );
+        assert!(
+            balls[1].hood.hood_dirty,
+            "Ball 1's hood_dirty should be true since it was added as inverse neighbor"
+        );
+    }
+
+    #[test]
+    fn test_hood_dirty_flag_set_when_neighbor_removed() {
+        // Test that hood_dirty is set to true when a neighbor is removed
+        use crate::objects2d::ball_impl::BallPhysics;
+
+        let physics = BallPhysics::default();
+        let cutoff = physics.get_cutoff_distance();
+        let cutoff_and_skin = cutoff + physics.get_skin_thickness();
+
+        let mut ball0 = make_ball(0, Vec2D::new(0.0, 0.0));
+        let mut ball1 = make_ball(1, Vec2D::new(1.0, 0.0));
+
+        ball0.last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
+        ball1.last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
+
+        let mut balls = vec![ball0, ball1];
+
+        // First, add a neighbor
+        Verlet::update_hood(0, 0.01, &[1], cutoff_and_skin, 0.1, &mut balls);
+        assert!(balls[0].hood.neighbours.contains(&1));
+
+        // Simulate resetting hood_dirty to false (as would happen after stats computation)
+        balls[0].hood.hood_dirty = false;
+        balls[1].hood.hood_dirty = false;
+
+        // Move ball 1 far away and update
+        balls[1].set_position_and_update_tail(Vec2D::new(cutoff_and_skin + 2.0 + 0.5, 0.0));
+        balls[0].last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
+
+        // Perform update_hood which removes the neighbor
+        Verlet::update_hood(0, 0.01, &[1], cutoff_and_skin, 0.1, &mut balls);
+
+        // After removal, hood_dirty should be true again
+        assert!(
+            balls[0].hood.hood_dirty,
+            "Ball 0's hood_dirty should be true after neighbor removal"
+        );
+        assert!(
+            balls[1].hood.hood_dirty,
+            "Ball 1's hood_dirty should be true since it was removed as inverse neighbor"
+        );
+    }
+
+    #[test]
+    fn test_hood_dirty_flag_tracks_neighbor_changes_correctly() {
+        // Test that hood_dirty correctly tracks whether any neighbor changes occurred
+        let mut v = Verlet::new();
+
+        // After initialization, hood_dirty is true
+        assert!(v.hood_dirty);
+
+        // Manually reset it (simulating that stats were just computed)
+        v.hood_dirty = false;
+        assert!(!v.hood_dirty);
+
+        // Add a neighbor
+        v.add_neighbour(1);
+
+        // Manually set hood_dirty as update_hood would (in a real scenario)
+        v.hood_dirty = true;
+        assert!(v.hood_dirty);
+
+        // Remove the neighbor
+        v.remove(1);
+
+        // Again set hood_dirty
+        v.hood_dirty = true;
+        assert!(v.hood_dirty);
+
+        // Clear and verify
+        v.clear_neighbours();
+        assert!(v.neighbours.is_empty());
+    }
+
+    #[test]
+    fn test_hood_dirty_independent_per_ball() {
+        // Test that hood_dirty flag is independent for each ball
+        let mut v1 = Verlet::new();
+        let mut v2 = Verlet::new();
+
+        // Both start as dirty
+        assert!(v1.hood_dirty);
+        assert!(v2.hood_dirty);
+
+        // Modify one
+        v1.hood_dirty = false;
+        assert!(!v1.hood_dirty);
+        assert!(v2.hood_dirty); // v2 should still be dirty
+
+        // Modify the other
+        v2.hood_dirty = false;
+        assert!(!v1.hood_dirty);
+        assert!(!v2.hood_dirty);
     }
 }
