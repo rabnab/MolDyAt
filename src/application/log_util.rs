@@ -20,6 +20,7 @@ impl LogStuff for MainContent {
             - Enter a specific ball ID to toggle verbose mode for that ball.\n\
             - Enter 'a' to set all balls to verbose.\n\
             - Enter '0' to disable verbose mode for all balls.";
+        const HELP_OPTION_0: &str = "0 - Reset viewport to default view (1.0x zoom, centered).";
         const HELP_OPTION_SPACE: &str = "SPACE - Pause or resume the simulation.";
 
         println!(
@@ -32,6 +33,7 @@ impl LogStuff for MainContent {
              {opt_minus}\n\
              {opt_b}\n\
              {opt_v}\n\
+             {opt_0}\n\
              {opt_space}",
             header = HELP_KEYS_INFO,
             opt_h = HELP_OPTION_H,
@@ -42,6 +44,7 @@ impl LogStuff for MainContent {
             opt_minus = HELP_OPTION_DECREASE_SPEED,
             opt_b = HELP_OPTION_B,
             opt_v = HELP_OPTION_V,
+            opt_0 = HELP_OPTION_0,
             opt_space = HELP_OPTION_SPACE,
         );
     }
