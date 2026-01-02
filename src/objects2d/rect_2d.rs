@@ -24,10 +24,18 @@ impl Rect {
         }
     }
 
+    /// Get top-left corner coordinates.
+    ///
+    /// # Returns
+    /// Tuple of (x, y) for top-left corner
     pub fn get_tl(&self) -> (f32, f32) {
         (self.x, self.y)
     }
 
+    /// Get bottom-right corner coordinates.
+    ///
+    /// # Returns
+    /// Tuple of (x + w, y + h) for bottom-right corner
     pub fn get_br(&self) -> (f32, f32) {
         (self.x + self.w, self.y + self.h)
     }

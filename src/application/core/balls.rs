@@ -8,12 +8,20 @@ use rand_distr::{Distribution, Normal};
 use std::cmp::Ordering;
 
 impl MainContent {
+    /// Add ball to simulation without collision checks.
+    /// Ball is added to both the balls vector and the cell grid.
+    /// Updates num_balls counter.
+    ///
+    /// # Arguments
+    /// * `candidate` - Ball to add to simulation
     pub fn add_candidate_to_vec(&mut self, candidate: Ball2D) {
         let ball_idx = self.balls.len();
         self.balls.push(candidate);
         self.cell_grid.add_ball(ball_idx, &mut self.balls);
         self.num_balls = self.balls.len();
     }
+    /// Remove all balls from simulation and reset ID counter.
+    /// Clears both balls vector and all cells in the grid.
     pub(crate) fn clear_points(&mut self) {
         self.balls.clear();
         self.cell_grid.clear_all_cells();
@@ -35,6 +43,13 @@ impl MainContent {
     // pub(crate) fn add_cursor_candidate(&mut self, pos: Vec2D) {
     //     self.add_candidate(pos).ok();
     // }
+    /// Add specified number of balls at random non-colliding positions.
+    /// Attempts up to count × 4 placements, stopping early if target count is reached.
+    /// Uses equilibrium_edge_distance as collision margin.
+    /// Updates neighbor lists after all balls are added.
+    ///
+    /// # Arguments
+    /// * `count` - Target number of balls to add
     pub(crate) fn add_random_candidates(&mut self, count: usize) {
         let time_step = self.get_game_logic_data().get_time_step();
         let cur_radius = self
@@ -125,6 +140,15 @@ impl MainContent {
         self.add_candidate_ball(candidate, 0.)
     }
 
+    /// Add ball if it's within region and not colliding.
+    /// Clears energy history after successful addition.
+    ///
+    /// # Arguments
+    /// * `candidate` - Ball to add
+    /// * `margin` - Additional collision margin beyond ball radius
+    ///
+    /// # Returns
+    /// Ok if ball was added, Err if out of bounds or colliding
     pub(crate) fn add_candidate_ball(&mut self, candidate: Ball2D, margin: f32) -> AppResult {
         if !self.is_ball_in_region(&candidate) {
             return Err(AppError::CustomError(

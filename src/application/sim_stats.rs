@@ -42,10 +42,15 @@ pub struct SimStats {
 }
 
 impl SimStats {
+    /// Toggle simulation pause state.
     pub(crate) fn toggle_pause(&mut self) {
         self.set_pause(!self.is_paused())
     }
 
+    /// Set simulation pause state.
+    ///
+    /// # Arguments
+    /// * `pause` - If true, pause simulation; if false, resume
     pub fn set_pause(&mut self, pause: bool) {
         self.pause = pause;
     }
@@ -82,11 +87,21 @@ impl SimStats {
         self.v_pot.clear();
     }
 
+    /// Reset minimum distance tracking to boundary dimensions.
+    /// Initial value is set to sum of boundary width and height.
+    ///
+    /// # Arguments
+    /// * `bound_rect` - Simulation boundary rectangle
     pub fn reset_min_dist(&mut self, bound_rect: &Rect) {
         self.min_dist_initial = bound_rect.w + bound_rect.h;
         self.min_dist = 0.;
     }
 
+    /// Update minimum distance if new value is smaller than current minimum.
+    /// Only updates if distance is positive and less than previously recorded minimum.
+    ///
+    /// # Arguments
+    /// * `min_dist` - New minimum distance candidate
     pub fn update_min_dist(&mut self, min_dist: f32) {
         if self.min_dist_initial > min_dist && min_dist > 0. {
             self.min_dist_initial = min_dist;
@@ -144,6 +159,13 @@ impl SimStats {
         )
     }
 
+    /// Update statistics from accumulated physics data.
+    /// Stores energy values in deques every PLT_STEP iterations for plotting.
+    /// Maintains fixed deque size of PLT_SIZE by removing oldest values.
+    ///
+    /// # Arguments
+    /// * `dt` - Time step
+    /// * `stats_acumulator` - Accumulated physics statistics (kinetic, potential energy, velocities)
     pub fn update(&mut self, dt: f32, stats_acumulator: StatsAccumulator) {
         self.energy_kin = stats_acumulator.kin;
         self.energy_pot = stats_acumulator.pot;
@@ -165,7 +187,12 @@ impl SimStats {
         self.v_com = stats_acumulator.v_com;
     }
 
-    // Calculate temperature from the ball slice directly
+    /// Calculate temperature from kinetic energy in center-of-mass frame.
+    /// Temperature is proportional to average kinetic energy per particle relative to COM velocity.
+    /// Also updates max_neighbours count.
+    ///
+    /// # Arguments
+    /// * `v_balls` - Slice of all balls in simulation
     #[inline]
     pub(crate) fn calculate_temperature_from_balls(&mut self, v_balls: &[Ball2D]) {
         let mut sum_rel_kin_doubled: f32 = 0.;
