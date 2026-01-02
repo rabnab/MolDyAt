@@ -1,3 +1,4 @@
+use crate::graphics::renderer::viewport::ViewportState;
 use crate::graphics::window::{MARGIN_PX_X, MARGIN_PX_Y};
 use crate::objects2d::{Rect, Vec2D};
 
@@ -77,6 +78,62 @@ impl WindowDefinition {
     #[cfg(test)]
     pub fn get_len_to_px() -> f32 {
         LEN_TO_PX
+    }
+
+    /// Convert pixel coordinates to world coordinates with viewport transform
+    pub fn px_to_coord_viewport(&self, px_x: f32, px_y: f32, viewport: &ViewportState) -> Vec2D {
+        // First convert to screen-space world coords (no viewport)
+        let screen_coord = self.px_to_coord(px_x, px_y);
+
+        // Get viewport parameters
+        let zoom = viewport.zoom();
+        let pan_offset = viewport.pan_offset();
+
+        // Calculate world size being displayed
+        let world_width = WindowDefinition::px_to_len(self.region_px.0);
+        let world_height = WindowDefinition::px_to_len(self.region_px.1);
+
+        // Adjust for zoom: smaller visible area means each screen pixel represents more world space
+        let visible_width = world_width / zoom;
+        let visible_height = world_height / zoom;
+
+        // Convert screen coord to viewport-relative coord
+        // Screen coords range from [-world_width/2, world_width/2]
+        // We need to map this to the visible viewport range
+        let viewport_x = (screen_coord.x / world_width) * visible_width;
+        let viewport_y = (screen_coord.y / world_height) * visible_height;
+
+        // Add pan offset to get final world coord
+        Vec2D::new(pan_offset.x + viewport_x, pan_offset.y + viewport_y)
+    }
+
+    /// Convert world coordinates to pixel coordinates with viewport transform
+    pub fn coord_to_px_viewport(&self, coord: &Vec2D, viewport: &ViewportState) -> Vec2D {
+        // Get viewport parameters
+        let zoom = viewport.zoom();
+        let pan_offset = viewport.pan_offset();
+
+        // Calculate world size being displayed
+        let world_width = WindowDefinition::px_to_len(self.region_px.0);
+        let world_height = WindowDefinition::px_to_len(self.region_px.1);
+
+        // Calculate visible area
+        let visible_width = world_width / zoom;
+        let visible_height = world_height / zoom;
+
+        // Convert world coord to viewport-relative coord
+        let viewport_x = coord.x - pan_offset.x;
+        let viewport_y = coord.y - pan_offset.y;
+
+        // Convert to screen-space coord (normalized to full world size)
+        let screen_x = (viewport_x / visible_width) * world_width;
+        let screen_y = (viewport_y / visible_height) * world_height;
+
+        // Convert screen coord to pixel coord
+        let px_x = Self::len_to_px(screen_x) + self.region_px.0 * 0.5 + self.margin_px.0;
+        let px_y = -Self::len_to_px(screen_y) + self.region_px.1 * 0.5 + self.margin_px.1;
+
+        Vec2D::new(px_x, px_y)
     }
 }
 
