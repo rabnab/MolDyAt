@@ -9,7 +9,7 @@ version = "0.1.1"
 edition = "2024"
 
 [dependencies]
-ggez = { version = "0.9.3", optional = true, default-features = false, features = ["gamepad"] }
+ggez = { version = "0.9.3", optional = true, default-features = false }
 wgpu = { version = "0.16.3", optional = true }
 rand = "0.9.0"
 rand_distr = "0.5.1"
