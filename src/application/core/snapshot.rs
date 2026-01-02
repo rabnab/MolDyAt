@@ -21,13 +21,24 @@ impl MainContent {
             )
             .unwrap_or_else(|| size_class_to_rgba(ball.get_size_idx()));
 
-            // Reuse force magnitudes from cached SIMD computation (if available)
-            // This avoids wasteful recalculation of forces that were already computed
-            let neighbors: Vec<(usize, f32)> = if ball_idx < self.cached_force_results.len() {
-                // Use cached force magnitudes from last physics step
-                self.cached_force_results[ball_idx].neighbor_forces.clone()
+            let show_neighbor_lines = ball.verbose.lines();
+            let show_main_neighbors_only = ball.verbose.is_main();
+
+            // Only clone expensive data if it will actually be used
+            let neighbors: Vec<(usize, f32)> =
+                if show_neighbor_lines && ball_idx < self.cached_force_results.len() {
+                    // Use cached force magnitudes from last physics step only if needed
+                    self.cached_force_results[ball_idx].neighbor_forces.clone()
+                } else {
+                    // Skip cloning if neighbor lines won't be drawn
+                    Vec::new()
+                };
+
+            // Only clone tail positions if they'll be used
+            let tail = if ball.get_tail_positions().is_some() {
+                ball.get_tail_positions()
+                    .map_or(Vec::new(), |tail| tail.iter().cloned().collect())
             } else {
-                // Fallback: no cached data available (e.g., during initial snapshots before first physics step)
                 Vec::new()
             };
 
@@ -37,13 +48,11 @@ impl MainContent {
                 position: ball.get_position().clone(),
                 color,
                 radius: ball.get_radius(),
-                show_neighbor_lines: ball.verbose.lines(),
-                show_main_neighbors_only: ball.verbose.is_main(),
+                show_neighbor_lines,
+                show_main_neighbors_only,
                 neighbors,
                 update_counter: ball.get_update_counter(),
-                tail: ball
-                    .get_tail_positions()
-                    .map_or(Vec::new(), |tail| tail.iter().cloned().collect()),
+                tail,
             });
         }
 
@@ -57,7 +66,22 @@ impl MainContent {
             cell_grid_bounds: self.cell_grid.world_rect(),
             cursor_ball_size_idx: self.get_ball_factory().get_new_ball_size_idx(),
             created_at: std::time::Instant::now(),
-            grid_structure: self.cell_grid.to_grid_structure(),
+            // Create lightweight grid spec instead of cloning the full CellGrid
+            // This avoids cloning the cell vector while providing all info needed for rendering
+            grid_spec: {
+                let (rows, cols) = self.cell_grid.get_grid_size();
+                let (cell_width, cell_height) = self.cell_grid.get_cell_size();
+                let world_rect = self.cell_grid.world_rect();
+                crate::application::renderer_snapshot::CellGridSpec {
+                    rows,
+                    cols,
+                    cell_width,
+                    cell_height,
+                    origin_x: world_rect.x,
+                    origin_y: world_rect.y,
+                }
+            },
+            physics_fps: self.get_physics_fps(),
         }
     }
 

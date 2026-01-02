@@ -37,6 +37,8 @@ pub struct MainContent {
     wait_time: u64,
     /// Cached force results from last physics step for reuse in rendering
     cached_force_results: Vec<ForceResult>,
+    /// Actual physics FPS for display (updated by physics thread)
+    physics_fps: Arc<std::sync::atomic::AtomicU32>,
 }
 
 pub struct StatsAccumulator {
