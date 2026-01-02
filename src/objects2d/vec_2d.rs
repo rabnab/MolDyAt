@@ -8,6 +8,11 @@ pub struct Vec2D {
 }
 
 impl Vec2D {
+    /// Create a new 2D vector.
+    ///
+    /// # Arguments
+    /// * `x` - X component
+    /// * `y` - Y component
     pub fn new(x: f32, y: f32) -> Vec2D {
         Vec2D { x, y }
     }
@@ -17,10 +22,12 @@ impl Vec2D {
         self.x * self.x + self.y * self.y
     }
 
+    /// Create a zero vector.
     pub fn zero() -> Vec2D {
         Vec2D::new(0.0, 0.0)
     }
 
+    /// Check if both components are finite (not NaN or infinite).
     pub fn is_finite(&self) -> bool {
         self.x.is_finite() && self.y.is_finite()
     }
@@ -30,7 +37,8 @@ impl Vec2D {
         self.norm_sq().sqrt()
     }
 
-    /// Returns the unit vector
+    /// Returns the unit vector (normalized).
+    /// Returns zero vector if magnitude is zero.
     pub fn normalize(&self) -> Vec2D {
         let norm = self.norm();
         if norm > 0.0 {
@@ -51,12 +59,21 @@ impl Vec2D {
     }
 
     /// Adds another vector, scaled by a factor, and returns a new vector.
+    /// Equivalent to: self + (pt * scale)
+    ///
+    /// # Arguments
+    /// * `pt` - Vector to add
+    /// * `scale` - Scale factor for pt
     pub fn add_scaled(&self, pt: &Vec2D, scale: f32) -> Vec2D {
         let scaled_pt = pt.scaled(scale);
         Vec2D::new(self.x + scaled_pt.x, self.y + scaled_pt.y)
     }
 
     /// Computes the distance vector to another vector.
+    /// Returns vector pointing from self to other.
+    ///
+    /// # Arguments
+    /// * `other` - Target vector
     pub fn dist(&self, other: &Vec2D) -> Vec2D {
         Vec2D::new(other.x - self.x, other.y - self.y)
     }

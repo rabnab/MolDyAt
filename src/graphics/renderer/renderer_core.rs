@@ -36,9 +36,22 @@ pub trait DrawingBackend {
         windef: &WindowDefinition,
         viewport: &ViewportState,
     ) -> AppResult;
+    /// Draw the boundary frame around the simulation region.
+    ///
+    /// # Arguments
+    /// * `margin_px` - Margin in pixels (horizontal, vertical)
+    /// * `region_px` - Region size in pixels (width, height)
     fn draw_boundary_frame(&mut self, margin_px: (f32, f32), region_px: (f32, f32)) -> AppResult;
     fn dimensions_of_text(&mut self, text: String, scale: f32) -> Option<crate::objects2d::Rect>;
 
+    /// Draw text on screen with positioning options.
+    ///
+    /// # Arguments
+    /// * `text` - Text to display
+    /// * `pos` - Position in pixels [x, y]
+    /// * `scale` - Font scale multiplier
+    /// * `align_right` - If true, align text to right edge of position
+    /// * `align_bottom` - If true, align text to bottom edge of position
     fn draw_text(
         &mut self,
         text: String,
@@ -47,6 +60,14 @@ pub trait DrawingBackend {
         align_right: bool,
         align_bottom: bool,
     ) -> AppResult;
+    /// Draw a ball mesh at the specified position.
+    ///
+    /// # Arguments
+    /// * `id` - Ball ID for text labels
+    /// * `size_idx` - Size class index (0-4) for mesh selection
+    /// * `pos` - Position in pixels [x, y]
+    /// * `ball_type` - Visual variant (Normal, Cursor, HoodUpdated)
+    /// * `scale` - Scale factor based on viewport zoom
     fn draw_ball_mesh(
         &mut self,
         id: usize,
@@ -71,10 +92,12 @@ pub trait DrawingBackend {
     /// Draw all batched lines as a single mesh
     fn draw_line_batch(&mut self) -> AppResult;
 
+    /// Begin batching tail lines (particle trails)
     fn begin_tail_batch(&mut self);
     fn add_tail_line_to_batch(&mut self, points: &[[f32; 2]; 2], width: f32) -> AppResult;
     fn draw_tail_batch(&mut self) -> AppResult;
 
+    /// Finish frame rendering and present to screen
     fn finish_frame(&mut self) -> AppResult;
 }
 
@@ -83,7 +106,9 @@ pub trait Renderer {
     fn cycle_plot_content(&mut self);
     /// Adds the kinetic energy data points to the existing line mesh builder and creates the builder if it doesn't exist.
     fn add_vkin_to_line(&mut self, v_kin: &VecDeque<f32>) -> AppResult;
+    /// Add potential energy data points to the line plot.
     fn add_vpot_to_line(&mut self, v_pot: &VecDeque<f32>) -> AppResult;
+    /// Add total energy (kinetic + potential) data points to the line plot.
     fn add_vtot_to_line(&mut self, v_kin: &VecDeque<f32>, v_pot: &VecDeque<f32>) -> AppResult;
 
     /// Draw balls from snapshot (new threaded architecture)
@@ -97,7 +122,8 @@ pub trait Renderer {
         Ok(())
     }
 
-    /// Helper to draw ball symbols from snapshot data
+    /// Helper to draw ball symbols from snapshot data.
+    /// Renders balls, trails, and neighbor lines using batched drawing.
     fn draw_balls_from_snapshot_data(
         &self,
         backend: &mut dyn DrawingBackend,
@@ -106,6 +132,11 @@ pub trait Renderer {
 
     fn draw_cursor(&self, backend: &mut dyn DrawingBackend, size_idx: usize) -> AppResult;
     fn draw_plot(&mut self) -> AppResult;
+    /// Draw the simulation frame (grid background and boundary).
+    ///
+    /// # Arguments
+    /// * `backend` - Drawing backend to render with
+    /// * `grid_spec` - Cell grid specification for background
     fn draw_frame(
         &mut self,
         backend: &mut dyn DrawingBackend,
@@ -116,6 +147,7 @@ pub trait Renderer {
     fn enable_drawing_cursor(&mut self, repeated: bool);
 
     fn resize(&mut self, width: f32, height: f32);
+    /// Get the world region rectangle (simulation box bounds).
     fn get_world_region(&self) -> crate::objects2d::Rect;
 
     fn set_physics_engine(&mut self, engine: BallPhysics);

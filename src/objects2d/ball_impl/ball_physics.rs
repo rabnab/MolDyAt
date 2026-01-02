@@ -206,11 +206,14 @@ impl BallPhysics {
         self.get_cutoff_distance() + self.get_skin_thickness()
     }
 
-    /// Returns the minimum movement threshold required before a ball's update hood needs to be recalculated.
-    /// We define a fixed "skin" thickness for the Verlet list buffer.
-    /// The neighbor list radius is [cutoff + skin](http://_vscodecontentref_/5).
-    /// The update threshold must be `skin / 2` to ensure no particle can cross the skin buffer
-    /// without triggering an update.
+    /// Returns the minimum movement threshold before a ball's neighbor list needs updating.
+    /// Uses half the skin thickness to ensure no particle crosses the buffer without triggering update.
+    ///
+    /// # Arguments
+    /// * `_max_radius` - Maximum ball radius (currently unused, reserved for dynamic calculations)
+    ///
+    /// # Returns
+    /// Movement threshold in world units (typically skin_thickness / 2)
     pub fn get_min_movement_for_update_hood(&self, _max_radius: f32) -> f32 {
         self.get_skin_thickness() * 0.5
     }
@@ -320,15 +323,41 @@ impl BallPhysics {
         Ok(f32::min(min_dist, actual_dist))
     }
 
+    /// Calculate edge-to-edge distance between two balls.
+    ///
+    /// # Arguments
+    /// * `a` - First ball
+    /// * `b` - Second ball
+    ///
+    /// # Returns
+    /// Distance between ball surfaces (negative if overlapping)
     pub fn distance_of_edges(a: &Ball2D, b: &Ball2D) -> f32 {
         let center_dist = a.get_position().dist(b.get_position()).norm();
         center_dist - (a.radius + b.radius)
     }
 
+    /// Check if two balls are colliding within a margin.
+    ///
+    /// # Arguments
+    /// * `this` - First ball
+    /// * `other` - Second ball
+    /// * `margin` - Collision margin (positive = earlier detection)
+    ///
+    /// # Returns
+    /// `true` if edge distance is less than margin
     pub fn is_colliding(&self, this: &Ball2D, other: &Ball2D, margin: f32) -> bool {
         this.get_edge_distance(other) < margin
     }
 
+    /// Update ball position using velocity-Verlet integration and handle wall bounces.
+    ///
+    /// # Arguments
+    /// * `ball` - Ball to update
+    /// * `dt` - Time step
+    /// * `bound` - Boundary rectangle (reflective walls)
+    ///
+    /// # Returns
+    /// Information about wall bounces that occurred
     pub fn update_positions(&self, ball: &mut Ball2D, dt: f32, bound: &Rect) -> BounceInfo {
         let bounce_info = ball.execute_update_pos(dt, bound);
 

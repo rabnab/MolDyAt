@@ -36,6 +36,14 @@ impl BallFactory {
         Self::default()
     }
 
+    /// Calculate ball radius for a given size index.
+    /// Radii increase exponentially: MIN_BALL_SIZE * 2^size_idx
+    ///
+    /// # Arguments
+    /// * `size_idx` - Size class index (0-4)
+    ///
+    /// # Returns
+    /// Ball radius in world units
     pub fn radius_for_size_idx(size_idx: usize) -> f32 {
         const BASE_EXPONENT: f32 = 2.0;
         MIN_BALL_SIZE * BASE_EXPONENT.powi(size_idx as i32)
@@ -52,6 +60,10 @@ impl BallFactory {
         *self.new_ball_size_idx.borrow_mut() = (current_idx + 1) % NUM_BALL_SIZES;
     }
 
+    /// Create vector containing all possible ball radii.
+    ///
+    /// # Returns
+    /// Vector of 5 radii values for size indices 0-4
     pub fn create_all_radii() -> Vec<f32> {
         (0..NUM_BALL_SIZES).map(Self::radius_for_size_idx).collect()
     }
@@ -91,7 +103,15 @@ impl BallFactory {
         ball
     }
 
-    /// Creates a ball with random properties within specified ranges
+    /// Creates a ball with random properties within specified ranges.
+    /// Position is uniformly distributed, velocity has random direction.
+    ///
+    /// # Arguments
+    /// * `pos_range` - Min and max position bounds (x and y)
+    /// * `velocity_range` - Speed range (min, max)
+    ///
+    /// # Returns
+    /// New ball with random position and velocity
     pub fn create_random(&self, pos_range: (&Vec2D, &Vec2D), velocity_range: (f32, f32)) -> Ball2D {
         let mut rng = self.rng.borrow_mut();
 
@@ -116,7 +136,15 @@ impl BallFactory {
         self.create_massive_with_velocity(pos, velocity)
     }
 
-    /// Creates a collection of balls with normally distributed positions
+    /// Creates a collection of balls with normally distributed positions (Gaussian cluster).
+    ///
+    /// # Arguments
+    /// * `count` - Number of balls to create
+    /// * `center_pos` - Mean position (cluster center)
+    /// * `pos_std_dev` - Standard deviation for position distribution
+    ///
+    /// # Returns
+    /// Vector of balls with zero initial velocity
     pub fn create_normal_distribution(
         &self,
         count: usize,
@@ -153,7 +181,15 @@ impl BallFactory {
         self.create_massive_with_velocity(pos, Vec2D::zero())
     }
 
-    /// Creates a lightweight ball with high velocity
+    /// Creates a lightweight ball with high velocity (projectile).
+    ///
+    /// # Arguments
+    /// * `pos` - Initial position
+    /// * `direction` - Direction vector (will be normalized)
+    /// * `speed` - Magnitude of velocity
+    ///
+    /// # Returns
+    /// New ball moving in specified direction at given speed
     pub fn create_projectile(&self, pos: impl Into<Vec2D>, direction: Vec2D, speed: f32) -> Ball2D {
         let velocity = direction.normalize() * speed;
         self.create_massive_with_velocity(pos, velocity)
