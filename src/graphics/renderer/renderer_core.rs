@@ -1,7 +1,7 @@
 use crate::application::AppResult;
 use crate::graphics::renderer::dummy_renderer::DummyRenderer;
+use crate::graphics::renderer::viewport::ViewportState;
 use crate::graphics::window::window_definition::WindowDefinition;
-use crate::objects2d::ball_cell::cell_grid::CellGrid;
 use crate::objects2d::ball_impl::BallPhysics;
 use std::collections::VecDeque;
 
@@ -21,8 +21,10 @@ pub enum BallType {
 }
 
 pub fn create_dummy_renderer(win_def: WindowDefinition) -> impl Renderer {
+    let world_bounds = win_def.compute_world_bounds_rect();
     DummyRenderer {
         window_def: std::rc::Rc::new(std::cell::RefCell::new(win_def)),
+        viewport: ViewportState::new(world_bounds),
     }
 }
 
@@ -30,8 +32,9 @@ pub trait DrawingBackend {
     /// Draws the cell grid as faint colored rectangles in the background.
     fn draw_cell_grid_background(
         &mut self,
-        grid_structure: &CellGrid,
+        grid_spec: &crate::application::renderer_snapshot::CellGridSpec,
         windef: &WindowDefinition,
+        viewport: &ViewportState,
     ) -> AppResult;
     fn draw_boundary_frame(&mut self, margin_px: (f32, f32), region_px: (f32, f32)) -> AppResult;
     fn dimensions_of_text(&mut self, text: String, scale: f32) -> Option<crate::objects2d::Rect>;
@@ -50,6 +53,7 @@ pub trait DrawingBackend {
         size_idx: usize,
         pos: [f32; 2],
         ball_type: BallType,
+        scale: f32,
     ) -> AppResult;
     fn draw_cross_hair(&mut self, pos: [f32; 2]) -> AppResult;
 
@@ -105,8 +109,7 @@ pub trait Renderer {
     fn draw_frame(
         &mut self,
         backend: &mut dyn DrawingBackend,
-        cell_grid: &CellGrid,
-        status_text: Option<String>,
+        grid_spec: &crate::application::renderer_snapshot::CellGridSpec,
     ) -> AppResult;
     fn finish_frame(&mut self, backend: &mut dyn DrawingBackend) -> AppResult;
     fn disable_drawing_cursor(&mut self);
@@ -116,6 +119,12 @@ pub trait Renderer {
     fn get_world_region(&self) -> crate::objects2d::Rect;
 
     fn set_physics_engine(&mut self, engine: BallPhysics);
+
+    /// Get mutable reference to viewport state
+    fn viewport_mut(&mut self) -> &mut ViewportState;
+
+    /// Get reference to viewport state
+    fn viewport(&self) -> &ViewportState;
 }
 
 pub(crate) fn is_number_continue(ch: char) -> bool {

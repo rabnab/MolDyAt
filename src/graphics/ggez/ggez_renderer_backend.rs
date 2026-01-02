@@ -2,7 +2,6 @@ use crate::application::AppResult;
 use crate::graphics::ggez::ggez_renderer::GgezRenderer;
 use crate::graphics::renderer::{BallType, DrawingBackend, is_number_continue, is_number_start};
 use crate::graphics::window::window_definition::WindowDefinition;
-use crate::objects2d::ball_cell::cell_grid::CellGrid;
 use ggez::Context;
 use ggez::glam::Vec2;
 use ggez::graphics::{
@@ -72,42 +71,40 @@ impl<'a> DrawingBackend for GgezBackend<'a> {
     /// Draws the cell grid as faint colored rectangles in the background.
     fn draw_cell_grid_background(
         &mut self,
-        grid_structure: &CellGrid,
+        grid_spec: &crate::application::renderer_snapshot::CellGridSpec,
         win_def: &WindowDefinition,
+        viewport: &crate::graphics::renderer::viewport::ViewportState,
     ) -> AppResult {
-        {
-            if let Some(mesh) = self.cache.cell_mesh.as_ref() {
-                self.canvas
-                    .as_mut()
-                    .unwrap()
-                    .draw(&mesh.1, DrawParam::default());
-                return Ok(());
-            }
-        }
-
+        // Don't cache when using viewport transformations - grid changes with zoom/pan
         let mut mesh_builder = MeshBuilder::new();
 
-        let (rows, cols) = grid_structure.get_grid_size();
+        for row in 0..grid_spec.rows {
+            for col in 0..grid_spec.cols {
+                // Calculate cell bounds from grid spec
+                // Note: Y decreases as row increases (Y axis points upward in world coords)
+                let cell_x = grid_spec.origin_x + (col as f32) * grid_spec.cell_width;
+                let cell_y = grid_spec.origin_y - (row as f32) * grid_spec.cell_height;
 
-        for row in 0..rows {
-            for col in 0..cols {
-                if let Some(cur_cell) = grid_structure.get_cell(row, col) {
-                    // Alternate colors based on row + col
-                    let color = GgezRenderer::get_cell_color(row, col);
+                // Alternate colors based on row + col
+                let color = GgezRenderer::get_cell_color(row, col);
 
-                    let tl_px = win_def.coord_to_px(&cur_cell.get_top_left());
-                    let br_px = win_def.coord_to_px(&cur_cell.get_bottom_right());
+                let tl = crate::objects2d::Vec2D::new(cell_x, cell_y);
+                let br = crate::objects2d::Vec2D::new(
+                    cell_x + grid_spec.cell_width,
+                    cell_y - grid_spec.cell_height,
+                );
 
-                    let rect = Rect::new(tl_px.x, tl_px.y, br_px.x - tl_px.x, br_px.y - tl_px.y);
-                    mesh_builder.rectangle(DrawMode::fill(), rect, color)?;
-                }
+                // Use viewport-aware coordinate transformation
+                let tl_px = win_def.coord_to_px_viewport(&tl, viewport);
+                let br_px = win_def.coord_to_px_viewport(&br, viewport);
+
+                let rect = Rect::new(tl_px.x, tl_px.y, br_px.x - tl_px.x, br_px.y - tl_px.y);
+                mesh_builder.rectangle(DrawMode::fill(), rect, color)?;
             }
         }
 
         let m = Mesh::from_data(self.ctx, mesh_builder.build());
-        let s = grid_structure.get_cell_size();
-
-        self.cache.cell_mesh = Some(((s.0, s.1), m));
+        self.canvas.as_mut().unwrap().draw(&m, DrawParam::default());
 
         Ok(())
     }
@@ -323,11 +320,11 @@ impl<'a> DrawingBackend for GgezBackend<'a> {
         size_idx: usize,
         pos: [f32; 2],
         ball_type: BallType,
+        scale: f32,
     ) -> AppResult {
         let draw_param = DrawParam::default()
             .dest(pos)
-            //.scale(Vec2::new(radius, radius))
-            ;
+            .scale(Vec2::new(scale, scale));
 
         let ball_mesh = match ball_type {
             BallType::Normal => &self.cache.ball_mesh,

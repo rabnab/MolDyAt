@@ -1,10 +1,10 @@
 #![allow(unused_variables)]
 
 use crate::application::AppResult;
+use crate::graphics::renderer::viewport::ViewportState;
 use crate::graphics::renderer::{DrawingBackend, PlotContent, Renderer};
 use crate::graphics::window::window_definition::WindowDefinition;
 use crate::objects2d::Rect;
-use crate::objects2d::ball_cell::cell_grid::CellGrid;
 use crate::objects2d::ball_impl::BallPhysics;
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -12,6 +12,7 @@ use std::rc::Rc;
 
 pub struct DummyRenderer {
     pub(crate) window_def: Rc<RefCell<WindowDefinition>>,
+    pub(crate) viewport: ViewportState,
 }
 
 impl Renderer for DummyRenderer {
@@ -46,8 +47,7 @@ impl Renderer for DummyRenderer {
     fn draw_frame(
         &mut self,
         backend: &mut dyn DrawingBackend,
-        cell_grid: &CellGrid,
-        status_text: Option<String>,
+        grid_spec: &crate::application::renderer_snapshot::CellGridSpec,
     ) -> AppResult<()> {
         todo!()
     }
@@ -66,6 +66,8 @@ impl Renderer for DummyRenderer {
 
     fn resize(&mut self, width: f32, height: f32) {
         self.window_def.borrow_mut().resize(width, height);
+        let world_bounds = self.window_def.borrow().compute_world_bounds_rect();
+        self.viewport.set_world_bounds(world_bounds);
     }
 
     fn get_world_region(&self) -> Rect {
@@ -83,5 +85,13 @@ impl Renderer for DummyRenderer {
 
     fn set_physics_engine(&mut self, engine: BallPhysics) {
         todo!()
+    }
+
+    fn viewport_mut(&mut self) -> &mut ViewportState {
+        &mut self.viewport
+    }
+
+    fn viewport(&self) -> &ViewportState {
+        &self.viewport
     }
 }

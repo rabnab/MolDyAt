@@ -1,10 +1,10 @@
 use crate::application::AppResult;
 use crate::graphics::ggez::WindowDefinitionRef;
 use crate::graphics::ggez::ggez_renderer_backend::GgezMeshCache;
+use crate::graphics::renderer::viewport::ViewportState;
 use crate::graphics::renderer::{BallType, DrawingBackend, PlotContent, Renderer};
 use crate::graphics::window::window_definition::WindowDefinition;
 use crate::objects2d::Vec2D;
-use crate::objects2d::ball_cell::cell_grid::CellGrid;
 use crate::objects2d::ball_impl::{Ball2D, BallPhysics};
 use ggez::Context;
 use ggez::graphics::{Color, DrawMode, Mesh, MeshBuilder, Shader};
@@ -33,6 +33,7 @@ pub struct GgezRenderer {
     string_elems: usize,
     glyph_elems: usize,
     ball_elems: usize,
+    viewport: ViewportState,
 }
 
 impl GgezRenderer {
@@ -60,6 +61,9 @@ impl GgezRenderer {
             let windef = window_def.borrow();
             [windef.margin_px.0 * 2.0 + windef.region_px.0, 0.0]
         };
+
+        let world_bounds = window_def.borrow().compute_world_bounds_rect();
+
         Self {
             show_plot: plot_type,
             window_def,
@@ -75,6 +79,7 @@ impl GgezRenderer {
             string_elems: 0,
             glyph_elems: 0,
             ball_elems: 0,
+            viewport: ViewportState::new(world_bounds),
         }
     }
 }
@@ -163,17 +168,40 @@ impl Renderer for GgezRenderer {
 
     fn draw_cursor(&self, backend: &mut dyn DrawingBackend, size_idx: usize) -> AppResult {
         if self.draw_cursor {
-            backend.draw_ball_mesh(0, size_idx, self.cursor_pos_px, BallType::Cursor)?;
+            // Cursor should also scale with zoom
+            let zoom_scale = self.viewport.zoom();
+            backend.draw_ball_mesh(
+                0,
+                size_idx,
+                self.cursor_pos_px,
+                BallType::Cursor,
+                zoom_scale,
+            )?;
         } else {
             backend.draw_cross_hair(self.cursor_pos_px)?;
         }
 
         let win_def = self.window_def.borrow();
+
+        // Draw cursor position text in bottom-right
         let txt_cursor_pos = [
             win_def.margin_px.0 * 2. + win_def.region_px.0,
             win_def.margin_px.1 * 2. + win_def.region_px.1,
         ];
         backend.draw_text(self.txt_cursor.clone(), txt_cursor_pos, 20., true, true)?;
+
+        // Draw zoom level indicator just above cursor position text
+        let zoom = self.viewport.zoom();
+        let zoom_text = if zoom >= 10.0 {
+            format!("Zoom: {:.0}x", zoom)
+        } else {
+            format!("Zoom: {:.1}x", zoom)
+        };
+        let zoom_pos = [
+            win_def.margin_px.0 * 2. + win_def.region_px.0,
+            win_def.margin_px.1 * 2. + win_def.region_px.1 - 25., // 25px above cursor text
+        ];
+        backend.draw_text(zoom_text, zoom_pos, 20., true, true)?;
 
         Ok(())
     }
@@ -185,25 +213,13 @@ impl Renderer for GgezRenderer {
     fn draw_frame(
         &mut self,
         backend: &mut dyn DrawingBackend,
-        cell_grid: &CellGrid,
-        status_text: Option<String>,
+        grid_spec: &crate::application::renderer_snapshot::CellGridSpec,
     ) -> AppResult<()> {
         let win_def = self.window_def.borrow();
 
         // 1) Draw cell grid and rectangle (short-lived &mut Canvas)
-        backend.draw_cell_grid_background(cell_grid, &win_def)?;
+        backend.draw_cell_grid_background(grid_spec, &win_def, &self.viewport)?;
         backend.draw_boundary_frame(win_def.margin_px, win_def.region_px)?;
-
-        // 2) draw upper right text
-        if let Some(text) = status_text {
-            let pos = self.ball_status_text_pos.unwrap_or([0., 0.]);
-
-            let full_text = format!(
-                "{}\n[Cache: strings {}, glyphs {}, ball labels {}]",
-                text, self.string_elems, self.glyph_elems, self.ball_elems
-            );
-            backend.draw_text(full_text, pos, 30., true, false)?;
-        }
 
         Ok(())
     }
@@ -227,10 +243,23 @@ impl Renderer for GgezRenderer {
         let mut win_def = self.window_def.borrow_mut();
         win_def.resize(width, height);
         self.ball_status_text_pos = Some([win_def.margin_px.0 * 2.0 + win_def.region_px.0, 0.0]);
+
+        // Update viewport world bounds on resize
+        let world_bounds = win_def.compute_world_bounds_rect();
+        drop(win_def); // Release borrow before calling viewport_mut
+        self.viewport.set_world_bounds(world_bounds);
     }
 
     fn get_world_region(&self) -> crate::objects2d::Rect {
         self.window_def.borrow().compute_world_bounds_rect()
+    }
+
+    fn viewport_mut(&mut self) -> &mut ViewportState {
+        &mut self.viewport
+    }
+
+    fn viewport(&self) -> &ViewportState {
+        &self.viewport
     }
 
     fn draw_balls_from_snapshot_data(
@@ -253,8 +282,15 @@ impl Renderer for GgezRenderer {
                     for window in ball.tail[start_index..].windows(2) {
                         let start_pos = &window[0];
                         let end_pos = &window[1];
-                        let start_px = self.window_def.borrow().coord_to_px(start_pos);
-                        let end_px = self.window_def.borrow().coord_to_px(end_pos);
+                        // Use viewport-aware coordinate transformation
+                        let start_px = self
+                            .window_def
+                            .borrow()
+                            .coord_to_px_viewport(start_pos, &self.viewport);
+                        let end_px = self
+                            .window_def
+                            .borrow()
+                            .coord_to_px_viewport(end_pos, &self.viewport);
                         let start: [f32; 2] = [start_px.x, start_px.y];
                         let end: [f32; 2] = [end_px.x, end_px.y];
                         let width = 1.0;
@@ -275,9 +311,34 @@ impl Renderer for GgezRenderer {
         }
         backend.draw_line_batch()?;
 
-        // Then, draw balls from snapshot data (on top of lines)
+        // Calculate viewport size in world coordinates for frustum culling
+        let win_def = self.window_def.borrow();
+        let viewport_size_world = (
+            WindowDefinition::px_to_len(win_def.region_px.0),
+            WindowDefinition::px_to_len(win_def.region_px.1),
+        );
+        drop(win_def);
+
+        // Then, draw balls from snapshot data (on top of lines) with frustum culling
         for ball in &snapshot.balls {
-            let ball_coord_px = self.window_def.borrow().coord_to_px(&ball.position);
+            // Frustum culling: only render balls that are at least partially visible
+            // Use ball radius for proper visibility testing
+            let ball_radius = ball.radius;
+            if !self
+                .viewport
+                .is_circle_visible(&ball.position, ball_radius, viewport_size_world)
+            {
+                continue; // Skip balls outside viewport
+            }
+
+            // Use viewport-aware coordinate transformation
+            let ball_coord_px = self
+                .window_def
+                .borrow()
+                .coord_to_px_viewport(&ball.position, &self.viewport);
+
+            // Scale balls with zoom level
+            let zoom_scale = self.viewport.zoom();
 
             backend.draw_ball_mesh(
                 ball.id,
@@ -288,6 +349,7 @@ impl Renderer for GgezRenderer {
                 } else {
                     BallType::Normal
                 },
+                zoom_scale,
             )?;
         }
 
@@ -303,7 +365,11 @@ impl GgezRenderer {
         ball: &crate::application::renderer_snapshot::BallRenderData,
         all_balls: &[crate::application::renderer_snapshot::BallRenderData],
     ) -> AppResult {
-        let ball_coord_px = self.window_def.borrow().coord_to_px(&ball.position);
+        // Use viewport-aware coordinate transformation
+        let ball_coord_px = self
+            .window_def
+            .borrow()
+            .coord_to_px_viewport(&ball.position, &self.viewport);
         let start: [f32; 2] = [ball_coord_px.x, ball_coord_px.y];
 
         // Find max force to determine main neighbors
@@ -334,9 +400,12 @@ impl GgezRenderer {
                 Color::from_rgb(64, 64, 64)
             };
 
-            // Get neighbor position and add line to batch
+            // Get neighbor position and add line to batch (use viewport-aware transform)
             if let Some(neighbor) = all_balls.get(*neighbor_idx) {
-                let neighbor_pos_px = self.window_def.borrow().coord_to_px(&neighbor.position);
+                let neighbor_pos_px = self
+                    .window_def
+                    .borrow()
+                    .coord_to_px_viewport(&neighbor.position, &self.viewport);
                 let end: [f32; 2] = [neighbor_pos_px.x, neighbor_pos_px.y];
                 backend.add_line_to_batch(&[start, end], 2.0, color_line.to_rgba())?;
             }
@@ -475,7 +544,9 @@ impl GgezRenderer {
         let curs_pos = clamped_px.clone();
         self.cursor_pos_px = [clamped_px.x, clamped_px.y];
 
-        let curs_pos_coord = win_def.px_to_coord(clamped_px.x, clamped_px.y);
+        // Use viewport-aware coordinate transformation
+        let curs_pos_coord =
+            win_def.px_to_coord_viewport(clamped_px.x, clamped_px.y, &self.viewport);
 
         let curs_moved_sq = curs_pos.dist(&self.curs_pos_of_txt).norm_sq();
         if curs_moved_sq > (f32::min(win_def.region_px.0, win_def.region_px.1) * 0.1) {
