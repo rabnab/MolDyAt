@@ -24,9 +24,18 @@ use crate::objects2d::ball_impl::{Ball2D, BallPhysics, ForceResult};
 use std::simd::prelude::SimdFloat;
 use std::simd::{StdFloat, f32x4};
 
-/// Calculate Lennard-Jones forces for multiple ball pairs using SIMD
+/// Calculate Lennard-Jones forces for multiple ball pairs using SIMD vectorization.
+/// Processes neighbors in chunks of 4 using CPU SIMD instructions (SSE2/AVX2/NEON).
+/// Applies force capping at r < r_cap with linear potential extrapolation for energy conservation.
+/// Conditionally collects per-neighbor force magnitudes only when visualization is enabled.
 ///
-/// This function processes multiple neighbor interactions simultaneously using SIMD instructions.
+/// # Arguments
+/// * `physics` - Physics engine with LJ parameters and force cap settings
+/// * `ball_idx` - Index of ball to calculate forces for
+/// * `balls` - Slice of all balls (read-only access)
+///
+/// # Returns
+/// ForceResult containing total force vector, potential energy, minimum distance, and optional neighbor forces
 pub fn force_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2D]) -> ForceResult {
     let mut force = Vec2D::new(0., 0.);
     let mut min_dist = f32::NAN;

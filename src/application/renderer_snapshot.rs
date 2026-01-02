@@ -121,7 +121,8 @@ pub struct RendererSnapshot {
 }
 
 impl RendererSnapshot {
-    /// Creates a new empty snapshot
+    /// Create new empty snapshot with default values.
+    /// Sets timestamp to current instant for debugging snapshot age.
     pub fn new() -> Self {
         Self {
             balls: Vec::new(),
@@ -145,7 +146,10 @@ impl RendererSnapshot {
         }
     }
 
-    /// Creates a snapshot with pre-allocated capacity
+    /// Create snapshot with pre-allocated ball capacity to avoid reallocation.
+    ///
+    /// # Arguments
+    /// * `capacity` - Number of balls to pre-allocate space for
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             balls: Vec::with_capacity(capacity),

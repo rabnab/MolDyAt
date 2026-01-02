@@ -70,19 +70,21 @@ pub struct ShutdownSignal {
 }
 
 impl ShutdownSignal {
-    /// Create a new shutdown signal
+    /// Create new shutdown signal for coordinating thread termination.
     pub fn new() -> Self {
         Self {
             should_stop: Arc::new(AtomicBool::new(false)),
         }
     }
 
-    /// Signal that the thread should shutdown
+    /// Signal that the thread should shutdown.
+    /// Uses Release ordering to ensure all prior writes are visible to the thread reading this signal.
     pub fn signal_shutdown(&self) {
         self.should_stop.store(true, Ordering::Release);
     }
 
-    /// Check if shutdown has been signaled
+    /// Check if shutdown has been signaled.
+    /// Uses Acquire ordering to ensure all writes from signaling thread are visible.
     pub fn should_shutdown(&self) -> bool {
         self.should_stop.load(Ordering::Acquire)
     }

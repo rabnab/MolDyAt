@@ -12,10 +12,16 @@ impl MainContent {
         self.game_data.get_ball_factory()
     }
 
+    /// Get world boundary rectangle for simulation area.
     pub fn world_region(&self) -> Rect {
         self.world_rect
     }
 
+    /// Get world boundary rectangle with inset margin.
+    /// Useful for preventing balls from spawning too close to walls.
+    ///
+    /// # Arguments
+    /// * `inner_margin` - Distance to inset from each boundary
     pub fn world_region_inset(&self, inner_margin: f32) -> Rect {
         let world_region = self.world_region();
         let tl = world_region.get_tl();
@@ -47,8 +53,12 @@ impl MainContent {
         self.show_timings = !self.show_timings;
     }
 
-    /// tells the renderer to resize the window to the given px size
-    /// pauses the sim if it's running, resumes after some time
+    /// Resize simulation world and reconstruct cell grid.
+    /// Pauses simulation if running, resumes after delay.
+    /// Rebuilds cell grid with new dimensions and re-adds all balls.
+    ///
+    /// # Arguments
+    /// * `world_rect` - New world boundary rectangle
     pub(crate) fn resize(&mut self, world_rect: crate::objects2d::Rect) {
         if !self.sim.is_paused() {
             self.pause_for_resize()
@@ -93,7 +103,8 @@ impl MainContent {
         self.wait_time
     }
 
-    /// Get the Arc to the physics FPS atomic counter for sharing with physics thread
+    /// Get Arc-wrapped atomic counter for lock-free physics FPS updates.
+    /// Shared between physics thread (writer) and rendering thread (reader).
     pub fn get_physics_fps_arc(&self) -> Arc<std::sync::atomic::AtomicU32> {
         self.physics_fps.clone()
     }

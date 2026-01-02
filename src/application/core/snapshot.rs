@@ -6,8 +6,9 @@ use crate::application::renderer_snapshot::{
 use std::sync::Arc;
 
 impl MainContent {
-    /// Creates a renderer snapshot from the current simulation state.
-    /// This snapshot contains all data needed for rendering: positions, colors, radii, and neighbors.
+    /// Create renderer snapshot from current simulation state.
+    /// Conditionally clones expensive data (neighbors, tail) only when needed for visualization.
+    /// Uses cached force magnitudes from last physics step for neighbor line rendering.
     pub fn create_snapshot(&self) -> RendererSnapshot {
         let ball_count = self.balls.len();
         let mut balls = Vec::with_capacity(ball_count);
@@ -85,13 +86,15 @@ impl MainContent {
         }
     }
 
-    /// Publish current snapshot to the snapshot slot for renderer consumption
+    /// Publish current snapshot to shared slot using atomic Arc swap.
+    /// Lock-free publication allows physics thread to continue without waiting for renderer.
     pub fn publish_snapshot(&self) {
         let snapshot = self.create_snapshot();
         self.snapshot_slot.store(Some(Arc::new(snapshot)));
     }
 
-    /// Get a clone of the snapshot slot Arc for sharing with renderer
+    /// Get clone of Arc-wrapped snapshot slot for sharing with renderer thread.
+    /// Renderer can load snapshots without blocking physics thread.
     pub fn get_snapshot_slot(&self) -> Arc<arc_swap::ArcSwapOption<RendererSnapshot>> {
         self.snapshot_slot.clone()
     }
