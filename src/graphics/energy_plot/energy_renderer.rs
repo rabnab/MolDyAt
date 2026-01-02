@@ -43,11 +43,23 @@ pub struct EnergyPlotRenderer {
 }
 
 impl EnergyPlotRenderer {
+    /// Create new energy plot renderer with shared data.
+    ///
+    /// # Arguments
+    /// * `energy_data` - Arc-wrapped Mutex to energy data shared with simulation
     pub fn new(energy_data: SharedEnergyData) -> Self {
         Self { energy_data }
     }
 
-    /// Backwards compatible method: use default plot dimensions
+    /// Render energy plot with default dimensions.
+    /// Uses fixed 80×30 character plot area.
+    ///
+    /// # Arguments
+    /// * `status_text` - Optional status text to display
+    /// * `display_mode` - Which energy values to show (All, Kinetic, Potential, Total)
+    ///
+    /// # Returns
+    /// Tuple of (text string, color matrix for each character)
     pub fn render_to_colored_string(
         &self,
         status_text: Option<&str>,
@@ -63,9 +75,18 @@ impl EnergyPlotRenderer {
         )
     }
 
-    /// New layout-aware renderer: total_cols/total_rows are number of text columns/rows available
-    /// It will place the status text to the right of the plot and ensure the plot fits into the
-    /// visible character grid.
+    /// Render energy plot sized to fit available terminal dimensions.
+    /// Automatically calculates plot dimensions based on window size minus headers/footers.
+    /// Places status text below plot.
+    ///
+    /// # Arguments
+    /// * `status_text` - Optional status text to display below plot
+    /// * `display_mode` - Which energy values to show (All, Kinetic, Potential, Total)
+    /// * `total_cols` - Available terminal width in characters
+    /// * `total_rows` - Available terminal height in characters
+    ///
+    /// # Returns
+    /// Tuple of (text string, color matrix for each character)
     pub fn render_to_colored_string_with_layout(
         &self,
         status_text: Option<&str>,

@@ -71,6 +71,13 @@ impl Default for Ball2D {
 }
 
 impl Ball2D {
+    /// Create a new ball with specified ID, position, and radius.
+    /// Initializes tail with first position and sets pre_update_pos and last_update_hood_pos.
+    ///
+    /// # Arguments
+    /// * `id` - Unique ball identifier
+    /// * `pos` - Initial position
+    /// * `radius` - Tuple of (size_index, radius_value)
     pub fn new(id: BallId, pos: Vec2D, radius: (usize, f32)) -> Ball2D {
         let mut ball = Ball2D {
             id,
@@ -117,6 +124,14 @@ impl Ball2D {
         self.mass
     }
 
+    /// Calculate edge-to-edge distance between this ball and another.
+    /// Returns center-to-center distance minus sum of radii.
+    ///
+    /// # Arguments
+    /// * `other` - Other ball to measure distance to
+    ///
+    /// # Returns
+    /// Distance between surfaces (negative if overlapping)
     pub fn get_edge_distance(&self, other: &Ball2D) -> f32 {
         let center_dist = self.get_position().dist(other.get_position()).norm();
         center_dist - (self.radius + other.radius)
@@ -148,6 +163,10 @@ impl Ball2D {
         self.show_update_count
     }
 
+    /// Calculate linear momentum (mass × velocity).
+    ///
+    /// # Returns
+    /// Momentum vector
     pub fn moment(&self) -> Vec2D {
         self.v.scaled(self.mass)
     }
@@ -193,6 +212,9 @@ impl Ball2D {
         accel
     }
 
+    /// Save current position before physics update.
+    /// Used to restore position or calculate displacement.
+    /// Note: Despite the name, this stores the "current" position, not the "old" one.
     pub fn update_old_pos(&mut self) {
         self.pre_update_pos = self.pos.clone();
     }
@@ -280,6 +302,16 @@ impl Ball2D {
         (res_x, bounced, collision_fraction)
     }
 
+    /// Update position using velocity-Verlet integration and handle wall bounces.
+    /// Positions are reflected at boundaries; velocity reversal happens during separate velocity update.
+    /// Calculates collision time fraction and stores pre-bounce velocity for momentum transfer.
+    ///
+    /// # Arguments
+    /// * `dt` - Time step
+    /// * `bound` - Boundary rectangle (reflective walls)
+    ///
+    /// # Returns
+    /// BounceInfo containing bounce flags, pre-bounce velocity, and collision timing
     pub(crate) fn execute_update_pos(&mut self, dt: f32, bound: &Rect) -> BounceInfo {
         let old_pos = self.pos.clone();
         let dx = self.v.x * dt + 0.5 * self.accel.x * dt * dt;
@@ -333,6 +365,12 @@ impl Ball2D {
         }
     }
 
+    /// Set ball position and add to tail trail if movement exceeds threshold.
+    /// Only adds to tail if distance from last tail point exceeds TAIL_RESOLUTION_DELTA_SQ.
+    /// Maintains tail length by removing oldest points when limit is exceeded.
+    ///
+    /// # Arguments
+    /// * `new_pos` - New position to set
     pub fn set_position_and_update_tail(&mut self, new_pos: Vec2D) {
         let end_pos = self.tail.back();
         if let Some(last_pos) = end_pos {

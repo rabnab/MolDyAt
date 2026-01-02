@@ -16,15 +16,17 @@ impl MainContent {
         self.wait_time = self.wait_time.saturating_sub(1);
     }
 
-    /// Call this when a window resize event is detected to pause the simulation
+    /// Pause simulation when window resize is detected.
+    /// Sets resize resume timer to allow rendering thread to stabilize.
     pub(crate) fn pause_for_resize(&mut self) {
         self.was_paused_for_resize = true;
         self.sim.toggle_pause();
         self.resize_resume_at = Some(std::time::Instant::now()); // + std::time::Duration::from_millis(3000));
     }
 
-    /// Call this periodically (e.g., in the update loop) to check if it's time to unpause
-    /// the simulation after a resize event.
+    /// Check if enough time has passed to unpause after resize.
+    /// If resume time is reached, unpauses simulation and reconstructs cell grid
+    /// to match new world boundaries.
     pub(crate) fn unpause_after_resize(&mut self) {
         if let Some(resume_time) = self.resize_resume_at
             && std::time::Instant::now() >= resume_time

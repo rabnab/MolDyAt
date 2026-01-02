@@ -177,6 +177,13 @@ impl CellGrid {
 
     /// Iterate over neighbor cells (including self) without allocating.
     #[inline]
+    /// Iterate over all cells in the 3x3 neighborhood around (row, col), including the cell itself.
+    /// Handles boundaries by clamping to valid indices.
+    ///
+    /// # Arguments
+    /// * `row` - Row index of center cell
+    /// * `col` - Column index of center cell
+    /// * `f` - Closure called for each neighbor cell
     pub fn for_each_neighbor<F>(&self, row: usize, col: usize, mut f: F)
     where
         F: FnMut(&Cell),
@@ -198,6 +205,9 @@ impl CellGrid {
         }
     }
 
+    /// Clone grid structure without ball indices.
+    /// Creates new grid with same dimensions and cell bounds but empty cells.
+    /// Useful for creating temporary grids or snapshots.
     pub(crate) fn to_grid_structure(&self) -> Self {
         let empty_cells = self
             .cells
@@ -216,15 +226,28 @@ impl CellGrid {
         }
     }
 
-    /// Collect all ball indices from the 3x3 neighborhood into the provided `out` buffer.
-    /// Caller should `clear()` the buffer if they want fresh contents each time.
+    /// Collect all ball indices from the 3x3 neighborhood into provided buffer.
+    /// Does not clear the buffer first - caller should clear if fresh contents are needed.
+    ///
+    /// # Arguments
+    /// * `i` - Row index
+    /// * `j` - Column index
+    /// * `out` - Buffer to append indices into
     pub(crate) fn collect_ball_indices_into(&self, i: usize, j: usize, out: &mut Vec<usize>) {
         self.for_each_neighbor(i, j, |cell| {
             out.extend_from_slice(cell.get_ball_indices());
         });
     }
 
-    /// Resize the grid to cover a new world rectangle, reassigning all existing balls to their new cells.
+    /// Resize grid to new world rectangle and reassign all balls to new cells.
+    /// Drains balls from old grid and adds them to new grid based on current positions.
+    ///
+    /// # Arguments
+    /// * `old_grid` - Existing grid to migrate balls from (will be emptied)
+    /// * `new_world` - New world boundary rectangle
+    /// * `cutoff_and_skin` - Interaction cutoff distance plus skin thickness
+    /// * `max_radius` - Maximum ball radius in simulation
+    /// * `balls` - Mutable slice of all balls (needed for position lookup)
     pub(crate) fn resize(
         old_grid: &mut CellGrid,
         new_world: Rect,

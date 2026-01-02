@@ -7,12 +7,19 @@ pub struct TimingMonad {
 }
 
 impl TimingMonad {
+    /// Create new timing monad for performance measurement.
     pub fn new() -> Self {
         Self {
             timings: Vec::new(),
         }
     }
 
+    /// Execute function and measure execution time.
+    /// Only measures when "measure-time" feature is enabled, otherwise zero overhead.
+    ///
+    /// # Arguments
+    /// * `label` - Description for this timing measurement
+    /// * `f` - Function to execute and time
     #[cfg(feature = "measure-time")]
     #[inline(never)]
     pub fn time<F, R>(&mut self, label: &str, f: F) -> R
@@ -53,6 +60,8 @@ impl TimingMonad {
         result
     }
 
+    /// Print all accumulated timing measurements in microseconds.
+    /// Only prints when "measure-time" feature is enabled.
     #[cfg(feature = "measure-time")]
     #[inline(never)]
     pub fn log(&self) {

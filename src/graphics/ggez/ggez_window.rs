@@ -21,6 +21,12 @@ pub struct GgezWindow {
 }
 
 impl GgezWindow {
+    /// Create new ggez window configuration.
+    ///
+    /// # Arguments
+    /// * `resource_dir` - Path to shader resources directory
+    /// * `reg_x` - Region width in pixels
+    /// * `reg_y` - Region height in pixels
     pub(crate) fn new(resource_dir: PathBuf, reg_x: f32, reg_y: f32) -> Self {
         let my_win_definition = WindowDefinition {
             region_px: (reg_x, reg_y),
@@ -40,6 +46,9 @@ impl Window<GgezRenderer> for GgezWindow {
         (win_def.region_px.0 as u32, win_def.region_px.1 as u32)
     }
 
+    /// Create and run ggez window with threaded physics architecture.
+    /// Main thread handles rendering (ggez requirement), separate physics thread runs simulation.
+    /// Physics thread publishes snapshots for rendering thread to consume.
     fn create_window(&self) {
         let height_default: f32 = 1024.;
         let (mut ctx, event_loop) = ContextBuilder::new("ThermoRust", "Rainer Kaltseis")

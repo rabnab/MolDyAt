@@ -51,6 +51,13 @@ impl Debug for Cell {
 }
 
 impl Cell {
+    /// Create new cell with spatial bounds and grid position.
+    ///
+    /// # Arguments
+    /// * `bounds` - Spatial boundaries of the cell
+    /// * `row` - Row index in grid
+    /// * `column` - Column index in grid
+    /// * `num_column` - Total number of columns (for ID calculation)
     pub fn new(bounds: CellBounds, row: usize, column: usize, num_column: usize) -> Self {
         let id = CellId::new(row, column, row * num_column + column);
 
@@ -61,10 +68,19 @@ impl Cell {
         }
     }
 
+    /// Add ball index to this cell's list.
+    ///
+    /// # Arguments
+    /// * `ball_idx` - Index into main balls vector
     pub fn add_ball(&mut self, ball_idx: usize) {
         self.balls.push(ball_idx);
     }
 
+    /// Remove ball index from this cell's list.
+    /// Uses retain to filter out matching index.
+    ///
+    /// # Arguments
+    /// * `ball_id` - Index to remove
     pub fn remove_ball(&mut self, ball_id: usize) {
         self.balls.retain(|&idx| idx != ball_id);
     }
@@ -73,6 +89,11 @@ impl Cell {
         &self.balls
     }
 
+    /// Remove and return all ball indices from this cell.
+    /// Cell's ball list will be empty after this call.
+    ///
+    /// # Returns
+    /// Vector of all ball indices that were in the cell
     pub fn drain_balls(&mut self) -> Vec<usize> {
         self.balls.drain(..).collect()
     }
@@ -88,6 +109,8 @@ impl Cell {
     pub fn clear(&mut self) {
         self.balls.clear();
     }
+    /// Clone cell structure without ball indices.
+    /// Useful for creating grid templates.
     pub fn empty_clone(&self) -> Self {
         Cell {
             balls: Vec::new(),
