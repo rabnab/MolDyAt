@@ -92,4 +92,14 @@ impl MainContent {
     pub(crate) fn get_wait_time(&self) -> u64 {
         self.wait_time
     }
+
+    /// Get the Arc to the physics FPS atomic counter for sharing with physics thread
+    pub fn get_physics_fps_arc(&self) -> Arc<std::sync::atomic::AtomicU32> {
+        self.physics_fps.clone()
+    }
+
+    /// Get current physics FPS value
+    pub fn get_physics_fps(&self) -> f32 {
+        f32::from_bits(self.physics_fps.load(std::sync::atomic::Ordering::Relaxed))
+    }
 }

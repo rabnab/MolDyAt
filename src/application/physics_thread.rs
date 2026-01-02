@@ -131,6 +131,21 @@ impl PhysicsThread {
             );
             println!("Entering physics loop (running as fast as possible)...");
 
+            // Get Arc to physics FPS counter for lock-free updates
+            let physics_fps_counter = main_content.get_physics_fps_arc();
+
+            // Snapshot throttling: only publish at ~60 Hz to match typical vsync
+            // This prevents expensive snapshot creation from slowing down physics
+            // 60 Hz provides smooth rendering while minimizing CPU overhead
+            let snapshot_interval = std::time::Duration::from_micros(16667); // ~60 Hz
+            let mut last_snapshot_time = std::time::Instant::now();
+
+            // Physics performance tracking
+            let mut physics_step_count: u64 = 0;
+            let mut last_perf_report = std::time::Instant::now();
+            let mut snapshot_time_total = std::time::Duration::ZERO;
+            let mut snapshot_count = 0u64;
+
             // Physics loop: run simulation as fast as possible
             while !thread_signal.should_shutdown() {
                 // Process all pending commands
@@ -143,9 +158,48 @@ impl PhysicsThread {
                 }
                 // Run one simulation step per iteration
                 let _ = main_content.simulation_step();
+                physics_step_count += 1;
 
-                // Publish snapshot for renderer
-                main_content.publish_snapshot();
+                // Publish snapshot for renderer only at throttled rate (~60 Hz)
+                // This prevents expensive snapshot creation from slowing down physics
+                let now = std::time::Instant::now();
+                if now.duration_since(last_snapshot_time) >= snapshot_interval {
+                    let snapshot_start = std::time::Instant::now();
+                    main_content.publish_snapshot();
+                    snapshot_time_total += snapshot_start.elapsed();
+                    snapshot_count += 1;
+                    last_snapshot_time = now;
+                }
+
+                // Update physics FPS counter (lock-free atomic write)
+                if now.duration_since(last_perf_report).as_secs() >= 1 {
+                    let elapsed = now.duration_since(last_perf_report).as_secs_f32();
+                    let physics_fps = physics_step_count as f32 / elapsed;
+
+                    // Store as atomic u32 (reinterpret f32 bits)
+                    physics_fps_counter
+                        .store(physics_fps.to_bits(), std::sync::atomic::Ordering::Relaxed);
+
+                    // Calculate snapshot overhead
+                    if snapshot_count > 0 {
+                        let avg_snapshot_us =
+                            snapshot_time_total.as_micros() / snapshot_count as u128;
+                        let snapshot_hz = snapshot_count as f32 / elapsed;
+                        let total_overhead_pct =
+                            (snapshot_time_total.as_secs_f32() / elapsed) * 100.0;
+                        println!(
+                            "Physics thread: {:.0} steps/sec | Snapshots: {:.1} Hz, {:.0} µs avg ({:.1}% overhead)",
+                            physics_fps, snapshot_hz, avg_snapshot_us, total_overhead_pct
+                        );
+                    } else {
+                        println!("Physics thread: {:.0} steps/sec", physics_fps);
+                    }
+
+                    physics_step_count = 0;
+                    snapshot_time_total = std::time::Duration::ZERO;
+                    snapshot_count = 0;
+                    last_perf_report = now;
+                }
 
                 // Optional: Add a small yield to prevent CPU starvation
                 // This can be tuned based on performance requirements
