@@ -35,6 +35,11 @@ pub struct EnergyPlotWindow {
 }
 
 impl EnergyPlotWindow {
+    /// Create new energy plot window (not yet shown).
+    ///
+    /// # Arguments
+    /// * `energy_data` - Shared data synchronized with main simulation
+    /// * `display_mode` - Initial display mode for which energy traces to show
     pub fn new(energy_data: SharedEnergyData, display_mode: DisplayMode) -> Self {
         Self {
             window: None,
@@ -45,6 +50,11 @@ impl EnergyPlotWindow {
         }
     }
 
+    /// Create OS window and initialize softbuffer surface for pixel rendering.
+    /// Window height adapts based on whether status text is present.
+    ///
+    /// # Arguments
+    /// * `window_target` - Event loop window target from winit
     pub fn create(
         &mut self,
         window_target: &EventLoopWindowTarget<()>,
