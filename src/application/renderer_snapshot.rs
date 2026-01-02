@@ -21,8 +21,25 @@
 //!   partial field updates that might benefit from SoA.
 
 use crate::objects2d::Vec2D;
-use crate::objects2d::ball_cell::cell_grid::CellGrid;
 use std::time::Instant;
+
+/// Lightweight specification for cell grid dimensions and layout.
+/// Used by renderer to draw cell background without cloning the full CellGrid.
+#[derive(Debug, Clone)]
+pub struct CellGridSpec {
+    /// Number of rows in the grid
+    pub rows: usize,
+    /// Number of columns in the grid
+    pub cols: usize,
+    /// Width of each cell in world coordinates
+    pub cell_width: f32,
+    /// Height of each cell in world coordinates
+    pub cell_height: f32,
+    /// X-coordinate of the top-left corner of the grid in world coordinates
+    pub origin_x: f32,
+    /// Y-coordinate of the top-left corner of the grid in world coordinates
+    pub origin_y: f32,
+}
 
 /// Rendering data for a single ball.
 ///
@@ -95,7 +112,12 @@ pub struct RendererSnapshot {
     /// Timestamp for debugging
     pub created_at: Instant,
 
-    pub grid_structure: CellGrid,
+    /// Grid specification for drawing cell backgrounds
+    pub grid_spec: CellGridSpec,
+
+    /// Actual physics thread step rate (steps per second)
+    /// This is the true simulation performance, independent of rendering
+    pub physics_fps: f32,
 }
 
 impl RendererSnapshot {
@@ -111,7 +133,15 @@ impl RendererSnapshot {
             cell_grid_bounds: crate::objects2d::Rect::new(0.0, 0.0, 0.0, 0.0),
             cursor_ball_size_idx: 0,
             created_at: Instant::now(),
-            grid_structure: CellGrid::default(),
+            grid_spec: CellGridSpec {
+                rows: 0,
+                cols: 0,
+                cell_width: 0.0,
+                cell_height: 0.0,
+                origin_x: 0.0,
+                origin_y: 0.0,
+            },
+            physics_fps: 0.0,
         }
     }
 
@@ -127,7 +157,15 @@ impl RendererSnapshot {
             cell_grid_bounds: crate::objects2d::Rect::new(0.0, 0.0, 0.0, 0.0),
             cursor_ball_size_idx: 0,
             created_at: Instant::now(),
-            grid_structure: CellGrid::default(),
+            grid_spec: CellGridSpec {
+                rows: 0,
+                cols: 0,
+                cell_width: 0.0,
+                cell_height: 0.0,
+                origin_x: 0.0,
+                origin_y: 0.0,
+            },
+            physics_fps: 0.0,
         }
     }
 
