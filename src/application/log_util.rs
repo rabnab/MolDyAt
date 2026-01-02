@@ -6,6 +6,7 @@ impl LogStuff for MainContent {
         self.show_timings //|| self.show_ball_stats
     }
 
+    /// Print comprehensive help message with all available keyboard shortcuts.
     fn print_help_message() {
         const HELP_KEYS_INFO: &str = "HELP: The following Keys are available:";
         const HELP_OPTION_H: &str = "H - Show this help message.";
@@ -49,6 +50,9 @@ impl LogStuff for MainContent {
         );
     }
 
+    /// Generate status text with simulation statistics.
+    /// Returns None if ball stats display is disabled.
+    /// Uses real units (SI) if real_data flag is set, otherwise simulation units.
     fn status_text(&self, fps: u32, dt: f32) -> Option<String> {
         if !self.show_ball_stats {
             return None;
@@ -63,6 +67,8 @@ impl LogStuff for MainContent {
         Some(return_value)
     }
 
+    /// Format float using scientific notation for very large/small values.
+    /// Uses "e" notation when |value| >= 10^4 or |value| < 10^-3 (excluding zero).
     fn format_g(value: f32, precision: usize) -> String {
         if value.abs() >= 1e4 || value.abs() < 1e-3 && value != 0.0 {
             format!("{:.*e}", precision - 1, value) // Use scientific notation

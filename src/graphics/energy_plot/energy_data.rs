@@ -12,7 +12,7 @@ pub enum DisplayMode {
 }
 
 impl DisplayMode {
-    /// Cycle to the next display mode
+    /// Cycle to next display mode in sequence: Pot → Kin → Total → All → Pot.
     pub fn next(self) -> Self {
         match self {
             DisplayMode::Pot => DisplayMode::Kin,
@@ -22,7 +22,7 @@ impl DisplayMode {
         }
     }
 
-    /// Get a short string representation for window title
+    /// Get short string representation for display in window title.
     pub fn as_str(self) -> &'static str {
         match self {
             DisplayMode::Pot => "pot",
@@ -43,6 +43,7 @@ pub struct EnergyData {
 }
 
 impl EnergyData {
+    /// Create new energy data with pre-allocated capacity of 1000 samples.
     pub fn new() -> Self {
         Self {
             v_kin: VecDeque::with_capacity(1000),
@@ -52,6 +53,8 @@ impl EnergyData {
         }
     }
 
+    /// Calculate total energy (kinetic + potential) for each time point.
+    /// Returns new VecDeque with element-wise sum.
     pub fn v_tot(&self) -> VecDeque<f32> {
         self.v_kin
             .iter()
