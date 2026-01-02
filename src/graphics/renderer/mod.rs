@@ -1,5 +1,6 @@
 mod dummy_renderer;
 mod renderer_core;
+pub mod viewport;
 
 pub use renderer_core::BallType;
 pub use renderer_core::DrawingBackend;
