@@ -18,6 +18,12 @@ pub struct GgezBackend<'a> {
 }
 
 impl<'a> GgezBackend<'a> {
+    /// Create new ggez drawing backend with canvas and mesh cache.
+    /// Canvas is created from frame and cleared to black.
+    ///
+    /// # Arguments
+    /// * `ctx` - Mutable ggez context
+    /// * `ggez_mesh_cache` - Mesh cache for reusing pre-built meshes
     pub fn new(ctx: &'a mut Context, ggez_mesh_cache: GgezMeshCache) -> Self {
         let canvas = Some(Canvas::from_frame(ctx, Color::BLACK));
 
@@ -46,7 +52,12 @@ impl<'a> GgezBackend<'a> {
         Ok(())
     }
 
-    /// Get cached single-character glyph Text for given char and scale
+    /// Get cached single-character glyph Text for rendering.
+    /// Uses LRU cache with (char, scale_bits) as key to avoid Text reconstruction.
+    ///
+    /// # Arguments
+    /// * `ch` - Character to render
+    /// * `scale` - Font scale (converted to bits for exact float comparison)
     fn get_cached_glyph(&mut self, ch: char, scale: f32) -> Text {
         let scale_key = scale.to_bits();
 
@@ -61,7 +72,8 @@ impl<'a> GgezBackend<'a> {
         }
     }
 
-    // Return the owned cache back to the caller after rendering
+    /// Return ownership of mesh cache after rendering completes.
+    /// Allows cache to be reused across frames.
     pub fn into_cache(self) -> GgezMeshCache {
         self.cache
     }
