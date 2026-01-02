@@ -44,6 +44,11 @@ pub struct CustomEventLoop {
 }
 
 impl CustomEventLoop {
+    /// Create a new custom event loop with physics thread and renderer.
+    ///
+    /// # Arguments
+    /// * `application` - MainContent with simulation state (will be moved to physics thread)
+    /// * `renderer` - Renderer for visualization
     pub fn new(application: MainContent, renderer: GgezRenderer) -> Self {
         let energy_data = Arc::new(Mutex::new(EnergyData::new()));
 
@@ -142,6 +147,12 @@ impl CustomEventLoop {
         }
     }
 
+    /// Start the main event loop.
+    /// Takes ownership and runs until window is closed.
+    ///
+    /// # Arguments
+    /// * `ctx` - ggez graphics context
+    /// * `event_loop` - Winit event loop
     pub fn run(mut self, mut ctx: Context, event_loop: EventLoop<()>) {
         event_loop.run(move |mut event, window_target, control_flow| {
             if ctx.quit_requested {

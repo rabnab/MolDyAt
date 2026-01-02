@@ -48,8 +48,14 @@ impl ViewportState {
         self.constrain_pan();
     }
 
-    /// Zoom in/out at a specific point in world coordinates
-    /// Returns true if zoom changed
+    /// Zoom in/out at a specific point in world coordinates while keeping that point fixed on screen.
+    ///
+    /// # Arguments
+    /// * `world_point` - Point in world coordinates to zoom toward (typically cursor position)
+    /// * `zoom_delta` - Multiplicative zoom factor (e.g., 1.1 to zoom in 10%, 0.9 to zoom out 10%)
+    ///
+    /// # Returns
+    /// `true` if zoom level changed, `false` if already at zoom limits
     pub fn zoom_at_point(&mut self, world_point: &Vec2D, zoom_delta: f32) -> bool {
         let old_zoom = self.zoom;
 
@@ -87,14 +93,20 @@ impl ViewportState {
         true
     }
 
-    /// Set pan offset in world coordinates
-    /// Pan is automatically constrained to keep simulation box partially visible
+    /// Set pan offset to a specific position in world coordinates.
+    /// Pan is automatically constrained to keep simulation box visible.
+    ///
+    /// # Arguments
+    /// * `pan` - New pan offset in world coordinates (center of viewport)
     pub fn set_pan(&mut self, pan: Vec2D) {
         self.pan_offset = pan;
         self.constrain_pan();
     }
 
-    /// Adjust pan offset by a delta in world coordinates
+    /// Adjust pan offset by a delta in world coordinates.
+    ///
+    /// # Arguments
+    /// * `delta` - Amount to move the viewport in world coordinates
     pub fn adjust_pan(&mut self, delta: &Vec2D) {
         self.pan_offset = &self.pan_offset + delta;
         self.constrain_pan();
@@ -106,7 +118,13 @@ impl ViewportState {
         self.pan_offset = Vec2D::zero();
     }
 
-    /// Get the visible world rectangle (accounting for zoom and pan)
+    /// Get the visible world rectangle (accounting for zoom and pan).
+    ///
+    /// # Arguments
+    /// * `viewport_size_world` - Size of viewport in world coordinates at 1.0x zoom (width, height)
+    ///
+    /// # Returns
+    /// Rectangle representing the visible portion of the world
     pub fn visible_world_rect(&self, viewport_size_world: (f32, f32)) -> Rect {
         // At zoom 1.0, we see the full world
         // At zoom 2.0, we see half the world, etc.
@@ -174,7 +192,14 @@ impl ViewportState {
         }
     }
 
-    /// Check if a world point is visible in the current viewport
+    /// Check if a world point is visible in the current viewport.
+    ///
+    /// # Arguments
+    /// * `point` - Point in world coordinates to test
+    /// * `viewport_size_world` - Size of viewport in world coordinates at 1.0x zoom
+    ///
+    /// # Returns
+    /// `true` if point is within visible bounds
     pub fn is_point_visible(&self, point: &Vec2D, viewport_size_world: (f32, f32)) -> bool {
         let visible_rect = self.visible_world_rect(viewport_size_world);
 
@@ -184,7 +209,15 @@ impl ViewportState {
             && point.y >= visible_rect.y + visible_rect.h
     }
 
-    /// Check if a circle (ball) is at least partially visible
+    /// Check if a circle (ball) is at least partially visible (frustum culling).
+    ///
+    /// # Arguments
+    /// * `center` - Center of circle in world coordinates
+    /// * `radius` - Radius of circle in world units
+    /// * `viewport_size_world` - Size of viewport in world coordinates at 1.0x zoom
+    ///
+    /// # Returns
+    /// `true` if any part of the circle intersects the visible viewport
     pub fn is_circle_visible(
         &self,
         center: &Vec2D,

@@ -50,6 +50,10 @@ impl Verlet {
     //     Verlet::default()
     // }
 
+    /// Get slice of neighbor ball indices.
+    ///
+    /// # Returns
+    /// Slice of indices into the main ball vector
     pub fn get_neighbour_indices(&self) -> &[usize] {
         &self.neighbours
     }
@@ -67,6 +71,13 @@ impl Verlet {
             .collect()
     }
 
+    /// Add a neighbor to this ball's Verlet list.
+    ///
+    /// # Arguments
+    /// * `neighbour_idx` - Index of ball to add as neighbor
+    ///
+    /// # Returns
+    /// `true` if ball was already a neighbor, `false` if newly added
     pub fn add_neighbour(&mut self, neighbour_idx: usize) -> bool {
         let was_neighbour = self.neighbours.contains(&neighbour_idx);
         if !was_neighbour {
@@ -80,10 +91,24 @@ impl Verlet {
         self.num_neighbours = 0;
     }
 
+    /// Check if a ball index is in this neighbor list.
+    ///
+    /// # Arguments
+    /// * `idx` - Ball index to check
+    ///
+    /// # Returns
+    /// `true` if ball is a neighbor
     pub fn is_a_neighbour_idx(&self, idx: usize) -> bool {
         self.neighbours.contains(&idx)
     }
 
+    /// Remove a neighbor from this Verlet list.
+    ///
+    /// # Arguments
+    /// * `remove_idx` - Index of ball to remove
+    ///
+    /// # Returns
+    /// `true` if ball was removed, `false` if not in list
     pub fn remove(&mut self, remove_idx: usize) -> bool {
         if self.is_a_neighbour_idx(remove_idx) {
             self.neighbours.retain(|&idx| idx != remove_idx);
@@ -91,7 +116,16 @@ impl Verlet {
         }
         false
     }
-    /// Returns true if the ball has moved more than the min_movement_threshold since last update.
+    /// Check if ball has moved enough to require neighbor list update.
+    /// Uses skin thickness threshold to prevent missing interactions.
+    ///
+    /// # Arguments
+    /// * `ball` - Ball to check
+    /// * `dt` - Time step (for velocity extrapolation)
+    /// * `min_movement_threshold` - Distance threshold (typically skin/2)
+    ///
+    /// # Returns
+    /// `true` if ball moved beyond threshold since last update
     pub fn has_ball_moved_enough(ball: &Ball2D, dt: f32, min_movement_threshold: f32) -> bool {
         let travel_since_last_upd_sq = ball
             .get_position()
@@ -101,6 +135,16 @@ impl Verlet {
         min_movement_threshold * min_movement_threshold < travel_since_last_upd_sq
     }
 
+    /// Check if this ball's neighbor list needs rebuilding.
+    /// Triggers update if refresh frequency reached or ball moved too far.
+    ///
+    /// # Arguments
+    /// * `ball` - Ball to check
+    /// * `dt` - Time step
+    /// * `min_movement_threshold` - Movement threshold for update
+    ///
+    /// # Returns
+    /// `true` if neighbor list should be rebuilt
     pub fn needs_update_hood(&self, ball: &Ball2D, dt: f32, min_movement_threshold: f32) -> bool {
         if self.updates_since_refresh >= self.updates_frequency {
             return true;

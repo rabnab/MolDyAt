@@ -80,7 +80,15 @@ impl WindowDefinition {
         LEN_TO_PX
     }
 
-    /// Convert pixel coordinates to world coordinates with viewport transform
+    /// Convert pixel coordinates to world coordinates with viewport transform (zoom and pan).
+    ///
+    /// # Arguments
+    /// * `px_x` - X coordinate in pixels
+    /// * `px_y` - Y coordinate in pixels
+    /// * `viewport` - Current viewport state (zoom and pan offset)
+    ///
+    /// # Returns
+    /// World coordinates accounting for current zoom and pan
     pub fn px_to_coord_viewport(&self, px_x: f32, px_y: f32, viewport: &ViewportState) -> Vec2D {
         // First convert to screen-space world coords (no viewport)
         let screen_coord = self.px_to_coord(px_x, px_y);
@@ -107,7 +115,14 @@ impl WindowDefinition {
         Vec2D::new(pan_offset.x + viewport_x, pan_offset.y + viewport_y)
     }
 
-    /// Convert world coordinates to pixel coordinates with viewport transform
+    /// Convert world coordinates to pixel coordinates with viewport transform (zoom and pan).
+    ///
+    /// # Arguments
+    /// * `coord` - World coordinates
+    /// * `viewport` - Current viewport state (zoom and pan offset)
+    ///
+    /// # Returns
+    /// Pixel coordinates on screen accounting for current zoom and pan
     pub fn coord_to_px_viewport(&self, coord: &Vec2D, viewport: &ViewportState) -> Vec2D {
         // Get viewport parameters
         let zoom = viewport.zoom();
