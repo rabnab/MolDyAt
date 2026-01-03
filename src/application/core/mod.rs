@@ -30,11 +30,11 @@ pub struct MainContent {
     update_hood_at_frame_start: usize,
     /// Override for speed limit (None = use default calculation, Some(f32::INFINITY) = disable)
     pub(crate) speed_limit_override: Option<f32>,
+    /// ms to wait between simulation steps
+    wait_time: u64,
 
     /// Snapshot slot for lock-free communication with renderer
     snapshot_slot: Arc<ArcSwapOption<RendererSnapshot>>,
-    /// ms to wait between simulation steps
-    wait_time: u64,
     /// Cached force results from last physics step for reuse in rendering
     cached_force_results: Vec<ForceResult>,
     /// Actual physics FPS for display (updated by physics thread)
