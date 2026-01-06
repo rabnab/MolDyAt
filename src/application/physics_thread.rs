@@ -133,9 +133,6 @@ impl PhysicsThread {
             );
             println!("Entering physics loop (running as fast as possible)...");
 
-            // Get Arc to physics FPS counter for lock-free updates
-            let physics_fps_counter = main_content.get_physics_fps_arc();
-
             // Snapshot throttling: only publish at ~60 Hz to match typical vsync
             // This prevents expensive snapshot creation from slowing down physics
             // 60 Hz provides smooth rendering while minimizing CPU overhead
@@ -178,9 +175,7 @@ impl PhysicsThread {
                     let elapsed = now.duration_since(last_perf_report).as_secs_f32();
                     let physics_fps = physics_step_count as f32 / elapsed;
 
-                    // Store as atomic u32 (reinterpret f32 bits)
-                    physics_fps_counter
-                        .store(physics_fps.to_bits(), std::sync::atomic::Ordering::Relaxed);
+                    main_content.set_physics_fps(physics_fps);
 
                     // Calculate snapshot overhead
                     if snapshot_count > 0 {

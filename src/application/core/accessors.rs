@@ -103,14 +103,13 @@ impl MainContent {
         self.wait_time
     }
 
-    /// Get Arc-wrapped atomic counter for lock-free physics FPS updates.
-    /// Shared between physics thread (writer) and rendering thread (reader).
-    pub fn get_physics_fps_arc(&self) -> Arc<std::sync::atomic::AtomicU32> {
-        self.physics_fps.clone()
-    }
-
     /// Get current physics FPS value
     pub fn get_physics_fps(&self) -> f32 {
-        f32::from_bits(self.physics_fps.load(std::sync::atomic::Ordering::Relaxed))
+        self.physics_fps
+    }
+
+    /// Set current physics FPS value
+    pub fn set_physics_fps(&mut self, fps: f32) {
+        self.physics_fps = fps;
     }
 }

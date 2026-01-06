@@ -37,8 +37,8 @@ pub struct MainContent {
     snapshot_slot: Arc<ArcSwapOption<RendererSnapshot>>,
     /// Cached force results from last physics step for reuse in rendering
     cached_force_results: Vec<ForceResult>,
-    /// Actual physics FPS for display (updated by physics thread)
-    physics_fps: Arc<std::sync::atomic::AtomicU32>,
+    /// Actual physics FPS for display (updated and read only by physics thread)
+    physics_fps: f32,
 }
 
 pub struct StatsAccumulator {
