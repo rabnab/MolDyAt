@@ -28,6 +28,6 @@
 		"type=volume,source=cargo-registry-cache,target=/usr/local/cargo/registry",
 		"type=volume,source=cargo-git-cache,target=/usr/local/cargo/git"
 	],
-	"postCreateCommand": "rustup component add rustfmt clippy",
+	"postCreateCommand": "rustup component add rustfmt clippy rust-analyzer",
 	"remoteUser": "vscode"
 }
