@@ -34,7 +34,7 @@ impl MainContent {
             snapshot_slot: Arc::new(ArcSwapOption::from(None)),
             wait_time: 0,
             cached_force_results: Vec::new(),
-            physics_fps: Arc::new(std::sync::atomic::AtomicU32::new(0)),
+            physics_fps: 0.0,
         })
     }
 }

@@ -41,6 +41,12 @@ pub struct CustomEventLoop {
 
     // Controls whether frame rendering is currently enabled (toggled via keyboard, e.g. F2)
     render_drawing: bool,
+    view_dirty: bool,
+
+    // Rendering FPS tracking
+    render_fps: u32,
+    last_reported_render_fps: f32,
+    render_report_interval: std::time::Instant,
 }
 
 impl CustomEventLoop {
@@ -80,6 +86,10 @@ impl CustomEventLoop {
             pan_start_pos_px: [0.0, 0.0],
             pan_start_offset: Vec2D::zero(),
             render_drawing: true,
+            view_dirty: true,
+            render_fps: 0,
+            last_reported_render_fps: 0.0,
+            render_report_interval: std::time::Instant::now(),
         }
     }
 
@@ -304,8 +314,16 @@ impl CustomEventLoop {
 
         // PHASE 4: Load snapshot BEFORE expensive rendering work
         let snapshot_guard_before = snapshot_slot.load();
-        let snapshot_arc_before = snapshot_guard_before.as_ref()?.clone();
-        let snapshot = snapshot_arc_before.as_ref();
+        let snapshot_ref = snapshot_guard_before.as_ref()?;
+
+        let is_new_sim_step = snapshot_ref.simulation_step > self.last_displayed_step;
+        if !is_new_sim_step && !self.view_dirty {
+            // No new simulation step - skip rendering to avoid redundant frames
+            return Some(());
+        }
+
+        let snapshot = snapshot_ref.clone();
+        drop(snapshot_guard_before); // Release lock early
 
         let _ = ctx.gfx.begin_frame();
 
@@ -320,7 +338,7 @@ impl CustomEventLoop {
         // Draw balls from snapshot (on top of cell grid)
         let _ = self
             .renderer
-            .draw_balls_from_snapshot(&mut backend, snapshot);
+            .draw_balls_from_snapshot(&mut backend, &snapshot);
 
         // Draw cursor (on top of balls)
         let _ = self
@@ -332,25 +350,11 @@ impl CustomEventLoop {
         let cache = backend.into_cache();
         self.renderer.put_cache(cache);
 
-        // PHASE 4: Verify snapshot hasn't changed before presenting
-        let snapshot_guard_after = snapshot_slot.load();
-        let is_stale = if let Some(ref snapshot_arc_after) = *snapshot_guard_after {
-            !Arc::ptr_eq(&snapshot_arc_before, snapshot_arc_after)
-        } else {
-            // If the snapshot disappears during rendering (very rare), we do NOT treat it as stale.
-            // This preserves legacy behavior: a None snapshot does not trigger early return,
-            // and the application will still be presented. See CodeQL nitpick for rationale.
-            false
-        };
-
         // CRITICAL: Always call end_frame() to drop SurfaceOutput before returning
         // Otherwise we get "SurfaceOutput must be dropped before new Surface" panic
         let _ = ctx.gfx.end_frame();
 
-        if is_stale {
-            // Newer snapshot available - application was rendered but not presented (skipped)
-            return None;
-        }
+        self.view_dirty = false;
 
         // Track steps per application for performance metrics
         let steps_this_frame = snapshot
@@ -374,9 +378,18 @@ impl CustomEventLoop {
         ctx.time.tick();
 
         if self.render_drawing {
+            self.render_fps += 1;
+
             // Skip most frames to reduce load
             // Physics runs in separate thread, we just render from snapshot
             self.render_from_snapshot(ctx);
+        }
+
+        if self.render_report_interval.elapsed().as_secs_f32() >= 1.0 {
+            self.last_reported_render_fps =
+                self.render_fps as f32 / self.render_report_interval.elapsed().as_secs_f32();
+            self.render_fps = 0;
+            self.render_report_interval = std::time::Instant::now();
         }
 
         // Update energy data from snapshot - only once per simulation step
@@ -396,14 +409,16 @@ impl CustomEventLoop {
                 energy_data.time = snapshot.time;
 
                 // Update status text from snapshot (with renderer FPS, simulation FPS, and steps/frame)
-                let renderer_fps = ctx.time.fps();
+
                 if let Some(ref status) = snapshot.status_text {
                     // Replace "fps 0" placeholder with combined renderer, simulation FPS, and steps/frame
                     let updated_status = status.replace(
                         "fps 0",
                         &format!(
                             "render: {} fps | sim: {:.0} fps | steps/frame: {:.1}",
-                            renderer_fps as u32, self.simulation_fps, self.steps_per_frame
+                            self.last_reported_render_fps as u32,
+                            self.simulation_fps,
+                            self.steps_per_frame
                         ),
                     );
                     energy_data.status_text = Some(updated_status);
@@ -488,6 +503,7 @@ impl CustomEventLoop {
         input: KeyInput,
         window_target: &winit::event_loop::EventLoopWindowTarget<()>,
     ) -> ggez::GameResult {
+        self.view_dirty = true;
         if let Some(key) = input.keycode {
             match key {
                 KeyCode::Tab => self.toggle_energy_window(window_target),
@@ -554,6 +570,7 @@ impl CustomEventLoop {
         x: f32,
         y: f32,
     ) -> ggez::GameResult {
+        self.view_dirty = true;
         match button {
             MouseButton::Right => {
                 self.send_physics_command(
@@ -578,6 +595,7 @@ impl CustomEventLoop {
         _x: f32,
         _y: f32,
     ) -> ggez::GameResult {
+        self.view_dirty = true;
         if button == MouseButton::Middle {
             // Stop panning
             self.is_panning = false;
@@ -586,6 +604,7 @@ impl CustomEventLoop {
     }
 
     fn handle_mouse_motion(&mut self, _ctx: &mut Context, x: f32, y: f32) {
+        self.view_dirty = true;
         let new_cursor_pos = self.renderer.update_cursor_and_text(x, y);
 
         // Handle panning if middle mouse button is down
@@ -618,6 +637,7 @@ impl CustomEventLoop {
     }
 
     fn handle_mouse_wheel(&mut self, _ctx: &mut Context, delta: MouseScrollDelta) {
+        self.view_dirty = true;
         // Calculate zoom factor from scroll delta
         let zoom_factor = match delta {
             MouseScrollDelta::LineDelta(_x, y) => {
@@ -649,6 +669,7 @@ impl CustomEventLoop {
     }
 
     fn handle_resize(&mut self, _ctx: &mut Context, width: f32, height: f32) -> ggez::GameResult {
+        self.view_dirty = true;
         // Always resize the renderer (it's on the render thread)
         self.renderer.resize(width, height);
 
