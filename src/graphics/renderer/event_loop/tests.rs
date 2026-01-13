@@ -49,66 +49,124 @@ mod tests {
     }
 
     #[test]
-    fn test_s_triggers_single_step() {
+    fn test_lcontrol_enables_cursor() {
         let mut handler = InputHandler::new();
-        let action = handler.handle_key_down(KeyCode::S, false);
-        assert!(matches!(action, Some(InputAction::SingleStep)));
+        let action = handler.handle_key_down(KeyCode::LControl, false);
+        assert!(matches!(
+            action,
+            Some(InputAction::EnableCursor { repeated: false })
+        ));
     }
 
     #[test]
-    fn test_s_repeated_returns_none() {
-        let mut handler = InputHandler::new();
-        let action = handler.handle_key_down(KeyCode::S, true);
-        assert!(action.is_none());
-    }
-
-    #[test]
-    fn test_escape_quits() {
+    fn test_escape_clears_balls() {
         let mut handler = InputHandler::new();
         let action = handler.handle_key_down(KeyCode::Escape, false);
-        assert!(matches!(action, Some(InputAction::Quit)));
+        assert!(matches!(action, Some(InputAction::ClearBalls)));
     }
 
     #[test]
-    fn test_f1_cycles_plot() {
+    fn test_tab_toggles_energy_window() {
         let mut handler = InputHandler::new();
-        let action = handler.handle_key_down(KeyCode::F1, false);
-        assert!(matches!(action, Some(InputAction::CyclePlotContent)));
+        let action = handler.handle_key_up(KeyCode::Tab);
+        assert!(matches!(action, Some(InputAction::ToggleEnergyWindow)));
     }
 
     #[test]
     fn test_f2_toggles_rendering() {
         let mut handler = InputHandler::new();
-        let action = handler.handle_key_down(KeyCode::F2, false);
+        let action = handler.handle_key_up(KeyCode::F2);
         assert!(matches!(action, Some(InputAction::ToggleRendering)));
     }
 
     #[test]
-    fn test_f3_toggles_energy_window() {
+    fn test_p_cycles_plot() {
         let mut handler = InputHandler::new();
-        let action = handler.handle_key_down(KeyCode::F3, false);
-        assert!(matches!(action, Some(InputAction::ToggleEnergyWindow)));
+        let action = handler.handle_key_up(KeyCode::P);
+        assert!(matches!(action, Some(InputAction::CyclePlotContent)));
     }
 
     #[test]
-    fn test_home_resets_view() {
+    fn test_f1_stops_all_balls() {
         let mut handler = InputHandler::new();
-        let action = handler.handle_key_down(KeyCode::Home, false);
+        let action = handler.handle_key_up(KeyCode::F1);
+        assert!(matches!(action, Some(InputAction::StopAllBalls)));
+    }
+
+    #[test]
+    fn test_key0_resets_view() {
+        let mut handler = InputHandler::new();
+        let action = handler.handle_key_up(KeyCode::Key0);
         assert!(matches!(action, Some(InputAction::ResetView)));
     }
 
     #[test]
-    fn test_r_resets() {
+    fn test_r_randomizes_speeds() {
         let mut handler = InputHandler::new();
-        let action = handler.handle_key_down(KeyCode::R, false);
-        assert!(matches!(action, Some(InputAction::Reset)));
+        let action = handler.handle_key_up(KeyCode::R);
+        assert!(matches!(action, Some(InputAction::RandomizeSpeeds)));
     }
 
     #[test]
-    fn test_a_key_up_disables_cursor() {
+    fn test_s_toggles_stepwise() {
         let mut handler = InputHandler::new();
-        let action = handler.handle_key_up(KeyCode::A);
-        assert!(matches!(action, Some(InputAction::DisableCursor)));
+        let action = handler.handle_key_up(KeyCode::S);
+        assert!(matches!(action, Some(InputAction::ToggleStepwise)));
+    }
+
+    #[test]
+    fn test_h_prints_help() {
+        let mut handler = InputHandler::new();
+        let action = handler.handle_key_up(KeyCode::H);
+        assert!(matches!(action, Some(InputAction::PrintHelp)));
+    }
+
+    #[test]
+    fn test_d_toggles_real_data() {
+        let mut handler = InputHandler::new();
+        let action = handler.handle_key_up(KeyCode::D);
+        assert!(matches!(action, Some(InputAction::ToggleRealData)));
+    }
+
+    #[test]
+    fn test_t_toggles_timing_display() {
+        let mut handler = InputHandler::new();
+        let action = handler.handle_key_up(KeyCode::T);
+        assert!(matches!(action, Some(InputAction::ToggleTimingDisplay)));
+    }
+
+    #[test]
+    fn test_b_toggles_ball_stats() {
+        let mut handler = InputHandler::new();
+        let action = handler.handle_key_up(KeyCode::B);
+        assert!(matches!(action, Some(InputAction::ToggleBallStats)));
+    }
+
+    #[test]
+    fn test_v_starts_verbosity_input() {
+        let mut handler = InputHandler::new();
+        let action = handler.handle_key_up(KeyCode::V);
+        assert!(matches!(action, Some(InputAction::StartVerbosityInput)));
+    }
+
+    #[test]
+    fn test_f5_adds_random_balls() {
+        let mut handler = InputHandler::new();
+        let action = handler.handle_key_up(KeyCode::F5);
+        assert!(matches!(
+            action,
+            Some(InputAction::AddRandomBalls { count: 100 })
+        ));
+    }
+
+    #[test]
+    fn test_lcontrol_up_adds_ball() {
+        let mut handler = InputHandler::new();
+        handler.set_cursor_pos(Vec2D::new(5.0, 10.0), [100.0, 200.0]);
+        let action = handler.handle_key_up(KeyCode::LControl);
+        assert!(
+            matches!(action, Some(InputAction::AddBall { position }) if position == Vec2D::new(5.0, 10.0))
+        );
     }
 
     #[test]
@@ -124,33 +182,46 @@ mod tests {
     }
 
     #[test]
-    fn test_default_ball_size_is_2() {
-        let handler = InputHandler::new();
-        assert_eq!(handler.get_selected_ball_size(), 2);
+    fn test_right_button_cycles_ball_size() {
+        let mut handler = InputHandler::new();
+        let action = handler.handle_mouse_button(
+            winit::event::MouseButton::Right,
+            winit::event::ElementState::Pressed,
+            [100.0, 200.0],
+            Vec2D::new(5.0, 10.0),
+            Vec2D::zero(),
+        );
+        assert!(matches!(action, Some(InputAction::NextBallSize)));
     }
 
     #[test]
-    fn test_number_key_selects_ball_size() {
+    fn test_middle_button_starts_pan() {
         let mut handler = InputHandler::new();
+        let action = handler.handle_mouse_button(
+            winit::event::MouseButton::Middle,
+            winit::event::ElementState::Pressed,
+            [100.0, 200.0],
+            Vec2D::new(5.0, 10.0),
+            Vec2D::zero(),
+        );
+        assert!(
+            matches!(action, Some(InputAction::PanStart { pos_px }) if pos_px == [100.0, 200.0])
+        );
+        assert!(handler.is_panning());
+    }
 
-        // Test each number key
-        handler.register_key_pressed(KeyCode::Key1);
-        assert_eq!(handler.get_selected_ball_size(), 0);
-        handler.register_key_released(KeyCode::Key1);
-
-        handler.register_key_pressed(KeyCode::Key2);
-        assert_eq!(handler.get_selected_ball_size(), 1);
-        handler.register_key_released(KeyCode::Key2);
-
-        handler.register_key_pressed(KeyCode::Key3);
-        assert_eq!(handler.get_selected_ball_size(), 2);
-        handler.register_key_released(KeyCode::Key3);
-
-        handler.register_key_pressed(KeyCode::Key4);
-        assert_eq!(handler.get_selected_ball_size(), 3);
-        handler.register_key_released(KeyCode::Key4);
-
-        handler.register_key_pressed(KeyCode::Key5);
-        assert_eq!(handler.get_selected_ball_size(), 4);
+    #[test]
+    fn test_middle_button_ends_pan() {
+        let mut handler = InputHandler::new();
+        handler.start_pan([100.0, 200.0], Vec2D::zero());
+        let action = handler.handle_mouse_button(
+            winit::event::MouseButton::Middle,
+            winit::event::ElementState::Released,
+            [150.0, 250.0],
+            Vec2D::new(7.0, 12.0),
+            Vec2D::zero(),
+        );
+        assert!(matches!(action, Some(InputAction::PanEnd)));
+        assert!(!handler.is_panning());
     }
 }

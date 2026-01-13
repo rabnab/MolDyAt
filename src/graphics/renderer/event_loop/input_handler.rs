@@ -10,14 +10,18 @@ pub type KeyCode = VirtualKeyCode;
 #[derive(Debug, Clone)]
 pub enum InputAction {
     // Ball manipulation
-    AddBall { size_idx: usize, position: Vec2D },
+    AddBall { position: Vec2D },
     RemoveBallAt { position: Vec2D },
-    CycleBallSize { increase: bool },
+    NextBallSize,
+    AddRandomBalls { count: usize },
+    StopAllBalls,
+    ClearBalls,
 
     // Simulation control
     TogglePause,
-    SingleStep,
-    Reset,
+    ToggleStepwise,
+    RandomizeSpeeds,
+    EnableRandomBallSpeed,
 
     // View control
     ZoomIn { center: Vec2D },
@@ -32,13 +36,17 @@ pub enum InputAction {
     CyclePlotContent,
     ToggleEnergyWindow,
 
+    // Display/Debug
+    PrintHelp,
+    ToggleRealData,
+    ToggleTimingDisplay,
+    ToggleBallStats,
+    StartVerbosityInput,
+
     // Cursor
     UpdateCursor { position: Vec2D },
     EnableCursor { repeated: bool },
     DisableCursor,
-
-    // Application
-    Quit,
 }
 
 /// Handles keyboard and mouse input, tracking state and producing actions
@@ -135,15 +143,13 @@ impl InputHandler {
 
         match key {
             KeyCode::Space => Some(InputAction::TogglePause),
-            KeyCode::S if !is_repeat => Some(InputAction::SingleStep),
-            KeyCode::R => Some(InputAction::Reset),
-            KeyCode::F1 => Some(InputAction::CyclePlotContent),
-            KeyCode::F2 => Some(InputAction::ToggleRendering),
-            KeyCode::F3 => Some(InputAction::ToggleEnergyWindow),
-            KeyCode::Home => Some(InputAction::ResetView),
-            KeyCode::Escape => Some(InputAction::Quit),
-            KeyCode::Key1 | KeyCode::Key2 | KeyCode::Key3 | KeyCode::Key4 | KeyCode::Key5 => {
-                // Number keys for ball size selection handled by caller
+            KeyCode::LControl => Some(InputAction::EnableCursor {
+                repeated: is_repeat,
+            }),
+            KeyCode::Escape => Some(InputAction::ClearBalls),
+            KeyCode::LShift => Some(InputAction::EnableRandomBallSpeed),
+            KeyCode::Minus | KeyCode::Equals => {
+                // These are handled separately for alt-key tracking
                 None
             }
             _ => None,
@@ -155,7 +161,30 @@ impl InputHandler {
         self.register_key_released(key);
 
         match key {
-            KeyCode::A => Some(InputAction::DisableCursor),
+            KeyCode::Tab => Some(InputAction::ToggleEnergyWindow),
+            KeyCode::F2 => Some(InputAction::ToggleRendering),
+            KeyCode::H => Some(InputAction::PrintHelp),
+            KeyCode::D => Some(InputAction::ToggleRealData),
+            KeyCode::S => Some(InputAction::ToggleStepwise),
+            KeyCode::T => Some(InputAction::ToggleTimingDisplay),
+            KeyCode::P => Some(InputAction::CyclePlotContent),
+            KeyCode::R => Some(InputAction::RandomizeSpeeds),
+            KeyCode::B => Some(InputAction::ToggleBallStats),
+            KeyCode::V => Some(InputAction::StartVerbosityInput),
+            KeyCode::LControl => {
+                // Add ball at cursor position and disable cursor
+                Some(InputAction::AddBall {
+                    position: self.cursor_pos,
+                })
+            }
+            KeyCode::F5 => Some(InputAction::AddRandomBalls { count: 100 }),
+            KeyCode::F1 => Some(InputAction::StopAllBalls),
+            KeyCode::Key0 | KeyCode::Numpad0 => Some(InputAction::ResetView),
+            KeyCode::Equals | KeyCode::Minus => {
+                // Handle alt-key release
+                self.register_alt_key_released(key);
+                None
+            }
             _ => None,
         }
     }
@@ -176,19 +205,15 @@ impl InputHandler {
                         position: world_pos,
                     })
                 } else {
-                    // Ball size determined by number key or default
-                    let size_idx = self.get_selected_ball_size();
-                    Some(InputAction::AddBall {
-                        size_idx,
-                        position: world_pos,
-                    })
+                    None // Left click without shift doesn't do anything by default
                 }
             }
-            (MouseButton::Right, ElementState::Pressed) => {
+            (MouseButton::Right, ElementState::Pressed) => Some(InputAction::NextBallSize),
+            (MouseButton::Middle, ElementState::Pressed) => {
                 self.start_pan(pos_px, current_pan_offset);
                 Some(InputAction::PanStart { pos_px })
             }
-            (MouseButton::Right, ElementState::Released) => {
+            (MouseButton::Middle, ElementState::Released) => {
                 self.end_pan();
                 Some(InputAction::PanEnd)
             }
@@ -230,23 +255,6 @@ impl InputHandler {
             Some(InputAction::ZoomOut { center })
         } else {
             None
-        }
-    }
-
-    /// Get currently selected ball size from number keys (1-5)
-    pub(crate) fn get_selected_ball_size(&self) -> usize {
-        if self.is_key_pressed(KeyCode::Key1) {
-            0
-        } else if self.is_key_pressed(KeyCode::Key2) {
-            1
-        } else if self.is_key_pressed(KeyCode::Key3) {
-            2
-        } else if self.is_key_pressed(KeyCode::Key4) {
-            3
-        } else if self.is_key_pressed(KeyCode::Key5) {
-            4
-        } else {
-            2 // Default to medium size
         }
     }
 }
