@@ -1,6 +1,8 @@
 {
 	"name": "Molecular Lennard-Jones Simulation",
-	"image": "mcr.microsoft.com/devcontainers/rust:1-bookworm",
+	"build": {
+		"dockerfile": "Dockerfile"
+	},
 	"features": {},
 	"customizations": {
 		"vscode": {
@@ -26,6 +28,6 @@
 		"type=volume,source=cargo-registry-cache,target=/usr/local/cargo/registry",
 		"type=volume,source=cargo-git-cache,target=/usr/local/cargo/git"
 	],
-	"postCreateCommand": "bash .devcontainer/post-create.sh",
+	"postCreateCommand": "rustup component add rustfmt clippy rust-analyzer",
 	"remoteUser": "vscode"
 }
