@@ -378,7 +378,7 @@ impl CustomEventLoop {
         ctx.time.tick();
 
         if self.render_drawing {
-            self.render_fps = self.render_fps + 1;
+            self.render_fps += 1;
 
             // Skip most frames to reduce load
             // Physics runs in separate thread, we just render from snapshot
