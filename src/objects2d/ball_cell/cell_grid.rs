@@ -156,7 +156,7 @@ impl CellGrid {
 
     /// Add a ball to the appropriate cell based on its current position.
     pub fn add_ball(&mut self, ball_idx: usize, balls: &mut [Ball2D]) {
-        let position = balls[ball_idx].get_position().clone();
+        let position = *balls[ball_idx].get_position();
         if let Some((row, col)) = self.get_cell_indices(&position)
             && let Some(cell) = self.get_cell_mut(row, col)
         {

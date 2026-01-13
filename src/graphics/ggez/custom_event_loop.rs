@@ -539,11 +539,9 @@ impl CustomEventLoop {
                     crate::application::physics_thread::PhysicsCommand::StartVerbosityInput,
                 ),
                 KeyCode::LControl => {
-                    let cursor_pos = self.cursor_pos.clone();
+                    let cursor_pos = self.cursor_pos;
                     self.send_physics_command(
-                        crate::application::physics_thread::PhysicsCommand::AddBall(
-                            cursor_pos.clone(),
-                        ),
+                        crate::application::physics_thread::PhysicsCommand::AddBall(cursor_pos),
                     );
                     self.renderer.disable_drawing_cursor();
                 }
@@ -581,7 +579,7 @@ impl CustomEventLoop {
                 // Start panning - store initial cursor position (in pixels) and pan offset
                 self.is_panning = true;
                 self.pan_start_pos_px = [x, y];
-                self.pan_start_offset = self.renderer.viewport().pan_offset().clone();
+                self.pan_start_offset = *self.renderer.viewport().pan_offset();
             }
             _ => {}
         }
@@ -629,7 +627,7 @@ impl CustomEventLoop {
             // Y is inverted only in X direction; Y already accounts for screen coordinate inversion
             let pan_delta = Vec2D::new(-world_delta.x, world_delta.y);
             // Apply delta to the initial pan offset
-            let new_pan = &self.pan_start_offset + &pan_delta;
+            let new_pan = self.pan_start_offset + pan_delta;
             self.renderer.viewport_mut().set_pan(new_pan);
         }
 

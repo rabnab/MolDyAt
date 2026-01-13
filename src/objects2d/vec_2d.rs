@@ -1,7 +1,7 @@
 use std::fmt;
 use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Vec2D {
     pub x: f32,
     pub y: f32,
@@ -200,12 +200,6 @@ impl From<[f32; 2]> for Vec2D {
 impl From<(f32, f32)> for Vec2D {
     fn from(coords: (f32, f32)) -> Self {
         Vec2D::new(coords.0, coords.1)
-    }
-}
-
-impl Clone for Vec2D {
-    fn clone(&self) -> Vec2D {
-        Vec2D::new(self.x, self.y)
     }
 }
 

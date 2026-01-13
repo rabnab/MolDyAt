@@ -81,11 +81,11 @@ impl Ball2D {
     pub fn new(id: BallId, pos: Vec2D, radius: (usize, f32)) -> Ball2D {
         let mut ball = Ball2D {
             id,
-            pos: pos.clone(),
+            pos,
             radius: radius.1,
             size_idx: radius.0,
-            pre_update_pos: pos.clone(),
-            last_update_hood_pos: pos.clone(),
+            pre_update_pos: pos,
+            last_update_hood_pos: pos,
             ..Ball2D::default()
         };
         ball.set_position_and_update_tail(pos);
@@ -216,7 +216,7 @@ impl Ball2D {
     /// Used to restore position or calculate displacement.
     /// Note: Despite the name, this stores the "current" position, not the "old" one.
     pub fn update_old_pos(&mut self) {
-        self.pre_update_pos = self.pos.clone();
+        self.pre_update_pos = self.pos;
     }
 
     fn update_y_and_handle_top_bottom_boundary(
@@ -313,7 +313,7 @@ impl Ball2D {
     /// # Returns
     /// BounceInfo containing bounce flags, pre-bounce velocity, and collision timing
     pub(crate) fn execute_update_pos(&mut self, dt: f32, bound: &Rect) -> BounceInfo {
-        let old_pos = self.pos.clone();
+        let old_pos = self.pos;
         let dx = self.v.x * dt + 0.5 * self.accel.x * dt * dt;
         let dy = self.v.y * dt + 0.5 * self.accel.y * dt * dt;
 
@@ -326,7 +326,7 @@ impl Ball2D {
         let bound_max_y = f32::max(y0, y1) - self.radius;
 
         // Store velocity before any bounces for momentum calculation
-        let v_before = self.v.clone();
+        let v_before = self.v;
 
         let (x, bounced_x, collision_frac_x) =
             self.update_x_and_handle_left_right_boundary(dx, bound_min_x, bound_max_x);
@@ -376,10 +376,10 @@ impl Ball2D {
         if let Some(last_pos) = end_pos {
             let dist = last_pos.dist(&new_pos);
             if dist.norm_sq() > TAIL_RESOLUTION_DELTA_SQ {
-                self.tail.push_back(new_pos.clone());
+                self.tail.push_back(new_pos);
             }
         } else {
-            self.tail.push_back(new_pos.clone());
+            self.tail.push_back(new_pos);
         }
         if self.tail.len() > self.tail_length {
             self.tail.pop_front();

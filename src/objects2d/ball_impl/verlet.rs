@@ -195,7 +195,7 @@ impl Verlet {
         // Get ball position and ID for distance calculations
         {
             let ball = &mut balls[ball_idx];
-            ball.last_update_hood_pos = ball.get_position().clone();
+            ball.last_update_hood_pos = *ball.get_position();
             ball.reset_update_counter();
         };
 

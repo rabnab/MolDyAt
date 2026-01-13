@@ -66,14 +66,14 @@ impl MainContent {
         let old_positions: Vec<_> = self
             .get_balls()
             .iter()
-            .map(|ball| ball.get_position().clone())
+            .map(|ball| *ball.get_position())
             .collect();
 
         self.update_sim(dt, bound_rect);
 
         // Update cell assignments for balls that moved
         for (i, old_pos) in old_positions.iter().enumerate() {
-            let new_pos = self.balls[i].get_position().clone();
+            let new_pos = *self.balls[i].get_position();
             self.cell_grid
                 .move_ball(i, &mut self.balls, old_pos, &new_pos);
         }
@@ -133,7 +133,7 @@ impl MainContent {
                     return (i, 0, f32::NAN, f32::NAN, false, false);
                 }
 
-                let ball_pos = ball.get_position().clone();
+                let ball_pos = *ball.get_position();
                 let verbose_lines = ball.verbose.lines();
                 let neighbour_indices = ball.hood.get_neighbour_indices();
 

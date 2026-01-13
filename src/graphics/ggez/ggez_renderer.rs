@@ -541,7 +541,7 @@ impl GgezRenderer {
     pub(crate) fn update_cursor_and_text(&mut self, x_px: f32, y_px: f32) -> Vec2D {
         let win_def = self.window_def.borrow();
         let clamped_px = win_def.clamp_to_bounds(&Vec2D::new(x_px, y_px));
-        let curs_pos = clamped_px.clone();
+        let curs_pos = clamped_px;
         self.cursor_pos_px = [clamped_px.x, clamped_px.y];
 
         // Use viewport-aware coordinate transformation
@@ -550,7 +550,7 @@ impl GgezRenderer {
 
         let curs_moved_sq = curs_pos.dist(&self.curs_pos_of_txt).norm_sq();
         if curs_moved_sq > (f32::min(win_def.region_px.0, win_def.region_px.1) * 0.1) {
-            self.curs_pos_of_txt = curs_pos.clone();
+            self.curs_pos_of_txt = curs_pos;
             self.txt_cursor = format!(
                 "x: {}, y: {} pos ({:.3},{:.3})",
                 clamped_px.x, clamped_px.y, curs_pos_coord.x, curs_pos_coord.y,
