@@ -1,6 +1,8 @@
 {
 	"name": "Molecular Lennard-Jones Simulation",
-	"image": "mcr.microsoft.com/devcontainers/rust:1-bookworm",
+	"build": {
+		"dockerfile": "Dockerfile"
+	},
 	"features": {},
 	"customizations": {
 		"vscode": {
@@ -10,9 +12,9 @@
 			],
 			"settings": {
 				"rust-analyzer.numThreads": 2,
-				"rust-analyzer.procMacro.enable": false,
+				"rust-analyzer.procMacro. enable": false,
 				"rust-analyzer.cargo.buildScripts.enable": false,
-				"files.watcherExclude": {
+				"files.watcherExclude":  {
 					"**/target/**": true
 				}
 			}
@@ -26,6 +28,6 @@
 		"type=volume,source=cargo-registry-cache,target=/usr/local/cargo/registry",
 		"type=volume,source=cargo-git-cache,target=/usr/local/cargo/git"
 	],
-	"postCreateCommand": "bash .devcontainer/post-create.sh",
+	"postCreateCommand": "rustup component add rustfmt clippy",
 	"remoteUser": "vscode"
 }
