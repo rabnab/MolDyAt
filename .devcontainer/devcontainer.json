@@ -12,7 +12,7 @@
 			],
 			"settings": {
 				"rust-analyzer.numThreads": 2,
-				"rust-analyzer.procMacro. enable": false,
+				"rust-analyzer.procMacro.enable": false,
 				"rust-analyzer.cargo.buildScripts.enable": false,
 				"files.watcherExclude": {
 					"**/target/**": true
