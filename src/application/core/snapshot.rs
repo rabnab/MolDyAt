@@ -46,7 +46,7 @@ impl MainContent {
             balls.push(BallRenderData {
                 id: ball.get_id(),
                 size_idx: ball.get_size_idx(),
-                position: ball.get_position().clone(),
+                position: *ball.get_position(),
                 color,
                 radius: ball.get_radius(),
                 show_neighbor_lines,

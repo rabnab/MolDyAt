@@ -381,7 +381,7 @@ impl BallPhysics {
         ball: &Ball2D,
         balls: &[Ball2D],
     ) -> Vec<(Vec2D, f32)> {
-        let ball_pos = ball.get_position().clone();
+        let ball_pos = *ball.get_position();
         let ball_radius = ball.radius;
         ball.hood
             .get_neighbour_indices()
@@ -390,7 +390,7 @@ impl BallPhysics {
             .map(|other| {
                 let center_dist = ball_pos.dist(other.get_position()).norm();
                 let edge_dist = center_dist - (ball_radius + other.radius);
-                (other.get_position().clone(), self.force(edge_dist))
+                (*other.get_position(), self.force(edge_dist))
             })
             .collect()
     }

@@ -82,9 +82,9 @@ impl ViewportState {
         // new_pan = world_point - (world_point - old_pan) * (old_zoom / new_zoom)
 
         let zoom_ratio = old_zoom / new_zoom;
-        let offset_from_point = &self.pan_offset - world_point;
+        let offset_from_point = self.pan_offset - world_point;
         let new_offset_from_point = offset_from_point.scaled(zoom_ratio);
-        self.pan_offset = world_point + &new_offset_from_point;
+        self.pan_offset = world_point + new_offset_from_point;
         self.zoom = new_zoom;
 
         // Constrain pan to keep simulation box visible
@@ -108,7 +108,7 @@ impl ViewportState {
     /// # Arguments
     /// * `delta` - Amount to move the viewport in world coordinates
     pub fn adjust_pan(&mut self, delta: &Vec2D) {
-        self.pan_offset = &self.pan_offset + delta;
+        self.pan_offset = self.pan_offset + delta;
         self.constrain_pan();
     }
 
