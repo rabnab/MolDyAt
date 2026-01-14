@@ -1,9 +1,12 @@
+mod event_loop_state;
 mod input_handler;
 mod physics_coordinator;
+mod render_context;
 #[cfg(test)]
 mod tests;
 
+pub use event_loop_state::EventLoopState;
 pub use input_handler::{InputAction, InputHandler, KeyCode};
-// PhysicsCoordinator will be used in a future PR (issue #74)
-#[allow(unused_imports)]
 pub use physics_coordinator::PhysicsCoordinator;
+#[allow(unused_imports)] // Will be used in WGPU implementation
+pub use render_context::RenderContext;
