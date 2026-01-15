@@ -5,6 +5,7 @@ mod render_context;
 #[cfg(test)]
 mod tests;
 
+#[cfg(feature = "renderer-ggez")]
 pub use event_loop_state::EventLoopState;
 pub use input_handler::{InputAction, InputHandler, KeyCode};
 pub use physics_coordinator::PhysicsCoordinator;
