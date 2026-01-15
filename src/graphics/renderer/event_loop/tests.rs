@@ -16,15 +16,21 @@ mod tests {
     }
 
     #[test]
-    fn test_alt_key_registration() {
+    fn test_alt_modifier_detection() {
         let mut handler = InputHandler::new();
-        assert!(!handler.is_alt_key_pressed(KeyCode::Minus));
+        assert!(!handler.is_alt_modifier_pressed());
 
-        handler.register_alt_key_pressed(KeyCode::Minus);
-        assert!(handler.is_alt_key_pressed(KeyCode::Minus));
+        handler.register_key_pressed(KeyCode::LAlt);
+        assert!(handler.is_alt_modifier_pressed());
 
-        handler.register_alt_key_released(KeyCode::Minus);
-        assert!(!handler.is_alt_key_pressed(KeyCode::Minus));
+        handler.register_key_released(KeyCode::LAlt);
+        assert!(!handler.is_alt_modifier_pressed());
+
+        handler.register_key_pressed(KeyCode::RAlt);
+        assert!(handler.is_alt_modifier_pressed());
+
+        handler.register_key_released(KeyCode::RAlt);
+        assert!(!handler.is_alt_modifier_pressed());
     }
 
     #[test]

@@ -428,22 +428,31 @@ impl CustomEventLoop {
         }
 
         // Handle +/- keys for time step control in threaded mode
-        if self.state.input.is_alt_key_pressed(KeyCode::Minus) {
-            self.state
-                .physics
-                .send_command(PhysicsCommand::IncreaseWaitTime);
-        } else if self.state.input.is_alt_key_pressed(KeyCode::Equals) {
-            self.state
-                .physics
-                .send_command(PhysicsCommand::DecreaseWaitTime);
-        } else if self.state.input.is_key_pressed(KeyCode::Minus) {
-            self.state
-                .physics
-                .send_command(PhysicsCommand::HalveTimeStep);
-        } else if self.state.input.is_key_pressed(KeyCode::Equals) {
-            self.state
-                .physics
-                .send_command(PhysicsCommand::DoubleTimeStep);
+        // Note: Use time-based cooldown to prevent rapid-fire commands
+        if self.state.input.can_process_plus_minus() {
+            let is_alt_pressed = self.state.input.is_alt_modifier_pressed();
+
+            if is_alt_pressed && self.state.input.is_key_pressed(KeyCode::Minus) {
+                self.state
+                    .physics
+                    .send_command(PhysicsCommand::IncreaseWaitTime);
+                self.state.input.mark_plus_minus_processed();
+            } else if is_alt_pressed && self.state.input.is_key_pressed(KeyCode::Equals) {
+                self.state
+                    .physics
+                    .send_command(PhysicsCommand::DecreaseWaitTime);
+                self.state.input.mark_plus_minus_processed();
+            } else if !is_alt_pressed && self.state.input.is_key_pressed(KeyCode::Minus) {
+                self.state
+                    .physics
+                    .send_command(PhysicsCommand::HalveTimeStep);
+                self.state.input.mark_plus_minus_processed();
+            } else if !is_alt_pressed && self.state.input.is_key_pressed(KeyCode::Equals) {
+                self.state
+                    .physics
+                    .send_command(PhysicsCommand::DoubleTimeStep);
+                self.state.input.mark_plus_minus_processed();
+            }
         }
 
         // Reset states for next frame (common to both paths)
