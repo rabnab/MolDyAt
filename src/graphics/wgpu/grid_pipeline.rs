@@ -20,7 +20,8 @@ pub struct GridUniforms {
     pub grid_cell_size: [f32; 2],
     /// Grid dimensions (cols, rows) - using u32 as vec2<u32> in shader
     pub grid_dims: [u32; 2],
-    /// Padding to align to 16 bytes
+    /// Padding to satisfy WGPU uniform buffer (std140-like) layout:
+    /// ensures `color_even` / `color_odd` (vec4<f32>) start at 16-byte boundaries.
     pub _padding: [u32; 2],
     /// Color for even cells (RGBA)
     pub color_even: [f32; 4],
