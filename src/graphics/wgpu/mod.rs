@@ -1,7 +1,20 @@
-//! wgpu rendering backend (placeholder)
+//! WGPU rendering backend
 //!
-//! This module will contain the wgpu-based renderer implementation using wgpu 28+.
-//! Note: This uses a much newer wgpu version than ggez's internal wgpu 0.16.
-//! Currently a placeholder for feature flag testing.
+//! This module contains the wgpu-based renderer implementation.
+//! It provides an alternative to the ggez renderer with direct GPU control.
+//!
+//! # Components
+//! - [`WgpuContext`]: Core GPU resources (Device, Queue, Surface, Adapter)
+//! - [`WgpuWindow`]: Window management and event loop
+//!
+//! # Usage
+//! Enable the `renderer-wgpu` feature and disable `renderer-ggez`:
+//! ```bash
+//! cargo run --no-default-features --features renderer-wgpu
+//! ```
 
+mod wgpu_context;
 pub(crate) mod wgpu_window;
+
+#[allow(unused_imports)] // Will be used by future renderer implementation
+pub use wgpu_context::WgpuContext;
