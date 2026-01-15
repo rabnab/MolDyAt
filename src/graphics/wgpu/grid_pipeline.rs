@@ -185,6 +185,10 @@ impl GridPipeline {
     pub fn set_colors(&mut self, queue: &wgpu::Queue, even: [f32; 4], odd: [f32; 4]) {
         self.uniforms.color_even = even;
         self.uniforms.color_odd = odd;
+        // NOTE: This writes the entire uniform buffer even though only colors changed.
+        // This approach is used for simplicity and is subject to later improvement.
+        // A more efficient implementation would use queue.write_buffer with a calculated
+        // offset and size to update only the color fields.
         queue.write_buffer(
             &self.uniform_buffer,
             0,
