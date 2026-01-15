@@ -3,7 +3,6 @@ pub mod event_loop;
 mod renderer_core;
 pub mod viewport;
 
-pub use renderer_core::BallType;
 pub use renderer_core::DrawingBackend;
 pub use renderer_core::PlotContent;
 pub use renderer_core::Renderer;
@@ -11,5 +10,11 @@ pub use renderer_core::Renderer;
 #[allow(unused_imports)]
 pub use event_loop::{InputAction, InputHandler, KeyCode};
 
+// These are currently only used by ggez renderer
+#[cfg(feature = "renderer-ggez")]
+pub use renderer_core::BallType;
+
+#[cfg(feature = "renderer-ggez")]
 pub(crate) use renderer_core::is_number_continue;
+#[cfg(feature = "renderer-ggez")]
 pub(crate) use renderer_core::is_number_start;
