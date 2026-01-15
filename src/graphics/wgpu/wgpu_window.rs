@@ -95,14 +95,26 @@ impl WgpuWindow {
         let mut last_mouse_pos: Option<(f64, f64)> = None;
         let mut cursor_world_pos = (0.0_f32, 0.0_f32);
 
-        // Demo grid specification (will come from physics thread later)
-        let grid_spec = CellGridSpec {
-            rows: 8,
-            cols: 12,
-            cell_width: 3.0,
-            cell_height: 3.0,
-            origin_x: -18.0,
-            origin_y: 12.0,
+        // Demo grid specification (will come from physics thread later).
+        // The origin is chosen so that the grid is centered around (0, 0):
+        //   origin_x = -(cols * cell_width / 2)
+        //   origin_y =  (rows * cell_height / 2)
+        let grid_spec = {
+            let rows = 8;
+            let cols = 12;
+            let cell_width = 3.0_f32;
+            let cell_height = 3.0_f32;
+            let origin_x = -(cols as f32 * cell_width / 2.0);
+            let origin_y = rows as f32 * cell_height / 2.0;
+
+            CellGridSpec {
+                rows,
+                cols,
+                cell_width,
+                cell_height,
+                origin_x,
+                origin_y,
+            }
         };
 
         // World dimensions (matches the grid extent)
