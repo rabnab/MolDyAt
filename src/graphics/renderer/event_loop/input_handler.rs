@@ -40,6 +40,7 @@ pub enum InputAction {
     ToggleRendering,
     CyclePlotContent,
     ToggleEnergyWindow,
+    ToggleCutoffRings,
 
     // Display/Debug
     PrintHelp,
@@ -194,6 +195,7 @@ impl InputHandler {
         match key {
             KeyCode::Tab => Some(InputAction::ToggleEnergyWindow),
             KeyCode::F2 => Some(InputAction::ToggleRendering),
+            KeyCode::F3 => Some(InputAction::ToggleCutoffRings),
             KeyCode::H => Some(InputAction::PrintHelp),
             KeyCode::D => Some(InputAction::ToggleRealData),
             KeyCode::S => Some(InputAction::ToggleStepwise),

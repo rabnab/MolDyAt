@@ -110,6 +110,7 @@ impl EventLoopState {
             | InputAction::DisableCursor
             | InputAction::CyclePlotContent
             | InputAction::ToggleEnergyWindow
+            | InputAction::ToggleCutoffRings
             | InputAction::PrintHelp => {
                 // These are handled separately by the event loop implementation
             }

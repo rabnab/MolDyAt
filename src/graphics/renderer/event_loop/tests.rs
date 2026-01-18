@@ -135,6 +135,13 @@ mod tests {
     }
 
     #[test]
+    fn test_f3_toggles_cutoff_rings() {
+        let mut handler = InputHandler::new();
+        let action = handler.handle_key_up(KeyCode::F3);
+        assert!(matches!(action, Some(InputAction::ToggleCutoffRings)));
+    }
+
+    #[test]
     fn test_t_toggles_timing_display() {
         let mut handler = InputHandler::new();
         let action = handler.handle_key_up(KeyCode::T);
