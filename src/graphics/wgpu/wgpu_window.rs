@@ -13,8 +13,9 @@ use super::wgpu_context::WgpuContext;
 use crate::application::physics_thread::PhysicsCommand;
 use crate::application::renderer_snapshot::{CellGridSpec, RendererSnapshot};
 use crate::application::{LogStuff, MainContent};
-use crate::graphics::energy_plot::{EnergyData, EnergyPlotWindow, SharedEnergyData};
-use crate::graphics::renderer::event_loop::PhysicsCoordinator;
+use crate::graphics::energy_plot::{EnergyData, SharedEnergyData};
+use crate::graphics::renderer::event_loop::{EnergyWindowManager, PhysicsCoordinator};
+use crate::graphics::renderer::viewport::ViewportState;
 use crate::graphics::renderer::{InputAction, InputHandler};
 use crate::graphics::window::{MARGIN_PX_X, MARGIN_PX_Y};
 use crate::objects2d::{Rect, Vec2D};
@@ -161,15 +162,16 @@ impl WgpuWindow {
         physics: PhysicsCoordinator,
         energy_data: SharedEnergyData,
     ) {
-        // Energy plot window (separate OS window, uses softbuffer)
-        let mut energy_window: Option<EnergyPlotWindow> = None;
+        // Energy window manager (shared logic with ggez)
+        let mut energy_manager = EnergyWindowManager::new(energy_data);
 
         // Centralized input handler for consistent behavior with ggez
         let mut input_handler = InputHandler::new();
 
-        // Viewport state for pan/zoom
-        let mut pan_offset = (0.0_f32, 0.0_f32);
-        let mut zoom = 1.0_f32;
+        // Viewport state for pan/zoom (shared with ggez via ViewportState)
+        // Create initial world bounds based on default grid
+        let initial_world_bounds = Rect::new(-18.0, 12.0, 36.0, -24.0);
+        let mut viewport = ViewportState::new(initial_world_bounds);
 
         // Mouse state for drag panning and zoom centering
         let mut is_dragging = false;
@@ -181,9 +183,6 @@ impl WgpuWindow {
 
         // Cache the last snapshot for rendering when no new data available
         let mut last_snapshot: Option<Arc<RendererSnapshot>> = None;
-
-        // Track last processed simulation step to avoid duplicate energy data
-        let mut last_processed_step: u64 = 0;
 
         // Track render FPS (frames per second for the renderer)
         let mut render_frame_count: u64 = 0;
@@ -217,48 +216,9 @@ impl WgpuWindow {
             match event {
                 Event::WindowEvent { event, window_id } => {
                     // Check if this event is for the energy window
-                    if let Some(ref mut energy_win) = energy_window
-                        && energy_win.window_id() == Some(window_id)
-                    {
-                        match event {
-                            WindowEvent::CloseRequested => {
-                                energy_window = None;
-                                return;
-                            }
-                            WindowEvent::Resized(size) => {
-                                energy_win.handle_resize(size.width, size.height);
-                                return;
-                            }
-                            WindowEvent::KeyboardInput {
-                                input:
-                                    KeyboardInput {
-                                        virtual_keycode: Some(VirtualKeyCode::Escape),
-                                        state: ElementState::Pressed,
-                                        ..
-                                    },
-                                ..
-                            } => {
-                                energy_window = None;
-                                return;
-                            }
-                            WindowEvent::KeyboardInput {
-                                input:
-                                    KeyboardInput {
-                                        virtual_keycode:
-                                            Some(VirtualKeyCode::Tab | VirtualKeyCode::P),
-                                        state: ElementState::Pressed,
-                                        ..
-                                    },
-                                ..
-                            } => {
-                                if let Some(ref mut win) = energy_window {
-                                    win.cycle_display_mode();
-                                    win.request_redraw();
-                                }
-                                return;
-                            }
-                            _ => return,
-                        }
+                    if energy_manager.is_energy_window_event(window_id) {
+                        energy_manager.handle_event(event);
+                        return;
                     }
 
                     // Main window events
@@ -276,6 +236,9 @@ impl WgpuWindow {
                             let world_rect =
                                 Self::compute_world_rect_for_size(size.width, size.height);
                             physics.send_command(PhysicsCommand::Resize { world_rect });
+
+                            // Update viewport world bounds
+                            viewport.set_world_bounds(world_rect);
                         }
                         WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
                             ctx.resize(new_inner_size.width, new_inner_size.height);
@@ -284,6 +247,7 @@ impl WgpuWindow {
                                 new_inner_size.height,
                             );
                             physics.send_command(PhysicsCommand::Resize { world_rect });
+                            viewport.set_world_bounds(world_rect);
                         }
                         // Mouse button events - middle button for panning, right for ball size
                         WindowEvent::MouseInput { state, button, .. } => {
@@ -312,6 +276,9 @@ impl WgpuWindow {
                             let world_height =
                                 current_grid_spec.rows as f32 * current_grid_spec.cell_height;
 
+                            // Get current zoom level from viewport
+                            let zoom = viewport.zoom();
+
                             // Convert screen position to world position for zoom centering
                             let (win_width, win_height) = ctx.size();
                             let viewport_width = (win_width as f32 - 2.0 * MARGIN_PX_X).max(1.0);
@@ -323,9 +290,10 @@ impl WgpuWindow {
                             let vp_x = (position.x as f32 - MARGIN_PX_X) / viewport_width;
                             let vp_y = (position.y as f32 - MARGIN_PX_Y) / viewport_height;
 
-                            // Convert to world coordinates (centered at pan_offset)
-                            cursor_world_pos.0 = pan_offset.0 + (vp_x - 0.5) * world_visible_width;
-                            cursor_world_pos.1 = pan_offset.1 - (vp_y - 0.5) * world_visible_height; // Y flipped
+                            // Convert to world coordinates using viewport
+                            let pan_offset = viewport.pan_offset();
+                            cursor_world_pos.0 = pan_offset.x + (vp_x - 0.5) * world_visible_width;
+                            cursor_world_pos.1 = pan_offset.y - (vp_y - 0.5) * world_visible_height; // Y flipped
 
                             // Update cursor position in input handler
                             input_handler.set_cursor_pos(
@@ -346,16 +314,7 @@ impl WgpuWindow {
                                         (dy as f32 / viewport_height) * world_visible_height;
 
                                     // Pan in opposite direction of drag (natural scrolling)
-                                    pan_offset.0 -= world_dx;
-                                    pan_offset.1 += world_dy; // Y is flipped in screen coords
-
-                                    // Clamp pan to keep view within simulation bounds
-                                    // Max pan is half the world size (can pan to edge but not beyond)
-                                    let max_pan_x = world_width / 2.0 * (1.0 - 1.0 / zoom).max(0.0);
-                                    let max_pan_y =
-                                        world_height / 2.0 * (1.0 - 1.0 / zoom).max(0.0);
-                                    pan_offset.0 = pan_offset.0.clamp(-max_pan_x, max_pan_x);
-                                    pan_offset.1 = pan_offset.1.clamp(-max_pan_y, max_pan_y);
+                                    viewport.adjust_pan(&Vec2D::new(-world_dx, world_dy));
                                 }
                                 last_mouse_pos = Some((position.x, position.y));
                             }
@@ -367,31 +326,10 @@ impl WgpuWindow {
                                 MouseScrollDelta::PixelDelta(pos) => pos.y as f32 / 50.0,
                             };
 
-                            // Get current world dimensions from grid spec (from CellGrid via snapshot)
-                            let world_width =
-                                current_grid_spec.cols as f32 * current_grid_spec.cell_width;
-                            let world_height =
-                                current_grid_spec.rows as f32 * current_grid_spec.cell_height;
-
-                            // Calculate zoom factor
+                            // Zoom centered on cursor position using ViewportState
+                            let cursor_vec = Vec2D::new(cursor_world_pos.0, cursor_world_pos.1);
                             let zoom_factor = 1.1_f32.powf(scroll_amount);
-                            let new_zoom = (zoom * zoom_factor).clamp(0.1, 10.0);
-
-                            // Zoom centered on cursor position:
-                            // The world point under the cursor should stay under the cursor
-                            // pan_new = cursor_world - (cursor_world - pan_old) * (zoom_old / zoom_new)
-                            // Simplified: pan_new = pan_old + (cursor_world - pan_old) * (1 - zoom_old / zoom_new)
-                            let scale_ratio = 1.0 - zoom / new_zoom;
-                            pan_offset.0 += (cursor_world_pos.0 - pan_offset.0) * scale_ratio;
-                            pan_offset.1 += (cursor_world_pos.1 - pan_offset.1) * scale_ratio;
-
-                            zoom = new_zoom;
-
-                            // Clamp pan to keep view within simulation bounds
-                            let max_pan_x = world_width / 2.0 * (1.0 - 1.0 / zoom).max(0.0);
-                            let max_pan_y = world_height / 2.0 * (1.0 - 1.0 / zoom).max(0.0);
-                            pan_offset.0 = pan_offset.0.clamp(-max_pan_x, max_pan_x);
-                            pan_offset.1 = pan_offset.1.clamp(-max_pan_y, max_pan_y);
+                            viewport.zoom_at_point(&cursor_vec, zoom_factor);
                         }
                         // Centralized keyboard input handling via InputHandler
                         WindowEvent::KeyboardInput {
@@ -407,11 +345,9 @@ impl WgpuWindow {
                                 Self::execute_input_action(
                                     &action,
                                     &physics,
-                                    &mut pan_offset,
-                                    &mut zoom,
+                                    &mut viewport,
                                     &mut current_ball_size_idx,
-                                    &mut energy_window,
-                                    &energy_data,
+                                    &mut energy_manager,
                                     window_target,
                                     &mut ball_pipeline,
                                     &ctx.queue,
@@ -431,11 +367,9 @@ impl WgpuWindow {
                                 Self::execute_input_action(
                                     &action,
                                     &physics,
-                                    &mut pan_offset,
-                                    &mut zoom,
+                                    &mut viewport,
                                     &mut current_ball_size_idx,
-                                    &mut energy_window,
-                                    &energy_data,
+                                    &mut energy_manager,
                                     window_target,
                                     &mut ball_pipeline,
                                     &ctx.queue,
@@ -455,54 +389,13 @@ impl WgpuWindow {
                         render_fps_timer = std::time::Instant::now();
                     }
 
-                    // Update energy data from latest snapshot (before requesting redraw)
+                    // Update energy data from latest snapshot using manager
                     if let Some(snapshot) = &last_snapshot {
-                        // Only update if this is a new simulation step (avoid duplicates)
-                        if snapshot.simulation_step > last_processed_step {
-                            last_processed_step = snapshot.simulation_step;
-
-                            if let Ok(mut data) = energy_data.lock() {
-                                data.v_kin.push_back(snapshot.kinetic_energy);
-                                data.v_pot.push_back(snapshot.potential_energy);
-                                data.time = snapshot.time;
-
-                                // Update status text with FPS information
-                                // The format (simulation units vs SI units) is controlled by physics thread's real_data flag
-                                if let Some(ref status) = snapshot.status_text {
-                                    // Replace "fps 0" placeholder with actual render and simulation FPS
-                                    let steps_per_frame = physics.steps_per_frame();
-                                    let updated_status = status.replace(
-                                        "fps 0",
-                                        &format!(
-                                            "render: {} fps | sim: {:.0} fps | steps/frame: {:.1}",
-                                            render_fps as u32,
-                                            snapshot.physics_fps,
-                                            steps_per_frame
-                                        ),
-                                    );
-                                    data.status_text = Some(updated_status);
-                                } else {
-                                    data.status_text = None;
-                                }
-
-                                // Limit buffer size to prevent unbounded growth
-                                const MAX_ENERGY_SAMPLES: usize = 1000;
-                                if data.v_kin.len() > MAX_ENERGY_SAMPLES {
-                                    data.v_kin.pop_front();
-                                }
-                                if data.v_pot.len() > MAX_ENERGY_SAMPLES {
-                                    data.v_pot.pop_front();
-                                }
-
-                                // Release lock before requesting redraw
-                                drop(data);
-
-                                // Request redraw for energy window if it exists
-                                if let Some(window) = &energy_window {
-                                    window.request_redraw();
-                                }
-                            }
-                        }
+                        energy_manager.update_from_snapshot(
+                            snapshot,
+                            render_fps,
+                            physics.steps_per_frame(),
+                        );
                     }
 
                     // Request a redraw after processing events
@@ -510,10 +403,8 @@ impl WgpuWindow {
                 }
                 Event::RedrawRequested(window_id) => {
                     // Check if redraw is for energy window
-                    if let Some(ref mut energy_win) = energy_window
-                        && energy_win.window_id() == Some(window_id)
-                    {
-                        let _ = energy_win.render();
+                    if energy_manager.is_energy_window_event(window_id) {
+                        energy_manager.handle_redraw();
                         return;
                     }
 
@@ -550,13 +441,10 @@ impl WgpuWindow {
                         let world_height = grid_spec.rows as f32 * grid_spec.cell_height;
 
                         // Update grid uniforms with current viewport
-                        let view_proj = build_view_proj_matrix(
-                            world_width,
-                            world_height,
-                            pan_offset.0,
-                            pan_offset.1,
-                            zoom,
-                        );
+                        let pan = viewport.pan_offset();
+                        let zoom = viewport.zoom();
+                        let view_proj =
+                            build_view_proj_matrix(world_width, world_height, pan.x, pan.y, zoom);
                         grid_pipeline.update_uniforms(&ctx.queue, grid_spec, view_proj);
 
                         // Physics constants from snapshot for ball rendering outlines
@@ -732,56 +620,15 @@ impl WgpuWindow {
         )
     }
 
-    /// Toggle or cycle the energy plot window.
-    /// Opens window if closed, cycles display mode if open.
-    fn toggle_energy_window(
-        energy_window: &mut Option<EnergyPlotWindow>,
-        energy_data: &SharedEnergyData,
-        window_target: &winit::event_loop::EventLoopWindowTarget<()>,
-    ) {
-        if energy_window.is_none() {
-            // Create and open energy window with default mode
-            let mut window = EnergyPlotWindow::new(
-                energy_data.clone(),
-                crate::graphics::energy_plot::DisplayMode::default(),
-            );
-            if let Err(e) = window.create(window_target) {
-                eprintln!("Failed to create energy window: {}", e);
-                return;
-            }
-            *energy_window = Some(window);
-            println!("Energy window opened");
-        } else if let Some(window) = energy_window {
-            if window.is_open() {
-                // Cycle display mode instead of closing
-                window.cycle_display_mode();
-                window.request_redraw();
-                println!("Cycled energy window display mode");
-            } else {
-                // Reopen if closed with last mode
-                let last_mode = window.get_display_mode();
-                let mut new_window = EnergyPlotWindow::new(energy_data.clone(), last_mode);
-                if let Err(e) = new_window.create(window_target) {
-                    eprintln!("Failed to create energy window: {}", e);
-                    return;
-                }
-                *energy_window = Some(new_window);
-                println!("Energy window reopened");
-            }
-        }
-    }
-
     /// Execute input actions from the centralized InputHandler.
     /// Maps InputAction enum to physics commands and view updates.
     #[allow(clippy::too_many_arguments)]
     fn execute_input_action(
         action: &InputAction,
         physics: &PhysicsCoordinator,
-        pan_offset: &mut (f32, f32),
-        zoom: &mut f32,
+        viewport: &mut ViewportState,
         ball_size_idx: &mut usize,
-        energy_window: &mut Option<EnergyPlotWindow>,
-        energy_data: &SharedEnergyData,
+        energy_manager: &mut EnergyWindowManager,
         window_target: &winit::event_loop::EventLoopWindowTarget<()>,
         ball_pipeline: &mut BallPipeline,
         queue: &wgpu::Queue,
@@ -845,14 +692,13 @@ impl WgpuWindow {
 
             // View control
             InputAction::ResetView => {
-                *pan_offset = (0.0, 0.0);
-                *zoom = 1.0;
+                viewport.reset();
                 println!("View reset");
             }
 
             // Energy window control
             InputAction::ToggleEnergyWindow | InputAction::CyclePlotContent => {
-                Self::toggle_energy_window(energy_window, energy_data, window_target);
+                energy_manager.toggle(window_target);
             }
 
             // Toggle real data display in energy window
