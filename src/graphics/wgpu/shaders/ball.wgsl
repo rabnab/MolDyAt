@@ -26,6 +26,8 @@ struct Uniforms {
     eq_edge_distance: f32,
     // Cutoff distance for interactions (typically 4.0)
     cutoff_distance: f32,
+    // Show cutoff rings flag (0 = hide, 1 = show)
+    show_cutoff_rings: u32,
 }
 
 @group(0) @binding(0)
@@ -121,13 +123,15 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let gray = vec4<f32>(0.43, 0.43, 0.43, 1.0); // RGB(110, 110, 110)
 
     // Check which region we're in (from outside to inside)
-    // 1. Cutoff circle outline (gray)
-    let cutoff_inner = in.cutoff_radius - stroke_width * 0.5;
-    let cutoff_outer = in.cutoff_radius + stroke_width * 0.5;
-    if dist > cutoff_inner && dist < cutoff_outer {
-        let edge = smoothstep(cutoff_inner, cutoff_inner + 0.05, dist)
-                 * (1.0 - smoothstep(cutoff_outer - 0.05, cutoff_outer, dist));
-        return vec4<f32>(gray.rgb, edge);
+    // 1. Cutoff circle outline (gray) - only if enabled
+    if uniforms.show_cutoff_rings != 0u {
+        let cutoff_inner = in.cutoff_radius - stroke_width * 0.5;
+        let cutoff_outer = in.cutoff_radius + stroke_width * 0.5;
+        if dist > cutoff_inner && dist < cutoff_outer {
+            let edge = smoothstep(cutoff_inner, cutoff_inner + 0.05, dist)
+                     * (1.0 - smoothstep(cutoff_outer - 0.05, cutoff_outer, dist));
+            return vec4<f32>(gray.rgb, edge);
+        }
     }
 
     // 2. Equilibrium circle outline (magenta)

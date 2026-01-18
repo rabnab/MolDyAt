@@ -59,6 +59,10 @@ pub struct BallUniforms {
     pub eq_edge_distance: f32,
     /// Cutoff distance for interactions (typically 4.0)
     pub cutoff_distance: f32,
+    /// Show cutoff rings flag (0 = hide, 1 = show)
+    pub show_cutoff_rings: u32,
+    /// Padding to maintain 16-byte alignment
+    _padding: [u32; 3],
 }
 
 impl Default for BallUniforms {
@@ -75,6 +79,9 @@ impl Default for BallUniforms {
             eq_edge_distance: 0.56,
             // Default cutoff distance
             cutoff_distance: 4.0,
+            // Show cutoff rings by default
+            show_cutoff_rings: 1,
+            _padding: [0; 3],
         }
     }
 }
@@ -157,7 +164,7 @@ impl BallPipeline {
                 // Uniform buffer (binding 0)
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
+                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
@@ -271,6 +278,42 @@ impl BallPipeline {
             0,
             bytemuck::cast_slice(&[self.uniforms]),
         );
+    }
+
+    /// Toggle cutoff ring visibility.
+    ///
+    /// # Arguments
+    /// * `queue` - WGPU queue for buffer writes
+    pub fn toggle_cutoff_rings(&mut self, queue: &wgpu::Queue) {
+        self.uniforms.show_cutoff_rings = if self.uniforms.show_cutoff_rings == 0 {
+            1
+        } else {
+            0
+        };
+        queue.write_buffer(
+            &self.uniform_buffer,
+            0,
+            bytemuck::cast_slice(&[self.uniforms]),
+        );
+    }
+
+    /// Set cutoff ring visibility.
+    ///
+    /// # Arguments
+    /// * `queue` - WGPU queue for buffer writes
+    /// * `visible` - Whether cutoff rings should be visible
+    pub fn set_cutoff_rings_visible(&mut self, queue: &wgpu::Queue, visible: bool) {
+        self.uniforms.show_cutoff_rings = if visible { 1 } else { 0 };
+        queue.write_buffer(
+            &self.uniform_buffer,
+            0,
+            bytemuck::cast_slice(&[self.uniforms]),
+        );
+    }
+
+    /// Check if cutoff rings are currently visible.
+    pub fn are_cutoff_rings_visible(&self) -> bool {
+        self.uniforms.show_cutoff_rings != 0
     }
 
     /// Upload ball data to the GPU storage buffer.
