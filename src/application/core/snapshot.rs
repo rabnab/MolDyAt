@@ -83,6 +83,8 @@ impl MainContent {
                 }
             },
             physics_fps: self.get_physics_fps(),
+            equilibrium_edge_distance: self.physics.equilibrium_edge_distance(),
+            cutoff_distance: self.physics.get_cutoff_distance(),
         }
     }
 

@@ -4,7 +4,8 @@ pub(crate) mod window;
 #[cfg(feature = "renderer-ggez")]
 pub(crate) mod ggez;
 
-#[cfg(feature = "renderer-ggez")]
+// Energy plot window is renderer-agnostic (uses softbuffer)
+#[cfg(any(feature = "renderer-ggez", feature = "renderer-wgpu"))]
 mod energy_plot;
 
 #[cfg(feature = "renderer-wgpu")]

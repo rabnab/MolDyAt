@@ -23,6 +23,10 @@ pub enum InputAction {
     ToggleStepwise,
     RandomizeSpeeds,
     EnableRandomBallSpeed,
+    DoubleTimeStep,
+    HalveTimeStep,
+    IncreaseWaitTime,
+    DecreaseWaitTime,
 
     // View control
     ZoomIn { center: Vec2D },
@@ -36,6 +40,7 @@ pub enum InputAction {
     ToggleRendering,
     CyclePlotContent,
     ToggleEnergyWindow,
+    ToggleCutoffRings,
 
     // Display/Debug
     PrintHelp,
@@ -190,6 +195,7 @@ impl InputHandler {
         match key {
             KeyCode::Tab => Some(InputAction::ToggleEnergyWindow),
             KeyCode::F2 => Some(InputAction::ToggleRendering),
+            KeyCode::F3 => Some(InputAction::ToggleCutoffRings),
             KeyCode::H => Some(InputAction::PrintHelp),
             KeyCode::D => Some(InputAction::ToggleRealData),
             KeyCode::S => Some(InputAction::ToggleStepwise),
@@ -207,9 +213,20 @@ impl InputHandler {
             KeyCode::F5 => Some(InputAction::AddRandomBalls { count: 100 }),
             KeyCode::F1 => Some(InputAction::StopAllBalls),
             KeyCode::Key0 | KeyCode::Numpad0 => Some(InputAction::ResetView),
-            KeyCode::Equals | KeyCode::Minus => {
-                // Handled separately in custom_event_loop.rs
-                None
+            // Time step control with +/- keys
+            KeyCode::Equals | KeyCode::Plus | KeyCode::NumpadAdd => {
+                if self.is_alt_modifier_pressed() {
+                    Some(InputAction::DecreaseWaitTime)
+                } else {
+                    Some(InputAction::DoubleTimeStep)
+                }
+            }
+            KeyCode::Minus | KeyCode::NumpadSubtract => {
+                if self.is_alt_modifier_pressed() {
+                    Some(InputAction::IncreaseWaitTime)
+                } else {
+                    Some(InputAction::HalveTimeStep)
+                }
             }
             _ => None,
         }

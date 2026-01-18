@@ -33,6 +33,7 @@ ggez = { version = "0.9.3", optional = true, default-features = false }
 wgpu = { version = "0.16", optional = true }
 pollster = { version = "0.3", optional = true }
 bytemuck = { version = "1.14", features = ["derive"], optional = true }
+font8x8 = { version = "0.3", optional = true }
 
 [dev-dependencies]
 float-cmp = "0.10"
@@ -41,7 +42,7 @@ float-cmp = "0.10"
 default = ["renderer-ggez", "measure-time"]
 measure-time = []
 renderer-ggez = ["dep:ggez"]
-renderer-wgpu = ["dep:wgpu", "dep:pollster", "dep:bytemuck"]
+renderer-wgpu = ["dep:wgpu", "dep:pollster", "dep:bytemuck", "dep:font8x8"]
 
 [profile.dev]
 opt-level = 2

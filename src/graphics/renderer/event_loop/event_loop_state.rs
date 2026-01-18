@@ -72,6 +72,18 @@ impl EventLoopState {
             InputAction::RandomizeSpeeds => {
                 self.physics.send_command(PhysicsCommand::RandomizeSpeeds);
             }
+            InputAction::DoubleTimeStep => {
+                self.physics.send_command(PhysicsCommand::DoubleTimeStep);
+            }
+            InputAction::HalveTimeStep => {
+                self.physics.send_command(PhysicsCommand::HalveTimeStep);
+            }
+            InputAction::IncreaseWaitTime => {
+                self.physics.send_command(PhysicsCommand::IncreaseWaitTime);
+            }
+            InputAction::DecreaseWaitTime => {
+                self.physics.send_command(PhysicsCommand::DecreaseWaitTime);
+            }
             InputAction::EnableRandomBallSpeed => {
                 self.physics
                     .send_command(PhysicsCommand::EnableRandomBallSpeed);
@@ -98,6 +110,7 @@ impl EventLoopState {
             | InputAction::DisableCursor
             | InputAction::CyclePlotContent
             | InputAction::ToggleEnergyWindow
+            | InputAction::ToggleCutoffRings
             | InputAction::PrintHelp => {
                 // These are handled separately by the event loop implementation
             }

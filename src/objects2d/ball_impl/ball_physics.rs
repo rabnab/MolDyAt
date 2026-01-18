@@ -493,23 +493,17 @@ mod tests {
     #[test]
     fn test_min_movement_threshold_formula() {
         let phys = BallPhysics::default();
-        let cutoff = phys.get_cutoff_distance();
         let max_radius = 1.0; // Example max radius
 
-        // New logic: skin-based Verlet lists
-        // skin_thickness = 2.0 * cutoff
-        // cutoff_and_skin = cutoff + skin_thickness = 3.0 * cutoff
-        // min_movement = skin_thickness / 2 = cutoff
+        // Test formula: min_movement = skin_thickness / 2
+        // With skin_thickness = 0.2 * cutoff and default cutoff = 2.0:
+        // Expected: 0.2 * 2.0 / 2.0 = 0.2
         let skin_thickness = phys.get_skin_thickness();
         let expected_threshold = skin_thickness / 2.0;
-
-        // This simplifies to: cutoff (since skin_thickness = 2.0 * cutoff)
-        let expected_simplified = cutoff;
 
         let actual_threshold = phys.get_min_movement_for_update_hood(max_radius);
 
         approx(actual_threshold, expected_threshold, 1e-6);
-        approx(actual_threshold, expected_simplified, 1e-6);
     }
 
     #[test]

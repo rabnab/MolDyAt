@@ -118,6 +118,14 @@ pub struct RendererSnapshot {
     /// Actual physics thread step rate (steps per second)
     /// This is the true simulation performance, independent of rendering
     pub physics_fps: f32,
+
+    /// Equilibrium edge distance from physics (2^(1/6) * lj_sig)
+    /// Used for drawing equilibrium circles around balls
+    pub equilibrium_edge_distance: f32,
+
+    /// Cutoff distance for LJ interactions from physics
+    /// Used for drawing cutoff circles around balls
+    pub cutoff_distance: f32,
 }
 
 impl RendererSnapshot {
@@ -143,6 +151,8 @@ impl RendererSnapshot {
                 origin_y: 0.0,
             },
             physics_fps: 0.0,
+            equilibrium_edge_distance: 1.122_462, // Default: 2^(1/6) * 1.0
+            cutoff_distance: 4.0,
         }
     }
 
@@ -170,6 +180,8 @@ impl RendererSnapshot {
                 origin_y: 0.0,
             },
             physics_fps: 0.0,
+            equilibrium_edge_distance: 1.122_462, // Default: 2^(1/6) * 1.0
+            cutoff_distance: 4.0,
         }
     }
 

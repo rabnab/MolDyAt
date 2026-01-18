@@ -89,10 +89,35 @@ fn run_ggez_renderer() -> GameResult {
 
 #[cfg(feature = "renderer-wgpu")]
 fn run_wgpu_renderer() {
+    use crate::application::MainContent;
+    use crate::graphics::window::{MARGIN_PX_X, MARGIN_PX_Y};
+    use crate::objects2d::Rect;
+
     println!("Using wgpu renderer");
     let resource_dir = get_resource_dir();
+
+    // Compute initial world bounds based on default window size (same as ggez)
+    // LEN_TO_PX = 0.1 means 1 world unit = 10 pixels
+    const LEN_TO_PX: f32 = 0.1;
+    let default_width: f32 = 1280.0;
+    let default_height: f32 = 720.0;
+    let region_width = default_width - 2.0 * MARGIN_PX_X;
+    let region_height = default_height - 2.0 * MARGIN_PX_Y;
+    let world_width = region_width * LEN_TO_PX;
+    let world_height = region_height * LEN_TO_PX;
+
+    // Create world rect centered at origin (matching ggez behavior)
+    let world_rect = Rect::new(
+        -world_width / 2.0,
+        world_height / 2.0,
+        world_width,
+        -world_height,
+    );
+
+    let application = MainContent::new(world_rect).expect("Failed to create MainContent");
+
     let window = WgpuWindow::new(resource_dir, 0.5, 0.5);
-    window.create_window();
+    window.create_window(application);
 }
 
 #[cfg(feature = "renderer-ggez")]
