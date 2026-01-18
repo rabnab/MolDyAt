@@ -130,6 +130,9 @@ impl WgpuWindow {
         let mut last_mouse_pos: Option<(f64, f64)> = None;
         let mut cursor_world_pos = (0.0_f32, 0.0_f32);
 
+        // Render toggle (shared with EventLoopState semantics)
+        let mut render_drawing = true;
+
         // Current ball size index (updated from input handler)
         let mut current_ball_size_idx: usize = 2; // Default to size index 2 (0.60)
 
@@ -168,6 +171,7 @@ impl WgpuWindow {
                         event,
                         &mut ctx,
                         &physics,
+                        &mut render_drawing,
                         &mut viewport,
                         &mut is_dragging,
                         &mut last_mouse_pos,
@@ -212,6 +216,10 @@ impl WgpuWindow {
 
                     // Render main window
                     if window_id != window.id() {
+                        return;
+                    }
+
+                    if !render_drawing {
                         return;
                     }
 
@@ -287,6 +295,7 @@ fn handle_window_event(
     event: WindowEvent,
     ctx: &mut WgpuContext,
     physics: &PhysicsCoordinator,
+    render_drawing: &mut bool,
     viewport: &mut ViewportState,
     is_dragging: &mut bool,
     last_mouse_pos: &mut Option<(f64, f64)>,
@@ -359,6 +368,7 @@ fn handle_window_event(
                 execute_input_action(
                     &action,
                     physics,
+                    render_drawing,
                     viewport,
                     current_ball_size_idx,
                     energy_manager,
@@ -381,6 +391,7 @@ fn handle_window_event(
                 execute_input_action(
                     &action,
                     physics,
+                    render_drawing,
                     viewport,
                     current_ball_size_idx,
                     energy_manager,

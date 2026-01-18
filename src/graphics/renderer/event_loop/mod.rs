@@ -11,6 +11,8 @@ mod tests;
 pub use energy_window_manager::EnergyWindowManager;
 #[allow(unused_imports)] // Unused when building without ggez
 pub use event_loop_state::EventLoopState;
+#[allow(unused_imports)] // Used by WGPU renderer only
+pub use event_loop_state::process_action_common;
 pub use input_handler::{InputAction, InputHandler, KeyCode};
 pub use physics_coordinator::PhysicsCoordinator;
 #[allow(unused_imports)] // May be used in future refactoring

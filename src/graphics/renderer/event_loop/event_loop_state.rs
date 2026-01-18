@@ -23,98 +23,10 @@ impl EventLoopState {
     /// Process an input action and update state accordingly
     /// Returns true if the action affects viewport (caller should mark view_dirty)
     pub fn process_action(&mut self, action: &InputAction) -> bool {
-        let mut affects_view = false;
-
-        match action {
-            InputAction::TogglePause => {
-                self.physics.send_command(PhysicsCommand::TogglePause);
-            }
-            InputAction::ZoomIn { .. } | InputAction::ZoomOut { .. } => {
-                // Viewport changes are handled by the event loop, just mark as dirty
-                affects_view = true;
-            }
-            InputAction::PanUpdate { .. } => {
-                affects_view = true;
-            }
-            InputAction::ResetView => {
-                affects_view = true;
-            }
-            InputAction::ToggleRendering => {
-                self.render_drawing = !self.render_drawing;
-            }
-            InputAction::AddBall { position } => {
-                self.physics
-                    .send_command(PhysicsCommand::AddBall(*position));
-            }
-            InputAction::NextBallSize => {
-                self.physics.send_command(PhysicsCommand::NextBallSize);
-            }
-            InputAction::AddRandomBalls { count } => {
-                self.physics
-                    .send_command(PhysicsCommand::AddRandomBalls(*count));
-            }
-            InputAction::StopAllBalls => {
-                self.physics.send_command(PhysicsCommand::StopAllBalls);
-            }
-            InputAction::ClearBalls => {
-                self.physics.send_command(PhysicsCommand::ClearBalls);
-            }
-            InputAction::ToggleStepwise => {
-                self.physics.send_command(PhysicsCommand::ToggleStepwise);
-            }
-            InputAction::RandomizeSpeeds => {
-                self.physics.send_command(PhysicsCommand::RandomizeSpeeds);
-            }
-            InputAction::DoubleTimeStep => {
-                self.physics.send_command(PhysicsCommand::DoubleTimeStep);
-            }
-            InputAction::HalveTimeStep => {
-                self.physics.send_command(PhysicsCommand::HalveTimeStep);
-            }
-            InputAction::IncreaseWaitTime => {
-                self.physics.send_command(PhysicsCommand::IncreaseWaitTime);
-            }
-            InputAction::DecreaseWaitTime => {
-                self.physics.send_command(PhysicsCommand::DecreaseWaitTime);
-            }
-            InputAction::EnableRandomBallSpeed => {
-                self.physics
-                    .send_command(PhysicsCommand::EnableRandomBallSpeed);
-            }
-            InputAction::ToggleRealData => {
-                self.physics.send_command(PhysicsCommand::ToggleRealData);
-            }
-            InputAction::ToggleTimingDisplay => {
-                self.physics
-                    .send_command(PhysicsCommand::ToggleTimingDisplay);
-            }
-            InputAction::ToggleBallStats => {
-                self.physics.send_command(PhysicsCommand::ToggleBallStats);
-            }
-            InputAction::StartVerbosityInput => {
-                self.physics
-                    .send_command(PhysicsCommand::StartVerbosityInput);
-            }
-            InputAction::PrintHelp => {
-                MainContent::print_help_message();
-            }
-            // Actions that don't affect physics or viewport state
-            InputAction::PanStart { .. }
-            | InputAction::PanEnd
-            | InputAction::UpdateCursor { .. }
-            | InputAction::EnableCursor { .. }
-            | InputAction::DisableCursor
-            | InputAction::CyclePlotContent
-            | InputAction::ToggleEnergyWindow
-            | InputAction::ToggleCutoffRings => {
-                // These are handled separately by the event loop implementation
-            }
-        }
-
+        let affects_view = process_action_common(action, &self.physics, &mut self.render_drawing);
         if affects_view {
             self.view_dirty = true;
         }
-
         affects_view
     }
 
@@ -130,4 +42,95 @@ impl EventLoopState {
             self.physics.mark_step_displayed(snapshot.simulation_step);
         }
     }
+}
+
+/// Shared mapping from InputAction to physics commands and renderer state flags.
+/// Returns true if the action affects the viewport (caller should refresh view).
+pub fn process_action_common(
+    action: &InputAction,
+    physics: &PhysicsCoordinator,
+    render_drawing: &mut bool,
+) -> bool {
+    let mut affects_view = false;
+
+    match action {
+        InputAction::TogglePause => {
+            physics.send_command(PhysicsCommand::TogglePause);
+        }
+        InputAction::ZoomIn { .. } | InputAction::ZoomOut { .. } => {
+            // Viewport changes are handled by the event loop
+            affects_view = true;
+        }
+        InputAction::PanUpdate { .. } => {
+            affects_view = true;
+        }
+        InputAction::ResetView => {
+            affects_view = true;
+        }
+        InputAction::ToggleRendering => {
+            *render_drawing = !*render_drawing;
+        }
+        InputAction::AddBall { position } => {
+            physics.send_command(PhysicsCommand::AddBall(*position));
+        }
+        InputAction::NextBallSize => {
+            physics.send_command(PhysicsCommand::NextBallSize);
+        }
+        InputAction::AddRandomBalls { count } => {
+            physics.send_command(PhysicsCommand::AddRandomBalls(*count));
+        }
+        InputAction::StopAllBalls => {
+            physics.send_command(PhysicsCommand::StopAllBalls);
+        }
+        InputAction::ClearBalls => {
+            physics.send_command(PhysicsCommand::ClearBalls);
+        }
+        InputAction::ToggleStepwise => {
+            physics.send_command(PhysicsCommand::ToggleStepwise);
+        }
+        InputAction::RandomizeSpeeds => {
+            physics.send_command(PhysicsCommand::RandomizeSpeeds);
+        }
+        InputAction::DoubleTimeStep => {
+            physics.send_command(PhysicsCommand::DoubleTimeStep);
+        }
+        InputAction::HalveTimeStep => {
+            physics.send_command(PhysicsCommand::HalveTimeStep);
+        }
+        InputAction::IncreaseWaitTime => {
+            physics.send_command(PhysicsCommand::IncreaseWaitTime);
+        }
+        InputAction::DecreaseWaitTime => {
+            physics.send_command(PhysicsCommand::DecreaseWaitTime);
+        }
+        InputAction::EnableRandomBallSpeed => {
+            physics.send_command(PhysicsCommand::EnableRandomBallSpeed);
+        }
+        InputAction::ToggleRealData => {
+            physics.send_command(PhysicsCommand::ToggleRealData);
+        }
+        InputAction::ToggleTimingDisplay => {
+            physics.send_command(PhysicsCommand::ToggleTimingDisplay);
+        }
+        InputAction::ToggleBallStats => {
+            physics.send_command(PhysicsCommand::ToggleBallStats);
+        }
+        InputAction::StartVerbosityInput => {
+            physics.send_command(PhysicsCommand::StartVerbosityInput);
+        }
+        InputAction::PrintHelp => {
+            MainContent::print_help_message();
+        }
+        // Actions handled elsewhere (renderer-specific)
+        InputAction::PanStart { .. }
+        | InputAction::PanEnd
+        | InputAction::UpdateCursor { .. }
+        | InputAction::EnableCursor { .. }
+        | InputAction::DisableCursor
+        | InputAction::CyclePlotContent
+        | InputAction::ToggleEnergyWindow
+        | InputAction::ToggleCutoffRings => {}
+    }
+
+    affects_view
 }
