@@ -1,6 +1,5 @@
 use crate::application::AppResult;
-use crate::graphics::ggez::ggez_renderer::GgezRenderer;
-use crate::graphics::renderer::{BallType, DrawingBackend, is_number_continue, is_number_start};
+use crate::graphics::ggez::ggez_renderer::{BallType, GgezRenderer};
 use crate::graphics::window::window_definition::WindowDefinition;
 use ggez::Context;
 use ggez::glam::Vec2;
@@ -10,6 +9,109 @@ use ggez::graphics::{
 use ggez::mint::Point2;
 use lru::LruCache;
 use std::num::NonZeroUsize;
+
+/// Trait for backend-specific drawing operations.
+/// This abstracts ggez-specific rendering from the renderer logic.
+pub trait DrawingBackend {
+    /// Draws the cell grid as faint colored rectangles in the background.
+    fn draw_cell_grid_background(
+        &mut self,
+        grid_spec: &crate::application::renderer_snapshot::CellGridSpec,
+        windef: &WindowDefinition,
+        viewport: &crate::graphics::renderer::viewport::ViewportState,
+    ) -> AppResult;
+
+    /// Draw the boundary frame around the simulation region.
+    ///
+    /// # Arguments
+    /// * `margin_px` - Margin in pixels (horizontal, vertical)
+    /// * `region_px` - Region size in pixels (width, height)
+    fn draw_boundary_frame(&mut self, margin_px: (f32, f32), region_px: (f32, f32)) -> AppResult;
+
+    fn dimensions_of_text(&mut self, text: String, scale: f32) -> Option<crate::objects2d::Rect>;
+
+    /// Draw text on screen with positioning options.
+    ///
+    /// # Arguments
+    /// * `text` - Text to display
+    /// * `pos` - Position in pixels [x, y]
+    /// * `scale` - Font scale multiplier
+    /// * `align_right` - If true, align text to right edge of position
+    /// * `align_bottom` - If true, align text to bottom edge of position
+    fn draw_text(
+        &mut self,
+        text: String,
+        pos: [f32; 2],
+        scale: f32,
+        align_right: bool,
+        align_bottom: bool,
+    ) -> AppResult;
+
+    /// Draw a ball mesh at the specified position.
+    ///
+    /// # Arguments
+    /// * `id` - Ball ID for text labels
+    /// * `size_idx` - Size class index (0-4) for mesh selection
+    /// * `pos` - Position in pixels [x, y]
+    /// * `ball_type` - Visual variant (Normal, Cursor, HoodUpdated)
+    /// * `scale` - Scale factor based on viewport zoom
+    fn draw_ball_mesh(
+        &mut self,
+        id: usize,
+        size_idx: usize,
+        pos: [f32; 2],
+        ball_type: BallType,
+        scale: f32,
+    ) -> AppResult;
+
+    fn draw_cross_hair(&mut self, pos: [f32; 2]) -> AppResult;
+
+    /// Begin batching lines for efficient rendering (clears previous batch)
+    fn begin_line_batch(&mut self);
+
+    /// Add a line to the current batch
+    fn add_line_to_batch(
+        &mut self,
+        points: &[[f32; 2]; 2],
+        width: f32,
+        color: (u8, u8, u8, u8),
+    ) -> AppResult;
+
+    /// Draw all batched lines as a single mesh
+    fn draw_line_batch(&mut self) -> AppResult;
+
+    /// Begin batching tail lines (particle trails)
+    fn begin_tail_batch(&mut self);
+    fn add_tail_line_to_batch(&mut self, points: &[[f32; 2]; 2], width: f32) -> AppResult;
+    fn draw_tail_batch(&mut self) -> AppResult;
+
+    /// Finish frame rendering and present to screen
+    fn finish_frame(&mut self) -> AppResult;
+}
+
+/// Check if character can continue a number (digit, decimal, exponent, sign)
+pub(crate) fn is_number_continue(ch: char) -> bool {
+    // Accept digits, decimal point, exponent letters and sign (+/-) (simple permissive DFA)
+    matches!(ch, '0'..='9' | '.' | 'e' | 'E' | '+' | '-')
+}
+
+/// Check if character can start a number
+pub(crate) fn is_number_start(ch: char, next_opt: Option<char>) -> bool {
+    // Start numbers for: '-' followed by digit or '.', a digit, or '.' followed by digit
+    if ch == '-' {
+        if let Some(n) = next_opt {
+            return n.is_ascii_digit();
+        }
+        return false;
+    }
+    if ch == '.' {
+        if let Some(n) = next_opt {
+            return n.is_ascii_digit();
+        }
+        return false;
+    }
+    ch.is_ascii_digit()
+}
 
 pub struct GgezBackend<'a> {
     ctx: &'a mut Context,

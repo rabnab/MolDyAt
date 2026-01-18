@@ -1,8 +1,7 @@
 use crate::application::AppResult;
 use crate::graphics::ggez::WindowDefinitionRef;
-use crate::graphics::ggez::ggez_renderer_backend::GgezMeshCache;
+use crate::graphics::ggez::ggez_renderer_backend::{DrawingBackend, GgezMeshCache};
 use crate::graphics::renderer::viewport::ViewportState;
-use crate::graphics::renderer::{BallType, DrawingBackend, PlotContent, Renderer};
 use crate::graphics::window::window_definition::WindowDefinition;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::{Ball2D, BallPhysics};
@@ -11,6 +10,23 @@ use ggez::graphics::{Color, DrawMode, Mesh, MeshBuilder, Shader};
 use ggez::mint::Point2;
 use std::cell::Ref;
 use std::collections::VecDeque;
+
+/// Content types for energy plots
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlotContent {
+    None,
+    Ekin,
+    Epot,
+    Etot,
+    All,
+}
+
+/// Ball visual types for rendering
+pub enum BallType {
+    Cursor,
+    Normal,
+    HoodUpdated,
+}
 
 pub(crate) const CIRCLE_TOLERANCE: f32 = 0.1; // Tolerance for circle drawing
 pub(crate) const STROKE_THICKNESS: f32 = 2.0; // Border thickness for stroke drawing
@@ -82,17 +98,16 @@ impl GgezRenderer {
             viewport: ViewportState::new(world_bounds),
         }
     }
-}
 
-impl Renderer for GgezRenderer {
-    fn set_physics_engine(&mut self, engine: BallPhysics) {
+    pub fn set_physics_engine(&mut self, engine: BallPhysics) {
         self.physics = Some(engine);
     }
 
-    fn plot_type(&self) -> PlotContent {
+    pub fn plot_type(&self) -> PlotContent {
         self.show_plot
     }
-    fn cycle_plot_content(&mut self) {
+
+    pub fn cycle_plot_content(&mut self) {
         self.show_plot = match self.show_plot {
             PlotContent::None => PlotContent::Ekin,
             PlotContent::Ekin => PlotContent::Epot,
@@ -103,7 +118,7 @@ impl Renderer for GgezRenderer {
     }
 
     /// Adds the kinetic energy data points to the existing line mesh builder and creates the builder if it doesn't exist.
-    fn add_vkin_to_line(&mut self, v_kin: &VecDeque<f32>) -> AppResult<()> {
+    pub fn add_vkin_to_line(&mut self, v_kin: &VecDeque<f32>) -> AppResult<()> {
         let win_def = self.window_def.borrow();
 
         let builder = self
@@ -114,7 +129,8 @@ impl Renderer for GgezRenderer {
         Ok(())
     }
 
-    fn add_vpot_to_line(&mut self, v_pot: &VecDeque<f32>) -> AppResult<()> {
+    /// Add potential energy data points to the line plot.
+    pub fn add_vpot_to_line(&mut self, v_pot: &VecDeque<f32>) -> AppResult<()> {
         let win_def = self.window_def.borrow();
         let builder = self
             .cache
@@ -124,7 +140,12 @@ impl Renderer for GgezRenderer {
         Ok(())
     }
 
-    fn add_vtot_to_line(&mut self, v_kin: &VecDeque<f32>, v_pot: &VecDeque<f32>) -> AppResult<()> {
+    /// Add total energy (kinetic + potential) data points to the line plot.
+    pub fn add_vtot_to_line(
+        &mut self,
+        v_kin: &VecDeque<f32>,
+        v_pot: &VecDeque<f32>,
+    ) -> AppResult<()> {
         let data = v_kin
             .iter()
             .zip(v_pot.iter())
@@ -139,34 +160,7 @@ impl Renderer for GgezRenderer {
         Ok(())
     }
 
-    // todo!()
-    // fn draw_all_ball_tails(
-    //     &self,
-    //     ctx: &mut Context,
-    //     canvas: &mut Canvas,
-    //     balls: &Vec<Rc<RefCell<Ball2D>>>,
-    // ) -> Result<(), GameError> {
-    //     let mut mesh_builder = MeshBuilder::new();
-    //     let to_screen_coords =
-    //         |pos: &Vec2D| -> Point2<f32> { self.get_window_definition().coord_to_px(pos).into() };
-    //
-    //     for ball_ref in balls {
-    //         let ball = ball_ref.borrow();
-    //         if let Some(tail_positions) = ball.get_tail_positions() {
-    //             let points: Vec<Point2<f32>> =
-    //                 tail_positions.iter().map(to_screen_coords).collect();
-    //             if points.len() > 1 {
-    //                 mesh_builder.polyline(DrawMode::stroke(1.0), &points, ggez::graphics::Color::WHITE)?;
-    //             }
-    //         }
-    //     }
-    //
-    //     let tail_mesh = Mesh::from_data(ctx, mesh_builder.build());
-    //     canvas.draw(&tail_mesh, DrawParam::default());
-    //     Ok(())
-    // }
-
-    fn draw_cursor(&self, backend: &mut dyn DrawingBackend, size_idx: usize) -> AppResult {
+    pub fn draw_cursor(&self, backend: &mut dyn DrawingBackend, size_idx: usize) -> AppResult {
         if self.draw_cursor {
             // Cursor should also scale with zoom
             let zoom_scale = self.viewport.zoom();
@@ -206,11 +200,17 @@ impl Renderer for GgezRenderer {
         Ok(())
     }
 
-    fn draw_plot(&mut self) -> AppResult<()> {
+    #[allow(dead_code)]
+    pub fn draw_plot(&mut self) -> AppResult<()> {
         todo!()
     }
 
-    fn draw_frame(
+    /// Draw the simulation frame (grid background and boundary).
+    ///
+    /// # Arguments
+    /// * `backend` - Drawing backend to render with
+    /// * `grid_spec` - Cell grid specification for background
+    pub fn draw_frame(
         &mut self,
         backend: &mut dyn DrawingBackend,
         grid_spec: &crate::application::renderer_snapshot::CellGridSpec,
@@ -224,21 +224,21 @@ impl Renderer for GgezRenderer {
         Ok(())
     }
 
-    fn finish_frame(&mut self, backend: &mut dyn DrawingBackend) -> AppResult<()> {
+    pub fn finish_frame(&mut self, backend: &mut dyn DrawingBackend) -> AppResult<()> {
         backend.finish_frame()
     }
 
-    fn disable_drawing_cursor(&mut self) {
+    pub fn disable_drawing_cursor(&mut self) {
         self.draw_cursor = false;
     }
 
-    fn enable_drawing_cursor(&mut self, repeated: bool) {
+    pub fn enable_drawing_cursor(&mut self, repeated: bool) {
         if !repeated {
             self.draw_cursor = true;
         }
     }
 
-    fn resize(&mut self, width: f32, height: f32) {
+    pub fn resize(&mut self, width: f32, height: f32) {
         self.cache.cell_mesh = None;
         let mut win_def = self.window_def.borrow_mut();
         win_def.resize(width, height);
@@ -250,18 +250,31 @@ impl Renderer for GgezRenderer {
         self.viewport.set_world_bounds(world_bounds);
     }
 
-    fn get_world_region(&self) -> crate::objects2d::Rect {
+    pub fn get_world_region(&self) -> crate::objects2d::Rect {
         self.window_def.borrow().compute_world_bounds_rect()
     }
 
-    fn viewport_mut(&mut self) -> &mut ViewportState {
+    pub fn viewport_mut(&mut self) -> &mut ViewportState {
         &mut self.viewport
     }
 
-    fn viewport(&self) -> &ViewportState {
+    pub fn viewport(&self) -> &ViewportState {
         &self.viewport
     }
 
+    /// Draw balls from snapshot (new threaded architecture)
+    pub fn draw_balls_from_snapshot(
+        &mut self,
+        backend: &mut dyn DrawingBackend,
+        snapshot: &crate::application::renderer_snapshot::RendererSnapshot,
+    ) -> AppResult<()> {
+        // Draw ball symbols and neighbor lines from snapshot
+        self.draw_balls_from_snapshot_data(backend, snapshot)?;
+        Ok(())
+    }
+
+    /// Helper to draw ball symbols from snapshot data.
+    /// Renders balls, trails, and neighbor lines using batched drawing.
     fn draw_balls_from_snapshot_data(
         &self,
         backend: &mut dyn DrawingBackend,

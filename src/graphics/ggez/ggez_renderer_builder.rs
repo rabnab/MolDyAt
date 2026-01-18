@@ -1,8 +1,7 @@
 use crate::graphics::ggez::WindowDefinitionRef;
 use crate::graphics::ggez::ggez_renderer::{
-    CIRCLE_TOLERANCE, CROSSHAIR_SIZE, GgezRenderer, STROKE_THICKNESS,
+    BallType, CIRCLE_TOLERANCE, CROSSHAIR_SIZE, GgezRenderer, PlotContent, STROKE_THICKNESS,
 };
-use crate::graphics::renderer::{BallType, PlotContent};
 use crate::graphics::window::window_definition::WindowDefinition;
 use crate::objects2d::Vec2D;
 use ggez::Context;

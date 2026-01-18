@@ -3,7 +3,6 @@ use crate::application::{LogStuff, MainContent};
 use crate::graphics::energy_plot::{EnergyData, EnergyPlotWindow, SharedEnergyData};
 use crate::graphics::ggez::ggez_renderer::GgezRenderer;
 use crate::graphics::ggez::ggez_renderer_backend::GgezBackend;
-use crate::graphics::renderer::Renderer;
 use crate::graphics::renderer::event_loop::{EventLoopState, InputAction};
 use crate::objects2d::Vec2D;
 use ggez::Context;
