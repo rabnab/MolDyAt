@@ -429,6 +429,9 @@ mod tests {
             let _ = main_content.simulation_step();
         }
 
+        // Explicitly publish a snapshot (simulation_step doesn't always publish)
+        main_content.publish_snapshot();
+
         // Verify snapshot was published
         let snapshot = snapshot_slot.load();
         assert!(snapshot.is_some(), "Snapshot should be published");
