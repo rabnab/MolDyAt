@@ -8,6 +8,7 @@ use super::ball_pipeline::BallPipeline;
 use super::crosshair_pipeline::CrosshairPipeline;
 use super::frame_pipeline::FramePipeline;
 use super::grid_pipeline::{GridPipeline, build_view_proj_matrix};
+use super::line_pipeline::LinePipeline;
 use super::text_pipeline::TextPipeline;
 use super::wgpu_context::WgpuContext;
 use crate::application::physics_thread::PhysicsCommand;
@@ -39,6 +40,9 @@ const BALL_SHADER: &str = include_str!("shaders/ball.wgsl");
 
 /// Crosshair shader source code (embedded at compile time)
 const CROSSHAIR_SHADER: &str = include_str!("shaders/crosshair.wgsl");
+
+/// Line shader source code (embedded at compile time)
+const LINE_SHADER: &str = include_str!("shaders/line.wgsl");
 
 /// Ball sizes for cursor placement (matching BallFactory)
 const BALL_SIZES: [f32; 5] = [0.15, 0.30, 0.60, 1.20, 2.40];
@@ -108,6 +112,10 @@ impl WgpuWindow {
         let ball_pipeline = BallPipeline::new(&ctx.device, ctx.format, BALL_SHADER);
         println!("✓ Ball pipeline initialized");
 
+        // Initialize line pipeline for neighbor lines
+        let line_pipeline = LinePipeline::new(&ctx.device, ctx.format, LINE_SHADER);
+        println!("✓ Line pipeline initialized");
+
         // Initialize crosshair pipeline
         let crosshair_pipeline = CrosshairPipeline::new(&ctx.device, ctx.format, CROSSHAIR_SHADER);
         println!("✓ Crosshair pipeline initialized");
@@ -138,6 +146,7 @@ impl WgpuWindow {
             ctx,
             grid_pipeline,
             ball_pipeline,
+            line_pipeline,
             crosshair_pipeline,
             frame_pipeline,
             text_pipeline,
@@ -156,6 +165,7 @@ impl WgpuWindow {
         mut ctx: WgpuContext,
         mut grid_pipeline: GridPipeline,
         mut ball_pipeline: BallPipeline,
+        mut line_pipeline: LinePipeline,
         mut crosshair_pipeline: CrosshairPipeline,
         mut frame_pipeline: FramePipeline,
         mut text_pipeline: TextPipeline,
@@ -462,6 +472,14 @@ impl WgpuWindow {
                         );
                         ball_pipeline.upload_balls(&ctx.device, &ctx.queue, &snapshot.balls);
 
+                        // Update line pipeline for neighbor lines
+                        line_pipeline.update_uniforms(&ctx.queue, view_proj);
+                        line_pipeline.upload_neighbor_lines(
+                            &ctx.device,
+                            &ctx.queue,
+                            &snapshot.balls,
+                        );
+
                         // Update crosshair uniforms
                         let current_ball_radius = BALL_SIZES[current_ball_size_idx];
                         let ctrl_pressed = input_handler.is_key_pressed(VirtualKeyCode::LControl)
@@ -493,6 +511,7 @@ impl WgpuWindow {
                             &ctx,
                             &grid_pipeline,
                             &ball_pipeline,
+                            &line_pipeline,
                             &crosshair_pipeline,
                             &mut frame_pipeline,
                             &text_pipeline,
@@ -513,10 +532,12 @@ impl WgpuWindow {
     /// Render a single frame with grid background, balls, and crosshair.
     ///
     /// The grid and balls are rendered in an inset viewport with margins around them.
+    #[allow(clippy::too_many_arguments)]
     fn render_frame(
         ctx: &WgpuContext,
         grid_pipeline: &GridPipeline,
         ball_pipeline: &BallPipeline,
+        line_pipeline: &LinePipeline,
         crosshair_pipeline: &CrosshairPipeline,
         frame_pipeline: &mut FramePipeline,
         text_pipeline: &TextPipeline,
@@ -579,6 +600,9 @@ impl WgpuWindow {
             // Draw grid - single instanced draw call
             let cell_count = grid_pipeline.cell_count();
             grid_pipeline.render(&mut render_pass, cell_count);
+
+            // Draw neighbor lines (before balls so lines appear behind)
+            line_pipeline.render(&mut render_pass);
 
             // Draw balls - single instanced draw call
             ball_pipeline.render(&mut render_pass);

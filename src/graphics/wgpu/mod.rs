@@ -20,6 +20,7 @@ mod ball_pipeline;
 mod crosshair_pipeline;
 mod frame_pipeline;
 mod grid_pipeline;
+mod line_pipeline;
 mod text_pipeline;
 mod wgpu_context;
 pub(crate) mod wgpu_window;
@@ -33,6 +34,8 @@ pub use crosshair_pipeline::{CrosshairPipeline, CrosshairUniforms};
 pub use frame_pipeline::FramePipeline;
 #[allow(unused_imports)]
 pub use grid_pipeline::{GridPipeline, GridUniforms, build_view_proj_matrix};
+#[allow(unused_imports)]
+pub use line_pipeline::LinePipeline;
 #[allow(unused_imports)]
 pub use text_pipeline::TextPipeline;
 #[allow(unused_imports)]
