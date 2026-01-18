@@ -11,9 +11,9 @@ use crate::application::MainContent;
 use crate::application::physics_thread::PhysicsCommand;
 use crate::application::renderer_snapshot::{CellGridSpec, RendererSnapshot};
 use crate::graphics::energy_plot::{EnergyData, SharedEnergyData};
-use crate::graphics::renderer::InputHandler;
 use crate::graphics::renderer::event_loop::{EnergyWindowManager, PhysicsCoordinator};
 use crate::graphics::renderer::viewport::ViewportState;
+use crate::graphics::renderer::{InputAction, InputHandler};
 use crate::graphics::window::{MARGIN_PX_X, MARGIN_PX_Y};
 use crate::objects2d::ball_impl::{BallFactory, NUM_BALL_SIZES};
 use crate::objects2d::{Rect, Vec2D};
@@ -21,10 +21,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use winit::{
     dpi::PhysicalSize,
-    event::{
-        ElementState, Event, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode,
-        WindowEvent,
-    },
+    event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::{Window, WindowBuilder},
 };
@@ -125,9 +122,7 @@ impl WgpuWindow {
         let initial_world_bounds = Rect::new(-18.0, 12.0, 36.0, -24.0);
         let mut viewport = ViewportState::new(initial_world_bounds);
 
-        // Mouse state for drag panning and zoom centering
-        let mut is_dragging = false;
-        let mut last_mouse_pos: Option<(f64, f64)> = None;
+        // Cursor world position for rendering and interaction
         let mut cursor_world_pos = (0.0_f32, 0.0_f32);
 
         // Render toggle (shared with EventLoopState semantics)
@@ -173,8 +168,6 @@ impl WgpuWindow {
                         &physics,
                         &mut render_drawing,
                         &mut viewport,
-                        &mut is_dragging,
-                        &mut last_mouse_pos,
                         &mut cursor_world_pos,
                         &mut current_ball_size_idx,
                         &mut input_handler,
@@ -297,8 +290,6 @@ fn handle_window_event(
     physics: &PhysicsCoordinator,
     render_drawing: &mut bool,
     viewport: &mut ViewportState,
-    is_dragging: &mut bool,
-    last_mouse_pos: &mut Option<(f64, f64)>,
     cursor_world_pos: &mut (f32, f32),
     current_ball_size_idx: &mut usize,
     input_handler: &mut InputHandler,
@@ -331,29 +322,70 @@ fn handle_window_event(
             viewport.set_world_bounds(world_rect);
         }
         WindowEvent::MouseInput { state, button, .. } => {
-            handle_mouse_button(
-                button,
-                state,
-                is_dragging,
-                last_mouse_pos,
-                current_ball_size_idx,
-                physics,
-            );
+            // Get current cursor positions for mouse click
+            let world_pos = input_handler.cursor_pos();
+            let screen_pos = input_handler.cursor_pos_px();
+            let pan_offset = *viewport.pan_offset();
+
+            if let Some(action) =
+                input_handler.handle_mouse_button(button, state, screen_pos, world_pos, pan_offset)
+            {
+                // Handle WGPU-specific actions (NextBallSize)
+                if let InputAction::NextBallSize = action {
+                    *current_ball_size_idx = (*current_ball_size_idx + 1) % NUM_BALL_SIZES;
+                    let radius = BallFactory::radius_for_size_idx(*current_ball_size_idx);
+                    println!("Ball size: {:.2} (index {})", radius, current_ball_size_idx);
+                }
+
+                execute_input_action(
+                    &action,
+                    physics,
+                    render_drawing,
+                    viewport,
+                    current_ball_size_idx,
+                    energy_manager,
+                    window_target,
+                    &mut pipelines.ball,
+                    &ctx.queue,
+                );
+            }
         }
         WindowEvent::CursorMoved { position, .. } => {
-            handle_cursor_moved(
+            let _world_pos = update_cursor_position(
                 position,
                 ctx,
                 viewport,
-                is_dragging,
-                last_mouse_pos,
                 cursor_world_pos,
                 input_handler,
                 current_grid_spec,
             );
+
+            if let Some(InputAction::PanUpdate { delta }) =
+                input_handler.handle_mouse_motion(position.x as f32, position.y as f32)
+            {
+                let start_offset = input_handler.pan_start_offset();
+                let zoom = viewport.zoom();
+                let new_pan = ViewportState::apply_pan_delta(delta, start_offset, zoom);
+                viewport.set_pan(new_pan);
+            }
         }
         WindowEvent::MouseWheel { delta, .. } => {
-            handle_mouse_wheel(delta, viewport, *cursor_world_pos);
+            let cursor_pos = input_handler.cursor_pos();
+
+            if let Some(action) = input_handler.handle_mouse_wheel(delta, cursor_pos) {
+                match &action {
+                    InputAction::ZoomIn { center } => {
+                        viewport.zoom_at_point(center, 1.1);
+                    }
+                    InputAction::ZoomOut { center } => {
+                        viewport.zoom_at_point(center, 1.0 / 1.1);
+                    }
+                    InputAction::ResetView => {
+                        viewport.reset();
+                    }
+                    _ => {}
+                }
+            }
         }
         WindowEvent::KeyboardInput {
             input:
@@ -405,42 +437,19 @@ fn handle_window_event(
     }
 }
 
-/// Handle mouse button press/release.
-fn handle_mouse_button(
-    button: MouseButton,
-    state: ElementState,
-    is_dragging: &mut bool,
-    last_mouse_pos: &mut Option<(f64, f64)>,
-    current_ball_size_idx: &mut usize,
-    physics: &PhysicsCoordinator,
-) {
-    if button == MouseButton::Middle {
-        *is_dragging = state == ElementState::Pressed;
-        if !*is_dragging {
-            *last_mouse_pos = None;
-        }
-    } else if button == MouseButton::Right && state == ElementState::Pressed {
-        *current_ball_size_idx = (*current_ball_size_idx + 1) % NUM_BALL_SIZES;
-        physics.send_command(PhysicsCommand::NextBallSize);
-        let radius = BallFactory::radius_for_size_idx(*current_ball_size_idx);
-        println!("Ball size: {:.2} (index {})", radius, current_ball_size_idx);
-    }
-}
-
-/// Handle cursor movement for panning and coordinate tracking.
-#[allow(clippy::too_many_arguments)]
-fn handle_cursor_moved(
+/// Convert screen coordinates to world coordinates.
+/// Update cursor position and convert to world coordinates.
+/// Returns the world position for use in InputHandler.
+fn update_cursor_position(
     position: winit::dpi::PhysicalPosition<f64>,
     ctx: &WgpuContext,
-    viewport: &mut ViewportState,
-    is_dragging: &mut bool,
-    last_mouse_pos: &mut Option<(f64, f64)>,
+    viewport: &ViewportState,
     cursor_world_pos: &mut (f32, f32),
     input_handler: &mut InputHandler,
-    current_grid_spec: &CellGridSpec,
-) {
-    let world_width = current_grid_spec.cols as f32 * current_grid_spec.cell_width;
-    let world_height = current_grid_spec.rows as f32 * current_grid_spec.cell_height;
+    grid_spec: &CellGridSpec,
+) -> Vec2D {
+    let world_width = grid_spec.cols as f32 * grid_spec.cell_width;
+    let world_height = grid_spec.rows as f32 * grid_spec.cell_height;
     let zoom = viewport.zoom();
 
     let (win_width, win_height) = ctx.size();
@@ -458,40 +467,12 @@ fn handle_cursor_moved(
     cursor_world_pos.0 = pan_offset.x + (vp_x - 0.5) * world_visible_width;
     cursor_world_pos.1 = pan_offset.y - (vp_y - 0.5) * world_visible_height;
 
+    let world_pos = Vec2D::new(cursor_world_pos.0, cursor_world_pos.1);
+
     // Update cursor position in input handler
-    input_handler.set_cursor_pos(
-        Vec2D::new(cursor_world_pos.0, cursor_world_pos.1),
-        [position.x as f32, position.y as f32],
-    );
+    input_handler.set_cursor_pos(world_pos, [position.x as f32, position.y as f32]);
 
-    if *is_dragging {
-        if let Some((last_x, last_y)) = *last_mouse_pos {
-            let dx = position.x - last_x;
-            let dy = position.y - last_y;
-
-            let world_dx = (dx as f32 / viewport_width) * world_visible_width;
-            let world_dy = (dy as f32 / viewport_height) * world_visible_height;
-
-            viewport.adjust_pan(&Vec2D::new(-world_dx, world_dy));
-        }
-        *last_mouse_pos = Some((position.x, position.y));
-    }
-}
-
-/// Handle mouse wheel for zooming.
-fn handle_mouse_wheel(
-    delta: MouseScrollDelta,
-    viewport: &mut ViewportState,
-    cursor_world_pos: (f32, f32),
-) {
-    let scroll_amount = match delta {
-        MouseScrollDelta::LineDelta(_, y) => y,
-        MouseScrollDelta::PixelDelta(pos) => pos.y as f32 / 50.0,
-    };
-
-    let cursor_vec = Vec2D::new(cursor_world_pos.0, cursor_world_pos.1);
-    let zoom_factor = 1.1_f32.powf(scroll_amount);
-    viewport.zoom_at_point(&cursor_vec, zoom_factor);
+    world_pos
 }
 
 /// Log frame info periodically for debugging.

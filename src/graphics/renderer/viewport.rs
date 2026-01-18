@@ -118,6 +118,28 @@ impl ViewportState {
         self.pan_offset = Vec2D::zero();
     }
 
+    /// Apply pan update from pixel delta (used by event loop handlers).
+    /// Converts pixel space delta to world space delta accounting for zoom.
+    ///
+    /// # Arguments
+    /// * `pixel_delta` - Delta in screen pixels (from InputAction::PanUpdate)
+    /// * `pan_start_offset` - Viewport pan offset when pan started
+    /// * `zoom` - Current zoom level
+    ///
+    /// # Returns
+    /// New pan offset to apply
+    pub fn apply_pan_delta(pixel_delta: Vec2D, pan_start_offset: Vec2D, zoom: f32) -> Vec2D {
+        // Convert pixel delta to world delta
+        // LEN_TO_PX = 0.1 means 1 world unit = 10 pixels
+        const LEN_TO_PX: f32 = 0.1;
+        let world_dx = (pixel_delta.x * LEN_TO_PX) / zoom;
+        let world_dy = (pixel_delta.y * LEN_TO_PX) / zoom;
+
+        // Invert delta because panning moves viewport in opposite direction
+        let pan_delta = Vec2D::new(-world_dx, world_dy);
+        pan_start_offset + pan_delta
+    }
+
     /// Get the visible world rectangle (accounting for zoom and pan).
     ///
     /// # Arguments

@@ -4,7 +4,7 @@ use crate::graphics::energy_plot::{EnergyData, EnergyPlotWindow, SharedEnergyDat
 use crate::graphics::ggez::ggez_renderer::GgezRenderer;
 use crate::graphics::ggez::ggez_renderer_backend::GgezBackend;
 use crate::graphics::renderer::event_loop::{EventLoopState, InputAction};
-use crate::objects2d::Vec2D;
+use crate::graphics::renderer::viewport::ViewportState;
 use ggez::Context;
 use ggez::event::process_event;
 use ggez::event::winit_event::{ElementState, Event, KeyboardInput, WindowEvent};
@@ -260,22 +260,11 @@ impl CustomEventLoop {
 
                 if let Some(action) = self.state.input.handle_mouse_motion(x, y) {
                     if let InputAction::PanUpdate { delta } = &action {
-                        // Handle pan update by updating renderer's viewport
+                        // Handle pan update using shared viewport logic
                         let start_offset = self.state.input.pan_start_offset();
                         let zoom = self.renderer.viewport().zoom();
-                        let world_delta = Vec2D::new(
-                            crate::graphics::window::window_definition::WindowDefinition::px_to_len(
-                                delta.x,
-                            ) / zoom,
-                            crate::graphics::window::window_definition::WindowDefinition::px_to_len(
-                                delta.y,
-                            ) / zoom,
-                        );
-                        // Invert delta because panning moves the viewport in opposite direction
-                        let pan_delta = Vec2D::new(-world_delta.x, world_delta.y);
-                        self.renderer
-                            .viewport_mut()
-                            .set_pan(start_offset + pan_delta);
+                        let new_pan = ViewportState::apply_pan_delta(*delta, start_offset, zoom);
+                        self.renderer.viewport_mut().set_pan(new_pan);
                         self.state.view_dirty = true;
                     }
                     self.state.process_action(&action);
