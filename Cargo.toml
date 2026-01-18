@@ -7,19 +7,33 @@ cargo-features = ["profile-rustflags"]
 name = "rust_thermo"
 version = "0.1.1"
 edition = "2024"
+resolver = "2"
 
 [dependencies]
-ggez = { version = "0.9.3", optional = true, default-features = false }
-wgpu = { version = "0.16.3", optional = true }
+# Core dependencies (always included)
 rand = "0.9.0"
 rand_distr = "0.5.1"
 lru = "0.16.2"
 rayon = "1.10.0"
-wide = "0.8.2"
+wide = "1.1"  # Updated from 0.8.2
 num_cpus = "1.16"
+arc-swap = "1.7"
+
+# Window management (explicit, used by both renderers)
 winit = "0.28.7"
 softbuffer = "0.3.3"
-arc-swap = "1.7"
+
+# ggez backend (optional, default)
+# Note: ggez 0.9.3 internally uses wgpu 0.16
+ggez = { version = "0.9.3", optional = true, default-features = false }
+
+# wgpu backend dependencies (optional)
+# Note: Using wgpu 0.16 to match ggez's internal wgpu version
+# This allows both renderers to coexist and share the same wgpu dependency
+wgpu = { version = "0.16", optional = true }
+pollster = { version = "0.3", optional = true }
+bytemuck = { version = "1.14", features = ["derive"], optional = true }
+font8x8 = { version = "0.3", optional = true }
 
 [dev-dependencies]
 float-cmp = "0.10"
@@ -27,8 +41,8 @@ float-cmp = "0.10"
 [features]
 default = ["renderer-ggez", "measure-time"]
 measure-time = []
-renderer-ggez = ["ggez"]
-renderer-wgpu = ["wgpu"]
+renderer-ggez = ["dep:ggez"]
+renderer-wgpu = ["dep:wgpu", "dep:pollster", "dep:bytemuck", "dep:font8x8"]
 
 [profile.dev]
 opt-level = 2
