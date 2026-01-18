@@ -20,5 +20,9 @@
                 "copilot/gpt-5.2-codex"
             ]
         }
+    },
+    "chat.tools.terminal.autoApprove": {
+        "git checkout": true,
+        "git stash": true
     }
 }

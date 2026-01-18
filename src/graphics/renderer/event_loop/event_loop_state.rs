@@ -1,6 +1,6 @@
 use super::{InputAction, InputHandler, PhysicsCoordinator};
-use crate::application::MainContent;
 use crate::application::physics_thread::PhysicsCommand;
+use crate::application::{LogStuff, MainContent};
 
 /// Shared state for any event loop implementation
 pub struct EventLoopState {
@@ -102,6 +102,9 @@ impl EventLoopState {
                 self.physics
                     .send_command(PhysicsCommand::StartVerbosityInput);
             }
+            InputAction::PrintHelp => {
+                MainContent::print_help_message();
+            }
             // Actions that don't affect physics or viewport state
             InputAction::PanStart { .. }
             | InputAction::PanEnd
@@ -110,8 +113,7 @@ impl EventLoopState {
             | InputAction::DisableCursor
             | InputAction::CyclePlotContent
             | InputAction::ToggleEnergyWindow
-            | InputAction::ToggleCutoffRings
-            | InputAction::PrintHelp => {
+            | InputAction::ToggleCutoffRings => {
                 // These are handled separately by the event loop implementation
             }
         }
