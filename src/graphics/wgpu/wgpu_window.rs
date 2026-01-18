@@ -904,7 +904,6 @@ impl WgpuWindow {
             | InputAction::DisableCursor
             | InputAction::UpdateCursor { .. }
             | InputAction::EnableRandomBallSpeed
-            | InputAction::RemoveBallAt { .. }
             | InputAction::ZoomIn { .. }
             | InputAction::ZoomOut { .. }
             | InputAction::PanStart { .. }

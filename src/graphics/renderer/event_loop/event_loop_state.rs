@@ -46,13 +46,6 @@ impl EventLoopState {
                 self.physics
                     .send_command(PhysicsCommand::AddBall(*position));
             }
-            InputAction::RemoveBallAt { position } => {
-                // Note: The current PhysicsCommand doesn't have RemoveBallAt
-                // This would need to be added to PhysicsCommand in the future
-                // For now, we can leave this as a placeholder or implement a workaround
-                // TODO: Add RemoveBallAt to PhysicsCommand
-                let _ = position; // Suppress unused warning
-            }
             InputAction::NextBallSize => {
                 self.physics.send_command(PhysicsCommand::NextBallSize);
             }

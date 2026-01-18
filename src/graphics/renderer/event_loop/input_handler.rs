@@ -12,7 +12,6 @@ pub type KeyCode = VirtualKeyCode;
 pub enum InputAction {
     // Ball manipulation
     AddBall { position: Vec2D },
-    RemoveBallAt { position: Vec2D },
     NextBallSize,
     AddRandomBalls { count: usize },
     StopAllBalls,
@@ -238,18 +237,12 @@ impl InputHandler {
         button: MouseButton,
         state: ElementState,
         pos_px: [f32; 2],
-        world_pos: Vec2D,
+        _world_pos: Vec2D,
         current_pan_offset: Vec2D,
     ) -> Option<InputAction> {
         match (button, state) {
             (MouseButton::Left, ElementState::Pressed) => {
-                if self.is_key_pressed(KeyCode::LShift) || self.is_key_pressed(KeyCode::RShift) {
-                    Some(InputAction::RemoveBallAt {
-                        position: world_pos,
-                    })
-                } else {
-                    None // Left click without shift doesn't do anything by default
-                }
+                None // Left click doesn't do anything by default
             }
             (MouseButton::Right, ElementState::Pressed) => Some(InputAction::NextBallSize),
             (MouseButton::Middle, ElementState::Pressed) => {
