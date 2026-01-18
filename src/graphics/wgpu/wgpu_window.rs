@@ -10,9 +10,9 @@ use super::frame_pipeline::FramePipeline;
 use super::grid_pipeline::{GridPipeline, build_view_proj_matrix};
 use super::text_pipeline::TextPipeline;
 use super::wgpu_context::WgpuContext;
-use crate::application::MainContent;
 use crate::application::physics_thread::PhysicsCommand;
 use crate::application::renderer_snapshot::{CellGridSpec, RendererSnapshot};
+use crate::application::{LogStuff, MainContent};
 use crate::graphics::energy_plot::{EnergyData, EnergyPlotWindow, SharedEnergyData};
 use crate::graphics::renderer::event_loop::PhysicsCoordinator;
 use crate::graphics::renderer::{InputAction, InputHandler};
@@ -221,44 +221,44 @@ impl WgpuWindow {
                         && energy_win.window_id() == Some(window_id)
                     {
                         match event {
-                                WindowEvent::CloseRequested => {
-                                    energy_window = None;
-                                    return;
-                                }
-                                WindowEvent::Resized(size) => {
-                                    energy_win.handle_resize(size.width, size.height);
-                                    return;
-                                }
-                                WindowEvent::KeyboardInput {
-                                    input:
-                                        KeyboardInput {
-                                            virtual_keycode: Some(VirtualKeyCode::Escape),
-                                            state: ElementState::Pressed,
-                                            ..
-                                        },
-                                    ..
-                                } => {
-                                    energy_window = None;
-                                    return;
-                                }
-                                WindowEvent::KeyboardInput {
-                                    input:
-                                        KeyboardInput {
-                                            virtual_keycode:
-                                                Some(VirtualKeyCode::Tab | VirtualKeyCode::P),
-                                            state: ElementState::Pressed,
-                                            ..
-                                        },
-                                    ..
-                                } => {
-                                    if let Some(ref mut win) = energy_window {
-                                        win.cycle_display_mode();
-                                        win.request_redraw();
-                                    }
-                                    return;
-                                }
-                                _ => return,
+                            WindowEvent::CloseRequested => {
+                                energy_window = None;
+                                return;
                             }
+                            WindowEvent::Resized(size) => {
+                                energy_win.handle_resize(size.width, size.height);
+                                return;
+                            }
+                            WindowEvent::KeyboardInput {
+                                input:
+                                    KeyboardInput {
+                                        virtual_keycode: Some(VirtualKeyCode::Escape),
+                                        state: ElementState::Pressed,
+                                        ..
+                                    },
+                                ..
+                            } => {
+                                energy_window = None;
+                                return;
+                            }
+                            WindowEvent::KeyboardInput {
+                                input:
+                                    KeyboardInput {
+                                        virtual_keycode:
+                                            Some(VirtualKeyCode::Tab | VirtualKeyCode::P),
+                                        state: ElementState::Pressed,
+                                        ..
+                                    },
+                                ..
+                            } => {
+                                if let Some(ref mut win) = energy_window {
+                                    win.cycle_display_mode();
+                                    win.request_redraw();
+                                }
+                                return;
+                            }
+                            _ => return,
+                        }
                     }
 
                     // Main window events
@@ -872,14 +872,31 @@ impl WgpuWindow {
                 );
             }
 
-            // Actions not implemented for WGPU (ggez-only UI features)
-            InputAction::ToggleRendering
-            | InputAction::PrintHelp
-            | InputAction::ToggleTimingDisplay
-            | InputAction::ToggleBallStats
-            | InputAction::StartVerbosityInput => {
-                // TODO(WGPU): Add UI for these features (ggez has these in UI, WGPU doesn't yet)
-                println!("Action not yet implemented in WGPU: {:?}", action);
+            // Help message
+            InputAction::PrintHelp => {
+                MainContent::print_help_message();
+            }
+
+            // Physics thread commands for display toggles
+            InputAction::ToggleTimingDisplay => {
+                physics.send_command(PhysicsCommand::ToggleTimingDisplay);
+                println!("Toggled timing display");
+            }
+            InputAction::ToggleBallStats => {
+                physics.send_command(PhysicsCommand::ToggleBallStats);
+                println!("Toggled ball statistics display");
+            }
+
+            // Verbosity input - reads from stdin in physics thread
+            InputAction::StartVerbosityInput => {
+                println!("Starting verbosity input mode...");
+                physics.send_command(PhysicsCommand::StartVerbosityInput);
+            }
+
+            // Toggle rendering (F2) - currently not tracked in WGPU
+            // TODO: Add render_drawing state tracking if needed
+            InputAction::ToggleRendering => {
+                println!("Toggle rendering not yet fully implemented in WGPU");
             }
 
             // Actions that are context-dependent or handled elsewhere

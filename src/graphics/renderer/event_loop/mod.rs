@@ -5,7 +5,8 @@ mod render_context;
 #[cfg(test)]
 mod tests;
 
-// EventLoopState is used by both ggez and wgpu renderers
+// EventLoopState is used by ggez renderer; WGPU may use it in future refactoring
+#[cfg(feature = "renderer-ggez")]
 pub use event_loop_state::EventLoopState;
 pub use input_handler::{InputAction, InputHandler, KeyCode};
 pub use physics_coordinator::PhysicsCoordinator;
