@@ -8,11 +8,9 @@ use crate::application::{LogStuff, MainContent};
 use crate::graphics::renderer::InputAction;
 use crate::graphics::renderer::event_loop::{EnergyWindowManager, PhysicsCoordinator};
 use crate::graphics::renderer::viewport::ViewportState;
+use crate::objects2d::ball_impl::{BallFactory, NUM_BALL_SIZES};
 
 use super::ball_pipeline::BallPipeline;
-
-/// Ball sizes for cursor placement (matching BallFactory)
-pub const BALL_SIZES: [f32; 5] = [0.15, 0.30, 0.60, 1.20, 2.40];
 
 /// Execute input actions from the centralized InputHandler.
 ///
@@ -78,12 +76,10 @@ pub fn execute_input_action(
             println!("Stopping all balls");
         }
         InputAction::NextBallSize => {
-            *ball_size_idx = (*ball_size_idx + 1) % BALL_SIZES.len();
+            *ball_size_idx = (*ball_size_idx + 1) % NUM_BALL_SIZES;
             physics.send_command(PhysicsCommand::NextBallSize);
-            println!(
-                "Ball size: {} (index {})",
-                BALL_SIZES[*ball_size_idx], ball_size_idx
-            );
+            let radius = BallFactory::radius_for_size_idx(*ball_size_idx);
+            println!("Ball size: {:.2} (index {})", radius, ball_size_idx);
         }
 
         // View control

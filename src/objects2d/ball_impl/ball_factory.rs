@@ -28,8 +28,10 @@ impl Default for BallFactory {
     }
 }
 
-const MIN_BALL_SIZE: f32 = 0.15;
-const NUM_BALL_SIZES: usize = 5;
+/// Minimum ball radius (smallest size class)
+pub const MIN_BALL_SIZE: f32 = 0.15;
+/// Number of ball size classes
+pub const NUM_BALL_SIZES: usize = 5;
 
 impl BallFactory {
     pub fn new() -> Self {

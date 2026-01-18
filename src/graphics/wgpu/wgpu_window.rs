@@ -5,7 +5,7 @@
 //! Integrates with the physics thread via PhysicsCoordinator to receive simulation snapshots.
 
 use super::wgpu_context::WgpuContext;
-use super::wgpu_input::{BALL_SIZES, execute_input_action};
+use super::wgpu_input::execute_input_action;
 use super::wgpu_pipelines::{WgpuPipelines, compute_view_proj};
 use crate::application::MainContent;
 use crate::application::physics_thread::PhysicsCommand;
@@ -15,6 +15,7 @@ use crate::graphics::renderer::InputHandler;
 use crate::graphics::renderer::event_loop::{EnergyWindowManager, PhysicsCoordinator};
 use crate::graphics::renderer::viewport::ViewportState;
 use crate::graphics::window::{MARGIN_PX_X, MARGIN_PX_Y};
+use crate::objects2d::ball_impl::{BallFactory, NUM_BALL_SIZES};
 use crate::objects2d::{Rect, Vec2D};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -231,7 +232,7 @@ impl WgpuWindow {
                             snapshot,
                             view_proj,
                             cursor_world_pos,
-                            BALL_SIZES[current_ball_size_idx],
+                            BallFactory::radius_for_size_idx(current_ball_size_idx),
                             ctrl_pressed,
                         );
 
@@ -408,12 +409,10 @@ fn handle_mouse_button(
             *last_mouse_pos = None;
         }
     } else if button == MouseButton::Right && state == ElementState::Pressed {
-        *current_ball_size_idx = (*current_ball_size_idx + 1) % BALL_SIZES.len();
+        *current_ball_size_idx = (*current_ball_size_idx + 1) % NUM_BALL_SIZES;
         physics.send_command(PhysicsCommand::NextBallSize);
-        println!(
-            "Ball size: {} (index {})",
-            BALL_SIZES[*current_ball_size_idx], current_ball_size_idx
-        );
+        let radius = BallFactory::radius_for_size_idx(*current_ball_size_idx);
+        println!("Ball size: {:.2} (index {})", radius, current_ball_size_idx);
     }
 }
 
