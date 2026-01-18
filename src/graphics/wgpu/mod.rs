@@ -6,6 +6,7 @@
 //! # Components
 //! - [`WgpuContext`]: Core GPU resources (Device, Queue, Surface, Adapter)
 //! - [`WgpuWindow`]: Window management and event loop
+//! - [`WgpuPipelines`]: Collection of all rendering pipelines
 //! - [`GridPipeline`]: Instanced grid rendering pipeline
 //! - [`BallPipeline`]: Instanced ball rendering pipeline with storage buffers
 //! - [`CrosshairPipeline`]: Crosshair and ball placement cursor pipeline
@@ -23,6 +24,8 @@ mod grid_pipeline;
 mod line_pipeline;
 mod text_pipeline;
 mod wgpu_context;
+mod wgpu_input;
+mod wgpu_pipelines;
 pub(crate) mod wgpu_window;
 
 // Re-exports for public API (allow unused for library-style exports)
@@ -40,3 +43,5 @@ pub use line_pipeline::LinePipeline;
 pub use text_pipeline::TextPipeline;
 #[allow(unused_imports)]
 pub use wgpu_context::WgpuContext;
+#[allow(unused_imports)]
+pub use wgpu_pipelines::WgpuPipelines;
