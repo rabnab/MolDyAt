@@ -1,52 +1,30 @@
-use crate::application::physics_thread::{PhysicsCommand, PhysicsThread};
-use crate::application::renderer_snapshot::RendererSnapshot;
+use crate::application::physics_thread::PhysicsCommand;
 use crate::application::{LogStuff, MainContent};
 use crate::graphics::energy_plot::{EnergyData, EnergyPlotWindow, SharedEnergyData};
 use crate::graphics::ggez::ggez_renderer::GgezRenderer;
 use crate::graphics::ggez::ggez_renderer_backend::GgezBackend;
 use crate::graphics::renderer::Renderer;
+use crate::graphics::renderer::event_loop::{EventLoopState, InputAction};
 use crate::objects2d::Vec2D;
-use arc_swap::ArcSwapOption;
 use ggez::Context;
-use ggez::event::winit_event::{ElementState, Event, KeyboardInput, MouseScrollDelta, WindowEvent};
-use ggez::event::{MouseButton, process_event};
-use ggez::input::keyboard::{KeyCode, KeyInput, KeyMods};
-use std::collections::HashSet;
-use std::sync::mpsc::Sender;
+use ggez::event::process_event;
+use ggez::event::winit_event::{ElementState, Event, KeyboardInput, WindowEvent};
+use ggez::input::keyboard::KeyCode;
 use std::sync::{Arc, Mutex};
 use winit::event_loop::{ControlFlow, EventLoop};
 
 pub struct CustomEventLoop {
-    physics_thread: Option<PhysicsThread>,
-    command_sender: Option<Sender<PhysicsCommand>>,
-    snapshot_slot: Option<Arc<ArcSwapOption<RendererSnapshot>>>,
-    last_processed_step: u64,
-    last_step_time: std::time::Instant,
-    simulation_fps: f32,
-    last_displayed_step: u64,
-    steps_per_frame: f32,
-    pressed_keys: HashSet<KeyCode>,
-    pressed_alt_keys: HashSet<KeyCode>,
-    renderer: GgezRenderer,
-    cursor_pos: Vec2D,
-    energy_window: Option<EnergyPlotWindow>,
+    // Shared state with InputHandler, PhysicsCoordinator, and ViewportState
+    state: EventLoopState,
 
-    // SHARED between both:
+    // ggez-specific fields
+    renderer: GgezRenderer,
+    energy_window: Option<EnergyPlotWindow>,
     energy_data: SharedEnergyData,
 
-    // Pan state
-    is_panning: bool,
-    pan_start_pos_px: [f32; 2], // Cursor position in pixels when pan started
-    pan_start_offset: Vec2D,
-
-    // Controls whether frame rendering is currently enabled (toggled via keyboard, e.g. F2)
-    render_drawing: bool,
-    view_dirty: bool,
-
-    // Rendering FPS tracking
-    render_fps: u32,
-    last_reported_render_fps: f32,
-    render_report_interval: std::time::Instant,
+    // Additional tracking for energy updates
+    last_processed_step: u64,
+    simulation_fps: f32,
 }
 
 impl CustomEventLoop {
@@ -58,69 +36,16 @@ impl CustomEventLoop {
     pub fn new(application: MainContent, renderer: GgezRenderer) -> Self {
         let energy_data = Arc::new(Mutex::new(EnergyData::new()));
 
-        // Get snapshot slot before moving MainContent to physics thread
-        let snapshot_slot = application.get_snapshot_slot();
-
-        // Spawn physics thread (this will print its thread ID)
-        let physics_thread = PhysicsThread::spawn(application);
-
-        // Get command sender for forwarding user input
-        let command_sender = physics_thread.get_command_sender();
+        // Create shared event loop state (this spawns physics thread)
+        let state = EventLoopState::new(application);
 
         Self {
-            physics_thread: Some(physics_thread),
-            command_sender: Some(command_sender),
-            snapshot_slot: Some(snapshot_slot),
-            last_processed_step: 0,
-            last_step_time: std::time::Instant::now(),
-            simulation_fps: 0.0,
-            last_displayed_step: 0,
-            steps_per_frame: 0.0,
-            pressed_keys: HashSet::new(),
-            pressed_alt_keys: HashSet::new(),
+            state,
             renderer,
-            cursor_pos: Vec2D::zero(),
             energy_window: None,
             energy_data,
-            is_panning: false,
-            pan_start_pos_px: [0.0, 0.0],
-            pan_start_offset: Vec2D::zero(),
-            render_drawing: true,
-            view_dirty: true,
-            render_fps: 0,
-            last_reported_render_fps: 0.0,
-            render_report_interval: std::time::Instant::now(),
-        }
-    }
-
-    pub fn register_key_pressed(&mut self, key: KeyCode) {
-        self.pressed_keys.insert(key);
-    }
-
-    pub fn register_key_released(&mut self, key: KeyCode) {
-        self.pressed_keys.remove(&key);
-    }
-
-    pub fn register_alt_key_pressed(&mut self, key: KeyCode) {
-        self.pressed_alt_keys.insert(key);
-    }
-    pub fn register_alt_key_released(&mut self, key: KeyCode) {
-        self.pressed_alt_keys.remove(&key);
-    }
-
-    pub fn is_key_pressed(&self, key: KeyCode) -> bool {
-        self.pressed_keys.contains(&key)
-    }
-
-    pub fn is_alt_key_pressed(&self, key: KeyCode) -> bool {
-        self.pressed_alt_keys.contains(&key)
-    }
-
-    /// Send a command to the physics thread if in threaded mode
-    /// Returns true if command was sent, false if in legacy mode
-    fn send_physics_command(&self, command: crate::application::physics_thread::PhysicsCommand) {
-        if let Some(sender) = &self.command_sender {
-            let _ = sender.send(command);
+            last_processed_step: 0,
+            simulation_fps: 0.0,
         }
     }
 
@@ -261,43 +186,125 @@ impl CustomEventLoop {
                 input:
                     KeyboardInput {
                         virtual_keycode: Some(keycode),
-                        state,
+                        state: key_state,
                         ..
                     },
                 ..
             } => {
-                let key_input = KeyInput {
-                    keycode: Some(keycode),
-                    scancode: 0,
-                    mods: KeyMods::empty(),
+                // Use InputHandler to process keyboard input
+                let action = match key_state {
+                    ElementState::Pressed => self.state.input.handle_key_down(keycode, false),
+                    ElementState::Released => self.state.input.handle_key_up(keycode),
                 };
 
-                match state {
-                    ElementState::Pressed => {
-                        let _ = self.handle_key_down(ctx, key_input, false);
+                if let Some(action) = action {
+                    // Handle ggez-specific actions here
+                    match &action {
+                        InputAction::ToggleEnergyWindow => {
+                            self.toggle_energy_window(window_target);
+                        }
+                        InputAction::CyclePlotContent => {
+                            self.renderer.cycle_plot_content();
+                        }
+                        InputAction::EnableCursor { repeated } => {
+                            self.renderer.enable_drawing_cursor(*repeated);
+                        }
+                        InputAction::DisableCursor => {
+                            self.renderer.disable_drawing_cursor();
+                        }
+                        InputAction::PrintHelp => {
+                            MainContent::print_help_message();
+                        }
+                        InputAction::ToggleRendering => {
+                            let new_state = !self.state.render_drawing;
+                            self.state.render_drawing = new_state;
+                            println!("============\nRender drawing toggled to {}", new_state);
+                        }
+                        InputAction::ResetView => {
+                            self.renderer.viewport_mut().reset();
+                            self.state.view_dirty = true;
+                        }
+                        _ => {}
                     }
-                    ElementState::Released => {
-                        let _ = self.handle_key_up(ctx, key_input, window_target);
-                    }
+                    // Process generic actions through EventLoopState
+                    self.state.process_action(&action);
                 }
             }
-            WindowEvent::MouseInput { state, button, .. } => {
+            WindowEvent::MouseInput {
+                state: mouse_state,
+                button,
+                ..
+            } => {
                 let pos = ctx.mouse.position();
-                match state {
-                    ElementState::Pressed => {
-                        let _ = self.handle_mouse_button_down(ctx, button, pos.x, pos.y);
-                    }
-                    ElementState::Released => {
-                        let _ = self.handle_mouse_button_up(ctx, button, pos.x, pos.y);
+                let world_pos = self.renderer.update_cursor_and_text(pos.x, pos.y);
+                let pan_offset = *self.renderer.viewport().pan_offset();
+
+                if let Some(action) = self.state.input.handle_mouse_button(
+                    button,
+                    mouse_state,
+                    [pos.x, pos.y],
+                    world_pos,
+                    pan_offset,
+                ) {
+                    let affects_view = self.state.process_action(&action);
+                    if affects_view {
+                        self.state.view_dirty = true;
                     }
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
                 let (x, y) = (position.x as f32, position.y as f32);
-                self.handle_mouse_motion(ctx, x, y);
+                let world_pos = self.renderer.update_cursor_and_text(x, y);
+
+                // Update cursor position in InputHandler
+                self.state.input.set_cursor_pos(world_pos, [x, y]);
+
+                if let Some(action) = self.state.input.handle_mouse_motion(x, y) {
+                    if let InputAction::PanUpdate { delta } = &action {
+                        // Handle pan update by updating renderer's viewport
+                        let start_offset = self.state.input.pan_start_offset();
+                        let zoom = self.renderer.viewport().zoom();
+                        let world_delta = Vec2D::new(
+                            crate::graphics::window::window_definition::WindowDefinition::px_to_len(
+                                delta.x,
+                            ) / zoom,
+                            crate::graphics::window::window_definition::WindowDefinition::px_to_len(
+                                delta.y,
+                            ) / zoom,
+                        );
+                        // Invert delta because panning moves the viewport in opposite direction
+                        let pan_delta = Vec2D::new(-world_delta.x, world_delta.y);
+                        self.renderer
+                            .viewport_mut()
+                            .set_pan(start_offset + pan_delta);
+                        self.state.view_dirty = true;
+                    }
+                    self.state.process_action(&action);
+                }
             }
             WindowEvent::MouseWheel { delta, .. } => {
-                self.handle_mouse_wheel(ctx, delta);
+                let cursor_pos = self.state.input.cursor_pos();
+
+                if let Some(action) = self.state.input.handle_mouse_wheel(delta, cursor_pos) {
+                    match &action {
+                        InputAction::ZoomIn { center } => {
+                            self.renderer.viewport_mut().zoom_at_point(center, 1.1);
+                            self.state.view_dirty = true;
+                        }
+                        InputAction::ZoomOut { center } => {
+                            self.renderer
+                                .viewport_mut()
+                                .zoom_at_point(center, 1.0 / 1.1);
+                            self.state.view_dirty = true;
+                        }
+                        InputAction::ResetView => {
+                            self.renderer.viewport_mut().reset();
+                            self.state.view_dirty = true;
+                        }
+                        _ => {}
+                    }
+                    self.state.process_action(&action);
+                }
             }
             WindowEvent::Resized(size) => {
                 let _ = self.handle_resize(ctx, size.width as f32, size.height as f32);
@@ -310,20 +317,12 @@ impl CustomEventLoop {
     /// This method reads the latest snapshot and renders it without accessing MainContent
     /// Implements freshness checking to prevent displaying stale frames
     fn render_from_snapshot(&mut self, ctx: &mut Context) -> Option<()> {
-        let snapshot_slot = self.snapshot_slot.as_ref()?;
-
-        // PHASE 4: Load snapshot BEFORE expensive rendering work
-        let snapshot_guard_before = snapshot_slot.load();
-        let snapshot_ref = snapshot_guard_before.as_ref()?;
-
-        let is_new_sim_step = snapshot_ref.simulation_step > self.last_displayed_step;
-        if !is_new_sim_step && !self.view_dirty {
-            // No new simulation step - skip rendering to avoid redundant frames
+        // Use EventLoopState's should_render check
+        if !self.state.should_render() {
             return Some(());
         }
 
-        let snapshot = snapshot_ref.clone();
-        drop(snapshot_guard_before); // Release lock early
+        let snapshot = self.state.physics.get_latest_snapshot()?;
 
         let _ = ctx.gfx.begin_frame();
 
@@ -354,48 +353,32 @@ impl CustomEventLoop {
         // Otherwise we get "SurfaceOutput must be dropped before new Surface" panic
         let _ = ctx.gfx.end_frame();
 
-        self.view_dirty = false;
-
-        // Track steps per application for performance metrics
-        let steps_this_frame = snapshot
-            .simulation_step
-            .saturating_sub(self.last_displayed_step);
-        if steps_this_frame > 0 {
-            // Smooth with exponential moving average (weight=0.1)
-            if self.steps_per_frame == 0.0 {
-                self.steps_per_frame = steps_this_frame as f32;
-            } else {
-                self.steps_per_frame = self.steps_per_frame * 0.9 + steps_this_frame as f32 * 0.1;
-            }
-            self.last_displayed_step = snapshot.simulation_step;
-        }
+        // Mark as rendered in EventLoopState
+        self.state.mark_rendered();
 
         Some(())
     }
 
     fn update_and_draw(&mut self, ctx: &mut Context) {
-        // Tell the timer stuff a application has happened
+        // Tell the timer stuff a frame has happened
         ctx.time.tick();
 
-        if self.render_drawing {
-            self.render_fps += 1;
+        if self.state.render_drawing {
+            self.state.physics.increment_render_count();
 
             // Skip most frames to reduce load
             // Physics runs in separate thread, we just render from snapshot
             self.render_from_snapshot(ctx);
         }
 
-        if self.render_report_interval.elapsed().as_secs_f32() >= 1.0 {
-            self.last_reported_render_fps =
-                self.render_fps as f32 / self.render_report_interval.elapsed().as_secs_f32();
-            self.render_fps = 0;
-            self.render_report_interval = std::time::Instant::now();
+        // Update render FPS
+        if let Some(fps) = self.state.physics.update_render_fps() {
+            // FPS was updated, continue
+            let _ = fps;
         }
 
         // Update energy data from snapshot - only once per simulation step
-        if let Some(snapshot_slot) = &self.snapshot_slot
-            && let Some(snapshot) = snapshot_slot.load().as_ref()
-        {
+        if let Some(snapshot) = self.state.physics.get_latest_snapshot() {
             // Only update if this is a new simulation step
             if snapshot.simulation_step > self.last_processed_step {
                 // Use actual physics FPS from snapshot (measured in physics thread)
@@ -409,16 +392,15 @@ impl CustomEventLoop {
                 energy_data.time = snapshot.time;
 
                 // Update status text from snapshot (with renderer FPS, simulation FPS, and steps/frame)
-
                 if let Some(ref status) = snapshot.status_text {
                     // Replace "fps 0" placeholder with combined renderer, simulation FPS, and steps/frame
                     let updated_status = status.replace(
                         "fps 0",
                         &format!(
                             "render: {} fps | sim: {:.0} fps | steps/frame: {:.1}",
-                            self.last_reported_render_fps as u32,
+                            self.state.physics.render_fps() as u32,
                             self.simulation_fps,
-                            self.steps_per_frame
+                            self.state.physics.steps_per_frame()
                         ),
                     );
                     energy_data.status_text = Some(updated_status);
@@ -446,17 +428,34 @@ impl CustomEventLoop {
         }
 
         // Handle +/- keys for time step control in threaded mode
-        if self.is_alt_key_pressed(KeyCode::Minus) {
-            self.send_physics_command(PhysicsCommand::IncreaseWaitTime);
-        } else if self.is_alt_key_pressed(KeyCode::Equals) {
-            self.send_physics_command(PhysicsCommand::DecreaseWaitTime);
-        } else if self.is_key_pressed(KeyCode::Minus) {
-            self.send_physics_command(PhysicsCommand::HalveTimeStep);
-        } else if self.is_key_pressed(KeyCode::Equals) {
-            self.send_physics_command(PhysicsCommand::DoubleTimeStep);
+        // Note: Use time-based cooldown to prevent rapid-fire commands
+        if self.state.input.can_process_plus_minus() {
+            let is_alt_pressed = self.state.input.is_alt_modifier_pressed();
+
+            if is_alt_pressed && self.state.input.is_key_pressed(KeyCode::Minus) {
+                self.state
+                    .physics
+                    .send_command(PhysicsCommand::IncreaseWaitTime);
+                self.state.input.mark_plus_minus_processed();
+            } else if is_alt_pressed && self.state.input.is_key_pressed(KeyCode::Equals) {
+                self.state
+                    .physics
+                    .send_command(PhysicsCommand::DecreaseWaitTime);
+                self.state.input.mark_plus_minus_processed();
+            } else if !is_alt_pressed && self.state.input.is_key_pressed(KeyCode::Minus) {
+                self.state
+                    .physics
+                    .send_command(PhysicsCommand::HalveTimeStep);
+                self.state.input.mark_plus_minus_processed();
+            } else if !is_alt_pressed && self.state.input.is_key_pressed(KeyCode::Equals) {
+                self.state
+                    .physics
+                    .send_command(PhysicsCommand::DoubleTimeStep);
+                self.state.input.mark_plus_minus_processed();
+            }
         }
 
-        // Reset states for next application (common to both paths)
+        // Reset states for next frame (common to both paths)
         ctx.mouse.reset_delta();
         ctx.keyboard.save_keyboard_state();
         ctx.mouse.save_mouse_state();
@@ -464,220 +463,18 @@ impl CustomEventLoop {
         ggez::timer::yield_now();
     }
 
-    fn handle_key_down(
-        &mut self,
-        ctx: &mut Context,
-        input: KeyInput,
-        repeated: bool,
-    ) -> ggez::GameResult {
-        if let Some(key) = input.keycode {
-            match key {
-                KeyCode::Space => self.send_physics_command(
-                    crate::application::physics_thread::PhysicsCommand::TogglePause,
-                ),
-                KeyCode::LControl => self.renderer.enable_drawing_cursor(repeated),
-                KeyCode::Escape => self.send_physics_command(
-                    crate::application::physics_thread::PhysicsCommand::ClearBalls,
-                ),
-                KeyCode::LShift => self.send_physics_command(
-                    crate::application::physics_thread::PhysicsCommand::EnableRandomBallSpeed,
-                ),
-                KeyCode::Minus | KeyCode::Equals => {
-                    if ctx.keyboard.is_key_pressed(KeyCode::LAlt)
-                        || ctx.keyboard.is_key_pressed(KeyCode::RAlt)
-                    {
-                        self.register_alt_key_pressed(key);
-                    } else {
-                        self.register_key_pressed(key);
-                    }
-                }
-                _ => {}
-            }
-        }
-        Ok(())
-    }
-
-    fn handle_key_up(
-        &mut self,
-        _ctx: &mut Context,
-        input: KeyInput,
-        window_target: &winit::event_loop::EventLoopWindowTarget<()>,
-    ) -> ggez::GameResult {
-        self.view_dirty = true;
-        if let Some(key) = input.keycode {
-            match key {
-                KeyCode::Tab => self.toggle_energy_window(window_target),
-                KeyCode::F2 => {
-                    self.render_drawing = !self.render_drawing;
-                    println!(
-                        "============\nRender drawing toggled to {}",
-                        self.render_drawing
-                    );
-                }
-                KeyCode::H => MainContent::print_help_message(),
-                KeyCode::D => self.send_physics_command(
-                    crate::application::physics_thread::PhysicsCommand::ToggleRealData,
-                ),
-                KeyCode::S => self.send_physics_command(
-                    crate::application::physics_thread::PhysicsCommand::ToggleStepwise,
-                ),
-                KeyCode::T => self.send_physics_command(
-                    crate::application::physics_thread::PhysicsCommand::ToggleTimingDisplay,
-                ),
-                KeyCode::P => self.renderer.cycle_plot_content(),
-                KeyCode::Equals | KeyCode::Minus => {
-                    self.register_key_released(key);
-                    self.register_alt_key_released(key);
-                }
-                KeyCode::R => self.send_physics_command(
-                    crate::application::physics_thread::PhysicsCommand::RandomizeSpeeds,
-                ),
-                KeyCode::B => self.send_physics_command(
-                    crate::application::physics_thread::PhysicsCommand::ToggleBallStats,
-                ),
-                KeyCode::V => self.send_physics_command(
-                    crate::application::physics_thread::PhysicsCommand::StartVerbosityInput,
-                ),
-                KeyCode::LControl => {
-                    let cursor_pos = self.cursor_pos;
-                    self.send_physics_command(
-                        crate::application::physics_thread::PhysicsCommand::AddBall(cursor_pos),
-                    );
-                    self.renderer.disable_drawing_cursor();
-                }
-                KeyCode::F5 => self.send_physics_command(
-                    crate::application::physics_thread::PhysicsCommand::AddRandomBalls(100),
-                ),
-                KeyCode::F1 => self.send_physics_command(
-                    crate::application::physics_thread::PhysicsCommand::StopAllBalls,
-                ),
-                KeyCode::Key0 | KeyCode::Numpad0 => {
-                    // Reset viewport to default view (1.0x zoom, centered)
-                    self.renderer.viewport_mut().reset();
-                }
-                _ => {}
-            }
-        }
-        Ok(())
-    }
-
-    fn handle_mouse_button_down(
-        &mut self,
-        _ctx: &mut Context,
-        button: MouseButton,
-        x: f32,
-        y: f32,
-    ) -> ggez::GameResult {
-        self.view_dirty = true;
-        match button {
-            MouseButton::Right => {
-                self.send_physics_command(
-                    crate::application::physics_thread::PhysicsCommand::NextBallSize,
-                );
-            }
-            MouseButton::Middle => {
-                // Start panning - store initial cursor position (in pixels) and pan offset
-                self.is_panning = true;
-                self.pan_start_pos_px = [x, y];
-                self.pan_start_offset = *self.renderer.viewport().pan_offset();
-            }
-            _ => {}
-        }
-        Ok(())
-    }
-
-    fn handle_mouse_button_up(
-        &mut self,
-        _ctx: &mut Context,
-        button: MouseButton,
-        _x: f32,
-        _y: f32,
-    ) -> ggez::GameResult {
-        self.view_dirty = true;
-        if button == MouseButton::Middle {
-            // Stop panning
-            self.is_panning = false;
-        }
-        Ok(())
-    }
-
-    fn handle_mouse_motion(&mut self, _ctx: &mut Context, x: f32, y: f32) {
-        self.view_dirty = true;
-        let new_cursor_pos = self.renderer.update_cursor_and_text(x, y);
-
-        // Handle panning if middle mouse button is down
-        if self.is_panning {
-            // Calculate cursor delta in pixel space (avoids jitter from viewport transformation)
-            let cursor_delta_px =
-                Vec2D::new(x - self.pan_start_pos_px[0], y - self.pan_start_pos_px[1]);
-
-            // Convert pixel delta to world space delta
-            // Viewport transformation: world_delta = pixel_delta / (LEN_TO_PX * zoom)
-            let zoom = self.renderer.viewport().zoom();
-            let world_delta = Vec2D::new(
-                crate::graphics::window::window_definition::WindowDefinition::px_to_len(
-                    cursor_delta_px.x,
-                ) / zoom,
-                crate::graphics::window::window_definition::WindowDefinition::px_to_len(
-                    cursor_delta_px.y,
-                ) / zoom,
-            );
-
-            // Invert delta because panning moves the viewport in opposite direction
-            // Y is inverted only in X direction; Y already accounts for screen coordinate inversion
-            let pan_delta = Vec2D::new(-world_delta.x, world_delta.y);
-            // Apply delta to the initial pan offset
-            let new_pan = self.pan_start_offset + pan_delta;
-            self.renderer.viewport_mut().set_pan(new_pan);
-        }
-
-        self.cursor_pos = new_cursor_pos;
-    }
-
-    fn handle_mouse_wheel(&mut self, _ctx: &mut Context, delta: MouseScrollDelta) {
-        self.view_dirty = true;
-        // Calculate zoom factor from scroll delta
-        let zoom_factor = match delta {
-            MouseScrollDelta::LineDelta(_x, y) => {
-                // Each line is approximately one "click" of the scroll wheel
-                // Zoom in/out by 10% per click
-                if y.abs() > 0.001 {
-                    1.1_f32.powf(y)
-                } else {
-                    1.0
-                }
-            }
-            MouseScrollDelta::PixelDelta(pos) => {
-                // For pixel-based scrolling (touchpads), scale appropriately
-                let y = pos.y as f32;
-                if y.abs() > 0.1 {
-                    1.0 + y * 0.002 // Smaller factor for smoother touchpad scrolling
-                } else {
-                    1.0
-                }
-            }
-        };
-
-        // Zoom at cursor position
-        if (zoom_factor - 1.0).abs() > 0.001 {
-            self.renderer
-                .viewport_mut()
-                .zoom_at_point(&self.cursor_pos, zoom_factor);
-        }
-    }
-
     fn handle_resize(&mut self, _ctx: &mut Context, width: f32, height: f32) -> ggez::GameResult {
-        self.view_dirty = true;
+        self.state.view_dirty = true;
         // Always resize the renderer (it's on the render thread)
         self.renderer.resize(width, height);
 
         // Get the updated world_rect from renderer's WindowDefinition
         let world_rect = self.renderer.get_world_region();
 
-        // Send resize command to physics thread or resize application directly
-        self.send_physics_command(crate::application::physics_thread::PhysicsCommand::Resize {
-            world_rect,
-        });
+        // Send resize command to physics thread
+        self.state
+            .physics
+            .send_command(PhysicsCommand::Resize { world_rect });
         Ok(())
     }
 }

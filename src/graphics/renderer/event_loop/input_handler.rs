@@ -1,5 +1,6 @@
 use crate::objects2d::Vec2D;
 use std::collections::HashSet;
+use std::time::{Duration, Instant};
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, VirtualKeyCode};
 
 // Type alias for compatibility - in winit 0.28.7 it's VirtualKeyCode
@@ -22,6 +23,10 @@ pub enum InputAction {
     ToggleStepwise,
     RandomizeSpeeds,
     EnableRandomBallSpeed,
+    DoubleTimeStep,
+    HalveTimeStep,
+    IncreaseWaitTime,
+    DecreaseWaitTime,
 
     // View control
     ZoomIn { center: Vec2D },
@@ -49,6 +54,9 @@ pub enum InputAction {
     DisableCursor,
 }
 
+/// Cooldown period between +/- key commands (in milliseconds)
+const PLUS_MINUS_COOLDOWN_MS: u64 = 150;
+
 /// Handles keyboard and mouse input, tracking state and producing actions
 pub struct InputHandler {
     pressed_keys: HashSet<KeyCode>,
@@ -60,6 +68,9 @@ pub struct InputHandler {
     is_panning: bool,
     pan_start_pos_px: [f32; 2],
     pan_start_offset: Vec2D,
+
+    // Debounce tracking for +/- keys (prevents rapid-fire commands)
+    last_plus_minus_time: Option<Instant>,
 }
 
 impl InputHandler {
@@ -72,6 +83,7 @@ impl InputHandler {
             is_panning: false,
             pan_start_pos_px: [0.0, 0.0],
             pan_start_offset: Vec2D::zero(),
+            last_plus_minus_time: None,
         }
     }
 
@@ -98,6 +110,25 @@ impl InputHandler {
 
     pub fn is_alt_key_pressed(&self, key: KeyCode) -> bool {
         self.pressed_alt_keys.contains(&key)
+    }
+
+    pub fn is_alt_modifier_pressed(&self) -> bool {
+        self.pressed_keys.contains(&KeyCode::LAlt) || self.pressed_keys.contains(&KeyCode::RAlt)
+    }
+
+    // Debounce tracking for +/- keys with cooldown period
+    pub fn can_process_plus_minus(&self) -> bool {
+        match self.last_plus_minus_time {
+            None => true, // Never processed before
+            Some(last_time) => {
+                let elapsed = Instant::now().duration_since(last_time);
+                elapsed >= Duration::from_millis(PLUS_MINUS_COOLDOWN_MS)
+            }
+        }
+    }
+
+    pub fn mark_plus_minus_processed(&mut self) {
+        self.last_plus_minus_time = Some(Instant::now());
     }
 
     // Cursor state
@@ -180,10 +211,20 @@ impl InputHandler {
             KeyCode::F5 => Some(InputAction::AddRandomBalls { count: 100 }),
             KeyCode::F1 => Some(InputAction::StopAllBalls),
             KeyCode::Key0 | KeyCode::Numpad0 => Some(InputAction::ResetView),
-            KeyCode::Equals | KeyCode::Minus => {
-                // Handle alt-key release
-                self.register_alt_key_released(key);
-                None
+            // Time step control with +/- keys
+            KeyCode::Equals | KeyCode::Plus | KeyCode::NumpadAdd => {
+                if self.is_alt_modifier_pressed() {
+                    Some(InputAction::DecreaseWaitTime)
+                } else {
+                    Some(InputAction::DoubleTimeStep)
+                }
+            }
+            KeyCode::Minus | KeyCode::NumpadSubtract => {
+                if self.is_alt_modifier_pressed() {
+                    Some(InputAction::IncreaseWaitTime)
+                } else {
+                    Some(InputAction::HalveTimeStep)
+                }
             }
             _ => None,
         }

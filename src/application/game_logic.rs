@@ -1,7 +1,6 @@
 use crate::application::{AppResult, GameLogic, LogStuff, MainContent, VerletIntegration};
 use crate::objects2d::ball_impl::verlet::Verlet;
 use crate::objects2d::ball_impl::{Ball2D, BallFactory};
-#[cfg(feature = "measure-time")]
 use crate::timing_monad::TimingMonad;
 use rayon::prelude::*;
 use std::time::Instant;
