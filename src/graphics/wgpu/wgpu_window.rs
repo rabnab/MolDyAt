@@ -13,6 +13,7 @@ use super::wgpu_context::WgpuContext;
 use crate::application::MainContent;
 use crate::application::physics_thread::PhysicsCommand;
 use crate::application::renderer_snapshot::{CellGridSpec, RendererSnapshot};
+use crate::graphics::energy_plot::{EnergyData, EnergyPlotWindow, SharedEnergyData};
 use crate::graphics::renderer::event_loop::PhysicsCoordinator;
 use crate::graphics::renderer::{InputAction, InputHandler};
 use crate::graphics::window::{MARGIN_PX_X, MARGIN_PX_Y};
@@ -114,6 +115,9 @@ impl WgpuWindow {
         let text_pipeline = TextPipeline::new(&ctx.device, ctx.format);
         println!("✓ Text pipeline initialized");
 
+        // Create shared energy data for energy plot window
+        let energy_data = Arc::new(std::sync::Mutex::new(EnergyData::new()));
+
         // Spawn physics thread with PhysicsCoordinator (like ggez)
         println!("\n========================================");
         println!("WGPU THREADED RENDERER ARCHITECTURE");
@@ -137,6 +141,7 @@ impl WgpuWindow {
             frame_pipeline,
             text_pipeline,
             physics,
+            energy_data,
         );
     }
 
@@ -154,7 +159,11 @@ impl WgpuWindow {
         mut frame_pipeline: FramePipeline,
         mut text_pipeline: TextPipeline,
         physics: PhysicsCoordinator,
+        energy_data: SharedEnergyData,
     ) {
+        // Energy plot window (separate OS window, uses softbuffer)
+        let mut energy_window: Option<EnergyPlotWindow> = None;
+
         // Centralized input handler for consistent behavior with ggez
         let mut input_handler = InputHandler::new();
 
@@ -173,7 +182,15 @@ impl WgpuWindow {
         // Cache the last snapshot for rendering when no new data available
         let mut last_snapshot: Option<Arc<RendererSnapshot>> = None;
 
-        event_loop.run(move |event, _, control_flow| {
+        // Track last processed simulation step to avoid duplicate energy data
+        let mut last_processed_step: u64 = 0;
+
+        // Track render FPS (frames per second for the renderer)
+        let mut render_frame_count: u64 = 0;
+        let mut render_fps_timer = std::time::Instant::now();
+        let mut render_fps: f32 = 0.0;
+
+        event_loop.run(move |event, window_target, control_flow| {
             *control_flow = ControlFlow::Poll;
 
             // Get latest snapshot from physics thread (if available)
@@ -198,177 +215,313 @@ impl WgpuWindow {
                 });
 
             match event {
-                Event::WindowEvent { event, .. } => match event {
-                    WindowEvent::CloseRequested => {
-                        println!("Window close requested");
-                        *control_flow = ControlFlow::Exit;
-                    }
-                    WindowEvent::Resized(size) => {
-                        println!("Window resized to {}x{}", size.width, size.height);
-                        ctx.resize(size.width, size.height);
-
-                        // Send resize command to physics thread to rebuild CellGrid
-                        // This ensures grid dimensions match the new window size
-                        let world_rect = Self::compute_world_rect_for_size(size.width, size.height);
-                        physics.send_command(PhysicsCommand::Resize { world_rect });
-                    }
-                    WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                        ctx.resize(new_inner_size.width, new_inner_size.height);
-                        let world_rect = Self::compute_world_rect_for_size(
-                            new_inner_size.width,
-                            new_inner_size.height,
-                        );
-                        physics.send_command(PhysicsCommand::Resize { world_rect });
-                    }
-                    // Mouse button events - middle button for panning, right for ball size
-                    WindowEvent::MouseInput { state, button, .. } => {
-                        if button == MouseButton::Middle {
-                            is_dragging = state == ElementState::Pressed;
-                            if !is_dragging {
-                                last_mouse_pos = None;
+                Event::WindowEvent { event, window_id } => {
+                    // Check if this event is for the energy window
+                    if let Some(ref mut energy_win) = energy_window
+                        && energy_win.window_id() == Some(window_id)
+                    {
+                        match event {
+                                WindowEvent::CloseRequested => {
+                                    energy_window = None;
+                                    return;
+                                }
+                                WindowEvent::Resized(size) => {
+                                    energy_win.handle_resize(size.width, size.height);
+                                    return;
+                                }
+                                WindowEvent::KeyboardInput {
+                                    input:
+                                        KeyboardInput {
+                                            virtual_keycode: Some(VirtualKeyCode::Escape),
+                                            state: ElementState::Pressed,
+                                            ..
+                                        },
+                                    ..
+                                } => {
+                                    energy_window = None;
+                                    return;
+                                }
+                                WindowEvent::KeyboardInput {
+                                    input:
+                                        KeyboardInput {
+                                            virtual_keycode:
+                                                Some(VirtualKeyCode::Tab | VirtualKeyCode::P),
+                                            state: ElementState::Pressed,
+                                            ..
+                                        },
+                                    ..
+                                } => {
+                                    if let Some(ref mut win) = energy_window {
+                                        win.cycle_display_mode();
+                                        win.request_redraw();
+                                    }
+                                    return;
+                                }
+                                _ => return,
                             }
-                        } else if button == MouseButton::Right && state == ElementState::Pressed {
-                            // Cycle through ball sizes
-                            current_ball_size_idx = (current_ball_size_idx + 1) % BALL_SIZES.len();
-                            physics.send_command(PhysicsCommand::NextBallSize);
-                            println!(
-                                "Ball size: {} (index {})",
-                                BALL_SIZES[current_ball_size_idx], current_ball_size_idx
-                            );
-                        }
                     }
-                    // Mouse movement for panning when dragging
-                    WindowEvent::CursorMoved { position, .. } => {
-                        // Get current world dimensions from grid spec (from CellGrid via snapshot)
-                        let world_width =
-                            current_grid_spec.cols as f32 * current_grid_spec.cell_width;
-                        let world_height =
-                            current_grid_spec.rows as f32 * current_grid_spec.cell_height;
 
-                        // Convert screen position to world position for zoom centering
-                        let (win_width, win_height) = ctx.size();
-                        let viewport_width = (win_width as f32 - 2.0 * MARGIN_PX_X).max(1.0);
-                        let viewport_height = (win_height as f32 - 2.0 * MARGIN_PX_Y).max(1.0);
-                        let world_visible_width = world_width / zoom;
-                        let world_visible_height = world_height / zoom;
+                    // Main window events
+                    match event {
+                        WindowEvent::CloseRequested => {
+                            println!("Window close requested");
+                            *control_flow = ControlFlow::Exit;
+                        }
+                        WindowEvent::Resized(size) => {
+                            println!("Window resized to {}x{}", size.width, size.height);
+                            ctx.resize(size.width, size.height);
 
-                        // Screen position relative to viewport (accounting for margin)
-                        let vp_x = (position.x as f32 - MARGIN_PX_X) / viewport_width;
-                        let vp_y = (position.y as f32 - MARGIN_PX_Y) / viewport_height;
-
-                        // Convert to world coordinates (centered at pan_offset)
-                        cursor_world_pos.0 = pan_offset.0 + (vp_x - 0.5) * world_visible_width;
-                        cursor_world_pos.1 = pan_offset.1 - (vp_y - 0.5) * world_visible_height; // Y flipped
-
-                        // Update cursor position in input handler
-                        input_handler.set_cursor_pos(
-                            Vec2D::new(cursor_world_pos.0, cursor_world_pos.1),
-                            [position.x as f32, position.y as f32],
-                        );
-
-                        if is_dragging {
-                            if let Some((last_x, last_y)) = last_mouse_pos {
-                                // Calculate delta in screen pixels
-                                let dx = position.x - last_x;
-                                let dy = position.y - last_y;
-
-                                // Convert pixel delta to world delta
-                                let world_dx = (dx as f32 / viewport_width) * world_visible_width;
-                                let world_dy = (dy as f32 / viewport_height) * world_visible_height;
-
-                                // Pan in opposite direction of drag (natural scrolling)
-                                pan_offset.0 -= world_dx;
-                                pan_offset.1 += world_dy; // Y is flipped in screen coords
-
-                                // Clamp pan to keep view within simulation bounds
-                                // Max pan is half the world size (can pan to edge but not beyond)
-                                let max_pan_x = world_width / 2.0 * (1.0 - 1.0 / zoom).max(0.0);
-                                let max_pan_y = world_height / 2.0 * (1.0 - 1.0 / zoom).max(0.0);
-                                pan_offset.0 = pan_offset.0.clamp(-max_pan_x, max_pan_x);
-                                pan_offset.1 = pan_offset.1.clamp(-max_pan_y, max_pan_y);
+                            // Send resize command to physics thread to rebuild CellGrid
+                            // This ensures grid dimensions match the new window size
+                            let world_rect =
+                                Self::compute_world_rect_for_size(size.width, size.height);
+                            physics.send_command(PhysicsCommand::Resize { world_rect });
+                        }
+                        WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                            ctx.resize(new_inner_size.width, new_inner_size.height);
+                            let world_rect = Self::compute_world_rect_for_size(
+                                new_inner_size.width,
+                                new_inner_size.height,
+                            );
+                            physics.send_command(PhysicsCommand::Resize { world_rect });
+                        }
+                        // Mouse button events - middle button for panning, right for ball size
+                        WindowEvent::MouseInput { state, button, .. } => {
+                            if button == MouseButton::Middle {
+                                is_dragging = state == ElementState::Pressed;
+                                if !is_dragging {
+                                    last_mouse_pos = None;
+                                }
+                            } else if button == MouseButton::Right && state == ElementState::Pressed
+                            {
+                                // Cycle through ball sizes
+                                current_ball_size_idx =
+                                    (current_ball_size_idx + 1) % BALL_SIZES.len();
+                                physics.send_command(PhysicsCommand::NextBallSize);
+                                println!(
+                                    "Ball size: {} (index {})",
+                                    BALL_SIZES[current_ball_size_idx], current_ball_size_idx
+                                );
                             }
-                            last_mouse_pos = Some((position.x, position.y));
                         }
-                    }
-                    // Mouse wheel for zooming centered on cursor
-                    WindowEvent::MouseWheel { delta, .. } => {
-                        let scroll_amount = match delta {
-                            MouseScrollDelta::LineDelta(_, y) => y,
-                            MouseScrollDelta::PixelDelta(pos) => pos.y as f32 / 50.0,
-                        };
+                        // Mouse movement for panning when dragging
+                        WindowEvent::CursorMoved { position, .. } => {
+                            // Get current world dimensions from grid spec (from CellGrid via snapshot)
+                            let world_width =
+                                current_grid_spec.cols as f32 * current_grid_spec.cell_width;
+                            let world_height =
+                                current_grid_spec.rows as f32 * current_grid_spec.cell_height;
 
-                        // Get current world dimensions from grid spec (from CellGrid via snapshot)
-                        let world_width =
-                            current_grid_spec.cols as f32 * current_grid_spec.cell_width;
-                        let world_height =
-                            current_grid_spec.rows as f32 * current_grid_spec.cell_height;
+                            // Convert screen position to world position for zoom centering
+                            let (win_width, win_height) = ctx.size();
+                            let viewport_width = (win_width as f32 - 2.0 * MARGIN_PX_X).max(1.0);
+                            let viewport_height = (win_height as f32 - 2.0 * MARGIN_PX_Y).max(1.0);
+                            let world_visible_width = world_width / zoom;
+                            let world_visible_height = world_height / zoom;
 
-                        // Calculate zoom factor
-                        let zoom_factor = 1.1_f32.powf(scroll_amount);
-                        let new_zoom = (zoom * zoom_factor).clamp(0.1, 10.0);
+                            // Screen position relative to viewport (accounting for margin)
+                            let vp_x = (position.x as f32 - MARGIN_PX_X) / viewport_width;
+                            let vp_y = (position.y as f32 - MARGIN_PX_Y) / viewport_height;
 
-                        // Zoom centered on cursor position:
-                        // The world point under the cursor should stay under the cursor
-                        // pan_new = cursor_world - (cursor_world - pan_old) * (zoom_old / zoom_new)
-                        // Simplified: pan_new = pan_old + (cursor_world - pan_old) * (1 - zoom_old / zoom_new)
-                        let scale_ratio = 1.0 - zoom / new_zoom;
-                        pan_offset.0 += (cursor_world_pos.0 - pan_offset.0) * scale_ratio;
-                        pan_offset.1 += (cursor_world_pos.1 - pan_offset.1) * scale_ratio;
+                            // Convert to world coordinates (centered at pan_offset)
+                            cursor_world_pos.0 = pan_offset.0 + (vp_x - 0.5) * world_visible_width;
+                            cursor_world_pos.1 = pan_offset.1 - (vp_y - 0.5) * world_visible_height; // Y flipped
 
-                        zoom = new_zoom;
-
-                        // Clamp pan to keep view within simulation bounds
-                        let max_pan_x = world_width / 2.0 * (1.0 - 1.0 / zoom).max(0.0);
-                        let max_pan_y = world_height / 2.0 * (1.0 - 1.0 / zoom).max(0.0);
-                        pan_offset.0 = pan_offset.0.clamp(-max_pan_x, max_pan_x);
-                        pan_offset.1 = pan_offset.1.clamp(-max_pan_y, max_pan_y);
-                    }
-                    // Centralized keyboard input handling via InputHandler
-                    WindowEvent::KeyboardInput {
-                        input:
-                            KeyboardInput {
-                                virtual_keycode: Some(key),
-                                state: ElementState::Pressed,
-                                ..
-                            },
-                        ..
-                    } => {
-                        if let Some(action) = input_handler.handle_key_down(key, false) {
-                            Self::execute_input_action(
-                                &action,
-                                &physics,
-                                &mut pan_offset,
-                                &mut zoom,
-                                &mut current_ball_size_idx,
+                            // Update cursor position in input handler
+                            input_handler.set_cursor_pos(
+                                Vec2D::new(cursor_world_pos.0, cursor_world_pos.1),
+                                [position.x as f32, position.y as f32],
                             );
+
+                            if is_dragging {
+                                if let Some((last_x, last_y)) = last_mouse_pos {
+                                    // Calculate delta in screen pixels
+                                    let dx = position.x - last_x;
+                                    let dy = position.y - last_y;
+
+                                    // Convert pixel delta to world delta
+                                    let world_dx =
+                                        (dx as f32 / viewport_width) * world_visible_width;
+                                    let world_dy =
+                                        (dy as f32 / viewport_height) * world_visible_height;
+
+                                    // Pan in opposite direction of drag (natural scrolling)
+                                    pan_offset.0 -= world_dx;
+                                    pan_offset.1 += world_dy; // Y is flipped in screen coords
+
+                                    // Clamp pan to keep view within simulation bounds
+                                    // Max pan is half the world size (can pan to edge but not beyond)
+                                    let max_pan_x = world_width / 2.0 * (1.0 - 1.0 / zoom).max(0.0);
+                                    let max_pan_y =
+                                        world_height / 2.0 * (1.0 - 1.0 / zoom).max(0.0);
+                                    pan_offset.0 = pan_offset.0.clamp(-max_pan_x, max_pan_x);
+                                    pan_offset.1 = pan_offset.1.clamp(-max_pan_y, max_pan_y);
+                                }
+                                last_mouse_pos = Some((position.x, position.y));
+                            }
                         }
-                    }
-                    WindowEvent::KeyboardInput {
-                        input:
-                            KeyboardInput {
-                                virtual_keycode: Some(key),
-                                state: ElementState::Released,
-                                ..
-                            },
-                        ..
-                    } => {
-                        if let Some(action) = input_handler.handle_key_up(key) {
-                            Self::execute_input_action(
-                                &action,
-                                &physics,
-                                &mut pan_offset,
-                                &mut zoom,
-                                &mut current_ball_size_idx,
-                            );
+                        // Mouse wheel for zooming centered on cursor
+                        WindowEvent::MouseWheel { delta, .. } => {
+                            let scroll_amount = match delta {
+                                MouseScrollDelta::LineDelta(_, y) => y,
+                                MouseScrollDelta::PixelDelta(pos) => pos.y as f32 / 50.0,
+                            };
+
+                            // Get current world dimensions from grid spec (from CellGrid via snapshot)
+                            let world_width =
+                                current_grid_spec.cols as f32 * current_grid_spec.cell_width;
+                            let world_height =
+                                current_grid_spec.rows as f32 * current_grid_spec.cell_height;
+
+                            // Calculate zoom factor
+                            let zoom_factor = 1.1_f32.powf(scroll_amount);
+                            let new_zoom = (zoom * zoom_factor).clamp(0.1, 10.0);
+
+                            // Zoom centered on cursor position:
+                            // The world point under the cursor should stay under the cursor
+                            // pan_new = cursor_world - (cursor_world - pan_old) * (zoom_old / zoom_new)
+                            // Simplified: pan_new = pan_old + (cursor_world - pan_old) * (1 - zoom_old / zoom_new)
+                            let scale_ratio = 1.0 - zoom / new_zoom;
+                            pan_offset.0 += (cursor_world_pos.0 - pan_offset.0) * scale_ratio;
+                            pan_offset.1 += (cursor_world_pos.1 - pan_offset.1) * scale_ratio;
+
+                            zoom = new_zoom;
+
+                            // Clamp pan to keep view within simulation bounds
+                            let max_pan_x = world_width / 2.0 * (1.0 - 1.0 / zoom).max(0.0);
+                            let max_pan_y = world_height / 2.0 * (1.0 - 1.0 / zoom).max(0.0);
+                            pan_offset.0 = pan_offset.0.clamp(-max_pan_x, max_pan_x);
+                            pan_offset.1 = pan_offset.1.clamp(-max_pan_y, max_pan_y);
                         }
+                        // Centralized keyboard input handling via InputHandler
+                        WindowEvent::KeyboardInput {
+                            input:
+                                KeyboardInput {
+                                    virtual_keycode: Some(key),
+                                    state: ElementState::Pressed,
+                                    ..
+                                },
+                            ..
+                        } => {
+                            if let Some(action) = input_handler.handle_key_down(key, false) {
+                                Self::execute_input_action(
+                                    &action,
+                                    &physics,
+                                    &mut pan_offset,
+                                    &mut zoom,
+                                    &mut current_ball_size_idx,
+                                    &mut energy_window,
+                                    &energy_data,
+                                    window_target,
+                                    &mut ball_pipeline,
+                                    &ctx.queue,
+                                );
+                            }
+                        }
+                        WindowEvent::KeyboardInput {
+                            input:
+                                KeyboardInput {
+                                    virtual_keycode: Some(key),
+                                    state: ElementState::Released,
+                                    ..
+                                },
+                            ..
+                        } => {
+                            if let Some(action) = input_handler.handle_key_up(key) {
+                                Self::execute_input_action(
+                                    &action,
+                                    &physics,
+                                    &mut pan_offset,
+                                    &mut zoom,
+                                    &mut current_ball_size_idx,
+                                    &mut energy_window,
+                                    &energy_data,
+                                    window_target,
+                                    &mut ball_pipeline,
+                                    &ctx.queue,
+                                );
+                            }
+                        }
+                        _ => {}
                     }
-                    _ => {}
-                },
+                }
                 Event::MainEventsCleared => {
+                    // Update render FPS calculation
+                    render_frame_count += 1;
+                    if render_fps_timer.elapsed().as_secs_f32() >= 1.0 {
+                        render_fps =
+                            render_frame_count as f32 / render_fps_timer.elapsed().as_secs_f32();
+                        render_frame_count = 0;
+                        render_fps_timer = std::time::Instant::now();
+                    }
+
+                    // Update energy data from latest snapshot (before requesting redraw)
+                    if let Some(snapshot) = &last_snapshot {
+                        // Only update if this is a new simulation step (avoid duplicates)
+                        if snapshot.simulation_step > last_processed_step {
+                            last_processed_step = snapshot.simulation_step;
+
+                            if let Ok(mut data) = energy_data.lock() {
+                                data.v_kin.push_back(snapshot.kinetic_energy);
+                                data.v_pot.push_back(snapshot.potential_energy);
+                                data.time = snapshot.time;
+
+                                // Update status text with FPS information
+                                // The format (simulation units vs SI units) is controlled by physics thread's real_data flag
+                                if let Some(ref status) = snapshot.status_text {
+                                    // Replace "fps 0" placeholder with actual render and simulation FPS
+                                    let steps_per_frame = physics.steps_per_frame();
+                                    let updated_status = status.replace(
+                                        "fps 0",
+                                        &format!(
+                                            "render: {} fps | sim: {:.0} fps | steps/frame: {:.1}",
+                                            render_fps as u32,
+                                            snapshot.physics_fps,
+                                            steps_per_frame
+                                        ),
+                                    );
+                                    data.status_text = Some(updated_status);
+                                } else {
+                                    data.status_text = None;
+                                }
+
+                                // Limit buffer size to prevent unbounded growth
+                                const MAX_ENERGY_SAMPLES: usize = 1000;
+                                if data.v_kin.len() > MAX_ENERGY_SAMPLES {
+                                    data.v_kin.pop_front();
+                                }
+                                if data.v_pot.len() > MAX_ENERGY_SAMPLES {
+                                    data.v_pot.pop_front();
+                                }
+
+                                // Release lock before requesting redraw
+                                drop(data);
+
+                                // Request redraw for energy window if it exists
+                                if let Some(window) = &energy_window {
+                                    window.request_redraw();
+                                }
+                            }
+                        }
+                    }
+
                     // Request a redraw after processing events
                     window.request_redraw();
                 }
-                Event::RedrawRequested(_) => {
+                Event::RedrawRequested(window_id) => {
+                    // Check if redraw is for energy window
+                    if let Some(ref mut energy_win) = energy_window
+                        && energy_win.window_id() == Some(window_id)
+                    {
+                        let _ = energy_win.render();
+                        return;
+                    }
+
+                    // Render main window
+                    if window_id != window.id() {
+                        return;
+                    }
+
                     // Render from snapshot if available
                     if let Some(snapshot) = &last_snapshot {
                         // Get grid spec from CellGrid (via snapshot)
@@ -579,6 +732,45 @@ impl WgpuWindow {
         )
     }
 
+    /// Toggle or cycle the energy plot window.
+    /// Opens window if closed, cycles display mode if open.
+    fn toggle_energy_window(
+        energy_window: &mut Option<EnergyPlotWindow>,
+        energy_data: &SharedEnergyData,
+        window_target: &winit::event_loop::EventLoopWindowTarget<()>,
+    ) {
+        if energy_window.is_none() {
+            // Create and open energy window with default mode
+            let mut window = EnergyPlotWindow::new(
+                energy_data.clone(),
+                crate::graphics::energy_plot::DisplayMode::default(),
+            );
+            if let Err(e) = window.create(window_target) {
+                eprintln!("Failed to create energy window: {}", e);
+                return;
+            }
+            *energy_window = Some(window);
+            println!("Energy window opened");
+        } else if let Some(window) = energy_window {
+            if window.is_open() {
+                // Cycle display mode instead of closing
+                window.cycle_display_mode();
+                window.request_redraw();
+                println!("Cycled energy window display mode");
+            } else {
+                // Reopen if closed with last mode
+                let last_mode = window.get_display_mode();
+                let mut new_window = EnergyPlotWindow::new(energy_data.clone(), last_mode);
+                if let Err(e) = new_window.create(window_target) {
+                    eprintln!("Failed to create energy window: {}", e);
+                    return;
+                }
+                *energy_window = Some(new_window);
+                println!("Energy window reopened");
+            }
+        }
+    }
+
     /// Execute input actions from the centralized InputHandler.
     /// Maps InputAction enum to physics commands and view updates.
     #[allow(clippy::too_many_arguments)]
@@ -588,6 +780,11 @@ impl WgpuWindow {
         pan_offset: &mut (f32, f32),
         zoom: &mut f32,
         ball_size_idx: &mut usize,
+        energy_window: &mut Option<EnergyPlotWindow>,
+        energy_data: &SharedEnergyData,
+        window_target: &winit::event_loop::EventLoopWindowTarget<()>,
+        ball_pipeline: &mut BallPipeline,
+        queue: &wgpu::Queue,
     ) {
         match action {
             // Simulation control
@@ -653,12 +850,31 @@ impl WgpuWindow {
                 println!("View reset");
             }
 
+            // Energy window control
+            InputAction::ToggleEnergyWindow | InputAction::CyclePlotContent => {
+                Self::toggle_energy_window(energy_window, energy_data, window_target);
+            }
+
+            // Toggle real data display in energy window
+            // This switches between simulation units and SI units (Joules, Kelvin, m/s)
+            InputAction::ToggleRealData => {
+                physics.send_command(PhysicsCommand::ToggleRealData);
+                println!("Status text units toggled (simulation units ↔ SI units)");
+            }
+
+            // Toggle cutoff rings around balls
+            InputAction::ToggleCutoffRings => {
+                ball_pipeline.toggle_cutoff_rings(queue);
+                let visible = ball_pipeline.are_cutoff_rings_visible();
+                println!(
+                    "Cutoff rings: {}",
+                    if visible { "visible" } else { "hidden" }
+                );
+            }
+
             // Actions not implemented for WGPU (ggez-only UI features)
             InputAction::ToggleRendering
-            | InputAction::CyclePlotContent
-            | InputAction::ToggleEnergyWindow
             | InputAction::PrintHelp
-            | InputAction::ToggleRealData
             | InputAction::ToggleTimingDisplay
             | InputAction::ToggleBallStats
             | InputAction::StartVerbosityInput => {
