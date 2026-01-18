@@ -454,8 +454,11 @@ mod tests {
     fn test_ball_uniforms_size() {
         // view_proj: mat4x4<f32> = 64 bytes
         // screen_size: vec2<f32> = 8 bytes
-        // _padding: vec2<f32> = 8 bytes
-        // Total: 80 bytes
-        assert_eq!(std::mem::size_of::<BallUniforms>(), 80);
+        // eq_edge_distance: f32 = 4 bytes
+        // cutoff_distance: f32 = 4 bytes
+        // show_cutoff_rings: u32 = 4 bytes
+        // _padding: [u32; 3] = 12 bytes
+        // Total: 96 bytes
+        assert_eq!(std::mem::size_of::<BallUniforms>(), 96);
     }
 }
