@@ -1,8 +1,8 @@
 #![feature(portable_simd)]
 #![allow(dead_code)]
 
-#[cfg(all(feature = "renderer-ggez", feature = "renderer-wgpu"))]
-compile_error!("Enable only one renderer feature: either `renderer-ggez` or `renderer-wgpu`.");
+//#[cfg(all(feature = "renderer-ggez", feature = "renderer-wgpu"))]
+//compile_error!("Enable only one renderer feature: either `renderer-ggez` or `renderer-wgpu`.");
 
 #[cfg(not(any(feature = "renderer-ggez", feature = "renderer-wgpu")))]
 compile_error!("No renderer selected. Enable one of: `renderer-ggez` or `renderer-wgpu`.");

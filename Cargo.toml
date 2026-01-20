@@ -39,10 +39,12 @@ font8x8 = { version = "0.3", optional = true }
 float-cmp = "0.10"
 
 [features]
-default = ["renderer-ggez", "measure-time"]
+default = []
 measure-time = []
-renderer-ggez = ["dep:ggez"]
-renderer-wgpu = ["dep:wgpu", "dep:pollster", "dep:bytemuck", "dep:font8x8"]
+#this does not work: all-features = ["renderer-ggez", "renderer-wgpu"]
+renderer-ggez = ["dep:ggez", "measure-time"]
+renderer-wgpu = ["dep:wgpu", "dep:pollster", "dep:bytemuck", "dep:font8x8", "measure-time"]
+
 
 [profile.dev]
 opt-level = 2
