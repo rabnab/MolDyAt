@@ -1,5 +1,6 @@
 use crate::application::AppResult;
 use crate::graphics::ggez::ggez_renderer::{BallType, GgezRenderer};
+use crate::graphics::renderer::CoordinateTransform;
 use crate::graphics::window::window_definition::WindowDefinition;
 use ggez::Context;
 use ggez::glam::Vec2;
@@ -19,6 +20,7 @@ pub trait DrawingBackend {
         grid_spec: &crate::application::renderer_snapshot::CellGridSpec,
         windef: &WindowDefinition,
         viewport: &crate::graphics::renderer::viewport::ViewportState,
+        coord_transform: &CoordinateTransform,
     ) -> AppResult;
 
     /// Draw the boundary frame around the simulation region.
@@ -188,7 +190,9 @@ impl<'a> DrawingBackend for GgezBackend<'a> {
         grid_spec: &crate::application::renderer_snapshot::CellGridSpec,
         win_def: &WindowDefinition,
         viewport: &crate::graphics::renderer::viewport::ViewportState,
+        coord_transform: &CoordinateTransform,
     ) -> AppResult {
+        let _ = win_def; // Keep for potential future use
         // Don't cache when using viewport transformations - grid changes with zoom/pan
         let mut mesh_builder = MeshBuilder::new();
 
@@ -208,11 +212,11 @@ impl<'a> DrawingBackend for GgezBackend<'a> {
                     cell_y - grid_spec.cell_height,
                 );
 
-                // Use viewport-aware coordinate transformation
-                let tl_px = win_def.coord_to_px_viewport(&tl, viewport);
-                let br_px = win_def.coord_to_px_viewport(&br, viewport);
+                // Use shared coordinate transformation
+                let tl_px = coord_transform.world_to_screen(&tl, viewport);
+                let br_px = coord_transform.world_to_screen(&br, viewport);
 
-                let rect = Rect::new(tl_px.x, tl_px.y, br_px.x - tl_px.x, br_px.y - tl_px.y);
+                let rect = Rect::new(tl_px[0], tl_px[1], br_px[0] - tl_px[0], br_px[1] - tl_px[1]);
                 mesh_builder.rectangle(DrawMode::fill(), rect, color)?;
             }
         }

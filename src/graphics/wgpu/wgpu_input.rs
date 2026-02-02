@@ -5,7 +5,7 @@
 
 use crate::graphics::renderer::InputAction;
 use crate::graphics::renderer::event_loop::{
-    process_action_common, EnergyWindowManager, PhysicsCoordinator,
+    EnergyWindowManager, PhysicsCoordinator, process_action_common,
 };
 use crate::graphics::renderer::viewport::ViewportState;
 use crate::objects2d::ball_impl::{BallFactory, NUM_BALL_SIZES};

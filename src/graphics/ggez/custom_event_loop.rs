@@ -1,9 +1,9 @@
 use crate::application::physics_thread::PhysicsCommand;
 use crate::application::{LogStuff, MainContent};
-use crate::graphics::energy_plot::{EnergyData, EnergyPlotWindow, SharedEnergyData};
+use crate::graphics::energy_plot::EnergyData;
 use crate::graphics::ggez::ggez_renderer::GgezRenderer;
 use crate::graphics::ggez::ggez_renderer_backend::GgezBackend;
-use crate::graphics::renderer::event_loop::{EventLoopState, InputAction};
+use crate::graphics::renderer::event_loop::{EnergyWindowManager, EventLoopState, InputAction};
 use crate::graphics::renderer::viewport::ViewportState;
 use ggez::Context;
 use ggez::event::process_event;
@@ -18,10 +18,11 @@ pub struct CustomEventLoop {
 
     // ggez-specific fields
     renderer: GgezRenderer,
-    energy_window: Option<EnergyPlotWindow>,
-    energy_data: SharedEnergyData,
 
-    // Additional tracking for energy updates
+    // Shared energy window management
+    energy_manager: EnergyWindowManager,
+
+    // Additional tracking for render FPS
     last_processed_step: u64,
     simulation_fps: f32,
 }
@@ -38,48 +39,19 @@ impl CustomEventLoop {
         // Create shared event loop state (this spawns physics thread)
         let state = EventLoopState::new(application);
 
+        // Use shared energy window manager
+        let energy_manager = EnergyWindowManager::new(energy_data);
+
         Self {
             state,
             renderer,
-            energy_window: None,
-            energy_data,
+            energy_manager,
             last_processed_step: 0,
             simulation_fps: 0.0,
         }
     }
 
-    fn toggle_energy_window(
-        &mut self,
-        window_target: &winit::event_loop::EventLoopWindowTarget<()>,
-    ) {
-        if self.energy_window.is_none() {
-            // Create and open energy window with default mode
-            let mut window = EnergyPlotWindow::new(
-                self.energy_data.clone(),
-                crate::graphics::energy_plot::DisplayMode::default(),
-            );
-            if let Err(e) = window.create(window_target) {
-                eprintln!("Failed to create energy window: {}", e);
-                return;
-            }
-            self.energy_window = Some(window);
-        } else if let Some(window) = &mut self.energy_window {
-            if window.is_open() {
-                // Cycle display mode instead of closing
-                window.cycle_display_mode();
-                window.request_redraw();
-            } else {
-                // Reopen if closed with last mode
-                let last_mode = window.get_display_mode();
-                let mut new_window = EnergyPlotWindow::new(self.energy_data.clone(), last_mode);
-                if let Err(e) = new_window.create(window_target) {
-                    eprintln!("Failed to create energy window: {}", e);
-                    return;
-                }
-                self.energy_window = Some(new_window);
-            }
-        }
-    }
+    // No longer need toggle_energy_window - use energy_manager.toggle() instead
 
     /// Start the main event loop.
     /// Takes ownership and runs until window is closed.
@@ -105,10 +77,8 @@ impl CustomEventLoop {
             match event {
                 Event::WindowEvent { event, window_id } => {
                     // Check if this event is for the energy window
-                    if let Some(energy_window) = &mut self.energy_window
-                        && energy_window.window_id() == Some(window_id)
-                    {
-                        self.handle_energy_window_event(event);
+                    if self.energy_manager.is_energy_window_event(window_id) {
+                        self.energy_manager.handle_event(event);
                         return;
                     }
                     // Otherwise, handle as main window event
@@ -116,10 +86,8 @@ impl CustomEventLoop {
                 }
                 Event::RedrawRequested(window_id) => {
                     // Check if redraw is for energy window
-                    if let Some(energy_window) = &mut self.energy_window
-                        && energy_window.window_id() == Some(window_id)
-                    {
-                        let _ = energy_window.render();
+                    if self.energy_manager.is_energy_window_event(window_id) {
+                        self.energy_manager.handle_redraw();
                     }
                     // Otherwise it's for the main window, ggez handles it
                 }
@@ -129,45 +97,6 @@ impl CustomEventLoop {
                 _ => {}
             }
         });
-    }
-
-    fn handle_energy_window_event(&mut self, event: WindowEvent) {
-        match event {
-            WindowEvent::CloseRequested => {
-                // Close the energy window
-                self.energy_window = None;
-            }
-            WindowEvent::Resized(size) => {
-                if let Some(window) = &mut self.energy_window {
-                    window.handle_resize(size.width, size.height);
-                }
-            }
-            WindowEvent::KeyboardInput {
-                input:
-                    KeyboardInput {
-                        virtual_keycode: Some(keycode),
-                        state: ElementState::Pressed,
-                        ..
-                    },
-                ..
-            } => {
-                match keycode {
-                    KeyCode::Escape => {
-                        // Close energy window on Escape
-                        self.energy_window = None;
-                    }
-                    KeyCode::Tab => {
-                        // Cycle display mode on Tab
-                        if let Some(window) = &mut self.energy_window {
-                            window.cycle_display_mode();
-                            window.request_redraw();
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            _ => {}
-        }
     }
 
     fn handle_window_event(
@@ -200,7 +129,7 @@ impl CustomEventLoop {
                     // Handle ggez-specific actions here
                     match &action {
                         InputAction::ToggleEnergyWindow => {
-                            self.toggle_energy_window(window_target);
+                            self.energy_manager.toggle(window_target);
                         }
                         InputAction::CyclePlotContent => {
                             self.renderer.cycle_plot_content();
@@ -374,44 +303,12 @@ impl CustomEventLoop {
                 self.simulation_fps = snapshot.physics_fps;
                 self.last_processed_step = snapshot.simulation_step;
 
-                let mut energy_data = self.energy_data.lock().unwrap();
-                energy_data.v_kin.push_back(snapshot.kinetic_energy);
-                energy_data.v_pot.push_back(snapshot.potential_energy);
-                energy_data.time = snapshot.time;
-
-                // Update status text from snapshot (with renderer FPS, simulation FPS, and steps/frame)
-                if let Some(ref status) = snapshot.status_text {
-                    // Replace "fps 0" placeholder with combined renderer, simulation FPS, and steps/frame
-                    let updated_status = status.replace(
-                        "fps 0",
-                        &format!(
-                            "render: {} fps | sim: {:.0} fps | steps/frame: {:.1}",
-                            self.state.physics.render_fps() as u32,
-                            self.simulation_fps,
-                            self.state.physics.steps_per_frame()
-                        ),
-                    );
-                    energy_data.status_text = Some(updated_status);
-                } else {
-                    energy_data.status_text = None;
-                }
-
-                // Limit buffer size to prevent unbounded growth
-                const MAX_ENERGY_SAMPLES: usize = 1000;
-                if energy_data.v_kin.len() > MAX_ENERGY_SAMPLES {
-                    energy_data.v_kin.pop_front();
-                }
-                if energy_data.v_pot.len() > MAX_ENERGY_SAMPLES {
-                    energy_data.v_pot.pop_front();
-                }
-
-                // Release the lock before requesting redraw
-                drop(energy_data);
-
-                // Request redraw for energy window if it exists and new data was added
-                if let Some(window) = &self.energy_window {
-                    window.request_redraw();
-                }
+                // Use shared energy manager for data updates
+                self.energy_manager.update_from_snapshot(
+                    &snapshot,
+                    self.state.physics.render_fps(),
+                    self.state.physics.steps_per_frame(),
+                );
             }
         }
 
