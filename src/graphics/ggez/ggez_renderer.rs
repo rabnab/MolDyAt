@@ -1,8 +1,7 @@
 use crate::application::AppResult;
 use crate::graphics::ggez::WindowDefinitionRef;
 use crate::graphics::ggez::ggez_renderer_backend::{DrawingBackend, GgezMeshCache};
-use crate::graphics::renderer::CoordinateTransform;
-use crate::graphics::renderer::viewport::ViewportState;
+use crate::graphics::renderer::ViewportTransform;
 use crate::graphics::window::window_definition::WindowDefinition;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::{Ball2D, BallPhysics};
@@ -50,8 +49,7 @@ pub struct GgezRenderer {
     string_elems: usize,
     glyph_elems: usize,
     ball_elems: usize,
-    viewport: ViewportState,
-    coord_transform: CoordinateTransform,
+    viewport: ViewportTransform,
 }
 
 impl GgezRenderer {
@@ -82,12 +80,15 @@ impl GgezRenderer {
 
         let world_bounds = window_def.borrow().compute_world_bounds_rect();
 
-        // Initialize coordinate transform for screen↔world conversion
+        // Initialize unified viewport transformation system
         let windef = window_def.borrow();
         let window_width = windef.region_px.0 + 2.0 * windef.margin_px.0;
         let window_height = windef.region_px.1 + 2.0 * windef.margin_px.1;
-        let coord_transform =
-            CoordinateTransform::from_window_size(window_width, window_height, windef.margin_px);
+        let viewport = ViewportTransform::new(
+            world_bounds,
+            (window_width, window_height),
+            windef.margin_px,
+        );
         drop(windef);
 
         Self {
@@ -105,8 +106,7 @@ impl GgezRenderer {
             string_elems: 0,
             glyph_elems: 0,
             ball_elems: 0,
-            viewport: ViewportState::new(world_bounds),
-            coord_transform,
+            viewport,
         }
     }
 
@@ -229,12 +229,7 @@ impl GgezRenderer {
         let win_def = self.window_def.borrow();
 
         // 1) Draw cell grid and rectangle (short-lived &mut Canvas)
-        backend.draw_cell_grid_background(
-            grid_spec,
-            &win_def,
-            &self.viewport,
-            &self.coord_transform,
-        )?;
+        backend.draw_cell_grid_background(grid_spec, &win_def, &mut self.viewport)?;
         backend.draw_boundary_frame(win_def.margin_px, win_def.region_px)?;
 
         Ok(())
@@ -260,24 +255,22 @@ impl GgezRenderer {
         win_def.resize(width, height);
         self.ball_status_text_pos = Some([win_def.margin_px.0 * 2.0 + win_def.region_px.0, 0.0]);
 
-        // Update viewport world bounds on resize
+        // Update viewport world bounds and window size on resize
         let world_bounds = win_def.compute_world_bounds_rect();
-        drop(win_def); // Release borrow before calling viewport_mut
+        drop(win_def); // Release borrow before calling viewport methods
         self.viewport.set_world_bounds(world_bounds);
-
-        // Update coordinate transform for new window size
-        self.coord_transform.set_window_size(width, height);
+        self.viewport.on_window_resize((width, height));
     }
 
     pub fn get_world_region(&self) -> crate::objects2d::Rect {
         self.window_def.borrow().compute_world_bounds_rect()
     }
 
-    pub fn viewport_mut(&mut self) -> &mut ViewportState {
+    pub fn viewport_mut(&mut self) -> &mut ViewportTransform {
         &mut self.viewport
     }
 
-    pub fn viewport(&self) -> &ViewportState {
+    pub fn viewport(&self) -> &ViewportTransform {
         &self.viewport
     }
 
@@ -295,7 +288,7 @@ impl GgezRenderer {
     /// Helper to draw ball symbols from snapshot data.
     /// Renders balls, trails, and neighbor lines using batched drawing.
     fn draw_balls_from_snapshot_data(
-        &self,
+        &mut self,
         backend: &mut dyn DrawingBackend,
         snapshot: &crate::application::renderer_snapshot::RendererSnapshot,
     ) -> AppResult {
@@ -314,13 +307,9 @@ impl GgezRenderer {
                     for window in ball.tail[start_index..].windows(2) {
                         let start_pos = &window[0];
                         let end_pos = &window[1];
-                        // Use shared coordinate transformation
-                        let start_px = self
-                            .coord_transform
-                            .world_to_screen(start_pos, &self.viewport);
-                        let end_px = self
-                            .coord_transform
-                            .world_to_screen(end_pos, &self.viewport);
+                        // Use unified viewport transformation
+                        let start_px = self.viewport.world_to_px(start_pos);
+                        let end_px = self.viewport.world_to_px(end_pos);
                         let start: [f32; 2] = start_px;
                         let end: [f32; 2] = end_px;
                         let width = 1.0;
@@ -341,30 +330,17 @@ impl GgezRenderer {
         }
         backend.draw_line_batch()?;
 
-        // Calculate viewport size in world coordinates for frustum culling
-        let win_def = self.window_def.borrow();
-        let viewport_size_world = (
-            WindowDefinition::px_to_len(win_def.region_px.0),
-            WindowDefinition::px_to_len(win_def.region_px.1),
-        );
-        drop(win_def);
-
         // Then, draw balls from snapshot data (on top of lines) with frustum culling
         for ball in &snapshot.balls {
             // Frustum culling: only render balls that are at least partially visible
             // Use ball radius for proper visibility testing
             let ball_radius = ball.radius;
-            if !self
-                .viewport
-                .is_circle_visible(&ball.position, ball_radius, viewport_size_world)
-            {
+            if !self.viewport.is_circle_visible(&ball.position, ball_radius) {
                 continue; // Skip balls outside viewport
             }
 
-            // Use shared coordinate transformation
-            let ball_coord_px = self
-                .coord_transform
-                .world_to_screen(&ball.position, &self.viewport);
+            // Use unified viewport transformation
+            let ball_coord_px = self.viewport.world_to_px(&ball.position);
 
             // Scale balls with zoom level
             let zoom_scale = self.viewport.zoom();
@@ -389,15 +365,13 @@ impl GgezRenderer {
 impl GgezRenderer {
     /// Add neighbor lines to batch for a ball from snapshot data (batched mode - efficient)
     fn add_neighbor_lines_from_snapshot_to_batch(
-        &self,
+        &mut self,
         backend: &mut dyn DrawingBackend,
         ball: &crate::application::renderer_snapshot::BallRenderData,
         all_balls: &[crate::application::renderer_snapshot::BallRenderData],
     ) -> AppResult {
-        // Use shared coordinate transformation
-        let ball_coord_px = self
-            .coord_transform
-            .world_to_screen(&ball.position, &self.viewport);
+        // Use unified viewport transformation
+        let ball_coord_px = self.viewport.world_to_px(&ball.position);
         let start: [f32; 2] = ball_coord_px;
 
         // Find max force to determine main neighbors
@@ -428,11 +402,9 @@ impl GgezRenderer {
                 Color::from_rgb(64, 64, 64)
             };
 
-            // Get neighbor position and add line to batch (use shared coordinate transformation)
+            // Get neighbor position and add line to batch (use unified viewport transformation)
             if let Some(neighbor) = all_balls.get(*neighbor_idx) {
-                let neighbor_pos_px = self
-                    .coord_transform
-                    .world_to_screen(&neighbor.position, &self.viewport);
+                let neighbor_pos_px = self.viewport.world_to_px(&neighbor.position);
                 let end: [f32; 2] = neighbor_pos_px;
                 backend.add_line_to_batch(&[start, end], 2.0, color_line.to_rgba())?;
             }
@@ -571,10 +543,8 @@ impl GgezRenderer {
         let curs_pos = clamped_px;
         self.cursor_pos_px = [clamped_px.x, clamped_px.y];
 
-        // Use shared coordinate transformation (same as wgpu)
-        let curs_pos_coord =
-            self.coord_transform
-                .screen_to_world(clamped_px.x, clamped_px.y, &self.viewport);
+        // Use unified viewport transformation (same as wgpu)
+        let curs_pos_coord = self.viewport.px_to_world(&[clamped_px.x, clamped_px.y]);
 
         let curs_moved_sq = curs_pos.dist(&self.curs_pos_of_txt).norm_sq();
         if curs_moved_sq > (f32::min(win_def.region_px.0, win_def.region_px.1) * 0.1) {

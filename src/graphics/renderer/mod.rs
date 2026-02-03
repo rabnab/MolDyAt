@@ -1,4 +1,3 @@
-pub mod coordinate_transform;
 pub mod event_loop;
 pub mod viewport;
 
@@ -6,7 +5,6 @@ pub mod viewport;
 #[allow(unused_imports)]
 pub use event_loop::{InputAction, InputHandler, KeyCode};
 
-// Public API for coordinate transformations - shared by ggez and wgpu
-// Currently only used by wgpu, but available for ggez refactoring
+// Public API for unified viewport transformation
 #[allow(unused_imports)]
-pub use coordinate_transform::{CoordinateTransform, compute_world_rect_from_window_size};
+pub use viewport::ViewportTransform;
