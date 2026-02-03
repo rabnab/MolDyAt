@@ -11,11 +11,9 @@ use crate::application::MainContent;
 use crate::application::physics_thread::PhysicsCommand;
 use crate::application::renderer_snapshot::{CellGridSpec, RendererSnapshot};
 use crate::graphics::energy_plot::{EnergyData, SharedEnergyData};
+use crate::graphics::renderer::ViewportTransform;
 use crate::graphics::renderer::event_loop::{EnergyWindowManager, PhysicsCoordinator};
-use crate::graphics::renderer::viewport::ViewportState;
-use crate::graphics::renderer::{
-    CoordinateTransform, InputAction, InputHandler, compute_world_rect_from_window_size,
-};
+use crate::graphics::renderer::{InputAction, InputHandler};
 use crate::graphics::window::{MARGIN_PX_X, MARGIN_PX_Y};
 use crate::objects2d::Rect;
 use crate::objects2d::ball_impl::{BallFactory, NUM_BALL_SIZES};
@@ -120,16 +118,13 @@ impl WgpuWindow {
         // Centralized input handler for consistent behavior with ggez
         let mut input_handler = InputHandler::new();
 
-        // Coordinate transform for screen↔world conversion (shared with ggez)
-        let mut coord_transform = CoordinateTransform::from_window_size(
-            ctx.size().0 as f32,
-            ctx.size().1 as f32,
+        // Unified viewport transformation system (replaces ViewportState + CoordinateTransform)
+        let initial_world_bounds = Rect::new(-18.0, 12.0, 36.0, -24.0);
+        let mut viewport = ViewportTransform::new(
+            initial_world_bounds,
+            (ctx.size().0 as f32, ctx.size().1 as f32),
             (MARGIN_PX_X, MARGIN_PX_Y),
         );
-
-        // Viewport state for pan/zoom (shared with ggez via ViewportState)
-        let initial_world_bounds = Rect::new(-18.0, 12.0, 36.0, -24.0);
-        let mut viewport = ViewportState::new(initial_world_bounds);
 
         // Cursor world position for rendering and interaction
         let mut cursor_world_pos = (0.0_f32, 0.0_f32);
@@ -183,7 +178,6 @@ impl WgpuWindow {
                         &mut energy_manager,
                         &mut pipelines,
                         &current_grid_spec,
-                        &mut coord_transform,
                         window_target,
                         control_flow,
                     );
@@ -281,14 +275,13 @@ fn handle_window_event(
     ctx: &mut WgpuContext,
     physics: &PhysicsCoordinator,
     render_drawing: &mut bool,
-    viewport: &mut ViewportState,
+    viewport: &mut ViewportTransform,
     cursor_world_pos: &mut (f32, f32),
     current_ball_size_idx: &mut usize,
     input_handler: &mut InputHandler,
     energy_manager: &mut EnergyWindowManager,
     pipelines: &mut WgpuPipelines,
     _current_grid_spec: &CellGridSpec,
-    coord_transform: &mut CoordinateTransform,
     window_target: &winit::event_loop::EventLoopWindowTarget<()>,
     control_flow: &mut ControlFlow,
 ) {
@@ -301,36 +294,31 @@ fn handle_window_event(
             println!("Window resized to {}x{}", size.width, size.height);
             ctx.resize(size.width, size.height);
 
-            let world_rect = compute_world_rect_from_window_size(
+            let world_rect = ViewportTransform::compute_world_bounds_from_window_size(
                 size.width,
                 size.height,
                 (MARGIN_PX_X, MARGIN_PX_Y),
             );
             physics.send_command(PhysicsCommand::Resize { world_rect });
             viewport.set_world_bounds(world_rect);
-
-            // Update coordinate transform for new window size
-            coord_transform.set_window_size(size.width as f32, size.height as f32);
+            viewport.on_window_resize((size.width as f32, size.height as f32));
         }
         WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
             ctx.resize(new_inner_size.width, new_inner_size.height);
-            let world_rect = compute_world_rect_from_window_size(
+            let world_rect = ViewportTransform::compute_world_bounds_from_window_size(
                 new_inner_size.width,
                 new_inner_size.height,
                 (MARGIN_PX_X, MARGIN_PX_Y),
             );
             physics.send_command(PhysicsCommand::Resize { world_rect });
             viewport.set_world_bounds(world_rect);
-
-            // Update coordinate transform for new window size
-            coord_transform
-                .set_window_size(new_inner_size.width as f32, new_inner_size.height as f32);
+            viewport.on_window_resize((new_inner_size.width as f32, new_inner_size.height as f32));
         }
         WindowEvent::MouseInput { state, button, .. } => {
             // Get current cursor positions for mouse click
             let world_pos = input_handler.cursor_pos();
             let screen_pos = input_handler.cursor_pos_px();
-            let pan_offset = *viewport.pan_offset();
+            let pan_offset = viewport.pan_offset();
 
             if let Some(action) =
                 input_handler.handle_mouse_button(button, state, screen_pos, world_pos, pan_offset)
@@ -356,8 +344,7 @@ fn handle_window_event(
             }
         }
         WindowEvent::CursorMoved { position, .. } => {
-            let world_pos =
-                coord_transform.screen_to_world(position.x as f32, position.y as f32, viewport);
+            let world_pos = viewport.px_to_world(&[position.x as f32, position.y as f32]);
 
             // Update cursor position in InputHandler
             input_handler.set_cursor_pos(world_pos, [position.x as f32, position.y as f32]);
@@ -369,8 +356,8 @@ fn handle_window_event(
             {
                 let start_offset = input_handler.pan_start_offset();
                 let zoom = viewport.zoom();
-                let new_pan = ViewportState::apply_pan_delta(delta, start_offset, zoom);
-                viewport.set_pan(new_pan);
+                let new_pan = ViewportTransform::apply_pan_delta(delta, start_offset, zoom);
+                viewport.pan(new_pan);
             }
         }
         WindowEvent::MouseWheel { delta, .. } => {

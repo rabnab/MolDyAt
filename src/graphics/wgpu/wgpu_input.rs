@@ -4,10 +4,10 @@
 //! Extracted from wgpu_window to separate input handling concerns.
 
 use crate::graphics::renderer::InputAction;
+use crate::graphics::renderer::ViewportTransform;
 use crate::graphics::renderer::event_loop::{
     EnergyWindowManager, PhysicsCoordinator, process_action_common,
 };
-use crate::graphics::renderer::viewport::ViewportState;
 use crate::objects2d::ball_impl::{BallFactory, NUM_BALL_SIZES};
 
 use super::ball_pipeline::BallPipeline;
@@ -21,7 +21,7 @@ pub fn execute_input_action(
     action: &InputAction,
     physics: &PhysicsCoordinator,
     render_drawing: &mut bool,
-    viewport: &mut ViewportState,
+    viewport: &mut ViewportTransform,
     ball_size_idx: &mut usize,
     energy_manager: &mut EnergyWindowManager,
     window_target: &winit::event_loop::EventLoopWindowTarget<()>,

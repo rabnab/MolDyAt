@@ -4,7 +4,7 @@ use crate::graphics::energy_plot::EnergyData;
 use crate::graphics::ggez::ggez_renderer::GgezRenderer;
 use crate::graphics::ggez::ggez_renderer_backend::GgezBackend;
 use crate::graphics::renderer::event_loop::{EnergyWindowManager, EventLoopState, InputAction};
-use crate::graphics::renderer::viewport::ViewportState;
+use crate::graphics::renderer::viewport::ViewportTransform;
 use ggez::Context;
 use ggez::event::process_event;
 use ggez::event::winit_event::{ElementState, Event, KeyboardInput, WindowEvent};
@@ -165,7 +165,7 @@ impl CustomEventLoop {
             } => {
                 let pos = ctx.mouse.position();
                 let world_pos = self.renderer.update_cursor_and_text(pos.x, pos.y);
-                let pan_offset = *self.renderer.viewport().pan_offset();
+                let pan_offset = self.renderer.viewport().pan_offset();
 
                 if let Some(action) = self.state.input.handle_mouse_button(
                     button,
@@ -189,11 +189,12 @@ impl CustomEventLoop {
 
                 if let Some(action) = self.state.input.handle_mouse_motion(x, y) {
                     if let InputAction::PanUpdate { delta } = &action {
-                        // Handle pan update using shared viewport logic
+                        // Handle pan update: convert pixel delta to world delta and apply
                         let start_offset = self.state.input.pan_start_offset();
                         let zoom = self.renderer.viewport().zoom();
-                        let new_pan = ViewportState::apply_pan_delta(*delta, start_offset, zoom);
-                        self.renderer.viewport_mut().set_pan(new_pan);
+                        let new_pan =
+                            ViewportTransform::apply_pan_delta(*delta, start_offset, zoom);
+                        self.renderer.viewport_mut().pan(new_pan);
                         self.state.view_dirty = true;
                     }
                     self.state.process_action(&action);
