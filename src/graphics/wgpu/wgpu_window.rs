@@ -8,15 +8,12 @@ use super::wgpu_context::WgpuContext;
 use super::wgpu_input::execute_input_action;
 use super::wgpu_pipelines::{WgpuPipelines, compute_view_proj};
 use crate::application::MainContent;
-use crate::application::physics_thread::PhysicsCommand;
 use crate::application::renderer_snapshot::{CellGridSpec, RendererSnapshot};
-use crate::graphics::energy_plot::{EnergyData, SharedEnergyData};
-use crate::graphics::renderer::ViewportTransform;
-use crate::graphics::renderer::event_loop::{EnergyWindowManager, PhysicsCoordinator};
-use crate::graphics::renderer::{InputAction, InputHandler};
+use crate::graphics::renderer::InputAction;
+use crate::graphics::renderer::event_loop::UnifiedRenderState;
 use crate::graphics::window::{MARGIN_PX_X, MARGIN_PX_Y};
 use crate::objects2d::Rect;
-use crate::objects2d::ball_impl::{BallFactory, NUM_BALL_SIZES};
+use crate::objects2d::ball_impl::BallFactory;
 use std::path::PathBuf;
 use std::sync::Arc;
 use winit::{
@@ -83,76 +80,54 @@ impl WgpuWindow {
         // Initialize all rendering pipelines
         let pipelines = WgpuPipelines::new(&ctx.device, ctx.format);
 
-        // Create shared energy data for energy plot window
-        let energy_data = Arc::new(std::sync::Mutex::new(EnergyData::new()));
+        // Build UnifiedRenderState (spawns physics thread internally)
+        let initial_world_bounds = Rect::new(-18.0, 12.0, 36.0, -24.0);
+        let window_size = (ctx.size().0 as f32, ctx.size().1 as f32);
 
-        // Spawn physics thread with PhysicsCoordinator (like ggez)
         println!("\n========================================");
         println!("WGPU THREADED RENDERER ARCHITECTURE");
         println!("========================================");
         println!("Main thread ID: {:?}", std::thread::current().id());
         println!("Spawning physics thread...");
-        let physics = PhysicsCoordinator::new(application);
+        let state = UnifiedRenderState::new(
+            application,
+            initial_world_bounds,
+            window_size,
+            (MARGIN_PX_X, MARGIN_PX_Y),
+        );
         println!("✓ Physics thread spawned successfully");
         println!("  - Main thread: Rendering (WGPU)");
         println!("  - Physics thread: Simulation + snapshot publishing");
         println!("========================================\n");
 
         // Run the event loop
-        Self::run_event_loop(event_loop, window, ctx, pipelines, physics, energy_data);
+        Self::run_event_loop(event_loop, window, ctx, pipelines, state);
     }
 
     /// Main event loop - handles window events and renders frames.
-    /// Receives simulation data from PhysicsCoordinator via snapshots.
+    /// Uses `UnifiedRenderState` for all shared state, eliminating scattered locals.
     fn run_event_loop(
         event_loop: EventLoop<()>,
         window: Arc<Window>,
         mut ctx: WgpuContext,
         mut pipelines: WgpuPipelines,
-        physics: PhysicsCoordinator,
-        energy_data: SharedEnergyData,
+        mut state: UnifiedRenderState,
     ) {
-        // Energy window manager (shared logic with ggez)
-        let mut energy_manager = EnergyWindowManager::new(energy_data);
-
-        // Centralized input handler for consistent behavior with ggez
-        let mut input_handler = InputHandler::new();
-
-        // Unified viewport transformation system (replaces ViewportState + CoordinateTransform)
-        let initial_world_bounds = Rect::new(-18.0, 12.0, 36.0, -24.0);
-        let mut viewport = ViewportTransform::new(
-            initial_world_bounds,
-            (ctx.size().0 as f32, ctx.size().1 as f32),
-            (MARGIN_PX_X, MARGIN_PX_Y),
-        );
-
-        // Cursor world position for rendering and interaction
-        let mut cursor_world_pos = (0.0_f32, 0.0_f32);
-
-        // Render toggle (shared with EventLoopState semantics)
-        let mut render_drawing = true;
-
-        // Current ball size index (updated from input handler)
-        let mut current_ball_size_idx: usize = 2; // Default to size index 2 (0.60)
-
-        // Cache the last snapshot for rendering when no new data available
-        let mut last_snapshot: Option<Arc<RendererSnapshot>> = None;
-
-        // Track render FPS (frames per second for the renderer)
-        let mut render_frame_count: u64 = 0;
-        let mut render_fps_timer = std::time::Instant::now();
-        let mut render_fps: f32 = 0.0;
-
         event_loop.run(move |event, window_target, control_flow| {
             *control_flow = ControlFlow::Poll;
 
-            // Get latest snapshot from physics thread (if available)
-            if let Some(snapshot) = physics.get_latest_snapshot() {
-                last_snapshot = Some(snapshot);
+            // Begin-frame: grab latest snapshot, update FPS counters.
+            // Only on frame-boundary events to avoid inflating FPS and
+            // over-polling the snapshot slot.
+            let is_frame_boundary =
+                matches!(event, Event::MainEventsCleared | Event::RedrawRequested(_));
+            if is_frame_boundary {
+                state.begin_frame();
             }
 
             // Use cached snapshot for current grid_spec
-            let current_grid_spec = last_snapshot
+            let current_grid_spec = state
+                .last_snapshot
                 .as_ref()
                 .map(|s| s.grid_spec.clone())
                 .unwrap_or_else(default_grid_spec);
@@ -160,8 +135,8 @@ impl WgpuWindow {
             match event {
                 Event::WindowEvent { event, window_id } => {
                     // Check if this event is for the energy window
-                    if energy_manager.is_energy_window_event(window_id) {
-                        energy_manager.handle_event(event);
+                    if state.energy_manager.is_energy_window_event(window_id) {
+                        state.energy_manager.handle_event(event);
                         return;
                     }
 
@@ -169,13 +144,7 @@ impl WgpuWindow {
                     handle_window_event(
                         event,
                         &mut ctx,
-                        &physics,
-                        &mut render_drawing,
-                        &mut viewport,
-                        &mut cursor_world_pos,
-                        &mut current_ball_size_idx,
-                        &mut input_handler,
-                        &mut energy_manager,
+                        &mut state,
                         &mut pipelines,
                         &current_grid_spec,
                         window_target,
@@ -183,31 +152,16 @@ impl WgpuWindow {
                     );
                 }
                 Event::MainEventsCleared => {
-                    // Update render FPS calculation
-                    render_frame_count += 1;
-                    if render_fps_timer.elapsed().as_secs_f32() >= 1.0 {
-                        render_fps =
-                            render_frame_count as f32 / render_fps_timer.elapsed().as_secs_f32();
-                        render_frame_count = 0;
-                        render_fps_timer = std::time::Instant::now();
-                    }
-
-                    // Update energy data from latest snapshot using manager
-                    if let Some(snapshot) = &last_snapshot {
-                        energy_manager.update_from_snapshot(
-                            snapshot,
-                            render_fps,
-                            physics.steps_per_frame(),
-                        );
-                    }
+                    // Update energy data from snapshot (idempotent per step).
+                    state.update_energy_from_snapshot();
 
                     // Request a redraw after processing events
                     window.request_redraw();
                 }
                 Event::RedrawRequested(window_id) => {
                     // Check if redraw is for energy window
-                    if energy_manager.is_energy_window_event(window_id) {
-                        energy_manager.handle_redraw();
+                    if state.energy_manager.is_energy_window_event(window_id) {
+                        state.energy_manager.handle_redraw();
                         return;
                     }
 
@@ -216,28 +170,29 @@ impl WgpuWindow {
                         return;
                     }
 
-                    if !render_drawing {
+                    if !state.should_render() {
                         return;
                     }
 
                     // Render from snapshot if available
-                    if let Some(snapshot) = &last_snapshot {
+                    if let Some(snapshot) = &state.last_snapshot {
                         log_frame_periodically(snapshot);
 
                         // Compute view-projection matrix
-                        let pan = viewport.pan_offset();
-                        let zoom = viewport.zoom();
+                        let pan = state.viewport.pan_offset();
+                        let zoom = state.viewport.zoom();
                         let view_proj = compute_view_proj(&snapshot.grid_spec, pan.x, pan.y, zoom);
 
                         // Update all pipelines from snapshot
-                        let ctrl_pressed = input_handler.is_key_pressed(VirtualKeyCode::LControl)
-                            || input_handler.is_key_pressed(VirtualKeyCode::RControl);
+                        let ctrl_pressed = state.input.is_key_pressed(VirtualKeyCode::LControl)
+                            || state.input.is_key_pressed(VirtualKeyCode::RControl);
+                        let cursor_wp = (state.cursor_world_pos.x, state.cursor_world_pos.y);
                         pipelines.update_from_snapshot(
                             &ctx,
                             snapshot,
                             view_proj,
-                            cursor_world_pos,
-                            BallFactory::radius_for_size_idx(current_ball_size_idx),
+                            cursor_wp,
+                            BallFactory::radius_for_size_idx(state.current_ball_size_idx),
                             ctrl_pressed,
                         );
 
@@ -249,6 +204,10 @@ impl WgpuWindow {
                             }
                         }
                     }
+
+                    // Mark frame as displayed so should_render() won't
+                    // re-trigger for the same data.
+                    state.end_frame();
                 }
                 _ => {}
             }
@@ -269,17 +228,10 @@ fn default_grid_spec() -> CellGridSpec {
 }
 
 /// Handle window events (resize, input, etc.)
-#[allow(clippy::too_many_arguments)]
 fn handle_window_event(
     event: WindowEvent,
     ctx: &mut WgpuContext,
-    physics: &PhysicsCoordinator,
-    render_drawing: &mut bool,
-    viewport: &mut ViewportTransform,
-    cursor_world_pos: &mut (f32, f32),
-    current_ball_size_idx: &mut usize,
-    input_handler: &mut InputHandler,
-    energy_manager: &mut EnergyWindowManager,
+    state: &mut UnifiedRenderState,
     pipelines: &mut WgpuPipelines,
     _current_grid_spec: &CellGridSpec,
     window_target: &winit::event_loop::EventLoopWindowTarget<()>,
@@ -293,50 +245,40 @@ fn handle_window_event(
         WindowEvent::Resized(size) => {
             println!("Window resized to {}x{}", size.width, size.height);
             ctx.resize(size.width, size.height);
-
-            let world_rect = ViewportTransform::compute_world_bounds_from_window_size(
-                size.width,
-                size.height,
+            state.handle_resize(
+                size.width as f32,
+                size.height as f32,
                 (MARGIN_PX_X, MARGIN_PX_Y),
             );
-            physics.send_command(PhysicsCommand::Resize { world_rect });
-            viewport.set_world_bounds(world_rect);
-            viewport.on_window_resize((size.width as f32, size.height as f32));
         }
         WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
             ctx.resize(new_inner_size.width, new_inner_size.height);
-            let world_rect = ViewportTransform::compute_world_bounds_from_window_size(
-                new_inner_size.width,
-                new_inner_size.height,
+            state.handle_resize(
+                new_inner_size.width as f32,
+                new_inner_size.height as f32,
                 (MARGIN_PX_X, MARGIN_PX_Y),
             );
-            physics.send_command(PhysicsCommand::Resize { world_rect });
-            viewport.set_world_bounds(world_rect);
-            viewport.on_window_resize((new_inner_size.width as f32, new_inner_size.height as f32));
         }
-        WindowEvent::MouseInput { state, button, .. } => {
-            // Get current cursor positions for mouse click
-            let world_pos = input_handler.cursor_pos();
-            let screen_pos = input_handler.cursor_pos_px();
-            let pan_offset = viewport.pan_offset();
+        WindowEvent::MouseInput {
+            state: btn_state,
+            button,
+            ..
+        } => {
+            let world_pos = state.input.cursor_pos();
+            let screen_pos = state.input.cursor_pos_px();
+            let pan_offset = state.viewport.pan_offset();
 
-            if let Some(action) =
-                input_handler.handle_mouse_button(button, state, screen_pos, world_pos, pan_offset)
+            if let Some(action) = state
+                .input
+                .handle_mouse_button(button, btn_state, screen_pos, world_pos, pan_offset)
             {
-                // Handle WGPU-specific actions (NextBallSize)
-                if let InputAction::NextBallSize = action {
-                    *current_ball_size_idx = (*current_ball_size_idx + 1) % NUM_BALL_SIZES;
-                    let radius = BallFactory::radius_for_size_idx(*current_ball_size_idx);
-                    println!("Ball size: {:.2} (index {})", radius, current_ball_size_idx);
-                }
-
                 execute_input_action(
                     &action,
-                    physics,
-                    render_drawing,
-                    viewport,
-                    current_ball_size_idx,
-                    energy_manager,
+                    &state.physics,
+                    &mut state.render_drawing,
+                    &mut state.viewport,
+                    &mut state.current_ball_size_idx,
+                    &mut state.energy_manager,
                     window_target,
                     &mut pipelines.ball,
                     &ctx.queue,
@@ -344,35 +286,28 @@ fn handle_window_event(
             }
         }
         WindowEvent::CursorMoved { position, .. } => {
-            let world_pos = viewport.px_to_world(&[position.x as f32, position.y as f32]);
+            state.update_cursor_world_pos(&[position.x as f32, position.y as f32]);
 
-            // Update cursor position in InputHandler
-            input_handler.set_cursor_pos(world_pos, [position.x as f32, position.y as f32]);
-
-            *cursor_world_pos = (world_pos.x, world_pos.y);
-
-            if let Some(InputAction::PanUpdate { delta }) =
-                input_handler.handle_mouse_motion(position.x as f32, position.y as f32)
+            if let Some(InputAction::PanUpdate { delta }) = state
+                .input
+                .handle_mouse_motion(position.x as f32, position.y as f32)
             {
-                let start_offset = input_handler.pan_start_offset();
-                let zoom = viewport.zoom();
-                let new_pan = ViewportTransform::apply_pan_delta(delta, start_offset, zoom);
-                viewport.pan(new_pan);
+                state.apply_pan_from_input(delta);
             }
         }
         WindowEvent::MouseWheel { delta, .. } => {
-            let cursor_pos = input_handler.cursor_pos();
+            let cursor_pos = state.input.cursor_pos();
 
-            if let Some(action) = input_handler.handle_mouse_wheel(delta, cursor_pos) {
+            if let Some(action) = state.input.handle_mouse_wheel(delta, cursor_pos) {
                 match &action {
                     InputAction::ZoomIn { center } => {
-                        viewport.zoom_at_point(center, 1.1);
+                        state.zoom_at_point(center, 1.1);
                     }
                     InputAction::ZoomOut { center } => {
-                        viewport.zoom_at_point(center, 1.0 / 1.1);
+                        state.zoom_at_point(center, 1.0 / 1.1);
                     }
                     InputAction::ResetView => {
-                        viewport.reset();
+                        state.reset_view();
                     }
                     _ => {}
                 }
@@ -387,14 +322,14 @@ fn handle_window_event(
                 },
             ..
         } => {
-            if let Some(action) = input_handler.handle_key_down(key, false) {
+            if let Some(action) = state.input.handle_key_down(key, false) {
                 execute_input_action(
                     &action,
-                    physics,
-                    render_drawing,
-                    viewport,
-                    current_ball_size_idx,
-                    energy_manager,
+                    &state.physics,
+                    &mut state.render_drawing,
+                    &mut state.viewport,
+                    &mut state.current_ball_size_idx,
+                    &mut state.energy_manager,
                     window_target,
                     &mut pipelines.ball,
                     &ctx.queue,
@@ -410,14 +345,14 @@ fn handle_window_event(
                 },
             ..
         } => {
-            if let Some(action) = input_handler.handle_key_up(key) {
+            if let Some(action) = state.input.handle_key_up(key) {
                 execute_input_action(
                     &action,
-                    physics,
-                    render_drawing,
-                    viewport,
-                    current_ball_size_idx,
-                    energy_manager,
+                    &state.physics,
+                    &mut state.render_drawing,
+                    &mut state.viewport,
+                    &mut state.current_ball_size_idx,
+                    &mut state.energy_manager,
                     window_target,
                     &mut pipelines.ball,
                     &ctx.queue,

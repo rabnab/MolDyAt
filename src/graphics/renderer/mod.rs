@@ -8,3 +8,7 @@ pub use event_loop::{InputAction, InputHandler, KeyCode};
 // Public API for unified viewport transformation
 #[allow(unused_imports)]
 pub use viewport::ViewportTransform;
+
+// Public API for unified render state
+#[allow(unused_imports)]
+pub use event_loop::UnifiedRenderState;

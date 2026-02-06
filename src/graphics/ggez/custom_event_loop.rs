@@ -1,30 +1,23 @@
+use crate::application::MainContent;
 use crate::application::physics_thread::PhysicsCommand;
-use crate::application::{LogStuff, MainContent};
-use crate::graphics::energy_plot::EnergyData;
 use crate::graphics::ggez::ggez_renderer::GgezRenderer;
 use crate::graphics::ggez::ggez_renderer_backend::GgezBackend;
-use crate::graphics::renderer::event_loop::{EnergyWindowManager, EventLoopState, InputAction};
+use crate::graphics::renderer::event_loop::{InputAction, UnifiedRenderState};
 use crate::graphics::renderer::viewport::ViewportTransform;
+use crate::graphics::window::{MARGIN_PX_X, MARGIN_PX_Y};
 use ggez::Context;
 use ggez::event::process_event;
 use ggez::event::winit_event::{ElementState, Event, KeyboardInput, WindowEvent};
 use ggez::input::keyboard::KeyCode;
-use std::sync::{Arc, Mutex};
 use winit::event_loop::{ControlFlow, EventLoop};
 
 pub struct CustomEventLoop {
-    // Shared state with InputHandler, PhysicsCoordinator, and ViewportState
-    state: EventLoopState,
+    /// Unified state shared across all renderer backends.
+    state: UnifiedRenderState,
 
-    // ggez-specific fields
+    /// ggez-specific renderer (owns meshes, caches, its own viewport copy
+    /// for draw-call coordinate transforms).
     renderer: GgezRenderer,
-
-    // Shared energy window management
-    energy_manager: EnergyWindowManager,
-
-    // Additional tracking for render FPS
-    last_processed_step: u64,
-    simulation_fps: f32,
 }
 
 impl CustomEventLoop {
@@ -34,21 +27,14 @@ impl CustomEventLoop {
     /// * `application` - MainContent with simulation state (will be moved to physics thread)
     /// * `renderer` - Renderer for visualization
     pub fn new(application: MainContent, renderer: GgezRenderer) -> Self {
-        let energy_data = Arc::new(Mutex::new(EnergyData::new()));
+        let world_bounds = renderer.get_world_region();
+        let vp = renderer.viewport();
+        let window_size = vp.window_size_px();
+        let margin_px = (MARGIN_PX_X, MARGIN_PX_Y);
 
-        // Create shared event loop state (this spawns physics thread)
-        let state = EventLoopState::new(application);
+        let state = UnifiedRenderState::new(application, world_bounds, window_size, margin_px);
 
-        // Use shared energy window manager
-        let energy_manager = EnergyWindowManager::new(energy_data);
-
-        Self {
-            state,
-            renderer,
-            energy_manager,
-            last_processed_step: 0,
-            simulation_fps: 0.0,
-        }
+        Self { state, renderer }
     }
 
     // No longer need toggle_energy_window - use energy_manager.toggle() instead
@@ -77,8 +63,8 @@ impl CustomEventLoop {
             match event {
                 Event::WindowEvent { event, window_id } => {
                     // Check if this event is for the energy window
-                    if self.energy_manager.is_energy_window_event(window_id) {
-                        self.energy_manager.handle_event(event);
+                    if self.state.energy_manager.is_energy_window_event(window_id) {
+                        self.state.energy_manager.handle_event(event);
                         return;
                     }
                     // Otherwise, handle as main window event
@@ -86,8 +72,8 @@ impl CustomEventLoop {
                 }
                 Event::RedrawRequested(window_id) => {
                     // Check if redraw is for energy window
-                    if self.energy_manager.is_energy_window_event(window_id) {
-                        self.energy_manager.handle_redraw();
+                    if self.state.energy_manager.is_energy_window_event(window_id) {
+                        self.state.energy_manager.handle_redraw();
                     }
                     // Otherwise it's for the main window, ggez handles it
                 }
@@ -126,36 +112,37 @@ impl CustomEventLoop {
                 };
 
                 if let Some(action) = action {
-                    // Handle ggez-specific actions here
+                    // Handle ggez-specific actions that need local work.
+                    // Actions fully handled here are NOT forwarded to
+                    // process_action to avoid double-dispatch.
+                    let mut handled_locally = false;
                     match &action {
                         InputAction::ToggleEnergyWindow => {
-                            self.energy_manager.toggle(window_target);
+                            self.state.energy_manager.toggle(window_target);
+                            handled_locally = true;
                         }
                         InputAction::CyclePlotContent => {
                             self.renderer.cycle_plot_content();
+                            handled_locally = true;
                         }
                         InputAction::EnableCursor { repeated } => {
                             self.renderer.enable_drawing_cursor(*repeated);
+                            handled_locally = true;
                         }
                         InputAction::DisableCursor => {
                             self.renderer.disable_drawing_cursor();
-                        }
-                        InputAction::PrintHelp => {
-                            MainContent::print_help_message();
-                        }
-                        InputAction::ToggleRendering => {
-                            let new_state = !self.state.render_drawing;
-                            self.state.render_drawing = new_state;
-                            println!("============\nRender drawing toggled to {}", new_state);
+                            handled_locally = true;
                         }
                         InputAction::ResetView => {
+                            // Must also reset the ggez renderer's own viewport.
                             self.renderer.viewport_mut().reset();
-                            self.state.view_dirty = true;
                         }
                         _ => {}
                     }
-                    // Process generic actions through EventLoopState
-                    self.state.process_action(&action);
+                    // Forward remaining actions to the shared handler.
+                    if !handled_locally {
+                        self.state.process_action(&action);
+                    }
                 }
             }
             WindowEvent::MouseInput {
@@ -235,7 +222,7 @@ impl CustomEventLoop {
     /// This method reads the latest snapshot and renders it without accessing MainContent
     /// Implements freshness checking to prevent displaying stale frames
     fn render_from_snapshot(&mut self, ctx: &mut Context) -> Option<()> {
-        // Use EventLoopState's should_render check
+        // Use UnifiedRenderState's should_render check
         if !self.state.should_render() {
             return Some(());
         }
@@ -271,8 +258,8 @@ impl CustomEventLoop {
         // Otherwise we get "SurfaceOutput must be dropped before new Surface" panic
         let _ = ctx.gfx.end_frame();
 
-        // Mark as rendered in EventLoopState
-        self.state.mark_rendered();
+        // Mark as rendered via UnifiedRenderState
+        self.state.end_frame();
 
         Some(())
     }
@@ -281,37 +268,23 @@ impl CustomEventLoop {
         // Tell the timer stuff a frame has happened
         ctx.time.tick();
 
+        // Begin-frame: grab latest snapshot and update FPS counters
+        self.state.begin_frame();
+
         if self.state.render_drawing {
             self.state.physics.increment_render_count();
 
-            // Skip most frames to reduce load
             // Physics runs in separate thread, we just render from snapshot
             self.render_from_snapshot(ctx);
         }
 
-        // Update render FPS
+        // Update render FPS via PhysicsCoordinator (kept for ggez-side tracking)
         if let Some(fps) = self.state.physics.update_render_fps() {
-            // FPS was updated, continue
             let _ = fps;
         }
 
-        // Update energy data from snapshot - only once per simulation step
-        if let Some(snapshot) = self.state.physics.get_latest_snapshot() {
-            // Only update if this is a new simulation step
-            if snapshot.simulation_step > self.last_processed_step {
-                // Use actual physics FPS from snapshot (measured in physics thread)
-                // This is the true simulation performance, not the snapshot observation rate
-                self.simulation_fps = snapshot.physics_fps;
-                self.last_processed_step = snapshot.simulation_step;
-
-                // Use shared energy manager for data updates
-                self.energy_manager.update_from_snapshot(
-                    &snapshot,
-                    self.state.physics.render_fps(),
-                    self.state.physics.steps_per_frame(),
-                );
-            }
-        }
+        // Update energy data from snapshot (idempotent per step)
+        self.state.update_energy_from_snapshot();
 
         // Handle +/- keys for time step control in threaded mode
         // Note: Use time-based cooldown to prevent rapid-fire commands
