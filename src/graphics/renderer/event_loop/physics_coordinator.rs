@@ -128,6 +128,27 @@ impl PhysicsCoordinator {
     pub fn is_running(&self) -> bool {
         self.physics_thread.is_some()
     }
+
+    /// Create a coordinator with no backing physics thread.
+    ///
+    /// `send_command` silently drops.  Useful for unit tests that only
+    /// exercise action-dispatch or state-management logic.
+    #[cfg(test)]
+    pub fn new_disconnected() -> Self {
+        Self {
+            physics_thread: None,
+            command_sender: None,
+            snapshot_slot: None,
+            last_processed_step: 0,
+            last_displayed_step: 0,
+            steps_per_frame: 0.0,
+            last_step_time: std::time::Instant::now(),
+            simulation_fps: 0.0,
+            render_fps: 0,
+            last_reported_render_fps: 0.0,
+            render_report_interval: std::time::Instant::now(),
+        }
+    }
 }
 
 impl Drop for PhysicsCoordinator {
