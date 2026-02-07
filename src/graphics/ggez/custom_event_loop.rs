@@ -229,6 +229,9 @@ impl CustomEventLoop {
 
         let snapshot = self.state.physics.get_latest_snapshot()?;
 
+        // Reset frame state at the start of each render
+        self.renderer.reset_frame();
+
         // Start metrics timer just before issuing draw calls.
         self.state.begin_render();
 

@@ -116,6 +116,11 @@ impl GgezRenderer {
         self.config.cycle_plot_content();
     }
 
+    /// Get current cache statistics.
+    pub fn cache_stats(&self) -> CacheStats {
+        self.cache_stats
+    }
+
     /// Adds the kinetic energy data points to the existing line mesh builder and creates the builder if it doesn't exist.
     pub fn add_vkin_to_line(&mut self, v_kin: &VecDeque<f32>) -> AppResult<()> {
         let win_def = self.window_def.borrow();
@@ -265,6 +270,14 @@ impl GgezRenderer {
 
     pub fn viewport(&self) -> &ViewportTransform {
         &self.viewport
+    }
+
+    /// Reset frame state at the start of each render frame.
+    ///
+    /// Increments the frame counter. Call this once per frame before
+    /// any drawing operations.
+    pub fn reset_frame(&mut self) {
+        self.frame.reset();
     }
 
     /// Draw balls from snapshot (new threaded architecture)
