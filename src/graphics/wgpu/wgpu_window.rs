@@ -284,17 +284,16 @@ fn handle_window_event(
                 .input
                 .handle_mouse_button(button, btn_state, screen_pos, world_pos, pan_offset)
             {
-                execute_input_action(
+                let affects_view = execute_input_action(
                     &action,
-                    &state.physics,
-                    &mut state.config,
-                    &mut state.viewport,
-                    &mut state.current_ball_size_idx,
-                    &mut state.energy_manager,
-                    window_target,
+                    state,
                     &mut pipelines.ball,
                     &ctx.queue,
+                    window_target,
                 );
+                if affects_view {
+                    state.view_dirty = true;
+                }
             }
         }
         WindowEvent::CursorMoved { position, .. } => {
@@ -335,17 +334,16 @@ fn handle_window_event(
             ..
         } => {
             if let Some(action) = state.input.handle_key_down(key, false) {
-                execute_input_action(
+                let affects_view = execute_input_action(
                     &action,
-                    &state.physics,
-                    &mut state.config,
-                    &mut state.viewport,
-                    &mut state.current_ball_size_idx,
-                    &mut state.energy_manager,
-                    window_target,
+                    state,
                     &mut pipelines.ball,
                     &ctx.queue,
+                    window_target,
                 );
+                if affects_view {
+                    state.view_dirty = true;
+                }
             }
         }
         WindowEvent::KeyboardInput {
@@ -358,17 +356,16 @@ fn handle_window_event(
             ..
         } => {
             if let Some(action) = state.input.handle_key_up(key) {
-                execute_input_action(
+                let affects_view = execute_input_action(
                     &action,
-                    &state.physics,
-                    &mut state.config,
-                    &mut state.viewport,
-                    &mut state.current_ball_size_idx,
-                    &mut state.energy_manager,
-                    window_target,
+                    state,
                     &mut pipelines.ball,
                     &ctx.queue,
+                    window_target,
                 );
+                if affects_view {
+                    state.view_dirty = true;
+                }
             }
         }
         _ => {}
