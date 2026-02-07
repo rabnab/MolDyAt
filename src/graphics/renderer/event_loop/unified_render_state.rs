@@ -173,9 +173,25 @@ impl UnifiedRenderState {
     /// Delegates to the single canonical `process_action_common` so there
     /// is only one copy of the action→command mapping.
     ///
+    /// Some actions (like ResetView, NextBallSize) are handled here before delegation
+    /// to avoid duplication and ensure proper state updates.
+    ///
     /// Returns `true` if the action affects the viewport (caller may still
     /// need to apply zoom/pan to `self.viewport` before the flag matters).
     pub fn process_action(&mut self, action: &InputAction) -> bool {
+        // Handle actions that need state updates beyond process_action_common
+        match action {
+            InputAction::ResetView => {
+                self.reset_view();
+                return true; // affects view
+            }
+            InputAction::NextBallSize => {
+                self.next_ball_size();
+                return false; // doesn't affect view
+            }
+            _ => {}
+        }
+
         let affects_view = process_action_common(action, &self.physics, &mut self.config);
         if affects_view {
             self.view_dirty = true;
@@ -229,6 +245,27 @@ impl UnifiedRenderState {
         let world = self.viewport.px_to_world(px);
         self.cursor_world_pos = world;
         self.input.set_cursor_pos(world, *px);
+    }
+
+    // ── Energy window helpers ────────────────────────────────────────
+
+    /// Toggle or cycle the energy plot window.
+    pub fn toggle_energy_window(
+        &mut self,
+        window_target: &winit::event_loop::EventLoopWindowTarget<()>,
+    ) {
+        self.energy_manager.toggle(window_target);
+    }
+
+    // ── Ball size helpers ────────────────────────────────────────────
+
+    /// Cycle to the next ball size.
+    ///
+    /// Updates the local size index and sends command to physics thread.
+    pub fn next_ball_size(&mut self) {
+        use crate::objects2d::ball_impl::NUM_BALL_SIZES;
+        self.current_ball_size_idx = (self.current_ball_size_idx + 1) % NUM_BALL_SIZES;
+        self.physics.send_command(PhysicsCommand::NextBallSize);
     }
 }
 
