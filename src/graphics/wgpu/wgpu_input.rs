@@ -4,57 +4,26 @@
 //! Extracted from wgpu_window to separate input handling concerns.
 
 use crate::graphics::renderer::InputAction;
-use crate::graphics::renderer::ViewportTransform;
-use crate::graphics::renderer::event_loop::{
-    EnergyWindowManager, PhysicsCoordinator, process_action_common,
-};
-use crate::graphics::renderer::state_layers::RendererConfig;
+use crate::graphics::renderer::event_loop::UnifiedRenderState;
 use crate::objects2d::ball_impl::{BallFactory, NUM_BALL_SIZES};
 
 use super::ball_pipeline::BallPipeline;
 
 /// Execute input actions from the centralized InputHandler.
 ///
-/// Maps InputAction enum to physics commands and view updates.
-/// This function is extracted from WgpuWindow to separate concerns.
-#[allow(clippy::too_many_arguments)]
+/// Handles WGPU-specific actions (cutoff rings, ball size cycling, energy window),
+/// then delegates common actions to UnifiedRenderState.
+///
+/// Returns `true` if the action affects the viewport.
 pub fn execute_input_action(
     action: &InputAction,
-    physics: &PhysicsCoordinator,
-    config: &mut RendererConfig,
-    viewport: &mut ViewportTransform,
-    ball_size_idx: &mut usize,
-    energy_manager: &mut EnergyWindowManager,
-    window_target: &winit::event_loop::EventLoopWindowTarget<()>,
+    state: &mut UnifiedRenderState,
     ball_pipeline: &mut BallPipeline,
     queue: &wgpu::Queue,
-) {
+    window_target: &winit::event_loop::EventLoopWindowTarget<()>,
+) -> bool {
+    // Handle WGPU-specific actions first
     match action {
-        // Simulation control
-        InputAction::NextBallSize => {
-            *ball_size_idx = (*ball_size_idx + 1) % NUM_BALL_SIZES;
-            let radius = BallFactory::radius_for_size_idx(*ball_size_idx);
-            println!("Ball size: {:.2} (index {})", radius, ball_size_idx);
-        }
-
-        // View control
-        InputAction::ResetView => {
-            viewport.reset();
-            println!("View reset");
-        }
-
-        // Energy window control
-        InputAction::ToggleEnergyWindow | InputAction::CyclePlotContent => {
-            energy_manager.toggle(window_target);
-        }
-
-        // Toggle real data display in energy window
-        // This switches between simulation units and SI units (Joules, Kelvin, m/s)
-        InputAction::ToggleRealData => {
-            // Delegated below
-        }
-
-        // Toggle cutoff rings around balls (WGPU-specific)
         InputAction::ToggleCutoffRings => {
             ball_pipeline.toggle_cutoff_rings(queue);
             let visible = ball_pipeline.are_cutoff_rings_visible();
@@ -62,23 +31,28 @@ pub fn execute_input_action(
                 "Cutoff rings: {}",
                 if visible { "visible" } else { "hidden" }
             );
+            return false; // doesn't affect view
         }
-
-        // Actions that are context-dependent or handled elsewhere
-        InputAction::EnableCursor { .. }
-        | InputAction::DisableCursor
-        | InputAction::UpdateCursor { .. }
-        | InputAction::EnableRandomBallSpeed
-        | InputAction::ZoomIn { .. }
-        | InputAction::ZoomOut { .. }
-        | InputAction::PanStart { .. }
-        | InputAction::PanUpdate { .. }
-        | InputAction::PanEnd => {
-            // These are handled separately in the event loop or not needed for WGPU
+        InputAction::NextBallSize => {
+            state.current_ball_size_idx = (state.current_ball_size_idx + 1) % NUM_BALL_SIZES;
+            let radius = BallFactory::radius_for_size_idx(state.current_ball_size_idx);
+            println!(
+                "Ball size: {:.2} (index {})",
+                radius, state.current_ball_size_idx
+            );
+            return false; // doesn't affect view
+        }
+        InputAction::ResetView => {
+            state.reset_view();
+            return true; // affects view
+        }
+        InputAction::ToggleEnergyWindow | InputAction::CyclePlotContent => {
+            state.energy_manager.toggle(window_target);
+            return false; // doesn't affect view
         }
         _ => {}
     }
 
-    // Delegate common physics/renderer actions to shared helper
-    let _ = process_action_common(action, physics, config);
+    // Delegate all other actions to UnifiedRenderState (single source of truth)
+    state.process_action(action)
 }
