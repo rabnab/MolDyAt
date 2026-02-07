@@ -43,9 +43,8 @@ pub struct GgezRenderer {
 
     // ── Backend-specific resources ──────────────────────────────────
     shader: Option<Shader>,
-    window_def: WindowDefinitionRef,
+    pub(crate) window_def: WindowDefinitionRef,
     cache: GgezMeshCache,
-    viewport: ViewportTransform,
 }
 
 impl GgezRenderer {
@@ -74,19 +73,6 @@ impl GgezRenderer {
             [windef.margin_px.0 * 2.0 + windef.region_px.0, 0.0]
         };
 
-        let world_bounds = window_def.borrow().compute_world_bounds_rect();
-
-        // Initialize unified viewport transformation system
-        let windef = window_def.borrow();
-        let window_width = windef.region_px.0 + 2.0 * windef.margin_px.0;
-        let window_height = windef.region_px.1 + 2.0 * windef.margin_px.1;
-        let viewport = ViewportTransform::new(
-            world_bounds,
-            (window_width, window_height),
-            windef.margin_px,
-        );
-        drop(windef);
-
         let config = RendererConfig {
             show_plot: plot_type,
             draw_cursor: false,
@@ -104,7 +90,6 @@ impl GgezRenderer {
             shader: None,
             window_def,
             cache,
-            viewport,
         }
     }
 
@@ -164,10 +149,15 @@ impl GgezRenderer {
         Ok(())
     }
 
-    pub fn draw_cursor(&self, backend: &mut dyn DrawingBackend, size_idx: usize) -> AppResult {
+    pub fn draw_cursor(
+        &self,
+        backend: &mut dyn DrawingBackend,
+        viewport: &ViewportTransform,
+        size_idx: usize,
+    ) -> AppResult {
         if self.config.draw_cursor {
             // Cursor should also scale with zoom
-            let zoom_scale = self.viewport.zoom();
+            let zoom_scale = viewport.zoom();
             backend.draw_ball_mesh(
                 0,
                 size_idx,
@@ -195,7 +185,7 @@ impl GgezRenderer {
         )?;
 
         // Draw zoom level indicator just above cursor position text
-        let zoom = self.viewport.zoom();
+        let zoom = viewport.zoom();
         let zoom_text = if zoom >= 10.0 {
             format!("Zoom: {:.0}x", zoom)
         } else {
@@ -219,16 +209,18 @@ impl GgezRenderer {
     ///
     /// # Arguments
     /// * `backend` - Drawing backend to render with
+    /// * `viewport` - Viewport transformation for coordinate conversion
     /// * `grid_spec` - Cell grid specification for background
     pub fn draw_frame(
         &mut self,
         backend: &mut dyn DrawingBackend,
+        viewport: &ViewportTransform,
         grid_spec: &crate::application::renderer_snapshot::CellGridSpec,
     ) -> AppResult<()> {
         let win_def = self.window_def.borrow();
 
         // 1) Draw cell grid and rectangle (short-lived &mut Canvas)
-        backend.draw_cell_grid_background(grid_spec, &win_def, &mut self.viewport)?;
+        backend.draw_cell_grid_background(grid_spec, &win_def, viewport)?;
         backend.draw_boundary_frame(win_def.margin_px, win_def.region_px)?;
 
         Ok(())
@@ -246,7 +238,7 @@ impl GgezRenderer {
         self.config.enable_cursor(repeated);
     }
 
-    pub fn resize(&mut self, width: f32, height: f32) {
+    pub fn resize(&mut self, viewport: &mut ViewportTransform, width: f32, height: f32) {
         self.cache.cell_mesh = None;
         let mut win_def = self.window_def.borrow_mut();
         win_def.resize(width, height);
@@ -256,20 +248,12 @@ impl GgezRenderer {
         // Update viewport world bounds and window size on resize
         let world_bounds = win_def.compute_world_bounds_rect();
         drop(win_def); // Release borrow before calling viewport methods
-        self.viewport.set_world_bounds(world_bounds);
-        self.viewport.on_window_resize((width, height));
+        viewport.set_world_bounds(world_bounds);
+        viewport.on_window_resize((width, height));
     }
 
     pub fn get_world_region(&self) -> crate::objects2d::Rect {
         self.window_def.borrow().compute_world_bounds_rect()
-    }
-
-    pub fn viewport_mut(&mut self) -> &mut ViewportTransform {
-        &mut self.viewport
-    }
-
-    pub fn viewport(&self) -> &ViewportTransform {
-        &self.viewport
     }
 
     /// Reset frame state at the start of each render frame.
@@ -284,10 +268,11 @@ impl GgezRenderer {
     pub fn draw_balls_from_snapshot(
         &mut self,
         backend: &mut dyn DrawingBackend,
+        viewport: &ViewportTransform,
         snapshot: &crate::application::renderer_snapshot::RendererSnapshot,
     ) -> AppResult<()> {
         // Draw ball symbols and neighbor lines from snapshot
-        self.draw_balls_from_snapshot_data(backend, snapshot)?;
+        self.draw_balls_from_snapshot_data(backend, viewport, snapshot)?;
         Ok(())
     }
 
@@ -296,6 +281,7 @@ impl GgezRenderer {
     fn draw_balls_from_snapshot_data(
         &mut self,
         backend: &mut dyn DrawingBackend,
+        viewport: &ViewportTransform,
         snapshot: &crate::application::renderer_snapshot::RendererSnapshot,
     ) -> AppResult {
         // Batch all tail lines for efficient rendering.
@@ -314,8 +300,8 @@ impl GgezRenderer {
                         let start_pos = &window[0];
                         let end_pos = &window[1];
                         // Use unified viewport transformation
-                        let start_px = self.viewport.world_to_px(start_pos);
-                        let end_px = self.viewport.world_to_px(end_pos);
+                        let start_px = viewport.world_to_px(start_pos);
+                        let end_px = viewport.world_to_px(end_pos);
                         tail_batch.push(TailSegment {
                             points: [start_px, end_px],
                             width: 1.0,
@@ -329,22 +315,22 @@ impl GgezRenderer {
         // Batch all neighbor lines for efficient rendering
         let mut line_batch: BatchRenderer<LineSegment> = BatchRenderer::new();
         collect_neighbor_lines(&snapshot.balls, &mut line_batch);
-        backend.flush_line_batch(&mut line_batch, &self.viewport)?;
+        backend.flush_line_batch(&mut line_batch, viewport)?;
 
         // Then, draw balls from snapshot data (on top of lines) with frustum culling
         for ball in &snapshot.balls {
             // Frustum culling: only render balls that are at least partially visible
             // Use ball radius for proper visibility testing
             let ball_radius = ball.radius;
-            if !self.viewport.is_circle_visible(&ball.position, ball_radius) {
+            if !viewport.is_circle_visible(&ball.position, ball_radius) {
                 continue; // Skip balls outside viewport
             }
 
             // Use unified viewport transformation
-            let ball_coord_px = self.viewport.world_to_px(&ball.position);
+            let ball_coord_px = viewport.world_to_px(&ball.position);
 
             // Scale balls with zoom level
-            let zoom_scale = self.viewport.zoom();
+            let zoom_scale = viewport.zoom();
 
             backend.draw_ball_mesh(
                 ball.id,
@@ -493,14 +479,23 @@ impl GgezRenderer {
         None
     }
 
-    pub(crate) fn update_cursor_and_text(&mut self, x_px: f32, y_px: f32) -> Vec2D {
+    /// Update cursor text display based on current cursor position.
+    ///
+    /// This is ggez-specific for rendering cursor coordinates.
+    /// The actual cursor position tracking is handled by UnifiedRenderState.
+    pub(crate) fn update_cursor_text(
+        &mut self,
+        viewport: &ViewportTransform,
+        x_px: f32,
+        y_px: f32,
+    ) {
         let win_def = self.window_def.borrow();
         let clamped_px = win_def.clamp_to_bounds(&Vec2D::new(x_px, y_px));
         let curs_pos = clamped_px;
         self.frame.cursor_pos_px = [clamped_px.x, clamped_px.y];
 
         // Use unified viewport transformation (same as wgpu)
-        let curs_pos_coord = self.viewport.px_to_world(&[clamped_px.x, clamped_px.y]);
+        let curs_pos_coord = viewport.px_to_world(&[clamped_px.x, clamped_px.y]);
 
         let origin = Vec2D::new(
             self.frame.cursor_text_origin_px[0],
@@ -514,7 +509,6 @@ impl GgezRenderer {
                 clamped_px.x, clamped_px.y, curs_pos_coord.x, curs_pos_coord.y,
             );
         }
-        curs_pos_coord
     }
 
     pub(crate) fn draw_line(
