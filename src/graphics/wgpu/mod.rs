@@ -28,8 +28,9 @@ mod wgpu_input;
 mod wgpu_pipelines;
 pub(crate) mod wgpu_window;
 
-// Re-exports for public API (allow unused for library-style exports)
-#[allow(unused_imports)]
+// Re-exports for internal use within wgpu renderer
+// These are generally only used within wgpu_window.rs and wgpu_pipelines.rs
+#[allow(unused_imports)] // Used conditionally within wgpu module
 pub use ball_pipeline::{BallPipeline, BallUniforms, GpuBallData};
 #[allow(unused_imports)]
 pub use crosshair_pipeline::{CrosshairPipeline, CrosshairUniforms};
