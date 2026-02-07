@@ -247,11 +247,10 @@ impl GgezRenderer {
         &mut self,
         backend: &mut dyn DrawingBackend,
         viewport: &ViewportTransform,
-        show_neighbor_lines: bool,
         snapshot: &crate::application::renderer_snapshot::RendererSnapshot,
     ) -> AppResult<()> {
         // Draw ball symbols and neighbor lines from snapshot
-        self.draw_balls_from_snapshot_data(backend, viewport, show_neighbor_lines, snapshot)?;
+        self.draw_balls_from_snapshot_data(backend, viewport, snapshot)?;
         Ok(())
     }
 
@@ -261,13 +260,12 @@ impl GgezRenderer {
         &mut self,
         backend: &mut dyn DrawingBackend,
         viewport: &ViewportTransform,
-        show_neighbor_lines: bool,
         snapshot: &crate::application::renderer_snapshot::RendererSnapshot,
     ) -> AppResult {
         // Batch all tail lines for efficient rendering.
         // Skip tail batching entirely if no ball has a tail.
         let has_any_tails = snapshot.balls.iter().any(|b| !b.tail.is_empty());
-        if has_any_tails && show_neighbor_lines {
+        if has_any_tails {
             let mut tail_batch: BatchRenderer<TailSegment> = BatchRenderer::new();
             for ball in &snapshot.balls {
                 let tail_len = ball.tail.len();
