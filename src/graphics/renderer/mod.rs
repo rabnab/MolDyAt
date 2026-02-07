@@ -12,3 +12,7 @@ pub use viewport::ViewportTransform;
 // Public API for unified render state
 #[allow(unused_imports)]
 pub use event_loop::UnifiedRenderState;
+
+// Public API for per-frame metrics
+#[allow(unused_imports)]
+pub use event_loop::{FrameMetrics, MetricsCollector};

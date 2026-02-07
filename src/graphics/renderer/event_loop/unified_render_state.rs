@@ -24,6 +24,7 @@ use std::sync::{Arc, Mutex};
 use super::energy_window_manager::EnergyWindowManager;
 use super::event_loop_state::process_action_common;
 use super::input_handler::{InputAction, InputHandler};
+use super::metrics::MetricsCollector;
 use super::physics_coordinator::PhysicsCoordinator;
 
 use crate::application::physics_thread::PhysicsCommand;
@@ -62,10 +63,9 @@ pub struct UnifiedRenderState {
     /// Active ball-size index (cycled with right-click).
     pub current_ball_size_idx: usize,
 
-    // ── Render-FPS tracking ──────────────────────────────────────────
-    render_frame_count: u64,
-    render_fps_timer: std::time::Instant,
-    render_fps: f32,
+    // ── Per-frame metrics ────────────────────────────────────────────
+    /// Renderer-agnostic frame metrics (FPS, draw calls, etc.).
+    pub metrics: MetricsCollector,
 }
 
 impl UnifiedRenderState {
@@ -100,9 +100,7 @@ impl UnifiedRenderState {
             last_snapshot: None,
             cursor_world_pos: Vec2D::zero(),
             current_ball_size_idx: 2, // default mid-size
-            render_frame_count: 0,
-            render_fps_timer: std::time::Instant::now(),
-            render_fps: 0.0,
+            metrics: MetricsCollector::new(),
         }
     }
 
@@ -110,21 +108,21 @@ impl UnifiedRenderState {
 
     /// Call at the start of each frame.
     ///
-    /// Pulls the latest physics snapshot and updates render-FPS tracking.
+    /// Pulls the latest physics snapshot.  Does **not** start the metrics
+    /// timer — call [`begin_render`] for that.
     pub fn begin_frame(&mut self) {
         // Grab latest snapshot from the physics thread.
         if let Some(snapshot) = self.physics.get_latest_snapshot() {
             self.last_snapshot = Some(snapshot);
         }
+    }
 
-        // Render-FPS counter.
-        self.render_frame_count += 1;
-        let elapsed = self.render_fps_timer.elapsed().as_secs_f32();
-        if elapsed >= 1.0 {
-            self.render_fps = self.render_frame_count as f32 / elapsed;
-            self.render_frame_count = 0;
-            self.render_fps_timer = std::time::Instant::now();
-        }
+    /// Start the per-frame metrics timer.
+    ///
+    /// Call this once per frame, immediately before issuing draw calls.
+    /// Paired with [`end_frame`] which finalises the metrics.
+    pub fn begin_render(&mut self) {
+        self.metrics.begin_render();
     }
 
     /// Whether the renderer should draw a frame right now.
@@ -134,10 +132,12 @@ impl UnifiedRenderState {
 
     /// Call after a frame has been drawn.
     ///
-    /// Clears the `view_dirty` flag and marks the current simulation step
-    /// as displayed so `should_render` won't re-trigger for the same data.
+    /// Finalises per-frame metrics, clears the `view_dirty` flag, and
+    /// marks the current simulation step as displayed so `should_render`
+    /// won't re-trigger for the same data.
     pub fn end_frame(&mut self) {
         self.view_dirty = false;
+        self.metrics.end_frame();
         if let Some(snapshot) = &self.last_snapshot {
             self.physics.mark_step_displayed(snapshot.simulation_step);
         }
@@ -151,17 +151,19 @@ impl UnifiedRenderState {
     /// deduplicates by simulation step.
     pub fn update_energy_from_snapshot(&mut self) {
         if let Some(snapshot) = &self.last_snapshot {
+            let frame_metrics = self.metrics.current().clone();
             self.energy_manager.update_from_snapshot(
                 snapshot,
-                self.render_fps,
+                self.metrics.average_fps(),
                 self.physics.steps_per_frame(),
+                &frame_metrics,
             );
         }
     }
 
-    /// Current render FPS (updated once per second).
+    /// Smoothed render FPS (rolling average over the last 60 frames).
     pub fn render_fps(&self) -> f32 {
-        self.render_fps
+        self.metrics.average_fps()
     }
 
     // ── Input-action dispatch ────────────────────────────────────────
