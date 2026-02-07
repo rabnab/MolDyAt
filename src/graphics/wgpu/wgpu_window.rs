@@ -277,19 +277,10 @@ fn handle_window_event(
                 world_rect,
             );
         }
-        WindowEvent::MouseInput {
-            state: btn_state,
-            button,
-            ..
-        } => {
-            state.view_dirty = state.handle_mouse_input_event(button, btn_state);
-        }
-        WindowEvent::CursorMoved { position, .. } => {
-            state.view_dirty =
-                state.handle_cursor_moved_event(position.x as f32, position.y as f32);
-        }
-        WindowEvent::MouseWheel { delta, .. } => {
-            state.view_dirty = state.handle_mouse_wheel_event(delta);
+        WindowEvent::MouseInput { .. }
+        | WindowEvent::CursorMoved { .. }
+        | WindowEvent::MouseWheel { .. } => {
+            state.view_dirty = state.handle_mouse_event(&event);
         }
         WindowEvent::KeyboardInput {
             input:

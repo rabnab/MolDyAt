@@ -296,6 +296,25 @@ impl UnifiedRenderState {
 
     // ── Centralized mouse event handlers ──────────────────────────────
 
+    /// Centralized handler for all mouse events.
+    ///
+    /// Processes MouseInput, CursorMoved, and MouseWheel events.
+    /// Returns true if the action affects the viewport.
+    pub fn handle_mouse_event(&mut self, event: &winit::event::WindowEvent) -> bool {
+        match event {
+            winit::event::WindowEvent::MouseInput { state, button, .. } => {
+                self.handle_mouse_input_event(*button, *state)
+            }
+            winit::event::WindowEvent::CursorMoved { position, .. } => {
+                self.handle_cursor_moved_event(position.x as f32, position.y as f32)
+            }
+            winit::event::WindowEvent::MouseWheel { delta, .. } => {
+                self.handle_mouse_wheel_event(*delta)
+            }
+            _ => false,
+        }
+    }
+
     /// Handle mouse button input event.
     ///
     /// Processes mouse clicks and drags for pan, ball addition, and ball size cycling.
