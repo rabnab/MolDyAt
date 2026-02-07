@@ -215,18 +215,19 @@ impl GgezRenderer {
         backend.finish_frame()
     }
 
-    pub fn resize(&mut self, viewport: &mut ViewportTransform, width: f32, height: f32) {
+    /// Resize renderer-specific state (window definition, caches, text positions).
+    ///
+    /// # Returns
+    /// The updated world bounds rectangle after resize.
+    pub fn resize(&mut self, width: f32, height: f32) -> crate::objects2d::Rect {
         self.cache.cell_mesh = None;
         let mut win_def = self.window_def.borrow_mut();
         win_def.resize(width, height);
         self.frame.ball_status_text_pos =
             Some([win_def.margin_px.0 * 2.0 + win_def.region_px.0, 0.0]);
-
-        // Update viewport world bounds and window size on resize
         let world_bounds = win_def.compute_world_bounds_rect();
-        drop(win_def); // Release borrow before calling viewport methods
-        viewport.set_world_bounds(world_bounds);
-        viewport.on_window_resize((width, height));
+        drop(win_def);
+        world_bounds
     }
 
     pub fn get_world_region(&self) -> crate::objects2d::Rect {

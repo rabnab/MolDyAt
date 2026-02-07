@@ -236,6 +236,19 @@ impl UnifiedRenderState {
             new_height as u32,
             margin_px,
         );
+        self.handle_resize_with_world_rect(new_width, new_height, world_rect);
+    }
+
+    /// Handle window resize with pre-computed world bounds.
+    ///
+    /// Use this when the renderer has custom logic for computing world bounds
+    /// (e.g., ggez with its WindowDefinition).
+    pub fn handle_resize_with_world_rect(
+        &mut self,
+        new_width: f32,
+        new_height: f32,
+        world_rect: crate::objects2d::Rect,
+    ) {
         self.physics
             .send_command(PhysicsCommand::Resize { world_rect });
         self.viewport.set_world_bounds(world_rect);
