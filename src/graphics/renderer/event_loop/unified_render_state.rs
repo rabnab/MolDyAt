@@ -267,6 +267,79 @@ impl UnifiedRenderState {
         self.current_ball_size_idx = (self.current_ball_size_idx + 1) % NUM_BALL_SIZES;
         self.physics.send_command(PhysicsCommand::NextBallSize);
     }
+
+    // ── Centralized mouse event handlers ──────────────────────────────
+
+    /// Handle mouse button input event.
+    ///
+    /// Processes mouse clicks and drags for pan, ball addition, and ball size cycling.
+    /// Returns true if the action affects the viewport.
+    pub fn handle_mouse_input_event(
+        &mut self,
+        button: winit::event::MouseButton,
+        state: winit::event::ElementState,
+    ) -> bool {
+        let world_pos = self.input.cursor_pos();
+        let screen_pos = self.input.cursor_pos_px();
+        let pan_offset = self.viewport.pan_offset();
+
+        if let Some(action) = self
+            .input
+            .handle_mouse_button(button, state, screen_pos, world_pos, pan_offset)
+        {
+            return self.process_action(&action);
+        }
+        false
+    }
+
+    /// Handle cursor moved event.
+    ///
+    /// Updates cursor position and processes pan gestures.
+    /// Returns true if the action affects the viewport.
+    pub fn handle_cursor_moved_event(&mut self, x: f32, y: f32) -> bool {
+        // Update cursor position using shared state logic
+        self.update_cursor_world_pos(&[x, y]);
+
+        if let Some(action) = self.input.handle_mouse_motion(x, y) {
+            if let InputAction::PanUpdate { delta } = &action {
+                self.apply_pan_from_input(*delta);
+                return true;
+            } else {
+                return self.process_action(&action);
+            }
+        }
+        false
+    }
+
+    /// Handle mouse wheel event.
+    ///
+    /// Processes zoom in/out and view reset actions.
+    /// Returns true if the action affects the viewport.
+    pub fn handle_mouse_wheel_event(&mut self, delta: winit::event::MouseScrollDelta) -> bool {
+        let cursor_pos = self.input.cursor_pos();
+
+        if let Some(action) = self.input.handle_mouse_wheel(delta, cursor_pos) {
+            match &action {
+                InputAction::ZoomIn { center } => {
+                    self.zoom_at_point(center, 1.1);
+                    self.process_action(&action);
+                    return true;
+                }
+                InputAction::ZoomOut { center } => {
+                    self.zoom_at_point(center, 1.0 / 1.1);
+                    self.process_action(&action);
+                    return true;
+                }
+                InputAction::ResetView => {
+                    self.reset_view();
+                    self.process_action(&action);
+                    return true;
+                }
+                _ => return self.process_action(&action),
+            }
+        }
+        false
+    }
 }
 
 #[cfg(test)]
