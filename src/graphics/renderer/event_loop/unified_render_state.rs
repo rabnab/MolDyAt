@@ -18,6 +18,7 @@ use crate::application::MainContent;
 use crate::application::renderer_snapshot::RendererSnapshot;
 use crate::graphics::energy_plot::{EnergyData, SharedEnergyData};
 use crate::graphics::renderer::ViewportTransform;
+use crate::graphics::renderer::state_layers::RendererConfig;
 use crate::objects2d::{Rect, Vec2D};
 use std::sync::{Arc, Mutex};
 
@@ -47,9 +48,11 @@ pub struct UnifiedRenderState {
     // ── Energy window ─────────────────────────────────────────────────
     pub energy_manager: EnergyWindowManager,
 
+    // ── Renderer config ─────────────────────────────────────────────
+    /// Shared renderer configuration (plot type, cursor toggle, render enable).
+    pub config: RendererConfig,
+
     // ── Frame flags ───────────────────────────────────────────────────
-    /// Whether rendering is enabled (toggled by F2).
-    pub render_drawing: bool,
     /// Set whenever the viewport changes; cleared after a frame is drawn.
     pub view_dirty: bool,
 
@@ -95,7 +98,7 @@ impl UnifiedRenderState {
             physics,
             viewport,
             energy_manager,
-            render_drawing: true,
+            config: RendererConfig::default(),
             view_dirty: true,
             last_snapshot: None,
             cursor_world_pos: Vec2D::zero(),
@@ -127,7 +130,7 @@ impl UnifiedRenderState {
 
     /// Whether the renderer should draw a frame right now.
     pub fn should_render(&self) -> bool {
-        self.render_drawing && (self.physics.is_new_step_available() || self.view_dirty)
+        self.config.render_drawing && (self.physics.is_new_step_available() || self.view_dirty)
     }
 
     /// Call after a frame has been drawn.
@@ -176,7 +179,7 @@ impl UnifiedRenderState {
     /// Returns `true` if the action affects the viewport (caller may still
     /// need to apply zoom/pan to `self.viewport` before the flag matters).
     pub fn process_action(&mut self, action: &InputAction) -> bool {
-        let affects_view = process_action_common(action, &self.physics, &mut self.render_drawing);
+        let affects_view = process_action_common(action, &self.physics, &mut self.config);
         if affects_view {
             self.view_dirty = true;
         }
@@ -250,58 +253,58 @@ mod tests {
 
     #[test]
     fn zoom_in_marks_view_dirty() {
-        let mut drawing = true;
+        let mut config = RendererConfig::default();
         let physics = make_disconnected_coordinator();
         let action = InputAction::ZoomIn {
             center: Vec2D::zero(),
         };
-        assert!(process_action_common(&action, &physics, &mut drawing));
+        assert!(process_action_common(&action, &physics, &mut config));
     }
 
     #[test]
     fn zoom_out_marks_view_dirty() {
-        let mut drawing = true;
+        let mut config = RendererConfig::default();
         let physics = make_disconnected_coordinator();
         let action = InputAction::ZoomOut {
             center: Vec2D::zero(),
         };
-        assert!(process_action_common(&action, &physics, &mut drawing));
+        assert!(process_action_common(&action, &physics, &mut config));
     }
 
     #[test]
     fn pan_update_marks_view_dirty() {
-        let mut drawing = true;
+        let mut config = RendererConfig::default();
         let physics = make_disconnected_coordinator();
         let action = InputAction::PanUpdate {
             delta: Vec2D::new(5.0, 3.0),
         };
-        assert!(process_action_common(&action, &physics, &mut drawing));
+        assert!(process_action_common(&action, &physics, &mut config));
     }
 
     #[test]
     fn reset_view_marks_view_dirty() {
-        let mut drawing = true;
+        let mut config = RendererConfig::default();
         let physics = make_disconnected_coordinator();
         let action = InputAction::ResetView;
-        assert!(process_action_common(&action, &physics, &mut drawing));
+        assert!(process_action_common(&action, &physics, &mut config));
     }
 
     #[test]
     fn toggle_rendering_flips_flag() {
-        let mut drawing = true;
+        let mut config = RendererConfig::default();
         let physics = make_disconnected_coordinator();
         let action = InputAction::ToggleRendering;
-        let affects = process_action_common(&action, &physics, &mut drawing);
+        let affects = process_action_common(&action, &physics, &mut config);
         assert!(!affects);
-        assert!(!drawing);
+        assert!(!config.render_drawing);
         // Toggle back.
-        process_action_common(&action, &physics, &mut drawing);
-        assert!(drawing);
+        process_action_common(&action, &physics, &mut config);
+        assert!(config.render_drawing);
     }
 
     #[test]
     fn renderer_specific_actions_do_not_affect_view() {
-        let mut drawing = true;
+        let mut config = RendererConfig::default();
         let physics = make_disconnected_coordinator();
         let actions = [
             InputAction::CyclePlotContent,
@@ -311,7 +314,7 @@ mod tests {
         ];
         for action in &actions {
             assert!(
-                !process_action_common(action, &physics, &mut drawing),
+                !process_action_common(action, &physics, &mut config),
                 "action {:?} should not affect view",
                 action
             );

@@ -6,6 +6,7 @@ use crate::graphics::renderer::ViewportTransform;
 use crate::graphics::renderer::batch_renderer::{
     BatchRenderer, LineSegment, collect_neighbor_lines,
 };
+use crate::graphics::renderer::state_layers::{CacheStats, FrameState, RendererConfig};
 use crate::graphics::window::window_definition::WindowDefinition;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::{Ball2D, BallPhysics};
@@ -15,15 +16,9 @@ use ggez::mint::Point2;
 use std::cell::Ref;
 use std::collections::VecDeque;
 
-/// Content types for energy plots
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PlotContent {
-    None,
-    Ekin,
-    Epot,
-    Etot,
-    All,
-}
+// Re-export PlotContent from state_layers so existing callers that
+// imported it from ggez_renderer still work.
+pub use crate::graphics::renderer::state_layers::PlotContent;
 
 /// Ball visual types for rendering
 pub enum BallType {
@@ -39,20 +34,17 @@ const LINE_THICKNESS: f32 = 2.0;
 const CROSSHAIR_COLOR: Color = Color::WHITE;
 
 pub struct GgezRenderer {
-    show_plot: PlotContent,
+    /// Stable configuration (plot type, cursor toggle).
+    config: RendererConfig,
+    /// Per-frame transient state.
+    frame: FrameState,
+    /// GPU-agnostic cache metrics.
+    cache_stats: CacheStats,
+
+    // ── Backend-specific resources ──────────────────────────────────
     shader: Option<Shader>,
-    ball_status_text_pos: Option<[f32; 2]>,
-    last_status_text: String,
-    txt_cursor: String,
-    curs_pos_of_txt: Vec2D,
     window_def: WindowDefinitionRef,
-    draw_cursor: bool,
-    cursor_pos_px: [f32; 2],
     cache: GgezMeshCache,
-    physics: Option<BallPhysics>,
-    string_elems: usize,
-    glyph_elems: usize,
-    ball_elems: usize,
     viewport: ViewportTransform,
 }
 
@@ -95,41 +87,33 @@ impl GgezRenderer {
         );
         drop(windef);
 
-        Self {
+        let config = RendererConfig {
             show_plot: plot_type,
-            window_def,
-            shader: None,
-            ball_status_text_pos: Some(ball_text_pos),
-            last_status_text: "".to_string(),
-            curs_pos_of_txt: Vec2D::zero(),
             draw_cursor: false,
-            cursor_pos_px: [0., 0.],
-            txt_cursor: format!("x: {}, y: {} pos ({:.3},{:.3})", 0., 0., 0., 0.,),
+            render_drawing: true,
+        };
+        let frame = FrameState {
+            ball_status_text_pos: Some(ball_text_pos),
+            ..FrameState::default()
+        };
+
+        Self {
+            config,
+            frame,
+            cache_stats: CacheStats::default(),
+            shader: None,
+            window_def,
             cache,
-            physics: None,
-            string_elems: 0,
-            glyph_elems: 0,
-            ball_elems: 0,
             viewport,
         }
     }
 
-    pub fn set_physics_engine(&mut self, engine: BallPhysics) {
-        self.physics = Some(engine);
-    }
-
     pub fn plot_type(&self) -> PlotContent {
-        self.show_plot
+        self.config.show_plot
     }
 
     pub fn cycle_plot_content(&mut self) {
-        self.show_plot = match self.show_plot {
-            PlotContent::None => PlotContent::Ekin,
-            PlotContent::Ekin => PlotContent::Epot,
-            PlotContent::Epot => PlotContent::Etot,
-            PlotContent::Etot => PlotContent::All,
-            PlotContent::All => PlotContent::None,
-        };
+        self.config.cycle_plot_content();
     }
 
     /// Adds the kinetic energy data points to the existing line mesh builder and creates the builder if it doesn't exist.
@@ -176,18 +160,18 @@ impl GgezRenderer {
     }
 
     pub fn draw_cursor(&self, backend: &mut dyn DrawingBackend, size_idx: usize) -> AppResult {
-        if self.draw_cursor {
+        if self.config.draw_cursor {
             // Cursor should also scale with zoom
             let zoom_scale = self.viewport.zoom();
             backend.draw_ball_mesh(
                 0,
                 size_idx,
-                self.cursor_pos_px,
+                self.frame.cursor_pos_px,
                 BallType::Cursor,
                 zoom_scale,
             )?;
         } else {
-            backend.draw_cross_hair(self.cursor_pos_px)?;
+            backend.draw_cross_hair(self.frame.cursor_pos_px)?;
         }
 
         let win_def = self.window_def.borrow();
@@ -197,7 +181,13 @@ impl GgezRenderer {
             win_def.margin_px.0 * 2. + win_def.region_px.0,
             win_def.margin_px.1 * 2. + win_def.region_px.1,
         ];
-        backend.draw_text(self.txt_cursor.clone(), txt_cursor_pos, 20., true, true)?;
+        backend.draw_text(
+            self.frame.cursor_text.clone(),
+            txt_cursor_pos,
+            20.,
+            true,
+            true,
+        )?;
 
         // Draw zoom level indicator just above cursor position text
         let zoom = self.viewport.zoom();
@@ -244,20 +234,19 @@ impl GgezRenderer {
     }
 
     pub fn disable_drawing_cursor(&mut self) {
-        self.draw_cursor = false;
+        self.config.disable_cursor();
     }
 
     pub fn enable_drawing_cursor(&mut self, repeated: bool) {
-        if !repeated {
-            self.draw_cursor = true;
-        }
+        self.config.enable_cursor(repeated);
     }
 
     pub fn resize(&mut self, width: f32, height: f32) {
         self.cache.cell_mesh = None;
         let mut win_def = self.window_def.borrow_mut();
         win_def.resize(width, height);
-        self.ball_status_text_pos = Some([win_def.margin_px.0 * 2.0 + win_def.region_px.0, 0.0]);
+        self.frame.ball_status_text_pos =
+            Some([win_def.margin_px.0 * 2.0 + win_def.region_px.0, 0.0]);
 
         // Update viewport world bounds and window size on resize
         let world_bounds = win_def.compute_world_bounds_rect();
@@ -365,18 +354,23 @@ impl GgezRenderer {
     // Move the cache out without cloning (leaves an empty/default cache behind).
     // Ensure GgezMeshCache implements Default (or create a proper empty value).
     pub fn take_cache(&mut self) -> GgezMeshCache {
-        self.string_elems = self.cache.text_cache.len();
-        self.glyph_elems = self.cache.glyph_cache.len();
-        self.ball_elems = self.cache.ball_label_cache.len();
+        self.update_cache_stats();
         std::mem::take(&mut self.cache)
     }
 
     // Put cache back after use
     pub fn put_cache(&mut self, cache: GgezMeshCache) {
         self.cache = cache;
-        self.string_elems = self.cache.text_cache.len();
-        self.glyph_elems = self.cache.glyph_cache.len();
-        self.ball_elems = self.cache.ball_label_cache.len();
+        self.update_cache_stats();
+    }
+
+    /// Sync [`CacheStats`] from the current [`GgezMeshCache`].
+    fn update_cache_stats(&mut self) {
+        self.cache_stats = CacheStats {
+            string_entries: self.cache.text_cache.len(),
+            glyph_entries: self.cache.glyph_cache.len(),
+            ball_label_entries: self.cache.ball_label_cache.len(),
+        };
     }
 
     fn create_ball_meshes(
@@ -490,15 +484,19 @@ impl GgezRenderer {
         let win_def = self.window_def.borrow();
         let clamped_px = win_def.clamp_to_bounds(&Vec2D::new(x_px, y_px));
         let curs_pos = clamped_px;
-        self.cursor_pos_px = [clamped_px.x, clamped_px.y];
+        self.frame.cursor_pos_px = [clamped_px.x, clamped_px.y];
 
         // Use unified viewport transformation (same as wgpu)
         let curs_pos_coord = self.viewport.px_to_world(&[clamped_px.x, clamped_px.y]);
 
-        let curs_moved_sq = curs_pos.dist(&self.curs_pos_of_txt).norm_sq();
+        let origin = Vec2D::new(
+            self.frame.cursor_text_origin_px[0],
+            self.frame.cursor_text_origin_px[1],
+        );
+        let curs_moved_sq = curs_pos.dist(&origin).norm_sq();
         if curs_moved_sq > (f32::min(win_def.region_px.0, win_def.region_px.1) * 0.1) {
-            self.curs_pos_of_txt = curs_pos;
-            self.txt_cursor = format!(
+            self.frame.cursor_text_origin_px = [curs_pos.x, curs_pos.y];
+            self.frame.cursor_text = format!(
                 "x: {}, y: {} pos ({:.3},{:.3})",
                 clamped_px.x, clamped_px.y, curs_pos_coord.x, curs_pos_coord.y,
             );

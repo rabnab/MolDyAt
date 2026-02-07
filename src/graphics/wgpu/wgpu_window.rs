@@ -287,7 +287,7 @@ fn handle_window_event(
                 execute_input_action(
                     &action,
                     &state.physics,
-                    &mut state.render_drawing,
+                    &mut state.config,
                     &mut state.viewport,
                     &mut state.current_ball_size_idx,
                     &mut state.energy_manager,
@@ -338,7 +338,7 @@ fn handle_window_event(
                 execute_input_action(
                     &action,
                     &state.physics,
-                    &mut state.render_drawing,
+                    &mut state.config,
                     &mut state.viewport,
                     &mut state.current_ball_size_idx,
                     &mut state.energy_manager,
@@ -361,7 +361,7 @@ fn handle_window_event(
                 execute_input_action(
                     &action,
                     &state.physics,
-                    &mut state.render_drawing,
+                    &mut state.config,
                     &mut state.viewport,
                     &mut state.current_ball_size_idx,
                     &mut state.energy_manager,

@@ -1,12 +1,13 @@
 use super::{InputAction, InputHandler, PhysicsCoordinator};
 use crate::application::physics_thread::PhysicsCommand;
 use crate::application::{LogStuff, MainContent};
+use crate::graphics::renderer::state_layers::RendererConfig;
 
 /// Shared state for any event loop implementation
 pub struct EventLoopState {
     pub input: InputHandler,
     pub physics: PhysicsCoordinator,
-    pub render_drawing: bool,
+    pub config: RendererConfig,
     pub view_dirty: bool,
 }
 
@@ -15,7 +16,7 @@ impl EventLoopState {
         Self {
             input: InputHandler::new(),
             physics: PhysicsCoordinator::new(application),
-            render_drawing: true,
+            config: RendererConfig::default(),
             view_dirty: true,
         }
     }
@@ -23,7 +24,7 @@ impl EventLoopState {
     /// Process an input action and update state accordingly
     /// Returns true if the action affects viewport (caller should mark view_dirty)
     pub fn process_action(&mut self, action: &InputAction) -> bool {
-        let affects_view = process_action_common(action, &self.physics, &mut self.render_drawing);
+        let affects_view = process_action_common(action, &self.physics, &mut self.config);
         if affects_view {
             self.view_dirty = true;
         }
@@ -32,7 +33,7 @@ impl EventLoopState {
 
     /// Check if rendering should occur this frame
     pub fn should_render(&self) -> bool {
-        self.render_drawing && (self.physics.is_new_step_available() || self.view_dirty)
+        self.config.render_drawing && (self.physics.is_new_step_available() || self.view_dirty)
     }
 
     /// Mark view as clean after rendering
@@ -49,7 +50,7 @@ impl EventLoopState {
 pub fn process_action_common(
     action: &InputAction,
     physics: &PhysicsCoordinator,
-    render_drawing: &mut bool,
+    config: &mut RendererConfig,
 ) -> bool {
     let mut affects_view = false;
 
@@ -68,7 +69,7 @@ pub fn process_action_common(
             affects_view = true;
         }
         InputAction::ToggleRendering => {
-            *render_drawing = !*render_drawing;
+            config.toggle_rendering();
         }
         InputAction::AddBall { position } => {
             physics.send_command(PhysicsCommand::AddBall(*position));
