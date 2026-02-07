@@ -1,18 +1,18 @@
 //! Input action execution for WGPU renderer
 //!
-//! Maps InputAction enum to physics commands and view updates.
-//! Extracted from wgpu_window to separate input handling concerns.
+//! Handles WGPU-specific actions (cutoff rings) that require wgpu resources.
+//! All other actions are delegated to UnifiedRenderState.
 
 use crate::graphics::renderer::InputAction;
 use crate::graphics::renderer::event_loop::UnifiedRenderState;
-use crate::objects2d::ball_impl::{BallFactory, NUM_BALL_SIZES};
 
 use super::ball_pipeline::BallPipeline;
 
 /// Execute input actions from the centralized InputHandler.
 ///
-/// Handles WGPU-specific actions (cutoff rings, ball size cycling, energy window),
-/// then delegates common actions to UnifiedRenderState.
+/// Only handles truly WGPU-specific actions that require wgpu resources
+/// or need access to resources not available in UnifiedRenderState (like window_target).
+/// All other actions are delegated to UnifiedRenderState.
 ///
 /// Returns `true` if the action affects the viewport.
 pub fn execute_input_action(
@@ -22,7 +22,7 @@ pub fn execute_input_action(
     queue: &wgpu::Queue,
     window_target: &winit::event_loop::EventLoopWindowTarget<()>,
 ) -> bool {
-    // Handle WGPU-specific actions first
+    // Handle ONLY actions that need wgpu resources or window_target
     match action {
         InputAction::ToggleCutoffRings => {
             ball_pipeline.toggle_cutoff_rings(queue);
@@ -33,21 +33,8 @@ pub fn execute_input_action(
             );
             return false; // doesn't affect view
         }
-        InputAction::NextBallSize => {
-            state.current_ball_size_idx = (state.current_ball_size_idx + 1) % NUM_BALL_SIZES;
-            let radius = BallFactory::radius_for_size_idx(state.current_ball_size_idx);
-            println!(
-                "Ball size: {:.2} (index {})",
-                radius, state.current_ball_size_idx
-            );
-            return false; // doesn't affect view
-        }
-        InputAction::ResetView => {
-            state.reset_view();
-            return true; // affects view
-        }
         InputAction::ToggleEnergyWindow | InputAction::CyclePlotContent => {
-            state.energy_manager.toggle(window_target);
+            state.toggle_energy_window(window_target);
             return false; // doesn't affect view
         }
         _ => {}
