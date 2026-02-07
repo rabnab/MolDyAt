@@ -311,11 +311,6 @@ impl BallPipeline {
         );
     }
 
-    /// Check if cutoff rings are currently visible.
-    pub fn are_cutoff_rings_visible(&self) -> bool {
-        self.uniforms.show_cutoff_rings != 0
-    }
-
     /// Upload ball data to the GPU storage buffer.
     ///
     /// If the number of balls exceeds max_balls, the buffer is reallocated.
