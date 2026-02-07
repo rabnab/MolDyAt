@@ -4,7 +4,9 @@ pub mod viewport;
 
 // Public API for batch rendering
 #[allow(unused_imports)]
-pub use batch_renderer::{BatchConfig, BatchRenderer, Batchable};
+pub use batch_renderer::{
+    BatchConfig, BatchRenderer, Batchable, LineSegment, collect_neighbor_lines,
+};
 
 // Public API for event handling - used by both ggez and wgpu event loops
 #[allow(unused_imports)]

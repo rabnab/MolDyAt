@@ -1,9 +1,11 @@
 use crate::application::AppResult;
 use crate::graphics::ggez::WindowDefinitionRef;
-use crate::graphics::ggez::batching::{LineSegment, TailSegment};
+use crate::graphics::ggez::batching::TailSegment;
 use crate::graphics::ggez::ggez_renderer_backend::{DrawingBackend, GgezMeshCache};
 use crate::graphics::renderer::ViewportTransform;
-use crate::graphics::renderer::batch_renderer::BatchRenderer;
+use crate::graphics::renderer::batch_renderer::{
+    BatchRenderer, LineSegment, collect_neighbor_lines,
+};
 use crate::graphics::window::window_definition::WindowDefinition;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::{Ball2D, BallPhysics};
@@ -324,16 +326,8 @@ impl GgezRenderer {
 
         // Batch all neighbor lines for efficient rendering
         let mut line_batch: BatchRenderer<LineSegment> = BatchRenderer::new();
-        for ball in &snapshot.balls {
-            if ball.show_neighbor_lines {
-                self.add_neighbor_lines_from_snapshot_to_batch(
-                    &mut line_batch,
-                    ball,
-                    &snapshot.balls,
-                );
-            }
-        }
-        backend.flush_line_batch(&mut line_batch)?;
+        collect_neighbor_lines(&snapshot.balls, &mut line_batch);
+        backend.flush_line_batch(&mut line_batch, &self.viewport)?;
 
         // Then, draw balls from snapshot data (on top of lines) with frustum culling
         for ball in &snapshot.balls {
@@ -368,58 +362,6 @@ impl GgezRenderer {
 }
 
 impl GgezRenderer {
-    /// Collect neighbor lines for a ball into the given batch.
-    fn add_neighbor_lines_from_snapshot_to_batch(
-        &mut self,
-        batch: &mut BatchRenderer<LineSegment>,
-        ball: &crate::application::renderer_snapshot::BallRenderData,
-        all_balls: &[crate::application::renderer_snapshot::BallRenderData],
-    ) {
-        // Use unified viewport transformation
-        let ball_coord_px = self.viewport.world_to_px(&ball.position);
-        let start: [f32; 2] = ball_coord_px;
-
-        // Find max force to determine main neighbors
-        let max_force = ball
-            .neighbors
-            .iter()
-            .map(|(_, force)| *force)
-            .reduce(f32::max)
-            .unwrap_or(0.0);
-
-        // Add lines to batch
-        for (neighbor_idx, force_magnitude) in &ball.neighbors {
-            let is_main = *force_magnitude > 0.5 * max_force;
-
-            // Skip non-main neighbors if this ball only shows main neighbors
-            if ball.show_main_neighbors_only && !is_main {
-                continue;
-            }
-
-            // Determine line color based on force magnitude
-            let color_line = if *force_magnitude > 0.0 {
-                if is_main {
-                    Color::CYAN
-                } else {
-                    Color::from_rgb(128, 128, 128)
-                }
-            } else {
-                Color::from_rgb(64, 64, 64)
-            };
-
-            // Get neighbor position and push to batch (use unified viewport transformation)
-            if let Some(neighbor) = all_balls.get(*neighbor_idx) {
-                let neighbor_pos_px = self.viewport.world_to_px(&neighbor.position);
-                let end: [f32; 2] = neighbor_pos_px;
-                batch.push(LineSegment {
-                    points: [start, end],
-                    width: 2.0,
-                    color: color_line.to_rgba(),
-                });
-            }
-        }
-    }
-
     // Move the cache out without cloning (leaves an empty/default cache behind).
     // Ensure GgezMeshCache implements Default (or create a proper empty value).
     pub fn take_cache(&mut self) -> GgezMeshCache {

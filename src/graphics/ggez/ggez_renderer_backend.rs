@@ -70,8 +70,9 @@ pub trait DrawingBackend {
     fn flush_line_batch(
         &mut self,
         batch: &mut crate::graphics::renderer::batch_renderer::BatchRenderer<
-            crate::graphics::ggez::batching::LineSegment,
+            crate::graphics::renderer::batch_renderer::LineSegment,
         >,
+        viewport: &ViewportTransform,
     ) -> AppResult;
 
     /// Flush all collected tail segments as a single mesh.
@@ -468,11 +469,13 @@ impl<'a> DrawingBackend for GgezBackend<'a> {
     fn flush_line_batch(
         &mut self,
         batch: &mut crate::graphics::renderer::batch_renderer::BatchRenderer<
-            crate::graphics::ggez::batching::LineSegment,
+            crate::graphics::renderer::batch_renderer::LineSegment,
         >,
+        viewport: &ViewportTransform,
     ) -> AppResult {
         crate::graphics::ggez::batching::flush_line_batch(
             batch,
+            viewport,
             self.ctx,
             self.canvas.as_mut().unwrap(),
         )

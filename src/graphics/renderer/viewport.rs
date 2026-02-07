@@ -276,6 +276,16 @@ impl ViewportTransform {
         [result.x, result.y]
     }
 
+    /// Convert world coordinates (as `[f32; 2]`) to pixel coordinates.
+    ///
+    /// Convenience variant of [`world_to_px`](Self::world_to_px) that
+    /// accepts a raw array instead of a [`Vec2D`] reference.
+    pub fn world_to_px_arr(&self, pos: [f32; 2]) -> [f32; 2] {
+        self.ensure_matrices_calculated();
+        let result = self.world_to_px_matrix.get().transform_point2(&pos);
+        [result.x, result.y]
+    }
+
     /// Get world region visible in the current viewport.
     pub fn visible_world_rect(&self) -> Rect {
         self.ensure_matrices_calculated();
