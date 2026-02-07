@@ -2,8 +2,11 @@
 //!
 //! Renders colored lines for neighbor visualization.
 //! Uses PrimitiveTopology::LineList with per-vertex colors.
+//!
+//! Line data is collected via the shared [`BatchRenderer<LineSegment>`]
+//! abstraction and flushed into a GPU vertex buffer here.
 
-use crate::application::renderer_snapshot::BallRenderData;
+use crate::graphics::renderer::batch_renderer::{BatchRenderer, LineSegment};
 use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
 
@@ -41,15 +44,6 @@ impl Default for LineUniforms {
 /// Default maximum number of line vertices (each line = 2 vertices).
 /// This supports up to MAX_VERTICES/2 lines.
 const DEFAULT_MAX_VERTICES: usize = 65536;
-
-/// CYAN color for main neighbor lines (matching ggez Color::CYAN)
-const CYAN: [f32; 4] = [0.0, 1.0, 1.0, 1.0];
-
-/// Gray color for secondary neighbor lines (128, 128, 128)
-const GRAY: [f32; 4] = [0.502, 0.502, 0.502, 1.0];
-
-/// Dark gray color for lines with no force (64, 64, 64)
-const DARK_GRAY: [f32; 4] = [0.251, 0.251, 0.251, 1.0];
 
 /// Line rendering pipeline and resources.
 pub struct LinePipeline {
@@ -199,71 +193,35 @@ impl LinePipeline {
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
     }
 
-    /// Upload neighbor line data from ball snapshot.
+    /// Flush a [`BatchRenderer<LineSegment>`] into the GPU vertex buffer.
     ///
-    /// Generates line vertices for all balls that have show_neighbor_lines enabled.
-    pub fn upload_neighbor_lines(
+    /// Converts each [`LineSegment`] (world-coordinate line) into a pair
+    /// of [`LineVertex`] structs and uploads them.  Drains the batch.
+    pub fn flush_line_batch(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        balls: &[BallRenderData],
+        batch: &mut BatchRenderer<LineSegment>,
     ) {
-        // Collect all line vertices
-        let mut vertices = Vec::new();
-
-        for ball in balls {
-            if !ball.show_neighbor_lines {
-                continue;
-            }
-
-            let start_pos = [ball.position.x, ball.position.y];
-
-            // Find max force to determine main neighbors
-            let max_force = ball
-                .neighbors
-                .iter()
-                .map(|(_, force)| *force)
-                .reduce(f32::max)
-                .unwrap_or(0.0);
-
-            for (neighbor_idx, force_magnitude) in &ball.neighbors {
-                let is_main = *force_magnitude > 0.5 * max_force;
-
-                // Skip non-main neighbors if this ball only shows main neighbors
-                if ball.show_main_neighbors_only && !is_main {
-                    continue;
-                }
-
-                // Determine line color based on force magnitude (matching ggez)
-                let color = if *force_magnitude > 0.0 {
-                    if is_main { CYAN } else { GRAY }
-                } else {
-                    DARK_GRAY
-                };
-
-                // Get neighbor position and create line vertices
-                if let Some(neighbor) = balls.get(*neighbor_idx) {
-                    let end_pos = [neighbor.position.x, neighbor.position.y];
-
-                    // Add two vertices for the line
-                    vertices.push(LineVertex {
-                        position: start_pos,
-                        color,
-                    });
-                    vertices.push(LineVertex {
-                        position: end_pos,
-                        color,
-                    });
-                }
-            }
-        }
-
-        // Update vertex count
-        self.vertex_count = vertices.len() as u32;
-
-        if vertices.is_empty() {
+        if batch.is_empty() {
+            self.vertex_count = 0;
             return;
         }
+
+        // Convert LineSegments → LineVertex pairs
+        let mut vertices: Vec<LineVertex> = Vec::with_capacity(batch.len() * 2);
+        for seg in batch.drain() {
+            vertices.push(LineVertex {
+                position: seg.points[0],
+                color: seg.color,
+            });
+            vertices.push(LineVertex {
+                position: seg.points[1],
+                color: seg.color,
+            });
+        }
+
+        self.vertex_count = vertices.len() as u32;
 
         // Resize buffer if needed
         if vertices.len() > self.max_vertices {

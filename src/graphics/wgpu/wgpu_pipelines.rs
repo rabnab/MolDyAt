@@ -11,6 +11,9 @@ use super::line_pipeline::LinePipeline;
 use super::text_pipeline::TextPipeline;
 use super::wgpu_context::WgpuContext;
 use crate::application::renderer_snapshot::{CellGridSpec, RendererSnapshot};
+use crate::graphics::renderer::batch_renderer::{
+    BatchRenderer, LineSegment, collect_neighbor_lines,
+};
 use crate::graphics::window::{MARGIN_PX_X, MARGIN_PX_Y};
 
 /// Shader source code (embedded at compile time)
@@ -106,10 +109,12 @@ impl WgpuPipelines {
         self.ball
             .upload_balls(&ctx.device, &ctx.queue, &snapshot.balls);
 
-        // Update neighbor lines
+        // Update neighbor lines via shared BatchRenderer abstraction
         self.line.update_uniforms(&ctx.queue, view_proj);
+        let mut line_batch: BatchRenderer<LineSegment> = BatchRenderer::new();
+        collect_neighbor_lines(&snapshot.balls, &mut line_batch);
         self.line
-            .upload_neighbor_lines(&ctx.device, &ctx.queue, &snapshot.balls);
+            .flush_line_batch(&ctx.device, &ctx.queue, &mut line_batch);
 
         // Update crosshair
         self.crosshair.update_uniforms(

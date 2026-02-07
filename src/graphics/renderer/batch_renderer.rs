@@ -18,19 +18,122 @@
 
 use std::hash::Hash;
 
+use crate::application::renderer_snapshot::BallRenderData;
+
+// ── Shared color constants ──────────────────────────────────────────
+
+/// Cyan: used for main (strongest) neighbor lines.
+const CYAN: [f32; 4] = [0.0, 1.0, 1.0, 1.0];
+/// Gray: used for secondary neighbor lines with non-zero force.
+const GRAY: [f32; 4] = [0.5, 0.5, 0.5, 1.0];
+/// Dark gray: used for neighbor lines with zero force.
+const DARK_GRAY: [f32; 4] = [0.25, 0.25, 0.25, 1.0];
+
+// ── LineSegment ─────────────────────────────────────────────────────
+
+/// A coloured line segment in **world coordinates**.
+///
+/// Renderer-agnostic: both ggez and wgpu flush implementations consume
+/// these, converting to their own vertex/mesh formats as needed.
+#[derive(Clone, Debug)]
+pub struct LineSegment {
+    /// Start and end points in world coordinates.
+    pub points: [[f32; 2]; 2],
+    /// Stroke width hint (backends may ignore this, e.g. wgpu LineList).
+    pub width: f32,
+    /// RGBA colour as `[r, g, b, a]` in `0.0..=1.0`.
+    pub color: [f32; 4],
+}
+
+impl Batchable for LineSegment {
+    /// Lines with the same colour and width can share a draw call.
+    ///
+    /// Key layout: `(packed_rgba_bits, width_bits)`.
+    type BatchKey = (u128, u32);
+
+    fn batch_key(&self) -> Self::BatchKey {
+        let [r, g, b, a] = self.color;
+        let packed = (r.to_bits() as u128) << 96
+            | (g.to_bits() as u128) << 64
+            | (b.to_bits() as u128) << 32
+            | a.to_bits() as u128;
+        (packed, self.width.to_bits())
+    }
+}
+
+// ── Shared neighbor-line collection ─────────────────────────────────
+
+/// Collect neighbor-line segments for all visible balls into `batch`.
+///
+/// This is the single source of truth for the neighbor-line logic used
+/// by **both** the ggez and wgpu renderers.  Positions are stored in
+/// world coordinates; each backend applies its own projection during
+/// the flush step.
+pub fn collect_neighbor_lines(balls: &[BallRenderData], batch: &mut BatchRenderer<LineSegment>) {
+    for ball in balls {
+        if !ball.show_neighbor_lines {
+            continue;
+        }
+        collect_lines_for_ball(ball, balls, batch);
+    }
+}
+
+/// Collect neighbor lines for a single ball.
+fn collect_lines_for_ball(
+    ball: &BallRenderData,
+    all_balls: &[BallRenderData],
+    batch: &mut BatchRenderer<LineSegment>,
+) {
+    let start = [ball.position.x, ball.position.y];
+
+    // Find max force to determine main neighbors
+    let max_force = ball
+        .neighbors
+        .iter()
+        .map(|(_, force)| *force)
+        .reduce(f32::max)
+        .unwrap_or(0.0);
+
+    for (neighbor_idx, force_magnitude) in &ball.neighbors {
+        let is_main = *force_magnitude > 0.5 * max_force;
+
+        // Skip non-main neighbors if this ball only shows main neighbors
+        if ball.show_main_neighbors_only && !is_main {
+            continue;
+        }
+
+        // Determine line color based on force magnitude
+        let color = if *force_magnitude > 0.0 {
+            if is_main { CYAN } else { GRAY }
+        } else {
+            DARK_GRAY
+        };
+
+        if let Some(neighbor) = all_balls.get(*neighbor_idx) {
+            let end = [neighbor.position.x, neighbor.position.y];
+            batch.push(LineSegment {
+                points: [start, end],
+                width: 2.0,
+                color,
+            });
+        }
+    }
+}
+
 // ── Batchable trait ─────────────────────────────────────────────────
 
 /// Data that can be collected into a draw batch.
 ///
 /// Implementors define a [`BatchKey`](Batchable::BatchKey) that
-/// identifies which items can be merged into a single draw call (e.g.
-/// same colour, same line width).  The key is informational for now —
-/// future optimisations may group items by key before flushing.
+/// identifies which items could be merged into a single draw call
+/// (e.g. same colour, same line width).  The key is currently only
+/// used for querying — no automatic grouping is performed.
 pub trait Batchable {
     /// Grouping criterion (colour, width, material, …).
     ///
-    /// Items with the same key *could* be merged into one draw call by
-    /// an optimising flush implementation.
+    /// Allows callers to distinguish item categories.  The
+    /// [`BatchRenderer`] itself does **not** sort or group by key;
+    /// backends may use the key in their flush logic if needed.
     type BatchKey: Hash + Eq + Clone;
 
     /// Return this item's batch key.
@@ -181,7 +284,7 @@ mod tests {
     }
 
     #[test]
-    fn batch_key_grouping() {
+    fn batch_key_is_queryable_on_items() {
         let mut batch = BatchRenderer::new();
         batch.push(TestItem { key: 1, value: 1.0 });
         batch.push(TestItem { key: 2, value: 2.0 });
