@@ -7,7 +7,6 @@ use ggez::glam::Vec2;
 use ggez::graphics::{
     Canvas, Color, DrawMode, DrawParam, Drawable, Mesh, MeshBuilder, Rect, Text, TextFragment,
 };
-use ggez::mint::Point2;
 use lru::LruCache;
 use std::num::NonZeroUsize;
 
@@ -67,24 +66,21 @@ pub trait DrawingBackend {
 
     fn draw_cross_hair(&mut self, pos: [f32; 2]) -> AppResult;
 
-    /// Begin batching lines for efficient rendering (clears previous batch)
-    fn begin_line_batch(&mut self);
-
-    /// Add a line to the current batch
-    fn add_line_to_batch(
+    /// Flush all collected line segments as a single mesh.
+    fn flush_line_batch(
         &mut self,
-        points: &[[f32; 2]; 2],
-        width: f32,
-        color: (u8, u8, u8, u8),
+        batch: &mut crate::graphics::renderer::batch_renderer::BatchRenderer<
+            crate::graphics::ggez::batching::LineSegment,
+        >,
     ) -> AppResult;
 
-    /// Draw all batched lines as a single mesh
-    fn draw_line_batch(&mut self) -> AppResult;
-
-    /// Begin batching tail lines (particle trails)
-    fn begin_tail_batch(&mut self);
-    fn add_tail_line_to_batch(&mut self, points: &[[f32; 2]; 2], width: f32) -> AppResult;
-    fn draw_tail_batch(&mut self) -> AppResult;
+    /// Flush all collected tail segments as a single mesh.
+    fn flush_tail_batch(
+        &mut self,
+        batch: &mut crate::graphics::renderer::batch_renderer::BatchRenderer<
+            crate::graphics::ggez::batching::TailSegment,
+        >,
+    ) -> AppResult;
 
     /// Finish frame rendering and present to screen
     fn finish_frame(&mut self) -> AppResult;
@@ -469,74 +465,30 @@ impl<'a> DrawingBackend for GgezBackend<'a> {
         Ok(())
     }
 
-    fn begin_tail_batch(&mut self) {
-        self.cache.tail_lines_builder = Some(MeshBuilder::new());
-    }
-
-    fn add_tail_line_to_batch(&mut self, points: &[[f32; 2]; 2], width: f32) -> AppResult {
-        let ggez_points: [Point2<f32>; 2] = [
-            Point2 {
-                x: points[0][0],
-                y: points[0][1],
-            },
-            Point2 {
-                x: points[1][0],
-                y: points[1][1],
-            },
-        ];
-        if let Some(builder) = &mut self.cache.tail_lines_builder {
-            builder.line(&ggez_points, width, Color::YELLOW)?;
-        }
-        Ok(())
-    }
-
-    fn draw_tail_batch(&mut self) -> AppResult {
-        if let Some(builder) = self.cache.tail_lines_builder.take() {
-            let mesh = Mesh::from_data(self.ctx, builder.build());
-            self.canvas
-                .as_mut()
-                .unwrap()
-                .draw(&mesh, DrawParam::default());
-        }
-        Ok(())
-    }
-
-    fn begin_line_batch(&mut self) {
-        self.cache.neighbor_lines_builder = Some(MeshBuilder::new());
-    }
-
-    fn add_line_to_batch(
+    fn flush_line_batch(
         &mut self,
-        points: &[[f32; 2]; 2],
-        width: f32,
-        color: (u8, u8, u8, u8),
+        batch: &mut crate::graphics::renderer::batch_renderer::BatchRenderer<
+            crate::graphics::ggez::batching::LineSegment,
+        >,
     ) -> AppResult {
-        let ggez_color = Color::from(color);
-        let ggez_points: [Point2<f32>; 2] = [
-            Point2 {
-                x: points[0][0],
-                y: points[0][1],
-            },
-            Point2 {
-                x: points[1][0],
-                y: points[1][1],
-            },
-        ];
-        if let Some(builder) = &mut self.cache.neighbor_lines_builder {
-            builder.line(&ggez_points, width, ggez_color)?;
-        }
-        Ok(())
+        crate::graphics::ggez::batching::flush_line_batch(
+            batch,
+            self.ctx,
+            self.canvas.as_mut().unwrap(),
+        )
     }
 
-    fn draw_line_batch(&mut self) -> AppResult {
-        if let Some(builder) = self.cache.neighbor_lines_builder.take() {
-            let mesh = Mesh::from_data(self.ctx, builder.build());
-            self.canvas
-                .as_mut()
-                .unwrap()
-                .draw(&mesh, DrawParam::default());
-        }
-        Ok(())
+    fn flush_tail_batch(
+        &mut self,
+        batch: &mut crate::graphics::renderer::batch_renderer::BatchRenderer<
+            crate::graphics::ggez::batching::TailSegment,
+        >,
+    ) -> AppResult {
+        crate::graphics::ggez::batching::flush_tail_batch(
+            batch,
+            self.ctx,
+            self.canvas.as_mut().unwrap(),
+        )
     }
 
     fn finish_frame(&mut self) -> AppResult {
@@ -553,8 +505,6 @@ pub struct GgezMeshCache {
     pub line_vkin_builder: Option<MeshBuilder>,
     pub line_vpot_builder: Option<MeshBuilder>,
     pub line_vtot_builder: Option<MeshBuilder>,
-    pub neighbor_lines_builder: Option<MeshBuilder>,
-    pub tail_lines_builder: Option<MeshBuilder>,
     pub(super) crosshair_mesh: Option<Mesh>,
     pub(super) ball_mesh: Vec<Mesh>,
     pub(super) cursor_mesh: Vec<Mesh>,
@@ -575,8 +525,6 @@ impl Default for GgezMeshCache {
             line_vkin_builder: None,
             line_vpot_builder: None,
             line_vtot_builder: None,
-            neighbor_lines_builder: None,
-            tail_lines_builder: None,
             crosshair_mesh: None,
             ball_mesh: vec![],
             cursor_mesh: vec![],

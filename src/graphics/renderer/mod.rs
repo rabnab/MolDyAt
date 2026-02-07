@@ -1,5 +1,10 @@
+pub mod batch_renderer;
 pub mod event_loop;
 pub mod viewport;
+
+// Public API for batch rendering
+#[allow(unused_imports)]
+pub use batch_renderer::{BatchConfig, BatchRenderer, Batchable};
 
 // Public API for event handling - used by both ggez and wgpu event loops
 #[allow(unused_imports)]
