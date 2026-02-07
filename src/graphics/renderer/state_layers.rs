@@ -96,11 +96,14 @@ impl PlotContent {
 
 // ── FrameState ──────────────────────────────────────────────────────
 
-/// Transient per-frame data.
+/// Transient per-frame UI state (ggez-specific).
 ///
-/// Fields in this struct change every frame and are conceptually
-/// "scratch" — call [`reset`](Self::reset) at the start of each
-/// frame to advance the counter and clear stale data.
+/// Tracks text overlay positions and cursor formatting for the ggez
+/// renderer. The wgpu renderer uses `UnifiedRenderState` directly
+/// and doesn't need this structure.
+///
+/// Call [`reset`](Self::reset) at the start of each frame to advance
+/// the frame counter.
 #[derive(Debug, Clone)]
 pub struct FrameState {
     /// Monotonically increasing frame counter.
@@ -119,9 +122,6 @@ pub struct FrameState {
 
     /// Position for the ball-status overlay text (layout-dependent).
     pub ball_status_text_pos: Option<[f32; 2]>,
-
-    /// A rolling status string displayed near the ball overlay.
-    pub last_status_text: String,
 }
 
 impl Default for FrameState {
@@ -132,7 +132,6 @@ impl Default for FrameState {
             cursor_text: format!("x: {}, y: {} pos ({:.3},{:.3})", 0., 0., 0., 0.),
             cursor_text_origin_px: [0.0, 0.0],
             ball_status_text_pos: None,
-            last_status_text: String::new(),
         }
     }
 }
@@ -150,12 +149,12 @@ impl FrameState {
 
 // ── CacheStats ──────────────────────────────────────────────────────
 
-/// GPU-agnostic cache-size metrics.
+/// GPU cache statistics (ggez-specific).
 ///
-/// Each backend wraps its own cache type (e.g. `GgezMeshCache`);
-/// this struct exposes uniform counters for diagnostics without
-/// leaking backend details.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// Tracks mesh cache sizes for the ggez renderer. The wgpu renderer
+/// manages GPU buffers directly through pipelines and doesn't use
+/// this structure.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct CacheStats {
     /// Number of cached text strings.
     pub string_entries: usize,
