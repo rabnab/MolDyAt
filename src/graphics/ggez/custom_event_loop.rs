@@ -2,7 +2,7 @@ use crate::application::MainContent;
 use crate::application::physics_thread::PhysicsCommand;
 use crate::graphics::ggez::ggez_renderer::GgezRenderer;
 use crate::graphics::ggez::ggez_renderer_backend::GgezBackend;
-use crate::graphics::renderer::event_loop::{InputAction, UnifiedRenderState};
+use crate::graphics::renderer::event_loop::UnifiedRenderState;
 use crate::graphics::window::{MARGIN_PX_X, MARGIN_PX_Y};
 use ggez::Context;
 use ggez::event::process_event;
@@ -114,17 +114,8 @@ impl CustomEventLoop {
                 };
 
                 if let Some(action) = action {
-                    // Handle only ggez-specific actions needing window_target
-                    match &action {
-                        InputAction::ToggleEnergyWindow => {
-                            self.state.toggle_energy_window(window_target);
-                            // Don't forward - fully handled
-                        }
-                        _ => {
-                            // All other actions handled by shared state logic
-                            self.state.process_action(&action);
-                        }
-                    }
+                    // All actions handled by shared state logic (including ToggleEnergyWindow)
+                    self.state.process_action(&action, Some(window_target));
                 }
             }
             WindowEvent::MouseInput {

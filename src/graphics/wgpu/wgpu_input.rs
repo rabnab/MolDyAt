@@ -10,9 +10,8 @@ use super::ball_pipeline::BallPipeline;
 
 /// Execute input actions from the centralized InputHandler.
 ///
-/// Only handles truly WGPU-specific actions that require wgpu resources
-/// or need access to resources not available in UnifiedRenderState (like window_target).
-/// All other actions are delegated to UnifiedRenderState.
+/// Only handles truly WGPU-specific actions that require wgpu resources.
+/// All other actions (including ToggleEnergyWindow) are delegated to UnifiedRenderState.
 ///
 /// Returns `true` if the action affects the viewport.
 pub fn execute_input_action(
@@ -22,7 +21,7 @@ pub fn execute_input_action(
     queue: &wgpu::Queue,
     window_target: &winit::event_loop::EventLoopWindowTarget<()>,
 ) -> bool {
-    // Handle ONLY actions that need wgpu resources or window_target
+    // Handle ONLY actions that need wgpu resources
     match action {
         InputAction::ToggleCutoffRings => {
             ball_pipeline.toggle_cutoff_rings(queue);
@@ -33,13 +32,10 @@ pub fn execute_input_action(
             );
             return false; // doesn't affect view
         }
-        InputAction::ToggleEnergyWindow => {
-            state.toggle_energy_window(window_target);
-            return false; // doesn't affect view
-        }
         _ => {}
     }
 
     // Delegate all other actions to UnifiedRenderState (single source of truth)
-    state.process_action(action)
+    // Pass window_target so ToggleEnergyWindow can be handled
+    state.process_action(action, Some(window_target))
 }
