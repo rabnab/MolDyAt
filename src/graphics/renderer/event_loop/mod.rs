@@ -8,11 +8,16 @@ mod tests;
 mod unified_render_state;
 
 // Shared event loop infrastructure for both ggez and wgpu renderers
-#[cfg(feature = "renderer-wgpu")]
-pub use action_processor::process_action_common;
-#[cfg(feature = "renderer-wgpu")]
+
+// EnergyWindowManager is a public field in UnifiedRenderState, must be exported
+// even though ggez accesses it only through the field (wgpu imports it directly)
+#[allow(unused_imports)]
 pub use energy_window_manager::EnergyWindowManager;
 pub use input_handler::{InputAction, InputHandler, KeyCode};
 pub use metrics::{FrameMetrics, MetricsCollector};
 pub use physics_coordinator::PhysicsCoordinator;
 pub use unified_render_state::UnifiedRenderState;
+
+// WGPU-specific exports for direct usage in wgpu_input.rs
+#[cfg(feature = "renderer-wgpu")]
+pub use action_processor::process_action_common;
