@@ -118,24 +118,10 @@ impl CustomEventLoop {
                     self.state.process_action(&action, Some(window_target));
                 }
             }
-            WindowEvent::MouseInput {
-                state: mouse_state,
-                button,
-                ..
-            } => {
-                self.state.view_dirty = self.state.handle_mouse_input_event(button, mouse_state);
-            }
-            WindowEvent::CursorMoved { position, .. } => {
-                let (x, y) = (position.x as f32, position.y as f32);
-
-                // Update ggez-specific cursor text for rendering
-                self.renderer.update_cursor_text(&self.state.viewport, x, y);
-
-                // Centralized cursor handling
-                self.state.view_dirty = self.state.handle_cursor_moved_event(x, y);
-            }
-            WindowEvent::MouseWheel { delta, .. } => {
-                self.state.view_dirty = self.state.handle_mouse_wheel_event(delta);
+            WindowEvent::MouseInput { .. }
+            | WindowEvent::CursorMoved { .. }
+            | WindowEvent::MouseWheel { .. } => {
+                self.state.view_dirty = self.state.handle_mouse_event(&event);
             }
             WindowEvent::Resized(size) => {
                 let world_rect = self.renderer.resize(size.width as f32, size.height as f32);
