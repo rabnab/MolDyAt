@@ -1,49 +1,7 @@
-use super::{InputAction, InputHandler, PhysicsCoordinator};
+use super::{InputAction, PhysicsCoordinator};
 use crate::application::physics_thread::PhysicsCommand;
 use crate::application::{LogStuff, MainContent};
 use crate::graphics::renderer::state_layers::RendererConfig;
-
-/// Shared state for any event loop implementation
-pub struct EventLoopState {
-    pub input: InputHandler,
-    pub physics: PhysicsCoordinator,
-    pub config: RendererConfig,
-    pub view_dirty: bool,
-}
-
-impl EventLoopState {
-    pub fn new(application: MainContent) -> Self {
-        Self {
-            input: InputHandler::new(),
-            physics: PhysicsCoordinator::new(application),
-            config: RendererConfig::default(),
-            view_dirty: true,
-        }
-    }
-
-    /// Process an input action and update state accordingly
-    /// Returns true if the action affects viewport (caller should mark view_dirty)
-    pub fn process_action(&mut self, action: &InputAction) -> bool {
-        let affects_view = process_action_common(action, &self.physics, &mut self.config);
-        if affects_view {
-            self.view_dirty = true;
-        }
-        affects_view
-    }
-
-    /// Check if rendering should occur this frame
-    pub fn should_render(&self) -> bool {
-        self.config.render_drawing && (self.physics.is_new_step_available() || self.view_dirty)
-    }
-
-    /// Mark view as clean after rendering
-    pub fn mark_rendered(&mut self) {
-        self.view_dirty = false;
-        if let Some(snapshot) = self.physics.get_latest_snapshot() {
-            self.physics.mark_step_displayed(snapshot.simulation_step);
-        }
-    }
-}
 
 /// Shared mapping from InputAction to physics commands and renderer state flags.
 /// Returns true if the action affects the viewport (caller should refresh view).
