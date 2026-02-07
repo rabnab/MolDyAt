@@ -8,6 +8,7 @@ use crate::graphics::renderer::ViewportTransform;
 use crate::graphics::renderer::event_loop::{
     EnergyWindowManager, PhysicsCoordinator, process_action_common,
 };
+use crate::graphics::renderer::state_layers::RendererConfig;
 use crate::objects2d::ball_impl::{BallFactory, NUM_BALL_SIZES};
 
 use super::ball_pipeline::BallPipeline;
@@ -20,7 +21,7 @@ use super::ball_pipeline::BallPipeline;
 pub fn execute_input_action(
     action: &InputAction,
     physics: &PhysicsCoordinator,
-    render_drawing: &mut bool,
+    config: &mut RendererConfig,
     viewport: &mut ViewportTransform,
     ball_size_idx: &mut usize,
     energy_manager: &mut EnergyWindowManager,
@@ -79,5 +80,5 @@ pub fn execute_input_action(
     }
 
     // Delegate common physics/renderer actions to shared helper
-    let _ = process_action_common(action, physics, render_drawing);
+    let _ = process_action_common(action, physics, config);
 }

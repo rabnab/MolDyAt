@@ -279,7 +279,7 @@ impl CustomEventLoop {
         // Begin-frame: grab latest snapshot and update FPS counters
         self.state.begin_frame();
 
-        if self.state.render_drawing {
+        if self.state.config.render_drawing {
             self.state.physics.increment_render_count();
 
             // Physics runs in separate thread, we just render from snapshot

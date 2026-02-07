@@ -1,5 +1,6 @@
 pub mod batch_renderer;
 pub mod event_loop;
+pub mod state_layers;
 pub mod viewport;
 
 // Public API for batch rendering
@@ -23,3 +24,7 @@ pub use event_loop::UnifiedRenderState;
 // Public API for per-frame metrics
 #[allow(unused_imports)]
 pub use event_loop::{FrameMetrics, MetricsCollector};
+
+// Public API for renderer state layers
+#[allow(unused_imports)]
+pub use state_layers::{CacheStats, FrameState, PlotContent, RendererConfig};
