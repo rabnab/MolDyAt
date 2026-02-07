@@ -4,6 +4,7 @@
 
 use crate::application::renderer_snapshot::RendererSnapshot;
 use crate::graphics::energy_plot::{DisplayMode, EnergyPlotWindow, SharedEnergyData};
+use crate::graphics::renderer::event_loop::metrics::FrameMetrics;
 use winit::event::{ElementState, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::EventLoopWindowTarget;
 use winit::window::WindowId;
@@ -147,13 +148,15 @@ impl EnergyWindowManager {
     ///
     /// # Arguments
     /// * `snapshot` - The renderer snapshot with energy data
-    /// * `render_fps` - Current render FPS for status text
+    /// * `render_fps` - Smoothed render FPS for status text
     /// * `steps_per_frame` - Physics steps per render frame for status text
+    /// * `frame_metrics` - Per-frame metrics (draw calls, frame time, etc.)
     pub fn update_from_snapshot(
         &mut self,
         snapshot: &RendererSnapshot,
         render_fps: f32,
         steps_per_frame: f32,
+        frame_metrics: &FrameMetrics,
     ) {
         // Only update if this is a new simulation step
         if snapshot.simulation_step <= self.last_processed_step {
@@ -167,16 +170,15 @@ impl EnergyWindowManager {
             data.v_pot.push_back(snapshot.potential_energy);
             data.time = snapshot.time;
 
-            // Update status text with FPS information
+            // Update status text with FPS and per-frame metrics
             if let Some(ref status) = snapshot.status_text {
-                // Replace "fps 0" placeholder with actual render and simulation FPS
-                let updated_status = status.replace(
-                    "fps 0",
-                    &format!(
-                        "render: {} fps | sim: {:.0} fps | steps/frame: {:.1}",
-                        render_fps as u32, snapshot.physics_fps, steps_per_frame
-                    ),
+                let fps_line = format_metrics_line(
+                    render_fps,
+                    snapshot.physics_fps,
+                    steps_per_frame,
+                    frame_metrics,
                 );
+                let updated_status = status.replace("fps 0", &fps_line);
                 data.status_text = Some(updated_status);
             } else {
                 data.status_text = None;
@@ -204,4 +206,27 @@ impl EnergyWindowManager {
     pub fn energy_data(&self) -> &SharedEnergyData {
         &self.energy_data
     }
+}
+
+/// Format the metrics replacement for the `"fps 0"` placeholder.
+///
+/// Produces two lines:
+/// 1. FPS & throughput:  `render: 60 fps (16.7ms) | sim: 1200 fps | steps/frame: 20.0`
+/// 2. Draw-call stats:   `draws: 3 | balls: 100`
+fn format_metrics_line(
+    render_fps: f32,
+    physics_fps: f32,
+    steps_per_frame: f32,
+    m: &FrameMetrics,
+) -> String {
+    format!(
+        "render: {} fps ({:.1}ms) | sim: {:.0} fps | steps/frame: {:.1}\n\
+         draws: {} | balls: {}",
+        render_fps as u32,
+        m.frame_time_ms,
+        physics_fps,
+        steps_per_frame,
+        m.draw_calls,
+        m.balls_rendered,
+    )
 }

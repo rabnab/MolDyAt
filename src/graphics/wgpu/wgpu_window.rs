@@ -116,9 +116,8 @@ impl WgpuWindow {
         event_loop.run(move |event, window_target, control_flow| {
             *control_flow = ControlFlow::Poll;
 
-            // Begin-frame: grab latest snapshot, update FPS counters.
-            // Only on frame-boundary events to avoid inflating FPS and
-            // over-polling the snapshot slot.
+            // Acquire the latest snapshot on frame-boundary events so
+            // window-event handlers always see up-to-date data.
             let is_frame_boundary =
                 matches!(event, Event::MainEventsCleared | Event::RedrawRequested(_));
             if is_frame_boundary {
@@ -152,9 +151,6 @@ impl WgpuWindow {
                     );
                 }
                 Event::MainEventsCleared => {
-                    // Update energy data from snapshot (idempotent per step).
-                    state.update_energy_from_snapshot();
-
                     // Request a redraw after processing events
                     window.request_redraw();
                 }
@@ -170,44 +166,60 @@ impl WgpuWindow {
                         return;
                     }
 
-                    if !state.should_render() {
-                        return;
-                    }
+                    if state.should_render() {
+                        // Start metrics timer just before issuing draw calls.
+                        state.begin_render();
 
-                    // Render from snapshot if available
-                    if let Some(snapshot) = &state.last_snapshot {
-                        log_frame_periodically(snapshot);
+                        // Render from snapshot if available
+                        if let Some(snapshot) = &state.last_snapshot {
+                            log_frame_periodically(snapshot);
 
-                        // Compute view-projection matrix
-                        let pan = state.viewport.pan_offset();
-                        let zoom = state.viewport.zoom();
-                        let view_proj = compute_view_proj(&snapshot.grid_spec, pan.x, pan.y, zoom);
+                            // Compute view-projection matrix
+                            let pan = state.viewport.pan_offset();
+                            let zoom = state.viewport.zoom();
+                            let view_proj =
+                                compute_view_proj(&snapshot.grid_spec, pan.x, pan.y, zoom);
 
-                        // Update all pipelines from snapshot
-                        let ctrl_pressed = state.input.is_key_pressed(VirtualKeyCode::LControl)
-                            || state.input.is_key_pressed(VirtualKeyCode::RControl);
-                        let cursor_wp = (state.cursor_world_pos.x, state.cursor_world_pos.y);
-                        pipelines.update_from_snapshot(
-                            &ctx,
-                            snapshot,
-                            view_proj,
-                            cursor_wp,
-                            BallFactory::radius_for_size_idx(state.current_ball_size_idx),
-                            ctrl_pressed,
-                        );
+                            // Update all pipelines from snapshot
+                            let ctrl_pressed = state.input.is_key_pressed(VirtualKeyCode::LControl)
+                                || state.input.is_key_pressed(VirtualKeyCode::RControl);
+                            let cursor_wp = (state.cursor_world_pos.x, state.cursor_world_pos.y);
+                            let ball_count = snapshot.balls.len() as u32;
+                            pipelines.update_from_snapshot(
+                                &ctx,
+                                snapshot,
+                                view_proj,
+                                cursor_wp,
+                                BallFactory::radius_for_size_idx(state.current_ball_size_idx),
+                                ctrl_pressed,
+                            );
 
-                        // Render frame
-                        if let Err(e) = render_frame(&ctx, &mut pipelines) {
-                            eprintln!("Render error: {:?}", e);
-                            if e == wgpu::SurfaceError::OutOfMemory {
-                                *control_flow = ControlFlow::Exit;
+                            // Record metrics: ball count + one draw call per
+                            // wgpu pipeline stage (frame, grid, lines, balls,
+                            // crosshair, text = 6 stages).  Exact vertex
+                            // counts are not tracked at this level.
+                            state.metrics.record_balls_rendered(ball_count);
+                            for _ in 0..6 {
+                                state.metrics.record_draw_call(0);
+                            }
+
+                            // Render frame
+                            if let Err(e) = render_frame(&ctx, &mut pipelines) {
+                                eprintln!("Render error: {:?}", e);
+                                if e == wgpu::SurfaceError::OutOfMemory {
+                                    *control_flow = ControlFlow::Exit;
+                                }
                             }
                         }
+
+                        // Finalise metrics and mark frame as displayed so
+                        // should_render() won't re-trigger for the same data.
+                        state.end_frame();
                     }
 
-                    // Mark frame as displayed so should_render() won't
-                    // re-trigger for the same data.
-                    state.end_frame();
+                    // Always update energy data so the energy window stays
+                    // responsive even when rendering is paused (F2).
+                    state.update_energy_from_snapshot();
                 }
                 _ => {}
             }

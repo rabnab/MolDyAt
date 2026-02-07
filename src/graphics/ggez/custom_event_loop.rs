@@ -229,6 +229,9 @@ impl CustomEventLoop {
 
         let snapshot = self.state.physics.get_latest_snapshot()?;
 
+        // Start metrics timer just before issuing draw calls.
+        self.state.begin_render();
+
         let _ = ctx.gfx.begin_frame();
 
         let cache = self.renderer.take_cache();
@@ -238,16 +241,21 @@ impl CustomEventLoop {
         // Cell grid dimensions now match the actual simulation
         let grid_spec = &snapshot.grid_spec;
         let _ = self.renderer.draw_frame(&mut backend, grid_spec);
+        self.state.metrics.record_draw_call(0); // frame/grid draw call
 
         // Draw balls from snapshot (on top of cell grid)
+        let ball_count = snapshot.balls.len() as u32;
         let _ = self
             .renderer
             .draw_balls_from_snapshot(&mut backend, &snapshot);
+        self.state.metrics.record_balls_rendered(ball_count);
+        self.state.metrics.record_draw_call(0); // vertex count unknown
 
         // Draw cursor (on top of balls)
         let _ = self
             .renderer
             .draw_cursor(&mut backend, snapshot.cursor_ball_size_idx);
+        self.state.metrics.record_draw_call(0); // cursor draw call
 
         let _ = self.renderer.finish_frame(&mut backend);
 
