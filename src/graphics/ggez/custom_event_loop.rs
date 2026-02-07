@@ -178,6 +178,11 @@ impl CustomEventLoop {
         self.state.metrics.record_balls_rendered(ball_count);
         self.state.metrics.record_draw_call(0); // vertex count unknown
 
+        // Update cursor position for rendering (ggez-specific)
+        let cursor_px = self.state.input.cursor_pos_px();
+        self.renderer
+            .update_cursor_text(&self.state.viewport, cursor_px[0], cursor_px[1]);
+
         // Draw cursor (on top of balls)
         let _ = self.renderer.draw_cursor(
             &mut backend,
