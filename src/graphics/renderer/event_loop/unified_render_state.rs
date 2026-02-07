@@ -7,12 +7,9 @@
 //! begin_frame() → handle events → should_render() → render → end_frame()
 //! ```
 //!
-//! # Migrating from `EventLoopState`
-//!
-//! `UnifiedRenderState` is a superset of `EventLoopState`.  It additionally
-//! owns the `ViewportTransform`, `EnergyWindowManager`, cursor state, ball-size
-//! tracking, and per-step energy bookkeeping that were previously scattered
-//! across renderer-specific locals.
+//! `UnifiedRenderState` owns the `ViewportTransform`, `EnergyWindowManager`,
+//! cursor state, ball-size tracking, and per-step energy bookkeeping that
+//! unifies renderer state management across both ggez and wgpu backends.
 
 use crate::application::MainContent;
 use crate::application::renderer_snapshot::RendererSnapshot;
@@ -22,8 +19,8 @@ use crate::graphics::renderer::state_layers::RendererConfig;
 use crate::objects2d::{Rect, Vec2D};
 use std::sync::{Arc, Mutex};
 
+use super::action_processor::process_action_common;
 use super::energy_window_manager::EnergyWindowManager;
-use super::event_loop_state::process_action_common;
 use super::input_handler::{InputAction, InputHandler};
 use super::metrics::MetricsCollector;
 use super::physics_coordinator::PhysicsCoordinator;
