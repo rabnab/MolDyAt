@@ -9,16 +9,17 @@ mod tests;
 mod unified_render_state;
 
 // Shared event loop infrastructure for both ggez and wgpu renderers
-#[allow(unused_imports)] // May be unused depending on renderer feature
+#[cfg(feature = "renderer-wgpu")]
 pub use energy_window_manager::EnergyWindowManager;
-#[allow(unused_imports)] // Unused when building without ggez
+// EventLoopState is legacy - superseded by UnifiedRenderState
+#[allow(unused_imports)]
 pub use event_loop_state::EventLoopState;
-#[allow(unused_imports)] // Used by WGPU renderer only
+#[cfg(feature = "renderer-wgpu")]
 pub use event_loop_state::process_action_common;
 pub use input_handler::{InputAction, InputHandler, KeyCode};
 pub use metrics::{FrameMetrics, MetricsCollector};
 pub use physics_coordinator::PhysicsCoordinator;
-#[allow(unused_imports)] // May be used in future refactoring
-pub use render_context::RenderContext;
+// RenderContext is unused - candidate for removal
 #[allow(unused_imports)]
+pub use render_context::RenderContext;
 pub use unified_render_state::UnifiedRenderState;

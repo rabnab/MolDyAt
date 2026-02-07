@@ -94,7 +94,6 @@ impl Vec2D {
     }
 
     /// Negates the vector in place.
-    #[allow(dead_code)]
     fn negate_mut(&mut self) {
         self.scale_mut(-1.0);
     }

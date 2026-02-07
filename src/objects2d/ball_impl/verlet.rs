@@ -39,17 +39,6 @@ impl Verlet {
         Self::default()
     }
 
-    // /// Creates a new Verlet integration system with custom parameters
-    // #[allow(unused_variables)]
-    // pub fn new_with_params(
-    //     interaction_radius: f32,
-    //     max_neighbors: usize,
-    //     update_frequency: usize,
-    //     min_movement_threshold: f32,
-    // ) -> Self {
-    //     Verlet::default()
-    // }
-
     /// Get slice of neighbor ball indices.
     ///
     /// # Returns
