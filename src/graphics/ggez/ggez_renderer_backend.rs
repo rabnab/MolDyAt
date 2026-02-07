@@ -18,7 +18,7 @@ pub trait DrawingBackend {
         &mut self,
         grid_spec: &crate::application::renderer_snapshot::CellGridSpec,
         windef: &WindowDefinition,
-        viewport: &mut ViewportTransform,
+        viewport: &ViewportTransform,
     ) -> AppResult;
 
     /// Draw the boundary frame around the simulation region.
@@ -185,7 +185,7 @@ impl<'a> DrawingBackend for GgezBackend<'a> {
         &mut self,
         grid_spec: &crate::application::renderer_snapshot::CellGridSpec,
         win_def: &WindowDefinition,
-        viewport: &mut ViewportTransform,
+        viewport: &ViewportTransform,
     ) -> AppResult {
         let _ = win_def; // Keep for potential future use
         // Don't cache when using viewport transformations - grid changes with zoom/pan

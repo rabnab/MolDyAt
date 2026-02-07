@@ -3,7 +3,6 @@ use crate::application::physics_thread::PhysicsCommand;
 use crate::graphics::ggez::ggez_renderer::GgezRenderer;
 use crate::graphics::ggez::ggez_renderer_backend::GgezBackend;
 use crate::graphics::renderer::event_loop::{InputAction, UnifiedRenderState};
-use crate::graphics::renderer::viewport::ViewportTransform;
 use crate::graphics::window::{MARGIN_PX_X, MARGIN_PX_Y};
 use ggez::Context;
 use ggez::event::process_event;
@@ -28,9 +27,12 @@ impl CustomEventLoop {
     /// * `renderer` - Renderer for visualization
     pub fn new(application: MainContent, renderer: GgezRenderer) -> Self {
         let world_bounds = renderer.get_world_region();
-        let vp = renderer.viewport();
-        let window_size = vp.window_size_px();
+        let window_def = renderer.window_def.borrow();
+        let window_width = window_def.region_px.0 + 2.0 * window_def.margin_px.0;
+        let window_height = window_def.region_px.1 + 2.0 * window_def.margin_px.1;
+        let window_size = (window_width, window_height);
         let margin_px = (MARGIN_PX_X, MARGIN_PX_Y);
+        drop(window_def);
 
         let state = UnifiedRenderState::new(application, world_bounds, window_size, margin_px);
 
@@ -112,13 +114,13 @@ impl CustomEventLoop {
                 };
 
                 if let Some(action) = action {
-                    // Handle ggez-specific actions that need local work.
+                    // Handle ggez-specific actions that need renderer access.
                     // Actions fully handled here are NOT forwarded to
                     // process_action to avoid double-dispatch.
                     let mut handled_locally = false;
                     match &action {
                         InputAction::ToggleEnergyWindow => {
-                            self.state.energy_manager.toggle(window_target);
+                            self.state.toggle_energy_window(window_target);
                             handled_locally = true;
                         }
                         InputAction::CyclePlotContent => {
@@ -133,9 +135,10 @@ impl CustomEventLoop {
                             self.renderer.disable_drawing_cursor();
                             handled_locally = true;
                         }
-                        InputAction::ResetView => {
-                            // Must also reset the ggez renderer's own viewport.
-                            self.renderer.viewport_mut().reset();
+                        InputAction::AddBall { .. } => {
+                            // When adding a ball (Ctrl released), also disable cursor
+                            // to switch back from ball cursor to crosshair
+                            self.renderer.disable_drawing_cursor();
                         }
                         _ => {}
                     }
@@ -150,41 +153,35 @@ impl CustomEventLoop {
                 button,
                 ..
             } => {
-                let pos = ctx.mouse.position();
-                let world_pos = self.renderer.update_cursor_and_text(pos.x, pos.y);
-                let pan_offset = self.renderer.viewport().pan_offset();
+                let world_pos = self.state.input.cursor_pos();
+                let screen_pos = self.state.input.cursor_pos_px();
+                let pan_offset = self.state.viewport.pan_offset();
 
                 if let Some(action) = self.state.input.handle_mouse_button(
                     button,
                     mouse_state,
-                    [pos.x, pos.y],
+                    screen_pos,
                     world_pos,
                     pan_offset,
                 ) {
-                    let affects_view = self.state.process_action(&action);
-                    if affects_view {
-                        self.state.view_dirty = true;
-                    }
+                    self.state.process_action(&action);
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
                 let (x, y) = (position.x as f32, position.y as f32);
-                let world_pos = self.renderer.update_cursor_and_text(x, y);
 
-                // Update cursor position in InputHandler
-                self.state.input.set_cursor_pos(world_pos, [x, y]);
+                // Update cursor position using shared state logic
+                self.state.update_cursor_world_pos(&[x, y]);
+
+                // Update ggez-specific cursor text for rendering
+                self.renderer.update_cursor_text(&self.state.viewport, x, y);
 
                 if let Some(action) = self.state.input.handle_mouse_motion(x, y) {
                     if let InputAction::PanUpdate { delta } = &action {
-                        // Handle pan update: convert pixel delta to world delta and apply
-                        let start_offset = self.state.input.pan_start_offset();
-                        let zoom = self.renderer.viewport().zoom();
-                        let new_pan =
-                            ViewportTransform::apply_pan_delta(*delta, start_offset, zoom);
-                        self.renderer.viewport_mut().pan(new_pan);
-                        self.state.view_dirty = true;
+                        self.state.apply_pan_from_input(*delta);
+                    } else {
+                        self.state.process_action(&action);
                     }
-                    self.state.process_action(&action);
                 }
             }
             WindowEvent::MouseWheel { delta, .. } => {
@@ -193,18 +190,10 @@ impl CustomEventLoop {
                 if let Some(action) = self.state.input.handle_mouse_wheel(delta, cursor_pos) {
                     match &action {
                         InputAction::ZoomIn { center } => {
-                            self.renderer.viewport_mut().zoom_at_point(center, 1.1);
-                            self.state.view_dirty = true;
+                            self.state.zoom_at_point(center, 1.1);
                         }
                         InputAction::ZoomOut { center } => {
-                            self.renderer
-                                .viewport_mut()
-                                .zoom_at_point(center, 1.0 / 1.1);
-                            self.state.view_dirty = true;
-                        }
-                        InputAction::ResetView => {
-                            self.renderer.viewport_mut().reset();
-                            self.state.view_dirty = true;
+                            self.state.zoom_at_point(center, 1.0 / 1.1);
                         }
                         _ => {}
                     }
@@ -243,21 +232,25 @@ impl CustomEventLoop {
         // Draw cell grid and boundary frame first (background layer)
         // Cell grid dimensions now match the actual simulation
         let grid_spec = &snapshot.grid_spec;
-        let _ = self.renderer.draw_frame(&mut backend, grid_spec);
+        let _ = self
+            .renderer
+            .draw_frame(&mut backend, &self.state.viewport, grid_spec);
         self.state.metrics.record_draw_call(0); // frame/grid draw call
 
         // Draw balls from snapshot (on top of cell grid)
         let ball_count = snapshot.balls.len() as u32;
-        let _ = self
-            .renderer
-            .draw_balls_from_snapshot(&mut backend, &snapshot);
+        let _ =
+            self.renderer
+                .draw_balls_from_snapshot(&mut backend, &self.state.viewport, &snapshot);
         self.state.metrics.record_balls_rendered(ball_count);
         self.state.metrics.record_draw_call(0); // vertex count unknown
 
         // Draw cursor (on top of balls)
-        let _ = self
-            .renderer
-            .draw_cursor(&mut backend, snapshot.cursor_ball_size_idx);
+        let _ = self.renderer.draw_cursor(
+            &mut backend,
+            &self.state.viewport,
+            snapshot.cursor_ball_size_idx,
+        );
         self.state.metrics.record_draw_call(0); // cursor draw call
 
         let _ = self.renderer.finish_frame(&mut backend);
@@ -335,8 +328,9 @@ impl CustomEventLoop {
 
     fn handle_resize(&mut self, _ctx: &mut Context, width: f32, height: f32) -> ggez::GameResult {
         self.state.view_dirty = true;
-        // Always resize the renderer (it's on the render thread)
-        self.renderer.resize(width, height);
+        // Resize both renderer's window definition and state's viewport
+        self.renderer
+            .resize(&mut self.state.viewport, width, height);
 
         // Get the updated world_rect from renderer's WindowDefinition
         let world_rect = self.renderer.get_world_region();
