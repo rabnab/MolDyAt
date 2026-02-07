@@ -114,37 +114,16 @@ impl CustomEventLoop {
                 };
 
                 if let Some(action) = action {
-                    // Handle ggez-specific actions that need renderer access.
-                    // Actions fully handled here are NOT forwarded to
-                    // process_action to avoid double-dispatch.
-                    let mut handled_locally = false;
+                    // Handle only ggez-specific actions needing window_target
                     match &action {
                         InputAction::ToggleEnergyWindow => {
                             self.state.toggle_energy_window(window_target);
-                            handled_locally = true;
+                            // Don't forward - fully handled
                         }
-                        InputAction::CyclePlotContent => {
-                            self.renderer.cycle_plot_content();
-                            handled_locally = true;
+                        _ => {
+                            // All other actions handled by shared state logic
+                            self.state.process_action(&action);
                         }
-                        InputAction::EnableCursor { repeated } => {
-                            self.renderer.enable_drawing_cursor(*repeated);
-                            handled_locally = true;
-                        }
-                        InputAction::DisableCursor => {
-                            self.renderer.disable_drawing_cursor();
-                            handled_locally = true;
-                        }
-                        InputAction::AddBall { .. } => {
-                            // When adding a ball (Ctrl released), also disable cursor
-                            // to switch back from ball cursor to crosshair
-                            self.renderer.disable_drawing_cursor();
-                        }
-                        _ => {}
-                    }
-                    // Forward remaining actions to the shared handler.
-                    if !handled_locally {
-                        self.state.process_action(&action);
                     }
                 }
             }
@@ -239,9 +218,14 @@ impl CustomEventLoop {
 
         // Draw balls from snapshot (on top of cell grid)
         let ball_count = snapshot.balls.len() as u32;
-        let _ =
-            self.renderer
-                .draw_balls_from_snapshot(&mut backend, &self.state.viewport, &snapshot);
+        let show_neighbor_lines = self.state.config.show_plot
+            == crate::graphics::renderer::state_layers::PlotContent::All;
+        let _ = self.renderer.draw_balls_from_snapshot(
+            &mut backend,
+            &self.state.viewport,
+            show_neighbor_lines,
+            &snapshot,
+        );
         self.state.metrics.record_balls_rendered(ball_count);
         self.state.metrics.record_draw_call(0); // vertex count unknown
 
@@ -249,6 +233,7 @@ impl CustomEventLoop {
         let _ = self.renderer.draw_cursor(
             &mut backend,
             &self.state.viewport,
+            self.state.config.draw_cursor,
             snapshot.cursor_ball_size_idx,
         );
         self.state.metrics.record_draw_call(0); // cursor draw call
