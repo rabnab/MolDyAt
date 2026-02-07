@@ -6,7 +6,7 @@ use crate::graphics::renderer::ViewportTransform;
 use crate::graphics::renderer::batch_renderer::{
     BatchRenderer, LineSegment, collect_neighbor_lines,
 };
-use crate::graphics::renderer::state_layers::{CacheStats, FrameState, RendererConfig};
+use crate::graphics::renderer::state_layers::{CacheStats, FrameState};
 use crate::graphics::window::window_definition::WindowDefinition;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::{Ball2D, BallPhysics};
@@ -34,8 +34,6 @@ const LINE_THICKNESS: f32 = 2.0;
 const CROSSHAIR_COLOR: Color = Color::WHITE;
 
 pub struct GgezRenderer {
-    /// Stable configuration (plot type, cursor toggle).
-    config: RendererConfig,
     /// Per-frame transient state.
     frame: FrameState,
     /// GPU-agnostic cache metrics.
@@ -55,7 +53,7 @@ impl GgezRenderer {
     /// * `ball_meshes` - Pre-created meshes for balls (normal, cursor, hood updated)
     /// * `window_def` - Reference to the window definition used for rendering
     pub(crate) fn new(
-        plot_type: PlotContent,
+        _plot_type: PlotContent,
         crosshair_mesh: Mesh,
         ball_meshes: (Vec<Mesh>, Vec<Mesh>, Vec<Mesh>),
         window_def: WindowDefinitionRef,
@@ -73,32 +71,18 @@ impl GgezRenderer {
             [windef.margin_px.0 * 2.0 + windef.region_px.0, 0.0]
         };
 
-        let config = RendererConfig {
-            show_plot: plot_type,
-            draw_cursor: false,
-            render_drawing: true,
-        };
         let frame = FrameState {
             ball_status_text_pos: Some(ball_text_pos),
             ..FrameState::default()
         };
 
         Self {
-            config,
             frame,
             cache_stats: CacheStats::default(),
             shader: None,
             window_def,
             cache,
         }
-    }
-
-    pub fn plot_type(&self) -> PlotContent {
-        self.config.show_plot
-    }
-
-    pub fn cycle_plot_content(&mut self) {
-        self.config.cycle_plot_content();
     }
 
     /// Get current cache statistics.
@@ -153,9 +137,10 @@ impl GgezRenderer {
         &self,
         backend: &mut dyn DrawingBackend,
         viewport: &ViewportTransform,
+        draw_cursor: bool,
         size_idx: usize,
     ) -> AppResult {
-        if self.config.draw_cursor {
+        if draw_cursor {
             // Cursor should also scale with zoom
             let zoom_scale = viewport.zoom();
             backend.draw_ball_mesh(
@@ -230,14 +215,6 @@ impl GgezRenderer {
         backend.finish_frame()
     }
 
-    pub fn disable_drawing_cursor(&mut self) {
-        self.config.disable_cursor();
-    }
-
-    pub fn enable_drawing_cursor(&mut self, repeated: bool) {
-        self.config.enable_cursor(repeated);
-    }
-
     pub fn resize(&mut self, viewport: &mut ViewportTransform, width: f32, height: f32) {
         self.cache.cell_mesh = None;
         let mut win_def = self.window_def.borrow_mut();
@@ -269,10 +246,11 @@ impl GgezRenderer {
         &mut self,
         backend: &mut dyn DrawingBackend,
         viewport: &ViewportTransform,
+        show_neighbor_lines: bool,
         snapshot: &crate::application::renderer_snapshot::RendererSnapshot,
     ) -> AppResult<()> {
         // Draw ball symbols and neighbor lines from snapshot
-        self.draw_balls_from_snapshot_data(backend, viewport, snapshot)?;
+        self.draw_balls_from_snapshot_data(backend, viewport, show_neighbor_lines, snapshot)?;
         Ok(())
     }
 
@@ -282,12 +260,13 @@ impl GgezRenderer {
         &mut self,
         backend: &mut dyn DrawingBackend,
         viewport: &ViewportTransform,
+        show_neighbor_lines: bool,
         snapshot: &crate::application::renderer_snapshot::RendererSnapshot,
     ) -> AppResult {
         // Batch all tail lines for efficient rendering.
         // Skip tail batching entirely if no ball has a tail.
         let has_any_tails = snapshot.balls.iter().any(|b| !b.tail.is_empty());
-        if has_any_tails {
+        if has_any_tails && show_neighbor_lines {
             let mut tail_batch: BatchRenderer<TailSegment> = BatchRenderer::new();
             for ball in &snapshot.balls {
                 let tail_len = ball.tail.len();

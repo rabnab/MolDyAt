@@ -33,7 +33,7 @@ pub fn execute_input_action(
             );
             return false; // doesn't affect view
         }
-        InputAction::ToggleEnergyWindow | InputAction::CyclePlotContent => {
+        InputAction::ToggleEnergyWindow => {
             state.toggle_energy_window(window_target);
             return false; // doesn't affect view
         }

@@ -31,6 +31,8 @@ pub fn process_action_common(
         }
         InputAction::AddBall { position } => {
             physics.send_command(PhysicsCommand::AddBall(*position));
+            // When adding ball (Ctrl released), disable cursor to return to crosshair
+            config.disable_cursor();
         }
         InputAction::NextBallSize => {
             physics.send_command(PhysicsCommand::NextBallSize);
@@ -80,15 +82,21 @@ pub fn process_action_common(
         InputAction::PrintHelp => {
             MainContent::print_help_message();
         }
-        // Actions handled elsewhere (renderer-specific)
+        InputAction::EnableCursor { repeated } => {
+            config.enable_cursor(*repeated);
+        }
+        InputAction::DisableCursor => {
+            config.disable_cursor();
+        }
+        InputAction::CyclePlotContent => {
+            config.cycle_plot_content();
+        }
+        // Actions handled in event loops (need framework-specific resources)
         InputAction::PanStart { .. }
         | InputAction::PanEnd
         | InputAction::UpdateCursor { .. }
-        | InputAction::EnableCursor { .. }
-        | InputAction::DisableCursor
-        | InputAction::CyclePlotContent
-        | InputAction::ToggleEnergyWindow
-        | InputAction::ToggleCutoffRings => {}
+        | InputAction::ToggleEnergyWindow  // needs window_target
+        | InputAction::ToggleCutoffRings => {}  // needs wgpu resources
     }
 
     affects_view
