@@ -24,11 +24,6 @@ pub fn execute_input_action(
     // Handle ONLY actions that need wgpu resources
     if let InputAction::ToggleCutoffRings = action {
         ball_pipeline.toggle_cutoff_rings(queue);
-        let visible = ball_pipeline.are_cutoff_rings_visible();
-        println!(
-            "Cutoff rings: {}",
-            if visible { "visible" } else { "hidden" }
-        );
         return false; // doesn't affect view
     }
 

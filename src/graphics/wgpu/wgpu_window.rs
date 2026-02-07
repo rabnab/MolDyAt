@@ -280,50 +280,31 @@ fn handle_window_event(
         WindowEvent::MouseInput { .. }
         | WindowEvent::CursorMoved { .. }
         | WindowEvent::MouseWheel { .. } => {
-            state.view_dirty = state.handle_mouse_event(&event);
+            state.view_dirty |= state.handle_mouse_event(&event);
         }
         WindowEvent::KeyboardInput {
             input:
                 KeyboardInput {
                     virtual_keycode: Some(key),
-                    state: ElementState::Pressed,
+                    state: key_state,
                     ..
                 },
             ..
         } => {
-            if let Some(action) = state.input.handle_key_down(key, false) {
-                let affects_view = execute_input_action(
+            // Use InputHandler to process keyboard input
+            let action = match key_state {
+                ElementState::Pressed => state.input.handle_key_down(key, false),
+                ElementState::Released => state.input.handle_key_up(key),
+            };
+
+            if let Some(action) = action {
+                state.view_dirty |= execute_input_action(
                     &action,
                     state,
                     &mut pipelines.ball,
                     &ctx.queue,
                     window_target,
                 );
-                if affects_view {
-                    state.view_dirty = true;
-                }
-            }
-        }
-        WindowEvent::KeyboardInput {
-            input:
-                KeyboardInput {
-                    virtual_keycode: Some(key),
-                    state: ElementState::Released,
-                    ..
-                },
-            ..
-        } => {
-            if let Some(action) = state.input.handle_key_up(key) {
-                let affects_view = execute_input_action(
-                    &action,
-                    state,
-                    &mut pipelines.ball,
-                    &ctx.queue,
-                    window_target,
-                );
-                if affects_view {
-                    state.view_dirty = true;
-                }
             }
         }
         _ => {}
