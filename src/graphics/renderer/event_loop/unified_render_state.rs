@@ -178,7 +178,14 @@ impl UnifiedRenderState {
     ///
     /// Returns `true` if the action affects the viewport (caller may still
     /// need to apply zoom/pan to `self.viewport` before the flag matters).
-    pub fn process_action(&mut self, action: &InputAction) -> bool {
+    ///
+    /// # Arguments
+    /// * `window_target` - Optional window target for actions that need to create windows (e.g., ToggleEnergyWindow)
+    pub fn process_action(
+        &mut self,
+        action: &InputAction,
+        window_target: Option<&winit::event_loop::EventLoopWindowTarget<()>>,
+    ) -> bool {
         // Handle actions that need state updates beyond process_action_common
         match action {
             InputAction::ResetView => {
@@ -187,6 +194,12 @@ impl UnifiedRenderState {
             }
             InputAction::NextBallSize => {
                 self.next_ball_size();
+                return false; // doesn't affect view
+            }
+            InputAction::ToggleEnergyWindow => {
+                if let Some(target) = window_target {
+                    self.toggle_energy_window(target);
+                }
                 return false; // doesn't affect view
             }
             _ => {}
@@ -287,7 +300,7 @@ impl UnifiedRenderState {
             .input
             .handle_mouse_button(button, state, screen_pos, world_pos, pan_offset)
         {
-            return self.process_action(&action);
+            return self.process_action(&action, None);
         }
         false
     }
@@ -305,7 +318,7 @@ impl UnifiedRenderState {
                 self.apply_pan_from_input(*delta);
                 return true;
             } else {
-                return self.process_action(&action);
+                return self.process_action(&action, None);
             }
         }
         false
@@ -322,20 +335,20 @@ impl UnifiedRenderState {
             match &action {
                 InputAction::ZoomIn { center } => {
                     self.zoom_at_point(center, 1.1);
-                    self.process_action(&action);
+                    self.process_action(&action, None);
                     return true;
                 }
                 InputAction::ZoomOut { center } => {
                     self.zoom_at_point(center, 1.0 / 1.1);
-                    self.process_action(&action);
+                    self.process_action(&action, None);
                     return true;
                 }
                 InputAction::ResetView => {
                     self.reset_view();
-                    self.process_action(&action);
+                    self.process_action(&action, None);
                     return true;
                 }
-                _ => return self.process_action(&action),
+                _ => return self.process_action(&action, None),
             }
         }
         false

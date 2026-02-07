@@ -91,11 +91,11 @@ pub fn process_action_common(
         InputAction::CyclePlotContent => {
             config.cycle_plot_content();
         }
-        // Actions handled in event loops (need framework-specific resources)
+        // Actions handled elsewhere (not in action_processor)
         InputAction::PanStart { .. }
         | InputAction::PanEnd
         | InputAction::UpdateCursor { .. }
-        | InputAction::ToggleEnergyWindow  // needs window_target
+        | InputAction::ToggleEnergyWindow  // handled in UnifiedRenderState::process_action
         | InputAction::ToggleCutoffRings => {}  // needs wgpu resources
     }
 
