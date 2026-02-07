@@ -1,7 +1,9 @@
 use crate::application::AppResult;
 use crate::graphics::ggez::WindowDefinitionRef;
+use crate::graphics::ggez::batching::{LineSegment, TailSegment};
 use crate::graphics::ggez::ggez_renderer_backend::{DrawingBackend, GgezMeshCache};
 use crate::graphics::renderer::ViewportTransform;
+use crate::graphics::renderer::batch_renderer::BatchRenderer;
 use crate::graphics::window::window_definition::WindowDefinition;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::{Ball2D, BallPhysics};
@@ -296,7 +298,7 @@ impl GgezRenderer {
         // Skip tail batching entirely if no ball has a tail.
         let has_any_tails = snapshot.balls.iter().any(|b| !b.tail.is_empty());
         if has_any_tails {
-            backend.begin_tail_batch();
+            let mut tail_batch: BatchRenderer<TailSegment> = BatchRenderer::new();
             for ball in &snapshot.balls {
                 let tail_len = ball.tail.len();
                 if tail_len > 1 {
@@ -310,25 +312,28 @@ impl GgezRenderer {
                         // Use unified viewport transformation
                         let start_px = self.viewport.world_to_px(start_pos);
                         let end_px = self.viewport.world_to_px(end_pos);
-                        let start: [f32; 2] = start_px;
-                        let end: [f32; 2] = end_px;
-                        let width = 1.0;
-                        // Propagate any errors in tail line batching instead of silently ignoring them.
-                        backend.add_tail_line_to_batch(&[start, end], width)?;
+                        tail_batch.push(TailSegment {
+                            points: [start_px, end_px],
+                            width: 1.0,
+                        });
                     }
                 }
             }
-            backend.draw_tail_batch()?;
+            backend.flush_tail_batch(&mut tail_batch)?;
         }
 
         // Batch all neighbor lines for efficient rendering
-        backend.begin_line_batch();
+        let mut line_batch: BatchRenderer<LineSegment> = BatchRenderer::new();
         for ball in &snapshot.balls {
             if ball.show_neighbor_lines {
-                self.add_neighbor_lines_from_snapshot_to_batch(backend, ball, &snapshot.balls)?;
+                self.add_neighbor_lines_from_snapshot_to_batch(
+                    &mut line_batch,
+                    ball,
+                    &snapshot.balls,
+                );
             }
         }
-        backend.draw_line_batch()?;
+        backend.flush_line_batch(&mut line_batch)?;
 
         // Then, draw balls from snapshot data (on top of lines) with frustum culling
         for ball in &snapshot.balls {
@@ -363,13 +368,13 @@ impl GgezRenderer {
 }
 
 impl GgezRenderer {
-    /// Add neighbor lines to batch for a ball from snapshot data (batched mode - efficient)
+    /// Collect neighbor lines for a ball into the given batch.
     fn add_neighbor_lines_from_snapshot_to_batch(
         &mut self,
-        backend: &mut dyn DrawingBackend,
+        batch: &mut BatchRenderer<LineSegment>,
         ball: &crate::application::renderer_snapshot::BallRenderData,
         all_balls: &[crate::application::renderer_snapshot::BallRenderData],
-    ) -> AppResult {
+    ) {
         // Use unified viewport transformation
         let ball_coord_px = self.viewport.world_to_px(&ball.position);
         let start: [f32; 2] = ball_coord_px;
@@ -402,15 +407,17 @@ impl GgezRenderer {
                 Color::from_rgb(64, 64, 64)
             };
 
-            // Get neighbor position and add line to batch (use unified viewport transformation)
+            // Get neighbor position and push to batch (use unified viewport transformation)
             if let Some(neighbor) = all_balls.get(*neighbor_idx) {
                 let neighbor_pos_px = self.viewport.world_to_px(&neighbor.position);
                 let end: [f32; 2] = neighbor_pos_px;
-                backend.add_line_to_batch(&[start, end], 2.0, color_line.to_rgba())?;
+                batch.push(LineSegment {
+                    points: [start, end],
+                    width: 2.0,
+                    color: color_line.to_rgba(),
+                });
             }
         }
-
-        Ok(())
     }
 
     // Move the cache out without cloning (leaves an empty/default cache behind).

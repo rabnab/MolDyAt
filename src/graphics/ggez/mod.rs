@@ -6,6 +6,7 @@ use ggez::mint::Point2;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+pub(crate) mod batching;
 pub(crate) mod custom_event_loop;
 #[cfg(test)]
 mod custom_event_loop_tests;
