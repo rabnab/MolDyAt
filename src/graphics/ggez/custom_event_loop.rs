@@ -167,14 +167,9 @@ impl CustomEventLoop {
 
         // Draw balls from snapshot (on top of cell grid)
         let ball_count = snapshot.balls.len() as u32;
-        let show_neighbor_lines = self.state.config.show_plot
-            == crate::graphics::renderer::state_layers::PlotContent::All;
-        let _ = self.renderer.draw_balls_from_snapshot(
-            &mut backend,
-            &self.state.viewport,
-            show_neighbor_lines,
-            &snapshot,
-        );
+        let _ =
+            self.renderer
+                .draw_balls_from_snapshot(&mut backend, &self.state.viewport, &snapshot);
         self.state.metrics.record_balls_rendered(ball_count);
         self.state.metrics.record_draw_call(0); // vertex count unknown
 
