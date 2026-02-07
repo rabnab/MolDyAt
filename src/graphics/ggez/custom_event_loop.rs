@@ -138,7 +138,12 @@ impl CustomEventLoop {
                 self.state.view_dirty = self.state.handle_mouse_wheel_event(delta);
             }
             WindowEvent::Resized(size) => {
-                let _ = self.handle_resize(ctx, size.width as f32, size.height as f32);
+                let world_rect = self.renderer.resize(size.width as f32, size.height as f32);
+                self.state.handle_resize_with_world_rect(
+                    size.width as f32,
+                    size.height as f32,
+                    world_rect,
+                );
             }
             _ => {}
         }
@@ -267,21 +272,5 @@ impl CustomEventLoop {
         ctx.mouse.save_mouse_state();
 
         ggez::timer::yield_now();
-    }
-
-    fn handle_resize(&mut self, _ctx: &mut Context, width: f32, height: f32) -> ggez::GameResult {
-        self.state.view_dirty = true;
-        // Resize both renderer's window definition and state's viewport
-        self.renderer
-            .resize(&mut self.state.viewport, width, height);
-
-        // Get the updated world_rect from renderer's WindowDefinition
-        let world_rect = self.renderer.get_world_region();
-
-        // Send resize command to physics thread
-        self.state
-            .physics
-            .send_command(PhysicsCommand::Resize { world_rect });
-        Ok(())
     }
 }

@@ -9,6 +9,7 @@ use super::wgpu_input::execute_input_action;
 use super::wgpu_pipelines::{WgpuPipelines, compute_view_proj};
 use crate::application::MainContent;
 use crate::application::renderer_snapshot::{CellGridSpec, RendererSnapshot};
+use crate::graphics::renderer::ViewportTransform;
 use crate::graphics::renderer::event_loop::UnifiedRenderState;
 use crate::graphics::window::{MARGIN_PX_X, MARGIN_PX_Y};
 use crate::objects2d::Rect;
@@ -256,18 +257,24 @@ fn handle_window_event(
         WindowEvent::Resized(size) => {
             println!("Window resized to {}x{}", size.width, size.height);
             ctx.resize(size.width, size.height);
-            state.handle_resize(
-                size.width as f32,
-                size.height as f32,
+            let world_rect = ViewportTransform::compute_world_bounds_from_window_size(
+                size.width,
+                size.height,
                 (MARGIN_PX_X, MARGIN_PX_Y),
             );
+            state.handle_resize_with_world_rect(size.width as f32, size.height as f32, world_rect);
         }
         WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
             ctx.resize(new_inner_size.width, new_inner_size.height);
-            state.handle_resize(
+            let world_rect = ViewportTransform::compute_world_bounds_from_window_size(
+                new_inner_size.width,
+                new_inner_size.height,
+                (MARGIN_PX_X, MARGIN_PX_Y),
+            );
+            state.handle_resize_with_world_rect(
                 new_inner_size.width as f32,
                 new_inner_size.height as f32,
-                (MARGIN_PX_X, MARGIN_PX_Y),
+                world_rect,
             );
         }
         WindowEvent::MouseInput {

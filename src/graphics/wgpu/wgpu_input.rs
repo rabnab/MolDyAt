@@ -22,17 +22,14 @@ pub fn execute_input_action(
     window_target: &winit::event_loop::EventLoopWindowTarget<()>,
 ) -> bool {
     // Handle ONLY actions that need wgpu resources
-    match action {
-        InputAction::ToggleCutoffRings => {
-            ball_pipeline.toggle_cutoff_rings(queue);
-            let visible = ball_pipeline.are_cutoff_rings_visible();
-            println!(
-                "Cutoff rings: {}",
-                if visible { "visible" } else { "hidden" }
-            );
-            return false; // doesn't affect view
-        }
-        _ => {}
+    if let InputAction::ToggleCutoffRings = action {
+        ball_pipeline.toggle_cutoff_rings(queue);
+        let visible = ball_pipeline.are_cutoff_rings_visible();
+        println!(
+            "Cutoff rings: {}",
+            if visible { "visible" } else { "hidden" }
+        );
+        return false; // doesn't affect view
     }
 
     // Delegate all other actions to UnifiedRenderState (single source of truth)
