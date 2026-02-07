@@ -132,52 +132,19 @@ impl CustomEventLoop {
                 button,
                 ..
             } => {
-                let world_pos = self.state.input.cursor_pos();
-                let screen_pos = self.state.input.cursor_pos_px();
-                let pan_offset = self.state.viewport.pan_offset();
-
-                if let Some(action) = self.state.input.handle_mouse_button(
-                    button,
-                    mouse_state,
-                    screen_pos,
-                    world_pos,
-                    pan_offset,
-                ) {
-                    self.state.process_action(&action);
-                }
+                self.state.view_dirty = self.state.handle_mouse_input_event(button, mouse_state);
             }
             WindowEvent::CursorMoved { position, .. } => {
                 let (x, y) = (position.x as f32, position.y as f32);
 
-                // Update cursor position using shared state logic
-                self.state.update_cursor_world_pos(&[x, y]);
-
                 // Update ggez-specific cursor text for rendering
                 self.renderer.update_cursor_text(&self.state.viewport, x, y);
 
-                if let Some(action) = self.state.input.handle_mouse_motion(x, y) {
-                    if let InputAction::PanUpdate { delta } = &action {
-                        self.state.apply_pan_from_input(*delta);
-                    } else {
-                        self.state.process_action(&action);
-                    }
-                }
+                // Centralized cursor handling
+                self.state.view_dirty = self.state.handle_cursor_moved_event(x, y);
             }
             WindowEvent::MouseWheel { delta, .. } => {
-                let cursor_pos = self.state.input.cursor_pos();
-
-                if let Some(action) = self.state.input.handle_mouse_wheel(delta, cursor_pos) {
-                    match &action {
-                        InputAction::ZoomIn { center } => {
-                            self.state.zoom_at_point(center, 1.1);
-                        }
-                        InputAction::ZoomOut { center } => {
-                            self.state.zoom_at_point(center, 1.0 / 1.1);
-                        }
-                        _ => {}
-                    }
-                    self.state.process_action(&action);
-                }
+                self.state.view_dirty = self.state.handle_mouse_wheel_event(delta);
             }
             WindowEvent::Resized(size) => {
                 let _ = self.handle_resize(ctx, size.width as f32, size.height as f32);

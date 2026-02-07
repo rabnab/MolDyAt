@@ -9,7 +9,6 @@ use super::wgpu_input::execute_input_action;
 use super::wgpu_pipelines::{WgpuPipelines, compute_view_proj};
 use crate::application::MainContent;
 use crate::application::renderer_snapshot::{CellGridSpec, RendererSnapshot};
-use crate::graphics::renderer::InputAction;
 use crate::graphics::renderer::event_loop::UnifiedRenderState;
 use crate::graphics::window::{MARGIN_PX_X, MARGIN_PX_Y};
 use crate::objects2d::Rect;
@@ -276,53 +275,14 @@ fn handle_window_event(
             button,
             ..
         } => {
-            let world_pos = state.input.cursor_pos();
-            let screen_pos = state.input.cursor_pos_px();
-            let pan_offset = state.viewport.pan_offset();
-
-            if let Some(action) = state
-                .input
-                .handle_mouse_button(button, btn_state, screen_pos, world_pos, pan_offset)
-            {
-                let affects_view = execute_input_action(
-                    &action,
-                    state,
-                    &mut pipelines.ball,
-                    &ctx.queue,
-                    window_target,
-                );
-                if affects_view {
-                    state.view_dirty = true;
-                }
-            }
+            state.view_dirty = state.handle_mouse_input_event(button, btn_state);
         }
         WindowEvent::CursorMoved { position, .. } => {
-            state.update_cursor_world_pos(&[position.x as f32, position.y as f32]);
-
-            if let Some(InputAction::PanUpdate { delta }) = state
-                .input
-                .handle_mouse_motion(position.x as f32, position.y as f32)
-            {
-                state.apply_pan_from_input(delta);
-            }
+            state.view_dirty =
+                state.handle_cursor_moved_event(position.x as f32, position.y as f32);
         }
         WindowEvent::MouseWheel { delta, .. } => {
-            let cursor_pos = state.input.cursor_pos();
-
-            if let Some(action) = state.input.handle_mouse_wheel(delta, cursor_pos) {
-                match &action {
-                    InputAction::ZoomIn { center } => {
-                        state.zoom_at_point(center, 1.1);
-                    }
-                    InputAction::ZoomOut { center } => {
-                        state.zoom_at_point(center, 1.0 / 1.1);
-                    }
-                    InputAction::ResetView => {
-                        state.reset_view();
-                    }
-                    _ => {}
-                }
-            }
+            state.view_dirty = state.handle_mouse_wheel_event(delta);
         }
         WindowEvent::KeyboardInput {
             input:
