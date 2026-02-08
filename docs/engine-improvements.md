@@ -18,54 +18,73 @@ The codebase demonstrates **solid fundamentals** with good separation of concern
 
 ---
 
-## Issue 1: Missing Abstraction Layer for Rendering Context ⚠️ **[Priority: LOW]**
+## Issue 1: Missing Abstraction Layer for Rendering Context ⚠️ **[Priority: VERY LOW — Partially Superseded]**
 
-### Current State
+> **Updated 2026-02-08**: The RenderGraph implementation (PR #105 / Issue #96) addresses
+> ~60-70% of the structural problems this issue identified. See
+> [Status Update](#issue-1-status-update) below.
 
-The `RenderContext` trait exists but is **unused**:
-```rust
-pub trait RenderContext {
-    fn begin_frame(&mut self) -> AppResult;
-    fn end_frame(&mut self) -> AppResult;
-    fn request_quit(&mut self);
-    fn is_quit_requested(&self) -> bool;
-    fn is_continuing(&self) -> bool;
-    fn tick(&mut self);
-}
-```
+### Original Problem (Feb 2026)
 
-Each renderer has fundamentally incompatible context management:
+The `RenderContext` trait existed but was **unused**, and each renderer had
+fundamentally incompatible context management:
 
-**ggez**:
-```rust
-pub fn update_and_draw(&mut self, ctx: &mut Context) {
-    // Takes mutable reference to framework Context
-    // Synchronous, imperative per-frame callback
-    self.render_from_snapshot(ctx);
-}
-```
+- **ggez**: Framework controls event loop → calls your `render_from_snapshot()` callback
+- **wgpu**: You control event loop → respond to events reactively
 
-**wgpu**:
-```rust
-event_loop.run(move |event, window_target, control_flow| {
-    // Async closure capturing state
-    // Reactive event-driven architecture
-    match event {
-        Event::MainEventsCleared => { /* render */ }
-        Event::RedrawRequested(_) => { /* render */ }
-    }
-});
-```
+**Result**: Context abstraction was abandoned; each renderer managed state separately.
 
-### Problem
+### <a id="issue-1-status-update"></a>Status Update — What RenderGraph Solved
 
-These are **fundamentally incompatible** design patterns:
-- **ggez**: Framework controls event loop → calls your update function
-- **wgpu**: You control event loop → respond to events
+The `RenderGraph` (in `src/graphics/wgpu/render_graph.rs`) now provides:
 
-**Result**: Context abstraction abandoned, each renderer manages separately
+| Capability | Implementation |
+|---|---|
+| Pipeline abstraction | `RenderPipeline` trait with `prepare()` / `render()` / `viewport_mode()` |
+| Orchestration | `RenderGraph` manages registration, execution order, enable/disable |
+| Context bundling | `PrepareContext` bundles all prepare-phase data into one struct |
+| Handle-based access | `PipelineHandle` for safe, opaque pipeline references |
+| Viewport switching | `ViewportMode::FullWindow` / `Inset` — automatic per-pipeline |
+| GPU-free testing | `MockPipeline` enables unit tests without GPU context |
+| Downcasting | `Any` super-trait on `RenderPipeline` for pipeline-specific operations |
 
-### Recommendation: Render Command Buffer Pattern
+The abandoned `RenderContext` trait has been **removed** from the codebase.
+
+### What Remains Unsolved
+
+1. **Cross-renderer command abstraction** — ggez and wgpu still have entirely separate
+   rendering paths. A `RenderCommand` enum wouldn't help unless a third backend is planned
+   or ggez needs feature-parity maintenance.
+
+2. **Command recording/replay** — Still useful for debugging. Could be implemented as a
+   thin recording decorator on `RenderGraph` rather than a full command buffer.
+
+3. **Headless rendering for CI** — Could be achieved by mocking at the `RenderPipeline`
+   trait level (which now exists).
+
+### Revised Recommendation
+
+Given that wgpu is the active renderer and ggez is de facto legacy, the full
+`RenderCommandBuffer` approach provides **diminishing returns**. Preferred alternatives:
+
+**Option A (Recommended): Recording decorator on RenderGraph**
+- Wrap `RenderGraph` to log `prepare()` / `render()` calls
+- Minimal effort, leverages existing infrastructure
+- Provides replay and debugging without a full command buffer
+
+**Option B: Lightweight command buffer for ggez only**
+- Only if ggez must stay in feature-sync with wgpu
+- Create `RenderCommand` enum consumed by `GgezRenderer`
+- Doesn't require changes to wgpu side
+
+**Option C: Full command buffer (original proposal)**
+- Only justified if planning a third renderer backend
+- High effort for marginal benefit given current project scope
+
+<details>
+<summary>Original Proposal (click to expand)</summary>
+
+#### Original Recommendation: Render Command Buffer Pattern
 
 Decouple rendering logic from framework event loops using a command queue:
 
@@ -93,63 +112,19 @@ pub enum RenderCommand {
     },
 }
 
-pub trait RenderQueue {
-    fn enqueue(&mut self, cmd: RenderCommand);
-    fn clear(&mut self);
-    fn is_empty(&self) -> bool;
-    fn iter(&self) -> impl Iterator<Item = &RenderCommand>;
-}
-
 pub trait FrameRenderer {
     fn begin_frame(&mut self) -> AppResult;
     fn flush_queue(&mut self, queue: &RenderQueue) -> AppResult;
     fn end_frame(&mut self) -> AppResult;
 }
-
-impl FrameRenderer for GgezRenderer {
-    fn flush_queue(&mut self, queue: &RenderQueue) -> AppResult {
-        for cmd in queue.iter() {
-            match cmd {
-                RenderCommand::DrawGrid { spec } => self.draw_grid(spec)?,
-                RenderCommand::DrawBalls { positions, scale } => {
-                    for (pos, size_idx, ball_type) in positions {
-                        self.draw_ball(*pos, *size_idx, *ball_type, *scale)?;
-                    }
-                }
-                // ... other commands
-            }
-        }
-        Ok(())
-    }
-}
 ```
 
-**Usage Pattern**:
-```rust
-// In both ggez and wgpu event loops:
-let mut render_queue = RenderQueue::new();
-
-// Collect render commands (framework-agnostic)
-render_queue.enqueue(RenderCommand::DrawGrid { spec });
-render_queue.enqueue(RenderCommand::DrawBalls { positions, scale });
-
-// Execute with framework-specific renderer
-renderer.begin_frame()?;
-renderer.flush_queue(&render_queue)?;
-renderer.end_frame()?;
-render_queue.clear();
-```
-
-### Benefits
-
-- **Decouples** rendering logic from framework event loops
-- **Makes extensibility** easy: add new renderer without touching event loop code
-- **Simplifies testing**: can record commands without GPU context
-- **Foundation** for future features (command validation, recording/replay, async rendering)
+</details>
 
 ### Implementation Effort
 
-**High** - Requires refactoring all rendering calls, but no semantic changes.
+**Medium** (reduced from High) — RenderGraph already handles wgpu pipeline orchestration.
+Only cross-renderer unification or recording remains.
 
 ---
 
