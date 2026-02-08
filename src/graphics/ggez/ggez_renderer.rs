@@ -11,7 +11,7 @@ use crate::graphics::window::window_definition::WindowDefinition;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::{Ball2D, BallPhysics};
 use ggez::Context;
-use ggez::graphics::{Color, DrawMode, Mesh, MeshBuilder, Shader};
+use ggez::graphics::{Color, DrawMode, Mesh, MeshBuilder};
 use ggez::mint::Point2;
 use std::cell::Ref;
 use std::collections::VecDeque;
@@ -40,7 +40,6 @@ pub struct GgezRenderer {
     cache_stats: CacheStats,
 
     // ── Backend-specific resources ──────────────────────────────────
-    shader: Option<Shader>,
     pub(crate) window_def: WindowDefinitionRef,
     cache: GgezMeshCache,
 }
@@ -79,7 +78,6 @@ impl GgezRenderer {
         Self {
             frame,
             cache_stats: CacheStats::default(),
-            shader: None,
             window_def,
             cache,
         }

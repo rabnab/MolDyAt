@@ -9,14 +9,11 @@ use crate::objects2d::Rect;
 use crate::objects2d::ball_impl::{BallFactory, BallPhysics};
 use ggez::ContextBuilder;
 use ggez::conf::{FullscreenType, WindowMode, WindowSetup};
-use ggez::graphics::ShaderBuilder;
 use ggez::input::mouse;
 use std::cell::RefCell;
-use std::path::PathBuf;
 use std::rc::Rc;
 
 pub struct GgezWindow {
-    resource_dir: PathBuf,
     win_definition: WindowDefinitionRef,
 }
 
@@ -24,17 +21,15 @@ impl GgezWindow {
     /// Create new ggez window configuration.
     ///
     /// # Arguments
-    /// * `resource_dir` - Path to shader resources directory
     /// * `reg_x` - Region width in pixels
     /// * `reg_y` - Region height in pixels
-    pub(crate) fn new(resource_dir: PathBuf, reg_x: f32, reg_y: f32) -> Self {
+    pub(crate) fn new(reg_x: f32, reg_y: f32) -> Self {
         let my_win_definition = WindowDefinition {
             region_px: (reg_x, reg_y),
             margin_px: (MARGIN_PX_X, MARGIN_PX_Y),
         };
 
         GgezWindow {
-            resource_dir,
             win_definition: Rc::new(RefCell::new(my_win_definition)),
         }
     }
@@ -52,7 +47,6 @@ impl Window<GgezRenderer> for GgezWindow {
     fn create_window(&self) {
         let height_default: f32 = 1024.;
         let (mut ctx, event_loop) = ContextBuilder::new("ThermoRust", "Rainer Kaltseis")
-            .add_resource_path(self.resource_dir.clone())
             .window_setup(
                 WindowSetup::default().title("Monatomic gas using modified Lenard Jones Potential"),
             )
@@ -72,14 +66,6 @@ impl Window<GgezRenderer> for GgezWindow {
 
         mouse::set_cursor_hidden(&mut ctx, true);
 
-        //let shader = Shader::from_fragment_shader ( &mut ctx, include_str!("objects2d/gradient.gls1"))?;
-        let _shader = ShaderBuilder::new()
-            //.vertex_code(include_str!("objects2d/gradient.wsgl"))
-            //.fragment_code(include_str!("objects2d/gradient_frag.wgsl"))
-            .vertex_path("/gradient_vert.wgsl")
-            .fragment_path("/gradient_frag.wgsl")
-            .build(&ctx.gfx)
-            .expect("Failed to build shader");
         let ball_physics = BallPhysics::default();
         let ball_defs = {
             let all_radii = BallFactory::create_all_radii();

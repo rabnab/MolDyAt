@@ -79,8 +79,7 @@ fn get_resource_dir() -> PathBuf {
 #[cfg(feature = "renderer-ggez")]
 fn run_ggez_renderer() -> GameResult {
     log::info!("Renderer: ggez");
-    let resource_dir = get_resource_dir();
-    let window = GgezWindow::new(resource_dir, 0.5, 0.5);
+    let window = GgezWindow::new(0.5, 0.5);
     window.create_window();
     Ok(())
 }
