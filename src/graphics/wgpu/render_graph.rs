@@ -123,24 +123,34 @@ impl RenderGraph {
     }
 
     /// Enable or disable a pipeline.
-    pub fn set_enabled(&mut self, handle: PipelineHandle, enabled: bool) {
+    ///
+    /// Returns `false` if the handle does not belong to this graph.
+    pub fn set_enabled(&mut self, handle: PipelineHandle, enabled: bool) -> bool {
+        if handle.0 >= self.pipelines.len() {
+            return false;
+        }
         if enabled {
             self.enabled.insert(handle);
         } else {
             self.enabled.remove(&handle);
         }
+        true
     }
 
     /// Check whether a pipeline is enabled.
+    ///
+    /// Returns `false` for handles that do not belong to this graph.
     pub fn is_enabled(&self, handle: PipelineHandle) -> bool {
-        self.enabled.contains(&handle)
+        handle.0 < self.pipelines.len() && self.enabled.contains(&handle)
     }
 
     /// Replace the execution order.
     ///
-    /// All handles must refer to registered pipelines.
+    /// Only handles that refer to registered pipelines are kept;
+    /// out-of-range handles are silently dropped.
     pub fn set_execution_order(&mut self, order: Vec<PipelineHandle>) {
-        self.execution_order = order;
+        let len = self.pipelines.len();
+        self.execution_order = order.into_iter().filter(|h| h.0 < len).collect();
     }
 
     /// Prepare all enabled pipelines (upload uniforms / buffers).
@@ -235,13 +245,104 @@ impl Default for RenderGraph {
 mod tests {
     use super::*;
 
+    /// Minimal mock pipeline that records calls without needing a GPU.
+    struct MockPipeline {
+        label: &'static str,
+        mode: ViewportMode,
+    }
+
+    impl MockPipeline {
+        fn new(label: &'static str, mode: ViewportMode) -> Self {
+            Self { label, mode }
+        }
+    }
+
+    impl RenderPipeline for MockPipeline {
+        fn name(&self) -> &'static str {
+            self.label
+        }
+        fn viewport_mode(&self) -> ViewportMode {
+            self.mode
+        }
+        fn prepare(&mut self, _ctx: &PrepareContext) -> AppResult {
+            Ok(())
+        }
+        fn render<'rp>(&'rp self, _render_pass: &mut wgpu::RenderPass<'rp>) {}
+    }
+
     #[test]
     fn add_pipeline_returns_sequential_handles() {
-        let graph = RenderGraph::new();
-        // We can't create real pipelines without a GPU, but we can test
-        // the handle/enable/order logic through the public API.
-        assert_eq!(graph.pipeline_count(), 0);
-        assert_eq!(graph.enabled_count(), 0);
+        let mut graph = RenderGraph::new();
+        let h0 = graph.add_pipeline(Box::new(MockPipeline::new("a", ViewportMode::FullWindow)));
+        let h1 = graph.add_pipeline(Box::new(MockPipeline::new("b", ViewportMode::Inset)));
+
+        assert_eq!(h0, PipelineHandle(0));
+        assert_eq!(h1, PipelineHandle(1));
+        assert_ne!(h0, h1);
+        assert_eq!(graph.pipeline_count(), 2);
+        assert_eq!(graph.enabled_count(), 2);
+        assert!(graph.is_enabled(h0));
+        assert!(graph.is_enabled(h1));
+    }
+
+    #[test]
+    fn disable_pipeline_excludes_from_enabled_count() {
+        let mut graph = RenderGraph::new();
+        let h0 = graph.add_pipeline(Box::new(MockPipeline::new("a", ViewportMode::FullWindow)));
+        let _h1 = graph.add_pipeline(Box::new(MockPipeline::new("b", ViewportMode::Inset)));
+
+        assert!(graph.set_enabled(h0, false));
+        assert!(!graph.is_enabled(h0));
+        assert_eq!(graph.enabled_count(), 1);
+
+        // Re-enable
+        assert!(graph.set_enabled(h0, true));
+        assert!(graph.is_enabled(h0));
+        assert_eq!(graph.enabled_count(), 2);
+    }
+
+    #[test]
+    fn invalid_handle_is_rejected() {
+        let mut graph = RenderGraph::new();
+        let bogus = PipelineHandle(42);
+
+        assert!(!graph.set_enabled(bogus, true));
+        assert!(!graph.is_enabled(bogus));
+    }
+
+    #[test]
+    fn set_execution_order_filters_invalid_handles() {
+        let mut graph = RenderGraph::new();
+        let h0 = graph.add_pipeline(Box::new(MockPipeline::new("a", ViewportMode::FullWindow)));
+        let bogus = PipelineHandle(99);
+
+        graph.set_execution_order(vec![bogus, h0, bogus]);
+        // Only h0 survives filtering
+        assert_eq!(graph.enabled_count(), 1);
+    }
+
+    #[test]
+    fn downcast_returns_none_for_wrong_type() {
+        let mut graph = RenderGraph::new();
+        let h0 = graph.add_pipeline(Box::new(MockPipeline::new("a", ViewportMode::FullWindow)));
+
+        // Downcast to a different concrete type should return None
+        struct OtherPipeline;
+        impl RenderPipeline for OtherPipeline {
+            fn name(&self) -> &'static str {
+                "other"
+            }
+            fn viewport_mode(&self) -> ViewportMode {
+                ViewportMode::FullWindow
+            }
+            fn prepare(&mut self, _ctx: &PrepareContext) -> AppResult {
+                Ok(())
+            }
+            fn render<'rp>(&'rp self, _render_pass: &mut wgpu::RenderPass<'rp>) {}
+        }
+
+        assert!(graph.get_pipeline_mut::<OtherPipeline>(h0).is_none());
+        assert!(graph.get_pipeline_mut::<MockPipeline>(h0).is_some());
     }
 
     #[test]
