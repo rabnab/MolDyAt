@@ -240,7 +240,7 @@ impl LinePipeline {
     }
 
     /// Render the lines.
-    pub fn render<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
+    pub fn draw<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
         if self.vertex_count == 0 {
             return;
         }
@@ -276,6 +276,6 @@ impl RenderPipeline for LinePipeline {
     }
 
     fn render<'rp>(&'rp self, render_pass: &mut wgpu::RenderPass<'rp>) {
-        self.render(render_pass);
+        self.draw(render_pass);
     }
 }

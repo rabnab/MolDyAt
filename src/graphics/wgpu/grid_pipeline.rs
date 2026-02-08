@@ -201,7 +201,7 @@ impl GridPipeline {
     /// # Arguments
     /// * `render_pass` - Active render pass
     /// * `instance_count` - Number of cells to draw (rows * cols)
-    pub fn render<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>, instance_count: u32) {
+    pub fn draw<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>, instance_count: u32) {
         render_pass.set_pipeline(&self.pipeline);
         render_pass.set_bind_group(0, &self.bind_group, &[]);
         // 6 vertices per quad (2 triangles), instanced for each cell
@@ -235,7 +235,7 @@ impl RenderPipeline for GridPipeline {
 
     fn render<'rp>(&'rp self, render_pass: &mut wgpu::RenderPass<'rp>) {
         let cell_count = self.cell_count();
-        self.render(render_pass, cell_count);
+        self.draw(render_pass, cell_count);
     }
 }
 
