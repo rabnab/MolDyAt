@@ -251,3 +251,31 @@ impl LinePipeline {
         render_pass.draw(0..self.vertex_count, 0..1);
     }
 }
+
+// ── RenderPipeline trait implementation ─────────────────────────────
+
+use super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
+use crate::application::AppResult;
+use crate::graphics::renderer::batch_renderer::collect_neighbor_lines;
+
+impl RenderPipeline for LinePipeline {
+    fn name(&self) -> &'static str {
+        "lines"
+    }
+
+    fn viewport_mode(&self) -> ViewportMode {
+        ViewportMode::Inset
+    }
+
+    fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
+        self.update_uniforms(ctx.queue, ctx.view_proj);
+        let mut line_batch: BatchRenderer<LineSegment> = BatchRenderer::new();
+        collect_neighbor_lines(&ctx.snapshot.balls, &mut line_batch);
+        self.flush_line_batch(ctx.device, ctx.queue, &mut line_batch);
+        Ok(())
+    }
+
+    fn render<'rp>(&'rp self, render_pass: &mut wgpu::RenderPass<'rp>) {
+        self.render(render_pass);
+    }
+}

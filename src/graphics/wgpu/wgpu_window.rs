@@ -185,14 +185,16 @@ impl WgpuWindow {
                                 || state.input.is_key_pressed(VirtualKeyCode::RControl);
                             let cursor_wp = (state.cursor_world_pos.x, state.cursor_world_pos.y);
                             let ball_count = snapshot.balls.len() as u32;
-                            pipelines.update_from_snapshot(
+                            if let Err(e) = pipelines.prepare_from_snapshot(
                                 &ctx,
                                 snapshot,
                                 view_proj,
                                 cursor_wp,
                                 BallFactory::radius_for_size_idx(state.current_ball_size_idx),
                                 ctrl_pressed,
-                            );
+                            ) {
+                                eprintln!("Pipeline prepare error: {:?}", e);
+                            }
 
                             // Record metrics: ball count + one draw call per
                             // wgpu pipeline stage (frame, grid, lines, balls,
@@ -204,7 +206,7 @@ impl WgpuWindow {
                             }
 
                             // Render frame
-                            if let Err(e) = render_frame(&ctx, &mut pipelines) {
+                            if let Err(e) = render_frame(&ctx, &pipelines) {
                                 eprintln!("Render error: {:?}", e);
                                 if e == wgpu::SurfaceError::OutOfMemory {
                                     *control_flow = ControlFlow::Exit;
@@ -298,13 +300,8 @@ fn handle_window_event(
             };
 
             if let Some(action) = action {
-                state.view_dirty |= execute_input_action(
-                    &action,
-                    state,
-                    &mut pipelines.ball,
-                    &ctx.queue,
-                    window_target,
-                );
+                state.view_dirty |=
+                    execute_input_action(&action, state, pipelines, &ctx.queue, window_target);
             }
         }
         _ => {}
@@ -332,10 +329,7 @@ fn log_frame_periodically(snapshot: &RendererSnapshot) {
 }
 
 /// Render a single frame.
-fn render_frame(
-    ctx: &WgpuContext,
-    pipelines: &mut WgpuPipelines,
-) -> Result<(), wgpu::SurfaceError> {
+fn render_frame(ctx: &WgpuContext, pipelines: &WgpuPipelines) -> Result<(), wgpu::SurfaceError> {
     let output = ctx.surface.get_current_texture()?;
     let view = output
         .texture
@@ -366,8 +360,7 @@ fn render_frame(
             depth_stencil_attachment: None,
         });
 
-        let margin = (MARGIN_PX_X, MARGIN_PX_Y);
-        pipelines.render(&mut render_pass, ctx, margin);
+        pipelines.render_all(&mut render_pass, ctx);
     }
 
     ctx.queue.submit(std::iter::once(encoder.finish()));

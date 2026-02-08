@@ -1,4 +1,4 @@
-//! Input action execution for WGPU renderer
+//! Input action execution for WGPU renderer.
 //!
 //! Handles WGPU-specific actions (cutoff rings) that require wgpu resources.
 //! All other actions are delegated to UnifiedRenderState.
@@ -6,7 +6,7 @@
 use crate::graphics::renderer::InputAction;
 use crate::graphics::renderer::event_loop::UnifiedRenderState;
 
-use super::ball_pipeline::BallPipeline;
+use super::wgpu_pipelines::WgpuPipelines;
 
 /// Execute input actions from the centralized InputHandler.
 ///
@@ -17,13 +17,13 @@ use super::ball_pipeline::BallPipeline;
 pub fn execute_input_action(
     action: &InputAction,
     state: &mut UnifiedRenderState,
-    ball_pipeline: &mut BallPipeline,
+    pipelines: &mut WgpuPipelines,
     queue: &wgpu::Queue,
     window_target: &winit::event_loop::EventLoopWindowTarget<()>,
 ) -> bool {
     // Handle ONLY actions that need wgpu resources
     if let InputAction::ToggleCutoffRings = action {
-        ball_pipeline.toggle_cutoff_rings(queue);
+        pipelines.toggle_cutoff_rings(queue);
         return false; // doesn't affect view
     }
 

@@ -214,6 +214,31 @@ impl GridPipeline {
     }
 }
 
+// ── RenderPipeline trait implementation ─────────────────────────────
+
+use super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
+use crate::application::AppResult;
+
+impl RenderPipeline for GridPipeline {
+    fn name(&self) -> &'static str {
+        "grid"
+    }
+
+    fn viewport_mode(&self) -> ViewportMode {
+        ViewportMode::Inset
+    }
+
+    fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
+        self.update_uniforms(ctx.queue, &ctx.snapshot.grid_spec, ctx.view_proj);
+        Ok(())
+    }
+
+    fn render<'rp>(&'rp self, render_pass: &mut wgpu::RenderPass<'rp>) {
+        let cell_count = self.cell_count();
+        self.render(render_pass, cell_count);
+    }
+}
+
 /// Build a view-projection matrix for 2D rendering.
 ///
 /// Converts world coordinates to NDC (-1..1) based on viewport settings.
