@@ -137,3 +137,28 @@ impl FramePipeline {
         render_pass.draw(0..self.vertex_count, 0..1);
     }
 }
+
+// ── RenderPipeline trait implementation ─────────────────────────────
+
+use super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
+use crate::application::AppResult;
+
+impl RenderPipeline for FramePipeline {
+    fn name(&self) -> &'static str {
+        "frame"
+    }
+
+    fn viewport_mode(&self) -> ViewportMode {
+        ViewportMode::FullWindow
+    }
+
+    fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
+        let (w, h) = ctx.window_size;
+        self.update_vertices(ctx.queue, w as f32, h as f32, ctx.margin);
+        Ok(())
+    }
+
+    fn render<'rp>(&'rp self, render_pass: &mut wgpu::RenderPass<'rp>) {
+        self.render(render_pass);
+    }
+}

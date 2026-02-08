@@ -403,6 +403,38 @@ impl BallPipeline {
     }
 }
 
+// ── RenderPipeline trait implementation ─────────────────────────────
+
+use super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
+use crate::application::AppResult;
+
+impl RenderPipeline for BallPipeline {
+    fn name(&self) -> &'static str {
+        "balls"
+    }
+
+    fn viewport_mode(&self) -> ViewportMode {
+        ViewportMode::Inset
+    }
+
+    fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
+        let (win_w, win_h) = ctx.window_size;
+        self.update_uniforms(
+            ctx.queue,
+            ctx.view_proj,
+            [win_w as f32, win_h as f32],
+            ctx.snapshot.equilibrium_edge_distance,
+            ctx.snapshot.cutoff_distance,
+        );
+        self.upload_balls(ctx.device, ctx.queue, &ctx.snapshot.balls);
+        Ok(())
+    }
+
+    fn render<'rp>(&'rp self, render_pass: &mut wgpu::RenderPass<'rp>) {
+        self.render(render_pass);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

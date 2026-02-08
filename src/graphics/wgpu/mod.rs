@@ -22,6 +22,7 @@ mod crosshair_pipeline;
 mod frame_pipeline;
 mod grid_pipeline;
 mod line_pipeline;
+pub(crate) mod render_graph;
 mod text_pipeline;
 mod wgpu_context;
 mod wgpu_input;

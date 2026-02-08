@@ -315,3 +315,37 @@ impl TextPipeline {
         render_pass.draw(0..self.vertex_count, 0..1);
     }
 }
+
+// ── RenderPipeline trait implementation ─────────────────────────────
+
+use super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
+use crate::application::AppResult;
+
+impl RenderPipeline for TextPipeline {
+    fn name(&self) -> &'static str {
+        "text"
+    }
+
+    fn viewport_mode(&self) -> ViewportMode {
+        ViewportMode::FullWindow
+    }
+
+    fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
+        let cursor_text = format!(
+            "({:.2}, {:.2})",
+            ctx.cursor_world_pos.0, ctx.cursor_world_pos.1
+        );
+        self.update_text(
+            ctx.device,
+            ctx.queue,
+            &cursor_text,
+            ctx.window_size,
+            ctx.margin,
+        );
+        Ok(())
+    }
+
+    fn render<'rp>(&'rp self, render_pass: &mut wgpu::RenderPass<'rp>) {
+        self.render(render_pass);
+    }
+}

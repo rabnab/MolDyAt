@@ -1,87 +1,95 @@
-//! Pipeline collection for WGPU rendering
+//! Pipeline collection for WGPU rendering.
 //!
-//! Groups all rendering pipelines together to reduce parameter passing
-//! and simplify the main window code.
+//! Wraps a [`RenderGraph`] with named handles so callers can still
+//! reference specific pipelines (e.g., toggling cutoff rings on the
+//! ball pipeline).
 
 use super::ball_pipeline::BallPipeline;
 use super::crosshair_pipeline::CrosshairPipeline;
 use super::frame_pipeline::FramePipeline;
 use super::grid_pipeline::{GridPipeline, build_view_proj_matrix};
 use super::line_pipeline::LinePipeline;
+use super::render_graph::{PipelineHandle, PrepareContext, RenderGraph};
 use super::text_pipeline::TextPipeline;
 use super::wgpu_context::WgpuContext;
+use crate::application::AppResult;
 use crate::application::renderer_snapshot::{CellGridSpec, RendererSnapshot};
-use crate::graphics::renderer::batch_renderer::{
-    BatchRenderer, LineSegment, collect_neighbor_lines,
-};
 use crate::graphics::window::{MARGIN_PX_X, MARGIN_PX_Y};
 
-/// Shader source code (embedded at compile time)
+/// Shader source code (embedded at compile time).
 const GRID_SHADER: &str = include_str!("shaders/grid.wgsl");
 const BALL_SHADER: &str = include_str!("shaders/ball.wgsl");
 const CROSSHAIR_SHADER: &str = include_str!("shaders/crosshair.wgsl");
 const LINE_SHADER: &str = include_str!("shaders/line.wgsl");
 const FRAME_SHADER: &str = include_str!("shaders/frame.wgsl");
 
-/// Collection of all rendering pipelines.
+/// Named handles for direct pipeline access.
+pub struct PipelineHandles {
+    pub frame: PipelineHandle,
+    pub grid: PipelineHandle,
+    pub line: PipelineHandle,
+    pub ball: PipelineHandle,
+    pub crosshair: PipelineHandle,
+    pub text: PipelineHandle,
+}
+
+/// Collection of all rendering pipelines, backed by a [`RenderGraph`].
 ///
-/// This struct groups the pipelines together to:
-/// - Reduce the number of parameters passed around
-/// - Provide a single place to initialize all pipelines
-/// - Encapsulate pipeline update and render logic
+/// Provides:
+/// - Graph-based `prepare` / `render` for the common path
+/// - Named handles for pipeline-specific operations (e.g., cutoff rings)
 pub struct WgpuPipelines {
-    pub grid: GridPipeline,
-    pub ball: BallPipeline,
-    pub line: LinePipeline,
-    pub crosshair: CrosshairPipeline,
-    pub frame: FramePipeline,
-    pub text: TextPipeline,
+    graph: RenderGraph,
+    pub handles: PipelineHandles,
 }
 
 impl WgpuPipelines {
-    /// Create all rendering pipelines.
+    /// Create all rendering pipelines and register them in the graph.
+    ///
+    /// Execution order: frame → grid → lines → balls → crosshair → text.
     pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
         println!("Initializing rendering pipelines...");
 
-        let grid = GridPipeline::new(device, format, GRID_SHADER);
-        println!("✓ Grid pipeline initialized");
+        let mut graph = RenderGraph::new();
 
-        let frame = FramePipeline::new(device, format, FRAME_SHADER);
-        println!("✓ Frame pipeline initialized");
+        // Register pipelines in execution order.
+        // Frame renders in FullWindow viewport; grid/lines/balls/crosshair
+        // render in Inset viewport; text renders in FullWindow viewport.
+        let frame = graph.add_pipeline(Box::new(FramePipeline::new(device, format, FRAME_SHADER)));
+        let grid = graph.add_pipeline(Box::new(GridPipeline::new(device, format, GRID_SHADER)));
+        let line = graph.add_pipeline(Box::new(LinePipeline::new(device, format, LINE_SHADER)));
+        let ball = graph.add_pipeline(Box::new(BallPipeline::new(device, format, BALL_SHADER)));
+        let crosshair = graph.add_pipeline(Box::new(CrosshairPipeline::new(
+            device,
+            format,
+            CROSSHAIR_SHADER,
+        )));
+        let text = graph.add_pipeline(Box::new(TextPipeline::new(device, format)));
 
-        let ball = BallPipeline::new(device, format, BALL_SHADER);
-        println!("✓ Ball pipeline initialized");
-
-        let line = LinePipeline::new(device, format, LINE_SHADER);
-        println!("✓ Line pipeline initialized");
-
-        let crosshair = CrosshairPipeline::new(device, format, CROSSHAIR_SHADER);
-        println!("✓ Crosshair pipeline initialized");
-
-        let text = TextPipeline::new(device, format);
-        println!("✓ Text pipeline initialized");
+        println!(
+            "All {} pipelines registered in RenderGraph",
+            graph.pipeline_count()
+        );
 
         Self {
-            grid,
-            ball,
-            line,
-            crosshair,
-            frame,
-            text,
+            graph,
+            handles: PipelineHandles {
+                frame,
+                grid,
+                line,
+                ball,
+                crosshair,
+                text,
+            },
         }
     }
 
-    /// Update all pipeline uniforms from snapshot data.
+    /// Prepare all pipelines from snapshot data.
     ///
-    /// # Arguments
-    /// * `ctx` - WGPU context with device and queue
-    /// * `snapshot` - Current renderer snapshot with ball and grid data
-    /// * `view_proj` - View-projection matrix
-    /// * `cursor_world_pos` - Cursor position in world coordinates
-    /// * `current_ball_radius` - Current ball placement radius
-    /// * `ctrl_pressed` - Whether Ctrl key is pressed (shows ball outline)
+    /// Delegates to [`RenderGraph::prepare_all`] with a [`PrepareContext`]
+    /// built from the provided arguments.
     #[allow(clippy::too_many_arguments)]
-    pub fn update_from_snapshot(
+    pub fn prepare_from_snapshot(
         &mut self,
         ctx: &WgpuContext,
         snapshot: &RendererSnapshot,
@@ -89,103 +97,52 @@ impl WgpuPipelines {
         cursor_world_pos: (f32, f32),
         current_ball_radius: f32,
         ctrl_pressed: bool,
-    ) {
-        let grid_spec = &snapshot.grid_spec;
-        let eq_edge_distance = snapshot.equilibrium_edge_distance;
-        let cutoff_distance = snapshot.cutoff_distance;
-        let (win_width, win_height) = ctx.size();
+    ) -> AppResult {
+        let window_size = ctx.size();
+        let margin = (MARGIN_PX_X, MARGIN_PX_Y);
 
-        // Update grid
-        self.grid.update_uniforms(&ctx.queue, grid_spec, view_proj);
-
-        // Update balls
-        self.ball.update_uniforms(
-            &ctx.queue,
+        let prepare_ctx = PrepareContext {
+            device: &ctx.device,
+            queue: &ctx.queue,
+            snapshot,
             view_proj,
-            [win_width as f32, win_height as f32],
-            eq_edge_distance,
-            cutoff_distance,
-        );
-        self.ball
-            .upload_balls(&ctx.device, &ctx.queue, &snapshot.balls);
-
-        // Update neighbor lines via shared BatchRenderer abstraction
-        self.line.update_uniforms(&ctx.queue, view_proj);
-        let mut line_batch: BatchRenderer<LineSegment> = BatchRenderer::new();
-        collect_neighbor_lines(&snapshot.balls, &mut line_batch);
-        self.line
-            .flush_line_batch(&ctx.device, &ctx.queue, &mut line_batch);
-
-        // Update crosshair
-        self.crosshair.update_uniforms(
-            &ctx.queue,
-            view_proj,
-            [cursor_world_pos.0, cursor_world_pos.1],
+            cursor_world_pos,
             current_ball_radius,
             ctrl_pressed,
-            eq_edge_distance,
-            cutoff_distance,
-        );
-
-        // Update cursor text
-        let margin = (MARGIN_PX_X, MARGIN_PX_Y);
-        let cursor_text = format!("({:.2}, {:.2})", cursor_world_pos.0, cursor_world_pos.1);
-        self.text.update_text(
-            &ctx.device,
-            &ctx.queue,
-            &cursor_text,
-            (win_width, win_height),
+            window_size,
             margin,
-        );
+        };
+
+        self.graph.prepare_all(&prepare_ctx)
     }
 
-    /// Render all pipelines to a render pass.
+    /// Render all enabled pipelines into a render pass.
     ///
-    /// Order: frame border -> grid -> neighbor lines -> balls -> crosshair -> text
-    pub fn render<'a>(
-        &'a mut self,
-        render_pass: &mut wgpu::RenderPass<'a>,
-        ctx: &WgpuContext,
-        margin: (f32, f32),
-    ) {
-        let (width, height) = ctx.size();
+    /// The graph handles viewport switching automatically based on each
+    /// pipeline's [`ViewportMode`](super::render_graph::ViewportMode).
+    pub fn render_all<'rp>(&'rp self, render_pass: &mut wgpu::RenderPass<'rp>, ctx: &WgpuContext) {
+        let margin = (MARGIN_PX_X, MARGIN_PX_Y);
+        self.graph.render_all(render_pass, ctx.size(), margin);
+    }
 
-        // Draw frame border in full-window viewport
-        self.frame
-            .update_vertices(&ctx.queue, width as f32, height as f32, margin);
-        render_pass.set_viewport(0.0, 0.0, width as f32, height as f32, 0.0, 1.0);
-        self.frame.render(render_pass);
+    /// Toggle cutoff ring visibility on the ball pipeline.
+    pub fn toggle_cutoff_rings(&mut self, queue: &wgpu::Queue) {
+        if let Some(ball) = self
+            .graph
+            .get_pipeline_mut::<BallPipeline>(self.handles.ball)
+        {
+            ball.toggle_cutoff_rings(queue);
+        }
+    }
 
-        // Set viewport with margins to create inset simulation pane
-        let viewport_x = margin.0;
-        let viewport_y = margin.1;
-        let viewport_width = (width as f32 - 2.0 * margin.0).max(1.0);
-        let viewport_height = (height as f32 - 2.0 * margin.1).max(1.0);
-        render_pass.set_viewport(
-            viewport_x,
-            viewport_y,
-            viewport_width,
-            viewport_height,
-            0.0,
-            1.0,
-        );
+    /// Enable or disable a pipeline by handle.
+    pub fn set_enabled(&mut self, handle: PipelineHandle, enabled: bool) {
+        self.graph.set_enabled(handle, enabled);
+    }
 
-        // Draw grid
-        let cell_count = self.grid.cell_count();
-        self.grid.render(render_pass, cell_count);
-
-        // Draw neighbor lines (before balls so lines appear behind)
-        self.line.render(render_pass);
-
-        // Draw balls
-        self.ball.render(render_pass);
-
-        // Draw crosshair
-        self.crosshair.render(render_pass);
-
-        // Draw cursor position text in margin (screen space)
-        render_pass.set_viewport(0.0, 0.0, width as f32, height as f32, 0.0, 1.0);
-        self.text.render(render_pass);
+    /// Check whether a pipeline is enabled.
+    pub fn is_enabled(&self, handle: PipelineHandle) -> bool {
+        self.graph.is_enabled(handle)
     }
 }
 

@@ -181,3 +181,35 @@ impl CrosshairPipeline {
         }
     }
 }
+
+// ── RenderPipeline trait implementation ─────────────────────────────
+
+use super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
+use crate::application::AppResult;
+
+impl RenderPipeline for CrosshairPipeline {
+    fn name(&self) -> &'static str {
+        "crosshair"
+    }
+
+    fn viewport_mode(&self) -> ViewportMode {
+        ViewportMode::Inset
+    }
+
+    fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
+        self.update_uniforms(
+            ctx.queue,
+            ctx.view_proj,
+            [ctx.cursor_world_pos.0, ctx.cursor_world_pos.1],
+            ctx.current_ball_radius,
+            ctx.ctrl_pressed,
+            ctx.snapshot.equilibrium_edge_distance,
+            ctx.snapshot.cutoff_distance,
+        );
+        Ok(())
+    }
+
+    fn render<'rp>(&'rp self, render_pass: &mut wgpu::RenderPass<'rp>) {
+        self.render(render_pass);
+    }
+}
