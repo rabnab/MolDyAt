@@ -193,6 +193,7 @@ This is a **molecular dynamics physics simulation** implementing Lennard-Jones p
 - Add doc comments (`///`) for public APIs and complex algorithms
 - Explain non-obvious design decisions in code comments
 - Document invariants that must be maintained (especially for unsafe code)
+- Add *.md documentation files for high-level architecture and design overviews in the ./docs/ directory
 - Update README.md for significant architectural changes
 
 ## Common Pitfalls
