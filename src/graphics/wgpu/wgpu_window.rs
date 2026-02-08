@@ -8,7 +8,7 @@ use super::wgpu_context::WgpuContext;
 use super::wgpu_input::execute_input_action;
 use super::wgpu_pipelines::{WgpuPipelines, compute_view_proj};
 use crate::application::MainContent;
-use crate::application::renderer_snapshot::{CellGridSpec, RendererSnapshot};
+use crate::application::renderer_snapshot::CellGridSpec;
 use crate::graphics::renderer::ViewportTransform;
 use crate::graphics::renderer::event_loop::UnifiedRenderState;
 use crate::graphics::window::{MARGIN_PX_X, MARGIN_PX_Y};
@@ -172,8 +172,6 @@ impl WgpuWindow {
 
                         // Render from snapshot if available
                         if let Some(snapshot) = &state.last_snapshot {
-                            log_frame_periodically(snapshot);
-
                             // Compute view-projection matrix
                             let pan = state.viewport.pan_offset();
                             let zoom = state.viewport.zoom();
@@ -305,26 +303,6 @@ fn handle_window_event(
             }
         }
         _ => {}
-    }
-}
-
-/// Log frame info periodically for debugging.
-fn log_frame_periodically(snapshot: &RendererSnapshot) {
-    static mut FRAME_COUNT: u64 = 0;
-    static mut PREV_BALL_COUNT: usize = 0;
-
-    unsafe {
-        FRAME_COUNT += 1;
-        let ball_count_changed = PREV_BALL_COUNT != snapshot.balls.len();
-        if FRAME_COUNT % 600 == 1 || ball_count_changed {
-            println!(
-                "Rendering: {}x{} grid, {} balls",
-                snapshot.grid_spec.cols,
-                snapshot.grid_spec.rows,
-                snapshot.balls.len()
-            );
-            PREV_BALL_COUNT = snapshot.balls.len();
-        }
     }
 }
 
