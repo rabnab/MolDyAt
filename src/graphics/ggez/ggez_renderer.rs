@@ -185,11 +185,6 @@ impl GgezRenderer {
         Ok(())
     }
 
-    #[allow(dead_code)]
-    pub fn draw_plot(&mut self) -> AppResult<()> {
-        todo!()
-    }
-
     /// Draw the simulation frame (grid background and boundary).
     ///
     /// # Arguments

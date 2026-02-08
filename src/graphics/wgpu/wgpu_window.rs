@@ -8,7 +8,6 @@ use super::wgpu_context::WgpuContext;
 use super::wgpu_input::execute_input_action;
 use super::wgpu_pipelines::{WgpuPipelines, compute_view_proj};
 use crate::application::MainContent;
-use crate::application::renderer_snapshot::CellGridSpec;
 use crate::graphics::renderer::ViewportTransform;
 use crate::graphics::renderer::event_loop::UnifiedRenderState;
 use crate::graphics::window::{MARGIN_PX_X, MARGIN_PX_Y};
@@ -124,13 +123,6 @@ impl WgpuWindow {
                 state.begin_frame();
             }
 
-            // Use cached snapshot for current grid_spec
-            let current_grid_spec = state
-                .last_snapshot
-                .as_ref()
-                .map(|s| s.grid_spec.clone())
-                .unwrap_or_else(default_grid_spec);
-
             match event {
                 Event::WindowEvent { event, window_id } => {
                     // Check if this event is for the energy window
@@ -145,7 +137,6 @@ impl WgpuWindow {
                         &mut ctx,
                         &mut state,
                         &mut pipelines,
-                        &current_grid_spec,
                         window_target,
                         control_flow,
                     );
@@ -227,25 +218,12 @@ impl WgpuWindow {
     }
 }
 
-/// Default grid spec when no snapshot is available yet.
-fn default_grid_spec() -> CellGridSpec {
-    CellGridSpec {
-        rows: 8,
-        cols: 12,
-        cell_width: 3.0,
-        cell_height: 3.0,
-        origin_x: -18.0,
-        origin_y: 12.0,
-    }
-}
-
 /// Handle window events (resize, input, etc.)
 fn handle_window_event(
     event: WindowEvent,
     ctx: &mut WgpuContext,
     state: &mut UnifiedRenderState,
     pipelines: &mut WgpuPipelines,
-    _current_grid_spec: &CellGridSpec,
     window_target: &winit::event_loop::EventLoopWindowTarget<()>,
     control_flow: &mut ControlFlow,
 ) {
