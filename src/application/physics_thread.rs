@@ -184,12 +184,15 @@ impl PhysicsThread {
                         let snapshot_hz = snapshot_count as f32 / elapsed;
                         let total_overhead_pct =
                             (snapshot_time_total.as_secs_f32() / elapsed) * 100.0;
-                        println!(
+                        log::debug!(
                             "Physics thread: {:.0} steps/sec | Snapshots: {:.1} Hz, {:.0} µs avg ({:.1}% overhead)",
-                            physics_fps, snapshot_hz, avg_snapshot_us, total_overhead_pct
+                            physics_fps,
+                            snapshot_hz,
+                            avg_snapshot_us,
+                            total_overhead_pct
                         );
                     } else {
-                        println!("Physics thread: {:.0} steps/sec", physics_fps);
+                        log::debug!("Physics thread: {:.0} steps/sec", physics_fps);
                     }
 
                     physics_step_count = 0;

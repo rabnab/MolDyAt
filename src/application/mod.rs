@@ -1,6 +1,6 @@
 mod core;
 mod game_logic;
-pub(crate) mod log_util;
+mod log_util;
 pub(crate) mod physics_thread;
 pub(crate) mod renderer_snapshot;
 mod sim_stats;

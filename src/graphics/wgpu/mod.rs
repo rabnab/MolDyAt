@@ -28,22 +28,3 @@ mod wgpu_context;
 mod wgpu_input;
 mod wgpu_pipelines;
 pub(crate) mod wgpu_window;
-
-// Re-exports for internal use within wgpu renderer
-// These are generally only used within wgpu_window.rs and wgpu_pipelines.rs
-#[allow(unused_imports)] // Used conditionally within wgpu module
-pub use ball_pipeline::{BallPipeline, BallUniforms, GpuBallData};
-#[allow(unused_imports)]
-pub use crosshair_pipeline::{CrosshairPipeline, CrosshairUniforms};
-#[allow(unused_imports)]
-pub use frame_pipeline::FramePipeline;
-#[allow(unused_imports)]
-pub use grid_pipeline::{GridPipeline, GridUniforms, build_view_proj_matrix};
-#[allow(unused_imports)]
-pub use line_pipeline::LinePipeline;
-#[allow(unused_imports)]
-pub use text_pipeline::TextPipeline;
-#[allow(unused_imports)]
-pub use wgpu_context::WgpuContext;
-#[allow(unused_imports)]
-pub use wgpu_pipelines::WgpuPipelines;

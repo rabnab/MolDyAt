@@ -101,16 +101,8 @@ impl Window<GgezRenderer> for GgezWindow {
         let application = MainContent::new(world_rect).expect("Failed to create MainContent");
 
         // Use threaded physics architecture
-        println!("\n========================================");
-        println!("THREADED RENDERER ARCHITECTURE");
-        println!("========================================");
-        println!("Main thread ID: {:?}", std::thread::current().id());
-        println!("Spawning physics thread...");
         let custom_loop = CustomEventLoop::new(application, renderer);
-        println!("✓ Physics thread spawned successfully");
-        println!("  - Main thread: Rendering (ggez requirement)");
-        println!("  - Physics thread: Simulation + snapshot publishing");
-        println!("========================================\n");
+        log::info!("Physics thread spawned, main thread: rendering (ggez)");
 
         custom_loop.run(ctx, event_loop);
     }

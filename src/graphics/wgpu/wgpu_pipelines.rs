@@ -48,8 +48,6 @@ impl WgpuPipelines {
     ///
     /// Execution order: frame → grid → lines → balls → crosshair → text.
     pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
-        println!("Initializing rendering pipelines...");
-
         let mut graph = RenderGraph::new();
 
         // Register pipelines in execution order.
@@ -66,8 +64,8 @@ impl WgpuPipelines {
         )));
         let text = graph.add_pipeline(Box::new(TextPipeline::new(device, format)));
 
-        println!(
-            "All {} pipelines registered in RenderGraph",
+        log::debug!(
+            "{} pipelines registered in RenderGraph",
             graph.pipeline_count()
         );
 

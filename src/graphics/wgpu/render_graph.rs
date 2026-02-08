@@ -112,10 +112,7 @@ impl RenderGraph {
     /// default.
     pub fn add_pipeline(&mut self, pipeline: Box<dyn RenderPipeline>) -> PipelineHandle {
         let handle = PipelineHandle(self.pipelines.len());
-        println!(
-            "  ✓ RenderGraph: registered pipeline \"{}\"",
-            pipeline.name()
-        );
+        log::trace!("RenderGraph: registered pipeline \"{}\"", pipeline.name());
         self.pipelines.push(pipeline);
         self.execution_order.push(handle);
         self.enabled.insert(handle);

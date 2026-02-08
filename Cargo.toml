@@ -18,6 +18,8 @@ rayon = "1.10.0"
 wide = "1.1"  # Updated from 0.8.2
 num_cpus = "1.16"
 arc-swap = "1.7"
+log = "0.4"
+env_logger = "0.11"
 
 # Window management (explicit, used by both renderers)
 winit = "0.28.7"

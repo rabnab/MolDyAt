@@ -13,7 +13,6 @@ use crate::graphics::renderer::event_loop::UnifiedRenderState;
 use crate::graphics::window::{MARGIN_PX_X, MARGIN_PX_Y};
 use crate::objects2d::Rect;
 use crate::objects2d::ball_impl::BallFactory;
-use std::path::PathBuf;
 use std::sync::Arc;
 use winit::{
     dpi::PhysicalSize,
@@ -25,25 +24,12 @@ use winit::{
 /// WGPU-based window for rendering the molecular dynamics simulation.
 ///
 /// This struct manages the winit window and WGPU context lifecycle.
-pub struct WgpuWindow {
-    #[allow(dead_code)]
-    resource_dir: PathBuf,
-    #[allow(dead_code)]
-    region: (f32, f32),
-}
+pub struct WgpuWindow;
 
 impl WgpuWindow {
     /// Create a new WGPU window configuration.
-    ///
-    /// # Arguments
-    /// * `resource_dir` - Path to shader and asset resources
-    /// * `reg_x` - Horizontal region size (unused currently, for future layout)
-    /// * `reg_y` - Vertical region size (unused currently, for future layout)
-    pub fn new(resource_dir: PathBuf, reg_x: f32, reg_y: f32) -> Self {
-        Self {
-            resource_dir,
-            region: (reg_x, reg_y),
-        }
+    pub fn new() -> Self {
+        Self
     }
 
     /// Create the window and run the event loop.
@@ -55,7 +41,7 @@ impl WgpuWindow {
     /// # Arguments
     /// * `application` - MainContent to be moved to physics thread
     pub fn create_window(&self, application: MainContent) {
-        println!("Creating WGPU window...");
+        log::info!("Creating WGPU window");
 
         // Create winit event loop and window
         let event_loop = EventLoop::new();
@@ -73,8 +59,7 @@ impl WgpuWindow {
 
         // Initialize WGPU context
         let ctx = WgpuContext::new(Arc::clone(&window));
-        println!("✓ WGPU context initialized");
-        println!("  Window size: {:?}", ctx.size());
+        log::debug!("WGPU context initialized, window size: {:?}", ctx.size());
 
         // Initialize all rendering pipelines
         let pipelines = WgpuPipelines::new(&ctx.device, ctx.format);
@@ -83,21 +68,13 @@ impl WgpuWindow {
         let initial_world_bounds = Rect::new(-18.0, 12.0, 36.0, -24.0);
         let window_size = (ctx.size().0 as f32, ctx.size().1 as f32);
 
-        println!("\n========================================");
-        println!("WGPU THREADED RENDERER ARCHITECTURE");
-        println!("========================================");
-        println!("Main thread ID: {:?}", std::thread::current().id());
-        println!("Spawning physics thread...");
         let state = UnifiedRenderState::new(
             application,
             initial_world_bounds,
             window_size,
             (MARGIN_PX_X, MARGIN_PX_Y),
         );
-        println!("✓ Physics thread spawned successfully");
-        println!("  - Main thread: Rendering (WGPU)");
-        println!("  - Physics thread: Simulation + snapshot publishing");
-        println!("========================================\n");
+        log::info!("Physics thread spawned, main thread: rendering (WGPU)");
 
         // Run the event loop
         Self::run_event_loop(event_loop, window, ctx, pipelines, state);
@@ -196,7 +173,7 @@ impl WgpuWindow {
 
                             // Render frame
                             if let Err(e) = render_frame(&ctx, &pipelines) {
-                                eprintln!("Render error: {:?}", e);
+                                log::error!("Render error: {:?}", e);
                                 if e == wgpu::SurfaceError::OutOfMemory {
                                     *control_flow = ControlFlow::Exit;
                                 }
@@ -229,11 +206,11 @@ fn handle_window_event(
 ) {
     match event {
         WindowEvent::CloseRequested => {
-            println!("Window close requested");
+            log::info!("Window close requested");
             *control_flow = ControlFlow::Exit;
         }
         WindowEvent::Resized(size) => {
-            println!("Window resized to {}x{}", size.width, size.height);
+            log::debug!("Window resized to {}x{}", size.width, size.height);
             ctx.resize(size.width, size.height);
             let world_rect = ViewportTransform::compute_world_bounds_from_window_size(
                 size.width,

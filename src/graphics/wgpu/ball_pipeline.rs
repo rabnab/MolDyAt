@@ -371,7 +371,7 @@ impl BallPipeline {
             ],
         });
 
-        println!(
+        log::debug!(
             "Ball storage buffer reallocated: {} balls capacity",
             self.max_balls
         );

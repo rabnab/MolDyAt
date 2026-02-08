@@ -105,11 +105,11 @@ impl MainContent {
 
         // Output the 10 closest pairs
         let count = pairs.len().min(10);
-        println!("\n=== {} Closest Ball Pairs ===", count);
+        log::info!("\n=== {} Closest Ball Pairs ===", count);
         for (idx, &(i, j, dist)) in pairs.iter().take(10).enumerate() {
             let ball_i = &self.balls[i];
             let ball_j = &self.balls[j];
-            println!(
+            log::info!(
                 "{}. Ball {} (r={:.2}) at ({:.2}, {:.2}) <-> Ball {} (r={:.2}) at ({:.2}, {:.2}) | distance: {:.4}",
                 idx + 1,
                 ball_i.get_name(),
@@ -123,7 +123,7 @@ impl MainContent {
                 dist,
             );
         }
-        println!("=================================\n");
+        log::info!("=================================\n");
     }
 
     pub(crate) fn enable_random_ball_speed(&mut self) {

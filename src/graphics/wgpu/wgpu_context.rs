@@ -63,8 +63,11 @@ impl WgpuContext {
             .await
             .expect("Failed to find a compatible GPU adapter");
 
-        println!("✓ WGPU adapter: {}", adapter.get_info().name);
-        println!("  Backend: {:?}", adapter.get_info().backend);
+        log::info!(
+            "WGPU adapter: {} ({:?})",
+            adapter.get_info().name,
+            adapter.get_info().backend
+        );
 
         // Request device and queue
         let (device, queue) = adapter
@@ -93,7 +96,7 @@ impl WgpuContext {
             .copied()
             .unwrap_or(surface_caps.formats[0]);
 
-        println!("  Surface format: {:?}", format);
+        log::debug!("Surface format: {:?}", format);
 
         // Configure the surface
         let config = SurfaceConfiguration {

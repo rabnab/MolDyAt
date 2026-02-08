@@ -9,6 +9,7 @@ compile_error!("No renderer selected. Enable one of: `renderer-ggez` or `rendere
 
 mod application;
 mod graphics;
+mod logging;
 mod objects2d;
 mod timing_monad;
 
@@ -51,20 +52,17 @@ fn init_rayon() {
         .build_global()
         .expect("Failed to initialize Rayon thread pool");
 
-    println!(
-        "✓ Rayon thread pool initialized with {} worker threads",
-        num_cpus
-    );
+    log::info!("Rayon thread pool: {} worker threads", num_cpus);
 }
 
-/// Print startup diagnostics about parallelization and SIMD features
+/// Print startup diagnostics about parallelization and SIMD features.
 fn print_diagnostics() {
-    println!("✓ Parallel feature: ENABLED (always on)");
+    logging::init();
+    log::info!(
+        "Parallel: enabled | SIMD: enabled | CPU cores: {}",
+        num_cpus::get()
+    );
     init_rayon();
-
-    println!("✓ SIMD feature: ENABLED (always on)");
-    println!("System has {} logical CPU cores", num_cpus::get());
-    println!("Note: Add many balls (F5 repeatedly) to see parallel performance benefits\n");
 }
 
 /// Get the resource directory path
@@ -80,7 +78,7 @@ fn get_resource_dir() -> PathBuf {
 
 #[cfg(feature = "renderer-ggez")]
 fn run_ggez_renderer() -> GameResult {
-    println!("Using ggez renderer");
+    log::info!("Renderer: ggez");
     let resource_dir = get_resource_dir();
     let window = GgezWindow::new(resource_dir, 0.5, 0.5);
     window.create_window();
@@ -93,8 +91,7 @@ fn run_wgpu_renderer() {
     use crate::graphics::window::{MARGIN_PX_X, MARGIN_PX_Y};
     use crate::objects2d::Rect;
 
-    println!("Using wgpu renderer");
-    let resource_dir = get_resource_dir();
+    log::info!("Renderer: wgpu");
 
     // Compute initial world bounds based on default window size (same as ggez)
     // LEN_TO_PX = 0.1 means 1 world unit = 10 pixels
@@ -116,7 +113,7 @@ fn run_wgpu_renderer() {
 
     let application = MainContent::new(world_rect).expect("Failed to create MainContent");
 
-    let window = WgpuWindow::new(resource_dir, 0.5, 0.5);
+    let window = WgpuWindow::new();
     window.create_window(application);
 }
 

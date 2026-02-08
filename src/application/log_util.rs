@@ -24,7 +24,7 @@ impl LogStuff for MainContent {
         const HELP_OPTION_0: &str = "0 - Reset viewport to default view (1.0x zoom, centered).";
         const HELP_OPTION_SPACE: &str = "SPACE - Pause or resume the simulation.";
 
-        println!(
+        log::info!(
             "{header}\n\
              {opt_h}\n\
              {opt_d}\n\
@@ -79,7 +79,7 @@ impl LogStuff for MainContent {
 
     fn log_closeness_update(ball: &Ball2D) {
         if ball.verbose.console {
-            println!(
+            log::debug!(
                 "update_closeness: {} nearest/farthest: {}/{}",
                 ball.get_name(),
                 ball.hood.nearest,
@@ -95,35 +95,6 @@ impl LogStuff for MainContent {
     }
 
     fn log_separator_line() {
-        println!("----------------------------------------");
-    }
-}
-
-pub fn log_update_hood_start(ball: &crate::objects2d::ball_impl::Ball2D, cutoff: f32) {
-    println!("update_hood: {:?} cutoff_and_skin: {} ", ball, cutoff,);
-}
-
-pub fn log_neighbour_add(
-    ball: &crate::objects2d::ball_impl::Ball2D,
-    cur_ref: &crate::objects2d::ball_impl::Ball2D,
-    dist_sq: f32,
-    dist_limit_sq: f32,
-) {
-    if ball.verbose.console {
-        println!(
-            "\tneighbours {} at ({},{}) dist {}",
-            cur_ref.get_name(),
-            cur_ref.get_position().x,
-            cur_ref.get_position().y,
-            f32::sqrt(dist_sq)
-        );
-    } else if cur_ref.verbose.console {
-        println!(
-            "\t {} is neighbour of {} since its dist is {} (dist_limit {})",
-            cur_ref.get_name(),
-            ball.get_name(),
-            f32::sqrt(dist_sq),
-            f32::sqrt(dist_limit_sq)
-        )
+        log::debug!("----------------------------------------");
     }
 }
