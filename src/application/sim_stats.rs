@@ -111,7 +111,7 @@ impl SimStats {
 
     pub fn get_status_text_real(&self, fps: u32, num_balls: usize, dt: f32) -> String {
         format!(
-            "fps {} | time: {:.1}ns | dt: {:.4}\n\
+            "fps {} | time: {:.1}ns | dt: {:.4}ns\n\
              #Balls: {} | maxNeig: {}\n\
              TotalE: {:.3E}J | Ekin: {:.3E}J\n\
              Epot: {:.3E}J\n\
@@ -119,7 +119,7 @@ impl SimStats {
              vCOM: ({:.2e}, {:.2e})m/s",
             fps,
             self.time * TIME_SCALE_NS,
-            dt,
+            dt * TIME_SCALE_NS,
             num_balls,
             self.max_neighbours,
             (self.energy_pot + self.energy_kin) * ENERGY_SCALE_J,
