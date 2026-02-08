@@ -10,9 +10,9 @@ const PLT_STEP: usize = 100;
 const _U_KG: f32 = 1.66E-27;
 const _MASS_SCALE_KG: f32 = 39.948 * _U_KG; //6.6E-26kg mass of Ar
 const ENERGY_SCALE_J: f32 = 122. * KBOLTZMANN_J_P_K; //energy scale for Ar at 122K
-const LEN_SCALE_M: f32 = 3.337_296E-9 / 6.; // about 0.5nm reason -- f32::cbrt(6.631E-26/1.784)/6; //density 1.784 kg/m³
-const TIME_SCALE: f32 = 3.48235E-11; //=f32::sqrt(MASS_SCALE_KG/ ENERGY_SCALE_J)*LEN_SCALE_M; //0.35ns
-const TIME_SCALE_NS: f32 = 3.48235E-2; //=f32::sqrt(MASS_SCALE_KG/ ENERGY_SCALE_J)*LEN_SCALE_M; //0.35ns
+const LEN_SCALE_M: f32 = 3.405E-10; // σ for Argon (standard LJ parameter)
+const TIME_SCALE: f32 = 2.156E-12; // sqrt(MASS_SCALE * LEN_SCALE^2 / ENERGY_SCALE)
+const TIME_SCALE_NS: f32 = 2.156E-3; // TIME_SCALE * 1E9
 const KBOLTZMANN_J_P_K: f32 = 1.380649E-23;
 const TEMP_SCALE: f32 = 122.; //=ENERGY_SCALE_J / KBOLTZMANN_J_P_K; //exact 122K
 
