@@ -1,0 +1,27 @@
+[package]
+name = "rust_thermo_wgpu"
+version.workspace = true
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+rust_thermo_core = { path = "../core" }
+
+# WGPU rendering
+wgpu = "0.16"
+pollster = "0.3"
+bytemuck = { version = "1.14", features = ["derive"] }
+font8x8 = "0.3"
+
+# Window management (same version as core for energy window compat)
+winit = "0.28.7"
+
+# Logging (for init in main)
+log = "0.4"
+env_logger = "0.11"
+
+# Needed for rayon init in main
+rayon = "1.10.0"
+num_cpus = "1.16"

@@ -84,12 +84,7 @@ cargo +nightly test --no-default-features --features renderer-ggez
 
 ```bash
 cargo +nightly fmt
-cargo +nightly clippy --no-default-features --features renderer-wgpu -- -D warnings
-```
-
-> **Note:** Parallelization and SIMD are always enabled and cannot be disabled.
-
-## Project Structure
+cargo +nightly clippy --no-default-features --features renderer-wgpu -- -D warnings## Project Structure
 
 ```
 src/
@@ -111,6 +106,8 @@ src/
 
 ## Documentation
 
+hitecture and data flows
+* [Key Concepts](docs/KEY_CONCEPTS.md) — explanation of the physics and rendering concepts
 * [Performance Optimization Guide](PERFORMANCE_OPTIMIZATION.md) — parallelization, SIMD, and benchmarking
 * [Engine Improvements Analysis](docs/engine-improvements.md) — architectural analysis and improvement roadmap
 * [Contributing Guide](CONTRIBUTING.md) — development workflow, code quality standards, PR process

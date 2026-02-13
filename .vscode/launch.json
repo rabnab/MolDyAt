@@ -4,28 +4,48 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
-
-
         {
-            "name": "Debug executable 'rust_thermo'",
+            "name": "Debug WGPU Renderer",
             "type": "lldb",
             "request": "launch",
             "cargo": {
                 "args": [
                     "run",
-                    "--bin=rust_thermo"
+                    "-p", "rust_thermo_wgpu"
                 ]
             },
             "args": []
         },
         {
-            "name": "Debug unit tests in executable 'rust_thermo'",
+            "name": "Debug Core Tests",
             "type": "lldb",
             "request": "launch",
             "cargo": {
                 "args": [
                     "test",
-                    "--bin=rust_thermo"
+                    "-p", "rust_thermo_core"
+                ]
+            }
+        },
+        {
+            "name": "Debug WGPU Renderer Tests",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "-p", "rust_thermo_wgpu"
+                ]
+            }
+        },
+        {
+            "name": "Debug All Tests",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--workspace"
                 ]
             }
         }

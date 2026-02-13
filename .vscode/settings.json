@@ -23,7 +23,13 @@
     },
     "chat.tools.terminal.autoApprove": {
         "git checkout": true,
-        "git stash": true
+        "git stash": true,
+        "Copy-Item": true,
+        "New-Item": true,
+        "Move-Item": true
     },
-    "rust-analyzer.cargo.features": ["renderer-wgpu"]
+    "rust-analyzer.linkedProjects": [
+        "core/Cargo.toml",
+        "wgpu_renderer/Cargo.toml"
+    ]
 }

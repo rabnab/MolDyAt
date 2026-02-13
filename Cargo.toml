@@ -1,46 +1,15 @@
 cargo-features = ["profile-rustflags"]
 
-[lints.rust]
-# Add any custom lints here if needed
-
-[package]
-name = "rust_thermo"
-version = "0.1.1"
-edition = "2024"
+[workspace]
+members = ["core", "wgpu_renderer"]
 resolver = "2"
 
-[dependencies]
-# Core dependencies (always included)
-rand = "0.9.0"
-rand_distr = "0.5.1"
-lru = "0.16.2"
-rayon = "1.10.0"
-wide = "1.1"  # Updated from 0.8.2
-num_cpus = "1.16"
-arc-swap = "1.7"
-log = "0.4"
-env_logger = "0.11"
+[workspace.package]
+version = "0.1.1"
+edition = "2024"
 
-# Window management (explicit, used by both renderers)
-winit = "0.28.7"
-softbuffer = "0.3.3"
-
-# wgpu backend dependencies (optional)
-# Note: Using wgpu 0.16 to match ggez's internal wgpu version
-# This allows both renderers to coexist and share the same wgpu dependency
-wgpu = { version = "0.16", optional = true }
-pollster = { version = "0.3", optional = true }
-bytemuck = { version = "1.14", features = ["derive"], optional = true }
-font8x8 = { version = "0.3", optional = true }
-
-[dev-dependencies]
-float-cmp = "0.10"
-
-[features]
-default = [ "renderer-wgpu" ]
-measure-time = []
-renderer-wgpu = ["dep:wgpu", "dep:pollster", "dep:bytemuck", "dep:font8x8", "measure-time"]
-
+[workspace.lints.rust]
+# Add any custom lints here if needed
 
 [profile.dev]
 opt-level = 2
@@ -48,7 +17,6 @@ debug = true
 overflow-checks = true
 debug-assertions = true
 lto = false
-
 
 [profile.release]
 #debug = true
