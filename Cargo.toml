@@ -25,10 +25,6 @@ env_logger = "0.11"
 winit = "0.28.7"
 softbuffer = "0.3.3"
 
-# ggez backend (optional, default)
-# Note: ggez 0.9.3 internally uses wgpu 0.16
-ggez = { version = "0.9.3", optional = true, default-features = false }
-
 # wgpu backend dependencies (optional)
 # Note: Using wgpu 0.16 to match ggez's internal wgpu version
 # This allows both renderers to coexist and share the same wgpu dependency
@@ -41,10 +37,8 @@ font8x8 = { version = "0.3", optional = true }
 float-cmp = "0.10"
 
 [features]
-default = []
+default = [ "renderer-wgpu" ]
 measure-time = []
-#this does not work: all-features = ["renderer-ggez", "renderer-wgpu"]
-renderer-ggez = ["dep:ggez", "measure-time"]
 renderer-wgpu = ["dep:wgpu", "dep:pollster", "dep:bytemuck", "dep:font8x8", "measure-time"]
 
 

@@ -1,24 +1,11 @@
 #![feature(portable_simd)]
 #![allow(dead_code)]
 
-#[cfg(all(feature = "renderer-ggez", feature = "renderer-wgpu"))]
-compile_error!("Enable only one renderer feature: either `renderer-ggez` or `renderer-wgpu`.");
-
-#[cfg(not(any(feature = "renderer-ggez", feature = "renderer-wgpu")))]
-compile_error!("No renderer selected. Enable one of: `renderer-ggez` or `renderer-wgpu`.");
-
 mod application;
 mod graphics;
 mod logging;
 mod objects2d;
 mod timing_monad;
-
-#[cfg(feature = "renderer-ggez")]
-use crate::graphics::ggez::ggez_window::GgezWindow;
-#[cfg(feature = "renderer-ggez")]
-use crate::graphics::window::Window;
-#[cfg(feature = "renderer-ggez")]
-use ggez::GameResult;
 
 #[cfg(feature = "renderer-wgpu")]
 use crate::graphics::wgpu::wgpu_window::WgpuWindow;
@@ -76,14 +63,6 @@ fn get_resource_dir() -> PathBuf {
     }
 }
 
-#[cfg(feature = "renderer-ggez")]
-fn run_ggez_renderer() -> GameResult {
-    log::info!("Renderer: ggez");
-    let window = GgezWindow::new(0.5, 0.5);
-    window.create_window();
-    Ok(())
-}
-
 #[cfg(feature = "renderer-wgpu")]
 fn run_wgpu_renderer() {
     use crate::application::MainContent;
@@ -114,12 +93,6 @@ fn run_wgpu_renderer() {
 
     let window = WgpuWindow::new();
     window.create_window(application);
-}
-
-#[cfg(feature = "renderer-ggez")]
-fn main() -> GameResult {
-    print_diagnostics();
-    run_ggez_renderer()
 }
 
 #[cfg(feature = "renderer-wgpu")]

@@ -35,6 +35,3 @@ pub use event_loop::{FrameMetrics, MetricsCollector};
 // PlotContent, FrameState, CacheStats are ggez-specific
 #[allow(unused_imports)] // Public API, accessed via direct submodule imports
 pub use state_layers::RendererConfig;
-#[cfg(feature = "renderer-ggez")]
-#[allow(unused_imports)] // Public API, accessed via direct submodule imports
-pub use state_layers::{CacheStats, FrameState, PlotContent};
