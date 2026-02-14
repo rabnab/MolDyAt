@@ -5,8 +5,9 @@
 use crate::application::renderer_snapshot::RendererSnapshot;
 use crate::graphics::energy_plot::{DisplayMode, EnergyPlotWindow, SharedEnergyData};
 use crate::graphics::renderer::event_loop::metrics::FrameMetrics;
-use winit::event::{ElementState, KeyboardInput, VirtualKeyCode, WindowEvent};
-use winit::event_loop::EventLoopWindowTarget;
+use winit::event::{ElementState, WindowEvent};
+use winit::event_loop::ActiveEventLoop;
+use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::WindowId;
 
 /// Manages the energy plot window lifecycle and data updates.
@@ -53,7 +54,7 @@ impl EnergyWindowManager {
     /// If no window exists, creates one with default mode.
     /// If window exists and is open, cycles display mode.
     /// If window was closed, reopens with last mode.
-    pub fn toggle(&mut self, window_target: &EventLoopWindowTarget<()>) {
+    pub fn toggle(&mut self, window_target: &ActiveEventLoop) {
         if self.window.is_none() {
             // Create and open energy window with default mode
             let mut window =
@@ -103,19 +104,19 @@ impl EnergyWindowManager {
                 true
             }
             WindowEvent::KeyboardInput {
-                input:
-                    KeyboardInput {
-                        virtual_keycode: Some(keycode),
+                event:
+                    winit::event::KeyEvent {
+                        physical_key: PhysicalKey::Code(keycode),
                         state: ElementState::Pressed,
                         ..
                     },
                 ..
             } => match keycode {
-                VirtualKeyCode::Escape => {
+                KeyCode::Escape => {
                     self.window = None;
                     true
                 }
-                VirtualKeyCode::Tab | VirtualKeyCode::P => {
+                KeyCode::Tab | KeyCode::KeyP => {
                     if let Some(window) = &mut self.window {
                         window.cycle_display_mode();
                         window.request_redraw();

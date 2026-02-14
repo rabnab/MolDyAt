@@ -21,7 +21,7 @@ pub struct WgpuContext {
     pub adapter: Adapter,
     pub device: Device,
     pub queue: Queue,
-    pub surface: Surface,
+    pub surface: Surface<'static>,
     pub config: SurfaceConfiguration,
     pub format: TextureFormat,
 }
@@ -46,12 +46,15 @@ impl WgpuContext {
         let instance = Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
             dx12_shader_compiler: Default::default(),
+            flags: wgpu::InstanceFlags::default(),
+            gles_minor_version: wgpu::Gles3MinorVersion::Automatic,
         });
 
         // Create surface from window
         // SAFETY: The window handle is valid for the lifetime of the surface
-        let surface =
-            unsafe { instance.create_surface(window.as_ref()) }.expect("Failed to create surface");
+        let surface = instance
+            .create_surface(window.clone())
+            .expect("Failed to create surface");
 
         // Request an adapter (GPU)
         let adapter = instance
@@ -74,8 +77,8 @@ impl WgpuContext {
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: Some("Primary Device"),
-                    features: wgpu::Features::empty(),
-                    limits: wgpu::Limits::default(),
+                    required_features: wgpu::Features::empty(),
+                    required_limits: wgpu::Limits::default(),
                 },
                 None,
             )
@@ -107,6 +110,7 @@ impl WgpuContext {
             present_mode: wgpu::PresentMode::AutoVsync,
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
+            desired_maximum_frame_latency: 2,
         };
         surface.configure(&device, &config);
 

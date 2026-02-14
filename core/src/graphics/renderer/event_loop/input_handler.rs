@@ -1,11 +1,10 @@
 use crate::objects2d::Vec2D;
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
-use winit::event::{ElementState, MouseButton, MouseScrollDelta, VirtualKeyCode};
+use winit::event::{ElementState, MouseButton, MouseScrollDelta};
 
-// Type alias for compatibility - in winit 0.28.7 it's VirtualKeyCode
-// In future winit versions it will be winit::keyboard::KeyCode
-pub type KeyCode = VirtualKeyCode;
+pub type KeyCode = winit::keyboard::KeyCode;
+
 
 /// Actions that can result from user input
 #[derive(Debug, Clone)]
@@ -113,7 +112,8 @@ impl InputHandler {
     }
 
     pub fn is_alt_modifier_pressed(&self) -> bool {
-        self.pressed_keys.contains(&KeyCode::LAlt) || self.pressed_keys.contains(&KeyCode::RAlt)
+        self.pressed_keys.contains(&KeyCode::AltLeft)
+            || self.pressed_keys.contains(&KeyCode::AltRight)
     }
 
     // Debounce tracking for +/- keys with cooldown period
@@ -174,12 +174,12 @@ impl InputHandler {
 
         match key {
             KeyCode::Space => Some(InputAction::TogglePause),
-            KeyCode::LControl => Some(InputAction::EnableCursor {
+            KeyCode::ControlLeft | KeyCode::ControlRight => Some(InputAction::EnableCursor {
                 repeated: is_repeat,
             }),
             KeyCode::Escape => Some(InputAction::ClearBalls),
-            KeyCode::LShift => Some(InputAction::EnableRandomBallSpeed),
-            KeyCode::Minus | KeyCode::Equals => {
+            KeyCode::ShiftLeft | KeyCode::ShiftRight => Some(InputAction::EnableRandomBallSpeed),
+            KeyCode::Minus | KeyCode::Equal => {
                 // These are handled separately for alt-key tracking
                 None
             }
@@ -195,15 +195,15 @@ impl InputHandler {
             KeyCode::Tab => Some(InputAction::ToggleEnergyWindow),
             KeyCode::F2 => Some(InputAction::ToggleRendering),
             KeyCode::F3 => Some(InputAction::ToggleCutoffRings),
-            KeyCode::H => Some(InputAction::PrintHelp),
-            KeyCode::D => Some(InputAction::ToggleRealData),
-            KeyCode::S => Some(InputAction::ToggleStepwise),
-            KeyCode::T => Some(InputAction::ToggleTimingDisplay),
-            KeyCode::P => Some(InputAction::CyclePlotContent),
-            KeyCode::R => Some(InputAction::RandomizeSpeeds),
-            KeyCode::B => Some(InputAction::ToggleBallStats),
-            KeyCode::V => Some(InputAction::StartVerbosityInput),
-            KeyCode::LControl => {
+            KeyCode::KeyH => Some(InputAction::PrintHelp),
+            KeyCode::KeyD => Some(InputAction::ToggleRealData),
+            KeyCode::KeyS => Some(InputAction::ToggleStepwise),
+            KeyCode::KeyT => Some(InputAction::ToggleTimingDisplay),
+            KeyCode::KeyP => Some(InputAction::CyclePlotContent),
+            KeyCode::KeyR => Some(InputAction::RandomizeSpeeds),
+            KeyCode::KeyB => Some(InputAction::ToggleBallStats),
+            KeyCode::KeyV => Some(InputAction::StartVerbosityInput),
+            KeyCode::ControlLeft | KeyCode::ControlRight => {
                 // Add ball at cursor position and disable cursor
                 Some(InputAction::AddBall {
                     position: self.cursor_pos,
@@ -211,9 +211,9 @@ impl InputHandler {
             }
             KeyCode::F5 => Some(InputAction::AddRandomBalls { count: 100 }),
             KeyCode::F1 => Some(InputAction::StopAllBalls),
-            KeyCode::Key0 | KeyCode::Numpad0 => Some(InputAction::ResetView),
+            KeyCode::Digit0 | KeyCode::Numpad0 => Some(InputAction::ResetView),
             // Time step control with +/- keys
-            KeyCode::Equals | KeyCode::Plus | KeyCode::NumpadAdd => {
+            KeyCode::Equal | KeyCode::NumpadAdd => {
                 if self.is_alt_modifier_pressed() {
                     Some(InputAction::DecreaseWaitTime)
                 } else {

@@ -4,8 +4,8 @@ use softbuffer::{Context, Surface};
 use std::num::NonZeroU32;
 use std::rc::Rc;
 use winit::dpi::LogicalSize;
-use winit::event_loop::EventLoopWindowTarget;
-use winit::window::{Window, WindowBuilder, WindowId};
+use winit::event_loop::ActiveEventLoop;
+use winit::window::{Window, WindowId};
 
 const DEFAULT_WIDTH: u32 = 1024; // Reduced by 20% from 1280
 const DEFAULT_HEIGHT: u32 = 576; // Reduced by 20% from 720
@@ -28,7 +28,8 @@ const MIN_HEIGHT_WITH_STATUS: u32 = MARGIN_TOP + (BASE_LINES + STATUS_TEXT_LINES
 /// Energy plot window - a separate OS window for displaying energy plots
 pub struct EnergyPlotWindow {
     pub window: Option<Rc<Window>>,
-    surface: Option<Surface>,
+    context: Option<Context<Rc<Window>>>,
+    surface: Option<Surface<Rc<Window>, Rc<Window>>>,
     energy_data: SharedEnergyData,
     display_mode: DisplayMode,
     has_status_text: bool,
@@ -43,6 +44,7 @@ impl EnergyPlotWindow {
     pub fn new(energy_data: SharedEnergyData, display_mode: DisplayMode) -> Self {
         Self {
             window: None,
+            context: None,
             surface: None,
             energy_data,
             display_mode,
@@ -57,7 +59,7 @@ impl EnergyPlotWindow {
     /// * `window_target` - Event loop window target from winit
     pub fn create(
         &mut self,
-        window_target: &EventLoopWindowTarget<()>,
+        window_target: &ActiveEventLoop,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let title = format!("Energy Plot 🐾 — {}", self.display_mode.as_str());
 
@@ -71,22 +73,21 @@ impl EnergyPlotWindow {
             }
         };
 
-        let window = Rc::new(
-            WindowBuilder::new()
-                .with_title(title)
-                .with_inner_size(LogicalSize::new(DEFAULT_WIDTH, initial_height))
-                .with_resizable(true)
-                .with_min_inner_size(LogicalSize::new(512, 288)) // Reduced by 20% from 640x360
-                .build(window_target)?,
-        );
+        let attrs = Window::default_attributes()
+            .with_title(title)
+            .with_inner_size(LogicalSize::new(DEFAULT_WIDTH, initial_height))
+            .with_resizable(true)
+            .with_min_inner_size(LogicalSize::new(512, 288)); // Reduced by 20% from 640x360
+        let window = Rc::new(window_target.create_window(attrs)?);
 
         // Create softbuffer context and surface
         // SAFETY: We own the window and it's valid for the lifetime of the context
-        let context = unsafe { Context::new(window.as_ref())? };
+        let context = Context::new(window.clone())?;
         // SAFETY: We own the context and window, and they're valid for the lifetime of the surface
-        let surface = unsafe { Surface::new(&context, window.as_ref())? };
+        let surface = Surface::new(&context, window.clone())?;
 
         self.window = Some(window);
+        self.context = Some(context);
         self.surface = Some(surface);
         Ok(())
     }
@@ -97,6 +98,8 @@ impl EnergyPlotWindow {
 
     pub fn close(&mut self) {
         self.window = None;
+        self.context = None;
+        self.surface = None;
     }
 
     pub fn window_id(&self) -> Option<WindowId> {
@@ -171,7 +174,7 @@ impl EnergyPlotWindow {
                 };
 
                 let current_size = window.inner_size();
-                window.set_inner_size(LogicalSize::new(current_size.width, new_height));
+                let _ = window.request_inner_size(LogicalSize::new(current_size.width, new_height));
             }
 
             let size = window.inner_size();

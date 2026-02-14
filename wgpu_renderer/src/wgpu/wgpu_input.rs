@@ -19,7 +19,7 @@ pub fn execute_input_action(
     state: &mut UnifiedRenderState,
     pipelines: &mut WgpuPipelines,
     queue: &wgpu::Queue,
-    window_target: &winit::event_loop::EventLoopWindowTarget<()>,
+    window_target: &winit::event_loop::ActiveEventLoop,
 ) -> bool {
     // Handle ONLY actions that need wgpu resources
     if let InputAction::ToggleCutoffRings = action {

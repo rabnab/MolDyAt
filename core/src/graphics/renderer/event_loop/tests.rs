@@ -20,16 +20,16 @@ mod tests {
         let mut handler = InputHandler::new();
         assert!(!handler.is_alt_modifier_pressed());
 
-        handler.register_key_pressed(KeyCode::LAlt);
+        handler.register_key_pressed(KeyCode::AltLeft);
         assert!(handler.is_alt_modifier_pressed());
 
-        handler.register_key_released(KeyCode::LAlt);
+        handler.register_key_released(KeyCode::AltLeft);
         assert!(!handler.is_alt_modifier_pressed());
 
-        handler.register_key_pressed(KeyCode::RAlt);
+        handler.register_key_pressed(KeyCode::AltRight);
         assert!(handler.is_alt_modifier_pressed());
 
-        handler.register_key_released(KeyCode::RAlt);
+        handler.register_key_released(KeyCode::AltRight);
         assert!(!handler.is_alt_modifier_pressed());
     }
 
@@ -57,7 +57,7 @@ mod tests {
     #[test]
     fn test_lcontrol_enables_cursor() {
         let mut handler = InputHandler::new();
-        let action = handler.handle_key_down(KeyCode::LControl, false);
+        let action = handler.handle_key_down(KeyCode::ControlLeft, false);
         assert!(matches!(
             action,
             Some(InputAction::EnableCursor { repeated: false })
@@ -88,7 +88,7 @@ mod tests {
     #[test]
     fn test_p_cycles_plot() {
         let mut handler = InputHandler::new();
-        let action = handler.handle_key_up(KeyCode::P);
+        let action = handler.handle_key_up(KeyCode::KeyP);
         assert!(matches!(action, Some(InputAction::CyclePlotContent)));
     }
 
@@ -102,35 +102,35 @@ mod tests {
     #[test]
     fn test_key0_resets_view() {
         let mut handler = InputHandler::new();
-        let action = handler.handle_key_up(KeyCode::Key0);
+        let action = handler.handle_key_up(KeyCode::Digit0);
         assert!(matches!(action, Some(InputAction::ResetView)));
     }
 
     #[test]
     fn test_r_randomizes_speeds() {
         let mut handler = InputHandler::new();
-        let action = handler.handle_key_up(KeyCode::R);
+        let action = handler.handle_key_up(KeyCode::KeyR);
         assert!(matches!(action, Some(InputAction::RandomizeSpeeds)));
     }
 
     #[test]
     fn test_s_toggles_stepwise() {
         let mut handler = InputHandler::new();
-        let action = handler.handle_key_up(KeyCode::S);
+        let action = handler.handle_key_up(KeyCode::KeyS);
         assert!(matches!(action, Some(InputAction::ToggleStepwise)));
     }
 
     #[test]
     fn test_h_prints_help() {
         let mut handler = InputHandler::new();
-        let action = handler.handle_key_up(KeyCode::H);
+        let action = handler.handle_key_up(KeyCode::KeyH);
         assert!(matches!(action, Some(InputAction::PrintHelp)));
     }
 
     #[test]
     fn test_d_toggles_real_data() {
         let mut handler = InputHandler::new();
-        let action = handler.handle_key_up(KeyCode::D);
+        let action = handler.handle_key_up(KeyCode::KeyD);
         assert!(matches!(action, Some(InputAction::ToggleRealData)));
     }
 
@@ -144,21 +144,21 @@ mod tests {
     #[test]
     fn test_t_toggles_timing_display() {
         let mut handler = InputHandler::new();
-        let action = handler.handle_key_up(KeyCode::T);
+        let action = handler.handle_key_up(KeyCode::KeyT);
         assert!(matches!(action, Some(InputAction::ToggleTimingDisplay)));
     }
 
     #[test]
     fn test_b_toggles_ball_stats() {
         let mut handler = InputHandler::new();
-        let action = handler.handle_key_up(KeyCode::B);
+        let action = handler.handle_key_up(KeyCode::KeyB);
         assert!(matches!(action, Some(InputAction::ToggleBallStats)));
     }
 
     #[test]
     fn test_v_starts_verbosity_input() {
         let mut handler = InputHandler::new();
-        let action = handler.handle_key_up(KeyCode::V);
+        let action = handler.handle_key_up(KeyCode::KeyV);
         assert!(matches!(action, Some(InputAction::StartVerbosityInput)));
     }
 
@@ -176,7 +176,7 @@ mod tests {
     fn test_lcontrol_up_adds_ball() {
         let mut handler = InputHandler::new();
         handler.set_cursor_pos(Vec2D::new(5.0, 10.0), [100.0, 200.0]);
-        let action = handler.handle_key_up(KeyCode::LControl);
+        let action = handler.handle_key_up(KeyCode::ControlLeft);
         assert!(
             matches!(action, Some(InputAction::AddBall { position }) if position == Vec2D::new(5.0, 10.0))
         );

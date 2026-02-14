@@ -184,7 +184,7 @@ impl UnifiedRenderState {
     pub fn process_action(
         &mut self,
         action: &InputAction,
-        window_target: Option<&winit::event_loop::EventLoopWindowTarget<()>>,
+        window_target: Option<&winit::event_loop::ActiveEventLoop>,
     ) -> bool {
         // Handle actions that need state updates beyond process_action_common
         match action {
@@ -276,10 +276,7 @@ impl UnifiedRenderState {
     // ── Energy window helpers ────────────────────────────────────────
 
     /// Toggle or cycle the energy plot window.
-    pub fn toggle_energy_window(
-        &mut self,
-        window_target: &winit::event_loop::EventLoopWindowTarget<()>,
-    ) {
+    pub fn toggle_energy_window(&mut self, window_target: &winit::event_loop::ActiveEventLoop) {
         self.energy_manager.toggle(window_target);
     }
 

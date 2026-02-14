@@ -10,13 +10,13 @@ workspace = true
 rust_thermo_core = { path = "../core" }
 
 # WGPU rendering
-wgpu = "0.16"
+wgpu = "0.19"
 pollster = "0.3"
 bytemuck = { version = "1.14", features = ["derive"] }
 font8x8 = "0.3"
 
 # Window management (same version as core for energy window compat)
-winit = "0.28.7"
+winit = "0.30.12"
 
 # Logging (for init in main)
 log = "0.4"
