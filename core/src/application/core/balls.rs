@@ -168,6 +168,7 @@ impl MainContent {
     pub(crate) fn randomize_speeds(&mut self) {
         let normal = self.calculate_normal_distribution_of_speed();
         let mut r = rng();
+
         for ball in &mut self.balls {
             ball.v.x = normal.sample(&mut r);
             ball.v.y = normal.sample(&mut r);

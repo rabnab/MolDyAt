@@ -2,9 +2,8 @@ use crate::objects2d::ball_impl::ball_core::Ball2D;
 use crate::objects2d::vec_2d::Vec2D;
 use std::cell::RefCell;
 
-use rand::Rng;
-use rand::SeedableRng;
-use rand::rngs::StdRng;
+use rand::rngs::{StdRng, SysRng};
+use rand::{RngExt, SeedableRng};
 use rand_distr::{Distribution, Normal};
 
 /// Factory for creating Ball2D instances with various configurations
@@ -18,12 +17,10 @@ const FIRST_BALL_ID: usize = 1;
 
 impl Default for BallFactory {
     fn default() -> Self {
-        // Use random seed for StdRng (Send-compatible)
-        let seed = rand::rng().random();
         BallFactory {
             next_id: RefCell::new(FIRST_BALL_ID),
             new_ball_size_idx: RefCell::new(2),
-            rng: RefCell::new(StdRng::seed_from_u64(seed)),
+            rng: RefCell::new(StdRng::try_from_rng(&mut SysRng).unwrap()),
         }
     }
 }
@@ -123,13 +120,13 @@ impl BallFactory {
         let max_y = f32::max(pos_range.0.y, pos_range.1.y);
 
         let pos = Vec2D::new(
-            Rng::random_range(&mut rng, min_x..=max_x),
-            Rng::random_range(&mut rng, min_y..=max_y),
+            rng.random_range(min_x..=max_x),
+            rng.random_range(min_y..=max_y),
         );
 
         let velocity = if velocity_range.0 < velocity_range.1 {
-            let speed = Rng::random_range(&mut rng, velocity_range.0..=velocity_range.1);
-            let angle = Rng::random_range(&mut rng, 0.0..std::f32::consts::TAU);
+            let speed = rng.random_range(velocity_range.0..=velocity_range.1);
+            let angle = rng.random_range(0.0..std::f32::consts::TAU);
             Vec2D::new(speed * angle.cos(), speed * angle.sin())
         } else {
             Vec2D::zero()
