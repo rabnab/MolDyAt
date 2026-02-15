@@ -5,7 +5,6 @@ use winit::event::{ElementState, MouseButton, MouseScrollDelta};
 
 pub type KeyCode = winit::keyboard::KeyCode;
 
-
 /// Actions that can result from user input
 #[derive(Debug, Clone)]
 pub enum InputAction {

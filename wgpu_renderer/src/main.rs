@@ -2,8 +2,9 @@
 
 mod wgpu;
 
-use rust_thermo_core::graphics::window::{MARGIN_PX_X, MARGIN_PX_Y};
 use rust_thermo_core::objects2d::Rect;
+
+use crate::wgpu::{MARGIN_PX_X, MARGIN_PX_Y};
 
 /// Initialize Rayon thread pool for parallel physics computations.
 ///

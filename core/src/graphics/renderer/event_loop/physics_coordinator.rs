@@ -29,12 +29,15 @@ impl PhysicsCoordinator {
     ///
     /// # Arguments
     /// * `application` - MainContent to move to physics thread
-    pub fn new(application: MainContent) -> Self {
+    pub fn new(
+        application: MainContent,
+        wakeup_callback: Box<dyn Fn() + Send + Sync + 'static>,
+    ) -> Self {
         // Get snapshot slot before moving MainContent
         let snapshot_slot = application.get_snapshot_slot();
 
         // Spawn physics thread
-        let physics_thread = PhysicsThread::spawn(application);
+        let physics_thread = PhysicsThread::spawn(application, wakeup_callback);
         let command_sender = physics_thread.get_command_sender();
 
         Self {

@@ -46,6 +46,11 @@ impl EnergyWindowManager {
 
     /// Check if this window event is for the energy window.
     pub fn is_energy_window_event(&self, window_id: WindowId) -> bool {
+        log::trace!(
+            "Checking if event for window {:?} matches energy window {:?}",
+            window_id,
+            self.window_id()
+        );
         self.window_id() == Some(window_id)
     }
 
@@ -134,6 +139,7 @@ impl EnergyWindowManager {
     /// # Returns
     /// `true` if render was performed, `false` if not energy window's redraw.
     pub fn handle_redraw(&mut self) -> bool {
+        log::trace!("EnergyWindowManager: handle_redraw called");
         if let Some(window) = &mut self.window {
             let _ = window.render();
             true
@@ -195,11 +201,6 @@ impl EnergyWindowManager {
 
             // Release lock before requesting redraw
             drop(data);
-
-            // Request redraw for energy window if it exists
-            if let Some(window) = &self.window {
-                window.request_redraw();
-            }
         }
     }
 

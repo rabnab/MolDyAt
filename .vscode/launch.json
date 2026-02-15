@@ -4,6 +4,7 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+
         {
             "name": "Debug WGPU Renderer",
             "type": "lldb",
@@ -13,6 +14,9 @@
                     "run",
                     "-p", "rust_thermo_wgpu"
                 ]
+            },
+            "env": {
+                "RUST_LOG": "info,rust_thermo_core=trace,rust_thermo_wgpu=trace"
             },
             "args": []
         },

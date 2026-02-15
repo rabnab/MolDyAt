@@ -30,3 +30,6 @@ mod wgpu_pipelines;
 mod wgpu_window;
 
 pub use wgpu_window::WgpuWindow;
+
+pub const MARGIN_PX_X: f32 = 50.;
+pub const MARGIN_PX_Y: f32 = 50.;

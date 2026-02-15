@@ -108,6 +108,7 @@ pub struct PhysicsThread {
     thread_handle: Option<JoinHandle<()>>,
     shutdown_signal: ShutdownSignal,
     command_sender: Sender<PhysicsCommand>,
+    wakeup_callback: Option<Arc<dyn Fn() + Send + Sync>>,
 }
 
 impl PhysicsThread {
@@ -118,12 +119,18 @@ impl PhysicsThread {
     ///
     /// # Returns
     /// A `PhysicsThread` handle that can be used to control the thread
-    pub fn spawn(mut main_content: MainContent) -> Self {
+    pub fn spawn(
+        mut main_content: MainContent,
+        wakeup_callback: Box<dyn Fn() + Send + Sync + 'static>,
+    ) -> Self {
         let shutdown_signal = ShutdownSignal::new();
         let thread_signal = shutdown_signal.clone_signal();
 
         // Create command channel
         let (command_sender, command_receiver) = mpsc::channel();
+
+        let wakeup = Arc::new(wakeup_callback);
+        let thread_wakeup = Arc::clone(&wakeup);
 
         let thread_handle = thread::spawn(move || {
             // Log physics thread startup
@@ -165,6 +172,9 @@ impl PhysicsThread {
                 if now.duration_since(last_snapshot_time) >= snapshot_interval {
                     let snapshot_start = std::time::Instant::now();
                     main_content.publish_snapshot();
+                    // Call wakeup callback to notify renderer of new snapshot
+                    thread_wakeup();
+
                     snapshot_time_total += snapshot_start.elapsed();
                     snapshot_count += 1;
                     last_snapshot_time = now;
@@ -211,6 +221,7 @@ impl PhysicsThread {
             thread_handle: Some(thread_handle),
             shutdown_signal,
             command_sender,
+            wakeup_callback: Some(wakeup),
         }
     }
 

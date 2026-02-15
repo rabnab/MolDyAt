@@ -7,14 +7,16 @@
 use super::wgpu_context::WgpuContext;
 use super::wgpu_input::execute_input_action;
 use super::wgpu_pipelines::{WgpuPipelines, compute_view_proj};
+use crate::wgpu::{MARGIN_PX_X, MARGIN_PX_Y};
 use rust_thermo_core::application::MainContent;
 use rust_thermo_core::graphics::renderer::ViewportTransform;
 use rust_thermo_core::graphics::renderer::event_loop::KeyCode;
 use rust_thermo_core::graphics::renderer::event_loop::UnifiedRenderState;
-use rust_thermo_core::graphics::window::{MARGIN_PX_X, MARGIN_PX_Y};
 use rust_thermo_core::objects2d::Rect;
 use rust_thermo_core::objects2d::ball_impl::BallFactory;
 use std::sync::Arc;
+use winit::event_loop::EventLoopProxy;
+
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
@@ -46,26 +48,37 @@ impl WgpuWindow {
     pub fn create_window(&self, application: MainContent) {
         log::info!("Creating WGPU window");
 
-        let event_loop = EventLoop::new().expect("Failed to create event loop");
-        let mut app = WgpuApp::new(application);
+        let event_loop = EventLoop::<UserEvent>::with_user_event()
+            .build()
+            .expect("Failed to create event loop");
+        let event_loop_proxy = event_loop.create_proxy();
+        let mut app = WgpuApp::new(application, event_loop_proxy);
         event_loop
             .run_app(&mut app)
             .expect("Winit event loop terminated with an error");
     }
 }
 
+#[derive(Debug)]
+enum UserEvent {
+    /// Triggered when new snapshot data is available from the physics thread.
+    NewSnapshot,
+}
+
 struct WgpuApp {
     application: Option<MainContent>,
     window: Option<Arc<Window>>,
+    proxy: EventLoopProxy<UserEvent>,
     ctx: Option<WgpuContext>,
     pipelines: Option<WgpuPipelines>,
     state: Option<UnifiedRenderState>,
 }
 
 impl WgpuApp {
-    fn new(application: MainContent) -> Self {
+    fn new(application: MainContent, proxy: EventLoopProxy<UserEvent>) -> Self {
         Self {
             application: Some(application),
+            proxy,
             window: None,
             ctx: None,
             pipelines: None,
@@ -106,11 +119,19 @@ impl WgpuApp {
             .take()
             .expect("Application state already consumed");
 
+        let proxy = Arc::new(self.proxy.clone());
+        let wakeup_fn = move || {
+            proxy
+                .send_event(UserEvent::NewSnapshot)
+                .expect("Failed to send NewSnapshot event");
+        };
+
         let state = UnifiedRenderState::new(
             application,
             initial_world_bounds,
             window_size,
             (MARGIN_PX_X, MARGIN_PX_Y),
+            Box::new(wakeup_fn),
         );
         log::info!("Physics thread spawned, main thread: rendering (WGPU)");
 
@@ -121,10 +142,28 @@ impl WgpuApp {
     }
 }
 
-impl ApplicationHandler for WgpuApp {
+impl ApplicationHandler<UserEvent> for WgpuApp {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        event_loop.set_control_flow(ControlFlow::Poll);
+        // Polling causes about_to_wait to be called, which is where we pull the latest snapshot and request redraws.
+        event_loop.set_control_flow(ControlFlow::Wait);
         self.init_if_needed(event_loop);
+    }
+
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: UserEvent) {
+        match event {
+            UserEvent::NewSnapshot => {
+                // Pull latest snapshot and request redraws for both windows
+                if let (Some(state), Some(window)) = (self.state.as_mut(), self.window.as_ref()) {
+                    state.begin_frame();
+
+                    // Request redraw for main window
+                    window.request_redraw();
+
+                    // actually redraw for energy window if it's open
+                    state.energy_manager.handle_redraw();
+                }
+            }
+        }
     }
 
     fn window_event(
@@ -138,11 +177,16 @@ impl ApplicationHandler for WgpuApp {
         };
 
         if event == WindowEvent::RedrawRequested {
+            log::trace!(
+                "Handling redraw for  window with id {:?} and should_render: {}",
+                window_id,
+                state.should_render()
+            );
             // Check if redraw is for energy window
-            if state.energy_manager.is_energy_window_event(window_id) {
-                state.energy_manager.handle_redraw();
-                return;
-            }
+            // if state.should_render() && state.energy_manager.is_energy_window_event(window_id) {
+            //     state.energy_manager.handle_redraw();
+            //     return;
+            // }
 
             // Render main window
             let Some(window) = self.window.as_ref() else {
@@ -223,24 +267,6 @@ impl ApplicationHandler for WgpuApp {
 
         // Main window events
         handle_window_event(event, ctx, state, pipelines, event_loop);
-    }
-
-    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
-        let Some(state) = self.state.as_mut() else {
-            return;
-        };
-        let Some(window) = self.window.as_ref() else {
-            return;
-        };
-
-        // Pull latest snapshot before next redraw cycle.
-        state.begin_frame();
-        // Keep energy-window updates independent from main-window redraw.
-        // This ensures the energy plot continues rendering even when
-        // main-window redraw cadence changes with focus/occlusion.
-        state.update_energy_from_snapshot();
-        // Request a redraw after processing events
-        window.request_redraw();
     }
 }
 

@@ -83,10 +83,11 @@ impl UnifiedRenderState {
         world_bounds: Rect,
         window_size: (f32, f32),
         margin_px: (f32, f32),
+        wakeup_callback: Box<dyn Fn() + Send + Sync + 'static>,
     ) -> Self {
         let energy_data: SharedEnergyData = Arc::new(Mutex::new(EnergyData::new()));
 
-        let physics = PhysicsCoordinator::new(application);
+        let physics = PhysicsCoordinator::new(application, wakeup_callback);
         let viewport = ViewportTransform::new(world_bounds, window_size, margin_px);
         let energy_manager = EnergyWindowManager::new(energy_data);
 
@@ -114,6 +115,7 @@ impl UnifiedRenderState {
         // Grab latest snapshot from the physics thread.
         if let Some(snapshot) = self.physics.get_latest_snapshot() {
             self.last_snapshot = Some(snapshot);
+            self.update_energy_from_snapshot();
         }
     }
 
@@ -149,7 +151,7 @@ impl UnifiedRenderState {
     ///
     /// Safe to call every frame — `EnergyWindowManager` internally
     /// deduplicates by simulation step.
-    pub fn update_energy_from_snapshot(&mut self) {
+    fn update_energy_from_snapshot(&mut self) {
         if let Some(snapshot) = &self.last_snapshot {
             let frame_metrics = self.metrics.current().clone();
             self.energy_manager.update_from_snapshot(

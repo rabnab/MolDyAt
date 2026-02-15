@@ -4,6 +4,8 @@
 //! reference specific pipelines (e.g., toggling cutoff rings on the
 //! ball pipeline).
 
+use crate::wgpu::{MARGIN_PX_X, MARGIN_PX_Y};
+
 use super::ball_pipeline::BallPipeline;
 use super::crosshair_pipeline::CrosshairPipeline;
 use super::frame_pipeline::FramePipeline;
@@ -14,7 +16,6 @@ use super::text_pipeline::TextPipeline;
 use super::wgpu_context::WgpuContext;
 use rust_thermo_core::application::AppResult;
 use rust_thermo_core::application::renderer_snapshot::{CellGridSpec, RendererSnapshot};
-use rust_thermo_core::graphics::window::{MARGIN_PX_X, MARGIN_PX_Y};
 
 /// Shader source code (embedded at compile time).
 const GRID_SHADER: &str = include_str!("shaders/grid.wgsl");
@@ -22,7 +23,6 @@ const BALL_SHADER: &str = include_str!("shaders/ball.wgsl");
 const CROSSHAIR_SHADER: &str = include_str!("shaders/crosshair.wgsl");
 const LINE_SHADER: &str = include_str!("shaders/line.wgsl");
 const FRAME_SHADER: &str = include_str!("shaders/frame.wgsl");
-
 /// Named handles for direct pipeline access.
 pub struct PipelineHandles {
     pub frame: PipelineHandle,
