@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod test_application_core {
     use crate::application::{GameLogic, MainContent};
-    use crate::graphics::window::window_definition::WindowDefinition;
+    use crate::graphics::renderer::ViewportTransform;
     use crate::objects2d::ball_impl::{Ball2D, Named};
-    use crate::objects2d::{Vec2D, VerboseInfoMode};
+    use crate::objects2d::{Rect, Vec2D, VerboseInfoMode};
     use float_cmp::approx_eq;
 
     const DT_GOAL: f32 = 0.01; // 1. / (FPS_GOAL as f32);
@@ -12,56 +12,47 @@ mod test_application_core {
     // TEST UTILITIES
     // ============================================================================
 
-    #[test]
-    fn test_defaults() {
-        let default_win = WindowDefinition::default();
-        assert_eq!(default_win.region_px.0, 100.);
-        assert_eq!(default_win.region_px.1, 100.);
-        assert_eq!(default_win.margin_px.0, 10.);
-        assert_eq!(default_win.margin_px.1, 10.);
+    fn create_main_content_for_region(tl_x: f32, tl_y: f32) -> (MainContent, ViewportTransform) {
+        let world = Rect::new(tl_x, tl_y, 100.0, -100.0);
+        let transform = ViewportTransform::new(world, (800.0, 600.0), (50.0, 50.0));
+        create_main_content_with_world(transform)
     }
 
-    fn create_main_content_for_region(x: f32, y: f32) -> (MainContent, WindowDefinition) {
-        let win_def = WindowDefinition::new((x, y));
-        create_main_content_with_windef(win_def)
-    }
-
-    fn create_main_content_with_windef(
-        win_def: WindowDefinition,
-    ) -> (MainContent, WindowDefinition) {
-        let world_rect = win_def.compute_world_bounds_rect();
+    fn create_main_content_with_world(
+        transform: ViewportTransform,
+    ) -> (MainContent, ViewportTransform) {
+        let world_rect = transform.world_bounds();
         let main_content = MainContent::new(world_rect).expect("Could not create main content");
 
         println!("Created main content with world rect {:?}", world_rect,);
-        (main_content, win_def)
+        (main_content, transform)
     }
-    fn create_main_content() -> (MainContent, WindowDefinition) {
-        create_main_content_with_windef(WindowDefinition::default())
+
+    fn create_main_content() -> (MainContent, ViewportTransform) {
+        create_main_content_for_region(-10., 10.)
     }
 
     #[test]
     fn test_add_candidate() {
-        let (mut main_content, win_def) = create_main_content();
+        let (mut main_content, _) = create_main_content();
 
         let new_ball_size = main_content
             .get_game_logic_data()
             .get_ball_factory()
             .get_new_ball_radius();
         // Add a valid candidate
-        let x_px = win_def.margin_px.0 + WindowDefinition::len_to_px(new_ball_size * 1.1);
-        let y_px = win_def.margin_px.1 + WindowDefinition::len_to_px(new_ball_size * 1.1);
+        let coord = main_content.world_region_inset(new_ball_size * 1.1);
+        let (x, y) = coord.get_tl();
+
         println!(
-            "test adding ball at px ({},{}) | LEN_TO_PX: {} and inset {:?}",
-            x_px,
-            y_px,
-            WindowDefinition::get_len_to_px(),
-            win_def.world_region_inset(new_ball_size)
+            "test adding ball at world ({},{}) with radius {new_ball_size} in inset {:?}",
+            x,
+            y,
+            main_content.world_region_inset(0.)
         );
 
-        let coord = win_def.px_to_coord(x_px, y_px);
-
         main_content
-            .add_candidate_at_pos(coord)
+            .add_candidate_at_pos((x, y).into())
             .expect("Could not add candidate");
 
         assert_eq!(main_content.num_balls, 1);
@@ -69,28 +60,26 @@ mod test_application_core {
         // Ensure the added ball is in the correct position
         {
             let ball = &main_content.balls[0];
-            let ball_pos_px = win_def.coord_to_px(&ball.get_position());
+            let ball_pos = ball.get_position();
             assert!(
-                approx_eq!(f32, ball_pos_px.x, x_px, ulps = 2),
+                approx_eq!(f32, ball_pos.x, x, ulps = 2),
                 "values in x are not close: {} vs {}",
-                ball_pos_px.x,
-                x_px
+                ball_pos.x,
+                x
             );
             assert!(
-                approx_eq!(f32, ball_pos_px.y, y_px, ulps = 2),
+                approx_eq!(f32, ball_pos.y, y, ulps = 2),
                 "values in y are not close: {} vs {}",
-                ball_pos_px.y,
-                y_px
+                ball_pos.y,
+                y
             );
         }
 
         // Attempt to add a candidate out of the region
         {
-            let invalid_x_px = -10.0;
-            let invalid_y_px = -10.0;
-            let coord = win_def.px_to_coord(invalid_x_px, invalid_y_px);
+            let coord = main_content.world_region();
             main_content
-                .add_candidate_at_pos(coord)
+                .add_candidate_at_pos((coord.get_tl().0 - 0.1, coord.get_tl().1 - 0.1).into())
                 .expect_err("Could not add candidate");
             assert_eq!(main_content.num_balls, 1, "Ball added out of valid region");
         }
@@ -98,48 +87,37 @@ mod test_application_core {
 
     #[test]
     fn test_is_ball_in_region() {
-        let (main_content, win_def) = create_main_content();
+        let (main_content, _) = create_main_content();
 
-        let ball_px: Vec2D = Vec2D::new(
-            win_def.margin_px.1 + win_def.region_px.0 * 0.1,
-            win_def.margin_px.1 + win_def.region_px.1 * 0.1,
-        );
-        let ball_coord = win_def.px_to_coord(ball_px.x, ball_px.y);
-        println!(
-            "ball coordinates are {:?} from px ({},{})",
-            ball_coord, ball_px.x, ball_px.y
-        );
-        let ball_radius = WindowDefinition::px_to_len(10.);
-        let ball = Ball2D::new(0, ball_coord.clone(), (0, ball_radius));
+        let tl = main_content.world_region().get_tl();
+        let ball_coord = (0., 0.);
+        println!("ball coordinates are {:?}", ball_coord,);
+        let ball_radius = 5.;
+        let ball = Ball2D::new(0, ball_coord.clone().into(), (0, ball_radius));
         assert!(main_content.is_ball_in_region(&ball));
 
-        let invalid_ball = Ball2D::new(1, Vec2D::new(-10., -10.), (0, ball_radius));
+        let invalid_ball = Ball2D::new(1, (tl.0 - 0.1, tl.1 - 0.1).into(), (0, ball_radius));
         // Move the ball outside the region
         assert!(!main_content.is_ball_in_region(&invalid_ball));
     }
 
     #[test]
     fn test_global_update() {
-        let (mut main_content, win_def) = create_main_content();
+        let (mut main_content, _win_def) = create_main_content();
 
         // Add some balls
-        let ball_coord_px: Vec2D = Vec2D::new(
-            win_def.margin_px.1 + win_def.region_px.0 * 0.1,
-            win_def.margin_px.1 + win_def.region_px.1 * 0.1,
-        );
+
         let ball_radius = main_content
             .get_game_logic_data()
             .get_ball_factory()
             .get_new_ball_radius();
-        let ball_radius_px = WindowDefinition::len_to_px(ball_radius);
-        let ball_coord = win_def.px_to_coord(ball_coord_px.x, ball_coord_px.y);
+
+        let ball_coord = Vec2D::zero();
         main_content
-            .add_candidate_at_pos(ball_coord.clone())
+            .add_candidate_at_pos(ball_coord.clone().into())
             .unwrap();
-        let ball_coord = win_def.px_to_coord(
-            ball_coord_px.x + ball_radius_px * 2.2,
-            ball_coord_px.y + ball_radius_px * 2.2,
-        );
+
+        let ball_coord = ball_coord + Vec2D::new(1., 1.) * ball_radius * 2.1;
         main_content.add_candidate_at_pos(ball_coord).unwrap();
         main_content.make_all_verbose(VerboseInfoMode::Console);
         main_content.simulation_step().unwrap();
@@ -156,28 +134,20 @@ mod test_application_core {
     #[test]
     #[ignore] // TODO: Fix resize after removing renderer from MainContent
     fn test_resize_event() {
-        let (mut main_content, mut win_def) = create_main_content();
+        let (mut main_content, _win_def) = create_main_content();
 
         let new_width = 300.0;
         let new_height = 200.0;
 
-        // Resize window definition to compute correct world_rect
-        win_def.resize(new_width, new_height);
-        let new_world_rect = win_def.compute_world_bounds_rect();
+        let new_world_rect = Rect::new(0., 0., new_width, -new_height);
 
         main_content.resize(new_world_rect);
         main_content.unpause_after_resize();
 
         let new_world = main_content.cell_grid.world_rect();
 
-        assert_eq!(
-            new_world.w,
-            WindowDefinition::px_to_len(new_width - 2.0 * win_def.margin_px.0)
-        );
-        assert_eq!(
-            new_world.h,
-            -WindowDefinition::px_to_len(new_height - 2.0 * win_def.margin_px.1)
-        );
+        assert_eq!(new_world.w, new_width);
+        assert_eq!(new_world.h, new_height);
 
         // assert_eq!(win_def.region_px.0, 300.0 - 2.0 * win_def.margin_px.0);
         // assert_eq!(win_def.region_px.1, 200.0 - 2.0 * win_def.margin_px.1);
@@ -185,14 +155,14 @@ mod test_application_core {
 
     #[test]
     fn test_resize_world_rect_matches_cell_grid() {
-        let (mut main_content, mut win_def) = create_main_content();
+        let (mut main_content, _def) = create_main_content();
 
         let new_width = 400.0;
         let new_height = 350.0;
 
         // Resize window definition and main_content
-        win_def.resize(new_width, new_height);
-        let new_world_rect = win_def.compute_world_bounds_rect();
+
+        let new_world_rect = Rect::new(0., 0., new_width, -new_height);
         main_content.resize(new_world_rect);
 
         // Verify main_content's world_rect matches what we passed
@@ -211,14 +181,13 @@ mod test_application_core {
 
     #[test]
     fn test_resize_cell_grid_origin_correct() {
-        let (mut main_content, mut win_def) = create_main_content();
+        let (mut main_content, _win_def) = create_main_content();
 
         let new_width = 500.0;
         let new_height = 400.0;
 
         // Resize and check cell grid origin matches world_rect top-left
-        win_def.resize(new_width, new_height);
-        let new_world_rect = win_def.compute_world_bounds_rect();
+        let new_world_rect = Rect::new(0., 0., new_width, -new_height);
         main_content.resize(new_world_rect);
 
         let cell_grid_world = main_content.cell_grid.world_rect();
@@ -236,7 +205,7 @@ mod test_application_core {
 
     #[test]
     fn test_resize_multiple_times_maintains_consistency() {
-        let (mut main_content, mut win_def) = create_main_content();
+        let (mut main_content, mut _win_def) = create_main_content();
 
         // Perform multiple resizes
         let sizes = [
@@ -247,8 +216,7 @@ mod test_application_core {
         ];
 
         for (width, height) in &sizes {
-            win_def.resize(*width, *height);
-            let world_rect = win_def.compute_world_bounds_rect();
+            let world_rect = Rect::new(0., 0., *width, -*height);
             main_content.resize(world_rect);
 
             // Verify consistency after each resize
@@ -279,14 +247,14 @@ mod test_application_core {
 
     #[test]
     fn test_resize_cell_count_changes_with_world_size() {
-        let (mut main_content, mut win_def) = create_main_content();
+        let (mut main_content, _win_def) = create_main_content();
 
         // Get initial cell count
         let (initial_rows, initial_cols) = main_content.cell_grid.get_grid_size();
 
         // Resize to much larger dimensions
-        win_def.resize(1000.0, 800.0);
-        let large_world_rect = win_def.compute_world_bounds_rect();
+
+        let large_world_rect = Rect::new(0., 0., 1000.0, -800.0);
         main_content.resize(large_world_rect);
 
         let (large_rows, large_cols) = main_content.cell_grid.get_grid_size();
@@ -302,8 +270,7 @@ mod test_application_core {
         );
 
         // Resize to smaller dimensions
-        win_def.resize(200.0, 150.0);
-        let small_world_rect = win_def.compute_world_bounds_rect();
+        let small_world_rect = Rect::new(0., 0., 200.0, -150.0);
         main_content.resize(small_world_rect);
 
         let (small_rows, small_cols) = main_content.cell_grid.get_grid_size();
@@ -321,24 +288,20 @@ mod test_application_core {
 
     #[test]
     fn test_ball_collision() {
-        let (mut main_content, win_def) = create_main_content();
+        let (mut main_content, _win_def) = create_main_content();
 
         // Add two overlapping balls
-        let ball_coord_px: Vec2D = Vec2D::new(
-            win_def.margin_px.1 + win_def.region_px.0 * 0.1,
-            win_def.margin_px.1 + win_def.region_px.1 * 0.1,
-        );
 
         let ball_radius = main_content
             .get_game_logic_data()
             .get_ball_factory()
             .get_new_ball_radius();
-        let ball_coord = win_def.px_to_coord(ball_coord_px.x, ball_coord_px.y);
+
+        let ball_coord = Vec2D::zero();
         main_content
             .add_candidate_at_pos(ball_coord.clone())
             .expect(format!("could not add ball at {:?}", ball_coord).as_str());
 
-        let ball_coord = win_def.px_to_coord(ball_coord_px.x, ball_coord_px.y);
         let new_ball_coord = Vec2D::new(
             ball_coord.x + 0.5 * ball_radius,
             ball_coord.y + 0.5 * ball_radius,
@@ -363,27 +326,28 @@ mod test_application_core {
     #[test]
     fn test_coord_trafo_idempotent() {
         let (_main_content, win_def) = create_main_content_for_region(500., 500.);
-        let test_coord = Vec2D::new(18., 234.);
-        let vec = win_def.coord_to_px(&test_coord);
-        let res_coord = win_def.px_to_coord(vec.x, vec.y);
+        let test_coord: [f32; 2] = [18., 234.];
+        let vec = win_def.px_to_world(&test_coord);
+
+        let res_coord = win_def.world_to_px(&vec);
 
         assert!(
-            approx_eq!(f32, test_coord.x, res_coord.x, ulps = 2),
+            approx_eq!(f32, test_coord[0], res_coord[0], ulps = 2),
             "values in x are not close: {} vs {}",
-            test_coord.x,
-            res_coord.x
+            test_coord[0],
+            res_coord[0]
         );
         assert!(
-            approx_eq!(f32, test_coord.y, res_coord.y, ulps = 2),
+            approx_eq!(f32, test_coord[1], res_coord[1], ulps = 2),
             "values in y are not close: {} vs {}",
-            test_coord.y,
-            res_coord.y
+            test_coord[1],
+            res_coord[1]
         );
     }
 
     #[test]
     fn test_collect_neighbours() {
-        let (mut main_content, _win_def) = create_main_content_for_region(500., 500.);
+        let (mut main_content, _win_def) = create_main_content_for_region(-50., 50.);
 
         // Add balls to the system
         // let x1 = 80.0;
@@ -479,7 +443,7 @@ mod test_application_core {
 
     #[test]
     fn test_remove_invalid_balls_clears_neighbor_indices() {
-        let (mut main_content, _win_def) = create_main_content_for_region(500., 500.);
+        let (mut main_content, _win_def) = create_main_content_for_region(-50.0, 50.0);
 
         // Add three balls in a line
         let ball1_coord = Vec2D::new(3.0, 3.0);
@@ -612,7 +576,7 @@ mod test_application_core {
         // Disable speed limit for momentum conservation testing
         main_content.speed_limit_override = Some(f32::INFINITY);
 
-        let world_rect = win_def.compute_world_bounds_rect();
+        let world_rect = win_def.world_bounds();
         println!("World rect: {:?}", world_rect);
         println!("World size: {:.2} x {:.2}", world_rect.w, world_rect.h);
 
@@ -865,7 +829,7 @@ mod test_application_core {
         println!("\n=== Testing Energy Loss at Cutoff Boundary ===");
 
         // Create a small world for controlled testing
-        let (mut main_content, _win_def) = create_main_content_for_region(200.0, 200.0);
+        let (mut main_content, _win_def) = create_main_content_for_region(-50.0, 50.0);
 
         let factory = BallFactory::new();
         let cutoff = main_content.physics.get_cutoff_distance();
@@ -884,19 +848,22 @@ mod test_application_core {
         let ball2_vel = Vec2D::new(1.0, 0.0); // Faster velocity to actually move
         let ball2 = factory.create_massive_with_velocity(ball2_pos, ball2_vel);
 
-        main_content.balls.push(ball1);
-        main_content.balls.push(ball2);
-        main_content.num_balls = 2;
+        main_content
+            .add_candidate_ball(ball1, 0.)
+            .expect("Could not add ball1");
+        main_content
+            .add_candidate_ball(ball2, 0.)
+            .expect("Could not add ball2");
 
         println!(
             "Initial separation (edge-to-edge): {:.6}",
             initial_separation - (main_content.balls[0].radius + main_content.balls[1].radius)
         );
 
-        // Add balls to cell grid
-        for i in 0..main_content.balls.len() {
-            main_content.cell_grid.add_ball(i, &mut main_content.balls);
-        }
+        // // Add balls to cell grid
+        // for i in 0..main_content.balls.len() {
+        //     main_content.cell_grid.add_ball(i, &mut main_content.balls);
+        // }
 
         println!("Ball 0 in cell: {:?}", main_content.balls[0].current_cell);
         println!("Ball 1 in cell: {:?}", main_content.balls[1].current_cell);
@@ -961,7 +928,7 @@ mod test_application_core {
 
         println!("\nRunning simulation to observe cutoff crossing...");
 
-        for step in 0..100 {
+        for step in 0..200 {
             main_content.simulation_step().unwrap();
 
             // Check current separation
@@ -984,7 +951,7 @@ mod test_application_core {
                 println!("    Ball1 neighbors: {}", neighbors1);
             }
 
-            if step % 10 == 9 || (crossed_cutoff && step == step_crossed) {
+            if step % 20 == 9 || (crossed_cutoff && step == step_crossed) {
                 let (ke, pe, total) = calculate_exact_energy(&main_content);
                 let drift = total - total_initial;
                 let relative_drift = (drift / total_initial).abs() * 100.0;
@@ -1316,7 +1283,7 @@ mod test_application_core {
         let snapshot_slot = main_content.get_snapshot_slot();
 
         // Spawn physics thread
-        let physics_thread = PhysicsThread::spawn(main_content);
+        let physics_thread = PhysicsThread::spawn(main_content, Box::new(|| {}));
 
         // Give the physics thread time to start and log its ID
         thread::sleep(Duration::from_millis(100));
@@ -1361,7 +1328,7 @@ mod test_application_core {
         let snapshot_slot = main_content.get_snapshot_slot();
 
         // Spawn physics thread
-        let physics_thread = PhysicsThread::spawn(main_content);
+        let physics_thread = PhysicsThread::spawn(main_content, Box::new(|| {}));
 
         // Wait for a few simulation steps to occur
         thread::sleep(Duration::from_millis(200));

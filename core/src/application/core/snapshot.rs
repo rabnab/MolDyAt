@@ -107,13 +107,11 @@ mod tests {
     use super::*;
     use crate::application::MainContent;
     use crate::application::renderer_snapshot::size_class_to_rgba;
-    use crate::graphics::window::window_definition::WindowDefinition;
     use crate::objects2d::Vec2D;
     use crate::objects2d::ball_impl::BallFactory;
 
     fn create_test_main_content_with_balls(ball_count: usize) -> MainContent {
-        let win_def = WindowDefinition::default();
-        let world_rect = win_def.compute_world_bounds_rect();
+        let world_rect = crate::objects2d::Rect::new(0.0, 0.0, 100.0, 100.0);
         let mut main_content = MainContent::new(world_rect).expect("Could not create main content");
 
         let factory = BallFactory::new();

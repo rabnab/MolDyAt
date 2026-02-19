@@ -470,7 +470,7 @@ mod tests {
         let snapshot_slot = main_content.get_snapshot_slot();
 
         // Spawn physics thread
-        let physics_thread = PhysicsThread::spawn(main_content);
+        let physics_thread = PhysicsThread::spawn(main_content, Box::new(|| {}));
 
         // Wait for the physics thread to publish at least one snapshot
         let deadline = Instant::now() + Duration::from_secs(5);
@@ -552,7 +552,7 @@ mod tests {
         let snapshot_slot = main_content.get_snapshot_slot();
 
         // Spawn physics thread
-        let physics_thread = PhysicsThread::spawn(main_content);
+        let physics_thread = PhysicsThread::spawn(main_content, Box::new(|| {}));
 
         // Wait for thread to start
         std::thread::sleep(Duration::from_millis(10));
