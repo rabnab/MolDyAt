@@ -109,12 +109,12 @@ pub struct FrameMetrics {
     /// Monotonically increasing frame counter.
     pub frame_count: u64,
 
-    /// Wall-clock time for the entire frame (begin → end), in
+    /// Wall-clock time for the separation of frames (previous end  → current end), in
     /// milliseconds.
     pub frame_time_ms: f32,
 
     /// Time spent in the rendering portion of the frame, in
-    /// milliseconds.  Currently identical to `frame_time_ms`.
+    /// milliseconds.  Currently calcualted by measuring the duration between `begin_frame` and `end_frame`, which captures the time taken to build and submit GPU draw calls.  This is typically much shorter than `frame_time_ms` because GPU command submission is very fast compared to the overall frame rate (e.g. 0.5 ms render time vs 16.7 ms frame time at 60 FPS).
     pub render_time_ms: f32,
 
     /// Instantaneous FPS derived from `frame_time_ms`.
@@ -152,8 +152,11 @@ pub struct MetricsCollector {
     /// Monotonic frame counter (never reset).
     total_frame_count: u64,
 
-    /// Instant when `begin_frame` was last called.
+    /// Instant when `begin_frame` was last called (tracks render duration).
     frame_start: Instant,
+
+    /// Instant when `end_frame` was last called (tracks inter-frame rate).
+    last_frame_end: Option<Instant>,
 
     // ── Accumulators (reset each frame) ─────────────────────────────
     pending_draw_calls: u32,
@@ -169,6 +172,7 @@ impl MetricsCollector {
             fps_average: RollingAverage::new(),
             total_frame_count: 0,
             frame_start: Instant::now(),
+            last_frame_end: None,
             pending_draw_calls: 0,
             pending_vertices: 0,
             pending_balls: 0,
@@ -198,25 +202,50 @@ impl MetricsCollector {
 
     /// Call at the end of a frame after all draw calls have been issued.
     ///
-    /// Finalises `FrameMetrics`, pushes instantaneous FPS into the
-    /// rolling average, and increments the total frame count.
+    /// Finalises `FrameMetrics`, pushes FPS into the rolling average, and
+    /// increments the total frame count.
+    ///
+    /// `fps` / `frame_time_ms` reflect the **wall-clock rate** at which
+    /// frames are produced (time between successive `end_frame` calls).
+    /// This correctly captures the physics-snapshot-driven render rate
+    /// (~60 Hz) rather than the sub-millisecond GPU command-submission
+    /// duration.  `render_time_ms` still records the actual draw-call
+    /// duration for GPU workload monitoring.
     pub fn end_frame(&mut self) {
         self.total_frame_count += 1;
 
-        let elapsed = self.frame_start.elapsed();
-        let frame_time_ms = elapsed.as_secs_f32() * 1000.0;
-        let fps = if frame_time_ms > 0.0 {
-            1000.0 / frame_time_ms
-        } else {
-            0.0
+        let now = Instant::now();
+
+        // Actual time spent building/submitting draw commands this frame.
+        let render_time_ms = self.frame_start.elapsed().as_secs_f32() * 1000.0;
+
+        // Frame rate measured as wall-clock time between successive end_frame
+        // calls so FPS reflects how often frames are *produced*, not how fast
+        // GPU commands are submitted (which is much faster than real frame rate).
+        let (frame_time_ms, fps) = match self.last_frame_end {
+            Some(last_end) => {
+                let inter_ms = now.saturating_duration_since(last_end).as_secs_f32() * 1000.0;
+                let fps = if inter_ms > 0.0 {
+                    1000.0 / inter_ms
+                } else {
+                    0.0
+                };
+                (inter_ms, fps)
+            }
+            None => {
+                // First frame: no previous timestamp to compare against, so we can't compute a meaningful frame time or FPS yet.  Default to 0.
+                let fps = 0.0;
+                (render_time_ms, fps)
+            }
         };
+        self.last_frame_end = Some(now);
 
         self.fps_average.push(fps);
 
         self.current = FrameMetrics {
             frame_count: self.total_frame_count,
             frame_time_ms,
-            render_time_ms: frame_time_ms,
+            render_time_ms,
             fps,
             draw_calls: self.pending_draw_calls,
             vertices_rendered: self.pending_vertices,

@@ -163,8 +163,13 @@ impl PhysicsThread {
                     std::thread::sleep(std::time::Duration::from_millis(wait_time_ms));
                 }
                 // Run one simulation step per iteration
+                let was_paused = main_content.sim.is_paused();
                 let _ = main_content.simulation_step();
-                physics_step_count += 1;
+                // Only count steps where physics actually ran (not paused idle loops
+                // which would otherwise inflate the reported step rate).
+                if !was_paused {
+                    physics_step_count += 1;
+                }
 
                 // Publish snapshot for renderer only at throttled rate (~60 Hz)
                 // This prevents expensive snapshot creation from slowing down physics
