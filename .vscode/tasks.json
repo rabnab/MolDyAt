@@ -5,10 +5,10 @@
         {
             "label": "Rust: Run",
             "type": "shell",
-            "command": "cargo +nightly run",
+            "command": "cargo +nightly run --no-default-features --features renderer-wgpu",
             "group": {
-                "kind": "test",
-                "isDefault": true
+                "kind": "build",
+                "isDefault": false
             },
             "problemMatcher": [],
             "presentation": {
@@ -18,9 +18,26 @@
         },
 
         {
+            "label": "Rust: Test (wgpu)",
+            "type": "shell",
+            "command": "cargo +nightly test --no-default-features --features renderer-wgpu",
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+
+        {
             "label": "Rust: Clippy",
             "type": "shell",
-            "command": "cargo +nightly clippy -- -D warnings",
+            "command": "cargo +nightly clippy --no-default-features --features renderer-wgpu -- -D warnings",
             "group": {
                 "kind": "build",
                 "isDefault": false
@@ -36,7 +53,7 @@
         {
             "label": "Rust: Build",
             "type": "shell",
-            "command": "cargo +nightly build",
+            "command": "cargo +nightly build --no-default-features --features renderer-wgpu",
             "group": {
                 "kind": "build",
                 "isDefault": true
