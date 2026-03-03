@@ -1,34 +1,15 @@
 cargo-features = ["profile-rustflags"]
 
-[lints.rust]
-# Add any custom lints here if needed
+[workspace]
+members = ["core", "wgpu_renderer"]
+resolver = "2"
 
-[package]
-name = "rust_thermo"
+[workspace.package]
 version = "0.1.1"
 edition = "2024"
 
-[dependencies]
-ggez = { version = "0.9.3", optional = true, default-features = false }
-wgpu = { version = "0.16.3", optional = true }
-rand = "0.9.0"
-rand_distr = "0.5.1"
-lru = "0.16.2"
-rayon = "1.10.0"
-wide = "0.8.2"
-num_cpus = "1.16"
-winit = "0.28.7"
-softbuffer = "0.3.3"
-arc-swap = "1.7"
-
-[dev-dependencies]
-float-cmp = "0.10"
-
-[features]
-default = ["renderer-ggez", "measure-time"]
-measure-time = []
-renderer-ggez = ["ggez"]
-renderer-wgpu = ["wgpu"]
+[workspace.lints.rust]
+# Add any custom lints here if needed
 
 [profile.dev]
 opt-level = 2
@@ -36,7 +17,6 @@ debug = true
 overflow-checks = true
 debug-assertions = true
 lto = false
-
 
 [profile.release]
 #debug = true
