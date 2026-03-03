@@ -16,7 +16,7 @@
                 ]
             },
             "env": {
-                "RUST_LOG": "info"
+                "RUST_LOG": "info,rust_thermo_core=info,rust_thermo_wgpu=info,wgpu=warn,naga=warn,wgpu_hal=warn"
             },
             "args": []
         },

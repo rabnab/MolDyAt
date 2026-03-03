@@ -118,7 +118,9 @@ fn vs_main(
             default: { local_uv = vec2<f32>(0.0, 0.0); }
         }
 
-        out.local_pos = local_uv * uniforms.cutoff_radius;
+        // Expand by half-stroke for the same reason as ball.wgsl
+        let quad_radius = uniforms.cutoff_radius + STROKE_WIDTH * 0.5;
+        out.local_pos = local_uv * quad_radius;
         let world_pos = uniforms.cursor_pos + out.local_pos;
         out.position = uniforms.view_proj * vec4<f32>(world_pos, 0.0, 1.0);
     }

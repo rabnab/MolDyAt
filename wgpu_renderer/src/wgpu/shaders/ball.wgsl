@@ -93,13 +93,18 @@ fn vs_main(
         default: { local_uv = vec2<f32>(0.0, 0.0); }
     }
 
-    // Calculate world position: center + offset by cutoff_radius (largest circle)
-    let world_pos = ball.position + local_uv * cutoff_radius;
+    // Expand quad by half-stroke so the outer cutoff ring edge never falls on the
+    // quad boundary. Without this, the stroke at the quadrant points (top/bottom/
+    // left/right) is clipped by the quad edge → holes + flickering.
+    let quad_radius = cutoff_radius + STROKE_WIDTH * 0.5;
+
+    // Calculate world position: center + offset by quad_radius
+    let world_pos = ball.position + local_uv * quad_radius;
 
     // Transform to clip space
     out.position = uniforms.view_proj * vec4<f32>(world_pos, 0.0, 1.0);
-    // UV is in range [-cutoff_radius, cutoff_radius], we pass it as world units
-    out.uv = local_uv * cutoff_radius;
+    // UV is the world-space offset from ball center; used for SDF distance in fs
+    out.uv = local_uv * quad_radius;
     out.color = unpack_color(ball.color);
     out.ball_radius = ball_radius;
     out.eq_radius = eq_radius;
