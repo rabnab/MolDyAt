@@ -1,7 +1,6 @@
 //! WGPU rendering backend
 //!
 //! This module contains the wgpu-based renderer implementation.
-//! It provides an alternative to the ggez renderer with direct GPU control.
 //!
 //! # Components
 //! - [`WgpuContext`]: Core GPU resources (Device, Queue, Surface, Adapter)
@@ -10,12 +9,9 @@
 //! - [`GridPipeline`]: Instanced grid rendering pipeline
 //! - [`BallPipeline`]: Instanced ball rendering pipeline with storage buffers
 //! - [`CrosshairPipeline`]: Crosshair and ball placement cursor pipeline
-//!
-//! # Usage
-//! Enable the `renderer-wgpu` feature and disable `renderer-ggez`:
-//! ```bash
-//! cargo run --no-default-features --features renderer-wgpu
-//! ```
+//! - [`FramePipeline`]: Screen-space frame border rendering pipeline
+//! - [`TextPipeline`]: Text rendering pipeline using a texture atlas
+//! - [`EnergyWindowManager`]: Manages the energy plot window lifecycle and data updates
 
 mod ball_pipeline;
 mod crosshair_pipeline;
