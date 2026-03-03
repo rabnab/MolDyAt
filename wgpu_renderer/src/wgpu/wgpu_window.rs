@@ -340,6 +340,7 @@ fn render_frame(ctx: &WgpuContext, pipelines: &WgpuPipelines) -> Result<(), wgpu
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: &view,
                 resolve_target: None,
+                depth_slice: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color {
                         r: 0.0,
@@ -353,6 +354,7 @@ fn render_frame(ctx: &WgpuContext, pipelines: &WgpuPipelines) -> Result<(), wgpu
             depth_stencil_attachment: None,
             occlusion_query_set: None,
             timestamp_writes: None,
+            multiview_mask: None,
         });
 
         pipelines.render_all(&mut render_pass, ctx);
