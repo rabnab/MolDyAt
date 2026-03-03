@@ -19,6 +19,7 @@ var<uniform> uniforms: Uniforms;
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) world_pos: vec2<f32>,
+    @location(1) @interpolate(flat) cell_parity: u32,
 }
 
 // Full-screen quad vertices (two triangles)
@@ -61,16 +62,14 @@ fn vs_main(
 
     // Transform to clip space
     out.position = uniforms.view_proj * vec4<f32>(world_pos, 0.0, 1.0);
+    // Compute palette index once in the vertex shader to avoid per-fragment floor/division
+    out.cell_parity = (col + row) % 6u;
 
     return out;
 }
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    // Determine which cell we're in based on world position
-    let cell_x = floor((in.world_pos.x - uniforms.grid_origin.x) / uniforms.grid_cell_size.x);
-    let cell_y = floor((uniforms.grid_origin.y - in.world_pos.y) / uniforms.grid_cell_size.y);
-
     // --- Outer border in world space (reddish) ---
     let grid_width_cells = f32(uniforms.grid_dims.x);
     let grid_height_cells = f32(uniforms.grid_dims.y);
@@ -89,9 +88,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         return vec4<f32>(0.9, 0.25, 0.25, 0.8); // reddish border
     }
 
-    // Use (row + col) modulo palette size; handle negatives safely
-    let sum = i32(cell_x) + i32(cell_y);
-    let idx = (sum % 6 + 6) % 6;
+    // Cell palette index was computed in the vertex shader as (col + row) % 6
+    let idx = i32(in.cell_parity);
 
     // Match ggez pastel palette (6 colors, faint alpha)
     switch idx {

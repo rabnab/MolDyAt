@@ -2,7 +2,7 @@
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
-};
+}
 
 @vertex
 fn vs_main(@location(0) pos: vec2<f32>) -> VertexOutput {

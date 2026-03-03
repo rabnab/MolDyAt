@@ -16,7 +16,7 @@
                 ]
             },
             "env": {
-                "RUST_LOG": "info,rust_thermo_core=trace,rust_thermo_wgpu=trace"
+                "RUST_LOG": "info"
             },
             "args": []
         },

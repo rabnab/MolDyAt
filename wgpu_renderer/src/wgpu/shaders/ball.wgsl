@@ -50,9 +50,13 @@ struct VertexOutput {
     @location(4) cutoff_radius: f32,
 }
 
+// Stroke thickness in world units (approximately 2 pixels worth)
+// This is a rough approximation; could be made more precise with screen_size
+const STROKE_WIDTH: f32 = 0.15;
+
 // Unpack RGBA color from u32 (0xAABBGGRR format, little-endian)
 fn unpack_color(packed: u32) -> vec4<f32> {
-    let r = f32((packed >> 0u) & 0xFFu) / 255.0;
+    let r = f32(packed & 0xFFu) / 255.0;
     let g = f32((packed >> 8u) & 0xFFu) / 255.0;
     let b = f32((packed >> 16u) & 0xFFu) / 255.0;
     let a = f32((packed >> 24u) & 0xFFu) / 255.0;
@@ -109,12 +113,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // Distance from center in world units
     let dist = length(in.uv);
 
-    // Stroke thickness in world units (approximately 2 pixels worth)
-    // This is a rough approximation; could be made more precise with screen_size
-    let stroke_width = 0.15;
-
     // Discard pixels outside the cutoff circle
-    if dist > in.cutoff_radius + stroke_width * 0.5 {
+    if dist > in.cutoff_radius + STROKE_WIDTH * 0.5 {
         discard;
     }
 
@@ -125,8 +125,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // Check which region we're in (from outside to inside)
     // 1. Cutoff circle outline (gray) - only if enabled
     if uniforms.show_cutoff_rings != 0u {
-        let cutoff_inner = in.cutoff_radius - stroke_width * 0.5;
-        let cutoff_outer = in.cutoff_radius + stroke_width * 0.5;
+        let cutoff_inner = in.cutoff_radius - STROKE_WIDTH * 0.5;
+        let cutoff_outer = in.cutoff_radius + STROKE_WIDTH * 0.5;
         if dist > cutoff_inner && dist < cutoff_outer {
             let edge = smoothstep(cutoff_inner, cutoff_inner + 0.05, dist)
                      * (1.0 - smoothstep(cutoff_outer - 0.05, cutoff_outer, dist));
@@ -135,8 +135,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     // 2. Equilibrium circle outline (magenta)
-    let eq_inner = in.eq_radius - stroke_width * 0.5;
-    let eq_outer = in.eq_radius + stroke_width * 0.5;
+    let eq_inner = in.eq_radius - STROKE_WIDTH * 0.5;
+    let eq_outer = in.eq_radius + STROKE_WIDTH * 0.5;
     if dist > eq_inner && dist < eq_outer {
         let edge = smoothstep(eq_inner, eq_inner + 0.05, dist)
                  * (1.0 - smoothstep(eq_outer - 0.05, eq_outer, dist));
