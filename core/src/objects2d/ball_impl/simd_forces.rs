@@ -141,8 +141,10 @@ pub fn force_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2D]) -> F
 
         let potential_used = f32x4::simd_min(potential_linear, potential_uncapped);
 
-        // Virial: Σ (r_ij · F_ij) = Σ (dx * fx + dy * fy)
-        virial += (dx_vec * fx + dy_vec * fy).reduce_sum();
+        // Virial: Σ (r_ij · F_ij).
+        // Since fx = dx_vec * force_to_dist and fy = dy_vec * force_to_dist,
+        // we have r · F = (dx^2 + dy^2) * force_to_dist = center_dist_sq * force_to_dist.
+        virial += (center_dist_sq * force_to_dist).reduce_sum();
 
         force.x += fx.reduce_sum();
         force.y += fy.reduce_sum();
