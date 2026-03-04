@@ -172,6 +172,10 @@ pub struct ForceResult {
     /// Per-neighbor force magnitudes for visualization (neighbor_idx, force_magnitude)
     /// Only populated when needed for rendering neighbor lines
     pub neighbor_forces: Vec<(usize, f32)>,
+    /// Sum of virial contributions from all neighbours: Σ_j (r_ij · F_ij).
+    /// The 0.5 double-counting factor is NOT applied here; it must be applied
+    /// when accumulating into per-cell statistics.
+    pub virial: f32,
 }
 
 #[derive(Clone)]

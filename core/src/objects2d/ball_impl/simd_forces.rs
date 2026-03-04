@@ -40,6 +40,7 @@ pub fn force_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2D]) -> F
     let mut force = Vec2D::new(0., 0.);
     let mut min_dist = f32::NAN;
     let mut total_pot = 0.;
+    let mut virial = 0.0f32;
 
     // Optimization: Only collect neighbor forces if visualization is enabled for this ball
     // This avoids expensive allocations and vector pushes in the hot path
@@ -140,6 +141,9 @@ pub fn force_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2D]) -> F
 
         let potential_used = f32x4::simd_min(potential_linear, potential_uncapped);
 
+        // Virial: Σ (r_ij · F_ij) = Σ (dx * fx + dy * fy)
+        virial += (dx_vec * fx + dy_vec * fy).reduce_sum();
+
         force.x += fx.reduce_sum();
         force.y += fy.reduce_sum();
         total_pot += potential_used.reduce_sum();
@@ -182,6 +186,9 @@ pub fn force_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2D]) -> F
             let fx = dist_vec.x * force_to_dist;
             let fy = dist_vec.y * force_to_dist;
 
+            // Virial: r_ij · F_ij = dx * fx + dy * fy
+            virial += dist_vec.x * fx + dist_vec.y * fy;
+
             force.x += fx;
             force.y += fy;
 
@@ -209,6 +216,7 @@ pub fn force_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2D]) -> F
         force,
         potential_energy: total_pot,
         neighbor_forces,
+        virial,
     }
 }
 
@@ -364,5 +372,110 @@ mod tests {
         let expected_linear_pot = pot_at_cap - max_force * (edge_dist_capped - r_cap);
 
         approx(simd_result.potential_energy, expected_linear_pot, 1e-4);
+    }
+
+    // ── Virial tests (issue #112) ────────────────────────────────────
+
+    #[test]
+    fn test_virial_no_neighbours() {
+        let physics = BallPhysics::default();
+        let ball_a = Ball2D::new(0, Vec2D::new(0.0, 0.0), (0, 1.0));
+        let balls = vec![ball_a];
+        let result = force_simd(&physics, 0, &balls);
+        assert_eq!(result.virial, 0.0, "Virial must be 0 with no neighbours");
+    }
+
+    #[test]
+    fn test_virial_single_neighbour_known_geometry() {
+        let physics = BallPhysics::default();
+
+        // Ball A at origin, Ball B at (2.5, 0). Both have radius 1.0.
+        // center_dist = 2.5, edge_dist = 0.5
+        let mut ball_a = Ball2D::new(0, Vec2D::new(0.0, 0.0), (0, 1.0));
+        let ball_b = Ball2D::new(1, Vec2D::new(2.5, 0.0), (0, 1.0));
+        ball_a.hood.add_neighbour(1);
+        let balls = vec![ball_a, ball_b];
+
+        let result = force_simd(&physics, 0, &balls);
+
+        // virial = Σ (r_ij · F_ij) = center_dist * lj_force (see derivation in issue #112)
+        let center_dist: f32 = 2.5;
+        let edge_dist: f32 = 0.5;
+        let lj_force = physics.force(edge_dist);
+        let expected_virial = center_dist * lj_force;
+
+        approx(result.virial, expected_virial, 1e-5);
+    }
+
+    #[test]
+    fn test_virial_force_capped_regime() {
+        let physics = BallPhysics::default();
+        let r_cap = physics.get_force_cap_distance();
+        let max_force = physics.constants.max_force;
+
+        // Place neighbour so edge_dist is well below r_cap
+        let edge_dist_capped = r_cap * 0.5;
+        let center_dist = edge_dist_capped + 2.0; // both radii = 1.0
+
+        let mut ball_a = Ball2D::new(0, Vec2D::new(0.0, 0.0), (0, 1.0));
+        let ball_b = Ball2D::new(1, Vec2D::new(center_dist, 0.0), (0, 1.0));
+        ball_a.hood.add_neighbour(1);
+        let balls = vec![ball_a, ball_b];
+
+        let result = force_simd(&physics, 0, &balls);
+
+        // In the capped regime force is evaluated at edge_dist = r_cap (clamped),
+        // giving lj_force = physics.force(r_cap) ≈ max_force.
+        // virial = center_dist * lj_force_at_cap
+        let lj_force_at_cap = physics.force(r_cap);
+        let expected_virial = center_dist * lj_force_at_cap;
+
+        approx(result.virial, expected_virial, 1e-4);
+
+        // Sanity: the force used should be close to max_force
+        approx(lj_force_at_cap, max_force, 1e-3);
+    }
+
+    #[test]
+    fn test_virial_simd_and_scalar_paths_agree() {
+        let physics = BallPhysics::default();
+
+        // 5 neighbours: 4 processed by SIMD chunk + 1 by scalar remainder.
+        // Place them at distinct distances so each contributes a different virial.
+        let positions = [
+            Vec2D::new(2.5, 0.0),
+            Vec2D::new(0.0, 3.0),
+            Vec2D::new(-3.5, 0.0),
+            Vec2D::new(0.0, -4.0),
+            Vec2D::new(3.0, 3.0), // 5th → scalar remainder
+        ];
+
+        let mut ball_a = Ball2D::new(0, Vec2D::new(0.0, 0.0), (0, 1.0));
+        for i in 0..positions.len() {
+            ball_a.hood.add_neighbour(i + 1);
+        }
+        let mut balls = vec![ball_a];
+        for (i, &pos) in positions.iter().enumerate() {
+            let b = Ball2D::new(i + 1, pos, (0, 1.0));
+            balls.push(b);
+        }
+
+        let result = force_simd(&physics, 0, &balls);
+
+        // Compute expected virial by scalar method for each pair
+        let ball_pos = Vec2D::new(0.0, 0.0);
+        let ball_radius = 1.0f32;
+        let mut expected_virial = 0.0f32;
+        for &pos in &positions {
+            let dx = ball_pos.x - pos.x;
+            let dy = ball_pos.y - pos.y;
+            let center_dist = (dx * dx + dy * dy).sqrt();
+            let edge_dist = center_dist - ball_radius - 1.0; // neighbour radius = 1.0
+            let lj_force = physics.force(edge_dist);
+            // virial_pair = center_dist * lj_force (derived from dx*fx + dy*fy)
+            expected_virial += center_dist * lj_force;
+        }
+
+        approx(result.virial, expected_virial, 1e-4);
     }
 }
