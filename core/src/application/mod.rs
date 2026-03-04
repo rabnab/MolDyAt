@@ -4,6 +4,7 @@ mod log_util;
 pub mod physics_thread;
 pub mod renderer_snapshot;
 mod sim_stats;
+pub mod thermo_field;
 
 use crate::application::game_logic::GameLogicData;
 use crate::objects2d::Rect;
