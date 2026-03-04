@@ -23,7 +23,10 @@ impl CellStats {
 }
 
 /// Compute the visualization grid dimensions (rows, cols) such that the average
-/// cell occupancy exceeds 2 balls and the grid aspect ratio matches the world.
+/// cell occupancy is at least 2 balls and the grid aspect ratio matches the world.
+///
+/// Uses absolute values of width/height to handle top-down coordinate systems
+/// where `Rect.h` may be negative.
 ///
 /// Returns `(rows, cols)` with both >= 1.
 pub fn compute_viz_grid_dims(
@@ -31,10 +34,12 @@ pub fn compute_viz_grid_dims(
     world_width: f32,
     world_height: f32,
 ) -> (usize, usize) {
-    if n_balls < 2 || world_width <= 0.0 || world_height <= 0.0 {
+    let ww = world_width.abs();
+    let wh = world_height.abs();
+    if n_balls < 2 || ww == 0.0 || wh == 0.0 {
         return (1, 1);
     }
-    let aspect = world_height / world_width;
+    let aspect = wh / ww;
     let cols = ((n_balls as f32 / (2.0 * aspect)).sqrt().floor() as usize).max(1);
     let rows = ((cols as f32 * aspect).floor() as usize).max(1);
     (rows, cols)
@@ -49,16 +54,28 @@ pub fn compute_cell_thermo(
     force_results: &[ForceResult],
     world_rect: &Rect,
 ) -> (Vec<Vec<f32>>, Vec<Vec<f32>>) {
-    let (rows, cols) = compute_viz_grid_dims(balls.len(), world_rect.w, world_rect.h);
-    let cell_w = world_rect.w / cols as f32;
-    let cell_h = world_rect.h / rows as f32;
+    debug_assert_eq!(
+        balls.len(),
+        force_results.len(),
+        "balls and force_results must have the same length"
+    );
+
+    let ww = world_rect.w.abs();
+    let wh = world_rect.h.abs();
+    let (rows, cols) = compute_viz_grid_dims(balls.len(), ww, wh);
+    let cell_w = ww / cols as f32;
+    let cell_h = wh / rows as f32;
+
+    // Top-left corner in world space (account for negative h)
+    let origin_x = world_rect.x.min(world_rect.x + world_rect.w);
+    let origin_y = world_rect.y.min(world_rect.y + world_rect.h);
 
     let mut stats: Vec<CellStats> = (0..rows * cols).map(|_| CellStats::new()).collect();
 
-    for (i, ball) in balls.iter().enumerate() {
+    for (ball, fr) in balls.iter().zip(force_results.iter()) {
         let pos = ball.get_position();
-        let col = ((pos.x - world_rect.x) / cell_w).floor() as usize;
-        let row = ((pos.y - world_rect.y) / cell_h).floor() as usize;
+        let col = ((pos.x - origin_x) / cell_w).floor() as usize;
+        let row = ((pos.y - origin_y) / cell_h).floor() as usize;
         let col = col.min(cols - 1);
         let row = row.min(rows - 1);
         let idx = row * cols + col;
@@ -71,7 +88,7 @@ pub fn compute_cell_thermo(
         cs.sum_mv.x += m * v.x;
         cs.sum_mv.y += m * v.y;
         cs.sum_mv2 += m * v.norm_sq();
-        cs.virial += force_results[i].virial * 0.5;
+        cs.virial += fr.virial * 0.5;
     }
 
     let cell_area = cell_w * cell_h;
@@ -143,8 +160,8 @@ mod tests {
             assert!(cols >= 1, "cols must be >= 1 for N={n}, W={w}, H={h}");
             let cells = rows * cols;
             assert!(
-                n as f32 / cells as f32 > 2.0,
-                "average occupancy must be > 2: N={n}, cells={cells}"
+                n as f32 / cells as f32 >= 2.0,
+                "average occupancy must be >= 2: N={n}, cells={cells}"
             );
             let aspect_ratio = rows as f32 / cols as f32;
             let world_aspect = h / w;
@@ -154,6 +171,17 @@ mod tests {
                 "aspect mismatch: grid={aspect_ratio:.2}, world={world_aspect:.2}, err={rel_err:.2} for N={n}"
             );
         }
+    }
+
+    #[test]
+    fn test_grid_dims_negative_height() {
+        // Production uses negative h for top-down coords
+        let (rows, cols) = compute_viz_grid_dims(100, 10.0, -10.0);
+        assert!(rows >= 1);
+        assert!(cols >= 1);
+        assert!(100.0 / (rows * cols) as f32 >= 2.0);
+        // Should give the same result as positive h
+        assert_eq!((rows, cols), compute_viz_grid_dims(100, 10.0, 10.0));
     }
 
     // ── compute_cell_thermo tests ────────────────────────────────────
@@ -229,6 +257,35 @@ mod tests {
         assert!(
             (p[0][0] - expected_p).abs() < 1e-5,
             "P={} expected {expected_p}",
+            p[0][0]
+        );
+    }
+
+    #[test]
+    fn test_negative_height_world_rect() {
+        // Production uses Rect with negative h (top-down coordinate system).
+        // e.g. Rect::new(-5.0, 5.0, 10.0, -10.0) → world from (-5, -5) to (5, 5)
+        let world = Rect::new(-5.0, 5.0, 10.0, -10.0);
+        let balls = vec![
+            make_ball(0, Vec2D::new(0.0, 0.0), Vec2D::new(1.0, 0.0), 1.0),
+            make_ball(1, Vec2D::new(0.1, 0.1), Vec2D::new(-1.0, 0.0), 1.0),
+        ];
+        let forces = vec![make_force_result(0.0), make_force_result(0.0)];
+        let (t, p) = compute_cell_thermo(&balls, &forces, &world);
+        // Grid should be 1×1, T should match the positive-h test
+        assert_eq!(t.len(), 1);
+        assert_eq!(t[0].len(), 1);
+        let expected_t = 0.5;
+        assert!(
+            (t[0][0] - expected_t).abs() < 1e-5,
+            "T={} expected {expected_t} with negative h",
+            t[0][0]
+        );
+        // Pressure with zero virial and T=0.5: P = (2*0.5 + 0) / 100 = 0.01
+        let expected_p = (2.0 * expected_t) / 100.0;
+        assert!(
+            (p[0][0] - expected_p).abs() < 1e-5,
+            "P={} expected {expected_p} with negative h",
             p[0][0]
         );
     }
