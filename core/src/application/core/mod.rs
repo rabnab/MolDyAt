@@ -3,6 +3,7 @@ pub(crate) const FPS_GOAL: u32 = 60;
 use crate::application::game_logic::GameLogicData;
 use crate::application::renderer_snapshot::RendererSnapshot;
 use crate::application::sim_stats::SimStats;
+use crate::application::thermo_field::ThermoFieldHistory;
 use crate::objects2d::ball_cell::cell_grid::CellGrid;
 use crate::objects2d::ball_impl::{Ball2D, BallPhysics, ForceResult};
 use crate::objects2d::{Rect, Vec2D, VerboseInfoMode};
@@ -36,9 +37,11 @@ pub struct MainContent {
     /// Snapshot slot for lock-free communication with renderer
     snapshot_slot: Arc<ArcSwapOption<RendererSnapshot>>,
     /// Cached force results from last physics step for reuse in rendering
-    cached_force_results: Vec<ForceResult>,
+    pub(crate) cached_force_results: Vec<ForceResult>,
     /// Actual physics FPS for display (updated and read only by physics thread)
     physics_fps: f32,
+    /// Rolling-window averager for per-cell T/P fields
+    pub(crate) thermo_history: ThermoFieldHistory,
 }
 
 pub struct StatsAccumulator {

@@ -1,4 +1,5 @@
 use super::{BallPhysics, CellGrid, MainContent, SimStats};
+use crate::application::thermo_field::ThermoFieldHistory;
 use crate::application::{AppResult, GameLogic};
 use crate::objects2d::Rect;
 use crate::objects2d::ball_impl::BallFactory;
@@ -35,6 +36,7 @@ impl MainContent {
             wait_time: 0,
             cached_force_results: Vec::new(),
             physics_fps: 0.0,
+            thermo_history: ThermoFieldHistory::new(),
         })
     }
 }

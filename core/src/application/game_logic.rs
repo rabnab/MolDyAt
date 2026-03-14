@@ -1,3 +1,4 @@
+use crate::application::thermo_field::compute_cell_thermo;
 use crate::application::{AppResult, GameLogic, LogStuff, MainContent, VerletIntegration};
 use crate::objects2d::ball_impl::verlet::Verlet;
 use crate::objects2d::ball_impl::{Ball2D, BallFactory};
@@ -252,6 +253,11 @@ impl GameLogic for MainContent {
 
         #[cfg(feature = "measure-time")]
         self.log_timings(timer);
+
+        // Compute per-cell T/P and push into rolling-window history
+        let world = self.world_region();
+        let (t_grid, p_grid) = compute_cell_thermo(&self.balls, &self.cached_force_results, &world);
+        self.thermo_history.push(t_grid, p_grid);
 
         self.step_count += 1;
         Ok(())

@@ -23,6 +23,8 @@
 use crate::objects2d::Vec2D;
 use std::time::Instant;
 
+use crate::application::thermo_field::ThermoGrid;
+
 /// Lightweight specification for cell grid dimensions and layout.
 /// Used by renderer to draw cell background without cloning the full CellGrid.
 #[derive(Debug, Clone)]
@@ -38,6 +40,26 @@ pub struct CellGridSpec {
     /// X-coordinate of the top-left corner of the grid in world coordinates
     pub origin_x: f32,
     /// Y-coordinate of the top-left corner of the grid in world coordinates
+    pub origin_y: f32,
+}
+
+/// Specification for the visualization thermo grid layout.
+///
+/// Separate from `CellGridSpec` because the visualization grid dimensions
+/// (based on ~2-ball occupancy) differ from the simulation CellGrid.
+#[derive(Debug, Clone)]
+pub struct ThermoGridSpec {
+    /// Number of rows in the visualization grid
+    pub rows: usize,
+    /// Number of columns in the visualization grid
+    pub cols: usize,
+    /// Width of each cell in world coordinates
+    pub cell_width: f32,
+    /// Height of each cell in world coordinates
+    pub cell_height: f32,
+    /// World x of the grid's top-left corner
+    pub origin_x: f32,
+    /// World y of the grid's top-left corner
     pub origin_y: f32,
 }
 
@@ -126,6 +148,18 @@ pub struct RendererSnapshot {
     /// Cutoff distance for LJ interactions from physics
     /// Used for drawing cutoff circles around balls
     pub cutoff_distance: f32,
+
+    /// Per-cell temperature field (row-major flat grid, NaN for underpopulated cells).
+    /// Empty grid (0×0) until at least one step of data is available.
+    pub cell_temperature: ThermoGrid,
+
+    /// Per-cell pressure field (row-major flat grid, NaN for underpopulated cells).
+    /// Empty grid (0×0) until at least one step of data is available.
+    pub cell_pressure: ThermoGrid,
+
+    /// Grid layout for mapping thermo cell indices to world coordinates.
+    /// `None` until at least one step of data is available.
+    pub thermo_grid_spec: Option<ThermoGridSpec>,
 }
 
 impl RendererSnapshot {
@@ -153,6 +187,9 @@ impl RendererSnapshot {
             physics_fps: 0.0,
             equilibrium_edge_distance: 1.122_462, // Default: 2^(1/6) * 1.0
             cutoff_distance: 4.0,
+            cell_temperature: ThermoGrid::filled(0, 0, 0.0),
+            cell_pressure: ThermoGrid::filled(0, 0, 0.0),
+            thermo_grid_spec: None,
         }
     }
 
@@ -182,6 +219,9 @@ impl RendererSnapshot {
             physics_fps: 0.0,
             equilibrium_edge_distance: 1.122_462, // Default: 2^(1/6) * 1.0
             cutoff_distance: 4.0,
+            cell_temperature: ThermoGrid::filled(0, 0, 0.0),
+            cell_pressure: ThermoGrid::filled(0, 0, 0.0),
+            thermo_grid_spec: None,
         }
     }
 
