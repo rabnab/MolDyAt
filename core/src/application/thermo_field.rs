@@ -1,5 +1,9 @@
 use crate::objects2d::ball_impl::{Ball2D, ForceResult};
 use crate::objects2d::{Rect, Vec2D};
+use std::collections::VecDeque;
+
+/// A pair of row-major grids: `(temperature, pressure)` with shape `[rows][cols]`.
+pub type ThermoGrids = (Vec<Vec<f32>>, Vec<Vec<f32>>);
 
 /// Per-cell accumulator for computing local temperature and pressure.
 struct CellStats {
@@ -56,7 +60,7 @@ pub fn compute_cell_thermo(
     balls: &[Ball2D],
     force_results: &[ForceResult],
     world_rect: &Rect,
-) -> (Vec<Vec<f32>>, Vec<Vec<f32>>) {
+) -> ThermoGrids {
     assert_eq!(
         balls.len(),
         force_results.len(),
@@ -115,6 +119,106 @@ pub fn compute_cell_thermo(
     }
 
     (temp_grid, pres_grid)
+}
+
+/// Number of simulation steps to average over for T/P field smoothing.
+const THERMO_WINDOW: usize = 10;
+
+/// Rolling-window averager for per-cell temperature and pressure grids.
+///
+/// Maintains a ring buffer of the last [`THERMO_WINDOW`] grids and computes
+/// element-wise NaN-aware averages. When the pushed grid shape differs from
+/// the stored shape, the history is cleared and starts fresh.
+pub struct ThermoFieldHistory {
+    t_buffer: VecDeque<Vec<Vec<f32>>>,
+    p_buffer: VecDeque<Vec<Vec<f32>>>,
+    shape: (usize, usize),
+}
+
+impl Default for ThermoFieldHistory {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ThermoFieldHistory {
+    pub fn new() -> Self {
+        Self {
+            t_buffer: VecDeque::with_capacity(THERMO_WINDOW),
+            p_buffer: VecDeque::with_capacity(THERMO_WINDOW),
+            shape: (0, 0),
+        }
+    }
+
+    /// Push a new pair of T/P grids into the ring buffer.
+    ///
+    /// If the grid shape differs from the stored shape, the entire history
+    /// is cleared before inserting.
+    pub fn push(&mut self, t_grid: Vec<Vec<f32>>, p_grid: Vec<Vec<f32>>) {
+        let rows = t_grid.len();
+        let cols = t_grid.first().map_or(0, |r| r.len());
+        debug_assert_eq!(p_grid.len(), rows, "p_grid row count must match t_grid");
+        debug_assert!(
+            p_grid.first().is_none_or(|r| r.len() == cols),
+            "p_grid column count must match t_grid"
+        );
+        let new_shape = (rows, cols);
+
+        if new_shape != self.shape {
+            self.t_buffer.clear();
+            self.p_buffer.clear();
+            self.shape = new_shape;
+        }
+
+        if self.t_buffer.len() == THERMO_WINDOW {
+            self.t_buffer.pop_front();
+            self.p_buffer.pop_front();
+        }
+
+        self.t_buffer.push_back(t_grid);
+        self.p_buffer.push_back(p_grid);
+    }
+
+    /// Compute element-wise NaN-aware averages over the buffered grids.
+    ///
+    /// For each cell `(r, c)`, the average is taken over all stored steps
+    /// where the value is finite. If every step is NaN at that position,
+    /// the output is NaN.
+    ///
+    /// Returns `Some((temperature, pressure))` grids, or `None` if the
+    /// buffer is empty (no data pushed yet, or cleared after shape change
+    /// with no subsequent push).
+    pub fn average(&self) -> Option<ThermoGrids> {
+        if self.t_buffer.is_empty() {
+            return None;
+        }
+
+        let (rows, cols) = self.shape;
+        let avg_t = Self::average_buffer(&self.t_buffer, rows, cols);
+        let avg_p = Self::average_buffer(&self.p_buffer, rows, cols);
+        Some((avg_t, avg_p))
+    }
+
+    fn average_buffer(buffer: &VecDeque<Vec<Vec<f32>>>, rows: usize, cols: usize) -> Vec<Vec<f32>> {
+        let mut result = vec![vec![f32::NAN; cols]; rows];
+        for r in 0..rows {
+            for c in 0..cols {
+                let mut sum = 0.0f32;
+                let mut count = 0u32;
+                for grid in buffer {
+                    let val = grid[r][c];
+                    if val.is_finite() {
+                        sum += val;
+                        count += 1;
+                    }
+                }
+                if count > 0 {
+                    result[r][c] = sum / count as f32;
+                }
+            }
+        }
+        result
+    }
 }
 
 #[cfg(test)]
@@ -296,5 +400,105 @@ mod tests {
             "P={} expected {expected_p} with negative h",
             p[0][0]
         );
+    }
+
+    // ── ThermoFieldHistory tests ─────────────────────────────────────
+
+    #[test]
+    fn test_history_empty_returns_none() {
+        let h = ThermoFieldHistory::new();
+        assert!(h.average().is_none());
+    }
+
+    fn grid_2x2(v00: f32, v01: f32, v10: f32, v11: f32) -> Vec<Vec<f32>> {
+        vec![vec![v00, v01], vec![v10, v11]]
+    }
+
+    #[test]
+    fn test_history_single_push() {
+        let mut h = ThermoFieldHistory::new();
+        let t = grid_2x2(1.0, 2.0, 3.0, 4.0);
+        let p = grid_2x2(5.0, 6.0, 7.0, 8.0);
+        h.push(t.clone(), p.clone());
+        let (avg_t, avg_p) = h.average().expect("should have data");
+        assert_eq!(avg_t, t);
+        assert_eq!(avg_p, p);
+    }
+
+    #[test]
+    fn test_history_steady_state() {
+        let mut h = ThermoFieldHistory::new();
+        let t = grid_2x2(1.0, 2.0, 3.0, 4.0);
+        let p = grid_2x2(5.0, 6.0, 7.0, 8.0);
+        for _ in 0..10 {
+            h.push(t.clone(), p.clone());
+        }
+        let (avg_t, avg_p) = h.average().expect("should have data");
+        assert_eq!(avg_t, t);
+        assert_eq!(avg_p, p);
+    }
+
+    #[test]
+    fn test_history_partial_window() {
+        let mut h = ThermoFieldHistory::new();
+        // Push 3 grids: values 1, 2, 3 at [0][0]
+        for i in 1..=3 {
+            h.push(vec![vec![i as f32]], vec![vec![(i * 10) as f32]]);
+        }
+        let (avg_t, avg_p) = h.average().expect("should have data");
+        // Average of 1,2,3 = 2.0; average of 10,20,30 = 20.0
+        assert!((avg_t[0][0] - 2.0).abs() < 1e-5);
+        assert!((avg_p[0][0] - 20.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_history_nan_handling() {
+        let mut h = ThermoFieldHistory::new();
+        // Step 1: finite value
+        h.push(vec![vec![4.0]], vec![vec![8.0]]);
+        // Step 2: NaN
+        h.push(vec![vec![f32::NAN]], vec![vec![f32::NAN]]);
+        // Step 3: finite value
+        h.push(vec![vec![6.0]], vec![vec![12.0]]);
+        let (avg_t, avg_p) = h.average().expect("should have data");
+        // Average over 2 finite values: (4+6)/2 = 5, (8+12)/2 = 10
+        assert!((avg_t[0][0] - 5.0).abs() < 1e-5);
+        assert!((avg_p[0][0] - 10.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_history_shape_change_clears() {
+        let mut h = ThermoFieldHistory::new();
+        // Push a 3×4 grid
+        let t_3x4 = vec![vec![1.0; 4]; 3];
+        let p_3x4 = vec![vec![2.0; 4]; 3];
+        h.push(t_3x4, p_3x4);
+
+        // Push a 4×5 grid with different values
+        let t_4x5 = vec![vec![10.0; 5]; 4];
+        let p_4x5 = vec![vec![20.0; 5]; 4];
+        h.push(t_4x5.clone(), p_4x5.clone());
+
+        let (avg_t, avg_p) = h.average().expect("should have data");
+        // Only the 4×5 grid should remain
+        assert_eq!(avg_t.len(), 4);
+        assert_eq!(avg_t[0].len(), 5);
+        assert_eq!(avg_t, t_4x5);
+        assert_eq!(avg_p, p_4x5);
+    }
+
+    #[test]
+    fn test_history_ring_wraparound() {
+        let mut h = ThermoFieldHistory::new();
+        // Push 15 grids with values 1..=15
+        for i in 1..=15 {
+            h.push(vec![vec![i as f32]], vec![vec![(i * 2) as f32]]);
+        }
+        let (avg_t, avg_p) = h.average().expect("should have data");
+        // Only the last 10 (values 6..=15) should be in the buffer
+        // T average: (6+7+8+9+10+11+12+13+14+15)/10 = 105/10 = 10.5
+        // P average: (12+14+16+18+20+22+24+26+28+30)/10 = 210/10 = 21.0
+        assert!((avg_t[0][0] - 10.5).abs() < 1e-5, "T={}", avg_t[0][0]);
+        assert!((avg_p[0][0] - 21.0).abs() < 1e-5, "P={}", avg_p[0][0]);
     }
 }
