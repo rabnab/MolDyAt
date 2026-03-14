@@ -6,11 +6,13 @@ use std::collections::VecDeque;
 ///
 /// Single contiguous allocation for cache-friendly iteration. Used for
 /// per-cell temperature and pressure fields.
+///
+/// **Invariant**: `data.len() == rows * cols` (enforced by constructors).
 #[derive(Clone, Debug)]
 pub struct ThermoGrid {
-    pub data: Vec<f32>,
-    pub rows: usize,
-    pub cols: usize,
+    data: Vec<f32>,
+    rows: usize,
+    cols: usize,
 }
 
 impl ThermoGrid {
@@ -28,11 +30,13 @@ impl ThermoGrid {
         Self::filled(rows, cols, f32::NAN)
     }
 
+    /// Read the value at `(r, c)`. Panics on out-of-bounds (standard Rust indexing).
     #[inline]
     pub fn get(&self, r: usize, c: usize) -> f32 {
         self.data[r * self.cols + c]
     }
 
+    /// Write the value at `(r, c)`. Panics on out-of-bounds (standard Rust indexing).
     #[inline]
     pub fn set(&mut self, r: usize, c: usize, val: f32) {
         self.data[r * self.cols + c] = val;
@@ -42,6 +46,14 @@ impl ThermoGrid {
     pub fn shape(&self) -> (usize, usize) {
         (self.rows, self.cols)
     }
+
+    pub fn rows(&self) -> usize {
+        self.rows
+    }
+
+    pub fn cols(&self) -> usize {
+        self.cols
+    }
 }
 
 impl PartialEq for ThermoGrid {
@@ -49,11 +61,13 @@ impl PartialEq for ThermoGrid {
         self.rows == other.rows
             && self.cols == other.cols
             && self.data.len() == other.data.len()
-            && self
-                .data
-                .iter()
-                .zip(other.data.iter())
-                .all(|(a, b)| a.to_bits() == b.to_bits())
+            && self.data.iter().zip(other.data.iter()).all(|(a, b)| {
+                match (a.is_nan(), b.is_nan()) {
+                    (true, true) => true,
+                    (false, false) => a == b,
+                    _ => false,
+                }
+            })
     }
 }
 
@@ -209,6 +223,16 @@ impl ThermoFieldHistory {
     pub fn push(&mut self, t_grid: ThermoGrid, p_grid: ThermoGrid) {
         let new_shape = t_grid.shape();
         debug_assert_eq!(p_grid.shape(), new_shape, "p_grid shape must match t_grid");
+        debug_assert_eq!(
+            t_grid.data.len(),
+            new_shape.0 * new_shape.1,
+            "t_grid data length must match rows*cols"
+        );
+        debug_assert_eq!(
+            p_grid.data.len(),
+            new_shape.0 * new_shape.1,
+            "p_grid data length must match rows*cols"
+        );
 
         if new_shape != self.shape {
             self.t_buffer.clear();
@@ -248,7 +272,7 @@ impl ThermoFieldHistory {
     fn average_buffer(buffer: &VecDeque<ThermoGrid>, rows: usize, cols: usize) -> ThermoGrid {
         let len = rows * cols;
         let mut data = vec![f32::NAN; len];
-        for (i, cell) in data.iter_mut().enumerate().take(len) {
+        for (i, cell) in data.iter_mut().enumerate() {
             let mut sum = 0.0f32;
             let mut count = 0u32;
             for grid in buffer {
@@ -365,9 +389,8 @@ mod tests {
         let forces = vec![make_force_result(0.0), make_force_result(0.0)];
         let (t, p) = compute_cell_thermo(&balls, &forces, &world);
         // With only 2 balls the grid is 1×1
-        assert_eq!(t.rows, 1);
-        assert_eq!(t.cols, 1);
-        assert_eq!(t.get(0, 0), 0.0, "T should be 0 for resting balls");
+        assert_eq!(t.rows(), 1);
+        assert_eq!(t.cols(), 1);
         assert_eq!(
             p.get(0, 0),
             0.0,
@@ -431,8 +454,8 @@ mod tests {
         let forces = vec![make_force_result(0.0), make_force_result(0.0)];
         let (t, p) = compute_cell_thermo(&balls, &forces, &world);
         // Grid should be 1×1, T should match the positive-h test
-        assert_eq!(t.rows, 1);
-        assert_eq!(t.cols, 1);
+        assert_eq!(t.rows(), 1);
+        assert_eq!(t.cols(), 1);
         let expected_t = 0.5;
         assert!(
             (t.get(0, 0) - expected_t).abs() < 1e-5,
@@ -457,19 +480,18 @@ mod tests {
     }
 
     fn grid_2x2(v00: f32, v01: f32, v10: f32, v11: f32) -> ThermoGrid {
-        ThermoGrid {
-            data: vec![v00, v01, v10, v11],
-            rows: 2,
-            cols: 2,
-        }
+        let mut g = ThermoGrid::filled(2, 2, 0.0);
+        g.set(0, 0, v00);
+        g.set(0, 1, v01);
+        g.set(1, 0, v10);
+        g.set(1, 1, v11);
+        g
     }
 
     fn grid_1x1(val: f32) -> ThermoGrid {
-        ThermoGrid {
-            data: vec![val],
-            rows: 1,
-            cols: 1,
-        }
+        let mut g = ThermoGrid::filled(1, 1, 0.0);
+        g.set(0, 0, val);
+        g
     }
 
     #[test]
@@ -537,8 +559,8 @@ mod tests {
 
         let (avg_t, avg_p) = h.average().expect("should have data");
         // Only the 4×5 grid should remain
-        assert_eq!(avg_t.rows, 4);
-        assert_eq!(avg_t.cols, 5);
+        assert_eq!(avg_t.rows(), 4);
+        assert_eq!(avg_t.cols(), 5);
         assert_eq!(avg_t, t_4x5);
         assert_eq!(avg_p, p_4x5);
     }
