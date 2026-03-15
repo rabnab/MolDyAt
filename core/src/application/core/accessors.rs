@@ -77,6 +77,10 @@ impl MainContent {
         for i in 0..self.balls.len() {
             self.cell_grid.add_ball(i, &mut self.balls);
         }
+
+        // Discard stale thermo history — accumulated grids used the old
+        // world rect and would produce incorrect cell-to-world mapping.
+        self.thermo_history.clear();
     }
 
     pub(crate) fn double_time_step(&mut self) {

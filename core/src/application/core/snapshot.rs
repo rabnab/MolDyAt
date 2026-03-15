@@ -1,8 +1,9 @@
 use crate::application::LogStuff;
 use crate::application::MainContent;
 use crate::application::renderer_snapshot::{
-    BallRenderData, RendererSnapshot, get_special_ball_color, size_class_to_rgba,
+    BallRenderData, RendererSnapshot, ThermoGridSpec, get_special_ball_color, size_class_to_rgba,
 };
+use crate::application::thermo_field::ThermoGrid;
 use std::sync::Arc;
 
 impl MainContent {
@@ -85,6 +86,52 @@ impl MainContent {
             physics_fps: self.get_physics_fps(),
             equilibrium_edge_distance: self.physics.equilibrium_edge_distance(),
             cutoff_distance: self.physics.get_cutoff_distance(),
+            ..{
+                let (cell_temperature, cell_pressure, thermo_grid_spec) =
+                    self.build_thermo_snapshot_fields();
+                RendererSnapshot {
+                    cell_temperature,
+                    cell_pressure,
+                    thermo_grid_spec,
+                    ..RendererSnapshot::new()
+                }
+            }
+        }
+    }
+
+    /// Build the thermo-related fields for the snapshot from the rolling-window history.
+    ///
+    /// Returns `(temperature_grid, pressure_grid, grid_spec)` without constructing
+    /// an intermediate `RendererSnapshot`.
+    fn build_thermo_snapshot_fields(&self) -> (ThermoGrid, ThermoGrid, Option<ThermoGridSpec>) {
+        let world = self.world_region();
+        let ww = world.w.abs();
+        let wh = world.h.abs();
+
+        match self.thermo_history.average() {
+            Some((avg_t, avg_p)) => {
+                let (rows, cols) = avg_t.shape();
+                let cell_width = ww / cols as f32;
+                let cell_height = wh / rows as f32;
+
+                // Use the same top-left derivation as compute_cell_thermo
+                // so the spec origin matches the binning origin.
+                let spec = ThermoGridSpec {
+                    rows,
+                    cols,
+                    cell_width,
+                    cell_height,
+                    origin_x: world.x.min(world.x + world.w),
+                    origin_y: world.y.min(world.y + world.h),
+                };
+
+                (avg_t, avg_p, Some(spec))
+            }
+            None => (
+                ThermoGrid::filled(0, 0, 0.0),
+                ThermoGrid::filled(0, 0, 0.0),
+                None,
+            ),
         }
     }
 
@@ -291,5 +338,83 @@ mod tests {
                 i
             );
         }
+    }
+
+    // ── Thermo snapshot tests (#115) ─────────────────────────────────
+
+    fn create_main_content_and_step(ball_count: usize) -> MainContent {
+        use crate::application::GameLogic;
+        let mut mc = create_test_main_content_with_balls(ball_count);
+        mc.simulation_step().unwrap();
+        mc
+    }
+
+    #[test]
+    fn test_thermo_snapshot_populated_after_step_with_balls() {
+        let mc = create_main_content_and_step(10);
+        let snap = mc.create_snapshot();
+        // After one step with ≥ 2 balls, thermo fields must be populated
+        assert!(snap.thermo_grid_spec.is_some(), "spec should be Some");
+        let (rows, cols) = snap.cell_temperature.shape();
+        assert!(rows > 0 && cols > 0, "T grid should be non-empty");
+        let (pr, pc) = snap.cell_pressure.shape();
+        assert!(pr > 0 && pc > 0, "P grid should be non-empty");
+    }
+
+    #[test]
+    fn test_thermo_grid_shape_matches_spec() {
+        let mc = create_main_content_and_step(20);
+        let snap = mc.create_snapshot();
+        let spec = snap.thermo_grid_spec.as_ref().expect("spec should be Some");
+        let (t_rows, t_cols) = snap.cell_temperature.shape();
+        assert_eq!(t_rows, spec.rows, "T rows must match spec");
+        assert_eq!(t_cols, spec.cols, "T cols must match spec");
+        let (p_rows, p_cols) = snap.cell_pressure.shape();
+        assert_eq!(p_rows, spec.rows, "P rows must match spec");
+        assert_eq!(p_cols, spec.cols, "P cols must match spec");
+    }
+
+    #[test]
+    fn test_thermo_snapshot_single_ball_all_nan() {
+        let mc = create_main_content_and_step(1);
+        let snap = mc.create_snapshot();
+        // With only 1 ball, all cells are NaN but spec is still populated
+        assert!(
+            snap.thermo_grid_spec.is_some(),
+            "spec should be Some even with 1 ball"
+        );
+        let (rows, cols) = snap.cell_temperature.shape();
+        for r in 0..rows {
+            for c in 0..cols {
+                assert!(
+                    snap.cell_temperature.get(r, c).is_nan(),
+                    "T[{r},{c}] should be NaN with 1 ball"
+                );
+                assert!(
+                    snap.cell_pressure.get(r, c).is_nan(),
+                    "P[{r},{c}] should be NaN with 1 ball"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_thermo_spec_dimensions_match_world() {
+        let mc = create_main_content_and_step(50);
+        let snap = mc.create_snapshot();
+        let spec = snap.thermo_grid_spec.as_ref().expect("spec should be Some");
+        let world = mc.world_region();
+        let world_w = world.w.abs();
+        let world_h = world.h.abs();
+        let grid_w = spec.cols as f32 * spec.cell_width;
+        let grid_h = spec.rows as f32 * spec.cell_height;
+        assert!(
+            (grid_w - world_w).abs() < 1e-3,
+            "grid width {grid_w} should match world width {world_w}"
+        );
+        assert!(
+            (grid_h - world_h).abs() < 1e-3,
+            "grid height {grid_h} should match world height {world_h}"
+        );
     }
 }

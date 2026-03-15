@@ -216,6 +216,13 @@ impl ThermoFieldHistory {
         }
     }
 
+    /// Discard all buffered grids so the next `push` starts fresh.
+    pub fn clear(&mut self) {
+        self.t_buffer.clear();
+        self.p_buffer.clear();
+        self.shape = (0, 0);
+    }
+
     /// Push a new pair of T/P grids into the ring buffer.
     ///
     /// If the grid shape differs from the stored shape, the entire history
@@ -468,6 +475,109 @@ mod tests {
             (p.get(0, 0) - expected_p).abs() < 1e-5,
             "P={} expected {expected_p} with negative h",
             p.get(0, 0)
+        );
+    }
+
+    // ── Spatial mapping tests ────────────────────────────────────────
+
+    /// Verify that virial injected near the top-left corner of the world rect
+    /// appears in grid cell (0, 0) and that cells in other quadrants are NaN
+    /// (underpopulated). Uses 8 balls to produce a 2×2 grid.
+    #[test]
+    fn test_top_left_pressure_maps_to_grid_0_0() {
+        // 20×20 world with origin at (0, 0), positive w/h.
+        // 8 balls → 2×2 grid → cell_w = 10, cell_h = 10.
+        // Place 2 balls with virial in top-left quadrant (0..10, 0..10)
+        // and the remaining 6 balls spread one-per-cell so those cells have n < 2 → NaN.
+        let world = Rect::new(0.0, 0.0, 20.0, 20.0);
+
+        let virial_value = 10.0;
+        let mut balls = vec![
+            // Top-left quadrant: 2 balls → n=2, finite pressure
+            make_ball(0, Vec2D::new(1.0, 1.0), Vec2D::zero(), 1.0),
+            make_ball(1, Vec2D::new(2.0, 2.0), Vec2D::zero(), 1.0),
+            // Other quadrants: 1 ball each → n < 2 → NaN
+            make_ball(2, Vec2D::new(15.0, 1.0), Vec2D::zero(), 1.0),
+            make_ball(3, Vec2D::new(1.0, 15.0), Vec2D::zero(), 1.0),
+            make_ball(4, Vec2D::new(15.0, 15.0), Vec2D::zero(), 1.0),
+            // Extra balls also in underpopulated cells (still only 1 per cell is fine,
+            // but we need 8 total to get 2×2 grid)
+            make_ball(5, Vec2D::new(15.5, 1.5), Vec2D::zero(), 1.0),
+            make_ball(6, Vec2D::new(1.5, 15.5), Vec2D::zero(), 1.0),
+            make_ball(7, Vec2D::new(15.5, 15.5), Vec2D::zero(), 1.0),
+        ];
+        // Only the top-left pair has virial; all others are zero
+        let forces: Vec<_> = (0..balls.len())
+            .map(|i| make_force_result(if i < 2 { virial_value } else { 0.0 }))
+            .collect();
+
+        let (_, p) = compute_cell_thermo(&balls, &forces, &world);
+
+        assert_eq!(p.rows(), 2, "expected 2 rows");
+        assert_eq!(p.cols(), 2, "expected 2 cols");
+
+        // Top-left cell (0,0): two resting balls with virial → finite positive pressure
+        let p00 = p.get(0, 0);
+        assert!(
+            p00.is_finite() && p00 > 0.0,
+            "top-left cell pressure should be finite and positive, got {p00}"
+        );
+
+        // All other cells should have exactly 2 balls each with zero virial → P = 0
+        // (resting balls, zero virial)
+        for (r, c) in [(0, 1), (1, 0), (1, 1)] {
+            let prc = p.get(r, c);
+            assert!(
+                prc.is_finite() && (prc - 0.0).abs() < 1e-5,
+                "cell ({r},{c}) pressure should be ~0 (zero virial, resting), got {prc}"
+            );
+        }
+    }
+
+    /// Same test with a negative-height world rect (top-down coordinate system).
+    /// Balls placed near the Rect origin (x, y) = (0, 20) should map to the
+    /// *last* row of the grid because the min-based origin starts at y = 0.
+    #[test]
+    fn test_top_left_pressure_negative_height() {
+        // Rect origin is (0, 20), extends right 20 and up(negative) 20 → y range 0..20.
+        // min-based origin: (0, 0). cell_h = 10.
+        // Balls near y = 19 → row = floor((19-0)/10) = 1 (last row).
+        let world = Rect::new(0.0, 20.0, 20.0, -20.0);
+
+        let virial_value = 10.0;
+        let balls = vec![
+            // Near Rect origin corner (x~0, y~20) → grid row 1, col 0
+            make_ball(0, Vec2D::new(1.0, 19.0), Vec2D::zero(), 1.0),
+            make_ball(1, Vec2D::new(2.0, 18.0), Vec2D::zero(), 1.0),
+            // Fill remaining cells
+            make_ball(2, Vec2D::new(15.0, 19.0), Vec2D::zero(), 1.0),
+            make_ball(3, Vec2D::new(1.0, 1.0), Vec2D::zero(), 1.0),
+            make_ball(4, Vec2D::new(15.0, 1.0), Vec2D::zero(), 1.0),
+            make_ball(5, Vec2D::new(15.5, 18.5), Vec2D::zero(), 1.0),
+            make_ball(6, Vec2D::new(1.5, 1.5), Vec2D::zero(), 1.0),
+            make_ball(7, Vec2D::new(15.5, 1.5), Vec2D::zero(), 1.0),
+        ];
+        let forces: Vec<_> = (0..balls.len())
+            .map(|i| make_force_result(if i < 2 { virial_value } else { 0.0 }))
+            .collect();
+
+        let (_, p) = compute_cell_thermo(&balls, &forces, &world);
+
+        assert_eq!(p.rows(), 2);
+        assert_eq!(p.cols(), 2);
+
+        // With negative h, the Rect origin corner maps to (row=1, col=0), not (0, 0).
+        let p10 = p.get(1, 0);
+        assert!(
+            p10.is_finite() && p10 > 0.0,
+            "Rect-origin corner cell (1,0) should have positive pressure, got {p10}"
+        );
+
+        // Top-left grid cell (0,0) should have zero-virial resting balls
+        let p00 = p.get(0, 0);
+        assert!(
+            p00.is_finite() && (p00).abs() < 1e-5,
+            "grid (0,0) should be ~0 for negative-h world, got {p00}"
         );
     }
 
