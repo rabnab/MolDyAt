@@ -254,10 +254,15 @@ impl GameLogic for MainContent {
         #[cfg(feature = "measure-time")]
         self.log_timings(timer);
 
-        // Compute per-cell T/P and push into rolling-window history
-        let world = self.world_region();
-        let (t_grid, p_grid) = compute_cell_thermo(&self.balls, &self.cached_force_results, &world);
-        self.thermo_history.push(t_grid, p_grid);
+        // Compute per-cell T/P and push into rolling-window history.
+        // Skip if cached_force_results is stale (e.g. after remove_invalid_balls
+        // shrinks the ball vector without updating force results).
+        if self.balls.len() == self.cached_force_results.len() {
+            let world = self.world_region();
+            let (t_grid, p_grid) =
+                compute_cell_thermo(&self.balls, &self.cached_force_results, &world);
+            self.thermo_history.push(t_grid, p_grid);
+        }
 
         self.step_count += 1;
         Ok(())

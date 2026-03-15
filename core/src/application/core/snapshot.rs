@@ -114,13 +114,15 @@ impl MainContent {
                 let cell_width = ww / cols as f32;
                 let cell_height = wh / rows as f32;
 
+                // Use the same top-left derivation as compute_cell_thermo
+                // so the spec origin matches the binning origin.
                 let spec = ThermoGridSpec {
                     rows,
                     cols,
                     cell_width,
                     cell_height,
-                    origin_x: world.x,
-                    origin_y: world.y,
+                    origin_x: world.x.min(world.x + world.w),
+                    origin_y: world.y.min(world.y + world.h),
                 };
 
                 (avg_t, avg_p, Some(spec))

@@ -57,9 +57,9 @@ pub struct ThermoGridSpec {
     pub cell_width: f32,
     /// Height of each cell in world coordinates
     pub cell_height: f32,
-    /// World x of the grid's top-left corner
+    /// World x of the grid's minimum-x corner (min of rect x-extent)
     pub origin_x: f32,
-    /// World y of the grid's top-left corner
+    /// World y of the grid's minimum-y corner (min of rect y-extent)
     pub origin_y: f32,
 }
 
