@@ -5,11 +5,12 @@
 //! filled by iterative 4-connected neighbour averaging before the spline
 //! is constructed.
 //!
-//! **Remaining-NaN behaviour**: In a rectangular grid every cell is
-//! reachable from every other cell through 4-connectivity. Therefore,
-//! after `max(rows, cols)` fill passes, either *all* cells are finite
-//! (at least one input cell was finite) or *all* remain NaN (whole grid
-//! was NaN). An all-NaN input produces an all-NaN output.
+//! **Remaining-NaN behaviour**: 4-connected wavefront propagation can
+//! require up to `(rows - 1) + (cols - 1)` passes to reach the cell at
+//! maximum Manhattan distance from the nearest finite seed. The fill is
+//! bounded by `rows + cols` passes. After that, either *all* cells are
+//! finite (at least one input cell was finite) or *all* remain NaN
+//! (whole grid was NaN). An all-NaN input produces an all-NaN output.
 
 use crate::application::renderer_snapshot::ThermoGridSpec;
 use crate::application::thermo_field::ThermoGrid;
@@ -19,7 +20,7 @@ use scirs2_interpolate::bivariate::{BivariateInterpolator, RectBivariateSpline};
 /// Interpolate a sparse [`ThermoGrid`] to screen-resolution output.
 ///
 /// 1. **NaN fill** — iterative 4-connected neighbour averaging (bounded
-///    by `max(rows, cols)` passes).
+///    by `rows + cols` passes, sufficient for full Manhattan propagation).
 /// 2. **Upsample** — bicubic `RectBivariateSpline` (falls back to lower
 ///    degree or nearest-neighbour when the grid is too small).
 ///
@@ -51,62 +52,70 @@ pub fn interpolate_field(
 }
 
 /// Replace each NaN cell with the mean of its finite 4-connected neighbours.
-/// Iterates up to `max(rows, cols)` passes, stopping early when no cell changes.
+///
+/// Uses two pre-allocated buffers and swaps between them to avoid
+/// per-pass heap allocations. Iterates up to `rows + cols` passes
+/// (sufficient for full Manhattan-distance propagation), stopping
+/// early when no cell changes.
 fn nan_fill(data: &[f32], rows: usize, cols: usize) -> Vec<f32> {
-    let mut buf = data.to_vec();
-    let max_passes = rows.max(cols);
+    let mut src = data.to_vec();
+    let mut dst = src.clone();
+    let max_passes = rows + cols;
 
     for _ in 0..max_passes {
-        let prev = buf.clone();
         let mut changed = false;
 
         for r in 0..rows {
             for c in 0..cols {
                 let idx = r * cols + c;
-                if prev[idx].is_finite() {
+                if src[idx].is_finite() {
+                    dst[idx] = src[idx];
                     continue;
                 }
                 let mut sum = 0.0f32;
                 let mut count = 0u32;
                 if r > 0 {
-                    let v = prev[(r - 1) * cols + c];
+                    let v = src[(r - 1) * cols + c];
                     if v.is_finite() {
                         sum += v;
                         count += 1;
                     }
                 }
                 if r + 1 < rows {
-                    let v = prev[(r + 1) * cols + c];
+                    let v = src[(r + 1) * cols + c];
                     if v.is_finite() {
                         sum += v;
                         count += 1;
                     }
                 }
                 if c > 0 {
-                    let v = prev[r * cols + c - 1];
+                    let v = src[r * cols + c - 1];
                     if v.is_finite() {
                         sum += v;
                         count += 1;
                     }
                 }
                 if c + 1 < cols {
-                    let v = prev[r * cols + c + 1];
+                    let v = src[r * cols + c + 1];
                     if v.is_finite() {
                         sum += v;
                         count += 1;
                     }
                 }
                 if count > 0 {
-                    buf[idx] = sum / count as f32;
+                    dst[idx] = sum / count as f32;
                     changed = true;
+                } else {
+                    dst[idx] = f32::NAN;
                 }
             }
         }
+        std::mem::swap(&mut src, &mut dst);
         if !changed {
             break;
         }
     }
-    buf
+    src
 }
 
 /// Upsample a fully-finite grid to `(target_h, target_w)` using spline
@@ -130,12 +139,15 @@ fn upsample(
     }
 
     // Cell-centre coordinates in world space.
-    let x_coords: Array1<f64> = Array1::from_vec(
+    // RectBivariateSpline treats its first axis as rows and second as columns,
+    // so row_coords maps rows→y (origin_y + cell_height) and col_coords maps
+    // cols→x (origin_x + cell_width).
+    let row_coords: Array1<f64> = Array1::from_vec(
         (0..rows)
             .map(|r| f64::from(spec.origin_y) + (r as f64 + 0.5) * f64::from(spec.cell_height))
             .collect(),
     );
-    let y_coords: Array1<f64> = Array1::from_vec(
+    let col_coords: Array1<f64> = Array1::from_vec(
         (0..cols)
             .map(|c| f64::from(spec.origin_x) + (c as f64 + 0.5) * f64::from(spec.cell_width))
             .collect(),
@@ -149,8 +161,8 @@ fn upsample(
     let ky = if cols >= 4 { 3 } else { (cols - 1).max(1) };
 
     let spline = match RectBivariateSpline::new(
-        &x_coords.view(),
-        &y_coords.view(),
+        &row_coords.view(),
+        &col_coords.view(),
         &z.view(),
         None,
         kx,
@@ -165,19 +177,19 @@ fn upsample(
     let total_h = rows as f64 * f64::from(spec.cell_height);
     let total_w = cols as f64 * f64::from(spec.cell_width);
 
-    let xi: Array1<f64> = Array1::from_vec(
+    let target_row_coords: Array1<f64> = Array1::from_vec(
         (0..target_h)
             .map(|r| f64::from(spec.origin_y) + (r as f64 + 0.5) / target_h as f64 * total_h)
             .collect(),
     );
-    let yi: Array1<f64> = Array1::from_vec(
+    let target_col_coords: Array1<f64> = Array1::from_vec(
         (0..target_w)
             .map(|c| f64::from(spec.origin_x) + (c as f64 + 0.5) / target_w as f64 * total_w)
             .collect(),
     );
 
     // evaluate with grid=true → result shape (target_h, target_w).
-    match spline.evaluate(&xi.view(), &yi.view(), true) {
+    match spline.evaluate(&target_row_coords.view(), &target_col_coords.view(), true) {
         Ok(result) => {
             let mut out = Vec::with_capacity(target_w * target_h);
             for r in 0..target_h {
