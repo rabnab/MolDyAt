@@ -1,5 +1,6 @@
 pub mod batch_renderer;
 pub mod event_loop;
+pub mod interpolation;
 pub mod state_layers;
 pub mod viewport;
 
