@@ -54,6 +54,11 @@ impl ThermoGrid {
     pub fn cols(&self) -> usize {
         self.cols
     }
+
+    /// Borrow the underlying flat data as a slice.
+    pub fn as_slice(&self) -> &[f32] {
+        &self.data
+    }
 }
 
 impl PartialEq for ThermoGrid {
@@ -492,7 +497,7 @@ mod tests {
         let world = Rect::new(0.0, 0.0, 20.0, 20.0);
 
         let virial_value = 10.0;
-        let mut balls = vec![
+        let balls = vec![
             // Top-left quadrant: 2 balls → n=2, finite pressure
             make_ball(0, Vec2D::new(1.0, 1.0), Vec2D::zero(), 1.0),
             make_ball(1, Vec2D::new(2.0, 2.0), Vec2D::zero(), 1.0),
