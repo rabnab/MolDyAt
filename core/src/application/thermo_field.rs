@@ -216,6 +216,13 @@ impl ThermoFieldHistory {
         }
     }
 
+    /// Discard all buffered grids so the next `push` starts fresh.
+    pub fn clear(&mut self) {
+        self.t_buffer.clear();
+        self.p_buffer.clear();
+        self.shape = (0, 0);
+    }
+
     /// Push a new pair of T/P grids into the ring buffer.
     ///
     /// If the grid shape differs from the stored shape, the entire history

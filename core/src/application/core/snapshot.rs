@@ -86,12 +86,24 @@ impl MainContent {
             physics_fps: self.get_physics_fps(),
             equilibrium_edge_distance: self.physics.equilibrium_edge_distance(),
             cutoff_distance: self.physics.get_cutoff_distance(),
-            ..self.build_thermo_snapshot_fields()
+            ..{
+                let (cell_temperature, cell_pressure, thermo_grid_spec) =
+                    self.build_thermo_snapshot_fields();
+                RendererSnapshot {
+                    cell_temperature,
+                    cell_pressure,
+                    thermo_grid_spec,
+                    ..RendererSnapshot::new()
+                }
+            }
         }
     }
 
     /// Build the thermo-related fields for the snapshot from the rolling-window history.
-    fn build_thermo_snapshot_fields(&self) -> RendererSnapshot {
+    ///
+    /// Returns `(temperature_grid, pressure_grid, grid_spec)` without constructing
+    /// an intermediate `RendererSnapshot`.
+    fn build_thermo_snapshot_fields(&self) -> (ThermoGrid, ThermoGrid, Option<ThermoGridSpec>) {
         let world = self.world_region();
         let ww = world.w.abs();
         let wh = world.h.abs();
@@ -101,31 +113,23 @@ impl MainContent {
                 let (rows, cols) = avg_t.shape();
                 let cell_width = ww / cols as f32;
                 let cell_height = wh / rows as f32;
-                let origin_x = world.x.min(world.x + world.w);
-                let origin_y = world.y.min(world.y + world.h);
 
                 let spec = ThermoGridSpec {
                     rows,
                     cols,
                     cell_width,
                     cell_height,
-                    origin_x,
-                    origin_y,
+                    origin_x: world.x,
+                    origin_y: world.y,
                 };
 
-                RendererSnapshot {
-                    cell_temperature: avg_t,
-                    cell_pressure: avg_p,
-                    thermo_grid_spec: Some(spec),
-                    ..RendererSnapshot::new()
-                }
+                (avg_t, avg_p, Some(spec))
             }
-            None => RendererSnapshot {
-                cell_temperature: ThermoGrid::filled(0, 0, 0.0),
-                cell_pressure: ThermoGrid::filled(0, 0, 0.0),
-                thermo_grid_spec: None,
-                ..RendererSnapshot::new()
-            },
+            None => (
+                ThermoGrid::filled(0, 0, 0.0),
+                ThermoGrid::filled(0, 0, 0.0),
+                None,
+            ),
         }
     }
 
