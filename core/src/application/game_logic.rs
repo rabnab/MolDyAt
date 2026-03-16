@@ -259,8 +259,14 @@ impl GameLogic for MainContent {
         // shrinks the ball vector without updating force results).
         if self.balls.len() == self.cached_force_results.len() {
             let world = self.world_region();
-            let (t_grid, p_grid) =
-                compute_cell_thermo(&self.balls, &self.cached_force_results, &world);
+            let (grid_rows, grid_cols) = self.cell_grid.get_grid_size();
+            let (t_grid, p_grid) = compute_cell_thermo(
+                &self.balls,
+                &self.cached_force_results,
+                &world,
+                grid_rows,
+                grid_cols,
+            );
             self.thermo_history.push(t_grid, p_grid);
         }
 

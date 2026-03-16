@@ -53,10 +53,13 @@ pub fn interpolate_field(
 
 /// Replace each NaN cell with the mean of its finite 4-connected neighbours.
 ///
-/// Uses two pre-allocated buffers and swaps between them to avoid
-/// per-pass heap allocations. Iterates up to `rows + cols` passes
-/// (sufficient for full Manhattan-distance propagation), stopping
-/// early when no cell changes.
+/// Iterates up to `rows + cols` passes (sufficient for full Manhattan-distance
+/// propagation), stopping early when no cell changes.  Exported for use by
+/// the wgpu renderer which uploads raw scalar values for GPU interpolation.
+pub fn fill_nans(data: &[f32], rows: usize, cols: usize) -> Vec<f32> {
+    nan_fill(data, rows, cols)
+}
+
 fn nan_fill(data: &[f32], rows: usize, cols: usize) -> Vec<f32> {
     let mut src = data.to_vec();
     let mut dst = src.clone();

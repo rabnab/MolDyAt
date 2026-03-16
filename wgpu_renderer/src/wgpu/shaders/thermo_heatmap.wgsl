@@ -1,64 +1,76 @@
 // Thermo heatmap overlay shader
 //
-// Renders per-cell coloured quads from a storage buffer of RGBA values.
-// Each cell is an instanced quad; the fragment shader reads the colour
-// from the storage buffer using the flat instance index.
+// Renders a single quad covering the simulation world area.  The raw scalar
+// field (temperature or pressure, NaN-filled and normalised to [0,1]) is
+// stored in a 1-channel R8Unorm texture with one texel per cell.  The GPU
+// samples it with a linear (bilinear) filter, so the overlay appears smooth
+// and continuous rather than blocky.
+//
+// Convention:
+//   • grid_origin is the world-space bottom-left corner (min_x, min_y).
+//   • grid_size   is (total_world_width, total_world_height), both positive.
+//   • UV (0,0) = bottom-left of grid; UV (1,1) = top-right.
+//   • Texture row 0 is written from ThermoGrid row 0 (= world bottom), so
+//     texture V matches UV.y directly — no flip required.
 
 struct Uniforms {
-    view_proj: mat4x4<f32>,
+    view_proj:   mat4x4<f32>,
     grid_origin: vec2<f32>,
-    grid_cell_size: vec2<f32>,
-    grid_dims: vec2<u32>,
-    _padding: vec2<u32>,
+    grid_size:   vec2<f32>,
 }
 
-@group(0) @binding(0)
-var<uniform> uniforms: Uniforms;
-
-@group(0) @binding(1)
-var<storage, read> cell_colors: array<vec4<f32>>;
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+@group(0) @binding(1) var field_texture: texture_2d<f32>;
+@group(0) @binding(2) var field_sampler: sampler;
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
-    @location(0) @interpolate(flat) cell_index: u32,
+    @location(0)       uv:       vec2<f32>,
 }
 
+// Six vertices for two triangles spanning the grid world area.
+// UV (0,0) is bottom-left, (1,1) is top-right.
+var<private> UV_TABLE: array<vec2<f32>, 6> = array<vec2<f32>, 6>(
+    vec2(0.0, 0.0), vec2(1.0, 0.0), vec2(0.0, 1.0),
+    vec2(1.0, 0.0), vec2(1.0, 1.0), vec2(0.0, 1.0),
+);
+
 @vertex
-fn vs_main(
-    @builtin(vertex_index) vertex_index: u32,
-    @builtin(instance_index) instance_index: u32,
-) -> VertexOutput {
+fn vs_main(@builtin(vertex_index) vi: u32) -> VertexOutput {
+    let uv = UV_TABLE[vi];
+    let world_pos = uniforms.grid_origin + uv * uniforms.grid_size;
     var out: VertexOutput;
-
-    let col = instance_index % uniforms.grid_dims.x;
-    let row = instance_index / uniforms.grid_dims.x;
-
-    // Cell origin is bottom-left corner in world space (Y-up; origin_y is min-y of the grid).
-    // Row 0 is the bottom row; row index increases upward.
-    let cell_origin = vec2<f32>(
-        uniforms.grid_origin.x + f32(col) * uniforms.grid_cell_size.x,
-        uniforms.grid_origin.y + f32(row) * uniforms.grid_cell_size.y
-    );
-
-    var local_pos: vec2<f32>;
-    switch vertex_index {
-        case 0u: { local_pos = vec2<f32>(0.0, 0.0); }
-        case 1u: { local_pos = vec2<f32>(0.0, uniforms.grid_cell_size.y); }
-        case 2u: { local_pos = vec2<f32>(uniforms.grid_cell_size.x, 0.0); }
-        case 3u: { local_pos = vec2<f32>(uniforms.grid_cell_size.x, 0.0); }
-        case 4u: { local_pos = vec2<f32>(0.0, uniforms.grid_cell_size.y); }
-        case 5u: { local_pos = vec2<f32>(uniforms.grid_cell_size.x, uniforms.grid_cell_size.y); }
-        default: { local_pos = vec2<f32>(0.0, 0.0); }
-    }
-
-    let world_pos = cell_origin + local_pos;
     out.position = uniforms.view_proj * vec4<f32>(world_pos, 0.0, 1.0);
-    out.cell_index = instance_index;
-
+    out.uv = uv;
     return out;
+}
+
+// Rainbow colormap: blue (t=0) → cyan → green → yellow → red (t=1).
+fn rainbow(t: f32) -> vec3<f32> {
+    let s = clamp(t, 0.0, 1.0) * 4.0;
+    let i = floor(s);
+    let f = s - i;
+    var r = 0.0; var g = 0.0; var b = 0.0;
+    if i < 1.0 {         // blue → cyan
+        r = 0.0; g = f;   b = 1.0;
+    } else if i < 2.0 {  // cyan → green
+        r = 0.0; g = 1.0; b = 1.0 - f;
+    } else if i < 3.0 {  // green → yellow
+        r = f;   g = 1.0; b = 0.0;
+    } else {             // yellow → red
+        r = 1.0; g = 1.0 - f; b = 0.0;
+    }
+    return vec3<f32>(r, g, b);
 }
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return cell_colors[in.cell_index];
+    // R8Unorm stores 0 as "no data" sentinel and 1..255 (→ 1/255..1) as data.
+    let raw = textureSample(field_texture, field_sampler, in.uv).r;
+    if raw < 0.004 {  // below 1/255 → NaN sentinel cell
+        discard;
+    }
+    // Remap 1/255..1 back to 0..1 for the colormap.
+    let t = (raw - 1.0 / 255.0) * (255.0 / 254.0);
+    return vec4<f32>(rainbow(clamp(t, 0.0, 1.0)), 0.55);
 }
