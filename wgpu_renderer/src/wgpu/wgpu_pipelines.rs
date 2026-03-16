@@ -13,9 +13,11 @@ use super::grid_pipeline::{GridPipeline, build_view_proj_matrix};
 use super::line_pipeline::LinePipeline;
 use super::render_graph::{PipelineHandle, PrepareContext, RenderGraph};
 use super::text_pipeline::TextPipeline;
+use super::thermo_heatmap_pipeline::ThermoHeatmapPipeline;
 use super::wgpu_context::WgpuContext;
 use rust_thermo_core::application::AppResult;
 use rust_thermo_core::application::renderer_snapshot::{CellGridSpec, RendererSnapshot};
+use rust_thermo_core::graphics::renderer::state_layers::ThermoDisplayMode;
 
 /// Shader source code (embedded at compile time).
 const GRID_SHADER: &str = include_str!("shaders/grid.wgsl");
@@ -23,10 +25,12 @@ const BALL_SHADER: &str = include_str!("shaders/ball.wgsl");
 const CROSSHAIR_SHADER: &str = include_str!("shaders/crosshair.wgsl");
 const LINE_SHADER: &str = include_str!("shaders/line.wgsl");
 const FRAME_SHADER: &str = include_str!("shaders/frame.wgsl");
+const THERMO_HEATMAP_SHADER: &str = include_str!("shaders/thermo_heatmap.wgsl");
 /// Named handles for direct pipeline access.
 pub struct PipelineHandles {
     pub frame: PipelineHandle,
     pub grid: PipelineHandle,
+    pub thermo_heatmap: PipelineHandle,
     pub line: PipelineHandle,
     pub ball: PipelineHandle,
     pub crosshair: PipelineHandle,
@@ -55,6 +59,11 @@ impl WgpuPipelines {
         // render in Inset viewport; text renders in FullWindow viewport.
         let frame = graph.add_pipeline(Box::new(FramePipeline::new(device, format, FRAME_SHADER)));
         let grid = graph.add_pipeline(Box::new(GridPipeline::new(device, format, GRID_SHADER)));
+        let thermo_heatmap = graph.add_pipeline(Box::new(ThermoHeatmapPipeline::new(
+            device,
+            format,
+            THERMO_HEATMAP_SHADER,
+        )));
         let line = graph.add_pipeline(Box::new(LinePipeline::new(device, format, LINE_SHADER)));
         let ball = graph.add_pipeline(Box::new(BallPipeline::new(device, format, BALL_SHADER)));
         let crosshair = graph.add_pipeline(Box::new(CrosshairPipeline::new(
@@ -69,11 +78,13 @@ impl WgpuPipelines {
             graph.pipeline_count()
         );
 
+        //graph.set_enabled(grid, false);
         Self {
             graph,
             handles: PipelineHandles {
                 frame,
                 grid,
+                thermo_heatmap,
                 line,
                 ball,
                 crosshair,
@@ -95,6 +106,7 @@ impl WgpuPipelines {
         cursor_world_pos: (f32, f32),
         current_ball_radius: f32,
         ctrl_pressed: bool,
+        thermo_display: ThermoDisplayMode,
     ) -> AppResult {
         let window_size = ctx.size();
         let margin = (MARGIN_PX_X, MARGIN_PX_Y);
@@ -109,6 +121,7 @@ impl WgpuPipelines {
             ctrl_pressed,
             window_size,
             margin,
+            thermo_display,
         };
 
         self.graph.prepare_all(&prepare_ctx)

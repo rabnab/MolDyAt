@@ -222,6 +222,33 @@ fn nearest_neighbor(
     out
 }
 
+/// Map a normalized value `t ∈ [0, 1]` to a rainbow colour.
+///
+/// The mapping is: blue (t = 0) → cyan → green → yellow → red (t = 1).
+/// Alpha is fixed at 0.55.  Values outside `[0, 1]` are clamped.
+pub fn rainbow_colormap(t: f32) -> [f32; 4] {
+    let t = t.clamp(0.0, 1.0);
+    // 4-segment piecewise linear: blue→cyan→green→yellow→red.
+    let (r, g, b) = if t < 0.25 {
+        // blue → cyan  (r=0, g rises, b=1)
+        let s = t / 0.25;
+        (0.0, s, 1.0)
+    } else if t < 0.5 {
+        // cyan → green  (r=0, g=1, b falls)
+        let s = (t - 0.25) / 0.25;
+        (0.0, 1.0, 1.0 - s)
+    } else if t < 0.75 {
+        // green → yellow  (r rises, g=1, b=0)
+        let s = (t - 0.5) / 0.25;
+        (s, 1.0, 0.0)
+    } else {
+        // yellow → red  (r=1, g falls, b=0)
+        let s = (t - 0.75) / 0.25;
+        (1.0, 1.0 - s, 0.0)
+    };
+    [r, g, b, 0.55]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -335,5 +362,96 @@ mod tests {
                 "rows={rows}, cols={cols}, tw={tw}, th={th}"
             );
         }
+    }
+
+    // ── Test 6: rainbow_colormap blue at 0 ───────────────────────────
+
+    #[test]
+    fn test_rainbow_colormap_blue_at_zero() {
+        let [r, g, b, a] = rainbow_colormap(0.0);
+        assert!((r - 0.0).abs() < 1e-5, "r={r}");
+        assert!((g - 0.0).abs() < 1e-5, "g={g}");
+        assert!((b - 1.0).abs() < 1e-5, "b={b}");
+        assert!((a - 0.55).abs() < 1e-5, "a={a}");
+    }
+
+    // ── Test 7: rainbow_colormap red at 1 ────────────────────────────
+
+    #[test]
+    fn test_rainbow_colormap_red_at_one() {
+        let [r, g, b, a] = rainbow_colormap(1.0);
+        assert!((r - 1.0).abs() < 1e-5, "r={r}");
+        assert!((g - 0.0).abs() < 1e-5, "g={g}");
+        assert!((b - 0.0).abs() < 1e-5, "b={b}");
+        assert!((a - 0.55).abs() < 1e-5, "a={a}");
+    }
+
+    // ── Test 8: rainbow_colormap midpoint in green/yellow band ───────
+
+    #[test]
+    fn test_rainbow_colormap_midpoint_green_yellow() {
+        let [r, _g, b, _a] = rainbow_colormap(0.5);
+        // At t=0.5 we're at cyan→green boundary: r low, b low
+        assert!(r < 0.5, "r={r} should be low at midpoint");
+        assert!(b < 0.5, "b={b} should be low at midpoint");
+    }
+
+    // ── Test 9: ThermoDisplayMode cycle correctness ──────────────────
+
+    #[test]
+    fn test_thermo_display_mode_cycle() {
+        use crate::graphics::renderer::state_layers::ThermoDisplayMode;
+
+        let mut mode = ThermoDisplayMode::Off;
+        mode = mode.next(); // Off → Temperature
+        assert_eq!(mode, ThermoDisplayMode::Temperature);
+        mode = mode.next(); // Temperature → Pressure
+        assert_eq!(mode, ThermoDisplayMode::Pressure);
+        mode = mode.next(); // Pressure → Off
+        assert_eq!(mode, ThermoDisplayMode::Off);
+
+        // Two presses from Off lands on Pressure
+        let mut mode2 = ThermoDisplayMode::Off;
+        mode2 = mode2.next().next();
+        assert_eq!(mode2, ThermoDisplayMode::Pressure);
+    }
+
+    // ── Test 10: No-data guard (None spec or 0×0 grid) ──────────────
+
+    #[test]
+    fn test_no_data_guard() {
+        // Zero-size grid → no panic, returns NaN output
+        let grid = ThermoGrid::filled(0, 0, 0.0);
+        let spec = make_spec(0, 0);
+        let out = interpolate_field(&grid, &spec, 10, 10);
+        assert_eq!(out.len(), 100);
+        assert!(out.iter().all(|v| v.is_nan()));
+    }
+
+    // ── Test 11: Uniform field guard (v_min == v_max) ────────────────
+
+    #[test]
+    fn test_uniform_field_guard() {
+        // When all values are identical, v_min == v_max
+        let grid = ThermoGrid::filled(4, 4, 42.0);
+        let spec = make_spec(4, 4);
+        let out = interpolate_field(&grid, &spec, 10, 10);
+        // All values should be ≈ 42.0 (identical), so (v - v_min) / (v_max - v_min)
+        // is 0/0 — the renderer should skip. Here we verify the field is finite
+        // and uniform so the renderer can detect the guard condition.
+        let v_min = out
+            .iter()
+            .copied()
+            .filter(|v| v.is_finite())
+            .fold(f32::INFINITY, f32::min);
+        let v_max = out
+            .iter()
+            .copied()
+            .filter(|v| v.is_finite())
+            .fold(f32::NEG_INFINITY, f32::max);
+        assert!(
+            (v_max - v_min).abs() < 0.2,
+            "uniform field: v_min={v_min}, v_max={v_max}"
+        );
     }
 }

@@ -20,6 +20,7 @@ mod grid_pipeline;
 mod line_pipeline;
 mod render_graph;
 mod text_pipeline;
+mod thermo_heatmap_pipeline;
 mod wgpu_context;
 mod wgpu_input;
 mod wgpu_pipelines;
