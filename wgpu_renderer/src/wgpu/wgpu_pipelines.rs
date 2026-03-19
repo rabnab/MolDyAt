@@ -78,7 +78,6 @@ impl WgpuPipelines {
             graph.pipeline_count()
         );
 
-        //graph.set_enabled(grid, false);
         Self {
             graph,
             handles: PipelineHandles {
