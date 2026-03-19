@@ -303,7 +303,7 @@ impl RenderPipeline for ThermoHeatmapPipeline {
 
         // Need a thermo grid spec.
         let Some(spec) = &ctx.snapshot.thermo_grid_spec else {
-            log::info!("ThermoHeatmapPipeline: no thermo_grid_spec, skipping");
+            log::debug!("ThermoHeatmapPipeline: no thermo_grid_spec, skipping");
             self.cell_count = 0;
             return Ok(());
         };
@@ -315,7 +315,7 @@ impl RenderPipeline for ThermoHeatmapPipeline {
         };
 
         let (grid_rows, grid_cols) = grid.shape();
-        log::info!(
+        log::debug!(
             "ThermoHeatmapPipeline::prepare [{:?}] — spec: {}×{} cells ({:.3}×{:.3} world/cell, origin [{:.3},{:.3}]), grid: {}×{}",
             ctx.thermo_display,
             spec.cols,
