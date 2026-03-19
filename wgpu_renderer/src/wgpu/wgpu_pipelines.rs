@@ -14,6 +14,7 @@ use super::line_pipeline::LinePipeline;
 use super::render_graph::{PipelineHandle, PrepareContext, RenderGraph};
 use super::text_pipeline::TextPipeline;
 use super::thermo_heatmap_pipeline::ThermoHeatmapPipeline;
+use super::thermo_value_pipeline::ThermoValueOverlayPipeline;
 use super::wgpu_context::WgpuContext;
 use rust_thermo_core::application::AppResult;
 use rust_thermo_core::application::renderer_snapshot::{CellGridSpec, RendererSnapshot};
@@ -31,6 +32,7 @@ pub struct PipelineHandles {
     pub frame: PipelineHandle,
     pub grid: PipelineHandle,
     pub thermo_heatmap: PipelineHandle,
+    pub thermo_value_overlay: PipelineHandle,
     pub line: PipelineHandle,
     pub ball: PipelineHandle,
     pub crosshair: PipelineHandle,
@@ -64,6 +66,8 @@ impl WgpuPipelines {
             format,
             THERMO_HEATMAP_SHADER,
         )));
+        let thermo_value_overlay =
+            graph.add_pipeline(Box::new(ThermoValueOverlayPipeline::new(device, format)));
         let line = graph.add_pipeline(Box::new(LinePipeline::new(device, format, LINE_SHADER)));
         let ball = graph.add_pipeline(Box::new(BallPipeline::new(device, format, BALL_SHADER)));
         let crosshair = graph.add_pipeline(Box::new(CrosshairPipeline::new(
@@ -84,6 +88,7 @@ impl WgpuPipelines {
                 frame,
                 grid,
                 thermo_heatmap,
+                thermo_value_overlay,
                 line,
                 ball,
                 crosshair,
