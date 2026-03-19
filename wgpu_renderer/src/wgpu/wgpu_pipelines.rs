@@ -50,12 +50,12 @@ pub struct WgpuPipelines {
 impl WgpuPipelines {
     /// Create all rendering pipelines and register them in the graph.
     ///
-    /// Execution order: frame → grid → lines → balls → crosshair → text.
+    /// Execution order: frame → grid → thermo_heatmap → lines → balls → crosshair → text.
     pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
         let mut graph = RenderGraph::new();
 
         // Register pipelines in execution order.
-        // Frame renders in FullWindow viewport; grid/lines/balls/crosshair
+        // Frame renders in FullWindow viewport; grid/thermo_heatmap/lines/balls/crosshair
         // render in Inset viewport; text renders in FullWindow viewport.
         let frame = graph.add_pipeline(Box::new(FramePipeline::new(device, format, FRAME_SHADER)));
         let grid = graph.add_pipeline(Box::new(GridPipeline::new(device, format, GRID_SHADER)));
