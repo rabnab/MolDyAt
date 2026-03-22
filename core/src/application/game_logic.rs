@@ -259,7 +259,14 @@ impl GameLogic for MainContent {
         // shrinks the ball vector without updating force results).
         if self.balls.len() == self.cached_force_results.len() {
             let world = self.world_region();
-            let (grid_rows, grid_cols) = self.cell_grid.get_grid_size();
+            // Use a grid that is half the physics-cell resolution in each dimension.
+            // Physics cells are sized for the LJ cutoff and are typically too small
+            // for thermodynamic binning (often 0-1 balls per cell → NaN).
+            // Merging 2×2 physics cells into one thermo cell raises average occupancy
+            // high enough for stable T/P statistics.
+            let (phys_rows, phys_cols) = self.cell_grid.get_grid_size();
+            let grid_rows = (phys_rows / 2).max(1);
+            let grid_cols = (phys_cols / 2).max(1);
             let (t_grid, p_grid) = compute_cell_thermo(
                 &self.balls,
                 &self.cached_force_results,

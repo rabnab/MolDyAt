@@ -25,5 +25,5 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         discard;
     }
     // Light gray text
-    return vec4<f32>(0.7, 0.7, 0.7, alpha);
+    return vec4<f32>(0.0, 0.0, 0.0, alpha);
 }

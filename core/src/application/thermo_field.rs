@@ -204,7 +204,8 @@ pub fn compute_cell_thermo(
 }
 
 /// Number of simulation steps to average over for T/P field smoothing.
-const THERMO_WINDOW: usize = 10;
+/// A larger window suppresses per-cell noise from small-sample statistics.
+const THERMO_WINDOW: usize = 1000;
 
 /// Rolling-window averager for per-cell temperature and pressure grids.
 ///

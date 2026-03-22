@@ -21,6 +21,12 @@ use wgpu::util::DeviceExt;
 use super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
 use rust_thermo_core::application::AppResult;
 
+// min and max values for thermo heatmap normalisation
+const TEMP_MIN: f32 = 0.0;
+const TEMP_MAX: f32 = 1.0; // tune to your simulation's typical range
+const PRES_MIN: f32 = -1.0;
+const PRES_MAX: f32 = 1.0; // tune similarly
+
 // ── GPU types ──────────────────────────────────────────────────────
 
 /// Uniform buffer — must match `thermo_heatmap.wgsl` `Uniforms` layout.
@@ -261,6 +267,7 @@ impl ThermoHeatmapPipeline {
         grid: &ThermoGrid,
         spec: &ThermoGridSpec,
         view_proj: [[f32; 4]; 4],
+        mode: ThermoDisplayMode,
     ) -> bool {
         let (rows, cols) = grid.shape();
         if rows == 0 || cols == 0 {
@@ -277,19 +284,25 @@ impl ThermoHeatmapPipeline {
         }
 
         // --- Normalisation range ---------------------------------------
-        let (v_min, v_max) = filled
-            .iter()
-            .filter(|v| v.is_finite())
-            .fold((f32::INFINITY, f32::NEG_INFINITY), |(lo, hi), &v| {
-                (lo.min(v), hi.max(v))
-            });
+        // let (v_min, v_max) = filled
+        //     .iter()
+        //     .filter(|v| v.is_finite())
+        //     .fold((f32::INFINITY, f32::NEG_INFINITY), |(lo, hi), &v| {
+        //         (lo.min(v), hi.max(v))
+        //     });
 
-        let range_threshold = 1e-6 * v_max.abs().max(1.0);
-        if v_max - v_min < range_threshold {
-            self.has_data = false;
-            return false;
-        }
+        // let range_threshold = 1e-6 * v_max.abs().max(1.0);
+        // if v_max - v_min < range_threshold {
+        //     self.has_data = false;
+        //     return false;
+        // }
 
+        // let inv_range = 1.0 / (v_max - v_min);
+        let (v_min, v_max) = match mode {
+            ThermoDisplayMode::Temperature => (TEMP_MIN, TEMP_MAX),
+            ThermoDisplayMode::Pressure => (PRES_MIN, PRES_MAX),
+            ThermoDisplayMode::Off => unreachable!(),
+        };
         let inv_range = 1.0 / (v_max - v_min);
 
         // --- Encode bytes (R8Unorm) ------------------------------------
@@ -407,7 +420,14 @@ impl RenderPipeline for ThermoHeatmapPipeline {
             grid_rows,
         );
 
-        self.upload_field(ctx.device, ctx.queue, grid, spec, ctx.view_proj);
+        self.upload_field(
+            ctx.device,
+            ctx.queue,
+            grid,
+            spec,
+            ctx.view_proj,
+            ctx.thermo_display,
+        );
         Ok(())
     }
 
