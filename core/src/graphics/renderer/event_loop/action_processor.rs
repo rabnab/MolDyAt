@@ -91,6 +91,10 @@ pub fn process_action_common(
         InputAction::CyclePlotContent => {
             config.cycle_plot_content();
         }
+        InputAction::CycleThermoDisplay => {
+            config.cycle_thermo_display();
+            affects_view = true;
+        }
         // Actions handled elsewhere (not in action_processor)
         InputAction::PanStart { .. }
         | InputAction::PanEnd

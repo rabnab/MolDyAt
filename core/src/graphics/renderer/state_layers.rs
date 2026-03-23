@@ -11,6 +11,32 @@
 //! This module intentionally contains no ggez or wgpu types so that
 //! unit tests can exercise state logic without a GPU context.
 
+// ── ThermoDisplayMode ────────────────────────────────────────────────
+
+/// Which thermodynamic field overlay to display.
+///
+/// Cycled by the `T` key: Off → Temperature → Pressure → Off.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ThermoDisplayMode {
+    #[default]
+    Off,
+    Temperature,
+    Pressure,
+}
+
+impl ThermoDisplayMode {
+    /// Next variant in the cycle (wraps around).
+    pub fn next(self) -> Self {
+        let next = match self {
+            Self::Off => Self::Temperature,
+            Self::Temperature => Self::Pressure,
+            Self::Pressure => Self::Off,
+        };
+        log::info!("Thermo display: {self:?} → {next:?}");
+        next
+    }
+}
+
 // ── RendererConfig ──────────────────────────────────────────────────
 
 /// Stable renderer configuration that persists across frames.
@@ -28,6 +54,9 @@ pub struct RendererConfig {
 
     /// Whether rendering is enabled (toggled by F2).
     pub render_drawing: bool,
+
+    /// Which thermodynamic field overlay to display (cycled by `T`).
+    pub thermo_display: ThermoDisplayMode,
 }
 
 impl Default for RendererConfig {
@@ -36,6 +65,7 @@ impl Default for RendererConfig {
             show_plot: PlotContent::None,
             draw_cursor: false,
             render_drawing: true,
+            thermo_display: ThermoDisplayMode::Off,
         }
     }
 }
@@ -64,6 +94,11 @@ impl RendererConfig {
     /// Toggle rendering on/off (F2).
     pub fn toggle_rendering(&mut self) {
         self.render_drawing = !self.render_drawing;
+    }
+
+    /// Cycle the thermodynamic field overlay (T key).
+    pub fn cycle_thermo_display(&mut self) {
+        self.thermo_display = self.thermo_display.next();
     }
 }
 
@@ -178,6 +213,7 @@ mod tests {
         assert_eq!(cfg.show_plot, PlotContent::None);
         assert!(!cfg.draw_cursor);
         assert!(cfg.render_drawing);
+        assert_eq!(cfg.thermo_display, ThermoDisplayMode::Off);
     }
 
     #[test]
@@ -290,5 +326,27 @@ mod tests {
         assert_eq!(stats.string_entries, 0);
         assert_eq!(stats.glyph_entries, 0);
         assert_eq!(stats.ball_label_entries, 0);
+    }
+
+    // ── ThermoDisplayMode tests ─────────────────────────────────────
+
+    #[test]
+    fn thermo_display_mode_cycle_wraps_around() {
+        let mut cfg = RendererConfig::default();
+        assert_eq!(cfg.thermo_display, ThermoDisplayMode::Off);
+        cfg.cycle_thermo_display();
+        assert_eq!(cfg.thermo_display, ThermoDisplayMode::Temperature);
+        cfg.cycle_thermo_display();
+        assert_eq!(cfg.thermo_display, ThermoDisplayMode::Pressure);
+        cfg.cycle_thermo_display();
+        assert_eq!(cfg.thermo_display, ThermoDisplayMode::Off);
+    }
+
+    #[test]
+    fn thermo_display_mode_two_presses_is_pressure() {
+        let mut cfg = RendererConfig::default();
+        cfg.cycle_thermo_display();
+        cfg.cycle_thermo_display();
+        assert_eq!(cfg.thermo_display, ThermoDisplayMode::Pressure);
     }
 }

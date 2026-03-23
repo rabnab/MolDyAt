@@ -19,6 +19,7 @@
 
 use rust_thermo_core::application::AppResult;
 use rust_thermo_core::application::renderer_snapshot::RendererSnapshot;
+use rust_thermo_core::graphics::renderer::state_layers::ThermoDisplayMode;
 use std::any::Any;
 use std::collections::HashSet;
 
@@ -49,6 +50,7 @@ pub struct PrepareContext<'a> {
     pub ctrl_pressed: bool,
     pub window_size: (u32, u32),
     pub margin: (f32, f32),
+    pub thermo_display: ThermoDisplayMode,
 }
 
 // ── Pipeline trait ─────────────────────────────────────────────────

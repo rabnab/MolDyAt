@@ -125,12 +125,19 @@ pub fn compute_viz_grid_dims(
 
 /// Compute per-cell temperature and pressure grids from ball state and force results.
 ///
+/// `grid_rows` and `grid_cols` specify the desired grid dimensions (e.g. from the
+/// physics `CellGrid`).  When either is zero the function falls back to
+/// [`compute_viz_grid_dims`] so behaviour is unchanged during start-up before the
+/// cell grid is fully initialised.
+///
 /// Returns `(temperature, pressure)` as flat row-major `ThermoGrid`s.
 /// Cells with fewer than 2 balls contain `f32::NAN`.
 pub fn compute_cell_thermo(
     balls: &[Ball2D],
     force_results: &[ForceResult],
     world_rect: &Rect,
+    grid_rows: usize,
+    grid_cols: usize,
 ) -> (ThermoGrid, ThermoGrid) {
     assert_eq!(
         balls.len(),
@@ -140,7 +147,11 @@ pub fn compute_cell_thermo(
 
     let ww = world_rect.w.abs();
     let wh = world_rect.h.abs();
-    let (rows, cols) = compute_viz_grid_dims(balls.len(), ww, wh);
+    let (rows, cols) = if grid_rows == 0 || grid_cols == 0 {
+        compute_viz_grid_dims(balls.len(), ww, wh)
+    } else {
+        (grid_rows, grid_cols)
+    };
     let cell_w = ww / cols as f32;
     let cell_h = wh / rows as f32;
 
@@ -193,7 +204,8 @@ pub fn compute_cell_thermo(
 }
 
 /// Number of simulation steps to average over for T/P field smoothing.
-const THERMO_WINDOW: usize = 10;
+/// A larger window suppresses per-cell noise from small-sample statistics.
+const THERMO_WINDOW: usize = 1000;
 
 /// Rolling-window averager for per-cell temperature and pressure grids.
 ///
@@ -385,7 +397,7 @@ mod tests {
         let world = Rect::new(0.0, 0.0, 10.0, 10.0);
         let balls = vec![make_ball(0, Vec2D::new(5.0, 5.0), Vec2D::zero(), 1.0)];
         let forces = vec![make_force_result(0.0)];
-        let (t, p) = compute_cell_thermo(&balls, &forces, &world);
+        let (t, p) = compute_cell_thermo(&balls, &forces, &world, 0, 0);
         assert!(t.get(0, 0).is_nan(), "T should be NaN for n < 2");
         assert!(p.get(0, 0).is_nan(), "P should be NaN for n < 2");
     }
@@ -399,7 +411,7 @@ mod tests {
             make_ball(1, Vec2D::new(5.1, 5.1), Vec2D::zero(), 1.0),
         ];
         let forces = vec![make_force_result(0.0), make_force_result(0.0)];
-        let (t, p) = compute_cell_thermo(&balls, &forces, &world);
+        let (t, p) = compute_cell_thermo(&balls, &forces, &world, 0, 0);
         // With only 2 balls the grid is 1×1
         assert_eq!(t.rows(), 1);
         assert_eq!(t.cols(), 1);
@@ -424,7 +436,7 @@ mod tests {
             make_ball(1, Vec2D::new(5.1, 5.1), Vec2D::new(-1.0, 0.0), 1.0),
         ];
         let forces = vec![make_force_result(0.0), make_force_result(0.0)];
-        let (t, _) = compute_cell_thermo(&balls, &forces, &world);
+        let (t, _) = compute_cell_thermo(&balls, &forces, &world, 0, 0);
         let expected_t = 0.5;
         assert!(
             (t.get(0, 0) - expected_t).abs() < 1e-5,
@@ -445,7 +457,7 @@ mod tests {
             make_ball(1, Vec2D::new(5.1, 5.1), Vec2D::zero(), 1.0),
         ];
         let forces = vec![make_force_result(10.0), make_force_result(10.0)];
-        let (_, p) = compute_cell_thermo(&balls, &forces, &world);
+        let (_, p) = compute_cell_thermo(&balls, &forces, &world, 0, 0);
         let expected_p = 10.0 / 100.0;
         assert!(
             (p.get(0, 0) - expected_p).abs() < 1e-5,
@@ -464,7 +476,7 @@ mod tests {
             make_ball(1, Vec2D::new(0.1, 0.1), Vec2D::new(-1.0, 0.0), 1.0),
         ];
         let forces = vec![make_force_result(0.0), make_force_result(0.0)];
-        let (t, p) = compute_cell_thermo(&balls, &forces, &world);
+        let (t, p) = compute_cell_thermo(&balls, &forces, &world, 0, 0);
         // Grid should be 1×1, T should match the positive-h test
         assert_eq!(t.rows(), 1);
         assert_eq!(t.cols(), 1);
@@ -516,7 +528,7 @@ mod tests {
             .map(|i| make_force_result(if i < 2 { virial_value } else { 0.0 }))
             .collect();
 
-        let (_, p) = compute_cell_thermo(&balls, &forces, &world);
+        let (_, p) = compute_cell_thermo(&balls, &forces, &world, 0, 0);
 
         assert_eq!(p.rows(), 2, "expected 2 rows");
         assert_eq!(p.cols(), 2, "expected 2 cols");
@@ -566,7 +578,7 @@ mod tests {
             .map(|i| make_force_result(if i < 2 { virial_value } else { 0.0 }))
             .collect();
 
-        let (_, p) = compute_cell_thermo(&balls, &forces, &world);
+        let (_, p) = compute_cell_thermo(&balls, &forces, &world, 0, 0);
 
         assert_eq!(p.rows(), 2);
         assert_eq!(p.cols(), 2);

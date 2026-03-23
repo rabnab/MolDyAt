@@ -35,4 +35,4 @@ pub use event_loop::{FrameMetrics, MetricsCollector};
 // RendererConfig is used by both renderers (via UnifiedRenderState)
 // PlotContent, FrameState, CacheStats are ggez-specific
 #[allow(unused_imports)] // Public API, accessed via direct submodule imports
-pub use state_layers::RendererConfig;
+pub use state_layers::{RendererConfig, ThermoDisplayMode};
