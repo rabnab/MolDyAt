@@ -142,9 +142,16 @@ mod tests {
     }
 
     #[test]
-    fn test_t_toggles_timing_display() {
+    fn test_t_cycles_thermo_display() {
         let mut handler = InputHandler::new();
         let action = handler.handle_key_up(KeyCode::KeyT);
+        assert!(matches!(action, Some(InputAction::CycleThermoDisplay)));
+    }
+
+    #[test]
+    fn test_f4_toggles_timing_display() {
+        let mut handler = InputHandler::new();
+        let action = handler.handle_key_up(KeyCode::F4);
         assert!(matches!(action, Some(InputAction::ToggleTimingDisplay)));
     }
 

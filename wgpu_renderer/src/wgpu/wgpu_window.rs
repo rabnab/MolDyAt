@@ -226,6 +226,7 @@ impl ApplicationHandler<UserEvent> for WgpuApp {
                         cursor_wp,
                         BallFactory::radius_for_size_idx(state.current_ball_size_idx),
                         ctrl_pressed,
+                        state.config.thermo_display,
                     ) {
                         eprintln!("Pipeline prepare error: {:?}", e);
                     }

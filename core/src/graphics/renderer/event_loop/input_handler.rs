@@ -36,6 +36,7 @@ pub enum InputAction {
     // Rendering
     ToggleRendering,
     CyclePlotContent,
+    CycleThermoDisplay,
     ToggleEnergyWindow,
     ToggleCutoffRings,
 
@@ -197,7 +198,8 @@ impl InputHandler {
             KeyCode::KeyH => Some(InputAction::PrintHelp),
             KeyCode::KeyD => Some(InputAction::ToggleRealData),
             KeyCode::KeyS => Some(InputAction::ToggleStepwise),
-            KeyCode::KeyT => Some(InputAction::ToggleTimingDisplay),
+            KeyCode::KeyT => Some(InputAction::CycleThermoDisplay),
+            KeyCode::F4 => Some(InputAction::ToggleTimingDisplay),
             KeyCode::KeyP => Some(InputAction::CyclePlotContent),
             KeyCode::KeyR => Some(InputAction::RandomizeSpeeds),
             KeyCode::KeyB => Some(InputAction::ToggleBallStats),
