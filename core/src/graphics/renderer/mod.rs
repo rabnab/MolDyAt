@@ -21,7 +21,7 @@ pub use event_loop::{InputAction, InputHandler, KeyCode};
 
 // Public API for unified viewport transformation (used by both renderers)
 #[allow(unused_imports)] // Public API, accessed via direct submodule imports
-pub use viewport::ViewportTransform;
+pub use viewport::{Margins, ViewportTransform};
 
 // Public API for unified render state (used by both renderers)
 #[allow(unused_imports)] // Public API, accessed via direct submodule imports

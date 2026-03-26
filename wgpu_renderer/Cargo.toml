@@ -18,6 +18,9 @@ font8x8 = "0.3"
 # Window management (same version as core for energy window compat)
 winit = "0.30.12"
 
+# PNG icon loading
+image = { version = "0.25", default-features = false, features = ["png"] }
+
 # Logging (for init in main)
 log = "0.4"
 env_logger = "0.11"

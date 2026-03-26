@@ -20,6 +20,7 @@
 use rust_thermo_core::application::AppResult;
 use rust_thermo_core::application::renderer_snapshot::RendererSnapshot;
 use rust_thermo_core::graphics::renderer::state_layers::ThermoDisplayMode;
+use rust_thermo_core::graphics::renderer::viewport::Margins;
 use std::any::Any;
 use std::collections::HashSet;
 
@@ -49,7 +50,7 @@ pub struct PrepareContext<'a> {
     pub current_ball_radius: f32,
     pub ctrl_pressed: bool,
     pub window_size: (u32, u32),
-    pub margin: (f32, f32),
+    pub margin: Margins,
     pub thermo_display: ThermoDisplayMode,
 }
 
@@ -170,7 +171,7 @@ impl RenderGraph {
         &'rp self,
         render_pass: &mut wgpu::RenderPass<'rp>,
         window_size: (u32, u32),
-        margin: (f32, f32),
+        margin: Margins,
     ) {
         let (w, h) = (window_size.0 as f32, window_size.1 as f32);
         let mut current_mode: Option<ViewportMode> = None;
@@ -189,9 +190,9 @@ impl RenderGraph {
                         render_pass.set_viewport(0.0, 0.0, w, h, 0.0, 1.0);
                     }
                     ViewportMode::Inset => {
-                        let vp_w = (w - 2.0 * margin.0).max(1.0);
-                        let vp_h = (h - 2.0 * margin.1).max(1.0);
-                        render_pass.set_viewport(margin.0, margin.1, vp_w, vp_h, 0.0, 1.0);
+                        let vp_w = (w - margin.horizontal()).max(1.0);
+                        let vp_h = (h - margin.vertical()).max(1.0);
+                        render_pass.set_viewport(margin.left, margin.top, vp_w, vp_h, 0.0, 1.0);
                     }
                 }
                 current_mode = Some(mode);

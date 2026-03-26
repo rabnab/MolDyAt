@@ -4,7 +4,7 @@
 //! reference specific pipelines (e.g., toggling cutoff rings on the
 //! ball pipeline).
 
-use crate::wgpu::{MARGIN_PX_X, MARGIN_PX_Y};
+use crate::wgpu::MARGINS;
 
 use super::ball_pipeline::BallPipeline;
 use super::crosshair_pipeline::CrosshairPipeline;
@@ -12,6 +12,7 @@ use super::frame_pipeline::FramePipeline;
 use super::grid_pipeline::{GridPipeline, build_view_proj_matrix};
 use super::line_pipeline::LinePipeline;
 use super::render_graph::{PipelineHandle, PrepareContext, RenderGraph};
+use super::sidebar_pipeline::SidebarPipeline;
 use super::text_pipeline::TextPipeline;
 use super::thermo_heatmap_pipeline::ThermoHeatmapPipeline;
 use super::thermo_value_pipeline::ThermoValueOverlayPipeline;
@@ -29,6 +30,7 @@ const FRAME_SHADER: &str = include_str!("shaders/frame.wgsl");
 const THERMO_HEATMAP_SHADER: &str = include_str!("shaders/thermo_heatmap.wgsl");
 /// Named handles for direct pipeline access.
 pub struct PipelineHandles {
+    pub sidebar: PipelineHandle,
     pub frame: PipelineHandle,
     pub grid: PipelineHandle,
     pub thermo_heatmap: PipelineHandle,
@@ -52,13 +54,14 @@ pub struct WgpuPipelines {
 impl WgpuPipelines {
     /// Create all rendering pipelines and register them in the graph.
     ///
-    /// Execution order: frame → grid → thermo_heatmap → lines → balls → crosshair → text.
-    pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
+    /// Execution order: sidebar → frame → grid → thermo_heatmap → lines → balls → crosshair → text.
+    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat) -> Self {
         let mut graph = RenderGraph::new();
 
         // Register pipelines in execution order.
         // Frame renders in FullWindow viewport; grid/thermo_heatmap/lines/balls/crosshair
         // render in Inset viewport; text renders in FullWindow viewport.
+        let sidebar = graph.add_pipeline(Box::new(SidebarPipeline::new(device, queue, format)));
         let frame = graph.add_pipeline(Box::new(FramePipeline::new(device, format, FRAME_SHADER)));
         let grid = graph.add_pipeline(Box::new(GridPipeline::new(device, format, GRID_SHADER)));
         let thermo_heatmap = graph.add_pipeline(Box::new(ThermoHeatmapPipeline::new(
@@ -85,6 +88,7 @@ impl WgpuPipelines {
         Self {
             graph,
             handles: PipelineHandles {
+                sidebar,
                 frame,
                 grid,
                 thermo_heatmap,
@@ -113,7 +117,7 @@ impl WgpuPipelines {
         thermo_display: ThermoDisplayMode,
     ) -> AppResult {
         let window_size = ctx.size();
-        let margin = (MARGIN_PX_X, MARGIN_PX_Y);
+        let margin = MARGINS;
 
         let prepare_ctx = PrepareContext {
             device: &ctx.device,
@@ -136,7 +140,7 @@ impl WgpuPipelines {
     /// The graph handles viewport switching automatically based on each
     /// pipeline's [`ViewportMode`](super::render_graph::ViewportMode).
     pub fn render_all<'rp>(&'rp self, render_pass: &mut wgpu::RenderPass<'rp>, ctx: &WgpuContext) {
-        let margin = (MARGIN_PX_X, MARGIN_PX_Y);
+        let margin = MARGINS;
         self.graph.render_all(render_pass, ctx.size(), margin);
     }
 

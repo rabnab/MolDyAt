@@ -4,7 +4,7 @@ mod wgpu;
 
 use rust_thermo_core::objects2d::Rect;
 
-use crate::wgpu::{MARGIN_PX_X, MARGIN_PX_Y};
+use crate::wgpu::MARGINS;
 
 /// Initialize Rayon thread pool for parallel physics computations.
 ///
@@ -55,8 +55,8 @@ fn run_wgpu_renderer() {
     const LEN_TO_PX: f32 = 0.1;
     let default_width: f32 = 1280.0;
     let default_height: f32 = 720.0;
-    let region_width = default_width - 2.0 * MARGIN_PX_X;
-    let region_height = default_height - 2.0 * MARGIN_PX_Y;
+    let region_width = default_width - MARGINS.horizontal();
+    let region_height = default_height - MARGINS.vertical();
     let world_width = region_width * LEN_TO_PX;
     let world_height = region_height * LEN_TO_PX;
 
