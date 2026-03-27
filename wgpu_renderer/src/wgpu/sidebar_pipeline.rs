@@ -32,15 +32,15 @@ const RECT_PADDING: f32 = 8.0;
 const CORNER_RADIUS: f32 = 12.0;
 /// Border width for the background rounded rectangle outline.
 const BORDER_WIDTH: f32 = 2.0;
-/// 6 vertices per quad: 1 background + ICON_COUNT icon quads.
-const MAX_VERTICES: usize = (ICON_COUNT + 1) * 6;
+/// 6 vertices per quad: 1 background + 1 highlight + ICON_COUNT icon quads.
+const MAX_VERTICES: usize = (ICON_COUNT + 2) * 6;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct SidebarVertex {
     position: [f32; 2],
     uv: [f32; 2],
-    /// 0.0 = background rounded rect, 1.0 = icon texture.
+    /// 0.0 = background rounded rect, 1.0 = icon texture, 2.0 = highlight.
     mode: f32,
 }
 
@@ -70,6 +70,8 @@ pub struct SidebarPipeline {
     atlas_icon_count: u32,
     /// Cached window size to skip redundant vertex rebuilds.
     last_window_size: (u32, u32),
+    /// Cached selected icon to detect selection changes.
+    last_selected_icon: Option<usize>,
 }
 
 /// Decode a PNG from memory into an RGBA8 buffer, resized to `size×size`.
@@ -285,12 +287,18 @@ impl SidebarPipeline {
             vertex_count: 0,
             atlas_icon_count: ICON_COUNT as u32,
             last_window_size: (0, 0),
+            last_selected_icon: None,
         }
     }
 
     /// Build vertex data and rect params for all sidebar geometry.
-    fn build_geometry(&self, win_w: f32, win_h: f32) -> (Vec<SidebarVertex>, RoundedRectParams) {
-        build_sidebar_geometry(self.atlas_icon_count, win_w, win_h)
+    fn build_geometry(
+        &self,
+        win_w: f32,
+        win_h: f32,
+        selected: Option<usize>,
+    ) -> (Vec<SidebarVertex>, RoundedRectParams) {
+        build_sidebar_geometry(self.atlas_icon_count, win_w, win_h, selected)
     }
 }
 
@@ -305,6 +313,7 @@ fn build_sidebar_geometry(
     icon_count: u32,
     win_w: f32,
     win_h: f32,
+    selected: Option<usize>,
 ) -> (Vec<SidebarVertex>, RoundedRectParams) {
     let mut verts = Vec::with_capacity(MAX_VERTICES);
 
@@ -388,6 +397,34 @@ fn build_sidebar_geometry(
         mode: 0.0,
     });
 
+    // ── Highlight quad behind selected icon ──────────────────────────
+    if let Some(sel) = selected {
+        let sel = sel as u32;
+        if sel < visible_count {
+            let icon_top = first_icon_top + sel as f32 * (ICON_DISPLAY_SIZE + ICON_SPACING);
+            let icon_bottom = icon_top + ICON_DISPLAY_SIZE;
+            let hl_tl = to_ndc(pad_x, icon_top);
+            let hl_tr = to_ndc(pad_x + ICON_DISPLAY_SIZE, icon_top);
+            let hl_bl = to_ndc(pad_x, icon_bottom);
+            let hl_br = to_ndc(pad_x + ICON_DISPLAY_SIZE, icon_bottom);
+
+            for &(pos, uv) in &[
+                (hl_tl, [0.0, 0.0]),
+                (hl_bl, [0.0, 1.0]),
+                (hl_tr, [1.0, 0.0]),
+                (hl_tr, [1.0, 0.0]),
+                (hl_bl, [0.0, 1.0]),
+                (hl_br, [1.0, 1.0]),
+            ] {
+                verts.push(SidebarVertex {
+                    position: pos,
+                    uv,
+                    mode: 2.0,
+                });
+            }
+        }
+    }
+
     // ── Icon quads ─────────────────────────────────────────────────
     for i in 0..visible_count {
         let icon_top = first_icon_top + i as f32 * (ICON_DISPLAY_SIZE + ICON_SPACING);
@@ -448,13 +485,15 @@ impl RenderPipeline for SidebarPipeline {
     }
 
     fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
-        if ctx.window_size == self.last_window_size {
+        let selected = ctx.selected_sidebar_icon;
+        if ctx.window_size == self.last_window_size && selected == self.last_selected_icon {
             return Ok(());
         }
         self.last_window_size = ctx.window_size;
+        self.last_selected_icon = selected;
 
         let (w, h) = ctx.window_size;
-        let (verts, rect_params) = self.build_geometry(w as f32, h as f32);
+        let (verts, rect_params) = self.build_geometry(w as f32, h as f32, selected);
         self.vertex_count = verts.len() as u32;
         if !verts.is_empty() {
             ctx.queue
@@ -499,46 +538,46 @@ mod tests {
     }
 
     #[test]
-    fn max_vertices_includes_background() {
-        assert_eq!(MAX_VERTICES, (ICON_COUNT + 1) * 6);
+    fn max_vertices_includes_background_and_highlight() {
+        assert_eq!(MAX_VERTICES, (ICON_COUNT + 2) * 6);
     }
 
     #[test]
     fn build_geometry_produces_correct_count_for_all_icons() {
-        let (verts, _) = build_sidebar_geometry(4, 1920.0, 1080.0);
+        let (verts, _) = build_sidebar_geometry(4, 1920.0, 1080.0, None);
         // 1 bg quad + 4 icon quads = 30 vertices
         assert_eq!(verts.len(), BG_VERTS + 4 * 6);
     }
 
     #[test]
     fn build_geometry_single_icon() {
-        let (verts, _) = build_sidebar_geometry(1, 800.0, 600.0);
+        let (verts, _) = build_sidebar_geometry(1, 800.0, 600.0, None);
         assert_eq!(verts.len(), BG_VERTS + 6);
     }
 
     #[test]
     fn build_geometry_zero_icons() {
-        let (verts, _) = build_sidebar_geometry(0, 800.0, 600.0);
+        let (verts, _) = build_sidebar_geometry(0, 800.0, 600.0, None);
         assert!(verts.is_empty());
     }
 
     #[test]
     fn build_geometry_clips_when_window_too_small() {
         let min_for_one = MARGIN_TOP + ICON_SPACING + ICON_DISPLAY_SIZE + MARGIN_BOTTOM;
-        let (verts, _) = build_sidebar_geometry(4, 400.0, min_for_one + 1.0);
+        let (verts, _) = build_sidebar_geometry(4, 400.0, min_for_one + 1.0, None);
         assert_eq!(verts.len(), BG_VERTS + 6, "only one icon should fit");
     }
 
     #[test]
     fn build_geometry_empty_when_window_too_short() {
         let too_short = MARGIN_TOP + ICON_SPACING + ICON_DISPLAY_SIZE + MARGIN_BOTTOM - 1.0;
-        let (verts, _) = build_sidebar_geometry(4, 400.0, too_short);
+        let (verts, _) = build_sidebar_geometry(4, 400.0, too_short, None);
         assert!(verts.is_empty());
     }
 
     #[test]
     fn ndc_positions_are_within_clip_space() {
-        let (verts, _) = build_sidebar_geometry(4, 1920.0, 1080.0);
+        let (verts, _) = build_sidebar_geometry(4, 1920.0, 1080.0, None);
         for v in &verts {
             assert!(
                 v.position[0] >= -1.0 && v.position[0] <= 1.0,
@@ -556,7 +595,7 @@ mod tests {
     #[test]
     fn all_geometry_is_in_left_margin() {
         let win_w = 1920.0_f32;
-        let (verts, _) = build_sidebar_geometry(4, win_w, 1080.0);
+        let (verts, _) = build_sidebar_geometry(4, win_w, 1080.0, None);
         let ndc_margin_right = (MARGIN_LEFT / win_w) * 2.0 - 1.0;
         for v in &verts {
             assert!(
@@ -570,7 +609,7 @@ mod tests {
 
     #[test]
     fn uv_coordinates_span_atlas_correctly() {
-        let (verts, _) = build_sidebar_geometry(4, 1920.0, 1080.0);
+        let (verts, _) = build_sidebar_geometry(4, 1920.0, 1080.0, None);
         let icons = &verts[BG_VERTS..];
         assert!((icons[0].uv[1] - 0.0).abs() < 1e-5, "first icon uv_top");
         assert!((icons[1].uv[1] - 0.25).abs() < 1e-5, "first icon uv_bottom");
@@ -585,7 +624,7 @@ mod tests {
 
     #[test]
     fn uv_x_spans_full_texture_width() {
-        let (verts, _) = build_sidebar_geometry(1, 800.0, 600.0);
+        let (verts, _) = build_sidebar_geometry(1, 800.0, 600.0, None);
         let icons = &verts[BG_VERTS..];
         assert!((icons[0].uv[0] - 0.0).abs() < 1e-5, "TL uv.x");
         assert!((icons[1].uv[0] - 0.0).abs() < 1e-5, "BL uv.x");
@@ -595,7 +634,7 @@ mod tests {
 
     #[test]
     fn icons_are_vertically_ordered_top_to_bottom() {
-        let (verts, _) = build_sidebar_geometry(4, 1920.0, 1080.0);
+        let (verts, _) = build_sidebar_geometry(4, 1920.0, 1080.0, None);
         let icons = &verts[BG_VERTS..];
         for i in 0..3 {
             let quad_base = i * 6;
@@ -635,7 +674,7 @@ mod tests {
     #[test]
     fn icons_centered_horizontally_in_margin() {
         let win_w = 1920.0_f32;
-        let (verts, _) = build_sidebar_geometry(1, win_w, 1080.0);
+        let (verts, _) = build_sidebar_geometry(1, win_w, 1080.0, None);
         let icons = &verts[BG_VERTS..];
         let expected_left_px = (MARGIN_LEFT - ICON_DISPLAY_SIZE) * 0.5;
         let expected_right_px = expected_left_px + ICON_DISPLAY_SIZE;
@@ -655,7 +694,7 @@ mod tests {
 
     #[test]
     fn background_quad_has_mode_zero() {
-        let (verts, _) = build_sidebar_geometry(4, 1920.0, 1080.0);
+        let (verts, _) = build_sidebar_geometry(4, 1920.0, 1080.0, None);
         for v in &verts[..BG_VERTS] {
             assert!((v.mode).abs() < 1e-5, "bg vertex mode should be 0.0");
         }
@@ -663,7 +702,7 @@ mod tests {
 
     #[test]
     fn icon_quads_have_mode_one() {
-        let (verts, _) = build_sidebar_geometry(4, 1920.0, 1080.0);
+        let (verts, _) = build_sidebar_geometry(4, 1920.0, 1080.0, None);
         for v in &verts[BG_VERTS..] {
             assert!(
                 (v.mode - 1.0).abs() < 1e-5,
@@ -674,7 +713,7 @@ mod tests {
 
     #[test]
     fn background_encloses_all_icons() {
-        let (verts, _) = build_sidebar_geometry(4, 1920.0, 1080.0);
+        let (verts, _) = build_sidebar_geometry(4, 1920.0, 1080.0, None);
         let bg = &verts[..BG_VERTS];
         let icons = &verts[BG_VERTS..];
 
@@ -705,7 +744,7 @@ mod tests {
 
     #[test]
     fn rect_params_have_positive_dimensions() {
-        let (_, params) = build_sidebar_geometry(4, 1920.0, 1080.0);
+        let (_, params) = build_sidebar_geometry(4, 1920.0, 1080.0, None);
         assert!(params.size_px[0] > 0.0, "rect width");
         assert!(params.size_px[1] > 0.0, "rect height");
         assert!(params.corner_radius > 0.0, "corner radius");
@@ -714,7 +753,7 @@ mod tests {
 
     #[test]
     fn rect_params_width_matches_icon_plus_padding() {
-        let (_, params) = build_sidebar_geometry(4, 1920.0, 1080.0);
+        let (_, params) = build_sidebar_geometry(4, 1920.0, 1080.0, None);
         let expected_w = ICON_DISPLAY_SIZE + 2.0 * RECT_PADDING;
         assert!(
             (params.size_px[0] - expected_w).abs() < 1e-5,
@@ -726,7 +765,7 @@ mod tests {
 
     #[test]
     fn rect_params_zero_when_no_icons_visible() {
-        let (_, params) = build_sidebar_geometry(0, 800.0, 600.0);
+        let (_, params) = build_sidebar_geometry(0, 800.0, 600.0, None);
         assert!((params.size_px[0]).abs() < 1e-5, "rect width should be 0");
         assert!((params.size_px[1]).abs() < 1e-5, "rect height should be 0");
     }

@@ -222,6 +222,7 @@ impl ApplicationHandler<UserEvent> for WgpuApp {
                     let line_preview = state
                         .line_segment_preview()
                         .map(|(s, e)| ([s.x, s.y], [e.x, e.y]));
+                    let selected_icon = state.selected_sidebar_icon();
                     if let Err(e) = pipelines.prepare_from_snapshot(
                         ctx,
                         snapshot,
@@ -231,6 +232,7 @@ impl ApplicationHandler<UserEvent> for WgpuApp {
                         ctrl_pressed,
                         state.config.thermo_display,
                         line_preview,
+                        selected_icon,
                     ) {
                         eprintln!("Pipeline prepare error: {:?}", e);
                     }

@@ -116,6 +116,7 @@ impl WgpuPipelines {
         ctrl_pressed: bool,
         thermo_display: ThermoDisplayMode,
         line_segment_preview: Option<([f32; 2], [f32; 2])>,
+        selected_sidebar_icon: Option<usize>,
     ) -> AppResult {
         let window_size = ctx.size();
         let margin = MARGINS;
@@ -132,6 +133,7 @@ impl WgpuPipelines {
             margin,
             thermo_display,
             line_segment_preview,
+            selected_sidebar_icon,
         };
 
         self.graph.prepare_all(&prepare_ctx)

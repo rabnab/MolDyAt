@@ -54,6 +54,8 @@ pub struct PrepareContext<'a> {
     pub thermo_display: ThermoDisplayMode,
     /// Ghost-preview line segment while the user is drawing (world coords).
     pub line_segment_preview: Option<([f32; 2], [f32; 2])>,
+    /// Currently selected sidebar icon index, if any.
+    pub selected_sidebar_icon: Option<usize>,
 }
 
 // ── Pipeline trait ─────────────────────────────────────────────────

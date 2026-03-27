@@ -498,6 +498,14 @@ impl UnifiedRenderState {
         }
     }
 
+    /// Returns the sidebar icon index of the currently active tool, if any.
+    pub fn selected_sidebar_icon(&self) -> Option<usize> {
+        match self.active_tool {
+            OperatorTool::LineSegment => Some(0),
+            OperatorTool::None => None,
+        }
+    }
+
     // ── Line segment preview ────────────────────────────────────────
 
     /// Returns the current ghost-preview line segment (start, end in world
