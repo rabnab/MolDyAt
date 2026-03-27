@@ -20,7 +20,7 @@
 //! - **Immutability**: Snapshots are immutable after creation, so no need for
 //!   partial field updates that might benefit from SoA.
 
-use crate::objects2d::Vec2D;
+use crate::objects2d::{SimLineSegment, Vec2D};
 use std::time::Instant;
 
 use crate::application::thermo_field::ThermoGrid;
@@ -160,6 +160,9 @@ pub struct RendererSnapshot {
     /// Grid layout for mapping thermo cell indices to world coordinates.
     /// `None` until at least one step of data is available.
     pub thermo_grid_spec: Option<ThermoGridSpec>,
+
+    /// Line segment barriers placed by the operator panel.
+    pub line_segments: Vec<SimLineSegment>,
 }
 
 impl RendererSnapshot {
@@ -190,6 +193,7 @@ impl RendererSnapshot {
             cell_temperature: ThermoGrid::filled(0, 0, 0.0),
             cell_pressure: ThermoGrid::filled(0, 0, 0.0),
             thermo_grid_spec: None,
+            line_segments: Vec::new(),
         }
     }
 
@@ -222,6 +226,7 @@ impl RendererSnapshot {
             cell_temperature: ThermoGrid::filled(0, 0, 0.0),
             cell_pressure: ThermoGrid::filled(0, 0, 0.0),
             thermo_grid_spec: None,
+            line_segments: Vec::new(),
         }
     }
 

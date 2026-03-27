@@ -299,6 +299,11 @@ impl ViewportTransform {
         )
     }
 
+    /// Get the pixel margins.
+    pub fn margins(&self) -> Margins {
+        self.margin_px
+    }
+
     /// Get viewport rectangle in pixels
     pub fn viewport_px(&self) -> Rect {
         self.viewport_px

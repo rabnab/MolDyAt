@@ -22,11 +22,21 @@ use std::sync::{Arc, Mutex};
 
 use super::action_processor::process_action_common;
 use super::energy_window_manager::EnergyWindowManager;
-use super::input_handler::{InputAction, InputHandler};
+use super::input_handler::{InputAction, InputHandler, OperatorTool};
 use super::metrics::MetricsCollector;
 use super::physics_coordinator::PhysicsCoordinator;
 
 use crate::application::physics_thread::PhysicsCommand;
+
+/// State machine for drawing a line segment.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum LineSegmentDrawState {
+    /// Waiting for the user to press left mouse button.
+    #[default]
+    Idle,
+    /// Left button pressed; dragging from `start` to current cursor.
+    Drawing { start: Vec2D },
+}
 
 /// Unified state shared by every renderer backend.
 ///
@@ -67,6 +77,12 @@ pub struct UnifiedRenderState {
     // ── Per-frame metrics ────────────────────────────────────────────
     /// Renderer-agnostic frame metrics (FPS, draw calls, etc.).
     pub metrics: MetricsCollector,
+
+    // ── Operator tool ────────────────────────────────────────────────
+    /// Currently selected operator tool from the sidebar panel.
+    pub active_tool: OperatorTool,
+    /// Drawing state for the line segment tool.
+    pub line_draw_state: LineSegmentDrawState,
 }
 
 impl UnifiedRenderState {
@@ -103,6 +119,8 @@ impl UnifiedRenderState {
             cursor_world_pos: Vec2D::zero(),
             current_ball_size_idx: 2, // default mid-size
             metrics: MetricsCollector::new(),
+            active_tool: OperatorTool::None,
+            line_draw_state: LineSegmentDrawState::Idle,
         }
     }
 
@@ -204,6 +222,11 @@ impl UnifiedRenderState {
                     self.toggle_energy_window(target);
                 }
                 return false; // doesn't affect view
+            }
+            InputAction::SelectOperatorTool(tool) => {
+                self.active_tool = *tool;
+                self.line_draw_state = LineSegmentDrawState::Idle;
+                return false;
             }
             _ => {}
         }
@@ -318,6 +341,7 @@ impl UnifiedRenderState {
     /// Handle mouse button input event.
     ///
     /// Processes mouse clicks and drags for pan, ball addition, and ball size cycling.
+    /// When the line segment tool is active, left-click starts/ends drawing.
     /// Returns true if the action affects the viewport.
     pub fn handle_mouse_input_event(
         &mut self,
@@ -327,6 +351,49 @@ impl UnifiedRenderState {
         let world_pos = self.input.cursor_pos();
         let screen_pos = self.input.cursor_pos_px();
         let pan_offset = self.viewport.pan_offset();
+
+        // Sidebar icon click detection (left press only)
+        if button == winit::event::MouseButton::Left
+            && state == winit::event::ElementState::Pressed
+            && let Some(icon_idx) = self.sidebar_icon_at(screen_pos)
+        {
+            let tool = Self::operator_tool_for_icon(icon_idx);
+            // Toggle off if already selected, otherwise switch
+            let new_tool = if self.active_tool == tool {
+                OperatorTool::None
+            } else {
+                tool
+            };
+            let action = InputAction::SelectOperatorTool(new_tool);
+            self.process_action(&action, None);
+            return true;
+        }
+
+        // Handle line segment tool interactions
+        if self.active_tool == OperatorTool::LineSegment
+            && button == winit::event::MouseButton::Left
+        {
+            match state {
+                winit::event::ElementState::Pressed => {
+                    self.line_draw_state = LineSegmentDrawState::Drawing { start: world_pos };
+                    self.view_dirty = true;
+                    return true;
+                }
+                winit::event::ElementState::Released => {
+                    if let LineSegmentDrawState::Drawing { start } = self.line_draw_state {
+                        let end = world_pos;
+                        // Only commit if the segment has meaningful length
+                        if start.distance_squared(&end) > 0.01 {
+                            let action = InputAction::CommitLineSegment { start, end };
+                            self.process_action(&action, None);
+                        }
+                        self.line_draw_state = LineSegmentDrawState::Idle;
+                        self.view_dirty = true;
+                    }
+                    return true;
+                }
+            }
+        }
 
         if let Some(action) = self
             .input
@@ -340,10 +407,16 @@ impl UnifiedRenderState {
     /// Handle cursor moved event.
     ///
     /// Updates cursor position and processes pan gestures.
+    /// When drawing a line segment, marks view dirty for ghost preview.
     /// Returns true if the action affects the viewport.
     pub fn handle_cursor_moved_event(&mut self, x: f32, y: f32) -> bool {
         // Update cursor position using shared state logic
         self.update_cursor_world_pos(&[x, y]);
+
+        // Mark view dirty while drawing a line segment so ghost preview updates
+        if matches!(self.line_draw_state, LineSegmentDrawState::Drawing { .. }) {
+            self.view_dirty = true;
+        }
 
         if let Some(action) = self.input.handle_mouse_motion(x, y) {
             if let InputAction::PanUpdate { delta } = &action {
@@ -384,6 +457,57 @@ impl UnifiedRenderState {
             }
         }
         false
+    }
+
+    // ── Sidebar icon hit-testing ────────────────────────────────────
+
+    /// Sidebar icon layout constants (must match wgpu sidebar_pipeline.rs).
+    const ICON_DISPLAY_SIZE: f32 = 48.0;
+    const ICON_SPACING: f32 = 12.0;
+    const ICON_COUNT: usize = 4;
+
+    /// Returns the sidebar icon index (0-based) at the given screen pixel
+    /// position, or `None` if the click is outside all icons.
+    pub fn sidebar_icon_at(&self, pos_px: [f32; 2]) -> Option<usize> {
+        let margins = self.viewport.margins();
+        let pad_x = (margins.left - Self::ICON_DISPLAY_SIZE) * 0.5;
+        let first_icon_top = margins.top + Self::ICON_SPACING;
+
+        // Horizontal bounds check
+        if pos_px[0] < pad_x || pos_px[0] > pad_x + Self::ICON_DISPLAY_SIZE {
+            return None;
+        }
+
+        for i in 0..Self::ICON_COUNT {
+            let icon_top =
+                first_icon_top + i as f32 * (Self::ICON_DISPLAY_SIZE + Self::ICON_SPACING);
+            let icon_bottom = icon_top + Self::ICON_DISPLAY_SIZE;
+
+            if pos_px[1] >= icon_top && pos_px[1] <= icon_bottom {
+                return Some(i);
+            }
+        }
+        None
+    }
+
+    /// Maps a sidebar icon index to an `OperatorTool`.
+    fn operator_tool_for_icon(index: usize) -> OperatorTool {
+        match index {
+            0 => OperatorTool::LineSegment, // wall icon
+            _ => OperatorTool::None,        // other icons not yet implemented
+        }
+    }
+
+    // ── Line segment preview ────────────────────────────────────────
+
+    /// Returns the current ghost-preview line segment (start, end in world
+    /// coordinates) while the user is drawing, or `None` when idle.
+    pub fn line_segment_preview(&self) -> Option<(Vec2D, Vec2D)> {
+        if let LineSegmentDrawState::Drawing { start } = self.line_draw_state {
+            Some((start, self.cursor_world_pos))
+        } else {
+            None
+        }
     }
 }
 

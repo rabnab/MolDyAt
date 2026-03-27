@@ -274,6 +274,25 @@ impl RenderPipeline for LinePipeline {
         self.update_uniforms(ctx.queue, ctx.view_proj);
         let mut line_batch: BatchRenderer<LineSegment> = BatchRenderer::new();
         collect_neighbor_lines(&ctx.snapshot.balls, &mut line_batch);
+
+        // Committed line segments (white, opaque)
+        for seg in &ctx.snapshot.line_segments {
+            line_batch.push(LineSegment {
+                points: [[seg.start.x, seg.start.y], [seg.end.x, seg.end.y]],
+                width: 2.0,
+                color: [1.0, 1.0, 1.0, 1.0],
+            });
+        }
+
+        // Ghost preview (semi-transparent white)
+        if let Some((start, end)) = ctx.line_segment_preview {
+            line_batch.push(LineSegment {
+                points: [start, end],
+                width: 2.0,
+                color: [1.0, 1.0, 1.0, 0.5],
+            });
+        }
+
         self.flush_line_batch(ctx.device, ctx.queue, &mut line_batch);
         Ok(())
     }

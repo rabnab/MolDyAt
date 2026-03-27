@@ -233,9 +233,12 @@ impl VerletIntegration for MainContent {
         // Cache force results for reuse in rendering (avoid recalculating forces)
         self.cached_force_results = force_results;
 
-        // Store wall momentum for tracking
-        self.sim.wall_momentum_x += wall_px;
-        self.sim.wall_momentum_y += wall_py;
+        // Resolve line segment collisions (post-step position correction + reflection)
+        let (seg_px, seg_py) = self.resolve_line_segment_collisions();
+
+        // Store wall momentum for tracking (includes line segment bounces)
+        self.sim.wall_momentum_x += wall_px + seg_px;
+        self.sim.wall_momentum_y += wall_py + seg_py;
 
         stats_accumulator.v_com = stats_accumulator
             .v_com

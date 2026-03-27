@@ -219,6 +219,9 @@ impl ApplicationHandler<UserEvent> for WgpuApp {
                         || state.input.is_key_pressed(KeyCode::ControlRight);
                     let cursor_wp = (state.cursor_world_pos.x, state.cursor_world_pos.y);
                     let ball_count = snapshot.balls.len() as u32;
+                    let line_preview = state
+                        .line_segment_preview()
+                        .map(|(s, e)| ([s.x, s.y], [e.x, e.y]));
                     if let Err(e) = pipelines.prepare_from_snapshot(
                         ctx,
                         snapshot,
@@ -227,6 +230,7 @@ impl ApplicationHandler<UserEvent> for WgpuApp {
                         BallFactory::radius_for_size_idx(state.current_ball_size_idx),
                         ctrl_pressed,
                         state.config.thermo_display,
+                        line_preview,
                     ) {
                         eprintln!("Pipeline prepare error: {:?}", e);
                     }

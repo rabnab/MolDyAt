@@ -61,6 +61,10 @@ pub enum PhysicsCommand {
     StartVerbosityInput,
     /// Resize the world region
     Resize { world_rect: crate::objects2d::Rect },
+    /// Add a line segment barrier with start and end positions
+    AddLineSegment { start: Vec2D, end: Vec2D },
+    /// Move the closest endpoint of a line segment to a new position
+    MoveLineSegmentEndpoint { segment_id: usize, new_pos: Vec2D },
 }
 
 /// Shutdown signal shared between threads
@@ -313,6 +317,15 @@ impl PhysicsThread {
             }
             PhysicsCommand::Resize { world_rect } => {
                 main_content.resize(world_rect);
+            }
+            PhysicsCommand::AddLineSegment { start, end } => {
+                main_content.add_line_segment(start, end);
+            }
+            PhysicsCommand::MoveLineSegmentEndpoint {
+                segment_id,
+                new_pos,
+            } => {
+                main_content.move_line_segment_endpoint(segment_id, new_pos);
             }
         }
     }

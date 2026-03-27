@@ -52,6 +52,8 @@ pub struct PrepareContext<'a> {
     pub window_size: (u32, u32),
     pub margin: Margins,
     pub thermo_display: ThermoDisplayMode,
+    /// Ghost-preview line segment while the user is drawing (world coords).
+    pub line_segment_preview: Option<([f32; 2], [f32; 2])>,
 }
 
 // ── Pipeline trait ─────────────────────────────────────────────────
