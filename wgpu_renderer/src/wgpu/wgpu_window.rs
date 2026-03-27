@@ -7,7 +7,7 @@
 use super::wgpu_context::WgpuContext;
 use super::wgpu_input::execute_input_action;
 use super::wgpu_pipelines::{WgpuPipelines, compute_view_proj};
-use crate::wgpu::{MARGIN_PX_X, MARGIN_PX_Y};
+use crate::wgpu::MARGINS;
 use rust_thermo_core::application::MainContent;
 use rust_thermo_core::graphics::renderer::ViewportTransform;
 use rust_thermo_core::graphics::renderer::event_loop::KeyCode;
@@ -109,7 +109,7 @@ impl WgpuApp {
         log::debug!("WGPU context initialized, window size: {:?}", ctx.size());
 
         // Initialize all rendering pipelines
-        let pipelines = WgpuPipelines::new(&ctx.device, ctx.format);
+        let pipelines = WgpuPipelines::new(&ctx.device, &ctx.queue, ctx.format);
 
         // Build UnifiedRenderState (spawns physics thread internally)
         let initial_world_bounds = Rect::new(-18.0, 12.0, 36.0, -24.0);
@@ -130,7 +130,7 @@ impl WgpuApp {
             application,
             initial_world_bounds,
             window_size,
-            (MARGIN_PX_X, MARGIN_PX_Y),
+            MARGINS,
             Box::new(wakeup_fn),
         );
         log::info!("Physics thread spawned, main thread: rendering (WGPU)");
@@ -290,7 +290,7 @@ fn handle_window_event(
             let world_rect = ViewportTransform::compute_world_bounds_from_window_size(
                 size.width,
                 size.height,
-                (MARGIN_PX_X, MARGIN_PX_Y),
+                MARGINS,
             );
             state.handle_resize_with_world_rect(size.width as f32, size.height as f32, world_rect);
         }

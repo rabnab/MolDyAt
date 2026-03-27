@@ -3,6 +3,7 @@
 
 use bytemuck::{Pod, Zeroable};
 use font8x8::UnicodeFonts;
+use rust_thermo_core::graphics::renderer::viewport::Margins;
 use wgpu::util::DeviceExt;
 
 #[repr(C)]
@@ -221,7 +222,7 @@ impl TextPipeline {
         queue: &wgpu::Queue,
         text: &str,
         window_size: (u32, u32),
-        margin: (f32, f32),
+        margin: Margins,
     ) {
         let width_px = (text.len().max(1) as u32) * 8;
         let height_px = 8u32;
@@ -277,9 +278,9 @@ impl TextPipeline {
         let text_h = height_px as f32;
         let padding = 4.0;
         // Center horizontally within the viewport, positioned in bottom margin
-        let viewport_width = (win_w - 2.0 * margin.0).max(1.0);
-        let left_px = margin.0 + (viewport_width - text_w) * 0.5;
-        let top_px = (win_h - margin.1 + padding).max(0.0);
+        let viewport_width = (win_w - margin.horizontal()).max(1.0);
+        let left_px = margin.left + (viewport_width - text_w) * 0.5;
+        let top_px = (win_h - margin.bottom + padding).max(0.0);
         let right_px = left_px + text_w;
         let bottom_px = top_px + text_h;
 

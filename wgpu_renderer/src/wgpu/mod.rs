@@ -19,6 +19,7 @@ mod frame_pipeline;
 mod grid_pipeline;
 mod line_pipeline;
 mod render_graph;
+mod sidebar_pipeline;
 mod text_pipeline;
 mod thermo_heatmap_pipeline;
 mod thermo_value_pipeline;
@@ -29,5 +30,11 @@ mod wgpu_window;
 
 pub use wgpu_window::WgpuWindow;
 
-pub const MARGIN_PX_X: f32 = 50.;
-pub const MARGIN_PX_Y: f32 = 50.;
+use rust_thermo_core::graphics::renderer::viewport::Margins;
+
+pub const MARGIN_LEFT: f32 = 110.;
+pub const MARGIN_RIGHT: f32 = 50.;
+pub const MARGIN_TOP: f32 = 50.;
+pub const MARGIN_BOTTOM: f32 = 50.;
+
+pub const MARGINS: Margins = Margins::new(MARGIN_LEFT, MARGIN_TOP, MARGIN_RIGHT, MARGIN_BOTTOM);

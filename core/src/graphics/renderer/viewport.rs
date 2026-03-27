@@ -1,6 +1,50 @@
 use crate::objects2d::{Rect, Vec2D};
 use std::cell::Cell;
 
+/// Pixel margins around the simulation viewport.
+///
+/// Supports asymmetric margins (e.g. a wider left margin to accommodate
+/// a sidebar panel).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Margins {
+    pub left: f32,
+    pub top: f32,
+    pub right: f32,
+    pub bottom: f32,
+}
+
+impl Margins {
+    /// Create margins with explicit values for each edge.
+    pub const fn new(left: f32, top: f32, right: f32, bottom: f32) -> Self {
+        Self {
+            left,
+            top,
+            right,
+            bottom,
+        }
+    }
+
+    /// Create symmetric margins (same on left/right, same on top/bottom).
+    pub const fn symmetric(x: f32, y: f32) -> Self {
+        Self {
+            left: x,
+            top: y,
+            right: x,
+            bottom: y,
+        }
+    }
+
+    /// Total horizontal margin (left + right).
+    pub fn horizontal(&self) -> f32 {
+        self.left + self.right
+    }
+
+    /// Total vertical margin (top + bottom).
+    pub fn vertical(&self) -> f32 {
+        self.top + self.bottom
+    }
+}
+
 /// Simple 3x3 matrix for 2D transformations.
 /// Used for efficient coordinate transforms with caching.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -143,8 +187,8 @@ pub struct ViewportTransform {
     // Physical bounds (pixels)
     /// Window size in pixels (width, height)
     window_size_px: (f32, f32),
-    /// Margin around simulation viewport in pixels (x, y)
-    margin_px: (f32, f32),
+    /// Margin around simulation viewport in pixels
+    margin_px: Margins,
     /// Viewport rectangle in pixels (position and size)
     viewport_px: Rect,
 
@@ -173,8 +217,8 @@ impl ViewportTransform {
     /// # Arguments
     /// * `world_bounds` - The full simulation box bounds
     /// * `window_size_px` - Window size in pixels (width, height)
-    /// * `margin_px` - Margin around viewport in pixels (x, y)
-    pub fn new(world_bounds: Rect, window_size_px: (f32, f32), margin_px: (f32, f32)) -> Self {
+    /// * `margin_px` - Margin around viewport in pixels
+    pub fn new(world_bounds: Rect, window_size_px: (f32, f32), margin_px: Margins) -> Self {
         let mut transform = Self {
             world_bounds,
             zoom: Self::MIN_ZOOM,
@@ -199,7 +243,7 @@ impl ViewportTransform {
     /// # Arguments
     /// * `window_width` - Window width in pixels
     /// * `window_height` - Window height in pixels
-    /// * `margin` - Margin around viewport in pixels (x, y)
+    /// * `margin` - Margin around viewport in pixels
     ///
     /// # Returns
     /// Rectangle with world bounds: (x, y, width, height) where:
@@ -208,10 +252,10 @@ impl ViewportTransform {
     pub fn compute_world_bounds_from_window_size(
         window_width: u32,
         window_height: u32,
-        margin: (f32, f32),
+        margin: Margins,
     ) -> Rect {
-        let viewport_width = (window_width as f32 - 2.0 * margin.0).max(1.0);
-        let viewport_height = (window_height as f32 - 2.0 * margin.1).max(1.0);
+        let viewport_width = (window_width as f32 - margin.horizontal()).max(1.0);
+        let viewport_height = (window_height as f32 - margin.vertical()).max(1.0);
 
         let world_width = viewport_width * Self::LEN_TO_PX;
         let world_height = viewport_height * Self::LEN_TO_PX;
@@ -250,8 +294,8 @@ impl ViewportTransform {
     /// Get viewport size in pixels (window size minus margins)
     pub fn viewport_size_px(&self) -> (f32, f32) {
         (
-            (self.window_size_px.0 - 2.0 * self.margin_px.0).max(1.0),
-            (self.window_size_px.1 - 2.0 * self.margin_px.1).max(1.0),
+            (self.window_size_px.0 - self.margin_px.horizontal()).max(1.0),
+            (self.window_size_px.1 - self.margin_px.vertical()).max(1.0),
         )
     }
 
@@ -404,10 +448,10 @@ impl ViewportTransform {
     /// Recalculate viewport rectangle in pixels
     fn recalculate_viewport_px(&mut self) {
         self.viewport_px = Rect::new(
-            self.margin_px.0,
-            self.margin_px.1,
-            self.window_size_px.0 - 2.0 * self.margin_px.0,
-            self.window_size_px.1 - 2.0 * self.margin_px.1,
+            self.margin_px.left,
+            self.margin_px.top,
+            self.window_size_px.0 - self.margin_px.horizontal(),
+            self.window_size_px.1 - self.margin_px.vertical(),
         );
     }
 
@@ -455,8 +499,8 @@ impl ViewportTransform {
         let scale_matrix = Mat3::scale(scale_x, scale_y);
 
         // Step 3: Translate to viewport center (which is at margin + viewport/2)
-        let viewport_center_x = self.margin_px.0 + viewport_width / 2.0;
-        let viewport_center_y = self.margin_px.1 + viewport_height / 2.0;
+        let viewport_center_x = self.margin_px.left + viewport_width / 2.0;
+        let viewport_center_y = self.margin_px.top + viewport_height / 2.0;
         let translate_matrix = Mat3::translation(viewport_center_x, viewport_center_y);
 
         // Combine: first pan, then scale, then translate
@@ -617,7 +661,8 @@ mod viewport_transform_tests {
     #[test]
     fn test_viewport_transform_new() {
         let world = Rect::new(-10.0, 10.0, 20.0, -20.0);
-        let transform = ViewportTransform::new(world, (800.0, 600.0), (50.0, 50.0));
+        let transform =
+            ViewportTransform::new(world, (800.0, 600.0), Margins::symmetric(50.0, 50.0));
 
         assert!(approx_eq(transform.zoom(), 1.0, 1e-6));
         assert!(approx_eq(transform.pan_offset().x, 0.0, 1e-6));
@@ -631,7 +676,8 @@ mod viewport_transform_tests {
     #[test]
     fn test_viewport_transform_zoom() {
         let world = Rect::new(-10.0, 10.0, 20.0, -20.0);
-        let mut transform = ViewportTransform::new(world, (800.0, 600.0), (50.0, 50.0));
+        let mut transform =
+            ViewportTransform::new(world, (800.0, 600.0), Margins::symmetric(50.0, 50.0));
 
         let point = Vec2D::zero();
         transform.zoom_at_point(&point, 2.0);
@@ -642,7 +688,7 @@ mod viewport_transform_tests {
     #[test]
     fn test_viewport_transform_coordinates() {
         let world = Rect::new(-10.0, 10.0, 20.0, -20.0);
-        let transform = ViewportTransform::new(world, (400.0, 400.0), (0.0, 0.0));
+        let transform = ViewportTransform::new(world, (400.0, 400.0), Margins::symmetric(0.0, 0.0));
 
         // At 1x zoom, viewport center (200, 200) should map to world center (0, 0)
         let world_pos = transform.px_to_world(&[200.0, 200.0]);
@@ -660,7 +706,8 @@ mod viewport_transform_tests {
     #[test]
     fn test_viewport_transform_window_resize() {
         let world = Rect::new(-10.0, 10.0, 20.0, -20.0);
-        let mut transform = ViewportTransform::new(world, (400.0, 400.0), (50.0, 50.0));
+        let mut transform =
+            ViewportTransform::new(world, (400.0, 400.0), Margins::symmetric(50.0, 50.0));
 
         transform.on_window_resize((800.0, 800.0));
 
@@ -675,7 +722,8 @@ mod viewport_transform_tests {
         // Window: 1000x700 with no margins
         // At zoom 1.0, the entire world should fit in the viewport
         let world = Rect::new(-50.0, 35.0, 100.0, -70.0);
-        let transform = ViewportTransform::new(world, (1000.0, 700.0), (0.0, 0.0));
+        let transform =
+            ViewportTransform::new(world, (1000.0, 700.0), Margins::symmetric(0.0, 0.0));
 
         // World origin (0, 0) should map to viewport center (500, 350)
         let px = transform.world_to_px(&Vec2D::new(0.0, 0.0));
@@ -697,7 +745,8 @@ mod viewport_transform_tests {
     fn test_px_to_world_center_at_origin() {
         // Same setup as above
         let world = Rect::new(-50.0, 35.0, 100.0, -70.0);
-        let transform = ViewportTransform::new(world, (1000.0, 700.0), (0.0, 0.0));
+        let transform =
+            ViewportTransform::new(world, (1000.0, 700.0), Margins::symmetric(0.0, 0.0));
 
         // Viewport center (500, 350) should map to world origin (0, 0)
         let w = transform.px_to_world(&[500.0, 350.0]);
@@ -718,7 +767,8 @@ mod viewport_transform_tests {
     #[test]
     fn test_roundtrip_world_to_px_to_world() {
         let world = Rect::new(-50.0, 35.0, 100.0, -70.0);
-        let transform = ViewportTransform::new(world, (1000.0, 700.0), (0.0, 0.0));
+        let transform =
+            ViewportTransform::new(world, (1000.0, 700.0), Margins::symmetric(0.0, 0.0));
 
         // Test multiple points for roundtrip consistency
         let test_points = [
@@ -746,7 +796,8 @@ mod viewport_transform_tests {
     #[test]
     fn test_roundtrip_px_to_world_to_px() {
         let world = Rect::new(-50.0, 35.0, 100.0, -70.0);
-        let transform = ViewportTransform::new(world, (1000.0, 700.0), (0.0, 0.0));
+        let transform =
+            ViewportTransform::new(world, (1000.0, 700.0), Margins::symmetric(0.0, 0.0));
 
         // Test multiple pixel positions for roundtrip consistency
         let test_points = [
@@ -776,7 +827,8 @@ mod viewport_transform_tests {
         // World: 100x70, Window: 1000x700, Margins: 100x50
         // Viewport region: 800x600 (starts at 100, 50)
         let world = Rect::new(-50.0, 35.0, 100.0, -70.0);
-        let transform = ViewportTransform::new(world, (1000.0, 700.0), (100.0, 50.0));
+        let transform =
+            ViewportTransform::new(world, (1000.0, 700.0), Margins::symmetric(100.0, 50.0));
 
         // World origin should map to viewport center, which is at (100+400, 50+300) = (500, 350)
         let px = transform.world_to_px(&Vec2D::new(0.0, 0.0));
@@ -797,7 +849,8 @@ mod viewport_transform_tests {
     #[test]
     fn test_zoom_at_center() {
         let world = Rect::new(-50.0, 35.0, 100.0, -70.0);
-        let mut transform = ViewportTransform::new(world, (1000.0, 700.0), (0.0, 0.0));
+        let mut transform =
+            ViewportTransform::new(world, (1000.0, 700.0), Margins::symmetric(0.0, 0.0));
 
         // Zoom 2x at center (0, 0)
         transform.zoom_at_point(&Vec2D::new(0.0, 0.0), 2.0);
@@ -818,7 +871,8 @@ mod viewport_transform_tests {
     #[test]
     fn test_zoom_at_off_center_point() {
         let world = Rect::new(-50.0, 35.0, 100.0, -70.0);
-        let mut transform = ViewportTransform::new(world, (1000.0, 700.0), (0.0, 0.0));
+        let mut transform =
+            ViewportTransform::new(world, (1000.0, 700.0), Margins::symmetric(0.0, 0.0));
 
         // Zoom 2x at point (25, 17.5) - top-right quadrant
         let zoom_point = Vec2D::new(25.0, 17.5);
@@ -834,7 +888,8 @@ mod viewport_transform_tests {
     #[test]
     fn test_pan() {
         let world = Rect::new(-50.0, 35.0, 100.0, -70.0);
-        let mut transform = ViewportTransform::new(world, (1000.0, 700.0), (0.0, 0.0));
+        let mut transform =
+            ViewportTransform::new(world, (1000.0, 700.0), Margins::symmetric(0.0, 0.0));
 
         // At zoom 1.0, pan is constrained to (0, 0) because the entire world is visible
         // We need to zoom in first to allow panning
@@ -862,7 +917,8 @@ mod viewport_transform_tests {
     #[test]
     fn test_visible_world_rect_no_zoom() {
         let world = Rect::new(-50.0, 35.0, 100.0, -70.0);
-        let transform = ViewportTransform::new(world, (1000.0, 700.0), (0.0, 0.0));
+        let transform =
+            ViewportTransform::new(world, (1000.0, 700.0), Margins::symmetric(0.0, 0.0));
 
         let visible = transform.visible_world_rect();
         // At zoom 1.0, entire world should be visible
@@ -873,7 +929,8 @@ mod viewport_transform_tests {
     #[test]
     fn test_visible_world_rect_with_zoom() {
         let world = Rect::new(-50.0, 35.0, 100.0, -70.0);
-        let mut transform = ViewportTransform::new(world, (1000.0, 700.0), (0.0, 0.0));
+        let mut transform =
+            ViewportTransform::new(world, (1000.0, 700.0), Margins::symmetric(0.0, 0.0));
 
         transform.zoom_at_point(&Vec2D::zero(), 2.0);
 
@@ -886,7 +943,8 @@ mod viewport_transform_tests {
     #[test]
     fn test_is_circle_visible() {
         let world = Rect::new(-50.0, 35.0, 100.0, -70.0);
-        let transform = ViewportTransform::new(world, (1000.0, 700.0), (0.0, 0.0));
+        let transform =
+            ViewportTransform::new(world, (1000.0, 700.0), Margins::symmetric(0.0, 0.0));
 
         // Circle at center should be visible
         assert!(transform.is_circle_visible(&Vec2D::zero(), 5.0));
@@ -904,7 +962,8 @@ mod viewport_transform_tests {
     #[test]
     fn test_reset() {
         let world = Rect::new(-50.0, 35.0, 100.0, -70.0);
-        let mut transform = ViewportTransform::new(world, (1000.0, 700.0), (0.0, 0.0));
+        let mut transform =
+            ViewportTransform::new(world, (1000.0, 700.0), Margins::symmetric(0.0, 0.0));
 
         // Apply some transforms
         transform.zoom_at_point(&Vec2D::zero(), 3.0);
@@ -923,7 +982,8 @@ mod viewport_transform_tests {
     #[test]
     fn test_adjust_pan() {
         let world = Rect::new(-50.0, 35.0, 100.0, -70.0);
-        let mut transform = ViewportTransform::new(world, (1000.0, 700.0), (0.0, 0.0));
+        let mut transform =
+            ViewportTransform::new(world, (1000.0, 700.0), Margins::symmetric(0.0, 0.0));
 
         // At zoom 1.0, pan is constrained to (0, 0) - can't pan when entire world is visible
         // Zoom in first to allow panning
@@ -949,8 +1009,11 @@ mod viewport_transform_tests {
     fn test_compute_world_bounds_from_window_size() {
         // Window 1000x700 with margins 100x50 -> viewport 800x600
         // At LEN_TO_PX = 0.1, world size = 80x60
-        let world =
-            ViewportTransform::compute_world_bounds_from_window_size(1000, 700, (100.0, 50.0));
+        let world = ViewportTransform::compute_world_bounds_from_window_size(
+            1000,
+            700,
+            Margins::symmetric(100.0, 50.0),
+        );
 
         assert!(approx_eq(world.w, 80.0, 1e-3));
         assert!(approx_eq(world.h.abs(), 60.0, 1e-3));
@@ -962,7 +1025,8 @@ mod viewport_transform_tests {
     #[test]
     fn test_zoom_limits() {
         let world = Rect::new(-10.0, 10.0, 20.0, -20.0);
-        let mut transform = ViewportTransform::new(world, (400.0, 400.0), (0.0, 0.0));
+        let mut transform =
+            ViewportTransform::new(world, (400.0, 400.0), Margins::symmetric(0.0, 0.0));
 
         // Try to zoom out below minimum - should clamp to MIN_ZOOM
         let point = Vec2D::zero();
@@ -995,7 +1059,8 @@ mod viewport_transform_tests {
     fn test_pan_constraints_at_zoom_1() {
         // World bounds: x=-10 to 10, y=-10 to 10 (note: height is negative in rect)
         let world = Rect::new(-10.0, 10.0, 20.0, -20.0);
-        let mut transform = ViewportTransform::new(world, (400.0, 400.0), (0.0, 0.0));
+        let mut transform =
+            ViewportTransform::new(world, (400.0, 400.0), Margins::symmetric(0.0, 0.0));
 
         // At 1x zoom, the visible area is the same size as the world
         // So pan should be constrained to stay at world center (0, 0)
@@ -1012,7 +1077,8 @@ mod viewport_transform_tests {
     #[test]
     fn test_pan_constraints_at_zoom_2() {
         let world = Rect::new(-10.0, 10.0, 20.0, -20.0);
-        let mut transform = ViewportTransform::new(world, (400.0, 400.0), (0.0, 0.0));
+        let mut transform =
+            ViewportTransform::new(world, (400.0, 400.0), Margins::symmetric(0.0, 0.0));
 
         // At 2x zoom, the visible area is half the world size
         // So we can pan up to ±5 in each direction

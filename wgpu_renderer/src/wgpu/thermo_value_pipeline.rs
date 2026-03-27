@@ -386,10 +386,10 @@ impl RenderPipeline for ThermoValueOverlayPipeline {
         self.ensure_atlas(ctx.device, ctx.queue);
 
         // Glyph size in NDC units within the inset viewport.
-        // Inset dimensions in pixels: (window_w - 2*margin_x) × (window_h - 2*margin_y).
+        // Inset dimensions in pixels: (window_w - margin_h) × (window_h - margin_v).
         // NDC range is 2 (-1 to 1), so 1 pixel = 2 / inset_px.
-        let inset_w = (ctx.window_size.0 as f32 - 2.0 * ctx.margin.0).max(1.0);
-        let inset_h = (ctx.window_size.1 as f32 - 2.0 * ctx.margin.1).max(1.0);
+        let inset_w = (ctx.window_size.0 as f32 - ctx.margin.horizontal()).max(1.0);
+        let inset_h = (ctx.window_size.1 as f32 - ctx.margin.vertical()).max(1.0);
         let glyph_ndc_w = GLYPH_W as f32 * 2.0 / inset_w;
         let glyph_ndc_h = GLYPH_H as f32 * 2.0 / inset_h;
 

@@ -16,6 +16,7 @@ use crate::application::renderer_snapshot::RendererSnapshot;
 use crate::graphics::energy_plot::{EnergyData, SharedEnergyData};
 use crate::graphics::renderer::ViewportTransform;
 use crate::graphics::renderer::state_layers::RendererConfig;
+use crate::graphics::renderer::viewport::Margins;
 use crate::objects2d::{Rect, Vec2D};
 use std::sync::{Arc, Mutex};
 
@@ -77,12 +78,12 @@ impl UnifiedRenderState {
     /// * `application` – moved into the physics thread.
     /// * `world_bounds` – initial world rectangle for `ViewportTransform`.
     /// * `window_size` – initial window size in pixels `(width, height)`.
-    /// * `margin_px` – pixel margins `(x, y)`.
+    /// * `margin_px` – pixel margins.
     pub fn new(
         application: MainContent,
         world_bounds: Rect,
         window_size: (f32, f32),
-        margin_px: (f32, f32),
+        margin_px: Margins,
         wakeup_callback: Box<dyn Fn() + Send + Sync + 'static>,
     ) -> Self {
         let energy_data: SharedEnergyData = Arc::new(Mutex::new(EnergyData::new()));
@@ -232,7 +233,7 @@ impl UnifiedRenderState {
     ///
     /// Updates the viewport **and** notifies the physics thread so the
     /// simulation world matches the new window dimensions.
-    pub fn handle_resize(&mut self, new_width: f32, new_height: f32, margin_px: (f32, f32)) {
+    pub fn handle_resize(&mut self, new_width: f32, new_height: f32, margin_px: Margins) {
         let world_rect = ViewportTransform::compute_world_bounds_from_window_size(
             new_width as u32,
             new_height as u32,
@@ -397,7 +398,7 @@ mod tests {
     /// pure-logic helpers here; integration tests cover the full path.
     fn dummy_viewport() -> ViewportTransform {
         let world = Rect::new(-18.0, 12.0, 36.0, -24.0);
-        ViewportTransform::new(world, (1280.0, 720.0), (50.0, 50.0))
+        ViewportTransform::new(world, (1280.0, 720.0), Margins::symmetric(50.0, 50.0))
     }
 
     // ── process_action_common ────────────────────────────────────────

@@ -2,6 +2,7 @@
 //! Draws a thin outline around the simulation viewport in screen space.
 
 use bytemuck::{Pod, Zeroable};
+use rust_thermo_core::graphics::renderer::viewport::Margins;
 use wgpu::util::DeviceExt;
 
 #[repr(C)]
@@ -98,13 +99,13 @@ impl FramePipeline {
         queue: &wgpu::Queue,
         width: f32,
         height: f32,
-        margin: (f32, f32),
+        margin: Margins,
     ) {
         // Convert screen-space rect to NDC
-        let left_px = margin.0;
-        let right_px = (width - margin.0).max(left_px);
-        let top_px = margin.1;
-        let bottom_px = (height - margin.1).max(top_px);
+        let left_px = margin.left;
+        let right_px = (width - margin.right).max(left_px);
+        let top_px = margin.top;
+        let bottom_px = (height - margin.bottom).max(top_px);
 
         let to_ndc = |x_px: f32, y_px: f32| -> [f32; 2] {
             let x_ndc = (x_px / width) * 2.0 - 1.0;

@@ -2,6 +2,7 @@
 mod test_application_core {
     use crate::application::{GameLogic, MainContent};
     use crate::graphics::renderer::ViewportTransform;
+    use crate::graphics::renderer::viewport::Margins;
     use crate::objects2d::ball_impl::{Ball2D, Named};
     use crate::objects2d::{Rect, Vec2D, VerboseInfoMode};
     use float_cmp::approx_eq;
@@ -14,7 +15,8 @@ mod test_application_core {
 
     fn create_main_content_for_region(tl_x: f32, tl_y: f32) -> (MainContent, ViewportTransform) {
         let world = Rect::new(tl_x, tl_y, 100.0, -100.0);
-        let transform = ViewportTransform::new(world, (800.0, 600.0), (50.0, 50.0));
+        let transform =
+            ViewportTransform::new(world, (800.0, 600.0), Margins::symmetric(50.0, 50.0));
         create_main_content_with_world(transform)
     }
 
