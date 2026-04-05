@@ -293,8 +293,12 @@ impl RenderPipeline for LinePipeline {
             });
         }
 
-        // Snap indicators: small crosshairs at snap target positions
-        let cross_size = 0.3;
+        // Snap indicators: small crosshairs at snap target positions.
+        // Scale the crosshair size proportionally to the simulation region
+        // so it stays visually consistent when the world is resized.
+        let bounds = &ctx.snapshot.cell_grid_bounds;
+        let world_extent = bounds.w.abs().max(bounds.h.abs()).max(1.0);
+        let cross_size = world_extent * 0.015;
         let snap_color = [0.0, 1.0, 1.0, 0.9]; // cyan
         for &pos in &ctx.snap_indicators {
             // Horizontal bar
