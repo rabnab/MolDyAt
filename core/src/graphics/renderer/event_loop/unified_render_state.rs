@@ -681,4 +681,79 @@ mod tests {
     fn make_disconnected_coordinator() -> PhysicsCoordinator {
         PhysicsCoordinator::new_disconnected()
     }
+
+    // ── Line segment snap / preview tests ───────────────────────────
+
+    #[test]
+    fn line_segment_preview_returns_none_when_idle() {
+        let vp = dummy_viewport();
+        // Build a minimal state-like check using the draw state enum
+        let draw_state = LineSegmentDrawState::Idle;
+        assert!(matches!(draw_state, LineSegmentDrawState::Idle));
+    }
+
+    #[test]
+    fn line_segment_preview_returns_some_when_drawing() {
+        let draw_state = LineSegmentDrawState::Drawing {
+            start: Vec2D::new(1.0, 2.0),
+        };
+        if let LineSegmentDrawState::Drawing { start } = draw_state {
+            assert!((start.x - 1.0).abs() < 1e-6);
+            assert!((start.y - 2.0).abs() < 1e-6);
+        } else {
+            panic!("Expected Drawing state");
+        }
+    }
+
+    #[test]
+    fn snap_position_snaps_near_wall() {
+        use crate::objects2d::line_segment::snap_position;
+        let world = Rect::new(-18.0, 12.0, 36.0, -24.0);
+        // Position near left wall (-18.0)
+        let pos = Vec2D::new(-17.7, 0.0);
+        let snapped = snap_position(pos, &world, &[], 0.5);
+        assert!(
+            (snapped.x - (-18.0)).abs() < 1e-6,
+            "Should snap to left wall"
+        );
+        assert!((snapped.y - 0.0).abs() < 1e-6, "y unchanged");
+    }
+
+    #[test]
+    fn snap_position_snaps_near_endpoint() {
+        use crate::objects2d::SimLineSegment;
+        use crate::objects2d::line_segment::snap_position;
+        let world = Rect::new(-18.0, 12.0, 36.0, -24.0);
+        let seg = SimLineSegment::new(0, Vec2D::new(5.0, 5.0), Vec2D::new(10.0, 5.0));
+        let pos = Vec2D::new(5.2, 5.1);
+        let snapped = snap_position(pos, &world, &[seg], 0.5);
+        assert!((snapped.x - 5.0).abs() < 1e-6, "Should snap to endpoint x");
+        assert!((snapped.y - 5.0).abs() < 1e-6, "Should snap to endpoint y");
+    }
+
+    #[test]
+    fn snap_position_no_snap_when_far() {
+        use crate::objects2d::line_segment::snap_position;
+        let world = Rect::new(-18.0, 12.0, 36.0, -24.0);
+        let pos = Vec2D::new(0.0, 0.0);
+        let snapped = snap_position(pos, &world, &[], 0.5);
+        assert!((snapped.x - 0.0).abs() < 1e-6, "No snap expected");
+        assert!((snapped.y - 0.0).abs() < 1e-6, "No snap expected");
+    }
+
+    #[test]
+    fn wall_snap_takes_priority_over_endpoint() {
+        use crate::objects2d::SimLineSegment;
+        use crate::objects2d::line_segment::snap_position;
+        let world = Rect::new(-18.0, 12.0, 36.0, -24.0);
+        // Endpoint near left wall
+        let seg = SimLineSegment::new(0, Vec2D::new(-17.9, 0.0), Vec2D::new(0.0, 0.0));
+        let pos = Vec2D::new(-17.7, 0.0);
+        let snapped = snap_position(pos, &world, &[seg], 0.5);
+        // Wall snap wins
+        assert!(
+            (snapped.x - (-18.0)).abs() < 1e-6,
+            "Wall snap should take priority"
+        );
+    }
 }

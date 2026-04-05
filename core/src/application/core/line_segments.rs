@@ -187,4 +187,93 @@ mod tests {
         // Should NOT reflect (velocity gate)
         assert!(mc.balls[0].v.y > 0.0);
     }
+
+    // ── Rescale tests ───────────────────────────────────────────────
+
+    #[test]
+    fn rescale_preserves_relative_position() {
+        let mut mc = make_content();
+        // World is (-20, 20, 40, -40) → x: -20..20, y: 20..-20
+        // Segment at (0, 0) → (10, -10) means (50%, 50%) → (75%, 75%)
+        mc.add_line_segment(Vec2D::new(0.0, 0.0), Vec2D::new(10.0, -10.0));
+
+        let old_rect = crate::objects2d::Rect::new(-20.0, 20.0, 40.0, -40.0);
+        // Double horizontal size: x: -40..40
+        let new_rect = crate::objects2d::Rect::new(-40.0, 20.0, 80.0, -40.0);
+        mc.rescale_line_segments(&old_rect, &new_rect);
+
+        // 50% of new width 80 from -40 → 0.0 → new x = -40 + 0.5*80 = 0.0 (unchanged)
+        assert!((mc.line_segments[0].start.x - 0.0).abs() < 1e-5);
+        assert!((mc.line_segments[0].start.y - 0.0).abs() < 1e-5);
+        // 75% of new width 80 from -40 → new x = -40 + 0.75*80 = 20.0
+        assert!((mc.line_segments[0].end.x - 20.0).abs() < 1e-5);
+        // y unchanged (same height)
+        assert!((mc.line_segments[0].end.y - (-10.0)).abs() < 1e-5);
+    }
+
+    #[test]
+    fn rescale_both_axes() {
+        let mut mc = make_content();
+        // Midpoint of rect: (50%, 50%) → (0, 0) in (-20,20,40,-40)
+        mc.add_line_segment(Vec2D::new(0.0, 0.0), Vec2D::new(0.0, 0.0));
+
+        let old_rect = crate::objects2d::Rect::new(-20.0, 20.0, 40.0, -40.0);
+        // New rect: (-10, 10, 20, -20) — half size in both axes
+        let new_rect = crate::objects2d::Rect::new(-10.0, 10.0, 20.0, -20.0);
+        mc.rescale_line_segments(&old_rect, &new_rect);
+
+        // 50% of new rect → midpoint (0, 0)
+        assert!((mc.line_segments[0].start.x - 0.0).abs() < 1e-5);
+        assert!((mc.line_segments[0].start.y - 0.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn rescale_corner_endpoints() {
+        let mut mc = make_content();
+        // Top-left corner of world (-20, 20) → (0%, 0%)
+        mc.add_line_segment(Vec2D::new(-20.0, 20.0), Vec2D::new(20.0, -20.0));
+
+        let old_rect = crate::objects2d::Rect::new(-20.0, 20.0, 40.0, -40.0);
+        let new_rect = crate::objects2d::Rect::new(-40.0, 40.0, 80.0, -80.0);
+        mc.rescale_line_segments(&old_rect, &new_rect);
+
+        // 0% → top-left of new rect
+        assert!((mc.line_segments[0].start.x - (-40.0)).abs() < 1e-5);
+        assert!((mc.line_segments[0].start.y - 40.0).abs() < 1e-5);
+        // 100% → bottom-right of new rect
+        assert!((mc.line_segments[0].end.x - 40.0).abs() < 1e-5);
+        assert!((mc.line_segments[0].end.y - (-40.0)).abs() < 1e-5);
+    }
+
+    #[test]
+    fn rescale_skips_degenerate_old_rect() {
+        let mut mc = make_content();
+        mc.add_line_segment(Vec2D::new(5.0, 5.0), Vec2D::new(10.0, 10.0));
+
+        let old_rect = crate::objects2d::Rect::new(0.0, 0.0, 0.0, 0.0);
+        let new_rect = crate::objects2d::Rect::new(-10.0, 10.0, 20.0, -20.0);
+        mc.rescale_line_segments(&old_rect, &new_rect);
+
+        // Endpoints unchanged (degenerate old rect)
+        assert!((mc.line_segments[0].start.x - 5.0).abs() < 1e-5);
+        assert!((mc.line_segments[0].end.x - 10.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn rescale_multiple_segments() {
+        let mut mc = make_content();
+        mc.add_line_segment(Vec2D::new(-20.0, 0.0), Vec2D::new(0.0, 0.0));
+        mc.add_line_segment(Vec2D::new(0.0, 0.0), Vec2D::new(20.0, 0.0));
+
+        let old_rect = crate::objects2d::Rect::new(-20.0, 20.0, 40.0, -40.0);
+        let new_rect = crate::objects2d::Rect::new(-40.0, 20.0, 80.0, -40.0);
+        mc.rescale_line_segments(&old_rect, &new_rect);
+
+        // First segment: 0% → 50%  mapped to new width
+        assert!((mc.line_segments[0].start.x - (-40.0)).abs() < 1e-5);
+        assert!((mc.line_segments[0].end.x - 0.0).abs() < 1e-5);
+        // Second segment: 50% → 100%
+        assert!((mc.line_segments[1].start.x - 0.0).abs() < 1e-5);
+        assert!((mc.line_segments[1].end.x - 40.0).abs() < 1e-5);
+    }
 }
