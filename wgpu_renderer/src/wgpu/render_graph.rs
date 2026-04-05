@@ -56,6 +56,8 @@ pub struct PrepareContext<'a> {
     pub line_segment_preview: Option<([f32; 2], [f32; 2])>,
     /// Currently selected sidebar icon index, if any.
     pub selected_sidebar_icon: Option<usize>,
+    /// World-coordinate positions for snap indicators (crosshairs).
+    pub snap_indicators: Vec<[f32; 2]>,
 }
 
 // ── Pipeline trait ─────────────────────────────────────────────────

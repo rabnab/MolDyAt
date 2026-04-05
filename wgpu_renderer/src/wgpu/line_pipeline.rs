@@ -293,6 +293,24 @@ impl RenderPipeline for LinePipeline {
             });
         }
 
+        // Snap indicators: small crosshairs at snap target positions
+        let cross_size = 0.3;
+        let snap_color = [0.0, 1.0, 1.0, 0.9]; // cyan
+        for &pos in &ctx.snap_indicators {
+            // Horizontal bar
+            line_batch.push(LineSegment {
+                points: [[pos[0] - cross_size, pos[1]], [pos[0] + cross_size, pos[1]]],
+                width: 2.0,
+                color: snap_color,
+            });
+            // Vertical bar
+            line_batch.push(LineSegment {
+                points: [[pos[0], pos[1] - cross_size], [pos[0], pos[1] + cross_size]],
+                width: 2.0,
+                color: snap_color,
+            });
+        }
+
         self.flush_line_batch(ctx.device, ctx.queue, &mut line_batch);
         Ok(())
     }

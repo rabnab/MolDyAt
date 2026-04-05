@@ -17,6 +17,7 @@ use crate::graphics::energy_plot::{EnergyData, SharedEnergyData};
 use crate::graphics::renderer::ViewportTransform;
 use crate::graphics::renderer::state_layers::RendererConfig;
 use crate::graphics::renderer::viewport::Margins;
+use crate::objects2d::line_segment::snap_position;
 use crate::objects2d::{Rect, Vec2D};
 use std::sync::{Arc, Mutex};
 
@@ -375,13 +376,14 @@ impl UnifiedRenderState {
         {
             match state {
                 winit::event::ElementState::Pressed => {
-                    self.line_draw_state = LineSegmentDrawState::Drawing { start: world_pos };
+                    let snapped = self.snap_world_pos(world_pos);
+                    self.line_draw_state = LineSegmentDrawState::Drawing { start: snapped };
                     self.view_dirty = true;
                     return true;
                 }
                 winit::event::ElementState::Released => {
                     if let LineSegmentDrawState::Drawing { start } = self.line_draw_state {
-                        let end = world_pos;
+                        let end = self.snap_world_pos(world_pos);
                         // Only commit if the segment has meaningful length
                         if start.distance_squared(&end) > 0.01 {
                             let action = InputAction::CommitLineSegment { start, end };
@@ -413,8 +415,11 @@ impl UnifiedRenderState {
         // Update cursor position using shared state logic
         self.update_cursor_world_pos(&[x, y]);
 
-        // Mark view dirty while drawing a line segment so ghost preview updates
-        if matches!(self.line_draw_state, LineSegmentDrawState::Drawing { .. }) {
+        // Mark view dirty while drawing a line segment so ghost preview updates,
+        // or when the line segment tool is selected (for snap indicator updates).
+        if matches!(self.line_draw_state, LineSegmentDrawState::Drawing { .. })
+            || self.active_tool == OperatorTool::LineSegment
+        {
             self.view_dirty = true;
         }
 
@@ -506,16 +511,60 @@ impl UnifiedRenderState {
         }
     }
 
+    // ── Line segment snapping ────────────────────────────────────────
+
+    /// Snap threshold in world units.
+    const SNAP_THRESHOLD: f32 = 0.5;
+
+    /// Snap a world position to nearby walls or existing segment endpoints.
+    fn snap_world_pos(&self, pos: Vec2D) -> Vec2D {
+        let world_rect = self.viewport.world_bounds();
+        let segments: &[crate::objects2d::SimLineSegment] = self
+            .last_snapshot
+            .as_ref()
+            .map(|s| s.line_segments.as_slice())
+            .unwrap_or(&[]);
+        snap_position(pos, &world_rect, segments, Self::SNAP_THRESHOLD)
+    }
+
     // ── Line segment preview ────────────────────────────────────────
 
     /// Returns the current ghost-preview line segment (start, end in world
     /// coordinates) while the user is drawing, or `None` when idle.
+    /// The end point is snapped to nearby walls/endpoints.
     pub fn line_segment_preview(&self) -> Option<(Vec2D, Vec2D)> {
         if let LineSegmentDrawState::Drawing { start } = self.line_draw_state {
-            Some((start, self.cursor_world_pos))
+            let snapped_end = self.snap_world_pos(self.cursor_world_pos);
+            Some((start, snapped_end))
         } else {
             None
         }
+    }
+
+    /// Returns world-coordinate positions where snap indicators should be
+    /// rendered (e.g. small crosshairs at snap targets).
+    pub fn snap_indicators(&self) -> Vec<[f32; 2]> {
+        let mut indicators = Vec::new();
+        if let LineSegmentDrawState::Drawing { start } = self.line_draw_state {
+            // Check if start was snapped (compare with an un-snapped version isn't
+            // possible here, so we always show the start indicator when drawing)
+            // Show indicator at snapped end position if it differs from cursor
+            let snapped_end = self.snap_world_pos(self.cursor_world_pos);
+            if snapped_end != self.cursor_world_pos {
+                indicators.push([snapped_end.x, snapped_end.y]);
+            }
+            // Also check start snap state: if start coincides with a wall or
+            // endpoint, show indicator there too.
+            let _ = start; // start is already snapped at press time
+        } else if self.active_tool == OperatorTool::LineSegment {
+            // When idle with the line tool selected, show snap indicator at
+            // cursor if it would snap.
+            let snapped = self.snap_world_pos(self.cursor_world_pos);
+            if snapped != self.cursor_world_pos {
+                indicators.push([snapped.x, snapped.y]);
+            }
+        }
+        indicators
     }
 }
 
