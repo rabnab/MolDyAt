@@ -498,8 +498,11 @@ impl UnifiedRenderState {
     /// Maps a sidebar icon index to an `OperatorTool`.
     fn operator_tool_for_icon(index: usize) -> OperatorTool {
         match index {
-            0 => OperatorTool::LineSegment, // wall icon
-            _ => OperatorTool::None,        // other icons not yet implemented
+            0 => OperatorTool::LineSegment,  // wall icon
+            1 => OperatorTool::ValveSegment, // gate icon
+            2 => OperatorTool::Thermostat,   // temperature icon
+            3 => OperatorTool::SourceSphere, // emitter icon
+            _ => OperatorTool::None,
         }
     }
 
@@ -507,6 +510,9 @@ impl UnifiedRenderState {
     pub fn selected_sidebar_icon(&self) -> Option<usize> {
         match self.active_tool {
             OperatorTool::LineSegment => Some(0),
+            OperatorTool::ValveSegment => Some(1),
+            OperatorTool::Thermostat => Some(2),
+            OperatorTool::SourceSphere => Some(3),
             OperatorTool::None => None,
         }
     }

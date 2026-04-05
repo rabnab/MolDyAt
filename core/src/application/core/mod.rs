@@ -61,6 +61,7 @@ mod accessors;
 mod balls;
 mod ctor;
 mod line_segments;
+mod operators;
 mod sim;
 mod snapshot;
 mod verbose;

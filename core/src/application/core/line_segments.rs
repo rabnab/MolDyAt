@@ -1,4 +1,5 @@
 use super::MainContent;
+use crate::objects2d::operator::{is_degenerate, remap_point};
 use crate::objects2d::{Rect, SimLineSegment, Vec2D};
 
 /// Collision tolerance: balls closer than `radius + EPSILON` are considered colliding.
@@ -100,21 +101,13 @@ impl MainContent {
     /// Rescale all line segment endpoints so they keep their relative
     /// position when the world region changes size.
     pub(crate) fn rescale_line_segments(&mut self, old_rect: &Rect, new_rect: &Rect) {
-        if old_rect.w.abs() < 1e-12 || old_rect.h.abs() < 1e-12 {
+        if is_degenerate(old_rect) {
             return;
         }
         for seg in &mut self.line_segments {
-            seg.start = Self::remap_point(seg.start, old_rect, new_rect);
-            seg.end = Self::remap_point(seg.end, old_rect, new_rect);
+            seg.start = remap_point(seg.start, old_rect, new_rect);
+            seg.end = remap_point(seg.end, old_rect, new_rect);
         }
-    }
-
-    /// Remap a point from `old_rect` coordinates to `new_rect`, preserving
-    /// relative position (0‥1 fraction within the rect).
-    fn remap_point(p: Vec2D, old: &Rect, new: &Rect) -> Vec2D {
-        let frac_x = (p.x - old.x) / old.w;
-        let frac_y = (p.y - old.y) / old.h;
-        Vec2D::new(new.x + frac_x * new.w, new.y + frac_y * new.h)
     }
 }
 

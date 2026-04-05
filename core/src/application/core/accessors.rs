@@ -64,10 +64,10 @@ impl MainContent {
             self.pause_for_resize()
         }
 
-        // Rescale line segment endpoints so they keep their relative
+        // Rescale all operator positions so they keep their relative
         // position within the world (e.g. 20%/50% stays 20%/50%).
         let old = self.world_rect;
-        self.rescale_line_segments(&old, &world_rect);
+        self.rescale_all_operators(&old, &world_rect);
 
         // Update world_rect with correctly computed world coordinates
         self.world_rect = world_rect;

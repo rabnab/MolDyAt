@@ -22,13 +22,13 @@ impl MainContent {
     }
     /// Remove all balls from simulation and reset ID counter.
     /// Clears both balls vector and all cells in the grid.
-    /// Also clears all placed operator line segments.
+    /// Also clears all placed operators.
     pub(crate) fn clear_points(&mut self) {
         self.balls.clear();
         self.cell_grid.clear_all_cells();
         self.get_ball_factory().reset_id_counter();
         self.num_balls = 0;
-        self.clear_line_segments();
+        self.clear_all_operators();
     }
     pub(crate) fn get_number_of_balls(&self) -> usize {
         self.balls.len()

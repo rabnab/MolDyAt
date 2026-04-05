@@ -12,7 +12,12 @@ pub enum OperatorTool {
     None,
     /// Line segment barrier tool (wall icon, sidebar index 0).
     LineSegment,
-    // Future: Valve, Source, Thermostat
+    /// Valve segment tool (gate icon, sidebar index 1).
+    ValveSegment,
+    /// Thermostat tool (temperature icon, sidebar index 2).
+    Thermostat,
+    /// Source sphere tool (emitter icon, sidebar index 3).
+    SourceSphere,
 }
 
 /// Actions that can result from user input
