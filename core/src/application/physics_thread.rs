@@ -63,8 +63,13 @@ pub enum PhysicsCommand {
     Resize { world_rect: crate::objects2d::Rect },
     /// Add a line segment barrier with start and end positions
     AddLineSegment { start: Vec2D, end: Vec2D },
-    /// Move the closest endpoint of a line segment to a new position
-    MoveLineSegmentEndpoint { segment_id: usize, new_pos: Vec2D },
+    /// Move a specific endpoint of a line segment to a new position.
+    /// `move_start`: `true` → start, `false` → end.
+    MoveLineSegmentEndpoint {
+        segment_id: usize,
+        new_pos: Vec2D,
+        move_start: bool,
+    },
 }
 
 /// Shutdown signal shared between threads
@@ -324,8 +329,9 @@ impl PhysicsThread {
             PhysicsCommand::MoveLineSegmentEndpoint {
                 segment_id,
                 new_pos,
+                move_start,
             } => {
-                main_content.move_line_segment_endpoint(segment_id, new_pos);
+                main_content.move_line_segment_endpoint(segment_id, new_pos, move_start);
             }
         }
     }

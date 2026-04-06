@@ -94,6 +94,8 @@ pub enum InputAction {
     MoveLineSegmentEndpoint {
         segment_id: usize,
         new_pos: Vec2D,
+        /// `true` → move start endpoint, `false` → move end endpoint.
+        move_start: bool,
     },
 }
 

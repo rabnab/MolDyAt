@@ -21,12 +21,17 @@ impl MainContent {
         self.line_segment_next_id = 0;
     }
 
-    /// Move the closest endpoint of a line segment to a new position.
-    pub(crate) fn move_line_segment_endpoint(&mut self, segment_id: usize, new_pos: Vec2D) {
+    /// Move a specific endpoint of a line segment to a new position.
+    ///
+    /// `move_start`: `true` → move the start endpoint, `false` → move the end.
+    pub(crate) fn move_line_segment_endpoint(
+        &mut self,
+        segment_id: usize,
+        new_pos: Vec2D,
+        move_start: bool,
+    ) {
         if let Some(seg) = self.line_segments.iter_mut().find(|s| s.id == segment_id) {
-            let d_start = seg.start.distance_squared(&new_pos);
-            let d_end = seg.end.distance_squared(&new_pos);
-            if d_start <= d_end {
+            if move_start {
                 seg.start = new_pos;
             } else {
                 seg.end = new_pos;
@@ -133,12 +138,24 @@ mod tests {
     }
 
     #[test]
-    fn move_endpoint_closest() {
+    fn move_endpoint_start() {
         let mut mc = make_content();
         mc.add_line_segment(Vec2D::new(0.0, 0.0), Vec2D::new(10.0, 0.0));
-        // Move start (closer to (0.5, 0))
-        mc.move_line_segment_endpoint(0, Vec2D::new(0.5, 0.0));
+        mc.move_line_segment_endpoint(0, Vec2D::new(0.5, 0.0), true);
         assert!((mc.line_segments[0].start.x - 0.5).abs() < 1e-6);
+        // End unchanged
+        assert!((mc.line_segments[0].end.x - 10.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn move_endpoint_end() {
+        let mut mc = make_content();
+        mc.add_line_segment(Vec2D::new(0.0, 0.0), Vec2D::new(10.0, 0.0));
+        mc.move_line_segment_endpoint(0, Vec2D::new(8.0, 1.0), false);
+        // Start unchanged
+        assert!((mc.line_segments[0].start.x - 0.0).abs() < 1e-6);
+        assert!((mc.line_segments[0].end.x - 8.0).abs() < 1e-6);
+        assert!((mc.line_segments[0].end.y - 1.0).abs() < 1e-6);
     }
 
     #[test]

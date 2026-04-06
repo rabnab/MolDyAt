@@ -10,6 +10,7 @@ use wgpu::util::DeviceExt;
 use super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
 use crate::wgpu::{MARGIN_BOTTOM, MARGIN_LEFT, MARGIN_TOP};
 use rust_thermo_core::application::AppResult;
+use rust_thermo_core::graphics::sidebar::{ICON_COUNT, ICON_DISPLAY_SIZE, ICON_SPACING};
 
 const SIDEBAR_SHADER: &str = include_str!("shaders/sidebar.wgsl");
 
@@ -19,13 +20,6 @@ const ICON_VALVE: &[u8] = include_bytes!("icons/valve.png");
 const ICON_THERMO: &[u8] = include_bytes!("icons/thermo.png");
 const ICON_SOURCE_OPEN: &[u8] = include_bytes!("icons/sourceOpen.png");
 
-/// Display size for each icon in pixels (square).
-const ICON_DISPLAY_SIZE: f32 = 48.0;
-/// Vertical spacing between icons in pixels.
-const ICON_SPACING: f32 = 12.0;
-
-/// Number of icons in the sidebar.
-const ICON_COUNT: usize = 4;
 /// Padding around the icon group inside the background rectangle.
 const RECT_PADDING: f32 = 8.0;
 /// Corner radius for the background rounded rectangle.
@@ -327,15 +321,9 @@ fn build_sidebar_geometry(
     let first_icon_top = MARGIN_TOP + ICON_SPACING;
 
     // Count how many icons fit.
-    let mut visible_count = 0u32;
-    for i in 0..icon_count {
-        let icon_top = first_icon_top + i as f32 * (ICON_DISPLAY_SIZE + ICON_SPACING);
-        let icon_bottom = icon_top + ICON_DISPLAY_SIZE;
-        if icon_bottom > win_h - MARGIN_BOTTOM {
-            break;
-        }
-        visible_count += 1;
-    }
+    let visible_count =
+        rust_thermo_core::graphics::sidebar::visible_icon_count(win_h, MARGIN_TOP, MARGIN_BOTTOM)
+            as u32;
 
     let mut rect_params = RoundedRectParams {
         size_px: [0.0, 0.0],

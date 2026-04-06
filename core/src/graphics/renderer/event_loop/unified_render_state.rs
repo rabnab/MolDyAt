@@ -37,6 +37,12 @@ pub enum LineSegmentDrawState {
     Idle,
     /// Left button pressed; dragging from `start` to current cursor.
     Drawing { start: Vec2D },
+    /// Dragging an existing segment endpoint to reposition it.
+    MovingEndpoint {
+        segment_id: usize,
+        /// `true` when the grabbed endpoint is `start`.
+        move_start: bool,
+    },
 }
 
 /// Unified state shared by every renderer backend.
@@ -376,22 +382,45 @@ impl UnifiedRenderState {
         {
             match state {
                 winit::event::ElementState::Pressed => {
-                    let snapped = self.snap_world_pos(world_pos);
-                    self.line_draw_state = LineSegmentDrawState::Drawing { start: snapped };
+                    // Try to grab an existing endpoint first
+                    if let Some((seg_id, move_start)) = self.find_near_endpoint(world_pos) {
+                        self.line_draw_state = LineSegmentDrawState::MovingEndpoint {
+                            segment_id: seg_id,
+                            move_start,
+                        };
+                    } else {
+                        let snapped = self.snap_world_pos(world_pos);
+                        self.line_draw_state = LineSegmentDrawState::Drawing { start: snapped };
+                    }
                     self.view_dirty = true;
                     return true;
                 }
                 winit::event::ElementState::Released => {
-                    if let LineSegmentDrawState::Drawing { start } = self.line_draw_state {
-                        let end = self.snap_world_pos(world_pos);
-                        // Only commit if the segment has meaningful length
-                        if start.distance_squared(&end) > 0.01 {
-                            let action = InputAction::CommitLineSegment { start, end };
+                    match self.line_draw_state {
+                        LineSegmentDrawState::Drawing { start } => {
+                            let end = self.snap_world_pos(world_pos);
+                            // Only commit if the segment has meaningful length
+                            if start.distance_squared(&end) > 0.01 {
+                                let action = InputAction::CommitLineSegment { start, end };
+                                self.process_action(&action, None);
+                            }
+                        }
+                        LineSegmentDrawState::MovingEndpoint {
+                            segment_id,
+                            move_start,
+                        } => {
+                            let snapped = self.snap_world_pos(world_pos);
+                            let action = InputAction::MoveLineSegmentEndpoint {
+                                segment_id,
+                                new_pos: snapped,
+                                move_start,
+                            };
                             self.process_action(&action, None);
                         }
-                        self.line_draw_state = LineSegmentDrawState::Idle;
-                        self.view_dirty = true;
+                        LineSegmentDrawState::Idle => {}
                     }
+                    self.line_draw_state = LineSegmentDrawState::Idle;
+                    self.view_dirty = true;
                     return true;
                 }
             }
@@ -415,9 +444,10 @@ impl UnifiedRenderState {
         // Update cursor position using shared state logic
         self.update_cursor_world_pos(&[x, y]);
 
-        // Mark view dirty while drawing a line segment so ghost preview updates,
-        // or when the line segment tool is selected (for snap indicator updates).
-        if matches!(self.line_draw_state, LineSegmentDrawState::Drawing { .. })
+        // Mark view dirty while drawing/moving a line segment so ghost
+        // preview updates, or when the line segment tool is selected
+        // (for snap indicator updates).
+        if !matches!(self.line_draw_state, LineSegmentDrawState::Idle)
             || self.active_tool == OperatorTool::LineSegment
         {
             self.view_dirty = true;
@@ -466,27 +496,29 @@ impl UnifiedRenderState {
 
     // ── Sidebar icon hit-testing ────────────────────────────────────
 
-    /// Sidebar icon layout constants (must match wgpu sidebar_pipeline.rs).
-    const ICON_DISPLAY_SIZE: f32 = 48.0;
-    const ICON_SPACING: f32 = 12.0;
-    const ICON_COUNT: usize = 4;
-
     /// Returns the sidebar icon index (0-based) at the given screen pixel
     /// position, or `None` if the click is outside all icons.
+    ///
+    /// Icons that would be clipped below the bottom margin are excluded
+    /// (matching the WGPU sidebar pipeline's `visible_count` logic).
     pub fn sidebar_icon_at(&self, pos_px: [f32; 2]) -> Option<usize> {
+        use crate::graphics::sidebar::{ICON_DISPLAY_SIZE, ICON_SPACING, visible_icon_count};
+
         let margins = self.viewport.margins();
-        let pad_x = (margins.left - Self::ICON_DISPLAY_SIZE) * 0.5;
-        let first_icon_top = margins.top + Self::ICON_SPACING;
+        let pad_x = (margins.left - ICON_DISPLAY_SIZE) * 0.5;
+        let first_icon_top = margins.top + ICON_SPACING;
 
         // Horizontal bounds check
-        if pos_px[0] < pad_x || pos_px[0] > pad_x + Self::ICON_DISPLAY_SIZE {
+        if pos_px[0] < pad_x || pos_px[0] > pad_x + ICON_DISPLAY_SIZE {
             return None;
         }
 
-        for i in 0..Self::ICON_COUNT {
-            let icon_top =
-                first_icon_top + i as f32 * (Self::ICON_DISPLAY_SIZE + Self::ICON_SPACING);
-            let icon_bottom = icon_top + Self::ICON_DISPLAY_SIZE;
+        let (_, win_h) = self.viewport.window_size_px();
+        let visible = visible_icon_count(win_h, margins.top, margins.bottom);
+
+        for i in 0..visible {
+            let icon_top = first_icon_top + i as f32 * (ICON_DISPLAY_SIZE + ICON_SPACING);
+            let icon_bottom = icon_top + ICON_DISPLAY_SIZE;
 
             if pos_px[1] >= icon_top && pos_px[1] <= icon_bottom {
                 return Some(i);
@@ -533,6 +565,34 @@ impl UnifiedRenderState {
         snap_position(pos, &world_rect, segments, Self::SNAP_THRESHOLD)
     }
 
+    /// Find a segment whose endpoint is within [`SNAP_THRESHOLD`] of `pos`.
+    ///
+    /// Returns `(segment_id, move_start)` where `move_start` is `true`
+    /// when the closest endpoint is the segment's start point.
+    fn find_near_endpoint(&self, pos: Vec2D) -> Option<(usize, bool)> {
+        let threshold_sq = Self::SNAP_THRESHOLD * Self::SNAP_THRESHOLD;
+        let segments = self
+            .last_snapshot
+            .as_ref()
+            .map(|s| s.line_segments.as_slice())
+            .unwrap_or(&[]);
+        let mut best_dist_sq = threshold_sq;
+        let mut best: Option<(usize, bool)> = None;
+        for seg in segments {
+            let d_start = pos.distance_squared(&seg.start);
+            let d_end = pos.distance_squared(&seg.end);
+            if d_start < best_dist_sq {
+                best_dist_sq = d_start;
+                best = Some((seg.id, true));
+            }
+            if d_end < best_dist_sq {
+                best_dist_sq = d_end;
+                best = Some((seg.id, false));
+            }
+        }
+        best
+    }
+
     // ── Line segment preview ────────────────────────────────────────
 
     /// Returns the current ghost-preview line segment (start, end in world
@@ -552,16 +612,13 @@ impl UnifiedRenderState {
     pub fn snap_indicators(&self) -> Vec<[f32; 2]> {
         let mut indicators = Vec::new();
         if let LineSegmentDrawState::Drawing { start } = self.line_draw_state {
-            // Check if start was snapped (compare with an un-snapped version isn't
-            // possible here, so we always show the start indicator when drawing)
-            // Show indicator at snapped end position if it differs from cursor
+            // Start was snapped at press time — always show indicator there.
+            indicators.push([start.x, start.y]);
+            // Show indicator at snapped end position if it differs from cursor.
             let snapped_end = self.snap_world_pos(self.cursor_world_pos);
             if snapped_end != self.cursor_world_pos {
                 indicators.push([snapped_end.x, snapped_end.y]);
             }
-            // Also check start snap state: if start coincides with a wall or
-            // endpoint, show indicator there too.
-            let _ = start; // start is already snapped at press time
         } else if self.active_tool == OperatorTool::LineSegment {
             // When idle with the line tool selected, show snap indicator at
             // cursor if it would snap.
@@ -761,5 +818,142 @@ mod tests {
             (snapped.x - (-18.0)).abs() < 1e-6,
             "Wall snap should take priority"
         );
+    }
+
+    // ── Sidebar icon hit-testing tests ──────────────────────────────
+
+    /// Build a viewport with margins that match the wgpu sidebar layout
+    /// (left=110, top=50, right=10, bottom=50) and a 1280×720 window.
+    fn sidebar_viewport() -> ViewportTransform {
+        let world = Rect::new(-18.0, 12.0, 36.0, -24.0);
+        let margins = Margins::new(110.0, 50.0, 10.0, 50.0);
+        ViewportTransform::new(world, (1280.0, 720.0), margins)
+    }
+
+    #[test]
+    fn sidebar_icon_at_returns_index_for_first_icon() {
+        use crate::graphics::sidebar::{ICON_DISPLAY_SIZE, ICON_SPACING};
+
+        let vp = sidebar_viewport();
+        let margins = vp.margins();
+        let pad_x = (margins.left - ICON_DISPLAY_SIZE) * 0.5;
+        let first_top = margins.top + ICON_SPACING;
+        let cx = pad_x + ICON_DISPLAY_SIZE * 0.5;
+        let cy = first_top + ICON_DISPLAY_SIZE * 0.5;
+
+        // Create a minimal state just for hit-testing
+        let physics = make_disconnected_coordinator();
+        let state = build_test_state(vp, physics);
+        assert_eq!(state.sidebar_icon_at([cx, cy]), Some(0));
+    }
+
+    #[test]
+    fn sidebar_icon_at_returns_none_outside_icons() {
+        let vp = sidebar_viewport();
+        let physics = make_disconnected_coordinator();
+        let state = build_test_state(vp, physics);
+        // Far right of window — nowhere near sidebar
+        assert_eq!(state.sidebar_icon_at([1000.0, 100.0]), None);
+    }
+
+    #[test]
+    fn sidebar_icon_at_clips_when_window_too_short() {
+        use crate::graphics::sidebar::{ICON_DISPLAY_SIZE, ICON_SPACING};
+
+        let world = Rect::new(-18.0, 12.0, 36.0, -24.0);
+        // Very short window: only room for ~1 icon
+        let margins = Margins::new(110.0, 50.0, 10.0, 50.0);
+        let vp = ViewportTransform::new(world, (1280.0, 170.0), margins);
+        let physics = make_disconnected_coordinator();
+        let state = build_test_state(vp, physics);
+
+        let pad_x = (margins.left - ICON_DISPLAY_SIZE) * 0.5;
+        let first_top = margins.top + ICON_SPACING;
+
+        // First icon should be visible
+        let cy0 = first_top + ICON_DISPLAY_SIZE * 0.5;
+        assert_eq!(state.sidebar_icon_at([pad_x + 24.0, cy0]), Some(0));
+
+        // Second icon would be clipped
+        let cy1 = first_top + (ICON_DISPLAY_SIZE + ICON_SPACING) + ICON_DISPLAY_SIZE * 0.5;
+        assert_eq!(
+            state.sidebar_icon_at([pad_x + 24.0, cy1]),
+            None,
+            "Icon 1 should be clipped in short window"
+        );
+    }
+
+    #[test]
+    fn operator_tool_toggle() {
+        assert_eq!(
+            UnifiedRenderState::operator_tool_for_icon(0),
+            OperatorTool::LineSegment
+        );
+        assert_eq!(
+            UnifiedRenderState::operator_tool_for_icon(1),
+            OperatorTool::ValveSegment
+        );
+        assert_eq!(
+            UnifiedRenderState::operator_tool_for_icon(99),
+            OperatorTool::None
+        );
+    }
+
+    // ── LineSegmentDrawState tests ──────────────────────────────────
+
+    #[test]
+    fn moving_endpoint_state_holds_segment_id() {
+        let state = LineSegmentDrawState::MovingEndpoint {
+            segment_id: 42,
+            move_start: true,
+        };
+        if let LineSegmentDrawState::MovingEndpoint {
+            segment_id,
+            move_start,
+        } = state
+        {
+            assert_eq!(segment_id, 42);
+            assert!(move_start);
+        } else {
+            panic!("Expected MovingEndpoint state");
+        }
+    }
+
+    // ── visible_icon_count tests ────────────────────────────────────
+
+    #[test]
+    fn visible_icon_count_all_fit() {
+        use crate::graphics::sidebar::visible_icon_count;
+        // 720px window with 50px top/bottom margins → plenty of room
+        assert_eq!(visible_icon_count(720.0, 50.0, 50.0), 4);
+    }
+
+    #[test]
+    fn visible_icon_count_none_fit() {
+        use crate::graphics::sidebar::visible_icon_count;
+        // 100px window → no room for any icon
+        assert_eq!(visible_icon_count(100.0, 50.0, 50.0), 0);
+    }
+
+    /// Helper: build a `UnifiedRenderState`-like object for sidebar
+    /// hit-testing without a real physics thread.
+    fn build_test_state(
+        viewport: ViewportTransform,
+        physics: PhysicsCoordinator,
+    ) -> UnifiedRenderState {
+        UnifiedRenderState {
+            input: InputHandler::new(),
+            physics,
+            viewport,
+            energy_manager: EnergyWindowManager::new(Arc::new(Mutex::new(EnergyData::new()))),
+            config: RendererConfig::default(),
+            view_dirty: false,
+            last_snapshot: None,
+            cursor_world_pos: Vec2D::zero(),
+            current_ball_size_idx: 2,
+            metrics: MetricsCollector::new(),
+            active_tool: OperatorTool::None,
+            line_draw_state: LineSegmentDrawState::Idle,
+        }
     }
 }

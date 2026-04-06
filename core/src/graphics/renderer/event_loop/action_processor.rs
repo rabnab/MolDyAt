@@ -111,10 +111,12 @@ pub fn process_action_common(
         InputAction::MoveLineSegmentEndpoint {
             segment_id,
             new_pos,
+            move_start,
         } => {
             physics.send_command(PhysicsCommand::MoveLineSegmentEndpoint {
                 segment_id: *segment_id,
                 new_pos: *new_pos,
+                move_start: *move_start,
             });
         }
     }
