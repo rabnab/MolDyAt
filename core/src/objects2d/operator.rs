@@ -2,7 +2,7 @@
 //!
 //! All operators placed via the sidebar panel share a lifecycle:
 //!
-//! 1. **Selection** from the sidebar (see [`OperatorTool`] in the graphics layer).
+//! 1. **Selection** from the sidebar (see `OperatorTool` in the graphics layer).
 //! 2. **Placement** on the simulation grid (operator-specific interaction).
 //! 3. **Toggle** ON/OFF (all except line segments).
 //! 4. **Rescale** positions when the world region is resized.
