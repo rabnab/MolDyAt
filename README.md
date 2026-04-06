@@ -105,10 +105,14 @@ core/
 └── src/
     ├── application/           # Simulation controller, physics thread, stats
     │   └── core/              # Ball management, simulation stepping
+    │       └── tests/         # Topic-based test files (ball_management, energy, …)
     ├── graphics/
     │   └── renderer/          # Renderer trait, viewport, batch renderer
-    │       └── event_loop/    # InputHandler, PhysicsCoordinator, Metrics,
-    │                          #   UnifiedRenderState, EnergyWindowManager
+    │       ├── event_loop/    # InputHandler, PhysicsCoordinator, Metrics,
+    │       │                  #   UnifiedRenderState, EnergyWindowManager
+    │       │   └── tests/     # Topic-based test files (key_actions, mouse, …)
+    │       └── viewport/      # ViewportTransform, coordinate mapping
+    │           └── tests.rs   # Viewport transform tests
     ├── objects2d/             # Ball physics, SIMD forces, Verlet lists, cell grid
     ├── logging/               # env_logger initialisation
     └── timing_monad.rs        # Performance measurement helpers
