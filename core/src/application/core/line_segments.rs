@@ -46,12 +46,9 @@ impl MainContent {
         let mut total_px = 0.0_f32;
         let mut total_py = 0.0_f32;
 
-        // Iterate over each segment; for each ball check collision.
-        // We need &self.line_segments and &mut self.balls simultaneously,
-        // so collect segment data first.
-        let segments: Vec<SimLineSegment> = self.line_segments.clone();
-
-        for seg in &segments {
+        // Split borrow: &self.line_segments (immutable) and &mut self.balls
+        // (mutable) are disjoint fields, so no clone needed.
+        for seg in &self.line_segments {
             if seg.length_sq() < 1e-12 {
                 continue; // degenerate segment
             }
