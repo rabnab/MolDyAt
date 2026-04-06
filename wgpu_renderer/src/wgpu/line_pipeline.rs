@@ -284,12 +284,12 @@ impl RenderPipeline for LinePipeline {
             });
         }
 
-        // Ghost preview (semi-transparent white)
+        // Ghost preview (semi-transparent yellow)
         if let Some((start, end)) = ctx.line_segment_preview {
             line_batch.push(LineSegment {
                 points: [start, end],
                 width: 2.0,
-                color: [1.0, 1.0, 1.0, 0.5],
+                color: [1.0, 1.0, 0.0, 0.5],
             });
         }
 
