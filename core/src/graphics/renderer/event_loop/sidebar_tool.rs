@@ -66,12 +66,11 @@ impl UnifiedRenderState {
 mod tests {
     use super::*;
     use crate::graphics::energy_plot::{EnergyData, SharedEnergyData};
-    use crate::graphics::renderer::ViewportTransform;
     use crate::graphics::renderer::event_loop::metrics::MetricsCollector;
     use crate::graphics::renderer::event_loop::unified_render_state::LineSegmentDrawState;
     use crate::graphics::renderer::event_loop::{EnergyWindowManager, InputHandler};
-    use crate::graphics::renderer::margins::Margins;
     use crate::graphics::renderer::state_layers::RendererConfig;
+    use crate::graphics::renderer::{Margins, ViewportTransform};
     use crate::objects2d::{Rect, Vec2D};
     use std::sync::{Arc, Mutex};
 
