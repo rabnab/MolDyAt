@@ -2,7 +2,7 @@
 //! Draws a thin outline around the simulation viewport in screen space.
 
 use bytemuck::{Pod, Zeroable};
-use rust_thermo_core::graphics::renderer::viewport::Margins;
+use rust_thermo_core::graphics::renderer::margins::Margins;
 use wgpu::util::DeviceExt;
 
 #[repr(C)]

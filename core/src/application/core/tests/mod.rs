@@ -7,7 +7,7 @@ mod wall_momentum;
 
 use crate::application::MainContent;
 use crate::graphics::renderer::ViewportTransform;
-use crate::graphics::renderer::viewport::Margins;
+use crate::graphics::renderer::margins::Margins;
 use crate::objects2d::Rect;
 
 const DT_GOAL: f32 = 0.01;

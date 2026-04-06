@@ -15,8 +15,8 @@ use crate::application::MainContent;
 use crate::application::renderer_snapshot::RendererSnapshot;
 use crate::graphics::energy_plot::{EnergyData, SharedEnergyData};
 use crate::graphics::renderer::ViewportTransform;
+use crate::graphics::renderer::margins::Margins;
 use crate::graphics::renderer::state_layers::RendererConfig;
-use crate::graphics::renderer::viewport::Margins;
 use crate::objects2d::{Rect, Vec2D};
 use std::sync::{Arc, Mutex};
 

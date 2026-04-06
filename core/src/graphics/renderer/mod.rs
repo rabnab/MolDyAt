@@ -1,6 +1,8 @@
 pub mod batch_renderer;
 pub mod event_loop;
 pub mod interpolation;
+pub mod margins;
+pub(crate) mod mat3;
 pub mod state_layers;
 pub mod viewport;
 
@@ -21,7 +23,9 @@ pub use event_loop::{InputAction, InputHandler, KeyCode};
 
 // Public API for unified viewport transformation (used by both renderers)
 #[allow(unused_imports)] // Public API, accessed via direct submodule imports
-pub use viewport::{Margins, ViewportTransform};
+pub use margins::Margins;
+#[allow(unused_imports)] // Public API, accessed via direct submodule imports
+pub use viewport::ViewportTransform;
 
 // Public API for unified render state (used by both renderers)
 #[allow(unused_imports)] // Public API, accessed via direct submodule imports

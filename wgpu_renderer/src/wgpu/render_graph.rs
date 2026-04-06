@@ -19,8 +19,8 @@
 
 use rust_thermo_core::application::AppResult;
 use rust_thermo_core::application::renderer_snapshot::RendererSnapshot;
+use rust_thermo_core::graphics::renderer::margins::Margins;
 use rust_thermo_core::graphics::renderer::state_layers::ThermoDisplayMode;
-use rust_thermo_core::graphics::renderer::viewport::Margins;
 use std::any::Any;
 use std::collections::HashSet;
 
