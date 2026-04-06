@@ -6,6 +6,9 @@ pub(crate) mod mat3;
 pub mod state_layers;
 pub mod viewport;
 
+#[cfg(test)]
+mod tests;
+
 // ── Public API re-exports ───────────────────────────────────────────
 // These define the public interface of the renderer module. Renderers
 // import from submodules directly, but these exports provide a stable

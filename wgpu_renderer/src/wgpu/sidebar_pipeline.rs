@@ -15,36 +15,36 @@ use rust_thermo_core::graphics::sidebar::{ICON_COUNT, ICON_DISPLAY_SIZE, ICON_SP
 const SIDEBAR_SHADER: &str = include_str!("shaders/sidebar.wgsl");
 
 /// Embedded PNG icon data (compile-time).
-const ICON_WALL: &[u8] = include_bytes!("icons/wall.png");
-const ICON_VALVE: &[u8] = include_bytes!("icons/valve.png");
-const ICON_THERMO: &[u8] = include_bytes!("icons/thermo.png");
-const ICON_SOURCE_OPEN: &[u8] = include_bytes!("icons/sourceOpen.png");
+pub(crate) const ICON_WALL: &[u8] = include_bytes!("icons/wall.png");
+pub(crate) const ICON_VALVE: &[u8] = include_bytes!("icons/valve.png");
+pub(crate) const ICON_THERMO: &[u8] = include_bytes!("icons/thermo.png");
+pub(crate) const ICON_SOURCE_OPEN: &[u8] = include_bytes!("icons/sourceOpen.png");
 
 /// Padding around the icon group inside the background rectangle.
-const RECT_PADDING: f32 = 8.0;
+pub(crate) const RECT_PADDING: f32 = 8.0;
 /// Corner radius for the background rounded rectangle.
 const CORNER_RADIUS: f32 = 12.0;
 /// Border width for the background rounded rectangle outline.
 const BORDER_WIDTH: f32 = 2.0;
 /// 6 vertices per quad: 1 background + 1 highlight + ICON_COUNT icon quads.
-const MAX_VERTICES: usize = (ICON_COUNT + 2) * 6;
+pub(crate) const MAX_VERTICES: usize = (ICON_COUNT + 2) * 6;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
-struct SidebarVertex {
-    position: [f32; 2],
-    uv: [f32; 2],
+pub(crate) struct SidebarVertex {
+    pub(crate) position: [f32; 2],
+    pub(crate) uv: [f32; 2],
     /// 0.0 = background rounded rect, 1.0 = icon texture, 2.0 = highlight.
-    mode: f32,
+    pub(crate) mode: f32,
 }
 
 /// Uniform data for the rounded rectangle background.
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
-struct RoundedRectParams {
-    size_px: [f32; 2],
-    corner_radius: f32,
-    border_width: f32,
+pub(crate) struct RoundedRectParams {
+    pub(crate) size_px: [f32; 2],
+    pub(crate) corner_radius: f32,
+    pub(crate) border_width: f32,
 }
 
 /// Sidebar icon rendering pipeline.
@@ -69,7 +69,7 @@ pub struct SidebarPipeline {
 }
 
 /// Decode a PNG from memory into an RGBA8 buffer, resized to `size×size`.
-fn decode_icon(png_bytes: &[u8], size: u32) -> Vec<u8> {
+pub(crate) fn decode_icon(png_bytes: &[u8], size: u32) -> Vec<u8> {
     let img = image::load_from_memory_with_format(png_bytes, image::ImageFormat::Png)
         .expect("Failed to decode embedded PNG icon");
     let resized = img.resize_exact(size, size, image::imageops::FilterType::Lanczos3);
@@ -303,7 +303,7 @@ impl SidebarPipeline {
 /// starting below the top margin. Icons that would exceed the bottom margin
 /// are omitted. The background rectangle encloses all visible icons with
 /// [`RECT_PADDING`] on each side.
-fn build_sidebar_geometry(
+pub(crate) fn build_sidebar_geometry(
     icon_count: u32,
     win_w: f32,
     win_h: f32,
@@ -324,6 +324,8 @@ fn build_sidebar_geometry(
     let visible_count =
         rust_thermo_core::graphics::sidebar::visible_icon_count(win_h, MARGIN_TOP, MARGIN_BOTTOM)
             as u32;
+    // Clamp to the number of icons actually in the atlas.
+    let visible_count = visible_count.min(icon_count);
 
     let mut rect_params = RoundedRectParams {
         size_px: [0.0, 0.0],
@@ -503,258 +505,5 @@ impl RenderPipeline for SidebarPipeline {
         render_pass.set_bind_group(0, &self.bind_group, &[]);
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.draw(0..self.vertex_count, 0..1);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Background quad uses 6 vertices.
-    const BG_VERTS: usize = 6;
-
-    #[test]
-    fn sidebar_vertex_size_matches_shader_layout() {
-        // position: vec2<f32> = 8, uv: vec2<f32> = 8, mode: f32 = 4 → 20 bytes
-        assert_eq!(std::mem::size_of::<SidebarVertex>(), 20);
-    }
-
-    #[test]
-    fn rounded_rect_params_size() {
-        // size_px: vec2<f32> = 8, corner_radius: f32 = 4, border_width: f32 = 4 → 16 bytes
-        assert_eq!(std::mem::size_of::<RoundedRectParams>(), 16);
-    }
-
-    #[test]
-    fn max_vertices_includes_background_and_highlight() {
-        assert_eq!(MAX_VERTICES, (ICON_COUNT + 2) * 6);
-    }
-
-    #[test]
-    fn build_geometry_produces_correct_count_for_all_icons() {
-        let (verts, _) = build_sidebar_geometry(4, 1920.0, 1080.0, None);
-        // 1 bg quad + 4 icon quads = 30 vertices
-        assert_eq!(verts.len(), BG_VERTS + 4 * 6);
-    }
-
-    #[test]
-    fn build_geometry_single_icon() {
-        let (verts, _) = build_sidebar_geometry(1, 800.0, 600.0, None);
-        assert_eq!(verts.len(), BG_VERTS + 6);
-    }
-
-    #[test]
-    fn build_geometry_zero_icons() {
-        let (verts, _) = build_sidebar_geometry(0, 800.0, 600.0, None);
-        assert!(verts.is_empty());
-    }
-
-    #[test]
-    fn build_geometry_clips_when_window_too_small() {
-        let min_for_one = MARGIN_TOP + ICON_SPACING + ICON_DISPLAY_SIZE + MARGIN_BOTTOM;
-        let (verts, _) = build_sidebar_geometry(4, 400.0, min_for_one + 1.0, None);
-        assert_eq!(verts.len(), BG_VERTS + 6, "only one icon should fit");
-    }
-
-    #[test]
-    fn build_geometry_empty_when_window_too_short() {
-        let too_short = MARGIN_TOP + ICON_SPACING + ICON_DISPLAY_SIZE + MARGIN_BOTTOM - 1.0;
-        let (verts, _) = build_sidebar_geometry(4, 400.0, too_short, None);
-        assert!(verts.is_empty());
-    }
-
-    #[test]
-    fn ndc_positions_are_within_clip_space() {
-        let (verts, _) = build_sidebar_geometry(4, 1920.0, 1080.0, None);
-        for v in &verts {
-            assert!(
-                v.position[0] >= -1.0 && v.position[0] <= 1.0,
-                "x NDC out of range: {}",
-                v.position[0]
-            );
-            assert!(
-                v.position[1] >= -1.0 && v.position[1] <= 1.0,
-                "y NDC out of range: {}",
-                v.position[1]
-            );
-        }
-    }
-
-    #[test]
-    fn all_geometry_is_in_left_margin() {
-        let win_w = 1920.0_f32;
-        let (verts, _) = build_sidebar_geometry(4, win_w, 1080.0, None);
-        let ndc_margin_right = (MARGIN_LEFT / win_w) * 2.0 - 1.0;
-        for v in &verts {
-            assert!(
-                v.position[0] <= ndc_margin_right + 1e-5,
-                "extends beyond left margin: NDC x={}, margin NDC x={}",
-                v.position[0],
-                ndc_margin_right
-            );
-        }
-    }
-
-    #[test]
-    fn uv_coordinates_span_atlas_correctly() {
-        let (verts, _) = build_sidebar_geometry(4, 1920.0, 1080.0, None);
-        let icons = &verts[BG_VERTS..];
-        assert!((icons[0].uv[1] - 0.0).abs() < 1e-5, "first icon uv_top");
-        assert!((icons[1].uv[1] - 0.25).abs() < 1e-5, "first icon uv_bottom");
-        assert!((icons[6].uv[1] - 0.25).abs() < 1e-5, "second icon uv_top");
-        assert!((icons[7].uv[1] - 0.5).abs() < 1e-5, "second icon uv_bottom");
-        assert!((icons[18].uv[1] - 0.75).abs() < 1e-5, "fourth icon uv_top");
-        assert!(
-            (icons[19].uv[1] - 1.0).abs() < 1e-5,
-            "fourth icon uv_bottom"
-        );
-    }
-
-    #[test]
-    fn uv_x_spans_full_texture_width() {
-        let (verts, _) = build_sidebar_geometry(1, 800.0, 600.0, None);
-        let icons = &verts[BG_VERTS..];
-        assert!((icons[0].uv[0] - 0.0).abs() < 1e-5, "TL uv.x");
-        assert!((icons[1].uv[0] - 0.0).abs() < 1e-5, "BL uv.x");
-        assert!((icons[2].uv[0] - 1.0).abs() < 1e-5, "TR uv.x");
-        assert!((icons[5].uv[0] - 1.0).abs() < 1e-5, "BR uv.x");
-    }
-
-    #[test]
-    fn icons_are_vertically_ordered_top_to_bottom() {
-        let (verts, _) = build_sidebar_geometry(4, 1920.0, 1080.0, None);
-        let icons = &verts[BG_VERTS..];
-        for i in 0..3 {
-            let quad_base = i * 6;
-            let next_quad_base = (i + 1) * 6;
-            assert!(
-                icons[next_quad_base].position[1] < icons[quad_base].position[1],
-                "icon {} is not above icon {}",
-                i,
-                i + 1
-            );
-        }
-    }
-
-    #[test]
-    fn decode_icon_produces_correct_buffer_size() {
-        let decoded = decode_icon(ICON_WALL, 64);
-        assert_eq!(decoded.len(), 64 * 64 * 4);
-    }
-
-    #[test]
-    fn decode_icon_all_embedded_pngs_are_valid() {
-        for (name, data) in [
-            ("wall", ICON_WALL),
-            ("valve", ICON_VALVE),
-            ("thermo", ICON_THERMO),
-            ("sourceOpen", ICON_SOURCE_OPEN),
-        ] {
-            let decoded = decode_icon(data, 64);
-            assert_eq!(
-                decoded.len(),
-                64 * 64 * 4,
-                "{name} icon decoding produced wrong size"
-            );
-        }
-    }
-
-    #[test]
-    fn icons_centered_horizontally_in_margin() {
-        let win_w = 1920.0_f32;
-        let (verts, _) = build_sidebar_geometry(1, win_w, 1080.0, None);
-        let icons = &verts[BG_VERTS..];
-        let expected_left_px = (MARGIN_LEFT - ICON_DISPLAY_SIZE) * 0.5;
-        let expected_right_px = expected_left_px + ICON_DISPLAY_SIZE;
-        let expected_left_ndc = (expected_left_px / win_w) * 2.0 - 1.0;
-        let expected_right_ndc = (expected_right_px / win_w) * 2.0 - 1.0;
-        assert!(
-            (icons[0].position[0] - expected_left_ndc).abs() < 1e-5,
-            "left edge"
-        );
-        assert!(
-            (icons[2].position[0] - expected_right_ndc).abs() < 1e-5,
-            "right edge"
-        );
-    }
-
-    // ── Background rectangle tests ──────────────────────────────
-
-    #[test]
-    fn background_quad_has_mode_zero() {
-        let (verts, _) = build_sidebar_geometry(4, 1920.0, 1080.0, None);
-        for v in &verts[..BG_VERTS] {
-            assert!((v.mode).abs() < 1e-5, "bg vertex mode should be 0.0");
-        }
-    }
-
-    #[test]
-    fn icon_quads_have_mode_one() {
-        let (verts, _) = build_sidebar_geometry(4, 1920.0, 1080.0, None);
-        for v in &verts[BG_VERTS..] {
-            assert!(
-                (v.mode - 1.0).abs() < 1e-5,
-                "icon vertex mode should be 1.0"
-            );
-        }
-    }
-
-    #[test]
-    fn background_encloses_all_icons() {
-        let (verts, _) = build_sidebar_geometry(4, 1920.0, 1080.0, None);
-        let bg = &verts[..BG_VERTS];
-        let icons = &verts[BG_VERTS..];
-
-        let bg_min_x = bg
-            .iter()
-            .map(|v| v.position[0])
-            .fold(f32::INFINITY, f32::min);
-        let bg_max_x = bg
-            .iter()
-            .map(|v| v.position[0])
-            .fold(f32::NEG_INFINITY, f32::max);
-        let bg_min_y = bg
-            .iter()
-            .map(|v| v.position[1])
-            .fold(f32::INFINITY, f32::min);
-        let bg_max_y = bg
-            .iter()
-            .map(|v| v.position[1])
-            .fold(f32::NEG_INFINITY, f32::max);
-
-        for v in icons {
-            assert!(v.position[0] >= bg_min_x - 1e-5, "icon left of bg");
-            assert!(v.position[0] <= bg_max_x + 1e-5, "icon right of bg");
-            assert!(v.position[1] >= bg_min_y - 1e-5, "icon below bg");
-            assert!(v.position[1] <= bg_max_y + 1e-5, "icon above bg");
-        }
-    }
-
-    #[test]
-    fn rect_params_have_positive_dimensions() {
-        let (_, params) = build_sidebar_geometry(4, 1920.0, 1080.0, None);
-        assert!(params.size_px[0] > 0.0, "rect width");
-        assert!(params.size_px[1] > 0.0, "rect height");
-        assert!(params.corner_radius > 0.0, "corner radius");
-        assert!(params.border_width > 0.0, "border width");
-    }
-
-    #[test]
-    fn rect_params_width_matches_icon_plus_padding() {
-        let (_, params) = build_sidebar_geometry(4, 1920.0, 1080.0, None);
-        let expected_w = ICON_DISPLAY_SIZE + 2.0 * RECT_PADDING;
-        assert!(
-            (params.size_px[0] - expected_w).abs() < 1e-5,
-            "rect width: got {}, expected {}",
-            params.size_px[0],
-            expected_w
-        );
-    }
-
-    #[test]
-    fn rect_params_zero_when_no_icons_visible() {
-        let (_, params) = build_sidebar_geometry(0, 800.0, 600.0, None);
-        assert!((params.size_px[0]).abs() < 1e-5, "rect width should be 0");
-        assert!((params.size_px[1]).abs() < 1e-5, "rect height should be 0");
     }
 }

@@ -5,6 +5,9 @@ mod resize;
 mod simulation;
 mod wall_momentum;
 
+mod line_segments;
+mod snapshot;
+
 use crate::application::MainContent;
 use crate::graphics::renderer::ViewportTransform;
 use crate::graphics::renderer::margins::Margins;
