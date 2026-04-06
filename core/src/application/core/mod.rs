@@ -6,7 +6,7 @@ use crate::application::sim_stats::SimStats;
 use crate::application::thermo_field::ThermoFieldHistory;
 use crate::objects2d::ball_cell::cell_grid::CellGrid;
 use crate::objects2d::ball_impl::{Ball2D, BallPhysics, ForceResult};
-use crate::objects2d::{Rect, Vec2D, VerboseInfoMode};
+use crate::objects2d::{Rect, SimLineSegment, Vec2D, VerboseInfoMode};
 use arc_swap::ArcSwapOption;
 use std::sync::Arc;
 
@@ -42,6 +42,10 @@ pub struct MainContent {
     physics_fps: f32,
     /// Rolling-window averager for per-cell T/P fields
     pub(crate) thermo_history: ThermoFieldHistory,
+    /// Line segment barriers placed by the operator panel
+    pub(crate) line_segments: Vec<SimLineSegment>,
+    /// Next ID for line segments (monotonically increasing, reset on clear)
+    line_segment_next_id: usize,
 }
 
 pub struct StatsAccumulator {
@@ -56,6 +60,8 @@ pub struct StatsAccumulator {
 mod accessors;
 mod balls;
 mod ctor;
+mod line_segments;
+mod operators;
 mod sim;
 mod snapshot;
 mod verbose;

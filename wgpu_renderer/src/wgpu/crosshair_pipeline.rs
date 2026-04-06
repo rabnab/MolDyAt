@@ -196,13 +196,30 @@ impl RenderPipeline for CrosshairPipeline {
     }
 
     fn viewport_mode(&self) -> ViewportMode {
-        ViewportMode::Inset
+        ViewportMode::FullWindow
     }
 
     fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
+        // Remap the inset view_proj to full-window NDC so the crosshair
+        // renders across the entire window including the sidebar margin.
+        let (fw, fh) = (ctx.window_size.0 as f32, ctx.window_size.1 as f32);
+        let vp_w = (fw - ctx.margin.horizontal()).max(1.0);
+        let vp_h = (fh - ctx.margin.vertical()).max(1.0);
+        let sx = vp_w / fw;
+        let sy = vp_h / fh;
+        let ox = (ctx.margin.left - ctx.margin.right) / fw;
+        let oy = (ctx.margin.bottom - ctx.margin.top) / fh;
+        // Column-major remap matrix: scale then translate
+        let remap: [[f32; 4]; 4] = [
+            [sx, 0.0, 0.0, 0.0],
+            [0.0, sy, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [ox, oy, 0.0, 1.0],
+        ];
+        let full_vp = mat4_mul(&remap, &ctx.view_proj);
         self.update_uniforms(
             ctx.queue,
-            ctx.view_proj,
+            full_vp,
             [ctx.cursor_world_pos.0, ctx.cursor_world_pos.1],
             ctx.current_ball_radius,
             ctx.ctrl_pressed,
@@ -215,4 +232,15 @@ impl RenderPipeline for CrosshairPipeline {
     fn render<'rp>(&'rp self, render_pass: &mut wgpu::RenderPass<'rp>) {
         self.draw(render_pass);
     }
+}
+
+/// Multiply two column-major 4×4 matrices: result = a * b.
+fn mat4_mul(a: &[[f32; 4]; 4], b: &[[f32; 4]; 4]) -> [[f32; 4]; 4] {
+    let mut out = [[0.0f32; 4]; 4];
+    for col in 0..4 {
+        for row in 0..4 {
+            out[col][row] = (0..4).map(|k| a[k][row] * b[col][k]).sum();
+        }
+    }
+    out
 }

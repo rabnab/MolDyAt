@@ -15,14 +15,15 @@ use crate::application::MainContent;
 use crate::application::renderer_snapshot::RendererSnapshot;
 use crate::graphics::energy_plot::{EnergyData, SharedEnergyData};
 use crate::graphics::renderer::ViewportTransform;
+use crate::graphics::renderer::margins::Margins;
 use crate::graphics::renderer::state_layers::RendererConfig;
-use crate::graphics::renderer::viewport::Margins;
 use crate::objects2d::{Rect, Vec2D};
 use std::sync::{Arc, Mutex};
 
 use super::action_processor::process_action_common;
 use super::energy_window_manager::EnergyWindowManager;
-use super::input_handler::{InputAction, InputHandler};
+use super::input_handler::{InputAction, InputHandler, OperatorTool};
+pub use super::line_segment_tool::LineSegmentDrawState;
 use super::metrics::MetricsCollector;
 use super::physics_coordinator::PhysicsCoordinator;
 
@@ -67,6 +68,12 @@ pub struct UnifiedRenderState {
     // ── Per-frame metrics ────────────────────────────────────────────
     /// Renderer-agnostic frame metrics (FPS, draw calls, etc.).
     pub metrics: MetricsCollector,
+
+    // ── Operator tool ────────────────────────────────────────────────
+    /// Currently selected operator tool from the sidebar panel.
+    pub active_tool: OperatorTool,
+    /// Drawing state for the line segment tool.
+    pub line_draw_state: LineSegmentDrawState,
 }
 
 impl UnifiedRenderState {
@@ -103,6 +110,8 @@ impl UnifiedRenderState {
             cursor_world_pos: Vec2D::zero(),
             current_ball_size_idx: 2, // default mid-size
             metrics: MetricsCollector::new(),
+            active_tool: OperatorTool::None,
+            line_draw_state: LineSegmentDrawState::Idle,
         }
     }
 
@@ -204,6 +213,11 @@ impl UnifiedRenderState {
                     self.toggle_energy_window(target);
                 }
                 return false; // doesn't affect view
+            }
+            InputAction::SelectOperatorTool(tool) => {
+                self.active_tool = *tool;
+                self.line_draw_state = LineSegmentDrawState::Idle;
+                return false;
             }
             _ => {}
         }
@@ -318,6 +332,7 @@ impl UnifiedRenderState {
     /// Handle mouse button input event.
     ///
     /// Processes mouse clicks and drags for pan, ball addition, and ball size cycling.
+    /// When the line segment tool is active, left-click starts/ends drawing.
     /// Returns true if the action affects the viewport.
     pub fn handle_mouse_input_event(
         &mut self,
@@ -327,6 +342,73 @@ impl UnifiedRenderState {
         let world_pos = self.input.cursor_pos();
         let screen_pos = self.input.cursor_pos_px();
         let pan_offset = self.viewport.pan_offset();
+
+        // Sidebar icon click detection (left press only)
+        if button == winit::event::MouseButton::Left
+            && state == winit::event::ElementState::Pressed
+            && let Some(icon_idx) = self.sidebar_icon_at(screen_pos)
+        {
+            let tool = Self::operator_tool_for_icon(icon_idx);
+            // Toggle off if already selected, otherwise switch
+            let new_tool = if self.active_tool == tool {
+                OperatorTool::None
+            } else {
+                tool
+            };
+            let action = InputAction::SelectOperatorTool(new_tool);
+            self.process_action(&action, None);
+            return true;
+        }
+
+        // Handle line segment tool interactions
+        if self.active_tool == OperatorTool::LineSegment
+            && button == winit::event::MouseButton::Left
+        {
+            match state {
+                winit::event::ElementState::Pressed => {
+                    // Try to grab an existing endpoint first
+                    if let Some((seg_id, move_start)) = self.find_near_endpoint(world_pos) {
+                        self.line_draw_state = LineSegmentDrawState::MovingEndpoint {
+                            segment_id: seg_id,
+                            move_start,
+                        };
+                    } else {
+                        let snapped = self.snap_world_pos(world_pos);
+                        self.line_draw_state = LineSegmentDrawState::Drawing { start: snapped };
+                    }
+                    self.view_dirty = true;
+                    return true;
+                }
+                winit::event::ElementState::Released => {
+                    match self.line_draw_state {
+                        LineSegmentDrawState::Drawing { start } => {
+                            let end = self.snap_world_pos(world_pos);
+                            // Only commit if the segment has meaningful length
+                            if start.distance_squared(&end) > 0.01 {
+                                let action = InputAction::CommitLineSegment { start, end };
+                                self.process_action(&action, None);
+                            }
+                        }
+                        LineSegmentDrawState::MovingEndpoint {
+                            segment_id,
+                            move_start,
+                        } => {
+                            let snapped = self.snap_world_pos(world_pos);
+                            let action = InputAction::MoveLineSegmentEndpoint {
+                                segment_id,
+                                new_pos: snapped,
+                                move_start,
+                            };
+                            self.process_action(&action, None);
+                        }
+                        LineSegmentDrawState::Idle => {}
+                    }
+                    self.line_draw_state = LineSegmentDrawState::Idle;
+                    self.view_dirty = true;
+                    return true;
+                }
+            }
+        }
 
         if let Some(action) = self
             .input
@@ -340,10 +422,20 @@ impl UnifiedRenderState {
     /// Handle cursor moved event.
     ///
     /// Updates cursor position and processes pan gestures.
+    /// When drawing a line segment, marks view dirty for ghost preview.
     /// Returns true if the action affects the viewport.
     pub fn handle_cursor_moved_event(&mut self, x: f32, y: f32) -> bool {
         // Update cursor position using shared state logic
         self.update_cursor_world_pos(&[x, y]);
+
+        // Mark view dirty while drawing/moving a line segment so ghost
+        // preview updates, or when the line segment tool is selected
+        // (for snap indicator updates).
+        if !matches!(self.line_draw_state, LineSegmentDrawState::Idle)
+            || self.active_tool == OperatorTool::LineSegment
+        {
+            self.view_dirty = true;
+        }
 
         if let Some(action) = self.input.handle_mouse_motion(x, y) {
             if let InputAction::PanUpdate { delta } = &action {

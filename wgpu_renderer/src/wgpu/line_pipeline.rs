@@ -274,6 +274,47 @@ impl RenderPipeline for LinePipeline {
         self.update_uniforms(ctx.queue, ctx.view_proj);
         let mut line_batch: BatchRenderer<LineSegment> = BatchRenderer::new();
         collect_neighbor_lines(&ctx.snapshot.balls, &mut line_batch);
+
+        // Committed line segments (white, opaque)
+        for seg in &ctx.snapshot.line_segments {
+            line_batch.push(LineSegment {
+                points: [[seg.start.x, seg.start.y], [seg.end.x, seg.end.y]],
+                width: 2.0,
+                color: [1.0, 1.0, 1.0, 1.0],
+            });
+        }
+
+        // Ghost preview (semi-transparent yellow)
+        if let Some((start, end)) = ctx.line_segment_preview {
+            line_batch.push(LineSegment {
+                points: [start, end],
+                width: 2.0,
+                color: [1.0, 1.0, 0.0, 0.5],
+            });
+        }
+
+        // Snap indicators: small crosshairs at snap target positions.
+        // Scale the crosshair size proportionally to the simulation region
+        // so it stays visually consistent when the world is resized.
+        let bounds = &ctx.snapshot.cell_grid_bounds;
+        let world_extent = bounds.w.abs().max(bounds.h.abs()).max(1.0);
+        let cross_size = world_extent * 0.015;
+        let snap_color = [0.0, 1.0, 1.0, 0.9]; // cyan
+        for &pos in &ctx.snap_indicators {
+            // Horizontal bar
+            line_batch.push(LineSegment {
+                points: [[pos[0] - cross_size, pos[1]], [pos[0] + cross_size, pos[1]]],
+                width: 2.0,
+                color: snap_color,
+            });
+            // Vertical bar
+            line_batch.push(LineSegment {
+                points: [[pos[0], pos[1] - cross_size], [pos[0], pos[1] + cross_size]],
+                width: 2.0,
+                color: snap_color,
+            });
+        }
+
         self.flush_line_batch(ctx.device, ctx.queue, &mut line_batch);
         Ok(())
     }

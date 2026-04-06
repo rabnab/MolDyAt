@@ -5,13 +5,32 @@ use winit::event::{ElementState, MouseButton, MouseScrollDelta};
 
 pub type KeyCode = winit::keyboard::KeyCode;
 
+/// Operator tool selected from the sidebar panel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OperatorTool {
+    /// No tool selected — default mode.
+    None,
+    /// Line segment barrier tool (wall icon, sidebar index 0).
+    LineSegment,
+    /// Valve segment tool (gate icon, sidebar index 1).
+    ValveSegment,
+    /// Thermostat tool (temperature icon, sidebar index 2).
+    Thermostat,
+    /// Source sphere tool (emitter icon, sidebar index 3).
+    SourceSphere,
+}
+
 /// Actions that can result from user input
 #[derive(Debug, Clone)]
 pub enum InputAction {
     // Ball manipulation
-    AddBall { position: Vec2D },
+    AddBall {
+        position: Vec2D,
+    },
     NextBallSize,
-    AddRandomBalls { count: usize },
+    AddRandomBalls {
+        count: usize,
+    },
     StopAllBalls,
     ClearBalls,
 
@@ -26,10 +45,18 @@ pub enum InputAction {
     DecreaseWaitTime,
 
     // View control
-    ZoomIn { center: Vec2D },
-    ZoomOut { center: Vec2D },
-    PanStart { pos_px: [f32; 2] },
-    PanUpdate { delta: Vec2D },
+    ZoomIn {
+        center: Vec2D,
+    },
+    ZoomOut {
+        center: Vec2D,
+    },
+    PanStart {
+        pos_px: [f32; 2],
+    },
+    PanUpdate {
+        delta: Vec2D,
+    },
     PanEnd,
     ResetView,
 
@@ -48,9 +75,28 @@ pub enum InputAction {
     StartVerbosityInput,
 
     // Cursor
-    UpdateCursor { position: Vec2D },
-    EnableCursor { repeated: bool },
+    UpdateCursor {
+        position: Vec2D,
+    },
+    EnableCursor {
+        repeated: bool,
+    },
     DisableCursor,
+
+    // Operator panel
+    SelectOperatorTool(OperatorTool),
+    /// Commit a drawn line segment (start, end in world coords).
+    CommitLineSegment {
+        start: Vec2D,
+        end: Vec2D,
+    },
+    /// Move a line segment endpoint (segment id, new position).
+    MoveLineSegmentEndpoint {
+        segment_id: usize,
+        new_pos: Vec2D,
+        /// `true` → move start endpoint, `false` → move end endpoint.
+        move_start: bool,
+    },
 }
 
 /// Cooldown period between +/- key commands (in milliseconds)

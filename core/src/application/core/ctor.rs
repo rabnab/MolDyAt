@@ -37,6 +37,8 @@ impl MainContent {
             cached_force_results: Vec::new(),
             physics_fps: 0.0,
             thermo_history: ThermoFieldHistory::new(),
+            line_segments: Vec::new(),
+            line_segment_next_id: 0,
         })
     }
 }

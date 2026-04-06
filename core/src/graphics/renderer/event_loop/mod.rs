@@ -1,8 +1,10 @@
 mod action_processor;
 mod energy_window_manager;
 mod input_handler;
+mod line_segment_tool;
 pub mod metrics;
 mod physics_coordinator;
+mod sidebar_tool;
 #[cfg(test)]
 mod tests;
 mod unified_render_state;

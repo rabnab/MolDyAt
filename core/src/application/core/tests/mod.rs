@@ -1,0 +1,36 @@
+mod ball_management;
+mod energy_conservation;
+mod physics_thread;
+mod resize;
+mod simulation;
+mod wall_momentum;
+
+mod line_segments;
+mod snapshot;
+
+use crate::application::MainContent;
+use crate::graphics::renderer::ViewportTransform;
+use crate::graphics::renderer::margins::Margins;
+use crate::objects2d::Rect;
+
+const DT_GOAL: f32 = 0.01;
+
+fn create_main_content_for_region(tl_x: f32, tl_y: f32) -> (MainContent, ViewportTransform) {
+    let world = Rect::new(tl_x, tl_y, 100.0, -100.0);
+    let transform = ViewportTransform::new(world, (800.0, 600.0), Margins::symmetric(50.0, 50.0));
+    create_main_content_with_world(transform)
+}
+
+fn create_main_content_with_world(
+    transform: ViewportTransform,
+) -> (MainContent, ViewportTransform) {
+    let world_rect = transform.world_bounds();
+    let main_content = MainContent::new(world_rect).expect("Could not create main content");
+
+    println!("Created main content with world rect {:?}", world_rect,);
+    (main_content, transform)
+}
+
+fn create_main_content() -> (MainContent, ViewportTransform) {
+    create_main_content_for_region(-10., 10.)
+}

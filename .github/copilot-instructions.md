@@ -111,8 +111,9 @@ This is a **molecular dynamics physics simulation** implementing Lennard-Jones p
 ## Testing Strategy
 
 **Test Placement**:
-- Unit tests: Place in `src/module_name/tests.rs` or inline with `#[cfg(test)]` for small modules
-- Integration tests: Place in `src/frame/application_master/tests.rs` or similar module-level test files
+- Unit tests: Place in a `tests/` subdirectory next to the module under test, with one file per topic (e.g. `src/application/core/tests/ball_management.rs`, `src/application/core/tests/energy_conservation.rs`)
+- The `tests/` directory must have a `mod.rs` that declares each topic file as `mod topic_name;` and contains shared imports/helpers
+- Inline `#[cfg(test)] mod tests` is acceptable only for small, self-contained modules where a single test file suffices (e.g. `mat3.rs`)
 - Test files should be next to the code they test for discoverability
 
 **What to Test**:

@@ -115,6 +115,9 @@ impl WgpuPipelines {
         current_ball_radius: f32,
         ctrl_pressed: bool,
         thermo_display: ThermoDisplayMode,
+        line_segment_preview: Option<([f32; 2], [f32; 2])>,
+        selected_sidebar_icon: Option<usize>,
+        snap_indicators: Vec<[f32; 2]>,
     ) -> AppResult {
         let window_size = ctx.size();
         let margin = MARGINS;
@@ -130,6 +133,9 @@ impl WgpuPipelines {
             window_size,
             margin,
             thermo_display,
+            line_segment_preview,
+            selected_sidebar_icon,
+            snap_indicators,
         };
 
         self.graph.prepare_all(&prepare_ctx)

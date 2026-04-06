@@ -3,7 +3,7 @@
 
 use bytemuck::{Pod, Zeroable};
 use font8x8::UnicodeFonts;
-use rust_thermo_core::graphics::renderer::viewport::Margins;
+use rust_thermo_core::graphics::renderer::margins::Margins;
 use wgpu::util::DeviceExt;
 
 #[repr(C)]

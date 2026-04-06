@@ -6,6 +6,9 @@ pub mod renderer_snapshot;
 mod sim_stats;
 pub mod thermo_field;
 
+#[cfg(test)]
+mod tests;
+
 use crate::application::game_logic::GameLogicData;
 use crate::objects2d::Rect;
 use crate::objects2d::ball_impl::Ball2D;

@@ -99,8 +99,26 @@ pub fn process_action_common(
         InputAction::PanStart { .. }
         | InputAction::PanEnd
         | InputAction::UpdateCursor { .. }
+        | InputAction::SelectOperatorTool(_)
         | InputAction::ToggleEnergyWindow  // handled in UnifiedRenderState::process_action
         | InputAction::ToggleCutoffRings => {}  // needs wgpu resources
+        InputAction::CommitLineSegment { start, end } => {
+            physics.send_command(PhysicsCommand::AddLineSegment {
+                start: *start,
+                end: *end,
+            });
+        }
+        InputAction::MoveLineSegmentEndpoint {
+            segment_id,
+            new_pos,
+            move_start,
+        } => {
+            physics.send_command(PhysicsCommand::MoveLineSegmentEndpoint {
+                segment_id: *segment_id,
+                new_pos: *new_pos,
+                move_start: *move_start,
+            });
+        }
     }
 
     affects_view

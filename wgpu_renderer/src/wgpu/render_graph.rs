@@ -19,8 +19,8 @@
 
 use rust_thermo_core::application::AppResult;
 use rust_thermo_core::application::renderer_snapshot::RendererSnapshot;
+use rust_thermo_core::graphics::renderer::margins::Margins;
 use rust_thermo_core::graphics::renderer::state_layers::ThermoDisplayMode;
-use rust_thermo_core::graphics::renderer::viewport::Margins;
 use std::any::Any;
 use std::collections::HashSet;
 
@@ -52,6 +52,12 @@ pub struct PrepareContext<'a> {
     pub window_size: (u32, u32),
     pub margin: Margins,
     pub thermo_display: ThermoDisplayMode,
+    /// Ghost-preview line segment while the user is drawing (world coords).
+    pub line_segment_preview: Option<([f32; 2], [f32; 2])>,
+    /// Currently selected sidebar icon index, if any.
+    pub selected_sidebar_icon: Option<usize>,
+    /// World-coordinate positions for snap indicators (crosshairs).
+    pub snap_indicators: Vec<[f32; 2]>,
 }
 
 // ── Pipeline trait ─────────────────────────────────────────────────

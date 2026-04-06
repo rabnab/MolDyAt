@@ -28,9 +28,12 @@ mod wgpu_input;
 mod wgpu_pipelines;
 mod wgpu_window;
 
+#[cfg(test)]
+mod tests;
+
 pub use wgpu_window::WgpuWindow;
 
-use rust_thermo_core::graphics::renderer::viewport::Margins;
+use rust_thermo_core::graphics::renderer::margins::Margins;
 
 pub const MARGIN_LEFT: f32 = 110.;
 pub const MARGIN_RIGHT: f32 = 50.;
