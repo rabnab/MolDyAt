@@ -41,7 +41,7 @@ fn sd_rounded_rect(p: vec2<f32>, half_size: vec2<f32>, r: f32) -> f32 {
 // Medium gray fill, purple outline.
 const FILL_COLOR: vec4<f32> = vec4<f32>(0.5, 0.5, 0.5, 1.0);
 const OUTLINE_COLOR: vec4<f32> = vec4<f32>(0.6, 0.2, 0.8, 1.0);
-const HIGHLIGHT_COLOR: vec4<f32> = vec4<f32>(0.8, 0.6, 1.0, 0.35);
+const HIGHLIGHT_BORDER_COLOR: vec4<f32> = vec4<f32>(0.0, 0.0, 0.0, 1.0);
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
@@ -68,8 +68,15 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     // Icon texture sampling.
     if in.mode > 1.5 {
-        // Highlight overlay for the selected icon (mode 2.0).
-        return HIGHLIGHT_COLOR;
+        // Solid border frame around the selected icon (mode 2.0).
+        // Border width ~2px on a ~56px quad ≈ 0.036 in UV space.
+        let bw = 0.04;
+        let u = in.uv.x;
+        let v = in.uv.y;
+        if u > bw && u < (1.0 - bw) && v > bw && v < (1.0 - bw) {
+            discard;
+        }
+        return HIGHLIGHT_BORDER_COLOR;
     }
 
     let color = textureSample(icon_tex, icon_sampler, in.uv);

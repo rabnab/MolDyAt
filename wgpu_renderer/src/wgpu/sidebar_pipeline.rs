@@ -391,12 +391,13 @@ pub(crate) fn build_sidebar_geometry(
     if let Some(sel) = selected {
         let sel = sel as u32;
         if sel < visible_count {
+            let hl_pad = RECT_PADDING * 0.5;
             let icon_top = first_icon_top + sel as f32 * (ICON_DISPLAY_SIZE + ICON_SPACING);
             let icon_bottom = icon_top + ICON_DISPLAY_SIZE;
-            let hl_tl = to_ndc(pad_x, icon_top);
-            let hl_tr = to_ndc(pad_x + ICON_DISPLAY_SIZE, icon_top);
-            let hl_bl = to_ndc(pad_x, icon_bottom);
-            let hl_br = to_ndc(pad_x + ICON_DISPLAY_SIZE, icon_bottom);
+            let hl_tl = to_ndc(pad_x - hl_pad, icon_top - hl_pad);
+            let hl_tr = to_ndc(pad_x + ICON_DISPLAY_SIZE + hl_pad, icon_top - hl_pad);
+            let hl_bl = to_ndc(pad_x - hl_pad, icon_bottom + hl_pad);
+            let hl_br = to_ndc(pad_x + ICON_DISPLAY_SIZE + hl_pad, icon_bottom + hl_pad);
 
             for &(pos, uv) in &[
                 (hl_tl, [0.0, 0.0]),
