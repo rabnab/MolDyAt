@@ -280,7 +280,7 @@ impl RenderPipeline for LinePipeline {
         let world_extent = bounds.w.abs().max(bounds.h.abs()).max(1.0);
 
         // Committed line segments (white, opaque)
-        for seg in &ctx.snapshot.line_segments {
+        for seg in &ctx.snapshot.operators.line_segments {
             line_batch.push(LineSegment {
                 points: [[seg.start.x, seg.start.y], [seg.end.x, seg.end.y]],
                 width: 2.0,
@@ -289,9 +289,10 @@ impl RenderPipeline for LinePipeline {
         }
 
         // Valve segment overlays — draw on top of committed line segments
-        for valve in &ctx.snapshot.valve_segments {
+        for valve in &ctx.snapshot.operators.valve_segments {
             if let Some(seg) = ctx
                 .snapshot
+                .operators
                 .line_segments
                 .iter()
                 .find(|s| s.id == valve.line_id)
@@ -374,7 +375,12 @@ impl RenderPipeline for LinePipeline {
 
         // Ghost preview for valve segment drawing (semi-transparent magenta)
         if let Some((line_id, t_start, t_end)) = ctx.valve_segment_preview
-            && let Some(seg) = ctx.snapshot.line_segments.iter().find(|s| s.id == line_id)
+            && let Some(seg) = ctx
+                .snapshot
+                .operators
+                .line_segments
+                .iter()
+                .find(|s| s.id == line_id)
         {
             let p0 = seg.point_at_t(t_start);
             let p1 = seg.point_at_t(t_end);

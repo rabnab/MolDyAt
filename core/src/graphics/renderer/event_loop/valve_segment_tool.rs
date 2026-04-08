@@ -44,7 +44,7 @@ impl UnifiedRenderState {
         let segments = self
             .last_snapshot
             .as_ref()
-            .map(|s| s.line_segments.as_slice())
+            .map(|s| s.operators.line_segments.as_slice())
             .unwrap_or(&[]);
         let mut best_dist = LINE_HIT_DISTANCE;
         let mut best: Option<(usize, f32)> = None;
@@ -66,8 +66,9 @@ impl UnifiedRenderState {
         let snapshot = self.last_snapshot.as_ref()?;
         let mut best_dist = VALVE_HIT_DISTANCE;
         let mut best: Option<(usize, usize, f32, f32, bool)> = None;
-        for valve in &snapshot.valve_segments {
+        for valve in &snapshot.operators.valve_segments {
             let seg = snapshot
+                .operators
                 .line_segments
                 .iter()
                 .find(|s| s.id == valve.line_id)?;

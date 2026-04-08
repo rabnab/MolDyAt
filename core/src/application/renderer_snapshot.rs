@@ -25,6 +25,19 @@ use std::time::Instant;
 
 use crate::application::thermo_field::ThermoGrid;
 
+/// All operator data needed for rendering, bundled in one struct.
+///
+/// New operator types add a field here instead of expanding
+/// `RendererSnapshot` directly.  Population is driven by
+/// `create_snapshot()` which iterates the operator collections.
+#[derive(Clone, Default)]
+pub struct OperatorSnapshot {
+    /// Line segment barriers placed by the operator panel.
+    pub line_segments: Vec<SimLineSegment>,
+    /// Valve sections on line segments.
+    pub valve_segments: Vec<ValveSegment>,
+}
+
 /// Lightweight specification for cell grid dimensions and layout.
 /// Used by renderer to draw cell background without cloning the full CellGrid.
 #[derive(Debug, Clone)]
@@ -161,11 +174,8 @@ pub struct RendererSnapshot {
     /// `None` until at least one step of data is available.
     pub thermo_grid_spec: Option<ThermoGridSpec>,
 
-    /// Line segment barriers placed by the operator panel.
-    pub line_segments: Vec<SimLineSegment>,
-
-    /// Valve sections on line segments.
-    pub valve_segments: Vec<ValveSegment>,
+    /// All operator data (line segments, valves, future types).
+    pub operators: OperatorSnapshot,
 }
 
 impl RendererSnapshot {
@@ -196,8 +206,7 @@ impl RendererSnapshot {
             cell_temperature: ThermoGrid::filled(0, 0, 0.0),
             cell_pressure: ThermoGrid::filled(0, 0, 0.0),
             thermo_grid_spec: None,
-            line_segments: Vec::new(),
-            valve_segments: Vec::new(),
+            operators: OperatorSnapshot::default(),
         }
     }
 
@@ -230,8 +239,7 @@ impl RendererSnapshot {
             cell_temperature: ThermoGrid::filled(0, 0, 0.0),
             cell_pressure: ThermoGrid::filled(0, 0, 0.0),
             thermo_grid_spec: None,
-            line_segments: Vec::new(),
-            valve_segments: Vec::new(),
+            operators: OperatorSnapshot::default(),
         }
     }
 
