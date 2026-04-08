@@ -183,6 +183,22 @@ impl UnifiedRenderState {
         self.metrics.average_fps()
     }
 
+    /// Collect all operator preview geometry for the current frame.
+    ///
+    /// Bundles line-segment ghost, valve ghost, snap indicators, and
+    /// selected sidebar icon into a single [`OperatorPreviews`] struct
+    /// so the render pipeline receives one aggregate value.
+    pub fn operator_previews(&self) -> super::OperatorPreviews {
+        super::OperatorPreviews {
+            line_segment: self
+                .line_segment_preview()
+                .map(|(s, e)| ([s.x, s.y], [e.x, e.y])),
+            valve_segment: self.valve_segment_preview(),
+            snap_indicators: self.snap_indicators(),
+            selected_sidebar_icon: self.selected_sidebar_icon(),
+        }
+    }
+
     // ── Input-action dispatch ────────────────────────────────────────
 
     /// Process a user action that is common to all renderers.

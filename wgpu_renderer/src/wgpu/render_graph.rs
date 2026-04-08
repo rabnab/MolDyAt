@@ -19,6 +19,7 @@
 
 use rust_thermo_core::application::AppResult;
 use rust_thermo_core::application::renderer_snapshot::RendererSnapshot;
+use rust_thermo_core::graphics::renderer::event_loop::OperatorPreviews;
 use rust_thermo_core::graphics::renderer::margins::Margins;
 use rust_thermo_core::graphics::renderer::state_layers::ThermoDisplayMode;
 use std::any::Any;
@@ -52,15 +53,8 @@ pub struct PrepareContext<'a> {
     pub window_size: (u32, u32),
     pub margin: Margins,
     pub thermo_display: ThermoDisplayMode,
-    /// Ghost-preview line segment while the user is drawing (world coords).
-    pub line_segment_preview: Option<([f32; 2], [f32; 2])>,
-    /// Currently selected sidebar icon index, if any.
-    pub selected_sidebar_icon: Option<usize>,
-    /// World-coordinate positions for snap indicators (crosshairs).
-    pub snap_indicators: Vec<[f32; 2]>,
-    /// Ghost-preview valve segment while the user is drawing.
-    /// `(line_id, t_start, t_end)` — resolve to world coords using committed line segments.
-    pub valve_segment_preview: Option<(usize, f32, f32)>,
+    /// All operator preview geometry for the current frame.
+    pub operator_previews: OperatorPreviews,
 }
 
 // ── Pipeline trait ─────────────────────────────────────────────────

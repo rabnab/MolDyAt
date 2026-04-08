@@ -475,7 +475,7 @@ impl RenderPipeline for SidebarPipeline {
     }
 
     fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
-        let selected = ctx.selected_sidebar_icon;
+        let selected = ctx.operator_previews.selected_sidebar_icon;
         if ctx.window_size == self.last_window_size && selected == self.last_selected_icon {
             return Ok(());
         }

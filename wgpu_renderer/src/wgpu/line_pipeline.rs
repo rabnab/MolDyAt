@@ -374,7 +374,7 @@ impl RenderPipeline for LinePipeline {
         }
 
         // Ghost preview for valve segment drawing (semi-transparent magenta)
-        if let Some((line_id, t_start, t_end)) = ctx.valve_segment_preview
+        if let Some((line_id, t_start, t_end)) = ctx.operator_previews.valve_segment
             && let Some(seg) = ctx
                 .snapshot
                 .operators
@@ -392,7 +392,7 @@ impl RenderPipeline for LinePipeline {
         }
 
         // Ghost preview (semi-transparent yellow)
-        if let Some((start, end)) = ctx.line_segment_preview {
+        if let Some((start, end)) = ctx.operator_previews.line_segment {
             line_batch.push(LineSegment {
                 points: [start, end],
                 width: 2.0,
@@ -405,7 +405,7 @@ impl RenderPipeline for LinePipeline {
         // so it stays visually consistent when the world is resized.
         let cross_size = world_extent * 0.015;
         let snap_color = [0.0, 1.0, 1.0, 0.9]; // cyan
-        for &pos in &ctx.snap_indicators {
+        for &pos in &ctx.operator_previews.snap_indicators {
             // Horizontal bar
             line_batch.push(LineSegment {
                 points: [[pos[0] - cross_size, pos[1]], [pos[0] + cross_size, pos[1]]],
