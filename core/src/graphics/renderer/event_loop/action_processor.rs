@@ -6,7 +6,7 @@ use crate::graphics::renderer::state_layers::RendererConfig;
 /// Shared mapping from InputAction to physics commands and renderer state flags.
 /// Returns true if the action affects the viewport (caller should refresh view).
 pub fn process_action_common(
-    action: &InputAction,
+    action: InputAction,
     physics: &PhysicsCoordinator,
     config: &mut RendererConfig,
 ) -> bool {
@@ -30,7 +30,7 @@ pub fn process_action_common(
             config.toggle_rendering();
         }
         InputAction::AddBall { position } => {
-            physics.send_command(PhysicsCommand::AddBall(*position));
+            physics.send_command(PhysicsCommand::AddBall(position));
             // When adding ball (Ctrl released), disable cursor to return to crosshair
             config.disable_cursor();
         }
@@ -38,7 +38,7 @@ pub fn process_action_common(
             physics.send_command(PhysicsCommand::NextBallSize);
         }
         InputAction::AddRandomBalls { count } => {
-            physics.send_command(PhysicsCommand::AddRandomBalls(*count));
+            physics.send_command(PhysicsCommand::AddRandomBalls(count));
         }
         InputAction::StopAllBalls => {
             physics.send_command(PhysicsCommand::StopAllBalls);
@@ -83,7 +83,7 @@ pub fn process_action_common(
             MainContent::print_help_message();
         }
         InputAction::EnableCursor { repeated } => {
-            config.enable_cursor(*repeated);
+            config.enable_cursor(repeated);
         }
         InputAction::DisableCursor => {
             config.disable_cursor();
@@ -102,56 +102,8 @@ pub fn process_action_common(
         | InputAction::SelectOperatorTool(_)
         | InputAction::ToggleEnergyWindow  // handled in UnifiedRenderState::process_action
         | InputAction::ToggleCutoffRings => {}  // needs wgpu resources
-        InputAction::CommitLineSegment { start, end } => {
-            physics.send_command(PhysicsCommand::AddLineSegment {
-                start: *start,
-                end: *end,
-            });
-        }
-        InputAction::MoveLineSegmentEndpoint {
-            segment_id,
-            new_pos,
-            move_start,
-        } => {
-            physics.send_command(PhysicsCommand::MoveLineSegmentEndpoint {
-                segment_id: *segment_id,
-                new_pos: *new_pos,
-                move_start: *move_start,
-            });
-        }
-        InputAction::CommitValveSegment {
-            line_id,
-            t_start,
-            t_end,
-        } => {
-            physics.send_command(PhysicsCommand::AddValveSegment {
-                line_id: *line_id,
-                t_start: *t_start,
-                t_end: *t_end,
-                is_closed: true,
-            });
-        }
-        InputAction::ToggleValve { valve_id } => {
-            // We don't know current state here; physics thread will handle it
-            // via a dedicated toggle command. For now use SetValveClosed with
-            // a toggle-like approach: we'll add a Toggle variant.
-            // Actually, let's just negate — but we don't have state here.
-            // Send as toggle: the physics command needs the target state.
-            // Since we can't query, we'll add a dedicated toggle command.
-            physics.send_command(PhysicsCommand::ToggleValve {
-                valve_id: *valve_id,
-            });
-        }
-        InputAction::MoveValveSegment {
-            valve_id,
-            t_start,
-            t_end,
-        } => {
-            physics.send_command(PhysicsCommand::MoveValveSegment {
-                valve_id: *valve_id,
-                t_start: *t_start,
-                t_end: *t_end,
-            });
+        InputAction::OperatorAction(cmd) => {
+            physics.send_command(PhysicsCommand::Operator(cmd));
         }
     }
 

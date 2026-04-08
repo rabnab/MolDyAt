@@ -7,6 +7,7 @@
 //! ARCHITECTURAL CONSTRAINT: This module must not depend on ggez.
 //! All ggez-specific code belongs in src/application/ggez/.
 
+use crate::application::operator_command::OperatorCommand;
 use crate::application::{GameLogic, MainContent};
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::Ball2D;
@@ -61,32 +62,8 @@ pub enum PhysicsCommand {
     StartVerbosityInput,
     /// Resize the world region
     Resize { world_rect: crate::objects2d::Rect },
-    /// Add a line segment barrier with start and end positions
-    AddLineSegment { start: Vec2D, end: Vec2D },
-    /// Move a specific endpoint of a line segment to a new position.
-    /// `move_start`: `true` → start, `false` → end.
-    MoveLineSegmentEndpoint {
-        segment_id: usize,
-        new_pos: Vec2D,
-        move_start: bool,
-    },
-    /// Add a valve section on a line segment in parametric space [0, 1].
-    AddValveSegment {
-        line_id: usize,
-        t_start: f32,
-        t_end: f32,
-        is_closed: bool,
-    },
-    /// Set valve open/closed state.
-    SetValveClosed { valve_id: usize, is_closed: bool },
-    /// Toggle valve state (open ↔ closed).
-    ToggleValve { valve_id: usize },
-    /// Move valve endpoints on parent segment in parametric space [0, 1].
-    MoveValveSegment {
-        valve_id: usize,
-        t_start: f32,
-        t_end: f32,
-    },
+    /// A self-contained operator command (line segment, valve, etc.).
+    Operator(Box<dyn OperatorCommand>),
 }
 
 /// Shutdown signal shared between threads
@@ -340,39 +317,8 @@ impl PhysicsThread {
             PhysicsCommand::Resize { world_rect } => {
                 main_content.resize(world_rect);
             }
-            PhysicsCommand::AddLineSegment { start, end } => {
-                main_content.add_line_segment(start, end);
-            }
-            PhysicsCommand::MoveLineSegmentEndpoint {
-                segment_id,
-                new_pos,
-                move_start,
-            } => {
-                main_content.move_line_segment_endpoint(segment_id, new_pos, move_start);
-            }
-            PhysicsCommand::AddValveSegment {
-                line_id,
-                t_start,
-                t_end,
-                is_closed,
-            } => {
-                main_content.add_valve_segment(line_id, t_start, t_end, is_closed);
-            }
-            PhysicsCommand::SetValveClosed {
-                valve_id,
-                is_closed,
-            } => {
-                main_content.set_valve_closed(valve_id, is_closed);
-            }
-            PhysicsCommand::ToggleValve { valve_id } => {
-                main_content.toggle_valve(valve_id);
-            }
-            PhysicsCommand::MoveValveSegment {
-                valve_id,
-                t_start,
-                t_end,
-            } => {
-                main_content.move_valve_segment(valve_id, t_start, t_end);
+            PhysicsCommand::Operator(cmd) => {
+                cmd.execute(main_content);
             }
         }
     }

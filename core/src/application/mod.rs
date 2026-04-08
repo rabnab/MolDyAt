@@ -1,6 +1,7 @@
 mod core;
 mod game_logic;
 mod log_util;
+pub mod operator_command;
 pub mod physics_thread;
 pub mod renderer_snapshot;
 mod sim_stats;

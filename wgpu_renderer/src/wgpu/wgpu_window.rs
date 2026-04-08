@@ -325,7 +325,7 @@ fn handle_window_event(
 
             if let Some(action) = action {
                 state.view_dirty |=
-                    execute_input_action(&action, state, pipelines, &ctx.queue, window_target);
+                    execute_input_action(action, state, pipelines, &ctx.queue, window_target);
             }
         }
         _ => {}
