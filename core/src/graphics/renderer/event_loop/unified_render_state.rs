@@ -26,6 +26,7 @@ use super::input_handler::{InputAction, InputHandler, OperatorTool};
 pub use super::line_segment_tool::LineSegmentDrawState;
 use super::metrics::MetricsCollector;
 use super::physics_coordinator::PhysicsCoordinator;
+pub use super::valve_segment_tool::ValveDrawState;
 
 use crate::application::physics_thread::PhysicsCommand;
 
@@ -74,6 +75,8 @@ pub struct UnifiedRenderState {
     pub active_tool: OperatorTool,
     /// Drawing state for the line segment tool.
     pub line_draw_state: LineSegmentDrawState,
+    /// Interaction state for the valve segment tool.
+    pub valve_draw_state: ValveDrawState,
 }
 
 impl UnifiedRenderState {
@@ -112,6 +115,7 @@ impl UnifiedRenderState {
             metrics: MetricsCollector::new(),
             active_tool: OperatorTool::None,
             line_draw_state: LineSegmentDrawState::Idle,
+            valve_draw_state: ValveDrawState::Idle,
         }
     }
 
@@ -217,6 +221,7 @@ impl UnifiedRenderState {
             InputAction::SelectOperatorTool(tool) => {
                 self.active_tool = *tool;
                 self.line_draw_state = LineSegmentDrawState::Idle;
+                self.valve_draw_state = ValveDrawState::Idle;
                 return false;
             }
             _ => {}
@@ -410,6 +415,88 @@ impl UnifiedRenderState {
             }
         }
 
+        // Handle valve segment tool interactions
+        if self.active_tool == OperatorTool::ValveSegment
+            && button == winit::event::MouseButton::Left
+        {
+            match state {
+                winit::event::ElementState::Pressed => {
+                    // First, check if clicking on an existing valve (toggle/drag)
+                    if let Some((valve_id, line_id, t_start, t_end, _is_closed)) =
+                        self.find_valve_at(world_pos)
+                    {
+                        let t_half = (t_end - t_start) * 0.5;
+                        self.valve_draw_state = ValveDrawState::Moving {
+                            valve_id,
+                            line_id,
+                            t_half_width: t_half,
+                        };
+                    } else if let Some((line_id, t)) = self.find_line_at(world_pos) {
+                        // Starting a new valve on this line segment
+                        let t = Self::snap_t(t);
+                        self.valve_draw_state = ValveDrawState::Drawing {
+                            line_id,
+                            t_start: t,
+                        };
+                    }
+                    self.view_dirty = true;
+                    return true;
+                }
+                winit::event::ElementState::Released => {
+                    match self.valve_draw_state {
+                        ValveDrawState::Drawing { line_id, t_start } => {
+                            // Find where cursor is on the same line
+                            if let Some((hit_line, t_end)) = self.find_line_at(world_pos)
+                                && hit_line == line_id
+                            {
+                                let t_end = Self::snap_t(t_end);
+                                // Only commit if the valve has meaningful length
+                                if (t_start - t_end).abs() > 0.02 {
+                                    let action = InputAction::CommitValveSegment {
+                                        line_id,
+                                        t_start,
+                                        t_end,
+                                    };
+                                    self.process_action(&action, None);
+                                }
+                            }
+                        }
+                        ValveDrawState::Moving {
+                            valve_id,
+                            line_id,
+                            t_half_width,
+                        } => {
+                            // Check if user clicked without moving (toggle)
+                            // vs actually dragged (move). We'll detect by checking
+                            // if the cursor is still near the valve center.
+                            if let Some((_, _, _t_start, _t_end, _)) = self.find_valve_at(world_pos)
+                            {
+                                // Still near center — toggle
+                                let action = InputAction::ToggleValve { valve_id };
+                                self.process_action(&action, None);
+                            } else if let Some((hit_line, t_center)) = self.find_line_at(world_pos)
+                                && hit_line == line_id
+                            {
+                                // Moved along the line — commit move
+                                let new_start = (t_center - t_half_width).clamp(0.0, 1.0);
+                                let new_end = (t_center + t_half_width).clamp(0.0, 1.0);
+                                let action = InputAction::MoveValveSegment {
+                                    valve_id,
+                                    t_start: new_start,
+                                    t_end: new_end,
+                                };
+                                self.process_action(&action, None);
+                            }
+                        }
+                        ValveDrawState::Idle => {}
+                    }
+                    self.valve_draw_state = ValveDrawState::Idle;
+                    self.view_dirty = true;
+                    return true;
+                }
+            }
+        }
+
         if let Some(action) = self
             .input
             .handle_mouse_button(button, state, screen_pos, world_pos, pan_offset)
@@ -433,6 +520,8 @@ impl UnifiedRenderState {
         // (for snap indicator updates).
         if !matches!(self.line_draw_state, LineSegmentDrawState::Idle)
             || self.active_tool == OperatorTool::LineSegment
+            || !matches!(self.valve_draw_state, ValveDrawState::Idle)
+            || self.active_tool == OperatorTool::ValveSegment
         {
             self.view_dirty = true;
         }

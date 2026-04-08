@@ -8,6 +8,7 @@ mod sidebar_tool;
 #[cfg(test)]
 mod tests;
 mod unified_render_state;
+mod valve_segment_tool;
 
 // Shared event loop infrastructure for both ggez and wgpu renderers
 

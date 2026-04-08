@@ -39,6 +39,8 @@ impl MainContent {
             thermo_history: ThermoFieldHistory::new(),
             line_segments: Vec::new(),
             line_segment_next_id: 0,
+            valve_segments: Vec::new(),
+            valve_segment_next_id: 0,
         })
     }
 }

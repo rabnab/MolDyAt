@@ -97,6 +97,22 @@ pub enum InputAction {
         /// `true` → move start endpoint, `false` → move end endpoint.
         move_start: bool,
     },
+    /// Commit a new valve segment on a parent line segment.
+    CommitValveSegment {
+        line_id: usize,
+        t_start: f32,
+        t_end: f32,
+    },
+    /// Toggle a valve between open and closed.
+    ToggleValve {
+        valve_id: usize,
+    },
+    /// Move a valve along its parent segment.
+    MoveValveSegment {
+        valve_id: usize,
+        t_start: f32,
+        t_end: f32,
+    },
 }
 
 /// Cooldown period between +/- key commands (in milliseconds)

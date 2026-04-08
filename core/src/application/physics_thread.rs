@@ -70,6 +70,23 @@ pub enum PhysicsCommand {
         new_pos: Vec2D,
         move_start: bool,
     },
+    /// Add a valve section on a line segment in parametric space [0, 1].
+    AddValveSegment {
+        line_id: usize,
+        t_start: f32,
+        t_end: f32,
+        is_closed: bool,
+    },
+    /// Set valve open/closed state.
+    SetValveClosed { valve_id: usize, is_closed: bool },
+    /// Toggle valve state (open ↔ closed).
+    ToggleValve { valve_id: usize },
+    /// Move valve endpoints on parent segment in parametric space [0, 1].
+    MoveValveSegment {
+        valve_id: usize,
+        t_start: f32,
+        t_end: f32,
+    },
 }
 
 /// Shutdown signal shared between threads
@@ -332,6 +349,30 @@ impl PhysicsThread {
                 move_start,
             } => {
                 main_content.move_line_segment_endpoint(segment_id, new_pos, move_start);
+            }
+            PhysicsCommand::AddValveSegment {
+                line_id,
+                t_start,
+                t_end,
+                is_closed,
+            } => {
+                main_content.add_valve_segment(line_id, t_start, t_end, is_closed);
+            }
+            PhysicsCommand::SetValveClosed {
+                valve_id,
+                is_closed,
+            } => {
+                main_content.set_valve_closed(valve_id, is_closed);
+            }
+            PhysicsCommand::ToggleValve { valve_id } => {
+                main_content.toggle_valve(valve_id);
+            }
+            PhysicsCommand::MoveValveSegment {
+                valve_id,
+                t_start,
+                t_end,
+            } => {
+                main_content.move_valve_segment(valve_id, t_start, t_end);
             }
         }
     }

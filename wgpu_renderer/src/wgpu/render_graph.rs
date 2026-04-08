@@ -58,6 +58,9 @@ pub struct PrepareContext<'a> {
     pub selected_sidebar_icon: Option<usize>,
     /// World-coordinate positions for snap indicators (crosshairs).
     pub snap_indicators: Vec<[f32; 2]>,
+    /// Ghost-preview valve segment while the user is drawing.
+    /// `(line_id, t_start, t_end)` — resolve to world coords using committed line segments.
+    pub valve_segment_preview: Option<(usize, f32, f32)>,
 }
 
 // ── Pipeline trait ─────────────────────────────────────────────────

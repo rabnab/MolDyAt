@@ -119,6 +119,40 @@ pub fn process_action_common(
                 move_start: *move_start,
             });
         }
+        InputAction::CommitValveSegment {
+            line_id,
+            t_start,
+            t_end,
+        } => {
+            physics.send_command(PhysicsCommand::AddValveSegment {
+                line_id: *line_id,
+                t_start: *t_start,
+                t_end: *t_end,
+                is_closed: true,
+            });
+        }
+        InputAction::ToggleValve { valve_id } => {
+            // We don't know current state here; physics thread will handle it
+            // via a dedicated toggle command. For now use SetValveClosed with
+            // a toggle-like approach: we'll add a Toggle variant.
+            // Actually, let's just negate — but we don't have state here.
+            // Send as toggle: the physics command needs the target state.
+            // Since we can't query, we'll add a dedicated toggle command.
+            physics.send_command(PhysicsCommand::ToggleValve {
+                valve_id: *valve_id,
+            });
+        }
+        InputAction::MoveValveSegment {
+            valve_id,
+            t_start,
+            t_end,
+        } => {
+            physics.send_command(PhysicsCommand::MoveValveSegment {
+                valve_id: *valve_id,
+                t_start: *t_start,
+                t_end: *t_end,
+            });
+        }
     }
 
     affects_view

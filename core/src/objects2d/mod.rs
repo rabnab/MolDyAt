@@ -6,7 +6,7 @@ mod rect_2d;
 mod vec_2d;
 pub mod verbose_info;
 
-pub use line_segment::SimLineSegment;
+pub use line_segment::{SimLineSegment, ValveSegment};
 pub use operator::{OperatorIdCounter, OperatorState};
 pub use rect_2d::Rect;
 pub use vec_2d::Vec2D;

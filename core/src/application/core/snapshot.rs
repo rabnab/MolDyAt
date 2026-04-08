@@ -87,6 +87,7 @@ impl MainContent {
             equilibrium_edge_distance: self.physics.equilibrium_edge_distance(),
             cutoff_distance: self.physics.get_cutoff_distance(),
             line_segments: self.get_line_segments().to_vec(),
+            valve_segments: self.valve_segments.clone(),
             ..{
                 let (cell_temperature, cell_pressure, thermo_grid_spec) =
                     self.build_thermo_snapshot_fields();

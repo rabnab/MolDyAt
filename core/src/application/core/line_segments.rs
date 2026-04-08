@@ -57,7 +57,20 @@ impl MainContent {
             if seg.length_sq() < 1e-12 {
                 continue; // degenerate segment
             }
+
+            let open_ranges: Vec<(f32, f32)> = self
+                .valve_segments
+                .iter()
+                .filter(|v| v.line_id == seg.id && !v.is_closed)
+                .map(|v| (v.t_start, v.t_end))
+                .collect();
+
             for ball in &mut self.balls {
+                let t = seg.closest_t(ball.get_position());
+                if open_ranges.iter().any(|(a, b)| t >= *a && t <= *b) {
+                    continue;
+                }
+
                 let closest = seg.closest_point(ball.get_position());
                 let to_ball = closest.dist(ball.get_position());
                 let center_dist = to_ball.norm();
