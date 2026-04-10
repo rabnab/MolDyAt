@@ -67,11 +67,14 @@ impl UnifiedRenderState {
         let mut best_dist = VALVE_HIT_DISTANCE;
         let mut best: Option<(usize, usize, f32, f32, bool)> = None;
         for valve in &snapshot.operators.valve_segments {
-            let seg = snapshot
+            let Some(seg) = snapshot
                 .operators
                 .line_segments
                 .iter()
-                .find(|s| s.id == valve.line_id)?;
+                .find(|s| s.id == valve.line_id)
+            else {
+                continue;
+            };
             let t_mid = (valve.t_start + valve.t_end) * 0.5;
             let center = seg.point_at_t(t_mid);
             let dist = pos.dist(&center).norm();
