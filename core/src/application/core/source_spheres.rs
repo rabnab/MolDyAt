@@ -6,12 +6,12 @@
 //! simulation steps.
 
 use super::MainContent;
-use crate::objects2d::Vec2D;
+use crate::{graphics::renderer::event_loop::DEFAULT_SOURCE_RADIUS, objects2d::Vec2D};
 
 impl MainContent {
     /// Place a new source sphere at `center` with `radius`.
-    pub(crate) fn add_source_sphere(&mut self, center: Vec2D, radius: f32) {
-        self.source_spheres.add(center, radius);
+    pub(crate) fn add_source_sphere(&mut self, center: Vec2D) {
+        self.source_spheres.add(center);
     }
 
     /// Toggle the on/off state of an existing source sphere.
@@ -35,7 +35,7 @@ impl MainContent {
             .spheres()
             .iter()
             .filter(|s| s.is_emitting() && step.is_multiple_of(s.emit_period))
-            .map(|s| Vec2D::new(s.center.x, s.center.y + s.radius))
+            .map(|s| Vec2D::new(s.center.x, s.center.y + DEFAULT_SOURCE_RADIUS))
             .collect();
 
         for emit_pos in emissions {

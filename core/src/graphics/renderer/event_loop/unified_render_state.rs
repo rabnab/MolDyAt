@@ -546,7 +546,6 @@ impl UnifiedRenderState {
                 let action =
                     InputAction::OperatorAction(Box::new(operator_command::PlaceSourceSphere {
                         center: world_pos,
-                        radius: Self::DEFAULT_SOURCE_RADIUS,
                     }));
                 self.process_action(action, None);
             }

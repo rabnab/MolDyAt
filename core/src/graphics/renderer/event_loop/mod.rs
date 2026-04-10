@@ -20,6 +20,7 @@ pub use energy_window_manager::EnergyWindowManager;
 pub use input_handler::{InputAction, InputHandler, KeyCode};
 pub use metrics::{FrameMetrics, MetricsCollector};
 pub use physics_coordinator::PhysicsCoordinator;
+pub use source_sphere_tool::DEFAULT_SOURCE_RADIUS;
 pub use unified_render_state::UnifiedRenderState;
 
 /// Bundled operator preview geometry for the current frame.

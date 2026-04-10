@@ -11,6 +11,7 @@
 //! state.
 
 use bytemuck::{Pod, Zeroable};
+use rust_thermo_core::graphics::renderer::event_loop::DEFAULT_SOURCE_RADIUS;
 use wgpu::util::DeviceExt;
 
 use super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
@@ -295,7 +296,7 @@ impl RenderPipeline for SourceSpherePipeline {
         for sphere in spheres.iter().take(MAX_SPHERES) {
             let cx = sphere.center.x;
             let cy = sphere.center.y;
-            let r = sphere.radius;
+            let r = DEFAULT_SOURCE_RADIUS;
 
             // World-space corners of the icon quad.
             let x0 = cx - r;

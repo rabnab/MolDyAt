@@ -84,12 +84,11 @@ impl OperatorCommand for MoveValveSegment {
 #[derive(Debug)]
 pub struct PlaceSourceSphere {
     pub center: Vec2D,
-    pub radius: f32,
 }
 
 impl OperatorCommand for PlaceSourceSphere {
     fn execute(self: Box<Self>, content: &mut MainContent) {
-        content.add_source_sphere(self.center, self.radius);
+        content.add_source_sphere(self.center);
     }
 }
 

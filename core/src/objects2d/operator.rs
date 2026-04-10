@@ -27,8 +27,6 @@ pub struct SimSourceSphere {
     pub id: usize,
     /// Center of the sphere in world coordinates.
     pub center: Vec2D,
-    /// Visual / collision radius of the sphere.
-    pub radius: f32,
     /// ON/OFF emission state.
     pub state: OperatorState,
     /// Emit one ball every this many simulation steps (when On).
@@ -37,11 +35,10 @@ pub struct SimSourceSphere {
 
 impl SimSourceSphere {
     /// Create a new source sphere starting in the `On` (emitting) state.
-    pub fn new(id: usize, center: Vec2D, radius: f32) -> Self {
+    pub fn new(id: usize, center: Vec2D) -> Self {
         Self {
             id,
             center,
-            radius,
             state: OperatorState::On,
             emit_period: 30,
         }
@@ -288,9 +285,9 @@ impl SourceSphereCollection {
     }
 
     /// Add a new source sphere, returning its assigned ID.
-    pub fn add(&mut self, center: Vec2D, radius: f32) -> usize {
+    pub fn add(&mut self, center: Vec2D) -> usize {
         let id = self.next_id.next_id();
-        self.spheres.push(SimSourceSphere::new(id, center, radius));
+        self.spheres.push(SimSourceSphere::new(id, center));
         id
     }
 
