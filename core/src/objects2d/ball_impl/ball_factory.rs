@@ -96,9 +96,19 @@ impl BallFactory {
         initial_velocity: Vec2D,
     ) -> Ball2D {
         let size_idx = self.get_new_ball_size_idx();
+        self.create_with_size_and_velocity(pos, size_idx, initial_velocity)
+    }
+
+    /// Creates a ball with a specific size class and initial velocity.
+    pub fn create_with_size_and_velocity(
+        &self,
+        pos: impl Into<Vec2D>,
+        size_idx: usize,
+        velocity: Vec2D,
+    ) -> Ball2D {
         let mut ball = self.create_basic(pos, size_idx);
         ball.mass = Self::mass_for_size_idx(size_idx);
-        ball.v = initial_velocity;
+        ball.v = velocity;
         ball
     }
 

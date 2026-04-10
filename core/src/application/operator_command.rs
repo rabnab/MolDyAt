@@ -102,3 +102,38 @@ impl OperatorCommand for ToggleSourceSphere {
         content.toggle_source_sphere(self.sphere_id);
     }
 }
+
+#[derive(Debug)]
+pub struct CycleSourceSphereBallSize {
+    pub sphere_id: usize,
+}
+
+impl OperatorCommand for CycleSourceSphereBallSize {
+    fn execute(self: Box<Self>, content: &mut MainContent) {
+        content.cycle_source_sphere_ball_size(self.sphere_id);
+    }
+}
+
+#[derive(Debug)]
+pub struct AdjustSourceSphereSpeed {
+    pub sphere_id: usize,
+    pub delta: f32,
+}
+
+impl OperatorCommand for AdjustSourceSphereSpeed {
+    fn execute(self: Box<Self>, content: &mut MainContent) {
+        content.adjust_source_sphere_speed(self.sphere_id, self.delta);
+    }
+}
+
+#[derive(Debug)]
+pub struct AdjustSourceSphereEmitPeriod {
+    pub sphere_id: usize,
+    pub delta_steps: i32,
+}
+
+impl OperatorCommand for AdjustSourceSphereEmitPeriod {
+    fn execute(self: Box<Self>, content: &mut MainContent) {
+        content.adjust_source_sphere_emit_period(self.sphere_id, self.delta_steps);
+    }
+}

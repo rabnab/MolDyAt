@@ -31,7 +31,26 @@ pub struct SimSourceSphere {
     pub state: OperatorState,
     /// Emit one ball every this many simulation steps (when On).
     pub emit_period: u32,
+    /// Ball size class index (0–4) for emitted balls.
+    pub ball_size_idx: usize,
+    /// Speed magnitude for emitted balls (world units per step).
+    pub emission_speed: f32,
 }
+
+/// Default ball size class index for new source spheres (medium).
+const DEFAULT_BALL_SIZE_IDX: usize = 2;
+/// Default emission speed magnitude for new source spheres.
+const DEFAULT_EMISSION_SPEED: f32 = 5.0;
+/// Minimum emission period in simulation steps.
+const MIN_EMIT_PERIOD: u32 = 5;
+/// Maximum emission period in simulation steps.
+const MAX_EMIT_PERIOD: u32 = 300;
+/// Step size for emission speed adjustments via scroll wheel.
+const EMISSION_SPEED_STEP: f32 = 1.0;
+/// Minimum emission speed magnitude.
+const MIN_EMISSION_SPEED: f32 = 0.0;
+/// Maximum emission speed magnitude.
+const MAX_EMISSION_SPEED: f32 = 50.0;
 
 impl SimSourceSphere {
     /// Create a new source sphere starting in the `On` (emitting) state.
@@ -41,12 +60,32 @@ impl SimSourceSphere {
             center,
             state: OperatorState::On,
             emit_period: 30,
+            ball_size_idx: DEFAULT_BALL_SIZE_IDX,
+            emission_speed: DEFAULT_EMISSION_SPEED,
         }
     }
 
     /// Whether this sphere is currently emitting.
     pub fn is_emitting(&self) -> bool {
         self.state.is_on()
+    }
+
+    /// Cycle to the next ball size class, wrapping around.
+    pub fn cycle_ball_size(&mut self) {
+        self.ball_size_idx = (self.ball_size_idx + 1) % super::ball_impl::NUM_BALL_SIZES;
+    }
+
+    /// Adjust emission speed by `delta` (positive = faster), clamped.
+    pub fn adjust_emission_speed(&mut self, delta: f32) {
+        self.emission_speed =
+            (self.emission_speed + delta).clamp(MIN_EMISSION_SPEED, MAX_EMISSION_SPEED);
+    }
+
+    /// Adjust emission period by `delta_steps` (positive = slower), clamped.
+    pub fn adjust_emit_period(&mut self, delta_steps: i32) {
+        let new_period = (self.emit_period as i32 + delta_steps)
+            .clamp(MIN_EMIT_PERIOD as i32, MAX_EMIT_PERIOD as i32);
+        self.emit_period = new_period as u32;
     }
 }
 

@@ -553,6 +553,20 @@ impl UnifiedRenderState {
             return true;
         }
 
+        // Right-click on existing source sphere → cycle ball size
+        if self.active_tool == OperatorTool::SourceSphere
+            && button == winit::event::MouseButton::Right
+            && state == winit::event::ElementState::Pressed
+            && let Some(sphere_id) = self.find_source_sphere_at(world_pos)
+        {
+            let action = InputAction::OperatorAction(Box::new(
+                operator_command::CycleSourceSphereBallSize { sphere_id },
+            ));
+            self.process_action(action, None);
+            self.view_dirty = true;
+            return true;
+        }
+
         if let Some(action) = self
             .input
             .handle_mouse_button(button, state, screen_pos, world_pos, pan_offset)
@@ -595,10 +609,53 @@ impl UnifiedRenderState {
 
     /// Handle mouse wheel event.
     ///
-    /// Processes zoom in/out and view reset actions.
+    /// When the source sphere tool is active and the cursor is over a
+    /// sphere, scroll adjusts emission speed (plain scroll) or emission
+    /// rate (Ctrl+scroll). Otherwise falls through to zoom.
     /// Returns true if the action affects the viewport.
     pub fn handle_mouse_wheel_event(&mut self, delta: winit::event::MouseScrollDelta) -> bool {
         let cursor_pos = self.input.cursor_pos();
+
+        // Source sphere scroll interactions
+        if self.active_tool == OperatorTool::SourceSphere
+            && let Some(sphere_id) = self.find_source_sphere_at(cursor_pos)
+        {
+            let scroll_amount = match delta {
+                winit::event::MouseScrollDelta::LineDelta(_, y) => y,
+                winit::event::MouseScrollDelta::PixelDelta(pos) => pos.y as f32 / 50.0,
+            };
+            if scroll_amount.abs() > f32::EPSILON {
+                let ctrl_held = self
+                    .input
+                    .is_key_pressed(winit::keyboard::KeyCode::ControlLeft)
+                    || self
+                        .input
+                        .is_key_pressed(winit::keyboard::KeyCode::ControlRight);
+                if ctrl_held {
+                    // Ctrl+scroll → adjust emission period (scroll up = faster = smaller period)
+                    let delta_steps = if scroll_amount > 0.0 { -5 } else { 5 };
+                    let action = InputAction::OperatorAction(Box::new(
+                        operator_command::AdjustSourceSphereEmitPeriod {
+                            sphere_id,
+                            delta_steps,
+                        },
+                    ));
+                    self.process_action(action, None);
+                } else {
+                    // Plain scroll → adjust emission speed
+                    let speed_delta = if scroll_amount > 0.0 { 1.0 } else { -1.0 };
+                    let action = InputAction::OperatorAction(Box::new(
+                        operator_command::AdjustSourceSphereSpeed {
+                            sphere_id,
+                            delta: speed_delta,
+                        },
+                    ));
+                    self.process_action(action, None);
+                }
+                self.view_dirty = true;
+                return true;
+            }
+        }
 
         if let Some(action) = self.input.handle_mouse_wheel(delta, cursor_pos) {
             match &action {
