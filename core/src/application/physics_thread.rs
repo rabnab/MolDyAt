@@ -7,6 +7,7 @@
 //! ARCHITECTURAL CONSTRAINT: This module must not depend on ggez.
 //! All ggez-specific code belongs in src/application/ggez/.
 
+use crate::application::operator_command::OperatorCommand;
 use crate::application::{GameLogic, MainContent};
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::Ball2D;
@@ -61,15 +62,8 @@ pub enum PhysicsCommand {
     StartVerbosityInput,
     /// Resize the world region
     Resize { world_rect: crate::objects2d::Rect },
-    /// Add a line segment barrier with start and end positions
-    AddLineSegment { start: Vec2D, end: Vec2D },
-    /// Move a specific endpoint of a line segment to a new position.
-    /// `move_start`: `true` → start, `false` → end.
-    MoveLineSegmentEndpoint {
-        segment_id: usize,
-        new_pos: Vec2D,
-        move_start: bool,
-    },
+    /// A self-contained operator command (line segment, valve, etc.).
+    Operator(Box<dyn OperatorCommand>),
 }
 
 /// Shutdown signal shared between threads
@@ -323,15 +317,8 @@ impl PhysicsThread {
             PhysicsCommand::Resize { world_rect } => {
                 main_content.resize(world_rect);
             }
-            PhysicsCommand::AddLineSegment { start, end } => {
-                main_content.add_line_segment(start, end);
-            }
-            PhysicsCommand::MoveLineSegmentEndpoint {
-                segment_id,
-                new_pos,
-                move_start,
-            } => {
-                main_content.move_line_segment_endpoint(segment_id, new_pos, move_start);
+            PhysicsCommand::Operator(cmd) => {
+                cmd.execute(main_content);
             }
         }
     }

@@ -26,7 +26,9 @@ use super::input_handler::{InputAction, InputHandler, OperatorTool};
 pub use super::line_segment_tool::LineSegmentDrawState;
 use super::metrics::MetricsCollector;
 use super::physics_coordinator::PhysicsCoordinator;
+pub use super::valve_segment_tool::ValveDrawState;
 
+use crate::application::operator_command;
 use crate::application::physics_thread::PhysicsCommand;
 
 /// Unified state shared by every renderer backend.
@@ -74,6 +76,8 @@ pub struct UnifiedRenderState {
     pub active_tool: OperatorTool,
     /// Drawing state for the line segment tool.
     pub line_draw_state: LineSegmentDrawState,
+    /// Interaction state for the valve segment tool.
+    pub valve_draw_state: ValveDrawState,
 }
 
 impl UnifiedRenderState {
@@ -112,6 +116,7 @@ impl UnifiedRenderState {
             metrics: MetricsCollector::new(),
             active_tool: OperatorTool::None,
             line_draw_state: LineSegmentDrawState::Idle,
+            valve_draw_state: ValveDrawState::Idle,
         }
     }
 
@@ -178,6 +183,22 @@ impl UnifiedRenderState {
         self.metrics.average_fps()
     }
 
+    /// Collect all operator preview geometry for the current frame.
+    ///
+    /// Bundles line-segment ghost, valve ghost, snap indicators, and
+    /// selected sidebar icon into a single [`OperatorPreviews`] struct
+    /// so the render pipeline receives one aggregate value.
+    pub fn operator_previews(&self) -> super::OperatorPreviews {
+        super::OperatorPreviews {
+            line_segment: self
+                .line_segment_preview()
+                .map(|(s, e)| ([s.x, s.y], [e.x, e.y])),
+            valve_segment: self.valve_segment_preview(),
+            snap_indicators: self.snap_indicators(),
+            selected_sidebar_icon: self.selected_sidebar_icon(),
+        }
+    }
+
     // ── Input-action dispatch ────────────────────────────────────────
 
     /// Process a user action that is common to all renderers.
@@ -195,38 +216,38 @@ impl UnifiedRenderState {
     /// * `window_target` - Optional window target for actions that need to create windows (e.g., ToggleEnergyWindow)
     pub fn process_action(
         &mut self,
-        action: &InputAction,
+        action: InputAction,
         window_target: Option<&winit::event_loop::ActiveEventLoop>,
     ) -> bool {
-        // Handle actions that need state updates beyond process_action_common
         match action {
             InputAction::ResetView => {
                 self.reset_view();
-                return true; // affects view
+                true
             }
             InputAction::NextBallSize => {
                 self.next_ball_size();
-                return false; // doesn't affect view
+                false
             }
             InputAction::ToggleEnergyWindow => {
                 if let Some(target) = window_target {
                     self.toggle_energy_window(target);
                 }
-                return false; // doesn't affect view
+                false
             }
             InputAction::SelectOperatorTool(tool) => {
-                self.active_tool = *tool;
+                self.active_tool = tool;
                 self.line_draw_state = LineSegmentDrawState::Idle;
-                return false;
+                self.valve_draw_state = ValveDrawState::Idle;
+                false
             }
-            _ => {}
+            other => {
+                let affects_view = process_action_common(other, &self.physics, &mut self.config);
+                if affects_view {
+                    self.view_dirty = true;
+                }
+                affects_view
+            }
         }
-
-        let affects_view = process_action_common(action, &self.physics, &mut self.config);
-        if affects_view {
-            self.view_dirty = true;
-        }
-        affects_view
     }
 
     // ── Viewport helpers ─────────────────────────────────────────────
@@ -356,7 +377,7 @@ impl UnifiedRenderState {
                 tool
             };
             let action = InputAction::SelectOperatorTool(new_tool);
-            self.process_action(&action, None);
+            self.process_action(action, None);
             return true;
         }
 
@@ -385,8 +406,10 @@ impl UnifiedRenderState {
                             let end = self.snap_world_pos(world_pos);
                             // Only commit if the segment has meaningful length
                             if start.distance_squared(&end) > 0.01 {
-                                let action = InputAction::CommitLineSegment { start, end };
-                                self.process_action(&action, None);
+                                let action = InputAction::OperatorAction(Box::new(
+                                    operator_command::AddLineSegment { start, end },
+                                ));
+                                self.process_action(action, None);
                             }
                         }
                         LineSegmentDrawState::MovingEndpoint {
@@ -394,12 +417,14 @@ impl UnifiedRenderState {
                             move_start,
                         } => {
                             let snapped = self.snap_world_pos(world_pos);
-                            let action = InputAction::MoveLineSegmentEndpoint {
-                                segment_id,
-                                new_pos: snapped,
-                                move_start,
-                            };
-                            self.process_action(&action, None);
+                            let action = InputAction::OperatorAction(Box::new(
+                                operator_command::MoveLineSegmentEndpoint {
+                                    segment_id,
+                                    new_pos: snapped,
+                                    move_start,
+                                },
+                            ));
+                            self.process_action(action, None);
                         }
                         LineSegmentDrawState::Idle => {}
                     }
@@ -410,11 +435,106 @@ impl UnifiedRenderState {
             }
         }
 
+        // Handle valve segment tool interactions
+        if self.active_tool == OperatorTool::ValveSegment
+            && button == winit::event::MouseButton::Left
+        {
+            match state {
+                winit::event::ElementState::Pressed => {
+                    // First, check if clicking on an existing valve (toggle/drag)
+                    if let Some((valve_id, line_id, t_start, t_end, _is_closed)) =
+                        self.find_valve_at(world_pos)
+                    {
+                        let t_half = (t_end - t_start) * 0.5;
+                        let t_center = (t_start + t_end) * 0.5;
+                        self.valve_draw_state = ValveDrawState::Moving {
+                            valve_id,
+                            line_id,
+                            t_half_width: t_half,
+                            t_center_at_press: t_center,
+                        };
+                    } else if let Some((line_id, t)) = self.find_line_at(world_pos) {
+                        // Starting a new valve on this line segment
+                        let t = Self::snap_t(t);
+                        self.valve_draw_state = ValveDrawState::Drawing {
+                            line_id,
+                            t_start: t,
+                        };
+                    }
+                    self.view_dirty = true;
+                    return true;
+                }
+                winit::event::ElementState::Released => {
+                    match self.valve_draw_state {
+                        ValveDrawState::Drawing { line_id, t_start } => {
+                            // Find where cursor is on the same line
+                            if let Some((hit_line, t_end)) = self.find_line_at(world_pos)
+                                && hit_line == line_id
+                            {
+                                let t_end = Self::snap_t(t_end);
+                                // Only commit if the valve has meaningful length
+                                if (t_start - t_end).abs() > 0.02 {
+                                    let action = InputAction::OperatorAction(Box::new(
+                                        operator_command::AddValveSegment {
+                                            line_id,
+                                            t_start,
+                                            t_end,
+                                            is_closed: true,
+                                        },
+                                    ));
+                                    self.process_action(action, None);
+                                }
+                            }
+                        }
+                        ValveDrawState::Moving {
+                            valve_id,
+                            line_id,
+                            t_half_width,
+                            t_center_at_press,
+                        } => {
+                            // Distinguish toggle (click) from drag (move) by
+                            // checking how far the cursor moved from the initial
+                            // parametric center recorded at press time.
+                            const T_MOVE_THRESHOLD: f32 = 0.03;
+                            let dragged = self.find_line_at(world_pos).filter(|(hit_line, t)| {
+                                *hit_line == line_id
+                                    && (*t - t_center_at_press).abs() > T_MOVE_THRESHOLD
+                            });
+
+                            if let Some((_, t_center)) = dragged {
+                                // Moved along the line — commit move
+                                let new_start = (t_center - t_half_width).clamp(0.0, 1.0);
+                                let new_end = (t_center + t_half_width).clamp(0.0, 1.0);
+                                let action = InputAction::OperatorAction(Box::new(
+                                    operator_command::MoveValveSegment {
+                                        valve_id,
+                                        t_start: new_start,
+                                        t_end: new_end,
+                                    },
+                                ));
+                                self.process_action(action, None);
+                            } else {
+                                // Click without meaningful drag — toggle
+                                let action = InputAction::OperatorAction(Box::new(
+                                    operator_command::ToggleValve { valve_id },
+                                ));
+                                self.process_action(action, None);
+                            }
+                        }
+                        ValveDrawState::Idle => {}
+                    }
+                    self.valve_draw_state = ValveDrawState::Idle;
+                    self.view_dirty = true;
+                    return true;
+                }
+            }
+        }
+
         if let Some(action) = self
             .input
             .handle_mouse_button(button, state, screen_pos, world_pos, pan_offset)
         {
-            return self.process_action(&action, None);
+            return self.process_action(action, None);
         }
         false
     }
@@ -433,6 +553,8 @@ impl UnifiedRenderState {
         // (for snap indicator updates).
         if !matches!(self.line_draw_state, LineSegmentDrawState::Idle)
             || self.active_tool == OperatorTool::LineSegment
+            || !matches!(self.valve_draw_state, ValveDrawState::Idle)
+            || self.active_tool == OperatorTool::ValveSegment
         {
             self.view_dirty = true;
         }
@@ -442,7 +564,7 @@ impl UnifiedRenderState {
                 self.apply_pan_from_input(*delta);
                 return true;
             } else {
-                return self.process_action(&action, None);
+                return self.process_action(action, None);
             }
         }
         false
@@ -459,20 +581,20 @@ impl UnifiedRenderState {
             match &action {
                 InputAction::ZoomIn { center } => {
                     self.zoom_at_point(center, 1.1);
-                    self.process_action(&action, None);
+                    self.process_action(action, None);
                     return true;
                 }
                 InputAction::ZoomOut { center } => {
                     self.zoom_at_point(center, 1.0 / 1.1);
-                    self.process_action(&action, None);
+                    self.process_action(action, None);
                     return true;
                 }
                 InputAction::ResetView => {
                     self.reset_view();
-                    self.process_action(&action, None);
+                    self.process_action(action, None);
                     return true;
                 }
-                _ => return self.process_action(&action, None),
+                _ => return self.process_action(action, None),
             }
         }
         false
@@ -502,7 +624,7 @@ mod tests {
         let action = InputAction::ZoomIn {
             center: Vec2D::zero(),
         };
-        assert!(process_action_common(&action, &physics, &mut config));
+        assert!(process_action_common(action, &physics, &mut config));
     }
 
     #[test]
@@ -512,7 +634,7 @@ mod tests {
         let action = InputAction::ZoomOut {
             center: Vec2D::zero(),
         };
-        assert!(process_action_common(&action, &physics, &mut config));
+        assert!(process_action_common(action, &physics, &mut config));
     }
 
     #[test]
@@ -522,7 +644,7 @@ mod tests {
         let action = InputAction::PanUpdate {
             delta: Vec2D::new(5.0, 3.0),
         };
-        assert!(process_action_common(&action, &physics, &mut config));
+        assert!(process_action_common(action, &physics, &mut config));
     }
 
     #[test]
@@ -530,19 +652,18 @@ mod tests {
         let mut config = RendererConfig::default();
         let physics = make_disconnected_coordinator();
         let action = InputAction::ResetView;
-        assert!(process_action_common(&action, &physics, &mut config));
+        assert!(process_action_common(action, &physics, &mut config));
     }
 
     #[test]
     fn toggle_rendering_flips_flag() {
         let mut config = RendererConfig::default();
         let physics = make_disconnected_coordinator();
-        let action = InputAction::ToggleRendering;
-        let affects = process_action_common(&action, &physics, &mut config);
+        let affects = process_action_common(InputAction::ToggleRendering, &physics, &mut config);
         assert!(!affects);
         assert!(!config.render_drawing);
         // Toggle back.
-        process_action_common(&action, &physics, &mut config);
+        process_action_common(InputAction::ToggleRendering, &physics, &mut config);
         assert!(config.render_drawing);
     }
 
@@ -556,11 +677,12 @@ mod tests {
             InputAction::ToggleCutoffRings,
             InputAction::DisableCursor,
         ];
-        for action in &actions {
+        for action in actions {
+            let label = format!("{:?}", action);
             assert!(
                 !process_action_common(action, &physics, &mut config),
-                "action {:?} should not affect view",
-                action
+                "action {} should not affect view",
+                label
             );
         }
     }

@@ -8,6 +8,7 @@ mod sidebar_tool;
 #[cfg(test)]
 mod tests;
 mod unified_render_state;
+mod valve_segment_tool;
 
 // Shared event loop infrastructure for both ggez and wgpu renderers
 
@@ -19,5 +20,23 @@ pub use input_handler::{InputAction, InputHandler, KeyCode};
 pub use metrics::{FrameMetrics, MetricsCollector};
 pub use physics_coordinator::PhysicsCoordinator;
 pub use unified_render_state::UnifiedRenderState;
+
+/// Bundled operator preview geometry for the current frame.
+///
+/// Produced by [`UnifiedRenderState::operator_previews`] and consumed
+/// by `PrepareContext` in the WGPU renderer.  Adding a new tool's
+/// preview just extends this struct — no signature changes elsewhere.
+#[derive(Debug, Clone, Default)]
+pub struct OperatorPreviews {
+    /// Ghost-preview line segment while the user is drawing (world coords).
+    pub line_segment: Option<([f32; 2], [f32; 2])>,
+    /// Ghost-preview valve segment while the user is drawing.
+    /// `(line_id, t_start, t_end)` — resolve to world coords via committed segments.
+    pub valve_segment: Option<(usize, f32, f32)>,
+    /// World-coordinate positions for snap indicators (crosshairs).
+    pub snap_indicators: Vec<[f32; 2]>,
+    /// Currently selected sidebar icon index, if any.
+    pub selected_sidebar_icon: Option<usize>,
+}
 
 // action_processor::process_action_common is now internal - only used by UnifiedRenderState

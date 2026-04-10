@@ -38,7 +38,7 @@ impl UnifiedRenderState {
         let segments: &[crate::objects2d::SimLineSegment] = self
             .last_snapshot
             .as_ref()
-            .map(|s| s.line_segments.as_slice())
+            .map(|s| s.operators.line_segments.as_slice())
             .unwrap_or(&[]);
         snap_position(pos, &world_rect, segments, Self::SNAP_THRESHOLD)
     }
@@ -52,7 +52,7 @@ impl UnifiedRenderState {
         let segments = self
             .last_snapshot
             .as_ref()
-            .map(|s| s.line_segments.as_slice())
+            .map(|s| s.operators.line_segments.as_slice())
             .unwrap_or(&[]);
         let mut best_dist_sq = threshold_sq;
         let mut best: Option<(usize, bool)> = None;

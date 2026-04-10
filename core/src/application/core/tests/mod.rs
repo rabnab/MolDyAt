@@ -7,6 +7,7 @@ mod wall_momentum;
 
 mod line_segments;
 mod snapshot;
+mod valves;
 
 use crate::application::MainContent;
 use crate::graphics::renderer::ViewportTransform;

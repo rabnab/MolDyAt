@@ -68,6 +68,7 @@ mod tests {
     use crate::graphics::energy_plot::{EnergyData, SharedEnergyData};
     use crate::graphics::renderer::event_loop::metrics::MetricsCollector;
     use crate::graphics::renderer::event_loop::unified_render_state::LineSegmentDrawState;
+    use crate::graphics::renderer::event_loop::unified_render_state::ValveDrawState;
     use crate::graphics::renderer::event_loop::{EnergyWindowManager, InputHandler};
     use crate::graphics::renderer::state_layers::RendererConfig;
     use crate::graphics::renderer::{Margins, ViewportTransform};
@@ -104,6 +105,7 @@ mod tests {
             metrics: MetricsCollector::new(),
             active_tool: OperatorTool::None,
             line_draw_state: LineSegmentDrawState::Idle,
+            valve_draw_state: ValveDrawState::Idle,
         }
     }
 

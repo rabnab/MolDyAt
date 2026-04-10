@@ -219,11 +219,7 @@ impl ApplicationHandler<UserEvent> for WgpuApp {
                         || state.input.is_key_pressed(KeyCode::ControlRight);
                     let cursor_wp = (state.cursor_world_pos.x, state.cursor_world_pos.y);
                     let ball_count = snapshot.balls.len() as u32;
-                    let line_preview = state
-                        .line_segment_preview()
-                        .map(|(s, e)| ([s.x, s.y], [e.x, e.y]));
-                    let selected_icon = state.selected_sidebar_icon();
-                    let snap_indicators = state.snap_indicators();
+                    let operator_previews = state.operator_previews();
                     if let Err(e) = pipelines.prepare_from_snapshot(
                         ctx,
                         snapshot,
@@ -232,9 +228,7 @@ impl ApplicationHandler<UserEvent> for WgpuApp {
                         BallFactory::radius_for_size_idx(state.current_ball_size_idx),
                         ctrl_pressed,
                         state.config.thermo_display,
-                        line_preview,
-                        selected_icon,
-                        snap_indicators,
+                        operator_previews,
                     ) {
                         eprintln!("Pipeline prepare error: {:?}", e);
                     }
@@ -323,7 +317,7 @@ fn handle_window_event(
 
             if let Some(action) = action {
                 state.view_dirty |=
-                    execute_input_action(&action, state, pipelines, &ctx.queue, window_target);
+                    execute_input_action(action, state, pipelines, &ctx.queue, window_target);
             }
         }
         _ => {}

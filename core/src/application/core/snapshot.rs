@@ -1,7 +1,8 @@
 use crate::application::LogStuff;
 use crate::application::MainContent;
 use crate::application::renderer_snapshot::{
-    BallRenderData, RendererSnapshot, ThermoGridSpec, get_special_ball_color, size_class_to_rgba,
+    BallRenderData, OperatorSnapshot, RendererSnapshot, ThermoGridSpec, get_special_ball_color,
+    size_class_to_rgba,
 };
 use crate::application::thermo_field::ThermoGrid;
 use std::sync::Arc;
@@ -86,7 +87,10 @@ impl MainContent {
             physics_fps: self.get_physics_fps(),
             equilibrium_edge_distance: self.physics.equilibrium_edge_distance(),
             cutoff_distance: self.physics.get_cutoff_distance(),
-            line_segments: self.get_line_segments().to_vec(),
+            operators: OperatorSnapshot {
+                line_segments: self.line_segments.segments().to_vec(),
+                valve_segments: self.valve_segments.valves().to_vec(),
+            },
             ..{
                 let (cell_temperature, cell_pressure, thermo_grid_spec) =
                     self.build_thermo_snapshot_fields();

@@ -17,6 +17,44 @@ pub struct SimLineSegment {
     pub end: Vec2D,
 }
 
+/// Valve section defined on a parent line segment using parametric coordinates.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ValveSegment {
+    /// Unique identifier (monotonically increasing, reset on clear).
+    pub id: usize,
+    /// Parent line segment ID.
+    pub line_id: usize,
+    /// Parametric start on parent line in [0, 1].
+    pub t_start: f32,
+    /// Parametric end on parent line in [0, 1].
+    pub t_end: f32,
+    /// Whether this valve section blocks passage.
+    pub is_closed: bool,
+}
+
+impl ValveSegment {
+    /// Create a new valve section and normalize/clamp parameter range.
+    pub fn new(id: usize, line_id: usize, t_start: f32, t_end: f32, is_closed: bool) -> Self {
+        let mut a = t_start.clamp(0.0, 1.0);
+        let mut b = t_end.clamp(0.0, 1.0);
+        if a > b {
+            std::mem::swap(&mut a, &mut b);
+        }
+        Self {
+            id,
+            line_id,
+            t_start: a,
+            t_end: b,
+            is_closed,
+        }
+    }
+
+    /// Whether this valve covers parameter `t` on its parent line.
+    pub fn contains_t(&self, t: f32) -> bool {
+        t >= self.t_start && t <= self.t_end
+    }
+}
+
 impl SimLineSegment {
     /// Create a new line segment.
     pub fn new(id: usize, start: Vec2D, end: Vec2D) -> Self {
@@ -47,6 +85,22 @@ impl SimLineSegment {
         let t = (ap.x * d.x + ap.y * d.y) / len_sq;
         let t = t.clamp(0.0, 1.0);
         self.start.add_scaled(&d, t)
+    }
+
+    /// Closest clamped parameter `t` on this segment for `point`.
+    pub fn closest_t(&self, point: &Vec2D) -> f32 {
+        let d = self.direction();
+        let len_sq = d.norm_sq();
+        if len_sq < 1e-12 {
+            return 0.0;
+        }
+        let ap = self.start.dist(point);
+        ((ap.x * d.x + ap.y * d.y) / len_sq).clamp(0.0, 1.0)
+    }
+
+    /// Point at parametric coordinate `t` clamped to [0, 1].
+    pub fn point_at_t(&self, t: f32) -> Vec2D {
+        self.start.add_scaled(&self.direction(), t.clamp(0.0, 1.0))
     }
 
     /// Outward normal toward `point`.
@@ -161,6 +215,23 @@ mod tests {
         let p = seg.closest_point(&Vec2D::new(5.0, 7.0));
         assert!((p.x - 5.0).abs() < 1e-6);
         assert!((p.y).abs() < 1e-6);
+    }
+
+    #[test]
+    fn closest_t_is_clamped() {
+        let seg = SimLineSegment::new(0, Vec2D::new(0.0, 0.0), Vec2D::new(10.0, 0.0));
+        assert!((seg.closest_t(&Vec2D::new(-5.0, 0.0)) - 0.0).abs() < 1e-6);
+        assert!((seg.closest_t(&Vec2D::new(5.0, 0.0)) - 0.5).abs() < 1e-6);
+        assert!((seg.closest_t(&Vec2D::new(15.0, 0.0)) - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn valve_segment_normalizes_range() {
+        let v = ValveSegment::new(1, 2, 0.9, 0.1, false);
+        assert!((v.t_start - 0.1).abs() < 1e-6);
+        assert!((v.t_end - 0.9).abs() < 1e-6);
+        assert_eq!(v.line_id, 2);
+        assert!(!v.is_closed);
     }
 
     #[test]

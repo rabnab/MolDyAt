@@ -1,30 +1,32 @@
 //! Shared operator lifecycle: clear and rescale.
 //!
-//! Centralizes the clear-on-reset and rescale-on-resize logic so each
-//! new operator type only needs to register here instead of threading
-//! calls through `balls.rs` and `accessors.rs`.
+//! Uses the `OperatorCollection` trait so each registered collection
+//! is handled uniformly.  Adding a new operator type means adding it
+//! to `operator_collections_mut()` — nothing else here changes.
 
 use super::MainContent;
 use crate::objects2d::Rect;
+use crate::objects2d::operator::OperatorCollection;
 
 impl MainContent {
-    /// Clear all placed operators (called on simulation reset).
+    /// Return mutable references to every operator collection.
     ///
-    /// New operator types should add their `clear_*()` call here.
+    /// New operator types extend this list.
+    fn operator_collections_mut(&mut self) -> [&mut dyn OperatorCollection; 2] {
+        [&mut self.line_segments, &mut self.valve_segments]
+    }
+
+    /// Clear all placed operators (called on simulation reset).
     pub(crate) fn clear_all_operators(&mut self) {
-        self.clear_line_segments();
-        // Future: self.clear_valves();
-        // Future: self.clear_sources();
-        // Future: self.clear_thermostats();
+        for col in self.operator_collections_mut() {
+            col.clear();
+        }
     }
 
     /// Rescale all operator positions when the world region changes size.
-    ///
-    /// New operator types should add their `rescale_*()` call here.
     pub(crate) fn rescale_all_operators(&mut self, old_rect: &Rect, new_rect: &Rect) {
-        self.rescale_line_segments(old_rect, new_rect);
-        // Future: self.rescale_valves(old_rect, new_rect);
-        // Future: self.rescale_sources(old_rect, new_rect);
-        // Future: self.rescale_thermostats(old_rect, new_rect);
+        for col in self.operator_collections_mut() {
+            col.rescale(old_rect, new_rect);
+        }
     }
 }

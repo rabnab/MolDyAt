@@ -8,6 +8,7 @@
 
 use bytemuck::{Pod, Zeroable};
 use rust_thermo_core::graphics::renderer::batch_renderer::{BatchRenderer, LineSegment};
+use std::collections::HashMap;
 use wgpu::util::DeviceExt;
 
 /// GPU-side line vertex with position and color.
@@ -275,8 +276,12 @@ impl RenderPipeline for LinePipeline {
         let mut line_batch: BatchRenderer<LineSegment> = BatchRenderer::new();
         collect_neighbor_lines(&ctx.snapshot.balls, &mut line_batch);
 
+        // Pre-compute world-extent-based sizing for indicators
+        let bounds = &ctx.snapshot.cell_grid_bounds;
+        let world_extent = bounds.w.abs().max(bounds.h.abs()).max(1.0);
+
         // Committed line segments (white, opaque)
-        for seg in &ctx.snapshot.line_segments {
+        for seg in &ctx.snapshot.operators.line_segments {
             line_batch.push(LineSegment {
                 points: [[seg.start.x, seg.start.y], [seg.end.x, seg.end.y]],
                 width: 2.0,
@@ -284,8 +289,109 @@ impl RenderPipeline for LinePipeline {
             });
         }
 
+        // Build a lookup table for O(1) segment resolution by ID.
+        let seg_by_id: HashMap<usize, &_> = ctx
+            .snapshot
+            .operators
+            .line_segments
+            .iter()
+            .map(|s| (s.id, s))
+            .collect();
+
+        // Valve segment overlays — draw on top of committed line segments
+        for valve in &ctx.snapshot.operators.valve_segments {
+            if let Some(&seg) = seg_by_id.get(&valve.line_id) {
+                let p0 = seg.point_at_t(valve.t_start);
+                let p1 = seg.point_at_t(valve.t_end);
+
+                if valve.is_closed {
+                    // Closed valve: thick green line
+                    line_batch.push(LineSegment {
+                        points: [[p0.x, p0.y], [p1.x, p1.y]],
+                        width: 3.0,
+                        color: [0.0, 0.9, 0.2, 1.0],
+                    });
+                } else {
+                    // Open valve: red dashed effect (3 short segments)
+                    let dx = p1.x - p0.x;
+                    let dy = p1.y - p0.y;
+                    let segments = 3;
+                    for i in 0..segments {
+                        let a = i as f32 / segments as f32;
+                        let b = (i as f32 + 0.5) / segments as f32;
+                        line_batch.push(LineSegment {
+                            points: [
+                                [p0.x + dx * a, p0.y + dy * a],
+                                [p0.x + dx * b, p0.y + dy * b],
+                            ],
+                            width: 2.0,
+                            color: [0.9, 0.2, 0.1, 0.6],
+                        });
+                    }
+                }
+
+                // State indicator at midpoint
+                let mid_x = (p0.x + p1.x) * 0.5;
+                let mid_y = (p0.y + p1.y) * 0.5;
+                let indicator_size = world_extent * 0.012;
+
+                if valve.is_closed {
+                    // Green circle indicator (approximated with small crosshair)
+                    let ic = [0.0, 1.0, 0.3, 1.0];
+                    line_batch.push(LineSegment {
+                        points: [
+                            [mid_x - indicator_size, mid_y],
+                            [mid_x + indicator_size, mid_y],
+                        ],
+                        width: 2.0,
+                        color: ic,
+                    });
+                    line_batch.push(LineSegment {
+                        points: [
+                            [mid_x, mid_y - indicator_size],
+                            [mid_x, mid_y + indicator_size],
+                        ],
+                        width: 2.0,
+                        color: ic,
+                    });
+                } else {
+                    // Red X indicator
+                    let ic = [1.0, 0.2, 0.1, 0.9];
+                    line_batch.push(LineSegment {
+                        points: [
+                            [mid_x - indicator_size, mid_y - indicator_size],
+                            [mid_x + indicator_size, mid_y + indicator_size],
+                        ],
+                        width: 2.0,
+                        color: ic,
+                    });
+                    line_batch.push(LineSegment {
+                        points: [
+                            [mid_x + indicator_size, mid_y - indicator_size],
+                            [mid_x - indicator_size, mid_y + indicator_size],
+                        ],
+                        width: 2.0,
+                        color: ic,
+                    });
+                }
+            }
+        }
+
+        // Ghost preview for valve segment drawing (semi-transparent magenta)
+        if let Some((line_id, t_start, t_end)) = ctx.operator_previews.valve_segment
+            && let Some(&seg) = seg_by_id.get(&line_id)
+        {
+            let p0 = seg.point_at_t(t_start);
+            let p1 = seg.point_at_t(t_end);
+            line_batch.push(LineSegment {
+                points: [[p0.x, p0.y], [p1.x, p1.y]],
+                width: 3.0,
+                color: [1.0, 0.0, 1.0, 0.5],
+            });
+        }
+
         // Ghost preview (semi-transparent yellow)
-        if let Some((start, end)) = ctx.line_segment_preview {
+        if let Some((start, end)) = ctx.operator_previews.line_segment {
             line_batch.push(LineSegment {
                 points: [start, end],
                 width: 2.0,
@@ -296,11 +402,9 @@ impl RenderPipeline for LinePipeline {
         // Snap indicators: small crosshairs at snap target positions.
         // Scale the crosshair size proportionally to the simulation region
         // so it stays visually consistent when the world is resized.
-        let bounds = &ctx.snapshot.cell_grid_bounds;
-        let world_extent = bounds.w.abs().max(bounds.h.abs()).max(1.0);
         let cross_size = world_extent * 0.015;
         let snap_color = [0.0, 1.0, 1.0, 0.9]; // cyan
-        for &pos in &ctx.snap_indicators {
+        for &pos in &ctx.operator_previews.snap_indicators {
             // Horizontal bar
             line_batch.push(LineSegment {
                 points: [[pos[0] - cross_size, pos[1]], [pos[0] + cross_size, pos[1]]],

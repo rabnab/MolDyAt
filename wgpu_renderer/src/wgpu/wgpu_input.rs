@@ -15,14 +15,14 @@ use super::wgpu_pipelines::WgpuPipelines;
 ///
 /// Returns `true` if the action affects the viewport.
 pub fn execute_input_action(
-    action: &InputAction,
+    action: InputAction,
     state: &mut UnifiedRenderState,
     pipelines: &mut WgpuPipelines,
     queue: &wgpu::Queue,
     window_target: &winit::event_loop::ActiveEventLoop,
 ) -> bool {
     // Handle ONLY actions that need wgpu resources
-    if let InputAction::ToggleCutoffRings = action {
+    if let InputAction::ToggleCutoffRings = &action {
         pipelines.toggle_cutoff_rings(queue);
         return false; // doesn't affect view
     }

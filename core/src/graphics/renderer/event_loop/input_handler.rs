@@ -1,3 +1,4 @@
+use crate::application::operator_command::OperatorCommand;
 use crate::objects2d::Vec2D;
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
@@ -21,7 +22,7 @@ pub enum OperatorTool {
 }
 
 /// Actions that can result from user input
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum InputAction {
     // Ball manipulation
     AddBall {
@@ -85,18 +86,8 @@ pub enum InputAction {
 
     // Operator panel
     SelectOperatorTool(OperatorTool),
-    /// Commit a drawn line segment (start, end in world coords).
-    CommitLineSegment {
-        start: Vec2D,
-        end: Vec2D,
-    },
-    /// Move a line segment endpoint (segment id, new position).
-    MoveLineSegmentEndpoint {
-        segment_id: usize,
-        new_pos: Vec2D,
-        /// `true` → move start endpoint, `false` → move end endpoint.
-        move_start: bool,
-    },
+    /// A self-contained operator command routed to the physics thread.
+    OperatorAction(Box<dyn OperatorCommand>),
 }
 
 /// Cooldown period between +/- key commands (in milliseconds)
