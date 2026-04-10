@@ -12,8 +12,12 @@ impl MainContent {
     /// Return mutable references to every operator collection.
     ///
     /// New operator types extend this list.
-    fn operator_collections_mut(&mut self) -> [&mut dyn OperatorCollection; 2] {
-        [&mut self.line_segments, &mut self.valve_segments]
+    fn operator_collections_mut(&mut self) -> [&mut dyn OperatorCollection; 3] {
+        [
+            &mut self.line_segments,
+            &mut self.valve_segments,
+            &mut self.source_spheres,
+        ]
     }
 
     /// Clear all placed operators (called on simulation reset).

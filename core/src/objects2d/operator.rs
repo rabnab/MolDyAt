@@ -14,6 +14,45 @@
 
 use super::{Rect, SimLineSegment, ValveSegment, Vec2D};
 
+// ── Source Sphere ────────────────────────────────────────────────────
+
+/// A circular emitter placed in the simulation world.
+///
+/// When its state is [`OperatorState::On`] the sphere spawns new balls
+/// every [`emit_period`](SimSourceSphere::emit_period) simulation steps.
+/// When [`OperatorState::Off`] it is dormant.
+#[derive(Debug, Clone, Copy)]
+pub struct SimSourceSphere {
+    /// Unique identifier assigned by [`SourceSphereCollection`].
+    pub id: usize,
+    /// Center of the sphere in world coordinates.
+    pub center: Vec2D,
+    /// Visual / collision radius of the sphere.
+    pub radius: f32,
+    /// ON/OFF emission state.
+    pub state: OperatorState,
+    /// Emit one ball every this many simulation steps (when On).
+    pub emit_period: u32,
+}
+
+impl SimSourceSphere {
+    /// Create a new source sphere starting in the `On` (emitting) state.
+    pub fn new(id: usize, center: Vec2D, radius: f32) -> Self {
+        Self {
+            id,
+            center,
+            radius,
+            state: OperatorState::On,
+            emit_period: 30,
+        }
+    }
+
+    /// Whether this sphere is currently emitting.
+    pub fn is_emitting(&self) -> bool {
+        self.state.is_on()
+    }
+}
+
 /// ON/OFF state for toggleable operators (all except line segments).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum OperatorState {
@@ -231,6 +270,59 @@ impl OperatorCollection for ValveCollection {
     fn rescale(&mut self, _old_rect: &Rect, _new_rect: &Rect) {
         // Valve geometry is parametric on line segments (t_start/t_end),
         // so line endpoint rescaling is sufficient.
+    }
+}
+
+// ── Source Sphere Collection ─────────────────────────────────────────
+
+/// Owns the `Vec<SimSourceSphere>` and its ID counter.
+#[derive(Debug, Clone, Default)]
+pub struct SourceSphereCollection {
+    spheres: Vec<SimSourceSphere>,
+    next_id: OperatorIdCounter,
+}
+
+impl SourceSphereCollection {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Add a new source sphere, returning its assigned ID.
+    pub fn add(&mut self, center: Vec2D, radius: f32) -> usize {
+        let id = self.next_id.next_id();
+        self.spheres.push(SimSourceSphere::new(id, center, radius));
+        id
+    }
+
+    /// Immutable access to all source spheres.
+    pub fn spheres(&self) -> &[SimSourceSphere] {
+        &self.spheres
+    }
+
+    /// Find a sphere by ID (immutable).
+    pub fn find(&self, id: usize) -> Option<&SimSourceSphere> {
+        self.spheres.iter().find(|s| s.id == id)
+    }
+
+    /// Find a sphere by ID (mutable).
+    pub fn find_mut(&mut self, id: usize) -> Option<&mut SimSourceSphere> {
+        self.spheres.iter_mut().find(|s| s.id == id)
+    }
+}
+
+impl OperatorCollection for SourceSphereCollection {
+    fn clear(&mut self) {
+        self.spheres.clear();
+        self.next_id.reset();
+    }
+
+    fn rescale(&mut self, old_rect: &Rect, new_rect: &Rect) {
+        if is_degenerate(old_rect) {
+            return;
+        }
+        for sphere in &mut self.spheres {
+            sphere.center = remap_point(sphere.center, old_rect, new_rect);
+        }
     }
 }
 

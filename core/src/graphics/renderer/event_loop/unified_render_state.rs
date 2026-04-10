@@ -530,6 +530,30 @@ impl UnifiedRenderState {
             }
         }
 
+        // Handle source sphere tool interactions
+        if self.active_tool == OperatorTool::SourceSphere
+            && button == winit::event::MouseButton::Left
+            && state == winit::event::ElementState::Released
+        {
+            // Click on existing sphere → toggle; click on empty space → place new.
+            if let Some(sphere_id) = self.find_source_sphere_at(world_pos) {
+                let action =
+                    InputAction::OperatorAction(Box::new(operator_command::ToggleSourceSphere {
+                        sphere_id,
+                    }));
+                self.process_action(action, None);
+            } else {
+                let action =
+                    InputAction::OperatorAction(Box::new(operator_command::PlaceSourceSphere {
+                        center: world_pos,
+                        radius: Self::DEFAULT_SOURCE_RADIUS,
+                    }));
+                self.process_action(action, None);
+            }
+            self.view_dirty = true;
+            return true;
+        }
+
         if let Some(action) = self
             .input
             .handle_mouse_button(button, state, screen_pos, world_pos, pan_offset)

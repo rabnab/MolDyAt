@@ -7,6 +7,7 @@ mod wall_momentum;
 
 mod line_segments;
 mod snapshot;
+mod source_spheres;
 mod valves;
 
 use crate::application::MainContent;

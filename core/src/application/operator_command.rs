@@ -78,3 +78,28 @@ impl OperatorCommand for MoveValveSegment {
         content.move_valve_segment(self.valve_id, self.t_start, self.t_end);
     }
 }
+
+// ── Source sphere commands ────────────────────────────────────────────
+
+#[derive(Debug)]
+pub struct PlaceSourceSphere {
+    pub center: Vec2D,
+    pub radius: f32,
+}
+
+impl OperatorCommand for PlaceSourceSphere {
+    fn execute(self: Box<Self>, content: &mut MainContent) {
+        content.add_source_sphere(self.center, self.radius);
+    }
+}
+
+#[derive(Debug)]
+pub struct ToggleSourceSphere {
+    pub sphere_id: usize,
+}
+
+impl OperatorCommand for ToggleSourceSphere {
+    fn execute(self: Box<Self>, content: &mut MainContent) {
+        content.toggle_source_sphere(self.sphere_id);
+    }
+}

@@ -236,6 +236,9 @@ impl VerletIntegration for MainContent {
         // Resolve line segment collisions (post-step position correction + reflection)
         let (seg_px, seg_py) = self.resolve_line_segment_collisions();
 
+        // Emit balls from active source spheres.
+        self.emit_from_source_spheres();
+
         // Store wall momentum for tracking (includes line segment bounces)
         self.sim.wall_momentum_x += wall_px + seg_px;
         self.sim.wall_momentum_y += wall_py + seg_py;

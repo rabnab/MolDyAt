@@ -5,6 +5,7 @@ mod line_segment_tool;
 pub mod metrics;
 mod physics_coordinator;
 mod sidebar_tool;
+mod source_sphere_tool;
 #[cfg(test)]
 mod tests;
 mod unified_render_state;

@@ -20,7 +20,7 @@
 //! - **Immutability**: Snapshots are immutable after creation, so no need for
 //!   partial field updates that might benefit from SoA.
 
-use crate::objects2d::{SimLineSegment, ValveSegment, Vec2D};
+use crate::objects2d::{SimLineSegment, SimSourceSphere, ValveSegment, Vec2D};
 use std::time::Instant;
 
 use crate::application::thermo_field::ThermoGrid;
@@ -36,6 +36,8 @@ pub struct OperatorSnapshot {
     pub line_segments: Vec<SimLineSegment>,
     /// Valve sections on line segments.
     pub valve_segments: Vec<ValveSegment>,
+    /// Source spheres that emit balls into the simulation.
+    pub source_spheres: Vec<SimSourceSphere>,
 }
 
 /// Lightweight specification for cell grid dimensions and layout.
