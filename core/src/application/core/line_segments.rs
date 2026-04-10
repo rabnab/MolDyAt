@@ -47,17 +47,14 @@ impl MainContent {
                 continue; // degenerate segment
             }
 
-            let open_ranges: Vec<(f32, f32)> = self
-                .valve_segments
-                .valves()
-                .iter()
-                .filter(|v| v.line_id == seg.id && !v.is_closed)
-                .map(|v| (v.t_start, v.t_end))
-                .collect();
-
             for ball in &mut self.balls {
                 let t = seg.closest_t(ball.get_position());
-                if open_ranges.iter().any(|(a, b)| t >= *a && t <= *b) {
+                if self
+                    .valve_segments
+                    .valves()
+                    .iter()
+                    .any(|v| v.line_id == seg.id && !v.is_closed && t >= v.t_start && t <= v.t_end)
+                {
                     continue;
                 }
 

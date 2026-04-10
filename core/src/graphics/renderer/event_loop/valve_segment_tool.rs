@@ -22,6 +22,8 @@ pub enum ValveDrawState {
         line_id: usize,
         /// Half-width of the valve in parametric space, preserved during drag.
         t_half_width: f32,
+        /// Parametric center at press time, used to distinguish toggle from drag.
+        t_center_at_press: f32,
     },
 }
 

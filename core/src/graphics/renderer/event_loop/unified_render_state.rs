@@ -446,10 +446,12 @@ impl UnifiedRenderState {
                         self.find_valve_at(world_pos)
                     {
                         let t_half = (t_end - t_start) * 0.5;
+                        let t_center = (t_start + t_end) * 0.5;
                         self.valve_draw_state = ValveDrawState::Moving {
                             valve_id,
                             line_id,
                             t_half_width: t_half,
+                            t_center_at_press: t_center,
                         };
                     } else if let Some((line_id, t)) = self.find_line_at(world_pos) {
                         // Starting a new valve on this line segment
@@ -488,20 +490,18 @@ impl UnifiedRenderState {
                             valve_id,
                             line_id,
                             t_half_width,
+                            t_center_at_press,
                         } => {
-                            // Check if user clicked without moving (toggle)
-                            // vs actually dragged (move). We'll detect by checking
-                            // if the cursor is still near the valve center.
-                            if let Some((_, _, _t_start, _t_end, _)) = self.find_valve_at(world_pos)
-                            {
-                                // Still near center — toggle
-                                let action = InputAction::OperatorAction(Box::new(
-                                    operator_command::ToggleValve { valve_id },
-                                ));
-                                self.process_action(action, None);
-                            } else if let Some((hit_line, t_center)) = self.find_line_at(world_pos)
-                                && hit_line == line_id
-                            {
+                            // Distinguish toggle (click) from drag (move) by
+                            // checking how far the cursor moved from the initial
+                            // parametric center recorded at press time.
+                            const T_MOVE_THRESHOLD: f32 = 0.03;
+                            let dragged = self.find_line_at(world_pos).filter(|(hit_line, t)| {
+                                *hit_line == line_id
+                                    && (*t - t_center_at_press).abs() > T_MOVE_THRESHOLD
+                            });
+
+                            if let Some((_, t_center)) = dragged {
                                 // Moved along the line — commit move
                                 let new_start = (t_center - t_half_width).clamp(0.0, 1.0);
                                 let new_end = (t_center + t_half_width).clamp(0.0, 1.0);
@@ -511,6 +511,12 @@ impl UnifiedRenderState {
                                         t_start: new_start,
                                         t_end: new_end,
                                     },
+                                ));
+                                self.process_action(action, None);
+                            } else {
+                                // Click without meaningful drag — toggle
+                                let action = InputAction::OperatorAction(Box::new(
+                                    operator_command::ToggleValve { valve_id },
                                 ));
                                 self.process_action(action, None);
                             }

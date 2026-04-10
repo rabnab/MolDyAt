@@ -8,6 +8,7 @@
 
 use bytemuck::{Pod, Zeroable};
 use rust_thermo_core::graphics::renderer::batch_renderer::{BatchRenderer, LineSegment};
+use std::collections::HashMap;
 use wgpu::util::DeviceExt;
 
 /// GPU-side line vertex with position and color.
@@ -288,15 +289,18 @@ impl RenderPipeline for LinePipeline {
             });
         }
 
+        // Build a lookup table for O(1) segment resolution by ID.
+        let seg_by_id: HashMap<usize, &_> = ctx
+            .snapshot
+            .operators
+            .line_segments
+            .iter()
+            .map(|s| (s.id, s))
+            .collect();
+
         // Valve segment overlays — draw on top of committed line segments
         for valve in &ctx.snapshot.operators.valve_segments {
-            if let Some(seg) = ctx
-                .snapshot
-                .operators
-                .line_segments
-                .iter()
-                .find(|s| s.id == valve.line_id)
-            {
+            if let Some(&seg) = seg_by_id.get(&valve.line_id) {
                 let p0 = seg.point_at_t(valve.t_start);
                 let p1 = seg.point_at_t(valve.t_end);
 
@@ -375,12 +379,7 @@ impl RenderPipeline for LinePipeline {
 
         // Ghost preview for valve segment drawing (semi-transparent magenta)
         if let Some((line_id, t_start, t_end)) = ctx.operator_previews.valve_segment
-            && let Some(seg) = ctx
-                .snapshot
-                .operators
-                .line_segments
-                .iter()
-                .find(|s| s.id == line_id)
+            && let Some(&seg) = seg_by_id.get(&line_id)
         {
             let p0 = seg.point_at_t(t_start);
             let p1 = seg.point_at_t(t_end);

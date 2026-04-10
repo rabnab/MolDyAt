@@ -26,16 +26,19 @@ fn valve_moving_holds_fields() {
         valve_id: 3,
         line_id: 1,
         t_half_width: 0.15,
+        t_center_at_press: 0.5,
     };
     if let ValveDrawState::Moving {
         valve_id,
         line_id,
         t_half_width,
+        t_center_at_press,
     } = state
     {
         assert_eq!(valve_id, 3);
         assert_eq!(line_id, 1);
         assert!((t_half_width - 0.15).abs() < 1e-6);
+        assert!((t_center_at_press - 0.5).abs() < 1e-6);
     } else {
         panic!("Expected Moving state");
     }
