@@ -16,12 +16,12 @@ fn add_source_sphere_increases_count() {
 }
 
 #[test]
-fn added_sphere_starts_on() {
+fn added_sphere_starts_off() {
     let mut mc = make_content();
     mc.add_source_sphere(Vec2D::new(0.0, 0.0));
     let sphere = &mc.source_spheres.spheres()[0];
-    assert_eq!(sphere.state, OperatorState::On);
-    assert!(sphere.is_emitting());
+    assert_eq!(sphere.state, OperatorState::Off);
+    assert!(!sphere.is_emitting());
 }
 
 #[test]
@@ -36,15 +36,15 @@ fn ids_are_sequential() {
 // ── Toggle ──────────────────────────────────────────────────────────
 
 #[test]
-fn toggle_turns_sphere_off() {
+fn toggle_turns_sphere_on() {
     let mut mc = make_content();
     mc.add_source_sphere(Vec2D::new(0.0, 0.0));
     let id = mc.source_spheres.spheres()[0].id;
 
     mc.toggle_source_sphere(id);
     let sphere = mc.source_spheres.find(id).unwrap();
-    assert_eq!(sphere.state, OperatorState::Off);
-    assert!(!sphere.is_emitting());
+    assert_eq!(sphere.state, OperatorState::On);
+    assert!(sphere.is_emitting());
 }
 
 #[test]
@@ -55,7 +55,7 @@ fn double_toggle_restores_on() {
 
     mc.toggle_source_sphere(id);
     mc.toggle_source_sphere(id);
-    assert_eq!(mc.source_spheres.find(id).unwrap().state, OperatorState::On);
+    assert_eq!(mc.source_spheres.find(id).unwrap().state, OperatorState::Off);
 }
 
 #[test]

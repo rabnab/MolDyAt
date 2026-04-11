@@ -53,12 +53,12 @@ const MIN_EMISSION_SPEED: f32 = 0.0;
 const MAX_EMISSION_SPEED: f32 = 50.0;
 
 impl SimSourceSphere {
-    /// Create a new source sphere starting in the `On` (emitting) state.
+    /// Create a new source sphere starting in the `Off` (dormant) state.
     pub fn new(id: usize, center: Vec2D) -> Self {
         Self {
             id,
             center,
-            state: OperatorState::On,
+            state: OperatorState::Off,
             emit_period: 30,
             ball_size_idx: DEFAULT_BALL_SIZE_IDX,
             emission_speed: DEFAULT_EMISSION_SPEED,
