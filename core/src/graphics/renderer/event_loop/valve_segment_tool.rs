@@ -8,9 +8,7 @@ use crate::application::operator_command;
 use crate::objects2d::Vec2D;
 use winit::event::{ElementState, MouseButton};
 
-use super::operator_tool_handler::{
-    OperatorPreview, OperatorToolHandler, ToolContext, ToolResponse,
-};
+use super::operator_tool_handler::{OperatorToolHandler, ToolContext, ToolPreview, ToolResponse};
 
 /// State machine for valve segment interactions.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -209,8 +207,12 @@ impl OperatorToolHandler for ValveSegmentToolHandler {
         }
     }
 
-    fn handle_cursor_move(&mut self, _world_pos: Vec2D, _ctx: &ToolContext) -> bool {
-        !matches!(self.state, ValveDrawState::Idle)
+    fn handle_cursor_move(&mut self, _world_pos: Vec2D, _ctx: &ToolContext) -> ToolResponse {
+        if matches!(self.state, ValveDrawState::Idle) {
+            ToolResponse::default()
+        } else {
+            ToolResponse::consumed_dirty()
+        }
     }
 
     fn handle_scroll(
@@ -223,25 +225,25 @@ impl OperatorToolHandler for ValveSegmentToolHandler {
         ToolResponse::default()
     }
 
-    fn preview(&self, ctx: &ToolContext) -> OperatorPreview {
+    fn preview(&self, ctx: &ToolContext) -> ToolPreview {
         if let ValveDrawState::Drawing { line_id, t_start } = self.state {
             if let Some((hit_line, t_end)) = Self::find_line_at(ctx.cursor_world_pos, ctx)
                 && hit_line == line_id
             {
                 let t_end = Self::snap_t(t_end);
-                return OperatorPreview::ValveSegment {
+                return ToolPreview::ValveSegment {
                     line_id,
                     t_start,
                     t_end,
                 };
             }
-            return OperatorPreview::ValveSegment {
+            return ToolPreview::ValveSegment {
                 line_id,
                 t_start,
                 t_end: t_start,
             };
         }
-        OperatorPreview::None
+        ToolPreview::None
     }
 
     fn snap_indicators(&self, _ctx: &ToolContext) -> Vec<[f32; 2]> {
@@ -250,10 +252,6 @@ impl OperatorToolHandler for ValveSegmentToolHandler {
 
     fn reset(&mut self) {
         self.state = ValveDrawState::Idle;
-    }
-
-    fn needs_continuous_redraw(&self) -> bool {
-        !matches!(self.state, ValveDrawState::Idle)
     }
 }
 
@@ -430,7 +428,7 @@ mod tests {
         let tool = ValveSegmentToolHandler::new();
         let (snap, world) = make_ctx_data(vec![], vec![]);
         let ctx = make_tool_ctx(&snap, &world, Vec2D::new(5.0, 0.0));
-        assert!(matches!(tool.preview(&ctx), OperatorPreview::None));
+        assert!(matches!(tool.preview(&ctx), ToolPreview::None));
     }
 
     #[test]
@@ -448,7 +446,7 @@ mod tests {
         let preview = tool.preview(&ctx);
         assert!(matches!(
             preview,
-            OperatorPreview::ValveSegment { line_id: 1, .. }
+            ToolPreview::ValveSegment { line_id: 1, .. }
         ));
     }
 
@@ -477,7 +475,8 @@ mod tests {
         let mut tool = ValveSegmentToolHandler::new();
         let (snap, world) = make_ctx_data(vec![], vec![]);
         let ctx = make_tool_ctx(&snap, &world, Vec2D::zero());
-        assert!(!tool.handle_cursor_move(Vec2D::new(1.0, 1.0), &ctx));
+        let resp = tool.handle_cursor_move(Vec2D::new(1.0, 1.0), &ctx);
+        assert!(!resp.view_dirty);
     }
 
     #[test]
@@ -489,6 +488,7 @@ mod tests {
         };
         let (snap, world) = make_ctx_data(vec![], vec![]);
         let ctx = make_tool_ctx(&snap, &world, Vec2D::zero());
-        assert!(tool.handle_cursor_move(Vec2D::new(1.0, 1.0), &ctx));
+        let resp = tool.handle_cursor_move(Vec2D::new(1.0, 1.0), &ctx);
+        assert!(resp.view_dirty);
     }
 }

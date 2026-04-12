@@ -8,9 +8,7 @@ use crate::application::operator_command;
 use crate::objects2d::Vec2D;
 use winit::event::{ElementState, MouseButton};
 
-use super::operator_tool_handler::{
-    OperatorPreview, OperatorToolHandler, ToolContext, ToolResponse,
-};
+use super::operator_tool_handler::{OperatorToolHandler, ToolContext, ToolPreview, ToolResponse};
 
 /// How close the cursor must be to a sphere centre (in world units) to
 /// register a hit for toggle/interaction.
@@ -72,8 +70,8 @@ impl OperatorToolHandler for SourceSphereToolHandler {
         }
     }
 
-    fn handle_cursor_move(&mut self, _world_pos: Vec2D, _ctx: &ToolContext) -> bool {
-        false
+    fn handle_cursor_move(&mut self, _world_pos: Vec2D, _ctx: &ToolContext) -> ToolResponse {
+        ToolResponse::default()
     }
 
     fn handle_scroll(
@@ -106,8 +104,8 @@ impl OperatorToolHandler for SourceSphereToolHandler {
         }
     }
 
-    fn preview(&self, _ctx: &ToolContext) -> OperatorPreview {
-        OperatorPreview::None
+    fn preview(&self, _ctx: &ToolContext) -> ToolPreview {
+        ToolPreview::None
     }
 
     fn snap_indicators(&self, _ctx: &ToolContext) -> Vec<[f32; 2]> {
@@ -281,7 +279,7 @@ mod tests {
         let tool = SourceSphereToolHandler::new();
         let (snap, world) = make_ctx_data(vec![]);
         let ctx = make_tool_ctx(&snap, &world, Vec2D::zero());
-        assert!(matches!(tool.preview(&ctx), OperatorPreview::None));
+        assert!(matches!(tool.preview(&ctx), ToolPreview::None));
     }
 
     #[test]

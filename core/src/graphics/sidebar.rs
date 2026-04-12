@@ -1,8 +1,10 @@
 //! Shared sidebar layout constants.
 //!
-//! These constants define the icon geometry used by both the renderer
-//! (WGPU sidebar pipeline) and the hit-testing logic in
-//! `UnifiedRenderState`.  Keeping them in one place prevents drift.
+//! These constants define the icon geometry and tool ordering used by
+//! both the renderer (WGPU sidebar pipeline) and the hit-testing logic
+//! in `UnifiedRenderState`.  Keeping them in one place prevents drift.
+
+use crate::graphics::renderer::event_loop::OperatorTool;
 
 /// Display size for each sidebar icon in pixels (square).
 pub const ICON_DISPLAY_SIZE: f32 = 48.0;
@@ -10,8 +12,18 @@ pub const ICON_DISPLAY_SIZE: f32 = 48.0;
 /// Vertical spacing between icons in pixels.
 pub const ICON_SPACING: f32 = 12.0;
 
-/// Number of icons in the sidebar.
-pub const ICON_COUNT: usize = 4;
+/// Sidebar icon order — single source of truth for icon index ↔ tool.
+///
+/// The WGPU sidebar pipeline's icon atlas **must** match this order.
+pub const SIDEBAR_TOOLS: [OperatorTool; 4] = [
+    OperatorTool::LineSegment,  // 0 — wall icon
+    OperatorTool::ValveSegment, // 1 — gate icon
+    OperatorTool::Thermostat,   // 2 — temperature icon
+    OperatorTool::SourceSphere, // 3 — emitter icon
+];
+
+/// Number of icons in the sidebar (derived from [`SIDEBAR_TOOLS`]).
+pub const ICON_COUNT: usize = SIDEBAR_TOOLS.len();
 
 /// Compute how many sidebar icons are visible given window height and margins.
 ///

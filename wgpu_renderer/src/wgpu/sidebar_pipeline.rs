@@ -80,6 +80,7 @@ impl SidebarPipeline {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat) -> Self {
         // ── Build texture atlas ────────────────────────────────────
         // All icons are decoded to ATLAS_CELL × ATLAS_CELL RGBA and stacked vertically.
+        // Order must match SIDEBAR_TOOLS in core/src/graphics/sidebar.rs.
         const ATLAS_CELL: u32 = 64; // texture resolution per icon
         let icons: [&[u8]; ICON_COUNT] = [ICON_WALL, ICON_VALVE, ICON_THERMO, ICON_SOURCE_OPEN];
 

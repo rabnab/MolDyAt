@@ -20,7 +20,7 @@ use super::thermo_value_pipeline::ThermoValueOverlayPipeline;
 use super::wgpu_context::WgpuContext;
 use rust_thermo_core::application::AppResult;
 use rust_thermo_core::application::renderer_snapshot::{CellGridSpec, RendererSnapshot};
-use rust_thermo_core::graphics::renderer::event_loop::OperatorPreviews;
+use rust_thermo_core::graphics::renderer::event_loop::FramePreviews;
 use rust_thermo_core::graphics::renderer::state_layers::ThermoDisplayMode;
 
 /// Shader source code (embedded at compile time).
@@ -121,7 +121,7 @@ impl WgpuPipelines {
         current_ball_radius: f32,
         ctrl_pressed: bool,
         thermo_display: ThermoDisplayMode,
-        operator_previews: OperatorPreviews,
+        operator_previews: FramePreviews,
     ) -> AppResult {
         let window_size = ctx.size();
         let margin = MARGINS;

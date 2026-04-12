@@ -40,25 +40,23 @@ impl UnifiedRenderState {
     }
 
     /// Maps a sidebar icon index to an `OperatorTool`.
+    /// Maps a sidebar icon index to an `OperatorTool`.
+    ///
+    /// Derived from [`SIDEBAR_TOOLS`](crate::graphics::sidebar::SIDEBAR_TOOLS).
     pub(super) fn operator_tool_for_icon(index: usize) -> OperatorTool {
-        match index {
-            0 => OperatorTool::LineSegment,  // wall icon
-            1 => OperatorTool::ValveSegment, // gate icon
-            2 => OperatorTool::Thermostat,   // temperature icon
-            3 => OperatorTool::SourceSphere, // emitter icon
-            _ => OperatorTool::None,
-        }
+        use crate::graphics::sidebar::SIDEBAR_TOOLS;
+        SIDEBAR_TOOLS
+            .get(index)
+            .copied()
+            .unwrap_or(OperatorTool::None)
     }
 
     /// Returns the sidebar icon index of the currently active tool, if any.
+    ///
+    /// Derived from [`SIDEBAR_TOOLS`](crate::graphics::sidebar::SIDEBAR_TOOLS).
     pub fn selected_sidebar_icon(&self) -> Option<usize> {
-        match self.active_tool {
-            OperatorTool::LineSegment => Some(0),
-            OperatorTool::ValveSegment => Some(1),
-            OperatorTool::Thermostat => Some(2),
-            OperatorTool::SourceSphere => Some(3),
-            OperatorTool::None => None,
-        }
+        use crate::graphics::sidebar::SIDEBAR_TOOLS;
+        SIDEBAR_TOOLS.iter().position(|&t| t == self.active_tool)
     }
 }
 
@@ -103,6 +101,7 @@ mod tests {
             metrics: MetricsCollector::new(),
             active_tool: OperatorTool::None,
             tool_handler: None,
+            default_operator_snapshot: Default::default(),
         }
     }
 

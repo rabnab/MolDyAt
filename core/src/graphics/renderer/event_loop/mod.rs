@@ -18,9 +18,9 @@ mod valve_segment_tool;
 // even though ggez accesses it only through the field (type needs to be public)
 #[allow(unused_imports)]
 pub use energy_window_manager::EnergyWindowManager;
-pub use input_handler::{InputAction, InputHandler, KeyCode};
+pub use input_handler::{InputAction, InputHandler, KeyCode, OperatorTool};
 pub use metrics::{FrameMetrics, MetricsCollector};
-pub use operator_tool_handler::{OperatorPreview, OperatorToolHandler, ToolContext, ToolResponse};
+pub use operator_tool_handler::{OperatorToolHandler, ToolContext, ToolPreview, ToolResponse};
 pub use physics_coordinator::PhysicsCoordinator;
 pub use source_sphere_tool::DEFAULT_SOURCE_RADIUS;
 pub use unified_render_state::UnifiedRenderState;
@@ -31,7 +31,7 @@ pub use unified_render_state::UnifiedRenderState;
 /// by `PrepareContext` in the WGPU renderer.  Adding a new tool's
 /// preview just extends this struct — no signature changes elsewhere.
 #[derive(Debug, Clone, Default)]
-pub struct OperatorPreviews {
+pub struct FramePreviews {
     /// Ghost-preview line segment while the user is drawing (world coords).
     pub line_segment: Option<([f32; 2], [f32; 2])>,
     /// Ghost-preview valve segment while the user is drawing.

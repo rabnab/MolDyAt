@@ -9,9 +9,7 @@ use crate::objects2d::Vec2D;
 use crate::objects2d::line_segment::snap_position;
 use winit::event::{ElementState, MouseButton};
 
-use super::operator_tool_handler::{
-    OperatorPreview, OperatorToolHandler, ToolContext, ToolResponse,
-};
+use super::operator_tool_handler::{OperatorToolHandler, ToolContext, ToolPreview, ToolResponse};
 
 /// Snap threshold in world units.
 const SNAP_THRESHOLD: f32 = 0.5;
@@ -133,8 +131,8 @@ impl OperatorToolHandler for LineSegmentToolHandler {
         }
     }
 
-    fn handle_cursor_move(&mut self, _world_pos: Vec2D, _ctx: &ToolContext) -> bool {
-        true
+    fn handle_cursor_move(&mut self, _world_pos: Vec2D, _ctx: &ToolContext) -> ToolResponse {
+        ToolResponse::consumed_dirty()
     }
 
     fn handle_scroll(
@@ -147,15 +145,15 @@ impl OperatorToolHandler for LineSegmentToolHandler {
         ToolResponse::default()
     }
 
-    fn preview(&self, ctx: &ToolContext) -> OperatorPreview {
+    fn preview(&self, ctx: &ToolContext) -> ToolPreview {
         if let LineSegmentDrawState::Drawing { start } = self.state {
             let snapped_end = Self::snap_world_pos(ctx.cursor_world_pos, ctx);
-            OperatorPreview::LineSegment {
+            ToolPreview::LineSegment {
                 start: [start.x, start.y],
                 end: [snapped_end.x, snapped_end.y],
             }
         } else {
-            OperatorPreview::None
+            ToolPreview::None
         }
     }
 
@@ -178,10 +176,6 @@ impl OperatorToolHandler for LineSegmentToolHandler {
 
     fn reset(&mut self) {
         self.state = LineSegmentDrawState::Idle;
-    }
-
-    fn needs_continuous_redraw(&self) -> bool {
-        true
     }
 }
 
@@ -349,7 +343,7 @@ mod tests {
         let tool = LineSegmentToolHandler::new();
         let (snap, world) = make_ctx_data(vec![]);
         let ctx = make_tool_ctx(&snap, &world, Vec2D::new(5.0, 5.0));
-        assert!(matches!(tool.preview(&ctx), OperatorPreview::None));
+        assert!(matches!(tool.preview(&ctx), ToolPreview::None));
     }
 
     #[test]
@@ -361,7 +355,7 @@ mod tests {
         let (snap, world) = make_ctx_data(vec![]);
         let ctx = make_tool_ctx(&snap, &world, Vec2D::new(8.0, 8.0));
         let preview = tool.preview(&ctx);
-        assert!(matches!(preview, OperatorPreview::LineSegment { .. }));
+        assert!(matches!(preview, ToolPreview::LineSegment { .. }));
     }
 
     // ── Snap tests ──────────────────────────────────────────────────
@@ -431,11 +425,5 @@ mod tests {
         assert!(!indicators.is_empty(), "Should show start indicator");
         assert!((indicators[0][0] - 1.0).abs() < 1e-6);
         assert!((indicators[0][1] - 2.0).abs() < 1e-6);
-    }
-
-    #[test]
-    fn needs_continuous_redraw_is_true() {
-        let tool = LineSegmentToolHandler::new();
-        assert!(tool.needs_continuous_redraw());
     }
 }

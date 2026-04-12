@@ -12,7 +12,7 @@
 //! unifies renderer state management across both ggez and wgpu backends.
 
 use crate::application::MainContent;
-use crate::application::renderer_snapshot::RendererSnapshot;
+use crate::application::renderer_snapshot::{OperatorSnapshot, RendererSnapshot};
 use crate::graphics::energy_plot::{EnergyData, SharedEnergyData};
 use crate::graphics::renderer::ViewportTransform;
 use crate::graphics::renderer::margins::Margins;
@@ -26,7 +26,7 @@ use super::input_handler::{InputAction, InputHandler, OperatorTool};
 use super::line_segment_tool::LineSegmentToolHandler;
 use super::metrics::MetricsCollector;
 use super::operator_tool_handler::{
-    OperatorPreview, OperatorToolHandler, ToolContext, scroll_y_from_delta,
+    OperatorToolHandler, ToolContext, ToolPreview, scroll_y_from_delta,
 };
 use super::physics_coordinator::PhysicsCoordinator;
 use super::source_sphere_tool::SourceSphereToolHandler;
@@ -79,6 +79,9 @@ pub struct UnifiedRenderState {
     pub active_tool: OperatorTool,
     /// Active tool handler (trait dispatch).  `None` when no tool is selected.
     pub tool_handler: Option<Box<dyn OperatorToolHandler>>,
+    /// Default empty operator snapshot, used when no physics snapshot is
+    /// available yet.  Avoids per-frame heap allocation and `LazyLock`.
+    pub(super) default_operator_snapshot: OperatorSnapshot,
 }
 
 impl UnifiedRenderState {
@@ -117,6 +120,7 @@ impl UnifiedRenderState {
             metrics: MetricsCollector::new(),
             active_tool: OperatorTool::None,
             tool_handler: None,
+            default_operator_snapshot: OperatorSnapshot::default(),
         }
     }
 
@@ -187,28 +191,27 @@ impl UnifiedRenderState {
     ///
     /// Delegates to the active [`OperatorToolHandler`] for preview and
     /// snap indicators, then bundles them with the selected sidebar icon.
-    pub fn operator_previews(&self) -> super::OperatorPreviews {
+    pub fn operator_previews(&self) -> super::FramePreviews {
         let ctx = self.make_tool_context();
 
-        let (line_segment, valve_segment, snap_indicators) = if let Some(handler) =
-            &self.tool_handler
-        {
-            let preview = handler.preview(&ctx);
-            let snaps = handler.snap_indicators(&ctx);
-            match preview {
-                OperatorPreview::LineSegment { start, end } => (Some((start, end)), None, snaps),
-                OperatorPreview::ValveSegment {
-                    line_id,
-                    t_start,
-                    t_end,
-                } => (None, Some((line_id, t_start, t_end)), snaps),
-                OperatorPreview::None => (None, None, snaps),
-            }
-        } else {
-            (None, None, Vec::new())
-        };
+        let (line_segment, valve_segment, snap_indicators) =
+            if let Some(handler) = &self.tool_handler {
+                let preview = handler.preview(&ctx);
+                let snaps = handler.snap_indicators(&ctx);
+                match preview {
+                    ToolPreview::LineSegment { start, end } => (Some((start, end)), None, snaps),
+                    ToolPreview::ValveSegment {
+                        line_id,
+                        t_start,
+                        t_end,
+                    } => (None, Some((line_id, t_start, t_end)), snaps),
+                    ToolPreview::None => (None, None, snaps),
+                }
+            } else {
+                (None, None, Vec::new())
+            };
 
-        super::OperatorPreviews {
+        super::FramePreviews {
             line_segment,
             valve_segment,
             snap_indicators,
@@ -223,8 +226,8 @@ impl UnifiedRenderState {
     /// should invoke this with explicit field borrows to avoid conflicting
     /// `&self` / `&mut self` borrows.
     fn make_tool_context_from<'a>(
-        snapshot: Option<&'a crate::application::renderer_snapshot::RendererSnapshot>,
-        fallback: &'a crate::application::renderer_snapshot::OperatorSnapshot,
+        snapshot: Option<&'a RendererSnapshot>,
+        fallback: &'a OperatorSnapshot,
         viewport: &crate::graphics::renderer::ViewportTransform,
         cursor_world_pos: Vec2D,
     ) -> ToolContext<'a> {
@@ -238,13 +241,9 @@ impl UnifiedRenderState {
 
     /// Convenience wrapper when no mutable self-borrow is needed.
     fn make_tool_context(&self) -> ToolContext<'_> {
-        // SAFETY: the static default lives long enough for the returned
-        // ToolContext which cannot outlive `&self`.
-        static EMPTY: std::sync::LazyLock<crate::application::renderer_snapshot::OperatorSnapshot> =
-            std::sync::LazyLock::new(Default::default);
         Self::make_tool_context_from(
             self.last_snapshot.as_deref(),
-            &EMPTY,
+            &self.default_operator_snapshot,
             &self.viewport,
             self.cursor_world_pos,
         )
@@ -296,6 +295,9 @@ impl UnifiedRenderState {
                 false
             }
             InputAction::SelectOperatorTool(tool) => {
+                if let Some(handler) = self.tool_handler.as_mut() {
+                    handler.reset();
+                }
                 self.active_tool = tool;
                 self.tool_handler = Self::handler_for_tool(tool);
                 false
@@ -442,11 +444,9 @@ impl UnifiedRenderState {
 
         // Delegate to active tool handler
         if let Some(handler) = &mut self.tool_handler {
-            let fallback: crate::application::renderer_snapshot::OperatorSnapshot =
-                Default::default();
             let ctx = Self::make_tool_context_from(
                 self.last_snapshot.as_deref(),
-                &fallback,
+                &self.default_operator_snapshot,
                 &self.viewport,
                 self.cursor_world_pos,
             );
@@ -482,23 +482,24 @@ impl UnifiedRenderState {
         // Update cursor position using shared state logic
         self.update_cursor_world_pos(&[x, y]);
 
-        // Delegate continuous-redraw check to the active tool handler.
+        // Delegate to active tool handler.
         if let Some(handler) = &mut self.tool_handler {
             let world_pos = self.input.cursor_pos();
-            if handler.needs_continuous_redraw() {
-                self.view_dirty = true;
-            }
-            let fallback: crate::application::renderer_snapshot::OperatorSnapshot =
-                Default::default();
             let ctx = Self::make_tool_context_from(
                 self.last_snapshot.as_deref(),
-                &fallback,
+                &self.default_operator_snapshot,
                 &self.viewport,
                 self.cursor_world_pos,
             );
-            // Give the handler a chance to react to the move.
-            if handler.handle_cursor_move(world_pos, &ctx) {
-                self.view_dirty = true;
+            let resp = handler.handle_cursor_move(world_pos, &ctx);
+            if resp.consumed {
+                if let Some(cmd) = resp.action {
+                    let action = InputAction::OperatorAction(cmd);
+                    self.process_action(action, None);
+                }
+                if resp.view_dirty {
+                    self.view_dirty = true;
+                }
             }
         }
 
@@ -532,11 +533,10 @@ impl UnifiedRenderState {
                     || self
                         .input
                         .is_key_pressed(winit::keyboard::KeyCode::ControlRight);
-                let fallback: crate::application::renderer_snapshot::OperatorSnapshot =
-                    Default::default();
+                let fallback = &self.default_operator_snapshot;
                 let ctx = Self::make_tool_context_from(
                     self.last_snapshot.as_deref(),
-                    &fallback,
+                    fallback,
                     &self.viewport,
                     self.cursor_world_pos,
                 );

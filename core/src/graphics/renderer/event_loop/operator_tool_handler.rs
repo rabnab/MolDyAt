@@ -46,7 +46,7 @@ impl ToolResponse {
 /// Uses an enum rather than trait objects to avoid per-frame heap
 /// allocation.  The renderer matches on variants to draw ghost outlines.
 #[derive(Debug, Clone, Default)]
-pub enum OperatorPreview {
+pub enum ToolPreview {
     /// No preview to render.
     #[default]
     None,
@@ -86,9 +86,8 @@ pub trait OperatorToolHandler: Send {
         ctx: &ToolContext,
     ) -> ToolResponse;
 
-    /// Handle cursor movement.  Return `true` if the view should redraw
-    /// (e.g. ghost preview needs update).
-    fn handle_cursor_move(&mut self, world_pos: Vec2D, ctx: &ToolContext) -> bool;
+    /// Handle cursor movement.
+    fn handle_cursor_move(&mut self, world_pos: Vec2D, ctx: &ToolContext) -> ToolResponse;
 
     /// Handle scroll wheel input.
     ///
@@ -103,19 +102,13 @@ pub trait OperatorToolHandler: Send {
     ) -> ToolResponse;
 
     /// Current ghost-preview geometry, if any.
-    fn preview(&self, ctx: &ToolContext) -> OperatorPreview;
+    fn preview(&self, ctx: &ToolContext) -> ToolPreview;
 
     /// Snap indicator positions (world coordinates) for crosshair rendering.
     fn snap_indicators(&self, ctx: &ToolContext) -> Vec<[f32; 2]>;
 
     /// Reset tool state to idle (called on tool deselection or sim clear).
     fn reset(&mut self);
-
-    /// Whether the view should be considered dirty just because this tool
-    /// is active (e.g. snap indicators update on every cursor move).
-    fn needs_continuous_redraw(&self) -> bool {
-        false
-    }
 
     /// Check if a key is relevant for this tool's scroll modifier behaviour.
     fn uses_key_modifier(&self) -> bool {
