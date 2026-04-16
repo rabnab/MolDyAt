@@ -55,7 +55,10 @@ fn double_toggle_restores_on() {
 
     mc.toggle_source_sphere(id);
     mc.toggle_source_sphere(id);
-    assert_eq!(mc.source_spheres.find(id).unwrap().state, OperatorState::Off);
+    assert_eq!(
+        mc.source_spheres.find(id).unwrap().state,
+        OperatorState::Off
+    );
 }
 
 #[test]

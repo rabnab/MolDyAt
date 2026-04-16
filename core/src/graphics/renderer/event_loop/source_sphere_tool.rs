@@ -13,6 +13,8 @@ use super::operator_tool_handler::{OperatorToolHandler, ToolContext, ToolPreview
 /// How close the cursor must be to a sphere centre (in world units) to
 /// register a hit for toggle/interaction.
 const SPHERE_HIT_RADIUS: f32 = 1.5;
+/// Step size for adjusting emission period via scroll wheel (in simulation steps).
+const EMISSION_PERIOD_DELTA: i32 = 5;
 /// Default radius for newly placed source spheres (in world units).
 pub const DEFAULT_SOURCE_RADIUS: f32 = 1.2;
 
@@ -90,7 +92,13 @@ impl OperatorToolHandler for SourceSphereToolHandler {
         };
 
         if ctrl_held {
-            let delta_steps = if scroll_y > 0.0 { -5 } else { 5 };
+            let delta_steps = if scroll_y > 0.0 {
+                // Scroll up → decrease emit period (more frequent)
+                -EMISSION_PERIOD_DELTA
+            } else {
+                // Scroll down → increase emit period (less frequent)
+                EMISSION_PERIOD_DELTA
+            };
             ToolResponse::consumed_with(Box::new(operator_command::AdjustSourceSphereEmitPeriod {
                 sphere_id,
                 delta_steps,
