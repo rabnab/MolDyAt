@@ -90,8 +90,9 @@ impl MainContent {
                 params.ball_size_idx,
                 velocity,
             );
-            // Ignore errors — if the position is occupied or out of bounds, skip.
-            let _ = self.add_candidate_ball(candidate, 0.);
+
+            let _ =
+                self.add_candidate_ball(candidate, self.get_ball_factory().get_new_ball_radius());
         }
     }
 }
