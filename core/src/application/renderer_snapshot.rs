@@ -40,6 +40,50 @@ pub struct OperatorSnapshot {
     pub source_spheres: Vec<SimSourceSphere>,
 }
 
+/// Distance threshold (world units) used by [`OperatorSnapshot::is_near_any_operator`]
+/// to suppress ball placement near operators.
+const OPERATOR_PROXIMITY_THRESHOLD: f32 = 1.5;
+
+impl OperatorSnapshot {
+    /// Returns `true` when `pos` is close to any placed operator.
+    ///
+    /// Checked operators: line segments, valve midpoints, and source sphere
+    /// centres.  The threshold is [`OPERATOR_PROXIMITY_THRESHOLD`] world
+    /// units so that a Ctrl-release ball placement does not interfere with
+    /// operator interaction zones.
+    pub fn is_near_any_operator(&self, pos: Vec2D) -> bool {
+        let threshold_sq = OPERATOR_PROXIMITY_THRESHOLD * OPERATOR_PROXIMITY_THRESHOLD;
+
+        // Line segments — closest-point distance.
+        for seg in &self.line_segments {
+            let closest = seg.closest_point(&pos);
+            if pos.distance_squared(&closest) <= threshold_sq {
+                return true;
+            }
+        }
+
+        // Valves — parametric midpoint on parent segment.
+        for valve in &self.valve_segments {
+            if let Some(seg) = self.line_segments.iter().find(|s| s.id == valve.line_id) {
+                let t_mid = (valve.t_start + valve.t_end) * 0.5;
+                let center = seg.point_at_t(t_mid);
+                if pos.distance_squared(&center) <= threshold_sq {
+                    return true;
+                }
+            }
+        }
+
+        // Source spheres — centre distance.
+        for sphere in &self.source_spheres {
+            if pos.distance_squared(&sphere.center) <= threshold_sq {
+                return true;
+            }
+        }
+
+        false
+    }
+}
+
 /// Lightweight specification for cell grid dimensions and layout.
 /// Used by renderer to draw cell background without cloning the full CellGrid.
 #[derive(Debug, Clone)]

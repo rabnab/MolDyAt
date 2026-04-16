@@ -302,6 +302,26 @@ impl UnifiedRenderState {
                 self.tool_handler = Self::handler_for_tool(tool);
                 false
             }
+            InputAction::AddBall { position } => {
+                // Suppress ball placement when the cursor is near an operator
+                // so Ctrl-release doesn't accidentally create a ball on top of
+                // a line segment, valve, or source sphere.
+                let operators = self
+                    .last_snapshot
+                    .as_deref()
+                    .map(|s| &s.operators)
+                    .unwrap_or(&self.default_operator_snapshot);
+                if operators.is_near_any_operator(position) {
+                    self.config.disable_cursor();
+                    return false;
+                }
+                process_action_common(
+                    InputAction::AddBall { position },
+                    &self.physics,
+                    &mut self.config,
+                );
+                false
+            }
             other => {
                 let affects_view = process_action_common(other, &self.physics, &mut self.config);
                 if affects_view {
