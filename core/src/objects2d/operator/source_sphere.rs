@@ -38,7 +38,7 @@ const MIN_EMIT_PERIOD: u32 = 5;
 /// Maximum emission period in simulation steps.
 const MAX_EMIT_PERIOD: u32 = 30000;
 /// Step size for emission speed adjustments via scroll wheel.
-const EMISSION_SPEED_STEP: f32 = 0.005;
+const EMISSION_SPEED_STEP: f32 = 0.05;
 /// Minimum emission speed magnitude.
 const MIN_EMISSION_SPEED: f32 = 0.0;
 /// Maximum emission speed magnitude.
@@ -78,6 +78,39 @@ impl SimSourceSphere {
         let new_period = (self.emit_period as i32 + delta_steps)
             .clamp(MIN_EMIT_PERIOD as i32, MAX_EMIT_PERIOD as i32);
         self.emit_period = new_period as u32;
+    }
+
+    /// Emission speed as a fraction in `[0, 1]` of the allowed range.
+    ///
+    /// Uses a logarithmic mapping so that the low end of the speed range
+    /// (where most interactive adjustment happens) is visually distinguishable.
+    pub fn speed_fraction(&self) -> f32 {
+        if self.emission_speed <= MIN_EMISSION_SPEED {
+            return 0.0;
+        }
+        // Map [MIN+ε, MAX] → [0, 1] via log scale.
+        // offset by 1.0 to avoid log(0): log(1 + speed) / log(1 + max)
+        let log_val = (1.0 + self.emission_speed).ln();
+        let log_max = (1.0 + MAX_EMISSION_SPEED).ln();
+        (log_val / log_max).clamp(0.0, 1.0)
+    }
+
+    /// Emission rate as a fraction in `[0, 1]` of the allowed range.
+    ///
+    /// Uses a logarithmic mapping so that changes at the fast-emission
+    /// end (small period) remain visible.  A higher rate (shorter period)
+    /// yields a larger fraction.
+    pub fn rate_fraction(&self) -> f32 {
+        if MAX_EMIT_PERIOD <= MIN_EMIT_PERIOD {
+            return 0.0;
+        }
+        // Linear position: 0 = fastest (MIN_EMIT_PERIOD), 1 = slowest
+        let range = (MAX_EMIT_PERIOD - MIN_EMIT_PERIOD) as f32;
+        let linear = (self.emit_period - MIN_EMIT_PERIOD) as f32 / range;
+        // Invert (1 = fastest) then apply log for perceptual spread
+        let inverted = 1.0 - linear;
+        let log_val = (1.0 + inverted * 99.0).log10(); // maps [0,1] → [0, 2]
+        (log_val / 2.0_f32).clamp(0.0, 1.0)
     }
 }
 

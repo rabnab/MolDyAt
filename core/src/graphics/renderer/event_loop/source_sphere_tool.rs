@@ -14,7 +14,7 @@ use super::operator_tool_handler::{OperatorToolHandler, ToolContext, ToolPreview
 /// register a hit for toggle/interaction.
 const SPHERE_HIT_RADIUS: f32 = 1.5;
 /// Step size for adjusting emission period via scroll wheel (in simulation steps).
-const EMISSION_PERIOD_DELTA: i32 = 5;
+const EMISSION_PERIOD_DELTA: i32 = 500;
 /// Default radius for newly placed source spheres (in world units).
 pub const DEFAULT_SOURCE_RADIUS: f32 = 1.2;
 
