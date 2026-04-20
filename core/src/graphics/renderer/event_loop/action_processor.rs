@@ -82,12 +82,6 @@ pub fn process_action_common(
         InputAction::PrintHelp => {
             MainContent::print_help_message();
         }
-        InputAction::EnableCursor { repeated } => {
-            config.enable_cursor(repeated);
-        }
-        InputAction::DisableCursor => {
-            config.disable_cursor();
-        }
         InputAction::CyclePlotContent => {
             config.cycle_plot_content();
         }

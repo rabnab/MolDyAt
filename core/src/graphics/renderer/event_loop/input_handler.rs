@@ -81,10 +81,6 @@ pub enum InputAction {
     UpdateCursor {
         position: Vec2D,
     },
-    EnableCursor {
-        repeated: bool,
-    },
-    DisableCursor,
 
     // Operator panel
     SelectOperatorTool(OperatorTool),
@@ -211,11 +207,11 @@ impl InputHandler {
     pub fn handle_key_down(&mut self, key: KeyCode, is_repeat: bool) -> Option<InputAction> {
         self.register_key_pressed(key);
 
+        let _ = is_repeat;
+
         match key {
             KeyCode::Space => Some(InputAction::TogglePause),
-            KeyCode::ControlLeft | KeyCode::ControlRight => Some(InputAction::EnableCursor {
-                repeated: is_repeat,
-            }),
+            KeyCode::ControlLeft | KeyCode::ControlRight => None,
             KeyCode::Escape => Some(InputAction::ClearBalls),
             KeyCode::ShiftLeft | KeyCode::ShiftRight => Some(InputAction::EnableRandomBallSpeed),
             KeyCode::Minus | KeyCode::Equal => {
@@ -243,12 +239,7 @@ impl InputHandler {
             KeyCode::KeyR => Some(InputAction::RandomizeSpeeds),
             KeyCode::KeyB => Some(InputAction::ToggleBallStats),
             KeyCode::KeyV => Some(InputAction::StartVerbosityInput),
-            KeyCode::ControlLeft | KeyCode::ControlRight => {
-                // Add ball at cursor position and disable cursor
-                Some(InputAction::AddBall {
-                    position: self.cursor_pos,
-                })
-            }
+            KeyCode::ControlLeft | KeyCode::ControlRight => None,
             KeyCode::F5 => Some(InputAction::AddRandomBalls { count: 100 }),
             KeyCode::F1 => Some(InputAction::StopAllBalls),
             KeyCode::Digit0 | KeyCode::Numpad0 => Some(InputAction::ResetView),

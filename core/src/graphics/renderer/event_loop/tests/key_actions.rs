@@ -1,5 +1,4 @@
 use super::super::input_handler::{InputAction, InputHandler, KeyCode};
-use crate::objects2d::Vec2D;
 
 #[test]
 fn test_space_toggles_pause() {
@@ -9,13 +8,10 @@ fn test_space_toggles_pause() {
 }
 
 #[test]
-fn test_lcontrol_enables_cursor() {
+fn test_lcontrol_no_action() {
     let mut handler = InputHandler::new();
     let action = handler.handle_key_down(KeyCode::ControlLeft, false);
-    assert!(matches!(
-        action,
-        Some(InputAction::EnableCursor { repeated: false })
-    ));
+    assert!(action.is_none());
 }
 
 #[test]
@@ -134,11 +130,8 @@ fn test_f5_adds_random_balls() {
 }
 
 #[test]
-fn test_lcontrol_up_adds_ball() {
+fn test_lcontrol_up_no_action() {
     let mut handler = InputHandler::new();
-    handler.set_cursor_pos(Vec2D::new(5.0, 10.0), [100.0, 200.0]);
     let action = handler.handle_key_up(KeyCode::ControlLeft);
-    assert!(
-        matches!(action, Some(InputAction::AddBall { position }) if position == Vec2D::new(5.0, 10.0))
-    );
+    assert!(action.is_none());
 }

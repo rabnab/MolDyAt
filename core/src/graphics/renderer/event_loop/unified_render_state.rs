@@ -686,7 +686,6 @@ mod tests {
             InputAction::CyclePlotContent,
             InputAction::ToggleEnergyWindow,
             InputAction::ToggleCutoffRings,
-            InputAction::DisableCursor,
         ];
         for action in actions {
             let label = format!("{:?}", action);

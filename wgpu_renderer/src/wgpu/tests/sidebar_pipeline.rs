@@ -31,13 +31,15 @@ fn build_geometry_produces_correct_count_for_all_icons() {
 
 #[test]
 fn build_geometry_single_icon() {
-    let (verts, _) = build_sidebar_geometry(1, 800.0, 600.0, None);
-    assert_eq!(verts.len(), BG_VERTS + 6);
+    let min_for_one = MARGIN_TOP + ICON_SPACING + ICON_DISPLAY_SIZE + MARGIN_BOTTOM;
+    let (verts, _) = build_sidebar_geometry(4, 800.0, min_for_one + 1.0, None);
+    assert_eq!(verts.len(), BG_VERTS + 6, "only one icon should fit");
 }
 
 #[test]
 fn build_geometry_zero_icons() {
-    let (verts, _) = build_sidebar_geometry(0, 800.0, 600.0, None);
+    let too_short = MARGIN_TOP + ICON_SPACING + ICON_DISPLAY_SIZE + MARGIN_BOTTOM - 1.0;
+    let (verts, _) = build_sidebar_geometry(4, 800.0, too_short, None);
     assert!(verts.is_empty());
 }
 
@@ -257,7 +259,8 @@ fn rect_params_width_matches_icon_plus_padding() {
 
 #[test]
 fn rect_params_zero_when_no_icons_visible() {
-    let (_, params) = build_sidebar_geometry(0, 800.0, 600.0, None);
+    let too_short = MARGIN_TOP + ICON_SPACING + ICON_DISPLAY_SIZE + MARGIN_BOTTOM - 1.0;
+    let (_, params) = build_sidebar_geometry(4, 800.0, too_short, None);
     assert!((params.size_px[0]).abs() < 1e-5, "rect width should be 0");
     assert!((params.size_px[1]).abs() < 1e-5, "rect height should be 0");
 }
