@@ -252,6 +252,7 @@ impl UnifiedRenderState {
     /// Create a handler for the given tool, or `None` if no tool selected.
     fn handler_for_tool(tool: OperatorTool) -> Option<Box<dyn OperatorToolHandler>> {
         match tool {
+            OperatorTool::Ball => None,
             OperatorTool::LineSegment => Some(Box::new(LineSegmentToolHandler::new())),
             OperatorTool::ValveSegment => Some(Box::new(ValveSegmentToolHandler::new())),
             OperatorTool::SourceSphere => Some(Box::new(SourceSphereToolHandler::new())),
@@ -460,6 +461,19 @@ impl UnifiedRenderState {
             let action = InputAction::SelectOperatorTool(new_tool);
             self.process_action(action, None);
             return true;
+        }
+
+        // Ball operator tool: left release places one ball at cursor.
+        if self.active_tool == OperatorTool::Ball
+            && button == winit::event::MouseButton::Left
+            && state == winit::event::ElementState::Released
+        {
+            return self.process_action(
+                InputAction::AddBall {
+                    position: world_pos,
+                },
+                None,
+            );
         }
 
         // Delegate to active tool handler

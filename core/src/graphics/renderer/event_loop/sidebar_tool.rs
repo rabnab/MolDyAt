@@ -157,10 +157,14 @@ mod tests {
     fn operator_tool_toggle() {
         assert_eq!(
             UnifiedRenderState::operator_tool_for_icon(0),
-            OperatorTool::LineSegment
+            OperatorTool::Ball
         );
         assert_eq!(
             UnifiedRenderState::operator_tool_for_icon(1),
+            OperatorTool::LineSegment
+        );
+        assert_eq!(
+            UnifiedRenderState::operator_tool_for_icon(2),
             OperatorTool::ValveSegment
         );
         assert_eq!(
@@ -172,7 +176,7 @@ mod tests {
     #[test]
     fn visible_icon_count_all_fit() {
         use crate::graphics::sidebar::visible_icon_count;
-        assert_eq!(visible_icon_count(720.0, 50.0, 50.0), 4);
+        assert_eq!(visible_icon_count(720.0, 50.0, 50.0), 5);
     }
 
     #[test]

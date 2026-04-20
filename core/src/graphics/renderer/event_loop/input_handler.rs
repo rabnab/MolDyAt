@@ -11,13 +11,15 @@ pub type KeyCode = winit::keyboard::KeyCode;
 pub enum OperatorTool {
     /// No tool selected — default mode.
     None,
-    /// Line segment barrier tool (wall icon, sidebar index 0).
+    /// Manual ball placement tool (standard ball icon, sidebar index 0).
+    Ball,
+    /// Line segment barrier tool (wall icon, sidebar index 1).
     LineSegment,
-    /// Valve segment tool (gate icon, sidebar index 1).
+    /// Valve segment tool (gate icon, sidebar index 2).
     ValveSegment,
-    /// Thermostat tool (temperature icon, sidebar index 2).
+    /// Thermostat tool (temperature icon, sidebar index 3).
     Thermostat,
-    /// Source sphere tool (emitter icon, sidebar index 3).
+    /// Source sphere tool (emitter icon, sidebar index 4).
     SourceSphere,
 }
 

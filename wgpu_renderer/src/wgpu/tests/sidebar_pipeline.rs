@@ -25,8 +25,8 @@ fn max_vertices_includes_background_and_highlight() {
 #[test]
 fn build_geometry_produces_correct_count_for_all_icons() {
     let (verts, _) = build_sidebar_geometry(4, 1920.0, 1080.0, None);
-    // 1 bg quad + 4 icon quads = 30 vertices
-    assert_eq!(verts.len(), BG_VERTS + 4 * 6);
+    // 1 bg quad + ICON_COUNT icon quads.
+    assert_eq!(verts.len(), BG_VERTS + ICON_COUNT * 6);
 }
 
 #[test]
@@ -91,14 +91,15 @@ fn all_geometry_is_in_left_margin() {
 fn uv_coordinates_span_atlas_correctly() {
     let (verts, _) = build_sidebar_geometry(4, 1920.0, 1080.0, None);
     let icons = &verts[BG_VERTS..];
-    assert!((icons[0].uv[1] - 0.0).abs() < 1e-5, "first icon uv_top");
-    assert!((icons[1].uv[1] - 0.25).abs() < 1e-5, "first icon uv_bottom");
-    assert!((icons[6].uv[1] - 0.25).abs() < 1e-5, "second icon uv_top");
-    assert!((icons[7].uv[1] - 0.5).abs() < 1e-5, "second icon uv_bottom");
-    assert!((icons[18].uv[1] - 0.75).abs() < 1e-5, "fourth icon uv_top");
+    // Icon 0 is procedural ball (mode 3), so atlas UV rows start at icon 1.
+    assert!((icons[6].uv[1] - 0.0).abs() < 1e-5, "wall icon uv_top");
+    assert!((icons[7].uv[1] - 0.25).abs() < 1e-5, "wall icon uv_bottom");
+    assert!((icons[12].uv[1] - 0.25).abs() < 1e-5, "valve icon uv_top");
+    assert!((icons[13].uv[1] - 0.5).abs() < 1e-5, "valve icon uv_bottom");
+    assert!((icons[24].uv[1] - 0.75).abs() < 1e-5, "source icon uv_top");
     assert!(
-        (icons[19].uv[1] - 1.0).abs() < 1e-5,
-        "fourth icon uv_bottom"
+        (icons[25].uv[1] - 1.0).abs() < 1e-5,
+        "source icon uv_bottom"
     );
 }
 
@@ -183,12 +184,23 @@ fn background_quad_has_mode_zero() {
 #[test]
 fn icon_quads_have_mode_one() {
     let (verts, _) = build_sidebar_geometry(4, 1920.0, 1080.0, None);
+    let mut mode1_count = 0usize;
+    let mut mode3_count = 0usize;
     for v in &verts[BG_VERTS..] {
-        assert!(
-            (v.mode - 1.0).abs() < 1e-5,
-            "icon vertex mode should be 1.0"
-        );
+        if (v.mode - 1.0).abs() < 1e-5 {
+            mode1_count += 1;
+        } else if (v.mode - 3.0).abs() < 1e-5 {
+            mode3_count += 1;
+        } else {
+            panic!("unexpected icon mode: {}", v.mode);
+        }
     }
+    assert_eq!(mode3_count, 6, "exactly one procedural ball quad expected");
+    assert_eq!(
+        mode1_count,
+        (ICON_COUNT - 1) * 6,
+        "remaining icons are textured"
+    );
 }
 
 #[test]

@@ -15,11 +15,12 @@ pub const ICON_SPACING: f32 = 12.0;
 /// Sidebar icon order — single source of truth for icon index ↔ tool.
 ///
 /// The WGPU sidebar pipeline's icon atlas **must** match this order.
-pub const SIDEBAR_TOOLS: [OperatorTool; 4] = [
-    OperatorTool::LineSegment,  // 0 — wall icon
-    OperatorTool::ValveSegment, // 1 — gate icon
-    OperatorTool::Thermostat,   // 2 — temperature icon
-    OperatorTool::SourceSphere, // 3 — emitter icon
+pub const SIDEBAR_TOOLS: [OperatorTool; 5] = [
+    OperatorTool::Ball,         // 0 — standard-sized ball icon
+    OperatorTool::LineSegment,  // 1 — wall icon
+    OperatorTool::ValveSegment, // 2 — gate icon
+    OperatorTool::Thermostat,   // 3 — temperature icon
+    OperatorTool::SourceSphere, // 4 — emitter icon
 ];
 
 /// Number of icons in the sidebar (derived from [`SIDEBAR_TOOLS`]).
