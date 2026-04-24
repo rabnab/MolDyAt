@@ -17,7 +17,9 @@ mod source_sphere;
 mod valve_collection;
 
 pub use line_segment_collection::LineSegmentCollection;
-pub use source_sphere::{SimSourceSphere, SourceSphereCollection};
+pub use source_sphere::{
+    EMISSION_SPEED_STEP, SOURCE_SPHERE_RADIUS, SimSourceSphere, SourceSphereCollection,
+};
 pub use valve_collection::ValveCollection;
 
 use super::{Rect, Vec2D};

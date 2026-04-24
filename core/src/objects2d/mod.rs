@@ -8,8 +8,8 @@ pub mod verbose_info;
 
 pub use line_segment::{SimLineSegment, ValveSegment};
 pub use operator::{
-    LineSegmentCollection, OperatorCollection, OperatorIdCounter, OperatorState, SimSourceSphere,
-    SourceSphereCollection, ValveCollection,
+    EMISSION_SPEED_STEP, LineSegmentCollection, OperatorCollection, OperatorIdCounter,
+    OperatorState, SOURCE_SPHERE_RADIUS, SimSourceSphere, SourceSphereCollection, ValveCollection,
 };
 pub use rect_2d::Rect;
 pub use vec_2d::Vec2D;

@@ -6,7 +6,7 @@
 //! simulation steps.
 
 use super::MainContent;
-use crate::{graphics::renderer::event_loop::DEFAULT_SOURCE_RADIUS, objects2d::Vec2D};
+use crate::objects2d::{SOURCE_SPHERE_RADIUS, Vec2D};
 use rand::RngExt;
 
 /// Parameters collected from a source sphere for one emission tick.
@@ -17,7 +17,7 @@ struct EmissionParams {
 }
 
 impl MainContent {
-    /// Place a new source sphere at `center` with `radius`.
+    /// Place a new source sphere at `center`.
     pub(crate) fn add_source_sphere(&mut self, center: Vec2D) {
         self.source_spheres.add(center);
     }
@@ -58,7 +58,7 @@ impl MainContent {
     /// Emitted balls have a random direction and the sphere's configured
     /// speed magnitude and ball size class.
     pub(crate) fn emit_from_source_spheres(&mut self) {
-        let step = self.step_count as u32;
+        let step = self.step_count;
 
         // Collect emission parameters to avoid borrowing self twice.
         let emissions: Vec<EmissionParams> = self
@@ -81,8 +81,8 @@ impl MainContent {
                 params.emission_speed * angle.sin(),
             );
             let emit_pos = Vec2D::new(
-                params.center.x + DEFAULT_SOURCE_RADIUS * angle.cos(),
-                params.center.y + DEFAULT_SOURCE_RADIUS * angle.sin(),
+                params.center.x + SOURCE_SPHERE_RADIUS * angle.cos(),
+                params.center.y + SOURCE_SPHERE_RADIUS * angle.sin(),
             );
 
             let candidate = self.get_ball_factory().create_with_size_and_velocity(

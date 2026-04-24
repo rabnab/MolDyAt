@@ -20,7 +20,7 @@ pub struct SimSourceSphere {
     /// ON/OFF emission state.
     pub state: OperatorState,
     /// Emit one ball every this many simulation steps (when On).
-    pub emit_period: u32,
+    pub emit_period: usize,
     /// Ball size class index (0–4) for emitted balls.
     pub ball_size_idx: usize,
     /// Speed magnitude for emitted balls (world units per step).
@@ -29,16 +29,18 @@ pub struct SimSourceSphere {
 
 /// Default ball size class index for new source spheres (medium).
 const DEFAULT_BALL_SIZE_IDX: usize = 2;
+/// Shared source sphere radius in world units.
+pub const SOURCE_SPHERE_RADIUS: f32 = 1.2;
 /// Default emission speed magnitude for new source spheres.
 const DEFAULT_EMISSION_SPEED: f32 = 0.05;
 /// Default emission period for new source spheres (in simulation steps).
-const DEFAULT_EMIT_PERIOD: u32 = 3000;
+const DEFAULT_EMIT_PERIOD: usize = 3000;
 /// Minimum emission period in simulation steps.
-const MIN_EMIT_PERIOD: u32 = 5;
+const MIN_EMIT_PERIOD: usize = 5;
 /// Maximum emission period in simulation steps.
-const MAX_EMIT_PERIOD: u32 = 30000;
+const MAX_EMIT_PERIOD: usize = 30000;
 /// Step size for emission speed adjustments via scroll wheel.
-const EMISSION_SPEED_STEP: f32 = 0.05;
+pub const EMISSION_SPEED_STEP: f32 = 0.05;
 /// Minimum emission speed magnitude.
 const MIN_EMISSION_SPEED: f32 = 0.0;
 /// Maximum emission speed magnitude.
@@ -69,15 +71,15 @@ impl SimSourceSphere {
 
     /// Adjust emission speed by `delta` (positive = faster), clamped.
     pub fn adjust_emission_speed(&mut self, delta: f32) {
-        self.emission_speed = (self.emission_speed + EMISSION_SPEED_STEP * delta.signum())
-            .clamp(MIN_EMISSION_SPEED, MAX_EMISSION_SPEED);
+        self.emission_speed =
+            (self.emission_speed + delta).clamp(MIN_EMISSION_SPEED, MAX_EMISSION_SPEED);
     }
 
     /// Adjust emission period by `delta_steps` (positive = slower), clamped.
     pub fn adjust_emit_period(&mut self, delta_steps: i32) {
         let new_period = (self.emit_period as i32 + delta_steps)
             .clamp(MIN_EMIT_PERIOD as i32, MAX_EMIT_PERIOD as i32);
-        self.emit_period = new_period as u32;
+        self.emit_period = new_period as usize;
     }
 
     /// Emission speed as a fraction in `[0, 1]` of the allowed range.

@@ -11,13 +11,12 @@
 //! state.
 
 use bytemuck::{Pod, Zeroable};
-use rust_thermo_core::graphics::renderer::event_loop::DEFAULT_SOURCE_RADIUS;
 use wgpu::util::DeviceExt;
 
 use super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
 use super::sidebar_pipeline::decode_icon;
 use rust_thermo_core::application::AppResult;
-use rust_thermo_core::objects2d::operator::OperatorState;
+use rust_thermo_core::objects2d::{OperatorState, SOURCE_SPHERE_RADIUS};
 
 /// Embedded icon assets.
 const ICON_SOURCE_OPEN: &[u8] = include_bytes!("icons/sourceOpen.png");
@@ -39,7 +38,7 @@ const VERTS_PER_QUAD: usize = 6;
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct SphereVertex {
-    /// NDC position.
+    /// World-space position. The shader applies `view_proj` to transform it.
     position: [f32; 2],
     /// UV coordinate in the atlas.
     uv: [f32; 2],
@@ -291,12 +290,26 @@ impl RenderPipeline for SourceSpherePipeline {
             return Ok(());
         }
 
+        if spheres.len() > MAX_SPHERES {
+            log::warn!(
+                "source sphere render limit reached: drawing first {} of {} spheres",
+                MAX_SPHERES,
+                spheres.len()
+            );
+            debug_assert!(
+                spheres.len() <= MAX_SPHERES,
+                "source sphere pipeline truncated {} spheres beyond MAX_SPHERES={}",
+                spheres.len() - MAX_SPHERES,
+                MAX_SPHERES
+            );
+        }
+
         let mut verts: Vec<SphereVertex> = Vec::with_capacity(spheres.len() * VERTS_PER_QUAD);
 
         for sphere in spheres.iter().take(MAX_SPHERES) {
             let cx = sphere.center.x;
             let cy = sphere.center.y;
-            let r = DEFAULT_SOURCE_RADIUS;
+            let r = SOURCE_SPHERE_RADIUS;
 
             // World-space corners of the icon quad.
             let x0 = cx - r;

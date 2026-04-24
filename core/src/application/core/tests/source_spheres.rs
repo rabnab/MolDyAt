@@ -48,7 +48,7 @@ fn toggle_turns_sphere_on() {
 }
 
 #[test]
-fn double_toggle_restores_on() {
+fn double_toggle_restores_off() {
     let mut mc = make_content();
     mc.add_source_sphere(Vec2D::new(0.0, 0.0));
     let id = mc.source_spheres.spheres()[0].id;

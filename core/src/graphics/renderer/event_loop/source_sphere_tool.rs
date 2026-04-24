@@ -5,7 +5,7 @@
 //! cycle ball size, scroll to adjust speed/emission period.
 
 use crate::application::operator_command;
-use crate::objects2d::Vec2D;
+use crate::objects2d::{EMISSION_SPEED_STEP, SOURCE_SPHERE_RADIUS, Vec2D};
 use winit::event::{ElementState, MouseButton};
 
 use super::operator_tool_handler::{OperatorToolHandler, ToolContext, ToolPreview, ToolResponse};
@@ -16,7 +16,7 @@ const SPHERE_HIT_RADIUS: f32 = 1.5;
 /// Step size for adjusting emission period via scroll wheel (in simulation steps).
 const EMISSION_PERIOD_DELTA: i32 = 500;
 /// Default radius for newly placed source spheres (in world units).
-pub const DEFAULT_SOURCE_RADIUS: f32 = 1.2;
+pub const DEFAULT_SOURCE_RADIUS: f32 = SOURCE_SPHERE_RADIUS;
 
 /// Self-contained handler for the source sphere operator tool.
 pub struct SourceSphereToolHandler;
@@ -104,7 +104,11 @@ impl OperatorToolHandler for SourceSphereToolHandler {
                 delta_steps,
             }))
         } else {
-            let speed_delta = if scroll_y > 0.0 { 1.0 } else { -1.0 };
+            let speed_delta = if scroll_y > 0.0 {
+                EMISSION_SPEED_STEP
+            } else {
+                -EMISSION_SPEED_STEP
+            };
             ToolResponse::consumed_with(Box::new(operator_command::AdjustSourceSphereSpeed {
                 sphere_id,
                 delta: speed_delta,
