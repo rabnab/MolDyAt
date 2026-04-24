@@ -2,6 +2,7 @@ use super::*;
 use crate::objects2d::Rect;
 use crate::objects2d::ball_cell::cell_grid;
 use crate::objects2d::ball_impl::BallFactory;
+use crate::objects2d::operator::{is_degenerate, remap_point};
 
 impl MainContent {
     pub(crate) fn get_game_logic_data(&mut self) -> &mut GameLogicData {
@@ -68,6 +69,18 @@ impl MainContent {
         // position within the world (e.g. 20%/50% stays 20%/50%).
         let old = self.world_rect;
         self.rescale_all_operators(&old, &world_rect);
+
+        // Keep ball centers and cached position state at the same fractional
+        // location in the new world rect, matching operator resize behavior.
+        if !is_degenerate(&old) {
+            for ball in &mut self.balls {
+                let new_pos = remap_point(*ball.get_position(), &old, &world_rect);
+                ball.set_position_and_update_tail(new_pos);
+                ball.pre_update_pos = remap_point(ball.pre_update_pos, &old, &world_rect);
+                ball.last_update_hood_pos =
+                    remap_point(ball.last_update_hood_pos, &old, &world_rect);
+            }
+        }
 
         // Update world_rect with correctly computed world coordinates
         self.world_rect = world_rect;
