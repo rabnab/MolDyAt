@@ -82,6 +82,11 @@ pub struct UnifiedRenderState {
     /// Default empty operator snapshot, used when no physics snapshot is
     /// available yet.  Avoids per-frame heap allocation and `LazyLock`.
     pub(super) default_operator_snapshot: OperatorSnapshot,
+
+    // ── Resize tracking ───────────────────────────────────────────────
+    /// Set when a window resize occurs; cleared when any mouse button is released.
+    /// While set, the simulation is paused; releasing the mouse unpauses it.
+    pub(super) resize_pending: bool,
 }
 
 impl UnifiedRenderState {
@@ -121,6 +126,7 @@ impl UnifiedRenderState {
             active_tool: OperatorTool::None,
             tool_handler: None,
             default_operator_snapshot: OperatorSnapshot::default(),
+            resize_pending: false,
         }
     }
 
@@ -375,6 +381,15 @@ impl UnifiedRenderState {
         self.viewport.set_world_bounds(world_rect);
         self.viewport.on_window_resize((new_width, new_height));
         self.view_dirty = true;
+        self.resize_pending = true;
+    }
+
+    /// Resume physics after resize if a resize completion is pending.
+    pub fn resume_after_resize_if_pending(&mut self) {
+        if self.resize_pending {
+            self.resize_pending = false;
+            self.physics.send_command(PhysicsCommand::ResumeAfterResize);
+        }
     }
 
     /// Apply a pan delta (in pixels) originating from a drag gesture.
@@ -443,6 +458,11 @@ impl UnifiedRenderState {
         button: winit::event::MouseButton,
         state: winit::event::ElementState,
     ) -> bool {
+        // On any mouse button release, check if we are waiting to resume after resize.
+        if state == winit::event::ElementState::Released {
+            self.resume_after_resize_if_pending();
+        }
+
         let world_pos = self.input.cursor_pos();
         let screen_pos = self.input.cursor_pos_px();
         let pan_offset = self.viewport.pan_offset();

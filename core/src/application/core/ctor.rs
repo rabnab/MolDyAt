@@ -28,7 +28,6 @@ impl MainContent {
             step_count: 0,
             show_timings: false,
             show_ball_stats: true,
-            resize_resume_at: None,
             was_paused_for_resize: false,
             update_hood_at_frame_start: 0,
             speed_limit_override: None,

@@ -20,7 +20,7 @@ use winit::event_loop::EventLoopProxy;
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
-    event::{ElementState, WindowEvent},
+    event::{DeviceEvent, ElementState, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     keyboard::PhysicalKey,
     window::Window,
@@ -270,6 +270,27 @@ impl ApplicationHandler<UserEvent> for WgpuApp {
 
         // Main window events
         handle_window_event(event, ctx, state, pipelines, event_loop);
+    }
+
+    fn device_event(
+        &mut self,
+        _event_loop: &ActiveEventLoop,
+        _device_id: winit::event::DeviceId,
+        event: DeviceEvent,
+    ) {
+        let Some(state) = self.state.as_mut() else {
+            return;
+        };
+
+        // Window-border resize may not emit a client-area MouseInput release.
+        // DeviceEvent::Button release is a reliable signal to finish resize pause.
+        if let DeviceEvent::Button {
+            state: ElementState::Released,
+            ..
+        } = event
+        {
+            state.resume_after_resize_if_pending();
+        }
     }
 }
 

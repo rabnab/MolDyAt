@@ -28,7 +28,6 @@ pub struct MainContent {
     pub(crate) step_count: usize,
 
     game_data: GameLogicData,
-    resize_resume_at: Option<std::time::Instant>,
     was_paused_for_resize: bool,
     update_hood_at_frame_start: usize,
     /// Override for speed limit (None = use default calculation, Some(f32::INFINITY) = disable)

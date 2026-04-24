@@ -102,6 +102,7 @@ mod tests {
             active_tool: OperatorTool::None,
             tool_handler: None,
             default_operator_snapshot: Default::default(),
+            resize_pending: false,
         }
     }
 
