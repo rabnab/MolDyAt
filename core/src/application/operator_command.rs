@@ -78,3 +78,62 @@ impl OperatorCommand for MoveValveSegment {
         content.move_valve_segment(self.valve_id, self.t_start, self.t_end);
     }
 }
+
+// ── Source sphere commands ────────────────────────────────────────────
+
+#[derive(Debug)]
+pub struct PlaceSourceSphere {
+    pub center: Vec2D,
+}
+
+impl OperatorCommand for PlaceSourceSphere {
+    fn execute(self: Box<Self>, content: &mut MainContent) {
+        content.add_source_sphere(self.center);
+    }
+}
+
+#[derive(Debug)]
+pub struct ToggleSourceSphere {
+    pub sphere_id: usize,
+}
+
+impl OperatorCommand for ToggleSourceSphere {
+    fn execute(self: Box<Self>, content: &mut MainContent) {
+        content.toggle_source_sphere(self.sphere_id);
+    }
+}
+
+#[derive(Debug)]
+pub struct CycleSourceSphereBallSize {
+    pub sphere_id: usize,
+}
+
+impl OperatorCommand for CycleSourceSphereBallSize {
+    fn execute(self: Box<Self>, content: &mut MainContent) {
+        content.cycle_source_sphere_ball_size(self.sphere_id);
+    }
+}
+
+#[derive(Debug)]
+pub struct AdjustSourceSphereSpeed {
+    pub sphere_id: usize,
+    pub delta: f32,
+}
+
+impl OperatorCommand for AdjustSourceSphereSpeed {
+    fn execute(self: Box<Self>, content: &mut MainContent) {
+        content.adjust_source_sphere_speed(self.sphere_id, self.delta);
+    }
+}
+
+#[derive(Debug)]
+pub struct AdjustSourceSphereEmitPeriod {
+    pub sphere_id: usize,
+    pub delta_steps: i32,
+}
+
+impl OperatorCommand for AdjustSourceSphereEmitPeriod {
+    fn execute(self: Box<Self>, content: &mut MainContent) {
+        content.adjust_source_sphere_emit_period(self.sphere_id, self.delta_steps);
+    }
+}

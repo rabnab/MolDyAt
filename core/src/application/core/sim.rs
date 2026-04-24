@@ -17,38 +17,34 @@ impl MainContent {
     }
 
     /// Pause simulation when window resize is detected.
-    /// Sets resize resume timer to allow rendering thread to stabilize.
     pub(crate) fn pause_for_resize(&mut self) {
         self.was_paused_for_resize = true;
         self.sim.toggle_pause();
-        self.resize_resume_at = Some(std::time::Instant::now()); // + std::time::Duration::from_millis(3000));
     }
 
-    /// Check if enough time has passed to unpause after resize.
-    /// If resume time is reached, unpauses simulation and reconstructs cell grid
-    /// to match new world boundaries.
+    /// Unpause after resize, triggered when the mouse button is released.
+    /// Unpauses simulation and reconstructs cell grid to match new world boundaries.
     pub(crate) fn unpause_after_resize(&mut self) {
-        if let Some(resume_time) = self.resize_resume_at
-            && std::time::Instant::now() >= resume_time
-        {
-            if self.was_paused_for_resize && self.sim.is_paused() {
-                self.sim.toggle_pause();
-            }
-
-            let max_radius = BallFactory::get_max_radius();
-            let nu_rect = self.world_region();
-            let nu_grid = CellGrid::resize(
-                &mut self.cell_grid,
-                nu_rect,
-                self.physics.get_cutoff_and_skin(),
-                max_radius,
-                &mut self.balls,
-            )
-            .expect("Failed to resize CellGrid");
-            self.cell_grid = nu_grid;
-            self.resize_resume_at = None;
-            self.was_paused_for_resize = false;
+        if !self.was_paused_for_resize {
+            return;
         }
+
+        if self.sim.is_paused() {
+            self.sim.toggle_pause();
+        }
+
+        let max_radius = BallFactory::get_max_radius();
+        let nu_rect = self.world_region();
+        let nu_grid = CellGrid::resize(
+            &mut self.cell_grid,
+            nu_rect,
+            self.physics.get_cutoff_and_skin(),
+            max_radius,
+            &mut self.balls,
+        )
+        .expect("Failed to resize CellGrid");
+        self.cell_grid = nu_grid;
+        self.was_paused_for_resize = false;
     }
 
     /// Update all ball positions and collect bounce information
@@ -235,6 +231,9 @@ impl VerletIntegration for MainContent {
 
         // Resolve line segment collisions (post-step position correction + reflection)
         let (seg_px, seg_py) = self.resolve_line_segment_collisions();
+
+        // Emit balls from active source spheres.
+        self.emit_from_source_spheres();
 
         // Store wall momentum for tracking (includes line segment bounces)
         self.sim.wall_momentum_x += wall_px + seg_px;

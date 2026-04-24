@@ -19,7 +19,7 @@
 
 use rust_thermo_core::application::AppResult;
 use rust_thermo_core::application::renderer_snapshot::RendererSnapshot;
-use rust_thermo_core::graphics::renderer::event_loop::OperatorPreviews;
+use rust_thermo_core::graphics::renderer::event_loop::FramePreviews;
 use rust_thermo_core::graphics::renderer::margins::Margins;
 use rust_thermo_core::graphics::renderer::state_layers::ThermoDisplayMode;
 use std::any::Any;
@@ -54,7 +54,7 @@ pub struct PrepareContext<'a> {
     pub margin: Margins,
     pub thermo_display: ThermoDisplayMode,
     /// All operator preview geometry for the current frame.
-    pub operator_previews: OperatorPreviews,
+    pub operator_previews: FramePreviews,
 }
 
 // ── Pipeline trait ─────────────────────────────────────────────────

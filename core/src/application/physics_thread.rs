@@ -62,6 +62,8 @@ pub enum PhysicsCommand {
     StartVerbosityInput,
     /// Resize the world region
     Resize { world_rect: crate::objects2d::Rect },
+    /// Unpause the simulation after a resize, triggered by mouse button release.
+    ResumeAfterResize,
     /// A self-contained operator command (line segment, valve, etc.).
     Operator(Box<dyn OperatorCommand>),
 }
@@ -316,6 +318,9 @@ impl PhysicsThread {
             }
             PhysicsCommand::Resize { world_rect } => {
                 main_content.resize(world_rect);
+            }
+            PhysicsCommand::ResumeAfterResize => {
+                main_content.unpause_after_resize();
             }
             PhysicsCommand::Operator(cmd) => {
                 cmd.execute(main_content);

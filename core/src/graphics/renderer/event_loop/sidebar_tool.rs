@@ -40,25 +40,22 @@ impl UnifiedRenderState {
     }
 
     /// Maps a sidebar icon index to an `OperatorTool`.
+    ///
+    /// Derived from [`SIDEBAR_TOOLS`](crate::graphics::sidebar::SIDEBAR_TOOLS).
     pub(super) fn operator_tool_for_icon(index: usize) -> OperatorTool {
-        match index {
-            0 => OperatorTool::LineSegment,  // wall icon
-            1 => OperatorTool::ValveSegment, // gate icon
-            2 => OperatorTool::Thermostat,   // temperature icon
-            3 => OperatorTool::SourceSphere, // emitter icon
-            _ => OperatorTool::None,
-        }
+        use crate::graphics::sidebar::SIDEBAR_TOOLS;
+        SIDEBAR_TOOLS
+            .get(index)
+            .copied()
+            .unwrap_or(OperatorTool::None)
     }
 
     /// Returns the sidebar icon index of the currently active tool, if any.
+    ///
+    /// Derived from [`SIDEBAR_TOOLS`](crate::graphics::sidebar::SIDEBAR_TOOLS).
     pub fn selected_sidebar_icon(&self) -> Option<usize> {
-        match self.active_tool {
-            OperatorTool::LineSegment => Some(0),
-            OperatorTool::ValveSegment => Some(1),
-            OperatorTool::Thermostat => Some(2),
-            OperatorTool::SourceSphere => Some(3),
-            OperatorTool::None => None,
-        }
+        use crate::graphics::sidebar::SIDEBAR_TOOLS;
+        SIDEBAR_TOOLS.iter().position(|&t| t == self.active_tool)
     }
 }
 
@@ -67,8 +64,6 @@ mod tests {
     use super::*;
     use crate::graphics::energy_plot::{EnergyData, SharedEnergyData};
     use crate::graphics::renderer::event_loop::metrics::MetricsCollector;
-    use crate::graphics::renderer::event_loop::unified_render_state::LineSegmentDrawState;
-    use crate::graphics::renderer::event_loop::unified_render_state::ValveDrawState;
     use crate::graphics::renderer::event_loop::{EnergyWindowManager, InputHandler};
     use crate::graphics::renderer::state_layers::RendererConfig;
     use crate::graphics::renderer::{Margins, ViewportTransform};
@@ -104,8 +99,9 @@ mod tests {
             current_ball_size_idx: 2,
             metrics: MetricsCollector::new(),
             active_tool: OperatorTool::None,
-            line_draw_state: LineSegmentDrawState::Idle,
-            valve_draw_state: ValveDrawState::Idle,
+            tool_handler: None,
+            default_operator_snapshot: Default::default(),
+            resize_pending: false,
         }
     }
 
@@ -161,10 +157,14 @@ mod tests {
     fn operator_tool_toggle() {
         assert_eq!(
             UnifiedRenderState::operator_tool_for_icon(0),
-            OperatorTool::LineSegment
+            OperatorTool::Ball
         );
         assert_eq!(
             UnifiedRenderState::operator_tool_for_icon(1),
+            OperatorTool::LineSegment
+        );
+        assert_eq!(
+            UnifiedRenderState::operator_tool_for_icon(2),
             OperatorTool::ValveSegment
         );
         assert_eq!(
@@ -176,7 +176,7 @@ mod tests {
     #[test]
     fn visible_icon_count_all_fit() {
         use crate::graphics::sidebar::visible_icon_count;
-        assert_eq!(visible_icon_count(720.0, 50.0, 50.0), 4);
+        assert_eq!(visible_icon_count(720.0, 50.0, 50.0), 5);
     }
 
     #[test]

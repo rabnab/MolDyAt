@@ -42,6 +42,8 @@ fn sd_rounded_rect(p: vec2<f32>, half_size: vec2<f32>, r: f32) -> f32 {
 const FILL_COLOR: vec4<f32> = vec4<f32>(0.5, 0.5, 0.5, 1.0);
 const OUTLINE_COLOR: vec4<f32> = vec4<f32>(0.6, 0.2, 0.8, 1.0);
 const HIGHLIGHT_BORDER_COLOR: vec4<f32> = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+const BALL_BASE_COLOR: vec3<f32> = vec3<f32>(0.80, 0.82, 0.86);
+const BALL_DARK_COLOR: vec3<f32> = vec3<f32>(0.58, 0.60, 0.66);
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
@@ -64,6 +66,27 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         );
         let color = mix(FILL_COLOR, OUTLINE_COLOR, border_blend);
         return vec4<f32>(color.rgb, color.a * aa);
+    }
+
+    if in.mode > 2.5 {
+        // Procedural standard-sized ball icon (mode 3.0).
+        let p = in.uv - vec2<f32>(0.5, 0.5);
+        let r = length(p);
+        if r > 0.46 {
+            discard;
+        }
+
+        // Radial body shading.
+        let t = smoothstep(0.02, 0.46, r);
+        let body = mix(BALL_BASE_COLOR, BALL_DARK_COLOR, t);
+
+        // Soft specular highlight near top-left.
+        let hl = exp(-dot((p - vec2<f32>(-0.16, -0.16)) * 12.0, (p - vec2<f32>(-0.16, -0.16)) * 12.0));
+        let color = body + vec3<f32>(0.30, 0.30, 0.30) * hl;
+
+        // Antialiased outer edge.
+        let alpha = 1.0 - smoothstep(0.44, 0.47, r);
+        return vec4<f32>(color, alpha);
     }
 
     // Icon texture sampling.

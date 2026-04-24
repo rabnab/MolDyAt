@@ -20,7 +20,7 @@
 //! - **Immutability**: Snapshots are immutable after creation, so no need for
 //!   partial field updates that might benefit from SoA.
 
-use crate::objects2d::{SimLineSegment, ValveSegment, Vec2D};
+use crate::objects2d::{SimLineSegment, SimSourceSphere, ValveSegment, Vec2D};
 use std::time::Instant;
 
 use crate::application::thermo_field::ThermoGrid;
@@ -36,6 +36,52 @@ pub struct OperatorSnapshot {
     pub line_segments: Vec<SimLineSegment>,
     /// Valve sections on line segments.
     pub valve_segments: Vec<ValveSegment>,
+    /// Source spheres that emit balls into the simulation.
+    pub source_spheres: Vec<SimSourceSphere>,
+}
+
+/// Distance threshold (world units) used by [`OperatorSnapshot::is_near_any_operator`]
+/// to suppress ball placement near operators.
+const OPERATOR_PROXIMITY_THRESHOLD: f32 = 1.5;
+
+impl OperatorSnapshot {
+    /// Returns `true` when `pos` is close to any placed operator.
+    ///
+    /// Checked operators: line segments, valve midpoints, and source sphere
+    /// centres.  The threshold is [`OPERATOR_PROXIMITY_THRESHOLD`] world
+    /// units so that a Ctrl-release ball placement does not interfere with
+    /// operator interaction zones.
+    pub fn is_near_any_operator(&self, pos: Vec2D) -> bool {
+        let threshold_sq = OPERATOR_PROXIMITY_THRESHOLD * OPERATOR_PROXIMITY_THRESHOLD;
+
+        // Line segments — closest-point distance.
+        for seg in &self.line_segments {
+            let closest = seg.closest_point(&pos);
+            if pos.distance_squared(&closest) <= threshold_sq {
+                return true;
+            }
+        }
+
+        // Valves — parametric midpoint on parent segment.
+        for valve in &self.valve_segments {
+            if let Some(seg) = self.line_segments.iter().find(|s| s.id == valve.line_id) {
+                let t_mid = (valve.t_start + valve.t_end) * 0.5;
+                let center = seg.point_at_t(t_mid);
+                if pos.distance_squared(&center) <= threshold_sq {
+                    return true;
+                }
+            }
+        }
+
+        // Source spheres — centre distance.
+        for sphere in &self.source_spheres {
+            if pos.distance_squared(&sphere.center) <= threshold_sq {
+                return true;
+            }
+        }
+
+        false
+    }
 }
 
 /// Lightweight specification for cell grid dimensions and layout.

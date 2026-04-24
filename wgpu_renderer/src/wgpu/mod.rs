@@ -20,6 +20,7 @@ mod grid_pipeline;
 mod line_pipeline;
 mod render_graph;
 mod sidebar_pipeline;
+mod source_sphere_pipeline;
 mod text_pipeline;
 mod thermo_heatmap_pipeline;
 mod thermo_value_pipeline;

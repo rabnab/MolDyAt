@@ -13,13 +13,14 @@ use super::grid_pipeline::{GridPipeline, build_view_proj_matrix};
 use super::line_pipeline::LinePipeline;
 use super::render_graph::{PipelineHandle, PrepareContext, RenderGraph};
 use super::sidebar_pipeline::SidebarPipeline;
+use super::source_sphere_pipeline::SourceSpherePipeline;
 use super::text_pipeline::TextPipeline;
 use super::thermo_heatmap_pipeline::ThermoHeatmapPipeline;
 use super::thermo_value_pipeline::ThermoValueOverlayPipeline;
 use super::wgpu_context::WgpuContext;
 use rust_thermo_core::application::AppResult;
 use rust_thermo_core::application::renderer_snapshot::{CellGridSpec, RendererSnapshot};
-use rust_thermo_core::graphics::renderer::event_loop::OperatorPreviews;
+use rust_thermo_core::graphics::renderer::event_loop::FramePreviews;
 use rust_thermo_core::graphics::renderer::state_layers::ThermoDisplayMode;
 
 /// Shader source code (embedded at compile time).
@@ -40,6 +41,7 @@ pub struct PipelineHandles {
     pub ball: PipelineHandle,
     pub crosshair: PipelineHandle,
     pub text: PipelineHandle,
+    pub source_sphere: PipelineHandle,
 }
 
 /// Collection of all rendering pipelines, backed by a [`RenderGraph`].
@@ -55,7 +57,7 @@ pub struct WgpuPipelines {
 impl WgpuPipelines {
     /// Create all rendering pipelines and register them in the graph.
     ///
-    /// Execution order: sidebar → frame → grid → thermo_heatmap → lines → balls → crosshair → text.
+    /// Execution order: sidebar → frame → grid → thermo_heatmap → lines → source_spheres → balls → crosshair → text.
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat) -> Self {
         let mut graph = RenderGraph::new();
 
@@ -73,6 +75,8 @@ impl WgpuPipelines {
         let thermo_value_overlay =
             graph.add_pipeline(Box::new(ThermoValueOverlayPipeline::new(device, format)));
         let line = graph.add_pipeline(Box::new(LinePipeline::new(device, format, LINE_SHADER)));
+        let source_sphere =
+            graph.add_pipeline(Box::new(SourceSpherePipeline::new(device, queue, format)));
         let ball = graph.add_pipeline(Box::new(BallPipeline::new(device, format, BALL_SHADER)));
         let crosshair = graph.add_pipeline(Box::new(CrosshairPipeline::new(
             device,
@@ -98,6 +102,7 @@ impl WgpuPipelines {
                 ball,
                 crosshair,
                 text,
+                source_sphere,
             },
         }
     }
@@ -116,7 +121,7 @@ impl WgpuPipelines {
         current_ball_radius: f32,
         ctrl_pressed: bool,
         thermo_display: ThermoDisplayMode,
-        operator_previews: OperatorPreviews,
+        operator_previews: FramePreviews,
     ) -> AppResult {
         let window_size = ctx.size();
         let margin = MARGINS;

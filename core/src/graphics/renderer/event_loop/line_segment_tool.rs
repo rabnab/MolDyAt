@@ -1,14 +1,18 @@
 //! Line segment operator tool — drawing, snapping, and endpoint dragging.
 //!
-//! This module extends [`UnifiedRenderState`] with the line-segment
-//! drawing state machine, snap-to-wall / snap-to-endpoint helpers,
-//! ghost-preview queries, and the endpoint find/drag interaction.
+//! Defines [`LineSegmentToolHandler`] which implements [`OperatorToolHandler`]
+//! for the line-segment drawing state machine, snap-to-wall / snap-to-endpoint
+//! helpers, ghost-preview queries, and the endpoint find/drag interaction.
 
+use crate::application::operator_command;
 use crate::objects2d::Vec2D;
 use crate::objects2d::line_segment::snap_position;
+use winit::event::{ElementState, MouseButton};
 
-use super::input_handler::OperatorTool;
-use super::unified_render_state::UnifiedRenderState;
+use super::operator_tool_handler::{OperatorToolHandler, ToolContext, ToolPreview, ToolResponse};
+
+/// Snap threshold in world units.
+const SNAP_THRESHOLD: f32 = 0.5;
 
 /// State machine for drawing a line segment.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -26,37 +30,34 @@ pub enum LineSegmentDrawState {
     },
 }
 
-impl UnifiedRenderState {
-    // ── Line segment snapping ────────────────────────────────────────
+/// Self-contained handler for the line segment operator tool.
+pub struct LineSegmentToolHandler {
+    pub state: LineSegmentDrawState,
+}
 
-    /// Snap threshold in world units.
-    pub(super) const SNAP_THRESHOLD: f32 = 0.5;
-
-    /// Snap a world position to nearby walls or existing segment endpoints.
-    pub(super) fn snap_world_pos(&self, pos: Vec2D) -> Vec2D {
-        let world_rect = self.viewport.world_bounds();
-        let segments: &[crate::objects2d::SimLineSegment] = self
-            .last_snapshot
-            .as_ref()
-            .map(|s| s.operators.line_segments.as_slice())
-            .unwrap_or(&[]);
-        snap_position(pos, &world_rect, segments, Self::SNAP_THRESHOLD)
+impl LineSegmentToolHandler {
+    pub fn new() -> Self {
+        Self {
+            state: LineSegmentDrawState::Idle,
+        }
     }
 
-    /// Find a segment whose endpoint is within [`SNAP_THRESHOLD`] of `pos`.
-    ///
-    /// Returns `(segment_id, move_start)` where `move_start` is `true`
-    /// when the closest endpoint is the segment's start point.
-    pub(super) fn find_near_endpoint(&self, pos: Vec2D) -> Option<(usize, bool)> {
-        let threshold_sq = Self::SNAP_THRESHOLD * Self::SNAP_THRESHOLD;
-        let segments = self
-            .last_snapshot
-            .as_ref()
-            .map(|s| s.operators.line_segments.as_slice())
-            .unwrap_or(&[]);
+    /// Snap a world position to nearby walls or existing segment endpoints.
+    fn snap_world_pos(pos: Vec2D, ctx: &ToolContext) -> Vec2D {
+        snap_position(
+            pos,
+            &ctx.world_bounds,
+            &ctx.operators.line_segments,
+            SNAP_THRESHOLD,
+        )
+    }
+
+    /// Find a segment whose endpoint is within threshold of `pos`.
+    fn find_near_endpoint(pos: Vec2D, ctx: &ToolContext) -> Option<(usize, bool)> {
+        let threshold_sq = SNAP_THRESHOLD * SNAP_THRESHOLD;
         let mut best_dist_sq = threshold_sq;
         let mut best: Option<(usize, bool)> = None;
-        for seg in segments {
+        for seg in &ctx.operators.line_segments {
             let d_start = pos.distance_squared(&seg.start);
             let d_end = pos.distance_squared(&seg.end);
             if d_start < best_dist_sq {
@@ -70,90 +71,297 @@ impl UnifiedRenderState {
         }
         best
     }
+}
 
-    // ── Line segment preview ────────────────────────────────────────
+impl OperatorToolHandler for LineSegmentToolHandler {
+    fn handle_mouse_button(
+        &mut self,
+        button: MouseButton,
+        state: ElementState,
+        world_pos: Vec2D,
+        ctx: &ToolContext,
+    ) -> ToolResponse {
+        if button != MouseButton::Left {
+            return ToolResponse::default();
+        }
 
-    /// Returns the current ghost-preview line segment (start, end in world
-    /// coordinates) while the user is drawing, or `None` when idle.
-    /// The end point is snapped to nearby walls/endpoints.
-    pub fn line_segment_preview(&self) -> Option<(Vec2D, Vec2D)> {
-        if let LineSegmentDrawState::Drawing { start } = self.line_draw_state {
-            let snapped_end = self.snap_world_pos(self.cursor_world_pos);
-            Some((start, snapped_end))
-        } else {
-            None
+        match state {
+            ElementState::Pressed => {
+                if let Some((seg_id, move_start)) = Self::find_near_endpoint(world_pos, ctx) {
+                    self.state = LineSegmentDrawState::MovingEndpoint {
+                        segment_id: seg_id,
+                        move_start,
+                    };
+                } else {
+                    let snapped = Self::snap_world_pos(world_pos, ctx);
+                    self.state = LineSegmentDrawState::Drawing { start: snapped };
+                }
+                ToolResponse::consumed_dirty()
+            }
+            ElementState::Released => {
+                let response = match self.state {
+                    LineSegmentDrawState::Drawing { start } => {
+                        let end = Self::snap_world_pos(world_pos, ctx);
+                        if start.distance_squared(&end) > 0.01 {
+                            ToolResponse::consumed_with(Box::new(
+                                operator_command::AddLineSegment { start, end },
+                            ))
+                        } else {
+                            ToolResponse::consumed_dirty()
+                        }
+                    }
+                    LineSegmentDrawState::MovingEndpoint {
+                        segment_id,
+                        move_start,
+                    } => {
+                        let snapped = Self::snap_world_pos(world_pos, ctx);
+                        ToolResponse::consumed_with(Box::new(
+                            operator_command::MoveLineSegmentEndpoint {
+                                segment_id,
+                                new_pos: snapped,
+                                move_start,
+                            },
+                        ))
+                    }
+                    LineSegmentDrawState::Idle => ToolResponse::consumed_dirty(),
+                };
+                self.state = LineSegmentDrawState::Idle;
+                response
+            }
         }
     }
 
-    /// Returns world-coordinate positions where snap indicators should be
-    /// rendered (e.g. small crosshairs at snap targets).
-    pub fn snap_indicators(&self) -> Vec<[f32; 2]> {
+    fn handle_cursor_move(&mut self, _world_pos: Vec2D, _ctx: &ToolContext) -> ToolResponse {
+        ToolResponse::consumed_dirty()
+    }
+
+    fn handle_scroll(
+        &mut self,
+        _scroll_y: f32,
+        _world_pos: Vec2D,
+        _ctrl_held: bool,
+        _ctx: &ToolContext,
+    ) -> ToolResponse {
+        ToolResponse::default()
+    }
+
+    fn preview(&self, ctx: &ToolContext) -> ToolPreview {
+        if let LineSegmentDrawState::Drawing { start } = self.state {
+            let snapped_end = Self::snap_world_pos(ctx.cursor_world_pos, ctx);
+            ToolPreview::LineSegment {
+                start: [start.x, start.y],
+                end: [snapped_end.x, snapped_end.y],
+            }
+        } else {
+            ToolPreview::None
+        }
+    }
+
+    fn snap_indicators(&self, ctx: &ToolContext) -> Vec<[f32; 2]> {
         let mut indicators = Vec::new();
-        if let LineSegmentDrawState::Drawing { start } = self.line_draw_state {
-            // Start was snapped at press time — always show indicator there.
+        if let LineSegmentDrawState::Drawing { start } = self.state {
             indicators.push([start.x, start.y]);
-            // Show indicator at snapped end position if it differs from cursor.
-            let snapped_end = self.snap_world_pos(self.cursor_world_pos);
-            if snapped_end != self.cursor_world_pos {
+            let snapped_end = Self::snap_world_pos(ctx.cursor_world_pos, ctx);
+            if snapped_end != ctx.cursor_world_pos {
                 indicators.push([snapped_end.x, snapped_end.y]);
             }
-        } else if self.active_tool == OperatorTool::LineSegment {
-            // When idle with the line tool selected, show snap indicator at
-            // cursor if it would snap.
-            let snapped = self.snap_world_pos(self.cursor_world_pos);
-            if snapped != self.cursor_world_pos {
+        } else {
+            let snapped = Self::snap_world_pos(ctx.cursor_world_pos, ctx);
+            if snapped != ctx.cursor_world_pos {
                 indicators.push([snapped.x, snapped.y]);
             }
         }
         indicators
+    }
+
+    fn reset(&mut self) {
+        self.state = LineSegmentDrawState::Idle;
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::objects2d::Rect;
+    use crate::application::renderer_snapshot::OperatorSnapshot;
+    use crate::objects2d::{Rect, SimLineSegment};
+
+    fn make_ctx_data(segments: Vec<SimLineSegment>) -> (OperatorSnapshot, Rect) {
+        let snap = OperatorSnapshot {
+            line_segments: segments,
+            ..Default::default()
+        };
+        let world = Rect::new(-18.0, 12.0, 36.0, -24.0);
+        (snap, world)
+    }
+
+    fn make_tool_ctx<'a>(
+        snap: &'a OperatorSnapshot,
+        world: &'a Rect,
+        cursor: Vec2D,
+    ) -> ToolContext<'a> {
+        ToolContext {
+            operators: snap,
+            world_bounds: *world,
+            cursor_world_pos: cursor,
+        }
+    }
+
+    // ── State machine tests ─────────────────────────────────────────
 
     #[test]
-    fn line_segment_draw_state_defaults_to_idle() {
-        let state = LineSegmentDrawState::default();
-        assert!(matches!(state, LineSegmentDrawState::Idle));
+    fn defaults_to_idle() {
+        let tool = LineSegmentToolHandler::new();
+        assert!(matches!(tool.state, LineSegmentDrawState::Idle));
     }
 
     #[test]
-    fn line_segment_drawing_holds_start() {
-        let state = LineSegmentDrawState::Drawing {
+    fn left_press_starts_drawing() {
+        let mut tool = LineSegmentToolHandler::new();
+        let (snap, world) = make_ctx_data(vec![]);
+        let ctx = make_tool_ctx(&snap, &world, Vec2D::zero());
+        let pos = Vec2D::new(5.0, 5.0);
+
+        let resp = tool.handle_mouse_button(MouseButton::Left, ElementState::Pressed, pos, &ctx);
+        assert!(resp.consumed);
+        assert!(resp.view_dirty);
+        assert!(matches!(tool.state, LineSegmentDrawState::Drawing { .. }));
+    }
+
+    #[test]
+    fn left_press_near_endpoint_starts_moving() {
+        let seg = SimLineSegment::new(7, Vec2D::new(3.0, 3.0), Vec2D::new(8.0, 3.0));
+        let (snap, world) = make_ctx_data(vec![seg]);
+        let ctx = make_tool_ctx(&snap, &world, Vec2D::zero());
+
+        let mut tool = LineSegmentToolHandler::new();
+        let pos = Vec2D::new(3.1, 3.1);
+        let resp = tool.handle_mouse_button(MouseButton::Left, ElementState::Pressed, pos, &ctx);
+        assert!(resp.consumed);
+        assert!(matches!(
+            tool.state,
+            LineSegmentDrawState::MovingEndpoint {
+                segment_id: 7,
+                move_start: true
+            }
+        ));
+    }
+
+    #[test]
+    fn release_after_drawing_commits_segment() {
+        let mut tool = LineSegmentToolHandler::new();
+        let (snap, world) = make_ctx_data(vec![]);
+        let ctx = make_tool_ctx(&snap, &world, Vec2D::zero());
+
+        tool.handle_mouse_button(
+            MouseButton::Left,
+            ElementState::Pressed,
+            Vec2D::new(2.0, 2.0),
+            &ctx,
+        );
+
+        let resp = tool.handle_mouse_button(
+            MouseButton::Left,
+            ElementState::Released,
+            Vec2D::new(10.0, 10.0),
+            &ctx,
+        );
+        assert!(resp.consumed);
+        assert!(resp.action.is_some(), "Should emit AddLineSegment command");
+        assert!(matches!(tool.state, LineSegmentDrawState::Idle));
+    }
+
+    #[test]
+    fn release_at_same_point_does_not_commit() {
+        let mut tool = LineSegmentToolHandler::new();
+        let (snap, world) = make_ctx_data(vec![]);
+        let ctx = make_tool_ctx(&snap, &world, Vec2D::zero());
+
+        let pos = Vec2D::new(5.0, 5.0);
+        tool.handle_mouse_button(MouseButton::Left, ElementState::Pressed, pos, &ctx);
+        let resp = tool.handle_mouse_button(MouseButton::Left, ElementState::Released, pos, &ctx);
+        assert!(resp.consumed);
+        assert!(resp.action.is_none(), "Too-short segment should not commit");
+    }
+
+    #[test]
+    fn release_after_moving_endpoint_commits() {
+        let seg = SimLineSegment::new(3, Vec2D::new(1.0, 1.0), Vec2D::new(6.0, 1.0));
+        let (snap, world) = make_ctx_data(vec![seg]);
+        let ctx = make_tool_ctx(&snap, &world, Vec2D::zero());
+
+        let mut tool = LineSegmentToolHandler::new();
+        tool.handle_mouse_button(
+            MouseButton::Left,
+            ElementState::Pressed,
+            Vec2D::new(1.1, 1.0),
+            &ctx,
+        );
+        assert!(matches!(
+            tool.state,
+            LineSegmentDrawState::MovingEndpoint { .. }
+        ));
+
+        let resp = tool.handle_mouse_button(
+            MouseButton::Left,
+            ElementState::Released,
+            Vec2D::new(2.0, 3.0),
+            &ctx,
+        );
+        assert!(resp.action.is_some(), "Should emit MoveLineSegmentEndpoint");
+        assert!(matches!(tool.state, LineSegmentDrawState::Idle));
+    }
+
+    #[test]
+    fn right_click_ignored() {
+        let mut tool = LineSegmentToolHandler::new();
+        let (snap, world) = make_ctx_data(vec![]);
+        let ctx = make_tool_ctx(&snap, &world, Vec2D::zero());
+
+        let resp = tool.handle_mouse_button(
+            MouseButton::Right,
+            ElementState::Pressed,
+            Vec2D::new(5.0, 5.0),
+            &ctx,
+        );
+        assert!(!resp.consumed);
+    }
+
+    #[test]
+    fn reset_returns_to_idle() {
+        let mut tool = LineSegmentToolHandler::new();
+        tool.state = LineSegmentDrawState::Drawing {
+            start: Vec2D::new(1.0, 1.0),
+        };
+        tool.reset();
+        assert!(matches!(tool.state, LineSegmentDrawState::Idle));
+    }
+
+    // ── Preview tests ───────────────────────────────────────────────
+
+    #[test]
+    fn preview_none_when_idle() {
+        let tool = LineSegmentToolHandler::new();
+        let (snap, world) = make_ctx_data(vec![]);
+        let ctx = make_tool_ctx(&snap, &world, Vec2D::new(5.0, 5.0));
+        assert!(matches!(tool.preview(&ctx), ToolPreview::None));
+    }
+
+    #[test]
+    fn preview_line_when_drawing() {
+        let mut tool = LineSegmentToolHandler::new();
+        tool.state = LineSegmentDrawState::Drawing {
             start: Vec2D::new(1.0, 2.0),
         };
-        if let LineSegmentDrawState::Drawing { start } = state {
-            assert!((start.x - 1.0).abs() < 1e-6);
-            assert!((start.y - 2.0).abs() < 1e-6);
-        } else {
-            panic!("Expected Drawing state");
-        }
+        let (snap, world) = make_ctx_data(vec![]);
+        let ctx = make_tool_ctx(&snap, &world, Vec2D::new(8.0, 8.0));
+        let preview = tool.preview(&ctx);
+        assert!(matches!(preview, ToolPreview::LineSegment { .. }));
     }
 
-    #[test]
-    fn moving_endpoint_state_holds_fields() {
-        let state = LineSegmentDrawState::MovingEndpoint {
-            segment_id: 42,
-            move_start: true,
-        };
-        if let LineSegmentDrawState::MovingEndpoint {
-            segment_id,
-            move_start,
-        } = state
-        {
-            assert_eq!(segment_id, 42);
-            assert!(move_start);
-        } else {
-            panic!("Expected MovingEndpoint state");
-        }
-    }
+    // ── Snap tests ──────────────────────────────────────────────────
 
     #[test]
     fn snap_position_snaps_near_wall() {
-        use crate::objects2d::line_segment::snap_position;
         let world = Rect::new(-18.0, 12.0, 36.0, -24.0);
         let pos = Vec2D::new(-17.7, 0.0);
         let snapped = snap_position(pos, &world, &[], 0.5);
@@ -166,8 +374,6 @@ mod tests {
 
     #[test]
     fn snap_position_snaps_near_endpoint() {
-        use crate::objects2d::SimLineSegment;
-        use crate::objects2d::line_segment::snap_position;
         let world = Rect::new(-18.0, 12.0, 36.0, -24.0);
         let seg = SimLineSegment::new(0, Vec2D::new(5.0, 5.0), Vec2D::new(10.0, 5.0));
         let pos = Vec2D::new(5.2, 5.1);
@@ -178,7 +384,6 @@ mod tests {
 
     #[test]
     fn snap_position_no_snap_when_far() {
-        use crate::objects2d::line_segment::snap_position;
         let world = Rect::new(-18.0, 12.0, 36.0, -24.0);
         let pos = Vec2D::new(0.0, 0.0);
         let snapped = snap_position(pos, &world, &[], 0.5);
@@ -188,8 +393,6 @@ mod tests {
 
     #[test]
     fn wall_snap_takes_priority_over_endpoint() {
-        use crate::objects2d::SimLineSegment;
-        use crate::objects2d::line_segment::snap_position;
         let world = Rect::new(-18.0, 12.0, 36.0, -24.0);
         let seg = SimLineSegment::new(0, Vec2D::new(-17.9, 0.0), Vec2D::new(0.0, 0.0));
         let pos = Vec2D::new(-17.7, 0.0);
@@ -198,5 +401,29 @@ mod tests {
             (snapped.x - (-18.0)).abs() < 1e-6,
             "Wall snap should take priority"
         );
+    }
+
+    // ── Snap indicator tests ────────────────────────────────────────
+
+    #[test]
+    fn snap_indicators_empty_when_idle_no_snap() {
+        let tool = LineSegmentToolHandler::new();
+        let (snap, world) = make_ctx_data(vec![]);
+        let ctx = make_tool_ctx(&snap, &world, Vec2D::new(5.0, 5.0));
+        assert!(tool.snap_indicators(&ctx).is_empty());
+    }
+
+    #[test]
+    fn snap_indicators_show_start_when_drawing() {
+        let mut tool = LineSegmentToolHandler::new();
+        tool.state = LineSegmentDrawState::Drawing {
+            start: Vec2D::new(1.0, 2.0),
+        };
+        let (snap, world) = make_ctx_data(vec![]);
+        let ctx = make_tool_ctx(&snap, &world, Vec2D::new(5.0, 5.0));
+        let indicators = tool.snap_indicators(&ctx);
+        assert!(!indicators.is_empty(), "Should show start indicator");
+        assert!((indicators[0][0] - 1.0).abs() < 1e-6);
+        assert!((indicators[0][1] - 2.0).abs() < 1e-6);
     }
 }

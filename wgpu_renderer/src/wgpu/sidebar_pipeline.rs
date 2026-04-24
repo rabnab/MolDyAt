@@ -2,7 +2,7 @@
 //!
 //! Loads PNG icons from embedded bytes and renders them as textured quads
 //! in the left margin of the window. Icons are arranged vertically from
-//! top to bottom: wall, valve, thermo, sourceOpen.
+//! top to bottom: ball (procedural), wall, valve, thermo, sourceOpen.
 
 use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
@@ -10,7 +10,10 @@ use wgpu::util::DeviceExt;
 use super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
 use crate::wgpu::{MARGIN_BOTTOM, MARGIN_LEFT, MARGIN_TOP};
 use rust_thermo_core::application::AppResult;
-use rust_thermo_core::graphics::sidebar::{ICON_COUNT, ICON_DISPLAY_SIZE, ICON_SPACING};
+use rust_thermo_core::graphics::renderer::event_loop::OperatorTool;
+use rust_thermo_core::graphics::sidebar::{
+    ICON_COUNT, ICON_DISPLAY_SIZE, ICON_SPACING, SIDEBAR_TOOLS,
+};
 
 const SIDEBAR_SHADER: &str = include_str!("shaders/sidebar.wgsl");
 
@@ -19,6 +22,9 @@ pub(crate) const ICON_WALL: &[u8] = include_bytes!("icons/wall.png");
 pub(crate) const ICON_VALVE: &[u8] = include_bytes!("icons/valve.png");
 pub(crate) const ICON_THERMO: &[u8] = include_bytes!("icons/thermo.png");
 pub(crate) const ICON_SOURCE_OPEN: &[u8] = include_bytes!("icons/sourceOpen.png");
+
+/// Number of texture-backed sidebar icons in the atlas.
+const TEXTURE_ICON_COUNT: u32 = 4;
 
 /// Padding around the icon group inside the background rectangle.
 pub(crate) const RECT_PADDING: f32 = 8.0;
@@ -79,12 +85,14 @@ pub(crate) fn decode_icon(png_bytes: &[u8], size: u32) -> Vec<u8> {
 impl SidebarPipeline {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat) -> Self {
         // ── Build texture atlas ────────────────────────────────────
-        // All icons are decoded to ATLAS_CELL × ATLAS_CELL RGBA and stacked vertically.
+        // Texture-backed icons are decoded to ATLAS_CELL × ATLAS_CELL RGBA and stacked vertically.
+        // Order must match SIDEBAR_TOOLS in core/src/graphics/sidebar.rs.
         const ATLAS_CELL: u32 = 64; // texture resolution per icon
-        let icons: [&[u8]; ICON_COUNT] = [ICON_WALL, ICON_VALVE, ICON_THERMO, ICON_SOURCE_OPEN];
+        let icons: [&[u8]; TEXTURE_ICON_COUNT as usize] =
+            [ICON_WALL, ICON_VALVE, ICON_THERMO, ICON_SOURCE_OPEN];
 
         let atlas_width = ATLAS_CELL;
-        let atlas_height = ATLAS_CELL * ICON_COUNT as u32;
+        let atlas_height = ATLAS_CELL * TEXTURE_ICON_COUNT;
         let mut atlas_data = Vec::with_capacity((atlas_width * atlas_height * 4) as usize);
 
         for icon_bytes in &icons {
@@ -279,7 +287,7 @@ impl SidebarPipeline {
             vertex_buffer,
             rect_uniform_buffer,
             vertex_count: 0,
-            atlas_icon_count: ICON_COUNT as u32,
+            atlas_icon_count: TEXTURE_ICON_COUNT,
             last_window_size: (0, 0),
             last_selected_icon: None,
         }
@@ -293,6 +301,16 @@ impl SidebarPipeline {
         selected: Option<usize>,
     ) -> (Vec<SidebarVertex>, RoundedRectParams) {
         build_sidebar_geometry(self.atlas_icon_count, win_w, win_h, selected)
+    }
+}
+
+fn atlas_row_for_tool(tool: OperatorTool) -> Option<u32> {
+    match tool {
+        OperatorTool::LineSegment => Some(0),
+        OperatorTool::ValveSegment => Some(1),
+        OperatorTool::Thermostat => Some(2),
+        OperatorTool::SourceSphere => Some(3),
+        OperatorTool::Ball | OperatorTool::None => None,
     }
 }
 
@@ -324,8 +342,8 @@ pub(crate) fn build_sidebar_geometry(
     let visible_count =
         rust_thermo_core::graphics::sidebar::visible_icon_count(win_h, MARGIN_TOP, MARGIN_BOTTOM)
             as u32;
-    // Clamp to the number of icons actually in the atlas.
-    let visible_count = visible_count.min(icon_count);
+    // Clamp to the number of tools declared in the shared ordering.
+    let visible_count = visible_count.min(ICON_COUNT as u32);
 
     let mut rect_params = RoundedRectParams {
         size_px: [0.0, 0.0],
@@ -422,44 +440,50 @@ pub(crate) fn build_sidebar_geometry(
         let icon_left = pad_x;
         let icon_right = icon_left + ICON_DISPLAY_SIZE;
         let icon_bottom = icon_top + ICON_DISPLAY_SIZE;
-
-        let uv_top = i as f32 / icon_count as f32;
-        let uv_bottom = (i + 1) as f32 / icon_count as f32;
+        let tool = SIDEBAR_TOOLS[i as usize];
 
         let tl = to_ndc(icon_left, icon_top);
         let tr = to_ndc(icon_right, icon_top);
         let bl = to_ndc(icon_left, icon_bottom);
         let br = to_ndc(icon_right, icon_bottom);
 
+        let (mode, uv_top, uv_bottom) = if let Some(row) = atlas_row_for_tool(tool) {
+            let denom = icon_count.max(1) as f32;
+            (1.0_f32, row as f32 / denom, (row + 1) as f32 / denom)
+        } else {
+            // Procedural icon (ball) uses local UV space [0,1].
+            (3.0_f32, 0.0_f32, 1.0_f32)
+        };
+
         verts.push(SidebarVertex {
             position: tl,
             uv: [0.0, uv_top],
-            mode: 1.0,
+            mode,
         });
         verts.push(SidebarVertex {
             position: bl,
             uv: [0.0, uv_bottom],
-            mode: 1.0,
+            mode,
         });
         verts.push(SidebarVertex {
             position: tr,
             uv: [1.0, uv_top],
-            mode: 1.0,
+            mode,
         });
         verts.push(SidebarVertex {
             position: tr,
             uv: [1.0, uv_top],
-            mode: 1.0,
+            mode,
         });
         verts.push(SidebarVertex {
             position: bl,
             uv: [0.0, uv_bottom],
-            mode: 1.0,
+            mode,
         });
         verts.push(SidebarVertex {
             position: br,
             uv: [1.0, uv_bottom],
-            mode: 1.0,
+            mode,
         });
     }
 

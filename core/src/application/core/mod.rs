@@ -6,7 +6,9 @@ use crate::application::sim_stats::SimStats;
 use crate::application::thermo_field::ThermoFieldHistory;
 use crate::objects2d::ball_cell::cell_grid::CellGrid;
 use crate::objects2d::ball_impl::{Ball2D, BallPhysics, ForceResult};
-use crate::objects2d::{LineSegmentCollection, Rect, ValveCollection, Vec2D, VerboseInfoMode};
+use crate::objects2d::{
+    LineSegmentCollection, Rect, SourceSphereCollection, ValveCollection, Vec2D, VerboseInfoMode,
+};
 use arc_swap::ArcSwapOption;
 use std::sync::Arc;
 
@@ -26,7 +28,6 @@ pub struct MainContent {
     pub(crate) step_count: usize,
 
     game_data: GameLogicData,
-    resize_resume_at: Option<std::time::Instant>,
     was_paused_for_resize: bool,
     update_hood_at_frame_start: usize,
     /// Override for speed limit (None = use default calculation, Some(f32::INFINITY) = disable)
@@ -46,6 +47,8 @@ pub struct MainContent {
     pub(crate) line_segments: LineSegmentCollection,
     /// Valve regions placed on top of line segments.
     pub(crate) valve_segments: ValveCollection,
+    /// Source spheres that emit balls into the simulation.
+    pub(crate) source_spheres: SourceSphereCollection,
 }
 
 pub struct StatsAccumulator {
@@ -64,6 +67,7 @@ mod line_segments;
 mod operators;
 mod sim;
 mod snapshot;
+mod source_spheres;
 mod valves;
 mod verbose;
 

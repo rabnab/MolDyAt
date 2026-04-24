@@ -399,6 +399,66 @@ impl RenderPipeline for LinePipeline {
             });
         }
 
+        // ── Source sphere arc indicators ─────────────────────────────
+        //
+        // Inner arc (blue, counterclockwise): emission speed fraction.
+        // Outer arc (black, clockwise): emission rate fraction.
+        // Both arcs are drawn *outside* the icon quad (radius > DEFAULT_SOURCE_RADIUS).
+        {
+            use rust_thermo_core::graphics::renderer::event_loop::DEFAULT_SOURCE_RADIUS;
+
+            let arc_segments = 32_usize; // line segments per full circle
+            let inner_radius = DEFAULT_SOURCE_RADIUS * 1.15;
+            let outer_radius = DEFAULT_SOURCE_RADIUS * 1.35;
+            let speed_color: [f32; 4] = [0.1, 0.4, 1.0, 0.9]; // blue
+            let rate_color: [f32; 4] = [0.05, 0.05, 0.05, 0.85]; // near-black
+
+            for sphere in &ctx.snapshot.operators.source_spheres {
+                let cx = sphere.center.x;
+                let cy = sphere.center.y;
+
+                // Inner arc — speed (CCW from 12-o'clock = −π/2)
+                let speed_frac = sphere.speed_fraction();
+                if speed_frac > 0.0 {
+                    let sweep = speed_frac * std::f32::consts::TAU;
+                    let n = ((arc_segments as f32 * speed_frac).ceil() as usize).max(1);
+                    let start_angle = -std::f32::consts::FRAC_PI_2;
+                    for i in 0..n {
+                        let a0 = start_angle - (i as f32 / n as f32) * sweep;
+                        let a1 = start_angle - ((i + 1) as f32 / n as f32) * sweep;
+                        line_batch.push(LineSegment {
+                            points: [
+                                [cx + inner_radius * a0.cos(), cy + inner_radius * a0.sin()],
+                                [cx + inner_radius * a1.cos(), cy + inner_radius * a1.sin()],
+                            ],
+                            width: 2.0,
+                            color: speed_color,
+                        });
+                    }
+                }
+
+                // Outer arc — rate (CW from 12-o'clock = −π/2)
+                let rate_frac = sphere.rate_fraction();
+                if rate_frac > 0.0 {
+                    let sweep = rate_frac * std::f32::consts::TAU;
+                    let n = ((arc_segments as f32 * rate_frac).ceil() as usize).max(1);
+                    let start_angle = -std::f32::consts::FRAC_PI_2;
+                    for i in 0..n {
+                        let a0 = start_angle + (i as f32 / n as f32) * sweep;
+                        let a1 = start_angle + ((i + 1) as f32 / n as f32) * sweep;
+                        line_batch.push(LineSegment {
+                            points: [
+                                [cx + outer_radius * a0.cos(), cy + outer_radius * a0.sin()],
+                                [cx + outer_radius * a1.cos(), cy + outer_radius * a1.sin()],
+                            ],
+                            width: 2.0,
+                            color: rate_color,
+                        });
+                    }
+                }
+            }
+        }
+
         // Snap indicators: small crosshairs at snap target positions.
         // Scale the crosshair size proportionally to the simulation region
         // so it stays visually consistent when the world is resized.

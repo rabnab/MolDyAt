@@ -12,7 +12,19 @@
 //! the same patterns for ID management, toggle state, and position
 //! rescaling.
 
-use super::{Rect, SimLineSegment, ValveSegment, Vec2D};
+mod line_segment_collection;
+mod source_sphere;
+mod valve_collection;
+
+pub use line_segment_collection::LineSegmentCollection;
+pub use source_sphere::{
+    EMISSION_SPEED_STEP, SOURCE_SPHERE_RADIUS, SimSourceSphere, SourceSphereCollection,
+};
+pub use valve_collection::ValveCollection;
+
+use super::{Rect, Vec2D};
+
+// ── Operator State ───────────────────────────────────────────────────
 
 /// ON/OFF state for toggleable operators (all except line segments).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -50,6 +62,8 @@ impl OperatorState {
     }
 }
 
+// ── Shared Helpers ───────────────────────────────────────────────────
+
 /// Remap a world-coordinate point from `old_rect` to `new_rect`,
 /// preserving its fractional position (0..1) within the rect.
 ///
@@ -66,6 +80,8 @@ pub fn remap_point(p: Vec2D, old: &Rect, new: &Rect) -> Vec2D {
 pub fn is_degenerate(rect: &Rect) -> bool {
     rect.w.abs() < 1e-12 || rect.h.abs() < 1e-12
 }
+
+// ── ID Counter ───────────────────────────────────────────────────────
 
 /// Monotonically increasing ID counter, reset on clear.
 ///
@@ -108,130 +124,6 @@ pub trait OperatorCollection: Send {
 
     /// Adjust operator positions for a world resize.
     fn rescale(&mut self, old_rect: &Rect, new_rect: &Rect);
-}
-
-// ── Line-Segment Collection ─────────────────────────────────────────
-
-/// Owns the `Vec<SimLineSegment>` and its ID counter.
-#[derive(Debug, Clone, Default)]
-pub struct LineSegmentCollection {
-    segments: Vec<SimLineSegment>,
-    next_id: OperatorIdCounter,
-}
-
-impl LineSegmentCollection {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Add a new line segment, returning its assigned ID.
-    pub fn add(&mut self, start: Vec2D, end: Vec2D) -> usize {
-        let id = self.next_id.next_id();
-        self.segments.push(SimLineSegment::new(id, start, end));
-        id
-    }
-
-    /// Immutable access to all line segments.
-    pub fn segments(&self) -> &[SimLineSegment] {
-        &self.segments
-    }
-
-    /// Mutable access to all line segments.
-    pub fn segments_mut(&mut self) -> &mut Vec<SimLineSegment> {
-        &mut self.segments
-    }
-
-    /// Find a segment by ID (immutable).
-    pub fn find(&self, id: usize) -> Option<&SimLineSegment> {
-        self.segments.iter().find(|s| s.id == id)
-    }
-
-    /// Find a segment by ID (mutable).
-    pub fn find_mut(&mut self, id: usize) -> Option<&mut SimLineSegment> {
-        self.segments.iter_mut().find(|s| s.id == id)
-    }
-}
-
-impl OperatorCollection for LineSegmentCollection {
-    fn clear(&mut self) {
-        self.segments.clear();
-        self.next_id.reset();
-    }
-
-    fn rescale(&mut self, old_rect: &Rect, new_rect: &Rect) {
-        if is_degenerate(old_rect) {
-            return;
-        }
-        for seg in &mut self.segments {
-            seg.start = remap_point(seg.start, old_rect, new_rect);
-            seg.end = remap_point(seg.end, old_rect, new_rect);
-        }
-    }
-}
-
-// ── Valve Collection ────────────────────────────────────────────────
-
-/// Owns the `Vec<ValveSegment>` and its ID counter.
-#[derive(Debug, Clone, Default)]
-pub struct ValveCollection {
-    valves: Vec<ValveSegment>,
-    next_id: OperatorIdCounter,
-}
-
-impl ValveCollection {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Add a new valve, returning its assigned ID.
-    pub fn add(&mut self, line_id: usize, t_start: f32, t_end: f32, is_closed: bool) -> usize {
-        let id = self.next_id.next_id();
-        self.valves
-            .push(ValveSegment::new(id, line_id, t_start, t_end, is_closed));
-        id
-    }
-
-    /// Immutable access to all valves.
-    pub fn valves(&self) -> &[ValveSegment] {
-        &self.valves
-    }
-
-    /// Find a valve by ID (immutable).
-    pub fn find(&self, id: usize) -> Option<&ValveSegment> {
-        self.valves.iter().find(|v| v.id == id)
-    }
-
-    /// Find a valve by ID (mutable).
-    pub fn find_mut(&mut self, id: usize) -> Option<&mut ValveSegment> {
-        self.valves.iter_mut().find(|v| v.id == id)
-    }
-
-    /// Index of a valve by ID (for indexed access after lookup).
-    pub fn position(&self, id: usize) -> Option<usize> {
-        self.valves.iter().position(|v| v.id == id)
-    }
-
-    /// Direct indexed access (immutable).
-    pub fn get(&self, idx: usize) -> &ValveSegment {
-        &self.valves[idx]
-    }
-
-    /// Direct indexed access (mutable).
-    pub fn get_mut(&mut self, idx: usize) -> &mut ValveSegment {
-        &mut self.valves[idx]
-    }
-}
-
-impl OperatorCollection for ValveCollection {
-    fn clear(&mut self) {
-        self.valves.clear();
-        self.next_id.reset();
-    }
-
-    fn rescale(&mut self, _old_rect: &Rect, _new_rect: &Rect) {
-        // Valve geometry is parametric on line segments (t_start/t_end),
-        // so line endpoint rescaling is sufficient.
-    }
 }
 
 #[cfg(test)]

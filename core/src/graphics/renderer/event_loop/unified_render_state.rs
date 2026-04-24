@@ -12,7 +12,7 @@
 //! unifies renderer state management across both ggez and wgpu backends.
 
 use crate::application::MainContent;
-use crate::application::renderer_snapshot::RendererSnapshot;
+use crate::application::renderer_snapshot::{OperatorSnapshot, RendererSnapshot};
 use crate::graphics::energy_plot::{EnergyData, SharedEnergyData};
 use crate::graphics::renderer::ViewportTransform;
 use crate::graphics::renderer::margins::Margins;
@@ -23,12 +23,15 @@ use std::sync::{Arc, Mutex};
 use super::action_processor::process_action_common;
 use super::energy_window_manager::EnergyWindowManager;
 use super::input_handler::{InputAction, InputHandler, OperatorTool};
-pub use super::line_segment_tool::LineSegmentDrawState;
+use super::line_segment_tool::LineSegmentToolHandler;
 use super::metrics::MetricsCollector;
+use super::operator_tool_handler::{
+    OperatorToolHandler, ToolContext, ToolPreview, scroll_y_from_delta,
+};
 use super::physics_coordinator::PhysicsCoordinator;
-pub use super::valve_segment_tool::ValveDrawState;
+use super::source_sphere_tool::SourceSphereToolHandler;
+use super::valve_segment_tool::ValveSegmentToolHandler;
 
-use crate::application::operator_command;
 use crate::application::physics_thread::PhysicsCommand;
 
 /// Unified state shared by every renderer backend.
@@ -74,10 +77,16 @@ pub struct UnifiedRenderState {
     // ── Operator tool ────────────────────────────────────────────────
     /// Currently selected operator tool from the sidebar panel.
     pub active_tool: OperatorTool,
-    /// Drawing state for the line segment tool.
-    pub line_draw_state: LineSegmentDrawState,
-    /// Interaction state for the valve segment tool.
-    pub valve_draw_state: ValveDrawState,
+    /// Active tool handler (trait dispatch).  `None` when no tool is selected.
+    pub tool_handler: Option<Box<dyn OperatorToolHandler>>,
+    /// Default empty operator snapshot, used when no physics snapshot is
+    /// available yet.  Avoids per-frame heap allocation and `LazyLock`.
+    pub(super) default_operator_snapshot: OperatorSnapshot,
+
+    // ── Resize tracking ───────────────────────────────────────────────
+    /// Set when a window resize occurs; cleared when any mouse button is released.
+    /// While set, the simulation is paused; releasing the mouse unpauses it.
+    pub(super) resize_pending: bool,
 }
 
 impl UnifiedRenderState {
@@ -115,8 +124,9 @@ impl UnifiedRenderState {
             current_ball_size_idx: 2, // default mid-size
             metrics: MetricsCollector::new(),
             active_tool: OperatorTool::None,
-            line_draw_state: LineSegmentDrawState::Idle,
-            valve_draw_state: ValveDrawState::Idle,
+            tool_handler: None,
+            default_operator_snapshot: OperatorSnapshot::default(),
+            resize_pending: false,
         }
     }
 
@@ -185,17 +195,74 @@ impl UnifiedRenderState {
 
     /// Collect all operator preview geometry for the current frame.
     ///
-    /// Bundles line-segment ghost, valve ghost, snap indicators, and
-    /// selected sidebar icon into a single [`OperatorPreviews`] struct
-    /// so the render pipeline receives one aggregate value.
-    pub fn operator_previews(&self) -> super::OperatorPreviews {
-        super::OperatorPreviews {
-            line_segment: self
-                .line_segment_preview()
-                .map(|(s, e)| ([s.x, s.y], [e.x, e.y])),
-            valve_segment: self.valve_segment_preview(),
-            snap_indicators: self.snap_indicators(),
+    /// Delegates to the active [`OperatorToolHandler`] for preview and
+    /// snap indicators, then bundles them with the selected sidebar icon.
+    pub fn operator_previews(&self) -> super::FramePreviews {
+        let ctx = self.make_tool_context();
+
+        let (line_segment, valve_segment, snap_indicators) =
+            if let Some(handler) = &self.tool_handler {
+                let preview = handler.preview(&ctx);
+                let snaps = handler.snap_indicators(&ctx);
+                match preview {
+                    ToolPreview::LineSegment { start, end } => (Some((start, end)), None, snaps),
+                    ToolPreview::ValveSegment {
+                        line_id,
+                        t_start,
+                        t_end,
+                    } => (None, Some((line_id, t_start, t_end)), snaps),
+                    ToolPreview::None => (None, None, snaps),
+                }
+            } else {
+                (None, None, Vec::new())
+            };
+
+        super::FramePreviews {
+            line_segment,
+            valve_segment,
+            snap_indicators,
             selected_sidebar_icon: self.selected_sidebar_icon(),
+        }
+    }
+
+    /// Build a [`ToolContext`] from the current snapshot.
+    ///
+    /// The returned context borrows `snapshot` (if `Some`) or the provided
+    /// `fallback` default.  Callers that also need `&mut self.tool_handler`
+    /// should invoke this with explicit field borrows to avoid conflicting
+    /// `&self` / `&mut self` borrows.
+    fn make_tool_context_from<'a>(
+        snapshot: Option<&'a RendererSnapshot>,
+        fallback: &'a OperatorSnapshot,
+        viewport: &crate::graphics::renderer::ViewportTransform,
+        cursor_world_pos: Vec2D,
+    ) -> ToolContext<'a> {
+        let operators = snapshot.map(|s| &s.operators).unwrap_or(fallback);
+        ToolContext {
+            operators,
+            world_bounds: viewport.world_bounds(),
+            cursor_world_pos,
+        }
+    }
+
+    /// Convenience wrapper when no mutable self-borrow is needed.
+    fn make_tool_context(&self) -> ToolContext<'_> {
+        Self::make_tool_context_from(
+            self.last_snapshot.as_deref(),
+            &self.default_operator_snapshot,
+            &self.viewport,
+            self.cursor_world_pos,
+        )
+    }
+
+    /// Create a handler for the given tool, or `None` if no tool selected.
+    fn handler_for_tool(tool: OperatorTool) -> Option<Box<dyn OperatorToolHandler>> {
+        match tool {
+            OperatorTool::Ball => None,
+            OperatorTool::LineSegment => Some(Box::new(LineSegmentToolHandler::new())),
+            OperatorTool::ValveSegment => Some(Box::new(ValveSegmentToolHandler::new())),
+            OperatorTool::SourceSphere => Some(Box::new(SourceSphereToolHandler::new())),
+            OperatorTool::Thermostat | OperatorTool::None => None,
         }
     }
 
@@ -235,9 +302,31 @@ impl UnifiedRenderState {
                 false
             }
             InputAction::SelectOperatorTool(tool) => {
+                if let Some(handler) = self.tool_handler.as_mut() {
+                    handler.reset();
+                }
                 self.active_tool = tool;
-                self.line_draw_state = LineSegmentDrawState::Idle;
-                self.valve_draw_state = ValveDrawState::Idle;
+                self.tool_handler = Self::handler_for_tool(tool);
+                false
+            }
+            InputAction::AddBall { position } => {
+                // Suppress ball placement when the cursor is near an operator
+                // so Ctrl-release doesn't accidentally create a ball on top of
+                // a line segment, valve, or source sphere.
+                let operators = self
+                    .last_snapshot
+                    .as_deref()
+                    .map(|s| &s.operators)
+                    .unwrap_or(&self.default_operator_snapshot);
+                if operators.is_near_any_operator(position) {
+                    self.config.disable_cursor();
+                    return false;
+                }
+                process_action_common(
+                    InputAction::AddBall { position },
+                    &self.physics,
+                    &mut self.config,
+                );
                 false
             }
             other => {
@@ -292,6 +381,15 @@ impl UnifiedRenderState {
         self.viewport.set_world_bounds(world_rect);
         self.viewport.on_window_resize((new_width, new_height));
         self.view_dirty = true;
+        self.resize_pending = true;
+    }
+
+    /// Resume physics after resize if a resize completion is pending.
+    pub fn resume_after_resize_if_pending(&mut self) {
+        if self.resize_pending {
+            self.resize_pending = false;
+            self.physics.send_command(PhysicsCommand::ResumeAfterResize);
+        }
     }
 
     /// Apply a pan delta (in pixels) originating from a drag gesture.
@@ -352,14 +450,19 @@ impl UnifiedRenderState {
 
     /// Handle mouse button input event.
     ///
-    /// Processes mouse clicks and drags for pan, ball addition, and ball size cycling.
-    /// When the line segment tool is active, left-click starts/ends drawing.
+    /// Dispatches to the active [`OperatorToolHandler`] for operator
+    /// interactions, then falls through to pan/ball/size-cycle input.
     /// Returns true if the action affects the viewport.
     pub fn handle_mouse_input_event(
         &mut self,
         button: winit::event::MouseButton,
         state: winit::event::ElementState,
     ) -> bool {
+        // On any mouse button release, check if we are waiting to resume after resize.
+        if state == winit::event::ElementState::Released {
+            self.resume_after_resize_if_pending();
+        }
+
         let world_pos = self.input.cursor_pos();
         let screen_pos = self.input.cursor_pos_px();
         let pan_offset = self.viewport.pan_offset();
@@ -370,7 +473,6 @@ impl UnifiedRenderState {
             && let Some(icon_idx) = self.sidebar_icon_at(screen_pos)
         {
             let tool = Self::operator_tool_for_icon(icon_idx);
-            // Toggle off if already selected, otherwise switch
             let new_tool = if self.active_tool == tool {
                 OperatorTool::None
             } else {
@@ -381,152 +483,37 @@ impl UnifiedRenderState {
             return true;
         }
 
-        // Handle line segment tool interactions
-        if self.active_tool == OperatorTool::LineSegment
+        // Ball operator tool: left release places one ball at cursor.
+        if self.active_tool == OperatorTool::Ball
             && button == winit::event::MouseButton::Left
+            && state == winit::event::ElementState::Released
         {
-            match state {
-                winit::event::ElementState::Pressed => {
-                    // Try to grab an existing endpoint first
-                    if let Some((seg_id, move_start)) = self.find_near_endpoint(world_pos) {
-                        self.line_draw_state = LineSegmentDrawState::MovingEndpoint {
-                            segment_id: seg_id,
-                            move_start,
-                        };
-                    } else {
-                        let snapped = self.snap_world_pos(world_pos);
-                        self.line_draw_state = LineSegmentDrawState::Drawing { start: snapped };
-                    }
-                    self.view_dirty = true;
-                    return true;
-                }
-                winit::event::ElementState::Released => {
-                    match self.line_draw_state {
-                        LineSegmentDrawState::Drawing { start } => {
-                            let end = self.snap_world_pos(world_pos);
-                            // Only commit if the segment has meaningful length
-                            if start.distance_squared(&end) > 0.01 {
-                                let action = InputAction::OperatorAction(Box::new(
-                                    operator_command::AddLineSegment { start, end },
-                                ));
-                                self.process_action(action, None);
-                            }
-                        }
-                        LineSegmentDrawState::MovingEndpoint {
-                            segment_id,
-                            move_start,
-                        } => {
-                            let snapped = self.snap_world_pos(world_pos);
-                            let action = InputAction::OperatorAction(Box::new(
-                                operator_command::MoveLineSegmentEndpoint {
-                                    segment_id,
-                                    new_pos: snapped,
-                                    move_start,
-                                },
-                            ));
-                            self.process_action(action, None);
-                        }
-                        LineSegmentDrawState::Idle => {}
-                    }
-                    self.line_draw_state = LineSegmentDrawState::Idle;
-                    self.view_dirty = true;
-                    return true;
-                }
-            }
+            return self.process_action(
+                InputAction::AddBall {
+                    position: world_pos,
+                },
+                None,
+            );
         }
 
-        // Handle valve segment tool interactions
-        if self.active_tool == OperatorTool::ValveSegment
-            && button == winit::event::MouseButton::Left
-        {
-            match state {
-                winit::event::ElementState::Pressed => {
-                    // First, check if clicking on an existing valve (toggle/drag)
-                    if let Some((valve_id, line_id, t_start, t_end, _is_closed)) =
-                        self.find_valve_at(world_pos)
-                    {
-                        let t_half = (t_end - t_start) * 0.5;
-                        let t_center = (t_start + t_end) * 0.5;
-                        self.valve_draw_state = ValveDrawState::Moving {
-                            valve_id,
-                            line_id,
-                            t_half_width: t_half,
-                            t_center_at_press: t_center,
-                        };
-                    } else if let Some((line_id, t)) = self.find_line_at(world_pos) {
-                        // Starting a new valve on this line segment
-                        let t = Self::snap_t(t);
-                        self.valve_draw_state = ValveDrawState::Drawing {
-                            line_id,
-                            t_start: t,
-                        };
-                    }
-                    self.view_dirty = true;
-                    return true;
+        // Delegate to active tool handler
+        if let Some(handler) = &mut self.tool_handler {
+            let ctx = Self::make_tool_context_from(
+                self.last_snapshot.as_deref(),
+                &self.default_operator_snapshot,
+                &self.viewport,
+                self.cursor_world_pos,
+            );
+            let resp = handler.handle_mouse_button(button, state, world_pos, &ctx);
+            if resp.consumed {
+                if let Some(cmd) = resp.action {
+                    let action = InputAction::OperatorAction(cmd);
+                    self.process_action(action, None);
                 }
-                winit::event::ElementState::Released => {
-                    match self.valve_draw_state {
-                        ValveDrawState::Drawing { line_id, t_start } => {
-                            // Find where cursor is on the same line
-                            if let Some((hit_line, t_end)) = self.find_line_at(world_pos)
-                                && hit_line == line_id
-                            {
-                                let t_end = Self::snap_t(t_end);
-                                // Only commit if the valve has meaningful length
-                                if (t_start - t_end).abs() > 0.02 {
-                                    let action = InputAction::OperatorAction(Box::new(
-                                        operator_command::AddValveSegment {
-                                            line_id,
-                                            t_start,
-                                            t_end,
-                                            is_closed: true,
-                                        },
-                                    ));
-                                    self.process_action(action, None);
-                                }
-                            }
-                        }
-                        ValveDrawState::Moving {
-                            valve_id,
-                            line_id,
-                            t_half_width,
-                            t_center_at_press,
-                        } => {
-                            // Distinguish toggle (click) from drag (move) by
-                            // checking how far the cursor moved from the initial
-                            // parametric center recorded at press time.
-                            const T_MOVE_THRESHOLD: f32 = 0.03;
-                            let dragged = self.find_line_at(world_pos).filter(|(hit_line, t)| {
-                                *hit_line == line_id
-                                    && (*t - t_center_at_press).abs() > T_MOVE_THRESHOLD
-                            });
-
-                            if let Some((_, t_center)) = dragged {
-                                // Moved along the line — commit move
-                                let new_start = (t_center - t_half_width).clamp(0.0, 1.0);
-                                let new_end = (t_center + t_half_width).clamp(0.0, 1.0);
-                                let action = InputAction::OperatorAction(Box::new(
-                                    operator_command::MoveValveSegment {
-                                        valve_id,
-                                        t_start: new_start,
-                                        t_end: new_end,
-                                    },
-                                ));
-                                self.process_action(action, None);
-                            } else {
-                                // Click without meaningful drag — toggle
-                                let action = InputAction::OperatorAction(Box::new(
-                                    operator_command::ToggleValve { valve_id },
-                                ));
-                                self.process_action(action, None);
-                            }
-                        }
-                        ValveDrawState::Idle => {}
-                    }
-                    self.valve_draw_state = ValveDrawState::Idle;
+                if resp.view_dirty {
                     self.view_dirty = true;
-                    return true;
                 }
+                return true;
             }
         }
 
@@ -542,21 +529,32 @@ impl UnifiedRenderState {
     /// Handle cursor moved event.
     ///
     /// Updates cursor position and processes pan gestures.
-    /// When drawing a line segment, marks view dirty for ghost preview.
+    /// When an operator tool is active, marks view dirty so previews and
+    /// snap indicators update continuously.
     /// Returns true if the action affects the viewport.
     pub fn handle_cursor_moved_event(&mut self, x: f32, y: f32) -> bool {
         // Update cursor position using shared state logic
         self.update_cursor_world_pos(&[x, y]);
 
-        // Mark view dirty while drawing/moving a line segment so ghost
-        // preview updates, or when the line segment tool is selected
-        // (for snap indicator updates).
-        if !matches!(self.line_draw_state, LineSegmentDrawState::Idle)
-            || self.active_tool == OperatorTool::LineSegment
-            || !matches!(self.valve_draw_state, ValveDrawState::Idle)
-            || self.active_tool == OperatorTool::ValveSegment
-        {
-            self.view_dirty = true;
+        // Delegate to active tool handler.
+        if let Some(handler) = &mut self.tool_handler {
+            let world_pos = self.input.cursor_pos();
+            let ctx = Self::make_tool_context_from(
+                self.last_snapshot.as_deref(),
+                &self.default_operator_snapshot,
+                &self.viewport,
+                self.cursor_world_pos,
+            );
+            let resp = handler.handle_cursor_move(world_pos, &ctx);
+            if resp.consumed {
+                if let Some(cmd) = resp.action {
+                    let action = InputAction::OperatorAction(cmd);
+                    self.process_action(action, None);
+                }
+                if resp.view_dirty {
+                    self.view_dirty = true;
+                }
+            }
         }
 
         if let Some(action) = self.input.handle_mouse_motion(x, y) {
@@ -572,10 +570,43 @@ impl UnifiedRenderState {
 
     /// Handle mouse wheel event.
     ///
-    /// Processes zoom in/out and view reset actions.
+    /// Delegates to the active tool handler first. If the tool consumes
+    /// the scroll (e.g. source sphere speed/period adjustment), the
+    /// event stops. Otherwise falls through to zoom.
     /// Returns true if the action affects the viewport.
     pub fn handle_mouse_wheel_event(&mut self, delta: winit::event::MouseScrollDelta) -> bool {
         let cursor_pos = self.input.cursor_pos();
+
+        // Delegate to active tool handler
+        if let Some(handler) = &mut self.tool_handler {
+            let scroll_y = scroll_y_from_delta(delta);
+            if scroll_y.abs() > f32::EPSILON {
+                let ctrl_held = self
+                    .input
+                    .is_key_pressed(winit::keyboard::KeyCode::ControlLeft)
+                    || self
+                        .input
+                        .is_key_pressed(winit::keyboard::KeyCode::ControlRight);
+                let fallback = &self.default_operator_snapshot;
+                let ctx = Self::make_tool_context_from(
+                    self.last_snapshot.as_deref(),
+                    fallback,
+                    &self.viewport,
+                    self.cursor_world_pos,
+                );
+                let resp = handler.handle_scroll(scroll_y, cursor_pos, ctrl_held, &ctx);
+                if resp.consumed {
+                    if let Some(cmd) = resp.action {
+                        let action = InputAction::OperatorAction(cmd);
+                        self.process_action(action, None);
+                    }
+                    if resp.view_dirty {
+                        self.view_dirty = true;
+                    }
+                    return true;
+                }
+            }
+        }
 
         if let Some(action) = self.input.handle_mouse_wheel(delta, cursor_pos) {
             match &action {
@@ -675,7 +706,6 @@ mod tests {
             InputAction::CyclePlotContent,
             InputAction::ToggleEnergyWindow,
             InputAction::ToggleCutoffRings,
-            InputAction::DisableCursor,
         ];
         for action in actions {
             let label = format!("{:?}", action);
