@@ -39,6 +39,7 @@ impl MainContent {
             line_segments: Default::default(),
             valve_segments: Default::default(),
             source_spheres: Default::default(),
+            thermostats: Default::default(),
         })
     }
 }

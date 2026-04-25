@@ -7,7 +7,8 @@ use crate::application::thermo_field::ThermoFieldHistory;
 use crate::objects2d::ball_cell::cell_grid::CellGrid;
 use crate::objects2d::ball_impl::{Ball2D, BallPhysics, ForceResult};
 use crate::objects2d::{
-    LineSegmentCollection, Rect, SourceSphereCollection, ValveCollection, Vec2D, VerboseInfoMode,
+    LineSegmentCollection, Rect, SourceSphereCollection, ThermostatCollection, ValveCollection,
+    Vec2D, VerboseInfoMode,
 };
 use arc_swap::ArcSwapOption;
 use std::sync::Arc;
@@ -49,6 +50,8 @@ pub struct MainContent {
     pub(crate) valve_segments: ValveCollection,
     /// Source spheres that emit balls into the simulation.
     pub(crate) source_spheres: SourceSphereCollection,
+    /// Nosé-Hoover thermostats that control local regions.
+    pub(crate) thermostats: ThermostatCollection,
 }
 
 pub struct StatsAccumulator {
@@ -68,6 +71,7 @@ mod operators;
 mod sim;
 mod snapshot;
 mod source_spheres;
+mod thermostats;
 mod valves;
 mod verbose;
 

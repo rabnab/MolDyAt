@@ -20,7 +20,7 @@
 //! - **Immutability**: Snapshots are immutable after creation, so no need for
 //!   partial field updates that might benefit from SoA.
 
-use crate::objects2d::{SimLineSegment, SimSourceSphere, ValveSegment, Vec2D};
+use crate::objects2d::{SimLineSegment, SimSourceSphere, SimThermostat, ValveSegment, Vec2D};
 use std::time::Instant;
 
 use crate::application::thermo_field::ThermoGrid;
@@ -38,6 +38,8 @@ pub struct OperatorSnapshot {
     pub valve_segments: Vec<ValveSegment>,
     /// Source spheres that emit balls into the simulation.
     pub source_spheres: Vec<SimSourceSphere>,
+    /// Thermostats that control local spherical regions.
+    pub thermostats: Vec<SimThermostat>,
 }
 
 /// Distance threshold (world units) used by [`OperatorSnapshot::is_near_any_operator`]
@@ -76,6 +78,13 @@ impl OperatorSnapshot {
         // Source spheres — centre distance.
         for sphere in &self.source_spheres {
             if pos.distance_squared(&sphere.center) <= threshold_sq {
+                return true;
+            }
+        }
+
+        // Thermostats — centre distance.
+        for thermostat in &self.thermostats {
+            if pos.distance_squared(&thermostat.position) <= threshold_sq {
                 return true;
             }
         }

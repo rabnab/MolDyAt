@@ -30,6 +30,7 @@ use super::operator_tool_handler::{
 };
 use super::physics_coordinator::PhysicsCoordinator;
 use super::source_sphere_tool::SourceSphereToolHandler;
+use super::thermostat_tool::ThermostatToolHandler;
 use super::valve_segment_tool::ValveSegmentToolHandler;
 
 use crate::application::physics_thread::PhysicsCommand;
@@ -262,7 +263,8 @@ impl UnifiedRenderState {
             OperatorTool::LineSegment => Some(Box::new(LineSegmentToolHandler::new())),
             OperatorTool::ValveSegment => Some(Box::new(ValveSegmentToolHandler::new())),
             OperatorTool::SourceSphere => Some(Box::new(SourceSphereToolHandler::new())),
-            OperatorTool::Thermostat | OperatorTool::None => None,
+            OperatorTool::Thermostat => Some(Box::new(ThermostatToolHandler::new())),
+            OperatorTool::None => None,
         }
     }
 

@@ -17,6 +17,7 @@ use super::source_sphere_pipeline::SourceSpherePipeline;
 use super::text_pipeline::TextPipeline;
 use super::thermo_heatmap_pipeline::ThermoHeatmapPipeline;
 use super::thermo_value_pipeline::ThermoValueOverlayPipeline;
+use super::thermostat_label_pipeline::ThermostatLabelPipeline;
 use super::wgpu_context::WgpuContext;
 use rust_thermo_core::application::AppResult;
 use rust_thermo_core::application::renderer_snapshot::{CellGridSpec, RendererSnapshot};
@@ -40,6 +41,7 @@ pub struct PipelineHandles {
     pub line: PipelineHandle,
     pub ball: PipelineHandle,
     pub crosshair: PipelineHandle,
+    pub thermostat_labels: PipelineHandle,
     pub text: PipelineHandle,
     pub source_sphere: PipelineHandle,
 }
@@ -57,7 +59,7 @@ pub struct WgpuPipelines {
 impl WgpuPipelines {
     /// Create all rendering pipelines and register them in the graph.
     ///
-    /// Execution order: sidebar → frame → grid → thermo_heatmap → lines → source_spheres → balls → crosshair → text.
+    /// Execution order: sidebar → frame → grid → thermo_heatmap → lines → source_spheres → balls → crosshair → thermostat_labels → text.
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat) -> Self {
         let mut graph = RenderGraph::new();
 
@@ -83,6 +85,8 @@ impl WgpuPipelines {
             format,
             CROSSHAIR_SHADER,
         )));
+        let thermostat_labels =
+            graph.add_pipeline(Box::new(ThermostatLabelPipeline::new(device, format)));
         let text = graph.add_pipeline(Box::new(TextPipeline::new(device, format)));
 
         log::debug!(
@@ -101,6 +105,7 @@ impl WgpuPipelines {
                 line,
                 ball,
                 crosshair,
+                thermostat_labels,
                 text,
                 source_sphere,
             },

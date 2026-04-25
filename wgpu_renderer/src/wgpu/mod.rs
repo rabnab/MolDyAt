@@ -24,6 +24,7 @@ mod source_sphere_pipeline;
 mod text_pipeline;
 mod thermo_heatmap_pipeline;
 mod thermo_value_pipeline;
+mod thermostat_label_pipeline;
 mod wgpu_context;
 mod wgpu_input;
 mod wgpu_pipelines;

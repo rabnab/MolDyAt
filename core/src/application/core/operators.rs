@@ -12,11 +12,12 @@ impl MainContent {
     /// Return mutable references to every operator collection.
     ///
     /// New operator types extend this list.
-    fn operator_collections_mut(&mut self) -> [&mut dyn OperatorCollection; 3] {
+    fn operator_collections_mut(&mut self) -> [&mut dyn OperatorCollection; 4] {
         [
             &mut self.line_segments,
             &mut self.valve_segments,
             &mut self.source_spheres,
+            &mut self.thermostats,
         ]
     }
 

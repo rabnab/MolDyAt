@@ -137,3 +137,63 @@ impl OperatorCommand for AdjustSourceSphereEmitPeriod {
         content.adjust_source_sphere_emit_period(self.sphere_id, self.delta_steps);
     }
 }
+
+// ── Thermostat commands ─────────────────────────────────────────────
+
+#[derive(Debug)]
+pub struct PlaceThermostat {
+    pub position: Vec2D,
+}
+
+impl OperatorCommand for PlaceThermostat {
+    fn execute(self: Box<Self>, content: &mut MainContent) {
+        content.add_thermostat(self.position);
+    }
+}
+
+#[derive(Debug)]
+pub struct ToggleThermostat {
+    pub thermostat_id: usize,
+}
+
+impl OperatorCommand for ToggleThermostat {
+    fn execute(self: Box<Self>, content: &mut MainContent) {
+        content.toggle_thermostat(self.thermostat_id);
+    }
+}
+
+#[derive(Debug)]
+pub struct MoveThermostat {
+    pub thermostat_id: usize,
+    pub new_pos: Vec2D,
+}
+
+impl OperatorCommand for MoveThermostat {
+    fn execute(self: Box<Self>, content: &mut MainContent) {
+        content.move_thermostat(self.thermostat_id, self.new_pos);
+    }
+}
+
+#[derive(Debug)]
+pub struct AdjustThermostatTargetTemperature {
+    pub thermostat_id: usize,
+    pub delta_steps: f32,
+}
+
+impl OperatorCommand for AdjustThermostatTargetTemperature {
+    fn execute(self: Box<Self>, content: &mut MainContent) {
+        content.adjust_thermostat_target_temperature(self.thermostat_id, self.delta_steps);
+    }
+}
+
+#[derive(Debug)]
+pub struct AdjustThermostatRadius {
+    pub thermostat_id: usize,
+    pub delta_steps: f32,
+}
+
+impl OperatorCommand for AdjustThermostatRadius {
+    fn execute(self: Box<Self>, content: &mut MainContent) {
+        content.adjust_thermostat_radius(self.thermostat_id, self.delta_steps);
+    }
+}

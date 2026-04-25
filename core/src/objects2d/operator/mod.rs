@@ -14,11 +14,16 @@
 
 mod line_segment_collection;
 mod source_sphere;
+mod thermostat;
 mod valve_collection;
 
 pub use line_segment_collection::LineSegmentCollection;
 pub use source_sphere::{
     EMISSION_SPEED_STEP, SOURCE_SPHERE_RADIUS, SimSourceSphere, SourceSphereCollection,
+};
+pub use thermostat::{
+    DEFAULT_THERMOSTAT_RADIUS, SimThermostat, THERMOSTAT_CHAIN_MAX, THERMOSTAT_CHAIN_MIN,
+    THERMOSTAT_RADIUS_STEP, THERMOSTAT_TARGET_TEMP_STEP, ThermostatCollection,
 };
 pub use valve_collection::ValveCollection;
 
