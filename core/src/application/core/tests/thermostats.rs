@@ -1,6 +1,7 @@
 use super::DT_GOAL;
 use crate::application::MainContent;
 use crate::application::core::StatsAccumulator;
+use crate::application::thermo_field::LocalKineticStats;
 use crate::objects2d::ball_impl::BallFactory;
 use crate::objects2d::{OperatorCollection, OperatorState, Rect, Vec2D};
 
@@ -22,6 +23,19 @@ fn zeroed_stats() -> StatsAccumulator {
 fn add_ball(mc: &mut MainContent, pos: Vec2D, velocity: Vec2D) {
     let factory = BallFactory::new();
     mc.add_candidate_to_vec(factory.create_massive_with_velocity(pos, velocity));
+}
+
+fn add_ball_with_size(mc: &mut MainContent, pos: Vec2D, velocity: Vec2D, size_idx: usize) {
+    let factory = BallFactory::new();
+    mc.add_candidate_to_vec(factory.create_with_size_and_velocity(pos, size_idx, velocity));
+}
+
+fn cluster_kinetic_stats(mc: &MainContent) -> LocalKineticStats {
+    let mut stats = LocalKineticStats::new();
+    for ball in &mc.balls {
+        stats.add_ball(ball);
+    }
+    stats
 }
 
 #[test]
@@ -115,6 +129,68 @@ fn rigid_bucket_drift_is_preserved() {
             .abs()
             < 1e-6
     );
+}
+
+#[test]
+fn hot_thermostat_heats_cold_cluster_without_changing_com_drift() {
+    let mut mc = make_content();
+    mc.add_thermostat(Vec2D::new(5.0, 0.0));
+    let thermostat_id = mc.thermostats.thermostats()[0].id;
+    mc.toggle_thermostat(thermostat_id);
+    let thermostat = mc.thermostats.find_mut(thermostat_id).unwrap();
+    thermostat.target_temperature = 1.0;
+    thermostat.radius = 12.0;
+
+    // Ten equal-mass particles form a cold cluster with T = 0.25 in the
+    // local COM frame while the full cluster drifts toward the thermostat
+    // center. Five +u and five -u thermal velocities give zero thermal COM and
+    // `sum |u_i|^2 = 10 * u^2 = 4.5`, which matches T = 4.5 / (2 * (10 - 1)).
+    let drift_velocity = Vec2D::new(0.8, 0.0);
+    let rel_speed = 0.45_f32.sqrt();
+    let positions = [
+        Vec2D::new(-3.0, 1.8),
+        Vec2D::new(-2.0, 1.8),
+        Vec2D::new(-1.0, 1.8),
+        Vec2D::new(0.0, 1.8),
+        Vec2D::new(1.0, 1.8),
+        Vec2D::new(-3.0, -1.8),
+        Vec2D::new(-2.0, -1.8),
+        Vec2D::new(-1.0, -1.8),
+        Vec2D::new(0.0, -1.8),
+        Vec2D::new(1.0, -1.8),
+    ];
+
+    for (idx, pos) in positions.into_iter().enumerate() {
+        let thermal_velocity = if idx < 5 {
+            Vec2D::new(rel_speed, 0.0)
+        } else {
+            Vec2D::new(-rel_speed, 0.0)
+        };
+        add_ball_with_size(&mut mc, pos, drift_velocity + thermal_velocity, 0);
+    }
+
+    assert_eq!(mc.balls.len(), 10);
+
+    let initial_stats = cluster_kinetic_stats(&mc);
+    let initial_temp = initial_stats.temperature().unwrap();
+    let initial_v_com = initial_stats.center_of_mass_velocity().unwrap();
+
+    assert!((initial_temp - 0.25).abs() < 1e-5);
+    assert!((initial_v_com.x - drift_velocity.x).abs() < 1e-6);
+    assert!(initial_v_com.y.abs() < 1e-6);
+
+    let mut stats = zeroed_stats();
+    for _ in 0..200 {
+        mc.apply_thermostats(DT_GOAL, &mut stats);
+    }
+
+    let final_stats = cluster_kinetic_stats(&mc);
+    let final_temp = final_stats.temperature().unwrap();
+    let final_v_com = final_stats.center_of_mass_velocity().unwrap();
+
+    assert!(final_temp > initial_temp);
+    assert!((final_v_com.x - initial_v_com.x).abs() < 1e-5);
+    assert!((final_v_com.y - initial_v_com.y).abs() < 1e-5);
 }
 
 #[test]
