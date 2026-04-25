@@ -102,14 +102,11 @@ impl MainContent {
         let mut velocity_changed = false;
 
         for bucket in &buckets {
-            let local_temp = bucket.kinetic.temperature();
-            let should_apply =
-                if let Some(thermostat) = self.thermostats.find_mut(bucket.thermostat_id) {
-                    thermostat.current_local_temp = local_temp.unwrap_or(f32::NAN);
-                    local_temp.is_some()
-                } else {
-                    false
-                };
+            let should_apply = bucket.kinetic.temperature().is_some();
+
+            if let Some(thermostat) = self.thermostats.find_mut(bucket.thermostat_id) {
+                thermostat.current_local_temp = f32::NAN;
+            }
 
             if !should_apply {
                 continue;
@@ -117,6 +114,13 @@ impl MainContent {
 
             if self.apply_thermostat_bucket(bucket, dt) {
                 velocity_changed = true;
+            }
+
+            let measured_temp = self
+                .measure_bucket_temperature(&bucket.ball_indices)
+                .unwrap_or(f32::NAN);
+            if let Some(thermostat) = self.thermostats.find_mut(bucket.thermostat_id) {
+                thermostat.current_local_temp = measured_temp;
             }
         }
 
@@ -192,6 +196,14 @@ impl MainContent {
         }
 
         !bucket.ball_indices.is_empty()
+    }
+
+    fn measure_bucket_temperature(&self, ball_indices: &[usize]) -> Option<f32> {
+        let mut kinetic = LocalKineticStats::new();
+        for &ball_idx in ball_indices {
+            kinetic.add_ball(&self.balls[ball_idx]);
+        }
+        kinetic.temperature()
     }
 
     fn refresh_velocity_stats(&self, stats_accumulator: &mut StatsAccumulator) {

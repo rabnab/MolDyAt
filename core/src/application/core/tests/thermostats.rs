@@ -137,6 +137,14 @@ fn zero_target_temperature_freezes_owned_balls() {
     assert_eq!(mc.balls[0].v, Vec2D::zero());
     assert_eq!(mc.balls[1].v, Vec2D::zero());
     assert_eq!(mc.balls[2].v, far_velocity_before);
+    assert!(
+        mc.thermostats
+            .find(thermostat_id)
+            .unwrap()
+            .current_local_temp
+            .abs()
+            < 1e-6
+    );
 }
 
 #[test]
