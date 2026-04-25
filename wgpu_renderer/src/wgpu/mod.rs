@@ -29,6 +29,7 @@ mod wgpu_context;
 mod wgpu_input;
 mod wgpu_pipelines;
 mod wgpu_window;
+mod world_text;
 
 #[cfg(test)]
 mod tests;

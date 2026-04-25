@@ -41,7 +41,6 @@ pub struct PipelineHandles {
     pub line: PipelineHandle,
     pub ball: PipelineHandle,
     pub crosshair: PipelineHandle,
-    pub thermostat_labels: PipelineHandle,
     pub text: PipelineHandle,
     pub source_sphere: PipelineHandle,
 }
@@ -59,7 +58,7 @@ pub struct WgpuPipelines {
 impl WgpuPipelines {
     /// Create all rendering pipelines and register them in the graph.
     ///
-    /// Execution order: sidebar → frame → grid → thermo_heatmap → lines → source_spheres → balls → crosshair → thermostat_labels → text.
+    /// Execution order: sidebar → frame → grid → thermo_heatmap → lines → source_spheres → balls → crosshair → thermostat labels → text.
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat) -> Self {
         let mut graph = RenderGraph::new();
 
@@ -85,8 +84,7 @@ impl WgpuPipelines {
             format,
             CROSSHAIR_SHADER,
         )));
-        let thermostat_labels =
-            graph.add_pipeline(Box::new(ThermostatLabelPipeline::new(device, format)));
+        graph.add_pipeline(Box::new(ThermostatLabelPipeline::new(device, format)));
         let text = graph.add_pipeline(Box::new(TextPipeline::new(device, format)));
 
         log::debug!(
@@ -105,7 +103,6 @@ impl WgpuPipelines {
                 line,
                 ball,
                 crosshair,
-                thermostat_labels,
                 text,
                 source_sphere,
             },

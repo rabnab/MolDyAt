@@ -9,6 +9,8 @@ struct VertexOutput {
 var text_tex: texture_2d<f32>;
 @group(0) @binding(1)
 var text_sampler: sampler;
+@group(0) @binding(2)
+var<uniform> text_color: vec4<f32>;
 
 @vertex
 fn vs_main(@location(0) pos: vec2<f32>, @location(1) uv: vec2<f32>) -> VertexOutput {
@@ -24,6 +26,5 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     if alpha < 0.01 {
         discard;
     }
-    // Light gray text
-    return vec4<f32>(0.0, 0.0, 0.0, alpha);
+    return vec4<f32>(text_color.rgb, text_color.a * alpha);
 }
