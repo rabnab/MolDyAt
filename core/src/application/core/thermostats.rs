@@ -155,6 +155,9 @@ impl MainContent {
         let Some(local_temp) = bucket.kinetic.temperature() else {
             return false;
         };
+        let Some(v_com) = bucket.kinetic.center_of_mass_velocity() else {
+            return false;
+        };
 
         let Some(thermostat) = self.thermostats.find_mut(bucket.thermostat_id) else {
             return false;
@@ -180,7 +183,12 @@ impl MainContent {
         let friction = dt * *xi;
 
         for &ball_idx in &bucket.ball_indices {
-            self.balls[ball_idx].v *= 1.0 - friction;
+            // Temperature is measured in the bucket COM frame, so only the
+            // peculiar velocity should be thermostatted. Preserving `v_com`
+            // avoids spuriously slowing or accelerating a rigidly drifting
+            // cluster that has zero local thermal motion.
+            let peculiar_velocity = self.balls[ball_idx].v - &v_com;
+            self.balls[ball_idx].v = v_com.add_scaled(&peculiar_velocity, 1.0 - friction);
         }
 
         !bucket.ball_indices.is_empty()

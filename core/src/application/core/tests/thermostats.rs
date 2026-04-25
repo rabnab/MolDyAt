@@ -89,6 +89,35 @@ fn fewer_than_two_balls_is_noop() {
 }
 
 #[test]
+fn rigid_bucket_drift_is_preserved() {
+    let mut mc = make_content();
+    mc.add_thermostat(Vec2D::new(0.0, 0.0));
+    let thermostat_id = mc.thermostats.thermostats()[0].id;
+    mc.toggle_thermostat(thermostat_id);
+
+    // Two balls with identical velocities have zero local temperature in the
+    // bucket COM frame. A correct thermostat must leave this rigid drift
+    // unchanged instead of heating or damping the absolute motion.
+    let drift_velocity = Vec2D::new(0.7, -0.3);
+    add_ball(&mut mc, Vec2D::new(-0.5, 0.0), drift_velocity);
+    add_ball(&mut mc, Vec2D::new(0.5, 0.0), drift_velocity);
+
+    let mut stats = zeroed_stats();
+    mc.apply_thermostats(DT_GOAL, &mut stats);
+
+    assert_eq!(mc.balls[0].v, drift_velocity);
+    assert_eq!(mc.balls[1].v, drift_velocity);
+    assert!(
+        mc.thermostats
+            .find(thermostat_id)
+            .unwrap()
+            .current_local_temp
+            .abs()
+            < 1e-6
+    );
+}
+
+#[test]
 fn zero_target_temperature_freezes_owned_balls() {
     let mut mc = make_content();
     mc.add_thermostat(Vec2D::new(0.0, 0.0));

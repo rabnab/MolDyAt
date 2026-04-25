@@ -30,14 +30,37 @@ impl LocalKineticStats {
         self.count
     }
 
+    /// Center-of-mass velocity for the accumulated region.
+    ///
+    /// The thermostat measures temperature in the local COM frame, so callers
+    /// that later modify velocities should use this velocity to isolate the
+    /// peculiar component `v - v_com` instead of damping the full drift motion.
+    pub fn center_of_mass_velocity(&self) -> Option<Vec2D> {
+        if self.count < 2 || self.sum_m <= f32::EPSILON {
+            return None;
+        }
+
+        Some(self.sum_mv.scaled(1.0 / self.sum_m))
+    }
+
     /// Local temperature in the center-of-mass frame.
     pub fn temperature(&self) -> Option<f32> {
         if self.count < 2 || self.sum_m <= f32::EPSILON {
             return None;
         }
 
-        let n = self.count as f32;
-        Some((self.sum_mv2 - self.sum_mv.norm_sq() / self.sum_m) / (2.0 * n))
+        // Removing the 2D center-of-mass motion leaves 2 * (N - 1) thermal
+        // degrees of freedom. The numerator is `sum m |v - v_com|^2`, i.e.
+        // twice the thermal kinetic energy in reduced LJ units.
+        let thermal_dof = 2.0 * (self.count as f32 - 1.0);
+        if thermal_dof <= f32::EPSILON {
+            return None;
+        }
+
+        // COM subtraction can leave a tiny negative/positive residue from
+        // floating-point cancellation for rigidly drifting buckets.
+        let thermal_speed_sq = (self.sum_mv2 - self.sum_mv.norm_sq() / self.sum_m).max(0.0);
+        Some(thermal_speed_sq / thermal_dof)
     }
 }
 

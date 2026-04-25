@@ -1,4 +1,5 @@
 use crate::application::core::StatsAccumulator;
+use crate::application::thermo_field::LocalKineticStats;
 use crate::objects2d::ball_impl::Ball2D;
 use crate::objects2d::{Rect, Vec2D};
 use std::collections::VecDeque;
@@ -195,44 +196,34 @@ impl SimStats {
     /// * `v_balls` - Slice of all balls in simulation
     #[inline]
     pub(crate) fn calculate_temperature_from_balls(&mut self, v_balls: &[Ball2D]) {
-        let mut sum_rel_kin_doubled: f32 = 0.;
-        let mut max_neighbours: usize = 0;
-        let vcom_x = self.v_com.x;
-        let vcom_y = self.v_com.y;
+        let mut kinetic = LocalKineticStats::new();
+        let mut max_neighbours = 0;
 
         for cur in v_balls {
-            let v_abs = &cur.v;
-            let v_rel_x = v_abs.x - vcom_x;
-            let v_rel_y = v_abs.y - vcom_y;
-            sum_rel_kin_doubled += cur.mass * (v_rel_x * v_rel_x + v_rel_y * v_rel_y);
+            kinetic.add_ball(cur);
             max_neighbours = max_neighbours.max(cur.hood.get_number_of_neighbors());
         }
+
         self.max_neighbours = max_neighbours;
-        self.temperature = sum_rel_kin_doubled / 3.0 / (v_balls.len() as f32);
+        // Keep the global temperature definition consistent with thermostats and
+        // thermo-field overlays by using the shared COM-subtracted accumulator.
+        self.temperature = kinetic.temperature().unwrap_or(0.0);
     }
 
     // alternative faster temperature calculation that avoids Rc<RefCell<...>>
     // Use only if callers can provide a slice of Ball2D (borrowed) to avoid runtime borrow checks.
     #[inline]
     pub(crate) fn calculate_temperature_fast(&mut self, v_balls: &[&Ball2D]) {
-        let mut sum_rel_kin_doubled: f32 = 0.;
-        let mut max_neighbours: usize = 0;
-        let vcom_x = self.v_com.x;
-        let vcom_y = self.v_com.y;
+        let mut kinetic = LocalKineticStats::new();
+        let mut max_neighbours = 0;
 
         for cur in v_balls {
-            let v_abs = &cur.v;
-            let v_rel_x = v_abs.x - vcom_x;
-            let v_rel_y = v_abs.y - vcom_y;
-            sum_rel_kin_doubled += cur.mass * (v_rel_x * v_rel_x + v_rel_y * v_rel_y);
+            kinetic.add_ball(cur);
             max_neighbours = max_neighbours.max(cur.hood.get_number_of_neighbors());
         }
+
         self.max_neighbours = max_neighbours;
-        // For 2D: (1/2) * m * v² per degree of freedom
-        // Total kinetic energy in COM application = (1/2) * sum(m * v_rel²)
-        // Temperature = (2 * KE) / (2 * N * k_B) = KE / (N * k_B)
-        //self.temperature = sum_rel_kin_doubled / 3.0 / (v_balls.len() as f32);
-        self.temperature = sum_rel_kin_doubled / 2.0 / (v_balls.len() as f32);
+        self.temperature = kinetic.temperature().unwrap_or(0.0);
     }
 
     pub(crate) fn get_update_hood_cnt(&self) -> usize {
@@ -284,6 +275,13 @@ impl Default for SimStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::objects2d::ball_impl::Ball2D;
+
+    fn make_ball(id: usize, velocity: Vec2D) -> Ball2D {
+        let mut ball = Ball2D::new(id, Vec2D::zero(), (0, 1.0));
+        ball.v = velocity;
+        ball
+    }
     //use float_cmp::approx_eq;
 
     #[test]
@@ -334,5 +332,32 @@ mod tests {
         // Verify getters don't modify state
         assert_eq!(stats.get_kinetic_energy(), 10.0);
         assert_eq!(stats.get_potential_energy(), 20.0);
+    }
+
+    #[test]
+    fn test_calculate_temperature_matches_shared_com_definition() {
+        let mut stats = SimStats::default();
+        let balls = vec![
+            make_ball(0, Vec2D::new(1.0, 0.0)),
+            make_ball(1, Vec2D::new(-1.0, 0.0)),
+        ];
+
+        stats.calculate_temperature_from_balls(&balls);
+
+        assert!((stats.temperature - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_calculate_temperature_fast_matches_shared_com_definition() {
+        let mut stats = SimStats::default();
+        let balls = [
+            make_ball(0, Vec2D::new(1.0, 0.0)),
+            make_ball(1, Vec2D::new(-1.0, 0.0)),
+        ];
+        let refs = balls.iter().collect::<Vec<_>>();
+
+        stats.calculate_temperature_fast(&refs);
+
+        assert!((stats.temperature - 1.0).abs() < 1e-5);
     }
 }
