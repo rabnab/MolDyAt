@@ -10,7 +10,6 @@ use super::wgpu_pipelines::{WgpuPipelines, compute_view_proj};
 use crate::wgpu::MARGINS;
 use rust_thermo_core::application::MainContent;
 use rust_thermo_core::graphics::renderer::ViewportTransform;
-use rust_thermo_core::graphics::renderer::event_loop::KeyCode;
 use rust_thermo_core::graphics::renderer::event_loop::UnifiedRenderState;
 use rust_thermo_core::objects2d::Rect;
 use rust_thermo_core::objects2d::ball_impl::BallFactory;
@@ -215,8 +214,8 @@ impl ApplicationHandler<UserEvent> for WgpuApp {
                     let view_proj = compute_view_proj(&snapshot.grid_spec, pan.x, pan.y, zoom);
 
                     // Update all pipelines from snapshot
-                    let ctrl_pressed = state.input.is_key_pressed(KeyCode::ControlLeft)
-                        || state.input.is_key_pressed(KeyCode::ControlRight);
+                    let show_ball_outline = state.active_tool
+                        == rust_thermo_core::graphics::renderer::event_loop::OperatorTool::Ball;
                     let cursor_wp = (state.cursor_world_pos.x, state.cursor_world_pos.y);
                     let ball_count = snapshot.balls.len() as u32;
                     let operator_previews = state.operator_previews();
@@ -226,7 +225,7 @@ impl ApplicationHandler<UserEvent> for WgpuApp {
                         view_proj,
                         cursor_wp,
                         BallFactory::radius_for_size_idx(state.current_ball_size_idx),
-                        ctrl_pressed,
+                        show_ball_outline,
                         state.config.thermo_display,
                         operator_previews,
                     ) {

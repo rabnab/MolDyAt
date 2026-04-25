@@ -293,6 +293,9 @@ impl UnifiedRenderState {
             }
             InputAction::NextBallSize => {
                 self.next_ball_size();
+                if self.active_tool == OperatorTool::Ball {
+                    self.view_dirty = true;
+                }
                 false
             }
             InputAction::ToggleEnergyWindow => {
@@ -307,6 +310,8 @@ impl UnifiedRenderState {
                 }
                 self.active_tool = tool;
                 self.tool_handler = Self::handler_for_tool(tool);
+                self.config.draw_cursor = tool == OperatorTool::Ball;
+                self.view_dirty = true;
                 false
             }
             InputAction::AddBall { position } => {
@@ -319,7 +324,6 @@ impl UnifiedRenderState {
                     .map(|s| &s.operators)
                     .unwrap_or(&self.default_operator_snapshot);
                 if operators.is_near_any_operator(position) {
-                    self.config.disable_cursor();
                     return false;
                 }
                 process_action_common(
@@ -743,5 +747,67 @@ mod tests {
     /// that only exercise action-dispatch logic.
     fn make_disconnected_coordinator() -> PhysicsCoordinator {
         PhysicsCoordinator::new_disconnected()
+    }
+
+    fn build_test_state() -> UnifiedRenderState {
+        let energy_data: SharedEnergyData = Arc::new(Mutex::new(EnergyData::new()));
+        UnifiedRenderState {
+            input: InputHandler::new(),
+            physics: make_disconnected_coordinator(),
+            viewport: dummy_viewport(),
+            energy_manager: EnergyWindowManager::new(energy_data),
+            config: RendererConfig::default(),
+            view_dirty: false,
+            last_snapshot: None,
+            cursor_world_pos: Vec2D::zero(),
+            current_ball_size_idx: 2,
+            metrics: MetricsCollector::new(),
+            active_tool: OperatorTool::None,
+            tool_handler: None,
+            default_operator_snapshot: OperatorSnapshot::default(),
+            resize_pending: false,
+        }
+    }
+
+    #[test]
+    fn selecting_ball_tool_enables_cursor_preview_and_marks_view_dirty() {
+        let mut state = build_test_state();
+
+        let affects_view =
+            state.process_action(InputAction::SelectOperatorTool(OperatorTool::Ball), None);
+
+        assert!(!affects_view);
+        assert_eq!(state.active_tool, OperatorTool::Ball);
+        assert!(state.config.draw_cursor);
+        assert!(state.view_dirty);
+    }
+
+    #[test]
+    fn switching_away_from_ball_tool_disables_cursor_preview() {
+        let mut state = build_test_state();
+        state.active_tool = OperatorTool::Ball;
+        state.config.draw_cursor = true;
+
+        let affects_view = state.process_action(
+            InputAction::SelectOperatorTool(OperatorTool::LineSegment),
+            None,
+        );
+
+        assert!(!affects_view);
+        assert_eq!(state.active_tool, OperatorTool::LineSegment);
+        assert!(!state.config.draw_cursor);
+        assert!(state.view_dirty);
+    }
+
+    #[test]
+    fn next_ball_size_marks_view_dirty_when_ball_tool_is_active() {
+        let mut state = build_test_state();
+        state.active_tool = OperatorTool::Ball;
+
+        let affects_view = state.process_action(InputAction::NextBallSize, None);
+
+        assert!(!affects_view);
+        assert_eq!(state.current_ball_size_idx, 3);
+        assert!(state.view_dirty);
     }
 }

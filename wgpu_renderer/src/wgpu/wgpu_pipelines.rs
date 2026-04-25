@@ -119,7 +119,7 @@ impl WgpuPipelines {
         view_proj: [[f32; 4]; 4],
         cursor_world_pos: (f32, f32),
         current_ball_radius: f32,
-        ctrl_pressed: bool,
+        show_ball_outline: bool,
         thermo_display: ThermoDisplayMode,
         operator_previews: FramePreviews,
     ) -> AppResult {
@@ -133,7 +133,7 @@ impl WgpuPipelines {
             view_proj,
             cursor_world_pos,
             current_ball_radius,
-            ctrl_pressed,
+            show_ball_outline,
             window_size,
             margin,
             thermo_display,
