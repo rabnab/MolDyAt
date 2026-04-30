@@ -3,12 +3,14 @@
 //! Handles energy plot window creation, event handling, and data updates.
 
 use crate::application::renderer_snapshot::RendererSnapshot;
-use crate::graphics::energy_plot::{DisplayMode, EnergyPlotWindow, SharedEnergyData};
+use crate::graphics::energy_plot::{
+    DisplayMode, EnergyPlotWindow, SharedEnergyData, split_screen_layout_for_monitor,
+};
 use crate::graphics::renderer::event_loop::metrics::FrameMetrics;
 use winit::event::{ElementState, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::{KeyCode, PhysicalKey};
-use winit::window::WindowId;
+use winit::window::{Window, WindowId};
 
 /// Manages the energy plot window lifecycle and data updates.
 ///
@@ -59,14 +61,23 @@ impl EnergyWindowManager {
     /// If no window exists, creates one with default mode.
     /// If window exists and is open, cycles display mode.
     /// If window was closed, reopens with last mode.
-    pub fn toggle(&mut self, window_target: &ActiveEventLoop) {
+    pub fn toggle(&mut self, window_target: &ActiveEventLoop, main_window: Option<&Window>) {
+        let split_layout = main_window
+            .and_then(|window| window.current_monitor())
+            .or_else(|| window_target.primary_monitor())
+            .map(|monitor| split_screen_layout_for_monitor(&monitor));
+
         if self.window.is_none() {
             // Create and open energy window with default mode
             let mut window =
                 EnergyPlotWindow::new(self.energy_data.clone(), DisplayMode::default());
-            if let Err(e) = window.create(window_target) {
+            if let Err(e) = window.create(window_target, split_layout.map(|layout| layout.energy)) {
                 eprintln!("Failed to create energy window: {}", e);
                 return;
+            }
+            if let (Some(layout), Some(main_window)) = (split_layout, main_window) {
+                let _ = main_window.request_inner_size(layout.simulation.size);
+                main_window.set_outer_position(layout.simulation.position);
             }
             self.window = Some(window);
         } else if let Some(window) = &mut self.window {
@@ -78,9 +89,15 @@ impl EnergyWindowManager {
                 // Reopen if closed with last mode
                 let last_mode = window.get_display_mode();
                 let mut new_window = EnergyPlotWindow::new(self.energy_data.clone(), last_mode);
-                if let Err(e) = new_window.create(window_target) {
+                if let Err(e) =
+                    new_window.create(window_target, split_layout.map(|layout| layout.energy))
+                {
                     eprintln!("Failed to create energy window: {}", e);
                     return;
+                }
+                if let (Some(layout), Some(main_window)) = (split_layout, main_window) {
+                    let _ = main_window.request_inner_size(layout.simulation.size);
+                    main_window.set_outer_position(layout.simulation.position);
                 }
                 self.window = Some(new_window);
             }

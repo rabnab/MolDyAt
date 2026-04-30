@@ -287,6 +287,7 @@ impl UnifiedRenderState {
         &mut self,
         action: InputAction,
         window_target: Option<&winit::event_loop::ActiveEventLoop>,
+        main_window: Option<&winit::window::Window>,
     ) -> bool {
         match action {
             InputAction::ResetView => {
@@ -302,7 +303,7 @@ impl UnifiedRenderState {
             }
             InputAction::ToggleEnergyWindow => {
                 if let Some(target) = window_target {
-                    self.toggle_energy_window(target);
+                    self.toggle_energy_window(target, main_window);
                 }
                 false
             }
@@ -364,6 +365,7 @@ impl UnifiedRenderState {
     /// Updates the viewport **and** notifies the physics thread so the
     /// simulation world matches the new window dimensions.
     pub fn handle_resize(&mut self, new_width: f32, new_height: f32, margin_px: Margins) {
+        self.viewport.set_margins(margin_px);
         let world_rect = ViewportTransform::compute_world_bounds_from_window_size(
             new_width as u32,
             new_height as u32,
@@ -418,8 +420,12 @@ impl UnifiedRenderState {
     // ── Energy window helpers ────────────────────────────────────────
 
     /// Toggle or cycle the energy plot window.
-    pub fn toggle_energy_window(&mut self, window_target: &winit::event_loop::ActiveEventLoop) {
-        self.energy_manager.toggle(window_target);
+    pub fn toggle_energy_window(
+        &mut self,
+        window_target: &winit::event_loop::ActiveEventLoop,
+        main_window: Option<&winit::window::Window>,
+    ) {
+        self.energy_manager.toggle(window_target, main_window);
     }
 
     // ── Ball size helpers ────────────────────────────────────────────
@@ -485,7 +491,7 @@ impl UnifiedRenderState {
                 tool
             };
             let action = InputAction::SelectOperatorTool(new_tool);
-            self.process_action(action, None);
+            self.process_action(action, None, None);
             return true;
         }
 
@@ -498,6 +504,7 @@ impl UnifiedRenderState {
                 InputAction::AddBall {
                     position: world_pos,
                 },
+                None,
                 None,
             );
         }
@@ -514,7 +521,7 @@ impl UnifiedRenderState {
             if resp.consumed {
                 if let Some(cmd) = resp.action {
                     let action = InputAction::OperatorAction(cmd);
-                    self.process_action(action, None);
+                    self.process_action(action, None, None);
                 }
                 if resp.view_dirty {
                     self.view_dirty = true;
@@ -527,7 +534,7 @@ impl UnifiedRenderState {
             .input
             .handle_mouse_button(button, state, screen_pos, world_pos, pan_offset)
         {
-            return self.process_action(action, None);
+            return self.process_action(action, None, None);
         }
         false
     }
@@ -555,7 +562,7 @@ impl UnifiedRenderState {
             if resp.consumed {
                 if let Some(cmd) = resp.action {
                     let action = InputAction::OperatorAction(cmd);
-                    self.process_action(action, None);
+                    self.process_action(action, None, None);
                 }
                 if resp.view_dirty {
                     self.view_dirty = true;
@@ -568,7 +575,7 @@ impl UnifiedRenderState {
                 self.apply_pan_from_input(*delta);
                 return true;
             } else {
-                return self.process_action(action, None);
+                return self.process_action(action, None, None);
             }
         }
         false
@@ -604,7 +611,7 @@ impl UnifiedRenderState {
                 if resp.consumed {
                     if let Some(cmd) = resp.action {
                         let action = InputAction::OperatorAction(cmd);
-                        self.process_action(action, None);
+                        self.process_action(action, None, None);
                     }
                     if resp.view_dirty {
                         self.view_dirty = true;
@@ -618,20 +625,20 @@ impl UnifiedRenderState {
             match &action {
                 InputAction::ZoomIn { center } => {
                     self.zoom_at_point(center, 1.1);
-                    self.process_action(action, None);
+                    self.process_action(action, None, None);
                     return true;
                 }
                 InputAction::ZoomOut { center } => {
                     self.zoom_at_point(center, 1.0 / 1.1);
-                    self.process_action(action, None);
+                    self.process_action(action, None, None);
                     return true;
                 }
                 InputAction::ResetView => {
                     self.reset_view();
-                    self.process_action(action, None);
+                    self.process_action(action, None, None);
                     return true;
                 }
-                _ => return self.process_action(action, None),
+                _ => return self.process_action(action, None, None),
             }
         }
         false
@@ -775,8 +782,11 @@ mod tests {
     fn selecting_ball_tool_enables_cursor_preview_and_marks_view_dirty() {
         let mut state = build_test_state();
 
-        let affects_view =
-            state.process_action(InputAction::SelectOperatorTool(OperatorTool::Ball), None);
+        let affects_view = state.process_action(
+            InputAction::SelectOperatorTool(OperatorTool::Ball),
+            None,
+            None,
+        );
 
         assert!(!affects_view);
         assert_eq!(state.active_tool, OperatorTool::Ball);
@@ -793,6 +803,7 @@ mod tests {
         let affects_view = state.process_action(
             InputAction::SelectOperatorTool(OperatorTool::LineSegment),
             None,
+            None,
         );
 
         assert!(!affects_view);
@@ -806,7 +817,7 @@ mod tests {
         let mut state = build_test_state();
         state.active_tool = OperatorTool::Ball;
 
-        let affects_view = state.process_action(InputAction::NextBallSize, None);
+        let affects_view = state.process_action(InputAction::NextBallSize, None, None);
 
         assert!(!affects_view);
         assert_eq!(state.current_ball_size_idx, 3);

@@ -7,9 +7,8 @@
 use super::wgpu_context::WgpuContext;
 use super::wgpu_input::execute_input_action;
 use super::wgpu_pipelines::{WgpuPipelines, compute_view_proj};
-use crate::wgpu::MARGINS;
+use crate::wgpu::margins_for_scale_factor;
 use rust_thermo_core::application::MainContent;
-use rust_thermo_core::graphics::renderer::ViewportTransform;
 use rust_thermo_core::graphics::renderer::event_loop::UnifiedRenderState;
 use rust_thermo_core::objects2d::Rect;
 use rust_thermo_core::objects2d::ball_impl::BallFactory;
@@ -18,7 +17,7 @@ use winit::event_loop::EventLoopProxy;
 
 use winit::{
     application::ApplicationHandler,
-    dpi::PhysicalSize,
+    dpi::LogicalSize,
     event::{DeviceEvent, ElementState, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     keyboard::PhysicalKey,
@@ -92,8 +91,8 @@ impl WgpuApp {
 
         let window_attrs = Window::default_attributes()
             .with_title("Molecular Dynamics Simulation (WGPU)")
-            .with_inner_size(PhysicalSize::new(1280, 720))
-            .with_min_inner_size(PhysicalSize::new(400, 300));
+            .with_inner_size(LogicalSize::new(1280.0, 720.0))
+            .with_min_inner_size(LogicalSize::new(320.0, 240.0));
         let window = Arc::new(
             event_loop
                 .create_window(window_attrs)
@@ -117,6 +116,7 @@ impl WgpuApp {
             .application
             .take()
             .expect("Application state already consumed");
+        let margins = margins_for_scale_factor(window.scale_factor());
 
         let proxy = Arc::new(self.proxy.clone());
         let wakeup_fn = move || {
@@ -129,7 +129,7 @@ impl WgpuApp {
             application,
             initial_world_bounds,
             window_size,
-            MARGINS,
+            margins,
             Box::new(wakeup_fn),
         );
         log::info!("Physics thread spawned, main thread: rendering (WGPU)");
@@ -227,6 +227,7 @@ impl ApplicationHandler<UserEvent> for WgpuApp {
                         BallFactory::radius_for_size_idx(state.current_ball_size_idx),
                         show_ball_outline,
                         state.config.thermo_display,
+                        state.viewport.margins(),
                         operator_previews,
                     ) {
                         eprintln!("Pipeline prepare error: {:?}", e);
@@ -238,7 +239,7 @@ impl ApplicationHandler<UserEvent> for WgpuApp {
                     }
 
                     // Render frame
-                    if let Err(e) = render_frame(ctx, pipelines) {
+                    if let Err(e) = render_frame(ctx, pipelines, state.viewport.margins()) {
                         log::error!("Render error: {:?}", e);
                         if e == wgpu::SurfaceError::OutOfMemory {
                             event_loop.exit();
@@ -268,7 +269,10 @@ impl ApplicationHandler<UserEvent> for WgpuApp {
         };
 
         // Main window events
-        handle_window_event(event, ctx, state, pipelines, event_loop);
+        let Some(window) = self.window.as_ref() else {
+            return;
+        };
+        handle_window_event(event, ctx, state, pipelines, event_loop, window.as_ref());
     }
 
     fn device_event(
@@ -300,6 +304,7 @@ fn handle_window_event(
     state: &mut UnifiedRenderState,
     pipelines: &mut WgpuPipelines,
     window_target: &ActiveEventLoop,
+    main_window: &Window,
 ) {
     match event {
         WindowEvent::CloseRequested => {
@@ -309,12 +314,8 @@ fn handle_window_event(
         WindowEvent::Resized(size) => {
             log::debug!("Window resized to {}x{}", size.width, size.height);
             ctx.resize(size.width, size.height);
-            let world_rect = ViewportTransform::compute_world_bounds_from_window_size(
-                size.width,
-                size.height,
-                MARGINS,
-            );
-            state.handle_resize_with_world_rect(size.width as f32, size.height as f32, world_rect);
+            let margins = margins_for_scale_factor(main_window.scale_factor());
+            state.handle_resize(size.width as f32, size.height as f32, margins);
         }
         WindowEvent::ScaleFactorChanged { .. } => {
             // A follow-up `Resized` event updates the surface dimensions.
@@ -336,8 +337,14 @@ fn handle_window_event(
             };
 
             if let Some(action) = action {
-                state.view_dirty |=
-                    execute_input_action(action, state, pipelines, &ctx.queue, window_target);
+                state.view_dirty |= execute_input_action(
+                    action,
+                    state,
+                    pipelines,
+                    &ctx.queue,
+                    window_target,
+                    main_window,
+                );
             }
         }
         _ => {}
@@ -345,7 +352,11 @@ fn handle_window_event(
 }
 
 /// Render a single frame.
-fn render_frame(ctx: &WgpuContext, pipelines: &WgpuPipelines) -> Result<(), wgpu::SurfaceError> {
+fn render_frame(
+    ctx: &WgpuContext,
+    pipelines: &WgpuPipelines,
+    margin: rust_thermo_core::graphics::renderer::Margins,
+) -> Result<(), wgpu::SurfaceError> {
     let output = ctx.surface.get_current_texture()?;
     let view = output
         .texture
@@ -380,7 +391,7 @@ fn render_frame(ctx: &WgpuContext, pipelines: &WgpuPipelines) -> Result<(), wgpu
             multiview_mask: None,
         });
 
-        pipelines.render_all(&mut render_pass, ctx);
+        pipelines.render_all(&mut render_pass, ctx, margin);
     }
 
     ctx.queue.submit(std::iter::once(encoder.finish()));

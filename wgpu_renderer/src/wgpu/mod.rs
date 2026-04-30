@@ -44,3 +44,17 @@ pub const MARGIN_TOP: f32 = 50.;
 pub const MARGIN_BOTTOM: f32 = 50.;
 
 pub const MARGINS: Margins = Margins::new(MARGIN_LEFT, MARGIN_TOP, MARGIN_RIGHT, MARGIN_BOTTOM);
+
+pub fn ui_scale_factor(scale_factor: f64) -> f32 {
+    scale_factor.max(1.0) as f32
+}
+
+pub fn margins_for_scale_factor(scale_factor: f64) -> Margins {
+    let ui_scale = ui_scale_factor(scale_factor);
+    Margins::new(
+        MARGIN_LEFT * ui_scale,
+        MARGIN_TOP * ui_scale,
+        MARGIN_RIGHT * ui_scale,
+        MARGIN_BOTTOM * ui_scale,
+    )
+}

@@ -3,12 +3,15 @@ use super::energy_renderer::EnergyPlotRenderer;
 use softbuffer::{Context, Surface};
 use std::num::NonZeroU32;
 use std::rc::Rc;
-use winit::dpi::LogicalSize;
+use winit::dpi::{LogicalSize, PhysicalPosition, PhysicalSize};
 use winit::event_loop::ActiveEventLoop;
+use winit::monitor::MonitorHandle;
 use winit::window::{Window, WindowId};
 
 const DEFAULT_WIDTH: u32 = 1024; // Reduced by 20% from 1280
 const DEFAULT_HEIGHT: u32 = 576; // Reduced by 20% from 720
+const MIN_WINDOW_WIDTH: u32 = 320;
+const MIN_WINDOW_HEIGHT: u32 = 240;
 
 // Text rendering constants
 const CHAR_WIDTH_PIX: u32 = 13; // pixel width per character (realistic value)
@@ -24,6 +27,74 @@ const STATUS_TEXT_LINES: u32 = 10;
 
 const MIN_HEIGHT_WITHOUT_STATUS: u32 = MARGIN_TOP + BASE_LINES * CHAR_HEIGHT_PIX;
 const MIN_HEIGHT_WITH_STATUS: u32 = MARGIN_TOP + (BASE_LINES + STATUS_TEXT_LINES) * CHAR_HEIGHT_PIX;
+
+#[derive(Debug, Clone, Copy)]
+struct TextMetrics {
+    char_width: u32,
+    char_height: u32,
+    margin_left: u32,
+    margin_top: u32,
+    margin_right: u32,
+    margin_bottom: u32,
+}
+
+fn text_metrics(scale_factor: f64) -> TextMetrics {
+    let ui_scale = scale_factor.max(1.0) as f32;
+    let scaled = |value: u32| -> u32 { ((value as f32) * ui_scale).round().max(1.0) as u32 };
+
+    TextMetrics {
+        char_width: scaled(CHAR_WIDTH_PIX),
+        char_height: scaled(CHAR_HEIGHT_PIX),
+        margin_left: scaled(MARGIN_LEFT),
+        margin_top: scaled(MARGIN_TOP),
+        margin_right: scaled(MARGIN_RIGHT),
+        margin_bottom: scaled(MARGIN_BOTTOM),
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WindowGeometry {
+    pub position: PhysicalPosition<i32>,
+    pub size: PhysicalSize<u32>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SplitScreenLayout {
+    pub simulation: WindowGeometry,
+    pub energy: WindowGeometry,
+}
+
+pub fn split_screen_layout_for_monitor(monitor: &MonitorHandle) -> SplitScreenLayout {
+    split_screen_layout(monitor.position(), monitor.size())
+}
+
+fn split_screen_layout(
+    monitor_position: PhysicalPosition<i32>,
+    monitor_size: PhysicalSize<u32>,
+) -> SplitScreenLayout {
+    let simulation_width = monitor_size.width / 2;
+    let energy_width = monitor_size.width - simulation_width;
+
+    SplitScreenLayout {
+        simulation: WindowGeometry {
+            position: monitor_position,
+            size: PhysicalSize::new(
+                simulation_width.max(MIN_WINDOW_WIDTH),
+                monitor_size.height.max(MIN_WINDOW_HEIGHT),
+            ),
+        },
+        energy: WindowGeometry {
+            position: PhysicalPosition::new(
+                monitor_position.x + simulation_width as i32,
+                monitor_position.y,
+            ),
+            size: PhysicalSize::new(
+                energy_width.max(MIN_WINDOW_WIDTH),
+                monitor_size.height.max(MIN_WINDOW_HEIGHT),
+            ),
+        },
+    }
+}
 
 /// Energy plot window - a separate OS window for displaying energy plots
 pub struct EnergyPlotWindow {
@@ -60,6 +131,7 @@ impl EnergyPlotWindow {
     pub fn create(
         &mut self,
         window_target: &ActiveEventLoop,
+        geometry: Option<WindowGeometry>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let title = format!("Energy Plot 🐾 — {}", self.display_mode.as_str());
 
@@ -73,11 +145,18 @@ impl EnergyPlotWindow {
             }
         };
 
-        let attrs = Window::default_attributes()
+        let initial_size = geometry
+            .map(|geometry| geometry.size)
+            .unwrap_or(PhysicalSize::new(DEFAULT_WIDTH, initial_height));
+
+        let mut attrs = Window::default_attributes()
             .with_title(title)
-            .with_inner_size(LogicalSize::new(DEFAULT_WIDTH, initial_height))
+            .with_inner_size(initial_size)
             .with_resizable(true)
-            .with_min_inner_size(LogicalSize::new(512, 288)); // Reduced by 20% from 640x360
+            .with_min_inner_size(LogicalSize::new(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT));
+        if let Some(geometry) = geometry {
+            attrs = attrs.with_position(geometry.position);
+        }
         let window = Rc::new(window_target.create_window(attrs)?);
 
         // Create softbuffer context and surface
@@ -157,29 +236,18 @@ impl EnergyPlotWindow {
 
     pub fn render(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         if let (Some(window), Some(surface)) = (&self.window, &mut self.surface) {
-            // Check if status_text presence has changed and resize window if needed
+            // Track status text presence, but keep the current geometry stable
+            // so the window can stay docked to a screen half on small displays.
             let current_has_status = {
                 let data = self.energy_data.lock().unwrap();
                 data.status_text.is_some()
             };
-
-            if current_has_status != self.has_status_text {
-                self.has_status_text = current_has_status;
-
-                // Resize window to appropriate height
-                let new_height = if current_has_status {
-                    MIN_HEIGHT_WITH_STATUS
-                } else {
-                    MIN_HEIGHT_WITHOUT_STATUS
-                };
-
-                let current_size = window.inner_size();
-                let _ = window.request_inner_size(LogicalSize::new(current_size.width, new_height));
-            }
+            self.has_status_text = current_has_status;
 
             let size = window.inner_size();
             let width = size.width;
             let height = size.height;
+            let metrics = text_metrics(window.scale_factor());
 
             if width == 0 || height == 0 {
                 return Ok(());
@@ -201,12 +269,13 @@ impl EnergyPlotWindow {
             // Compute character grid dimensions from pixel size and character metrics
             // Subtract all margins (top, bottom, left, right) for actual plot area
 
-            let available_width = width.saturating_sub(MARGIN_LEFT + MARGIN_RIGHT);
-            let available_height = height.saturating_sub(MARGIN_TOP + MARGIN_BOTTOM);
+            let available_width = width.saturating_sub(metrics.margin_left + metrics.margin_right);
+            let available_height =
+                height.saturating_sub(metrics.margin_top + metrics.margin_bottom);
 
             // Calculate grid size to fill window, no hard clamp
-            let cols = (available_width / CHAR_WIDTH_PIX) as usize;
-            let rows = (available_height / CHAR_HEIGHT_PIX) as usize;
+            let cols = (available_width / metrics.char_width) as usize;
+            let rows = (available_height / metrics.char_height) as usize;
 
             // Get status text and render to colored string using layout-aware renderer
             let (text, color_map) = {
@@ -230,6 +299,7 @@ impl EnergyPlotWindow {
                 height as usize,
                 &text,
                 &color_map,
+                metrics,
             );
 
             buffer.present()?;
@@ -244,11 +314,12 @@ impl EnergyPlotWindow {
         height: usize,
         text: &str,
         color_map: &[Vec<u32>],
+        metrics: TextMetrics,
     ) {
-        let left_margin = MARGIN_LEFT as usize;
-        let top_margin = MARGIN_TOP as usize;
-        let char_width = CHAR_WIDTH_PIX as usize;
-        let char_height = CHAR_HEIGHT_PIX as usize;
+        let left_margin = metrics.margin_left as usize;
+        let top_margin = metrics.margin_top as usize;
+        let char_width = metrics.char_width as usize;
+        let char_height = metrics.char_height as usize;
 
         let mut y = top_margin;
         for (line_idx, line) in text.lines().enumerate() {
@@ -270,7 +341,7 @@ impl EnergyPlotWindow {
                 };
 
                 // Render character using bitmap font
-                Self::draw_char_scaled(buffer, width, x, y, ch, color);
+                Self::draw_char_scaled(buffer, width, x, y, ch, color, metrics);
 
                 x += char_width;
             }
@@ -282,10 +353,11 @@ impl EnergyPlotWindow {
     /// Simple bitmap font renderer - renders text as pixels
     fn render_text_to_buffer(buffer: &mut [u32], width: usize, height: usize, text: &str) {
         const TEXT_COLOR: u32 = 0xFFCCCCCC;
-        let left_margin = MARGIN_LEFT as usize;
-        let top_margin = MARGIN_TOP as usize;
-        let char_width = CHAR_WIDTH_PIX as usize;
-        let char_height = CHAR_HEIGHT_PIX as usize;
+        let metrics = text_metrics(1.0);
+        let left_margin = metrics.margin_left as usize;
+        let top_margin = metrics.margin_top as usize;
+        let char_width = metrics.char_width as usize;
+        let char_height = metrics.char_height as usize;
 
         let mut y = top_margin; // top margin
         for line in text.lines() {
@@ -300,7 +372,7 @@ impl EnergyPlotWindow {
                 }
 
                 // Render actual character using bitmap font
-                Self::draw_char_scaled(buffer, width, x, y, ch, TEXT_COLOR);
+                Self::draw_char_scaled(buffer, width, x, y, ch, TEXT_COLOR, metrics);
 
                 x += char_width;
             }
@@ -317,12 +389,13 @@ impl EnergyPlotWindow {
         y: usize,
         ch: char,
         color: u32,
+        metrics: TextMetrics,
     ) {
         let glyph = Self::get_glyph(ch);
 
         // Target size is 13x19, source is 8x8
-        let target_width = CHAR_WIDTH_PIX as usize;
-        let target_height = CHAR_HEIGHT_PIX as usize;
+        let target_width = metrics.char_width as usize;
+        let target_height = metrics.char_height as usize;
         const SOURCE_SIZE: usize = 8;
 
         for ty in 0..target_height {
@@ -488,5 +561,28 @@ mod tests {
         assert!(!window.is_open());
         assert!(!window.has_status_text);
         assert_eq!(window.get_display_mode(), DisplayMode::All);
+    }
+
+    #[test]
+    fn test_split_screen_layout_divides_monitor_into_halves() {
+        let layout =
+            split_screen_layout(PhysicalPosition::new(100, 50), PhysicalSize::new(1600, 900));
+
+        assert_eq!(layout.simulation.position, PhysicalPosition::new(100, 50));
+        assert_eq!(layout.simulation.size, PhysicalSize::new(800, 900));
+        assert_eq!(layout.energy.position, PhysicalPosition::new(900, 50));
+        assert_eq!(layout.energy.size, PhysicalSize::new(800, 900));
+    }
+
+    #[test]
+    fn test_split_screen_layout_preserves_full_monitor_width_for_odd_sizes() {
+        let layout = split_screen_layout(PhysicalPosition::new(0, 0), PhysicalSize::new(1365, 768));
+
+        assert_eq!(
+            layout.simulation.size.width + layout.energy.size.width,
+            1365
+        );
+        assert_eq!(layout.simulation.size.height, 768);
+        assert_eq!(layout.energy.size.height, 768);
     }
 }

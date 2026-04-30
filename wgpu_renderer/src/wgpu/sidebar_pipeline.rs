@@ -8,11 +8,13 @@ use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
 
 use super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
-use crate::wgpu::{MARGIN_BOTTOM, MARGIN_LEFT, MARGIN_TOP};
+use crate::wgpu::MARGINS;
 use rust_thermo_core::application::AppResult;
+use rust_thermo_core::graphics::renderer::Margins;
 use rust_thermo_core::graphics::renderer::event_loop::OperatorTool;
 use rust_thermo_core::graphics::sidebar::{
-    ICON_COUNT, ICON_DISPLAY_SIZE, ICON_SPACING, SIDEBAR_TOOLS,
+    ICON_COUNT, SIDEBAR_TOOLS, icon_display_size_for_margin, icon_spacing_for_margin,
+    visible_icon_count_for_margin,
 };
 
 const SIDEBAR_SHADER: &str = include_str!("shaders/sidebar.wgsl");
@@ -72,6 +74,8 @@ pub struct SidebarPipeline {
     last_window_size: (u32, u32),
     /// Cached selected icon to detect selection changes.
     last_selected_icon: Option<usize>,
+    /// Cached margins to detect DPI-scale changes.
+    last_margin: Margins,
 }
 
 /// Decode a PNG from memory into an RGBA8 buffer, resized to `size×size`.
@@ -290,6 +294,7 @@ impl SidebarPipeline {
             atlas_icon_count: TEXTURE_ICON_COUNT,
             last_window_size: (0, 0),
             last_selected_icon: None,
+            last_margin: MARGINS,
         }
     }
 
@@ -298,9 +303,10 @@ impl SidebarPipeline {
         &self,
         win_w: f32,
         win_h: f32,
+        margin: Margins,
         selected: Option<usize>,
     ) -> (Vec<SidebarVertex>, RoundedRectParams) {
-        build_sidebar_geometry(self.atlas_icon_count, win_w, win_h, selected)
+        build_sidebar_geometry_with_margins(self.atlas_icon_count, win_w, win_h, margin, selected)
     }
 }
 
@@ -327,6 +333,16 @@ pub(crate) fn build_sidebar_geometry(
     win_h: f32,
     selected: Option<usize>,
 ) -> (Vec<SidebarVertex>, RoundedRectParams) {
+    build_sidebar_geometry_with_margins(icon_count, win_w, win_h, MARGINS, selected)
+}
+
+pub(crate) fn build_sidebar_geometry_with_margins(
+    icon_count: u32,
+    win_w: f32,
+    win_h: f32,
+    margin: Margins,
+    selected: Option<usize>,
+) -> (Vec<SidebarVertex>, RoundedRectParams) {
     let mut verts = Vec::with_capacity(MAX_VERTICES);
 
     let to_ndc = |px: f32, py: f32| -> [f32; 2] {
@@ -335,20 +351,23 @@ pub(crate) fn build_sidebar_geometry(
         [x, y]
     };
 
-    let pad_x = (MARGIN_LEFT - ICON_DISPLAY_SIZE) * 0.5;
-    let first_icon_top = MARGIN_TOP + ICON_SPACING;
+    let ui_scale = (margin.left / MARGINS.left).max(1.0);
+    let rect_padding = RECT_PADDING * ui_scale;
+    let icon_display_size = icon_display_size_for_margin(margin.left);
+    let icon_spacing = icon_spacing_for_margin(margin.left);
+    let pad_x = (margin.left - icon_display_size) * 0.5;
+    let first_icon_top = margin.top + icon_spacing;
 
     // Count how many icons fit.
     let visible_count =
-        rust_thermo_core::graphics::sidebar::visible_icon_count(win_h, MARGIN_TOP, MARGIN_BOTTOM)
-            as u32;
+        visible_icon_count_for_margin(win_h, margin.top, margin.bottom, margin.left) as u32;
     // Clamp to the number of tools declared in the shared ordering.
     let visible_count = visible_count.min(ICON_COUNT as u32);
 
     let mut rect_params = RoundedRectParams {
         size_px: [0.0, 0.0],
-        corner_radius: CORNER_RADIUS,
-        border_width: BORDER_WIDTH,
+        corner_radius: CORNER_RADIUS * ui_scale,
+        border_width: BORDER_WIDTH * ui_scale,
     };
 
     if visible_count == 0 {
@@ -356,13 +375,13 @@ pub(crate) fn build_sidebar_geometry(
     }
 
     // ── Background rounded rectangle ───────────────────────────────
-    let rect_left = pad_x - RECT_PADDING;
-    let rect_right = pad_x + ICON_DISPLAY_SIZE + RECT_PADDING;
-    let rect_top = first_icon_top - RECT_PADDING;
+    let rect_left = pad_x - rect_padding;
+    let rect_right = pad_x + icon_display_size + rect_padding;
+    let rect_top = first_icon_top - rect_padding;
     let last_icon_bottom = first_icon_top
-        + (visible_count - 1) as f32 * (ICON_DISPLAY_SIZE + ICON_SPACING)
-        + ICON_DISPLAY_SIZE;
-    let rect_bottom = last_icon_bottom + RECT_PADDING;
+        + (visible_count - 1) as f32 * (icon_display_size + icon_spacing)
+        + icon_display_size;
+    let rect_bottom = last_icon_bottom + rect_padding;
 
     let rect_w = rect_right - rect_left;
     let rect_h = rect_bottom - rect_top;
@@ -409,13 +428,13 @@ pub(crate) fn build_sidebar_geometry(
     if let Some(sel) = selected {
         let sel = sel as u32;
         if sel < visible_count {
-            let hl_pad = RECT_PADDING * 0.5;
-            let icon_top = first_icon_top + sel as f32 * (ICON_DISPLAY_SIZE + ICON_SPACING);
-            let icon_bottom = icon_top + ICON_DISPLAY_SIZE;
+            let hl_pad = rect_padding * 0.5;
+            let icon_top = first_icon_top + sel as f32 * (icon_display_size + icon_spacing);
+            let icon_bottom = icon_top + icon_display_size;
             let hl_tl = to_ndc(pad_x - hl_pad, icon_top - hl_pad);
-            let hl_tr = to_ndc(pad_x + ICON_DISPLAY_SIZE + hl_pad, icon_top - hl_pad);
+            let hl_tr = to_ndc(pad_x + icon_display_size + hl_pad, icon_top - hl_pad);
             let hl_bl = to_ndc(pad_x - hl_pad, icon_bottom + hl_pad);
-            let hl_br = to_ndc(pad_x + ICON_DISPLAY_SIZE + hl_pad, icon_bottom + hl_pad);
+            let hl_br = to_ndc(pad_x + icon_display_size + hl_pad, icon_bottom + hl_pad);
 
             for &(pos, uv) in &[
                 (hl_tl, [0.0, 0.0]),
@@ -436,10 +455,10 @@ pub(crate) fn build_sidebar_geometry(
 
     // ── Icon quads ─────────────────────────────────────────────────
     for i in 0..visible_count {
-        let icon_top = first_icon_top + i as f32 * (ICON_DISPLAY_SIZE + ICON_SPACING);
+        let icon_top = first_icon_top + i as f32 * (icon_display_size + icon_spacing);
         let icon_left = pad_x;
-        let icon_right = icon_left + ICON_DISPLAY_SIZE;
-        let icon_bottom = icon_top + ICON_DISPLAY_SIZE;
+        let icon_right = icon_left + icon_display_size;
+        let icon_bottom = icon_top + icon_display_size;
         let tool = SIDEBAR_TOOLS[i as usize];
 
         let tl = to_ndc(icon_left, icon_top);
@@ -501,24 +520,28 @@ impl RenderPipeline for SidebarPipeline {
 
     fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
         let selected = ctx.operator_previews.selected_sidebar_icon;
-        if ctx.window_size == self.last_window_size && selected == self.last_selected_icon {
+        if ctx.window_size == self.last_window_size
+            && selected == self.last_selected_icon
+            && ctx.margin == self.last_margin
+        {
             return Ok(());
         }
         self.last_window_size = ctx.window_size;
         self.last_selected_icon = selected;
+        self.last_margin = ctx.margin;
 
         let (w, h) = ctx.window_size;
-        let (verts, rect_params) = self.build_geometry(w as f32, h as f32, selected);
+        let (verts, rect_params) = self.build_geometry(w as f32, h as f32, ctx.margin, selected);
         self.vertex_count = verts.len() as u32;
         if !verts.is_empty() {
             ctx.queue
                 .write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(&verts));
-            ctx.queue.write_buffer(
-                &self.rect_uniform_buffer,
-                0,
-                bytemuck::bytes_of(&rect_params),
-            );
         }
+        ctx.queue.write_buffer(
+            &self.rect_uniform_buffer,
+            0,
+            bytemuck::bytes_of(&rect_params),
+        );
         Ok(())
     }
 

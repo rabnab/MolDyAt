@@ -1,6 +1,7 @@
 use bytemuck::{Pod, Zeroable};
 use font8x8::UnicodeFonts;
 use rust_thermo_core::graphics::renderer::margins::Margins;
+use rust_thermo_core::graphics::sidebar::sidebar_ui_scale;
 use wgpu::util::DeviceExt;
 
 pub(crate) const GLYPH_W: u32 = 8;
@@ -30,9 +31,10 @@ pub(crate) fn apply_view_proj(m: [[f32; 4]; 4], wx: f32, wy: f32) -> (f32, f32) 
 pub(crate) fn inset_glyph_ndc_size(window_size: (u32, u32), margin: Margins) -> (f32, f32) {
     let inset_w = (window_size.0 as f32 - margin.horizontal()).max(1.0);
     let inset_h = (window_size.1 as f32 - margin.vertical()).max(1.0);
+    let ui_scale = sidebar_ui_scale(margin.left);
     (
-        GLYPH_W as f32 * 2.0 / inset_w,
-        GLYPH_H as f32 * 2.0 / inset_h,
+        GLYPH_W as f32 * ui_scale * 2.0 / inset_w,
+        GLYPH_H as f32 * ui_scale * 2.0 / inset_h,
     )
 }
 

@@ -14,23 +14,28 @@ impl UnifiedRenderState {
     /// Icons that would be clipped below the bottom margin are excluded
     /// (matching the WGPU sidebar pipeline's `visible_count` logic).
     pub fn sidebar_icon_at(&self, pos_px: [f32; 2]) -> Option<usize> {
-        use crate::graphics::sidebar::{ICON_DISPLAY_SIZE, ICON_SPACING, visible_icon_count};
+        use crate::graphics::sidebar::{
+            icon_display_size_for_margin, icon_spacing_for_margin, visible_icon_count_for_margin,
+        };
 
         let margins = self.viewport.margins();
-        let pad_x = (margins.left - ICON_DISPLAY_SIZE) * 0.5;
-        let first_icon_top = margins.top + ICON_SPACING;
+        let icon_display_size = icon_display_size_for_margin(margins.left);
+        let icon_spacing = icon_spacing_for_margin(margins.left);
+        let pad_x = (margins.left - icon_display_size) * 0.5;
+        let first_icon_top = margins.top + icon_spacing;
 
         // Horizontal bounds check
-        if pos_px[0] < pad_x || pos_px[0] > pad_x + ICON_DISPLAY_SIZE {
+        if pos_px[0] < pad_x || pos_px[0] > pad_x + icon_display_size {
             return None;
         }
 
         let (_, win_h) = self.viewport.window_size_px();
-        let visible = visible_icon_count(win_h, margins.top, margins.bottom);
+        let visible =
+            visible_icon_count_for_margin(win_h, margins.top, margins.bottom, margins.left);
 
         for i in 0..visible {
-            let icon_top = first_icon_top + i as f32 * (ICON_DISPLAY_SIZE + ICON_SPACING);
-            let icon_bottom = icon_top + ICON_DISPLAY_SIZE;
+            let icon_top = first_icon_top + i as f32 * (icon_display_size + icon_spacing);
+            let icon_bottom = icon_top + icon_display_size;
 
             if pos_px[1] >= icon_top && pos_px[1] <= icon_bottom {
                 return Some(i);
@@ -107,14 +112,16 @@ mod tests {
 
     #[test]
     fn sidebar_icon_at_returns_index_for_first_icon() {
-        use crate::graphics::sidebar::{ICON_DISPLAY_SIZE, ICON_SPACING};
+        use crate::graphics::sidebar::{icon_display_size_for_margin, icon_spacing_for_margin};
 
         let vp = sidebar_viewport();
         let margins = vp.margins();
-        let pad_x = (margins.left - ICON_DISPLAY_SIZE) * 0.5;
-        let first_top = margins.top + ICON_SPACING;
-        let cx = pad_x + ICON_DISPLAY_SIZE * 0.5;
-        let cy = first_top + ICON_DISPLAY_SIZE * 0.5;
+        let icon_display_size = icon_display_size_for_margin(margins.left);
+        let icon_spacing = icon_spacing_for_margin(margins.left);
+        let pad_x = (margins.left - icon_display_size) * 0.5;
+        let first_top = margins.top + icon_spacing;
+        let cx = pad_x + icon_display_size * 0.5;
+        let cy = first_top + icon_display_size * 0.5;
 
         let physics = make_disconnected_coordinator();
         let state = build_test_state(vp, physics);
@@ -131,7 +138,7 @@ mod tests {
 
     #[test]
     fn sidebar_icon_at_clips_when_window_too_short() {
-        use crate::graphics::sidebar::{ICON_DISPLAY_SIZE, ICON_SPACING};
+        use crate::graphics::sidebar::{icon_display_size_for_margin, icon_spacing_for_margin};
 
         let world = Rect::new(-18.0, 12.0, 36.0, -24.0);
         let margins = Margins::new(110.0, 50.0, 10.0, 50.0);
@@ -139,13 +146,15 @@ mod tests {
         let physics = make_disconnected_coordinator();
         let state = build_test_state(vp, physics);
 
-        let pad_x = (margins.left - ICON_DISPLAY_SIZE) * 0.5;
-        let first_top = margins.top + ICON_SPACING;
+        let icon_display_size = icon_display_size_for_margin(margins.left);
+        let icon_spacing = icon_spacing_for_margin(margins.left);
+        let pad_x = (margins.left - icon_display_size) * 0.5;
+        let first_top = margins.top + icon_spacing;
 
-        let cy0 = first_top + ICON_DISPLAY_SIZE * 0.5;
+        let cy0 = first_top + icon_display_size * 0.5;
         assert_eq!(state.sidebar_icon_at([pad_x + 24.0, cy0]), Some(0));
 
-        let cy1 = first_top + (ICON_DISPLAY_SIZE + ICON_SPACING) + ICON_DISPLAY_SIZE * 0.5;
+        let cy1 = first_top + (icon_display_size + icon_spacing) + icon_display_size * 0.5;
         assert_eq!(
             state.sidebar_icon_at([pad_x + 24.0, cy1]),
             None,

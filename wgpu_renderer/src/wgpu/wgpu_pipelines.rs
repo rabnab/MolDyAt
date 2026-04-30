@@ -4,8 +4,6 @@
 //! reference specific pipelines (e.g., toggling cutoff rings on the
 //! ball pipeline).
 
-use crate::wgpu::MARGINS;
-
 use super::ball_pipeline::BallPipeline;
 use super::crosshair_pipeline::CrosshairPipeline;
 use super::frame_pipeline::FramePipeline;
@@ -21,6 +19,7 @@ use super::thermostat_label_pipeline::ThermostatLabelPipeline;
 use super::wgpu_context::WgpuContext;
 use rust_thermo_core::application::AppResult;
 use rust_thermo_core::application::renderer_snapshot::{CellGridSpec, RendererSnapshot};
+use rust_thermo_core::graphics::renderer::Margins;
 use rust_thermo_core::graphics::renderer::event_loop::FramePreviews;
 use rust_thermo_core::graphics::renderer::state_layers::ThermoDisplayMode;
 
@@ -123,10 +122,10 @@ impl WgpuPipelines {
         current_ball_radius: f32,
         show_ball_outline: bool,
         thermo_display: ThermoDisplayMode,
+        margin: Margins,
         operator_previews: FramePreviews,
     ) -> AppResult {
         let window_size = ctx.size();
-        let margin = MARGINS;
 
         let prepare_ctx = PrepareContext {
             device: &ctx.device,
@@ -149,8 +148,12 @@ impl WgpuPipelines {
     ///
     /// The graph handles viewport switching automatically based on each
     /// pipeline's [`ViewportMode`](super::render_graph::ViewportMode).
-    pub fn render_all<'rp>(&'rp self, render_pass: &mut wgpu::RenderPass<'rp>, ctx: &WgpuContext) {
-        let margin = MARGINS;
+    pub fn render_all<'rp>(
+        &'rp self,
+        render_pass: &mut wgpu::RenderPass<'rp>,
+        ctx: &WgpuContext,
+        margin: Margins,
+    ) {
         self.graph.render_all(render_pass, ctx.size(), margin);
     }
 

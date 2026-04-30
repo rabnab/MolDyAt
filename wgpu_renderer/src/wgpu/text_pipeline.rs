@@ -4,6 +4,7 @@
 use bytemuck::{Pod, Zeroable};
 use font8x8::UnicodeFonts;
 use rust_thermo_core::graphics::renderer::margins::Margins;
+use rust_thermo_core::graphics::sidebar::sidebar_ui_scale;
 use wgpu::util::DeviceExt;
 
 const CURSOR_TEXT_COLOR: [f32; 4] = [0.92, 0.9, 0.84, 1.0];
@@ -310,9 +311,10 @@ impl TextPipeline {
         // Position: bottom-right of the simulation pane, inside the bottom margin.
         let win_w = window_size.0 as f32;
         let win_h = window_size.1 as f32;
-        let text_w = width_px as f32;
-        let text_h = height_px as f32;
-        let padding = 4.0;
+        let ui_scale = sidebar_ui_scale(margin.left);
+        let text_w = width_px as f32 * ui_scale;
+        let text_h = height_px as f32 * ui_scale;
+        let padding = 4.0 * ui_scale;
         let left_px = (win_w - margin.right - text_w - padding).max(margin.left);
         let top_px = (win_h - margin.bottom + padding).max(0.0);
         let right_px = left_px + text_w;
