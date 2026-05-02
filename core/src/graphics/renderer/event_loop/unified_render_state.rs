@@ -33,7 +33,7 @@ use super::source_sphere_tool::SourceSphereToolHandler;
 use super::thermostat_tool::ThermostatToolHandler;
 use super::valve_segment_tool::ValveSegmentToolHandler;
 
-use crate::application::physics_thread::PhysicsCommand;
+use crate::application::DomainCommand;
 
 /// Unified state shared by every renderer backend.
 ///
@@ -385,7 +385,7 @@ impl UnifiedRenderState {
         world_rect: crate::objects2d::Rect,
     ) {
         self.physics
-            .send_command(PhysicsCommand::Resize { world_rect });
+            .send_domain_command(DomainCommand::Resize { world_rect });
         self.viewport.set_world_bounds(world_rect);
         self.viewport.on_window_resize((new_width, new_height));
         self.view_dirty = true;
@@ -396,7 +396,8 @@ impl UnifiedRenderState {
     pub fn resume_after_resize_if_pending(&mut self) {
         if self.resize_pending {
             self.resize_pending = false;
-            self.physics.send_command(PhysicsCommand::ResumeAfterResize);
+            self.physics
+                .send_domain_command(DomainCommand::ResumeAfterResize);
         }
     }
 
@@ -436,7 +437,8 @@ impl UnifiedRenderState {
     pub fn next_ball_size(&mut self) {
         use crate::objects2d::ball_impl::NUM_BALL_SIZES;
         self.current_ball_size_idx = (self.current_ball_size_idx + 1) % NUM_BALL_SIZES;
-        self.physics.send_command(PhysicsCommand::NextBallSize);
+        self.physics
+            .send_domain_command(DomainCommand::NextBallSize);
     }
 
     // ── Centralized mouse event handlers ──────────────────────────────

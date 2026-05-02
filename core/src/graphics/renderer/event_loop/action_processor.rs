@@ -1,7 +1,7 @@
 use super::{InputAction, PhysicsCoordinator};
-use crate::application::physics_thread::PhysicsCommand;
-use crate::application::{LogStuff, MainContent};
+use crate::application::{DomainCommand, LogStuff, MainContent};
 use crate::graphics::renderer::state_layers::RendererConfig;
+use std::convert::TryFrom;
 
 /// Shared mapping from InputAction to physics commands and renderer state flags.
 /// Returns true if the action affects the viewport (caller should refresh view).
@@ -12,91 +12,62 @@ pub fn process_action_common(
 ) -> bool {
     let mut affects_view = false;
 
-    match action {
-        InputAction::TogglePause => {
-            physics.send_command(PhysicsCommand::TogglePause);
+    match DomainCommand::try_from(action) {
+        Ok(command) => {
+            physics.send_domain_command(command);
         }
-        InputAction::ZoomIn { .. } | InputAction::ZoomOut { .. } => {
-            // Viewport changes are handled by the event loop
-            affects_view = true;
-        }
-        InputAction::PanUpdate { .. } => {
-            affects_view = true;
-        }
-        InputAction::ResetView => {
-            affects_view = true;
-        }
-        InputAction::ToggleRendering => {
-            config.toggle_rendering();
-        }
-        InputAction::AddBall { position } => {
-            physics.send_command(PhysicsCommand::AddBall(position));
-        }
-        InputAction::NextBallSize => {
-            physics.send_command(PhysicsCommand::NextBallSize);
-        }
-        InputAction::AddRandomBalls { count } => {
-            physics.send_command(PhysicsCommand::AddRandomBalls(count));
-        }
-        InputAction::StopAllBalls => {
-            physics.send_command(PhysicsCommand::StopAllBalls);
-        }
-        InputAction::ClearBalls => {
-            physics.send_command(PhysicsCommand::ClearBalls);
-        }
-        InputAction::ToggleStepwise => {
-            physics.send_command(PhysicsCommand::ToggleStepwise);
-        }
-        InputAction::RandomizeSpeeds => {
-            physics.send_command(PhysicsCommand::RandomizeSpeeds);
-        }
-        InputAction::DoubleTimeStep => {
-            physics.send_command(PhysicsCommand::DoubleTimeStep);
-        }
-        InputAction::HalveTimeStep => {
-            physics.send_command(PhysicsCommand::HalveTimeStep);
-        }
-        InputAction::IncreaseWaitTime => {
-            physics.send_command(PhysicsCommand::IncreaseWaitTime);
-        }
-        InputAction::DecreaseWaitTime => {
-            physics.send_command(PhysicsCommand::DecreaseWaitTime);
-        }
-        InputAction::EnableRandomBallSpeed => {
-            physics.send_command(PhysicsCommand::EnableRandomBallSpeed);
-        }
-        InputAction::ToggleRealData => {
-            physics.send_command(PhysicsCommand::ToggleRealData);
-        }
-        InputAction::ToggleTimingDisplay => {
-            physics.send_command(PhysicsCommand::ToggleTimingDisplay);
-        }
-        InputAction::ToggleBallStats => {
-            physics.send_command(PhysicsCommand::ToggleBallStats);
-        }
-        InputAction::StartVerbosityInput => {
-            physics.send_command(PhysicsCommand::StartVerbosityInput);
-        }
-        InputAction::PrintHelp => {
-            MainContent::print_help_message();
-        }
-        InputAction::CyclePlotContent => {
-            config.cycle_plot_content();
-        }
-        InputAction::CycleThermoDisplay => {
-            config.cycle_thermo_display();
-            affects_view = true;
-        }
-        // Actions handled elsewhere (not in action_processor)
-        InputAction::PanStart { .. }
-        | InputAction::PanEnd
-        | InputAction::UpdateCursor { .. }
-        | InputAction::SelectOperatorTool(_)
-        | InputAction::ToggleEnergyWindow  // handled in UnifiedRenderState::process_action
-        | InputAction::ToggleCutoffRings => {}  // needs wgpu resources
-        InputAction::OperatorAction(cmd) => {
-            physics.send_command(PhysicsCommand::Operator(cmd));
-        }
+        Err(action) => match action {
+            InputAction::ZoomIn { .. } | InputAction::ZoomOut { .. } => {
+                // Viewport changes are handled by the event loop
+                affects_view = true;
+            }
+            InputAction::PanUpdate { .. } => {
+                affects_view = true;
+            }
+            InputAction::ResetView => {
+                affects_view = true;
+            }
+            InputAction::ToggleRendering => {
+                config.toggle_rendering();
+            }
+            InputAction::PrintHelp => {
+                MainContent::print_help_message();
+            }
+            InputAction::CyclePlotContent => {
+                config.cycle_plot_content();
+            }
+            InputAction::CycleThermoDisplay => {
+                config.cycle_thermo_display();
+                affects_view = true;
+            }
+            // Actions handled elsewhere (not in action_processor)
+            InputAction::PanStart { .. }
+            | InputAction::PanEnd
+            | InputAction::UpdateCursor { .. }
+            | InputAction::SelectOperatorTool(_)
+            | InputAction::ToggleEnergyWindow
+            | InputAction::ToggleCutoffRings => {}
+            InputAction::AddBall { .. }
+            | InputAction::NextBallSize
+            | InputAction::AddRandomBalls { .. }
+            | InputAction::StopAllBalls
+            | InputAction::ClearBalls
+            | InputAction::TogglePause
+            | InputAction::ToggleStepwise
+            | InputAction::RandomizeSpeeds
+            | InputAction::EnableRandomBallSpeed
+            | InputAction::DoubleTimeStep
+            | InputAction::HalveTimeStep
+            | InputAction::IncreaseWaitTime
+            | InputAction::DecreaseWaitTime
+            | InputAction::ToggleRealData
+            | InputAction::ToggleTimingDisplay
+            | InputAction::ToggleBallStats
+            | InputAction::StartVerbosityInput
+            | InputAction::OperatorAction(_) => {
+                unreachable!("domain actions must map to DomainCommand")
+            }
+        },
     }
 
     affects_view
