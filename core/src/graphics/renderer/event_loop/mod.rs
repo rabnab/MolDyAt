@@ -1,4 +1,5 @@
 mod action_processor;
+mod domain_command_adapter;
 mod energy_window_manager;
 mod input_handler;
 mod line_segment_tool;

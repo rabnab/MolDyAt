@@ -1,4 +1,5 @@
 use crate::application::MainContent;
+use crate::application::domain_command::DomainCommand;
 use crate::application::physics_thread::{PhysicsCommand, PhysicsThread};
 use crate::application::renderer_snapshot::RendererSnapshot;
 use arc_swap::ArcSwapOption;
@@ -60,6 +61,11 @@ impl PhysicsCoordinator {
         if let Some(sender) = &self.command_sender {
             let _ = sender.send(command);
         }
+    }
+
+    /// Send a domain-level command through the existing runtime adapter.
+    pub fn send_domain_command(&self, command: DomainCommand) {
+        self.send_command(command.into());
     }
 
     /// Get latest snapshot if available

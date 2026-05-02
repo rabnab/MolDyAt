@@ -1,4 +1,5 @@
 mod core;
+pub mod domain_command;
 mod game_logic;
 mod log_util;
 pub mod operator_command;
@@ -15,6 +16,7 @@ use crate::objects2d::Rect;
 use crate::objects2d::ball_impl::Ball2D;
 use crate::timing_monad::TimingMonad;
 pub use core::MainContent;
+pub use domain_command::DomainCommand;
 
 // Re-export error types so existing `crate::application::AppResult` paths still work
 pub use crate::error::AppError;
