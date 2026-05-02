@@ -37,8 +37,10 @@ This keeps the feature aligned with the current operator framework instead of cr
 The thermostat should use the same center-of-mass-subtracted kinetic temperature used by `compute_cell_thermo`:
 
 $$
-T_{local} = \frac{\sum_i m_i v_i^2 - |\sum_i m_i v_i|^2 / \sum_i m_i}{2N}
+T_{local} = \frac{\sum_i m_i v_i^2 - |\sum_i m_i v_i|^2 / \sum_i m_i}{2(N - 1)}
 $$
+
+In 2D that COM-subtracted definition implies a matching kinetic pressure term of $(N - 1) T$ for a cell, not $N T$.
 
 That formula should be extracted into a small shared helper so the thermo visualization and the thermostat cannot drift apart.
 

@@ -123,12 +123,18 @@ fn test_known_velocities_no_virial() {
         make_ball(1, Vec2D::new(5.1, 5.1), Vec2D::new(-1.0, 0.0), 1.0),
     ];
     let forces = vec![make_force_result(0.0), make_force_result(0.0)];
-    let (t, _) = compute_cell_thermo(&balls, &forces, &world, 0, 0);
+    let (t, p) = compute_cell_thermo(&balls, &forces, &world, 0, 0);
     let expected_t = 1.0;
     assert!(
         (t.get(0, 0) - expected_t).abs() < 1e-5,
         "T={} expected {expected_t}",
         t.get(0, 0)
+    );
+    let expected_p = expected_t / 100.0;
+    assert!(
+        (p.get(0, 0) - expected_p).abs() < 1e-5,
+        "P={} expected {expected_p}",
+        p.get(0, 0)
     );
 }
 
@@ -182,8 +188,8 @@ fn test_negative_height_world_rect() {
         "T={} expected {expected_t} with negative h",
         t.get(0, 0)
     );
-    // Pressure with zero virial and T=1.0: P = (2*1.0 + 0) / 100 = 0.02
-    let expected_p = (2.0 * expected_t) / 100.0;
+    // Pressure with zero virial and T=1.0: P = ((2 - 1) * 1.0 + 0) / 100 = 0.01
+    let expected_p = expected_t / 100.0;
     assert!(
         (p.get(0, 0) - expected_p).abs() < 1e-5,
         "P={} expected {expected_p} with negative h",

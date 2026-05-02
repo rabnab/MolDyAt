@@ -72,26 +72,21 @@ fn split_screen_layout(
     monitor_position: PhysicalPosition<i32>,
     monitor_size: PhysicalSize<u32>,
 ) -> SplitScreenLayout {
-    let simulation_width = monitor_size.width / 2;
-    let energy_width = monitor_size.width - simulation_width;
+    let simulation_width = (monitor_size.width / 2).max(1);
+    let energy_width = (monitor_size.width - simulation_width).max(1);
+    let window_height = monitor_size.height.max(1);
 
     SplitScreenLayout {
         simulation: WindowGeometry {
             position: monitor_position,
-            size: PhysicalSize::new(
-                simulation_width.max(MIN_WINDOW_WIDTH),
-                monitor_size.height.max(MIN_WINDOW_HEIGHT),
-            ),
+            size: PhysicalSize::new(simulation_width, window_height),
         },
         energy: WindowGeometry {
             position: PhysicalPosition::new(
                 monitor_position.x + simulation_width as i32,
                 monitor_position.y,
             ),
-            size: PhysicalSize::new(
-                energy_width.max(MIN_WINDOW_WIDTH),
-                monitor_size.height.max(MIN_WINDOW_HEIGHT),
-            ),
+            size: PhysicalSize::new(energy_width, window_height),
         },
     }
 }
@@ -584,5 +579,19 @@ mod tests {
         );
         assert_eq!(layout.simulation.size.height, 768);
         assert_eq!(layout.energy.size.height, 768);
+    }
+
+    #[test]
+    fn test_split_screen_layout_stays_within_small_monitor_bounds() {
+        let layout =
+            split_screen_layout(PhysicalPosition::new(25, 40), PhysicalSize::new(500, 200));
+
+        assert_eq!(layout.simulation.size.width + layout.energy.size.width, 500);
+        assert_eq!(layout.simulation.size.height, 200);
+        assert_eq!(layout.energy.size.height, 200);
+        assert_eq!(
+            layout.energy.position.x,
+            25 + layout.simulation.size.width as i32
+        );
     }
 }

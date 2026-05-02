@@ -254,7 +254,9 @@ pub fn compute_cell_thermo(
                 continue;
             };
             let n = cs.kinetic.count() as f32;
-            let p = (n * t + cs.virial) / cell_area;
+            // Temperature removes the 2D COM motion, so the matching kinetic
+            // pressure term is (N - 1) * T rather than N * T.
+            let p = ((n - 1.0) * t + cs.virial) / cell_area;
             temp_grid.set(r, c, t);
             pres_grid.set(r, c, p);
         }
