@@ -20,6 +20,7 @@ pub fn execute_input_action(
     pipelines: &mut WgpuPipelines,
     queue: &wgpu::Queue,
     window_target: &winit::event_loop::ActiveEventLoop,
+    main_window: &winit::window::Window,
 ) -> bool {
     // Handle ONLY actions that need wgpu resources
     if let InputAction::ToggleCutoffRings = &action {
@@ -29,5 +30,5 @@ pub fn execute_input_action(
 
     // Delegate all other actions to UnifiedRenderState (single source of truth)
     // Pass window_target so ToggleEnergyWindow can be handled
-    state.process_action(action, Some(window_target))
+    state.process_action(action, Some(window_target), Some(main_window))
 }

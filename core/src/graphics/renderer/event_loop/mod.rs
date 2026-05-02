@@ -9,6 +9,7 @@ mod sidebar_tool;
 mod source_sphere_tool;
 #[cfg(test)]
 mod tests;
+mod thermostat_tool;
 mod unified_render_state;
 mod valve_segment_tool;
 
@@ -23,6 +24,7 @@ pub use metrics::{FrameMetrics, MetricsCollector};
 pub use operator_tool_handler::{OperatorToolHandler, ToolContext, ToolPreview, ToolResponse};
 pub use physics_coordinator::PhysicsCoordinator;
 pub use source_sphere_tool::DEFAULT_SOURCE_RADIUS;
+pub use thermostat_tool::ThermostatToolHandler;
 pub use unified_render_state::UnifiedRenderState;
 
 /// Bundled operator preview geometry for the current frame.

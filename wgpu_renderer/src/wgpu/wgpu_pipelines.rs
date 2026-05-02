@@ -4,8 +4,6 @@
 //! reference specific pipelines (e.g., toggling cutoff rings on the
 //! ball pipeline).
 
-use crate::wgpu::MARGINS;
-
 use super::ball_pipeline::BallPipeline;
 use super::crosshair_pipeline::CrosshairPipeline;
 use super::frame_pipeline::FramePipeline;
@@ -17,9 +15,11 @@ use super::source_sphere_pipeline::SourceSpherePipeline;
 use super::text_pipeline::TextPipeline;
 use super::thermo_heatmap_pipeline::ThermoHeatmapPipeline;
 use super::thermo_value_pipeline::ThermoValueOverlayPipeline;
+use super::thermostat_label_pipeline::ThermostatLabelPipeline;
 use super::wgpu_context::WgpuContext;
 use rust_thermo_core::application::AppResult;
 use rust_thermo_core::application::renderer_snapshot::{CellGridSpec, RendererSnapshot};
+use rust_thermo_core::graphics::renderer::Margins;
 use rust_thermo_core::graphics::renderer::event_loop::FramePreviews;
 use rust_thermo_core::graphics::renderer::state_layers::ThermoDisplayMode;
 
@@ -57,7 +57,7 @@ pub struct WgpuPipelines {
 impl WgpuPipelines {
     /// Create all rendering pipelines and register them in the graph.
     ///
-    /// Execution order: sidebar → frame → grid → thermo_heatmap → lines → source_spheres → balls → crosshair → text.
+    /// Execution order: sidebar → frame → grid → thermo_heatmap → lines → source_spheres → balls → crosshair → thermostat labels → text.
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat) -> Self {
         let mut graph = RenderGraph::new();
 
@@ -83,6 +83,7 @@ impl WgpuPipelines {
             format,
             CROSSHAIR_SHADER,
         )));
+        graph.add_pipeline(Box::new(ThermostatLabelPipeline::new(device, format)));
         let text = graph.add_pipeline(Box::new(TextPipeline::new(device, format)));
 
         log::debug!(
@@ -119,12 +120,12 @@ impl WgpuPipelines {
         view_proj: [[f32; 4]; 4],
         cursor_world_pos: (f32, f32),
         current_ball_radius: f32,
-        ctrl_pressed: bool,
+        show_ball_outline: bool,
         thermo_display: ThermoDisplayMode,
+        margin: Margins,
         operator_previews: FramePreviews,
     ) -> AppResult {
         let window_size = ctx.size();
-        let margin = MARGINS;
 
         let prepare_ctx = PrepareContext {
             device: &ctx.device,
@@ -133,7 +134,7 @@ impl WgpuPipelines {
             view_proj,
             cursor_world_pos,
             current_ball_radius,
-            ctrl_pressed,
+            show_ball_outline,
             window_size,
             margin,
             thermo_display,
@@ -147,8 +148,12 @@ impl WgpuPipelines {
     ///
     /// The graph handles viewport switching automatically based on each
     /// pipeline's [`ViewportMode`](super::render_graph::ViewportMode).
-    pub fn render_all<'rp>(&'rp self, render_pass: &mut wgpu::RenderPass<'rp>, ctx: &WgpuContext) {
-        let margin = MARGINS;
+    pub fn render_all<'rp>(
+        &'rp self,
+        render_pass: &mut wgpu::RenderPass<'rp>,
+        ctx: &WgpuContext,
+        margin: Margins,
+    ) {
         self.graph.render_all(render_pass, ctx.size(), margin);
     }
 

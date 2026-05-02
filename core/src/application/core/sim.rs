@@ -232,6 +232,9 @@ impl VerletIntegration for MainContent {
         // Resolve line segment collisions (post-step position correction + reflection)
         let (seg_px, seg_py) = self.resolve_line_segment_collisions();
 
+        // Apply active Nosé-Hoover thermostats to owned local regions.
+        self.apply_thermostats(dt, &mut stats_accumulator);
+
         // Emit balls from active source spheres.
         self.emit_from_source_spheres();
 

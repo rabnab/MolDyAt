@@ -31,8 +31,6 @@ pub fn process_action_common(
         }
         InputAction::AddBall { position } => {
             physics.send_command(PhysicsCommand::AddBall(position));
-            // When adding ball (Ctrl released), disable cursor to return to crosshair
-            config.disable_cursor();
         }
         InputAction::NextBallSize => {
             physics.send_command(PhysicsCommand::NextBallSize);

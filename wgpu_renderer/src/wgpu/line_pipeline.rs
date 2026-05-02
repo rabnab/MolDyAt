@@ -8,6 +8,7 @@
 
 use bytemuck::{Pod, Zeroable};
 use rust_thermo_core::graphics::renderer::batch_renderer::{BatchRenderer, LineSegment};
+use rust_thermo_core::objects2d::OperatorState;
 use std::collections::HashMap;
 use wgpu::util::DeviceExt;
 
@@ -455,6 +456,113 @@ impl RenderPipeline for LinePipeline {
                             color: rate_color,
                         });
                     }
+                }
+            }
+        }
+
+        // ── Thermostat region indicators ────────────────────────────
+        {
+            let circle_segments = 48_usize;
+
+            fn push_circle(
+                line_batch: &mut BatchRenderer<LineSegment>,
+                circle_segments: usize,
+                cx: f32,
+                cy: f32,
+                radius: f32,
+                width: f32,
+                color: [f32; 4],
+            ) {
+                if radius <= f32::EPSILON {
+                    return;
+                }
+                for i in 0..circle_segments {
+                    let a0 = std::f32::consts::TAU * i as f32 / circle_segments as f32;
+                    let a1 = std::f32::consts::TAU * (i + 1) as f32 / circle_segments as f32;
+                    line_batch.push(LineSegment {
+                        points: [
+                            [cx + radius * a0.cos(), cy + radius * a0.sin()],
+                            [cx + radius * a1.cos(), cy + radius * a1.sin()],
+                        ],
+                        width,
+                        color,
+                    });
+                }
+            }
+
+            for thermostat in &ctx.snapshot.operators.thermostats {
+                let cx = thermostat.position.x;
+                let cy = thermostat.position.y;
+                let radius = thermostat.radius;
+                let temp_frac = thermostat.target_temperature.clamp(0.0, 1.0);
+                let region_color = [temp_frac, 0.2, 1.0 - temp_frac, 0.45];
+                let outline_color = if thermostat.state == OperatorState::On {
+                    [region_color[0], region_color[1], region_color[2], 0.8]
+                } else {
+                    [0.5, 0.2, 0.2, 0.35]
+                };
+
+                push_circle(
+                    &mut line_batch,
+                    circle_segments,
+                    cx,
+                    cy,
+                    radius,
+                    2.0,
+                    outline_color,
+                );
+
+                if thermostat.state == OperatorState::On {
+                    push_circle(
+                        &mut line_batch,
+                        circle_segments,
+                        cx,
+                        cy,
+                        radius * 0.66,
+                        1.0,
+                        region_color,
+                    );
+                    push_circle(
+                        &mut line_batch,
+                        circle_segments,
+                        cx,
+                        cy,
+                        radius * 0.33,
+                        1.0,
+                        [region_color[0], region_color[1], region_color[2], 0.25],
+                    );
+
+                    let indicator_size = world_extent * 0.012;
+                    let indicator_color = [0.0, 1.0, 0.3, 1.0];
+                    line_batch.push(LineSegment {
+                        points: [[cx - indicator_size, cy], [cx + indicator_size, cy]],
+                        width: 2.0,
+                        color: indicator_color,
+                    });
+                    line_batch.push(LineSegment {
+                        points: [[cx, cy - indicator_size], [cx, cy + indicator_size]],
+                        width: 2.0,
+                        color: indicator_color,
+                    });
+                } else {
+                    let indicator_size = world_extent * 0.012;
+                    let indicator_color = [1.0, 0.2, 0.1, 0.9];
+                    line_batch.push(LineSegment {
+                        points: [
+                            [cx - indicator_size, cy - indicator_size],
+                            [cx + indicator_size, cy + indicator_size],
+                        ],
+                        width: 2.0,
+                        color: indicator_color,
+                    });
+                    line_batch.push(LineSegment {
+                        points: [
+                            [cx + indicator_size, cy - indicator_size],
+                            [cx - indicator_size, cy + indicator_size],
+                        ],
+                        width: 2.0,
+                        color: indicator_color,
+                    });
                 }
             }
         }

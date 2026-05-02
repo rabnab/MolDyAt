@@ -1,5 +1,5 @@
 use crate::application::thermo_field::{
-    ThermoFieldHistory, ThermoGrid, compute_cell_thermo, compute_viz_grid_dims,
+    LocalKineticStats, ThermoFieldHistory, ThermoGrid, compute_cell_thermo, compute_viz_grid_dims,
 };
 use crate::objects2d::Rect;
 use crate::objects2d::Vec2D;
@@ -115,20 +115,36 @@ fn test_known_velocities_no_virial() {
     // COM velocity = (0, 0).
     // sum_mv2 = 1*1 + 1*1 = 2
     // sum_mv = (0, 0) → sum_mv.norm_sq()/sum_m = 0
-    // T = (2 - 0) / (2 * 2) = 0.5
+    // In 2D the COM-subtracted system has 2 * (N - 1) = 2 thermal dof,
+    // so T = (2 - 0) / 2 = 1.0.
     let world = Rect::new(0.0, 0.0, 10.0, 10.0);
     let balls = vec![
         make_ball(0, Vec2D::new(5.0, 5.0), Vec2D::new(1.0, 0.0), 1.0),
         make_ball(1, Vec2D::new(5.1, 5.1), Vec2D::new(-1.0, 0.0), 1.0),
     ];
     let forces = vec![make_force_result(0.0), make_force_result(0.0)];
-    let (t, _) = compute_cell_thermo(&balls, &forces, &world, 0, 0);
-    let expected_t = 0.5;
+    let (t, p) = compute_cell_thermo(&balls, &forces, &world, 0, 0);
+    let expected_t = 1.0;
     assert!(
         (t.get(0, 0) - expected_t).abs() < 1e-5,
         "T={} expected {expected_t}",
         t.get(0, 0)
     );
+    let expected_p = expected_t / 100.0;
+    assert!(
+        (p.get(0, 0) - expected_p).abs() < 1e-5,
+        "P={} expected {expected_p}",
+        p.get(0, 0)
+    );
+}
+
+#[test]
+fn test_local_temperature_uses_com_removed_degrees_of_freedom() {
+    let mut stats = LocalKineticStats::new();
+    stats.add_ball(&make_ball(0, Vec2D::zero(), Vec2D::new(1.0, 0.0), 1.0));
+    stats.add_ball(&make_ball(1, Vec2D::zero(), Vec2D::new(-1.0, 0.0), 1.0));
+
+    assert!((stats.temperature().unwrap() - 1.0).abs() < 1e-5);
 }
 
 #[test]
@@ -166,14 +182,14 @@ fn test_negative_height_world_rect() {
     // Grid should be 1×1, T should match the positive-h test
     assert_eq!(t.rows(), 1);
     assert_eq!(t.cols(), 1);
-    let expected_t = 0.5;
+    let expected_t = 1.0;
     assert!(
         (t.get(0, 0) - expected_t).abs() < 1e-5,
         "T={} expected {expected_t} with negative h",
         t.get(0, 0)
     );
-    // Pressure with zero virial and T=0.5: P = (2*0.5 + 0) / 100 = 0.01
-    let expected_p = (2.0 * expected_t) / 100.0;
+    // Pressure with zero virial and T=1.0: P = ((2 - 1) * 1.0 + 0) / 100 = 0.01
+    let expected_p = expected_t / 100.0;
     assert!(
         (p.get(0, 0) - expected_p).abs() < 1e-5,
         "P={} expected {expected_p} with negative h",

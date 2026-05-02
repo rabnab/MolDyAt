@@ -272,6 +272,13 @@ impl ViewportTransform {
         self.dirty.set(true);
     }
 
+    /// Update viewport margins in pixels.
+    pub fn set_margins(&mut self, margin_px: Margins) {
+        self.margin_px = margin_px;
+        self.recalculate_viewport_px();
+        self.dirty.set(true);
+    }
+
     /// Update world bounds (called when simulation box changes)
     pub fn set_world_bounds(&mut self, world_bounds: Rect) {
         self.world_bounds = world_bounds;

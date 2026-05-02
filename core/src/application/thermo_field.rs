@@ -2,6 +2,79 @@ use crate::objects2d::ball_impl::{Ball2D, ForceResult};
 use crate::objects2d::{Rect, Vec2D};
 use std::collections::VecDeque;
 
+/// Center-of-mass-subtracted kinetic statistics for a local region.
+#[derive(Clone, Debug)]
+pub struct LocalKineticStats {
+    count: usize,
+    sum_m: f32,
+    sum_mv: Vec2D,
+    sum_mv2: f32,
+}
+
+impl LocalKineticStats {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Add one ball to the local kinetic accumulator.
+    pub fn add_ball(&mut self, ball: &Ball2D) {
+        let mass = ball.mass;
+        self.count += 1;
+        self.sum_m += mass;
+        self.sum_mv.x += mass * ball.v.x;
+        self.sum_mv.y += mass * ball.v.y;
+        self.sum_mv2 += mass * ball.v.norm_sq();
+    }
+
+    pub fn count(&self) -> usize {
+        self.count
+    }
+
+    /// Center-of-mass velocity for the accumulated region.
+    ///
+    /// The thermostat measures temperature in the local COM frame, so callers
+    /// that later modify velocities should use this velocity to isolate the
+    /// peculiar component `v - v_com` instead of damping the full drift motion.
+    pub fn center_of_mass_velocity(&self) -> Option<Vec2D> {
+        if self.count < 2 || self.sum_m <= f32::EPSILON {
+            return None;
+        }
+
+        Some(self.sum_mv.scaled(1.0 / self.sum_m))
+    }
+
+    /// Local temperature in the center-of-mass frame.
+    pub fn temperature(&self) -> Option<f32> {
+        if self.count < 2 || self.sum_m <= f32::EPSILON {
+            return None;
+        }
+
+        // Removing the 2D center-of-mass motion leaves 2 * (N - 1) thermal
+        // degrees of freedom. The numerator is `sum m |v - v_com|^2`, i.e.
+        // twice the thermal kinetic energy in reduced LJ units.
+        let thermal_dof = 2.0 * (self.count as f32 - 1.0);
+        if thermal_dof <= f32::EPSILON {
+            return None;
+        }
+
+        // COM subtraction can leave a tiny negative/positive residue from
+        // floating-point cancellation for rigidly drifting buckets.
+        let thermal_speed_sq = (self.sum_mv2 - self.sum_mv.norm_sq() / self.sum_m).max(0.0);
+        Some(thermal_speed_sq / thermal_dof)
+    }
+}
+
+impl Default for LocalKineticStats {
+    fn default() -> Self {
+        Self {
+            count: 0,
+            sum_m: 0.0,
+            sum_mv: Vec2D::zero(),
+            sum_mv2: 0.0,
+        }
+    }
+}
+
 /// A flat, row-major grid of `f32` values with explicit dimensions.
 ///
 /// Single contiguous allocation for cache-friendly iteration. Used for
@@ -78,20 +151,14 @@ impl PartialEq for ThermoGrid {
 
 /// Per-cell accumulator for computing local temperature and pressure.
 struct CellStats {
-    n: usize,
-    sum_m: f32,
-    sum_mv: Vec2D,
-    sum_mv2: f32,
+    kinetic: LocalKineticStats,
     virial: f32,
 }
 
 impl CellStats {
     fn new() -> Self {
         Self {
-            n: 0,
-            sum_m: 0.0,
-            sum_mv: Vec2D::zero(),
-            sum_mv2: 0.0,
+            kinetic: LocalKineticStats::new(),
             virial: 0.0,
         }
     }
@@ -169,14 +236,8 @@ pub fn compute_cell_thermo(
         let row = row.min(rows - 1);
         let idx = row * cols + col;
 
-        let m = ball.mass;
-        let v = &ball.v;
         let cs = &mut stats[idx];
-        cs.n += 1;
-        cs.sum_m += m;
-        cs.sum_mv.x += m * v.x;
-        cs.sum_mv.y += m * v.y;
-        cs.sum_mv2 += m * v.norm_sq();
+        cs.kinetic.add_ball(ball);
         cs.virial += fr.virial * 0.5;
     }
 
@@ -187,14 +248,15 @@ pub fn compute_cell_thermo(
     for r in 0..rows {
         for c in 0..cols {
             let cs = &stats[r * cols + c];
-            if cs.n < 2 {
+            let Some(t) = cs.kinetic.temperature() else {
                 temp_grid.set(r, c, f32::NAN);
                 pres_grid.set(r, c, f32::NAN);
                 continue;
-            }
-            let n = cs.n as f32;
-            let t = (cs.sum_mv2 - cs.sum_mv.norm_sq() / cs.sum_m) / (2.0 * n);
-            let p = (n * t + cs.virial) / cell_area;
+            };
+            let n = cs.kinetic.count() as f32;
+            // Temperature removes the 2D COM motion, so the matching kinetic
+            // pressure term is (N - 1) * T rather than N * T.
+            let p = ((n - 1.0) * t + cs.virial) / cell_area;
             temp_grid.set(r, c, t);
             pres_grid.set(r, c, p);
         }

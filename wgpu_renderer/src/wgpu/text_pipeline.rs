@@ -4,7 +4,16 @@
 use bytemuck::{Pod, Zeroable};
 use font8x8::UnicodeFonts;
 use rust_thermo_core::graphics::renderer::margins::Margins;
+use rust_thermo_core::graphics::sidebar::sidebar_ui_scale;
 use wgpu::util::DeviceExt;
+
+const CURSOR_TEXT_COLOR: [f32; 4] = [0.92, 0.9, 0.84, 1.0];
+
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct TextColorUniform {
+    color: [f32; 4],
+}
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -21,6 +30,7 @@ pub struct TextPipeline {
     texture: wgpu::Texture,
     texture_view: wgpu::TextureView,
     sampler: wgpu::Sampler,
+    color_buffer: wgpu::Buffer,
     vertex_buffer: wgpu::Buffer,
     vertex_count: u32,
     texture_size: (u32, u32),
@@ -80,7 +90,25 @@ impl TextPipeline {
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,
                 },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
             ],
+        });
+
+        let color_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Text Color Buffer"),
+            contents: bytemuck::bytes_of(&TextColorUniform {
+                color: CURSOR_TEXT_COLOR,
+            }),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -94,6 +122,10 @@ impl TextPipeline {
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: color_buffer.as_entire_binding(),
                 },
             ],
         });
@@ -173,6 +205,7 @@ impl TextPipeline {
             texture,
             texture_view,
             sampler,
+            color_buffer,
             vertex_buffer,
             vertex_count: 4,
             texture_size,
@@ -209,6 +242,10 @@ impl TextPipeline {
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: self.color_buffer.as_entire_binding(),
                 },
             ],
         });
@@ -271,15 +308,14 @@ impl TextPipeline {
             },
         );
 
-        // Position: centered horizontally, just below the simulation pane (in bottom margin)
+        // Position: bottom-right of the simulation pane, inside the bottom margin.
         let win_w = window_size.0 as f32;
         let win_h = window_size.1 as f32;
-        let text_w = width_px as f32;
-        let text_h = height_px as f32;
-        let padding = 4.0;
-        // Center horizontally within the viewport, positioned in bottom margin
-        let viewport_width = (win_w - margin.horizontal()).max(1.0);
-        let left_px = margin.left + (viewport_width - text_w) * 0.5;
+        let ui_scale = sidebar_ui_scale(margin.left);
+        let text_w = width_px as f32 * ui_scale;
+        let text_h = height_px as f32 * ui_scale;
+        let padding = 4.0 * ui_scale;
+        let left_px = (win_w - margin.right - text_w - padding).max(margin.left);
         let top_px = (win_h - margin.bottom + padding).max(0.0);
         let right_px = left_px + text_w;
         let bottom_px = top_px + text_h;

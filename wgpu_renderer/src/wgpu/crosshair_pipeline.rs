@@ -1,7 +1,7 @@
 //! Crosshair rendering pipeline for WGPU
 //!
 //! Renders a crosshair at the cursor position and optionally a ball outline
-//! when the user is placing a ball (Ctrl held).
+//! when the ball placement tool is active.
 
 use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
@@ -222,7 +222,7 @@ impl RenderPipeline for CrosshairPipeline {
             full_vp,
             [ctx.cursor_world_pos.0, ctx.cursor_world_pos.1],
             ctx.current_ball_radius,
-            ctx.ctrl_pressed,
+            ctx.show_ball_outline,
             ctx.snapshot.equilibrium_edge_distance,
             ctx.snapshot.cutoff_distance,
         );

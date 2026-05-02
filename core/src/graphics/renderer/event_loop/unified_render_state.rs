@@ -30,6 +30,7 @@ use super::operator_tool_handler::{
 };
 use super::physics_coordinator::PhysicsCoordinator;
 use super::source_sphere_tool::SourceSphereToolHandler;
+use super::thermostat_tool::ThermostatToolHandler;
 use super::valve_segment_tool::ValveSegmentToolHandler;
 
 use crate::application::physics_thread::PhysicsCommand;
@@ -262,7 +263,8 @@ impl UnifiedRenderState {
             OperatorTool::LineSegment => Some(Box::new(LineSegmentToolHandler::new())),
             OperatorTool::ValveSegment => Some(Box::new(ValveSegmentToolHandler::new())),
             OperatorTool::SourceSphere => Some(Box::new(SourceSphereToolHandler::new())),
-            OperatorTool::Thermostat | OperatorTool::None => None,
+            OperatorTool::Thermostat => Some(Box::new(ThermostatToolHandler::new())),
+            OperatorTool::None => None,
         }
     }
 
@@ -285,6 +287,7 @@ impl UnifiedRenderState {
         &mut self,
         action: InputAction,
         window_target: Option<&winit::event_loop::ActiveEventLoop>,
+        main_window: Option<&winit::window::Window>,
     ) -> bool {
         match action {
             InputAction::ResetView => {
@@ -293,11 +296,14 @@ impl UnifiedRenderState {
             }
             InputAction::NextBallSize => {
                 self.next_ball_size();
+                if self.active_tool == OperatorTool::Ball {
+                    self.view_dirty = true;
+                }
                 false
             }
             InputAction::ToggleEnergyWindow => {
                 if let Some(target) = window_target {
-                    self.toggle_energy_window(target);
+                    self.toggle_energy_window(target, main_window);
                 }
                 false
             }
@@ -307,6 +313,8 @@ impl UnifiedRenderState {
                 }
                 self.active_tool = tool;
                 self.tool_handler = Self::handler_for_tool(tool);
+                self.config.draw_cursor = tool == OperatorTool::Ball;
+                self.view_dirty = true;
                 false
             }
             InputAction::AddBall { position } => {
@@ -319,7 +327,6 @@ impl UnifiedRenderState {
                     .map(|s| &s.operators)
                     .unwrap_or(&self.default_operator_snapshot);
                 if operators.is_near_any_operator(position) {
-                    self.config.disable_cursor();
                     return false;
                 }
                 process_action_common(
@@ -358,6 +365,7 @@ impl UnifiedRenderState {
     /// Updates the viewport **and** notifies the physics thread so the
     /// simulation world matches the new window dimensions.
     pub fn handle_resize(&mut self, new_width: f32, new_height: f32, margin_px: Margins) {
+        self.viewport.set_margins(margin_px);
         let world_rect = ViewportTransform::compute_world_bounds_from_window_size(
             new_width as u32,
             new_height as u32,
@@ -412,8 +420,12 @@ impl UnifiedRenderState {
     // ── Energy window helpers ────────────────────────────────────────
 
     /// Toggle or cycle the energy plot window.
-    pub fn toggle_energy_window(&mut self, window_target: &winit::event_loop::ActiveEventLoop) {
-        self.energy_manager.toggle(window_target);
+    pub fn toggle_energy_window(
+        &mut self,
+        window_target: &winit::event_loop::ActiveEventLoop,
+        main_window: Option<&winit::window::Window>,
+    ) {
+        self.energy_manager.toggle(window_target, main_window);
     }
 
     // ── Ball size helpers ────────────────────────────────────────────
@@ -479,7 +491,7 @@ impl UnifiedRenderState {
                 tool
             };
             let action = InputAction::SelectOperatorTool(new_tool);
-            self.process_action(action, None);
+            self.process_action(action, None, None);
             return true;
         }
 
@@ -492,6 +504,7 @@ impl UnifiedRenderState {
                 InputAction::AddBall {
                     position: world_pos,
                 },
+                None,
                 None,
             );
         }
@@ -508,7 +521,7 @@ impl UnifiedRenderState {
             if resp.consumed {
                 if let Some(cmd) = resp.action {
                     let action = InputAction::OperatorAction(cmd);
-                    self.process_action(action, None);
+                    self.process_action(action, None, None);
                 }
                 if resp.view_dirty {
                     self.view_dirty = true;
@@ -521,7 +534,7 @@ impl UnifiedRenderState {
             .input
             .handle_mouse_button(button, state, screen_pos, world_pos, pan_offset)
         {
-            return self.process_action(action, None);
+            return self.process_action(action, None, None);
         }
         false
     }
@@ -549,7 +562,7 @@ impl UnifiedRenderState {
             if resp.consumed {
                 if let Some(cmd) = resp.action {
                     let action = InputAction::OperatorAction(cmd);
-                    self.process_action(action, None);
+                    self.process_action(action, None, None);
                 }
                 if resp.view_dirty {
                     self.view_dirty = true;
@@ -562,7 +575,7 @@ impl UnifiedRenderState {
                 self.apply_pan_from_input(*delta);
                 return true;
             } else {
-                return self.process_action(action, None);
+                return self.process_action(action, None, None);
             }
         }
         false
@@ -598,7 +611,7 @@ impl UnifiedRenderState {
                 if resp.consumed {
                     if let Some(cmd) = resp.action {
                         let action = InputAction::OperatorAction(cmd);
-                        self.process_action(action, None);
+                        self.process_action(action, None, None);
                     }
                     if resp.view_dirty {
                         self.view_dirty = true;
@@ -612,20 +625,20 @@ impl UnifiedRenderState {
             match &action {
                 InputAction::ZoomIn { center } => {
                     self.zoom_at_point(center, 1.1);
-                    self.process_action(action, None);
+                    self.process_action(action, None, None);
                     return true;
                 }
                 InputAction::ZoomOut { center } => {
                     self.zoom_at_point(center, 1.0 / 1.1);
-                    self.process_action(action, None);
+                    self.process_action(action, None, None);
                     return true;
                 }
                 InputAction::ResetView => {
                     self.reset_view();
-                    self.process_action(action, None);
+                    self.process_action(action, None, None);
                     return true;
                 }
-                _ => return self.process_action(action, None),
+                _ => return self.process_action(action, None, None),
             }
         }
         false
@@ -743,5 +756,71 @@ mod tests {
     /// that only exercise action-dispatch logic.
     fn make_disconnected_coordinator() -> PhysicsCoordinator {
         PhysicsCoordinator::new_disconnected()
+    }
+
+    fn build_test_state() -> UnifiedRenderState {
+        let energy_data: SharedEnergyData = Arc::new(Mutex::new(EnergyData::new()));
+        UnifiedRenderState {
+            input: InputHandler::new(),
+            physics: make_disconnected_coordinator(),
+            viewport: dummy_viewport(),
+            energy_manager: EnergyWindowManager::new(energy_data),
+            config: RendererConfig::default(),
+            view_dirty: false,
+            last_snapshot: None,
+            cursor_world_pos: Vec2D::zero(),
+            current_ball_size_idx: 2,
+            metrics: MetricsCollector::new(),
+            active_tool: OperatorTool::None,
+            tool_handler: None,
+            default_operator_snapshot: OperatorSnapshot::default(),
+            resize_pending: false,
+        }
+    }
+
+    #[test]
+    fn selecting_ball_tool_enables_cursor_preview_and_marks_view_dirty() {
+        let mut state = build_test_state();
+
+        let affects_view = state.process_action(
+            InputAction::SelectOperatorTool(OperatorTool::Ball),
+            None,
+            None,
+        );
+
+        assert!(!affects_view);
+        assert_eq!(state.active_tool, OperatorTool::Ball);
+        assert!(state.config.draw_cursor);
+        assert!(state.view_dirty);
+    }
+
+    #[test]
+    fn switching_away_from_ball_tool_disables_cursor_preview() {
+        let mut state = build_test_state();
+        state.active_tool = OperatorTool::Ball;
+        state.config.draw_cursor = true;
+
+        let affects_view = state.process_action(
+            InputAction::SelectOperatorTool(OperatorTool::LineSegment),
+            None,
+            None,
+        );
+
+        assert!(!affects_view);
+        assert_eq!(state.active_tool, OperatorTool::LineSegment);
+        assert!(!state.config.draw_cursor);
+        assert!(state.view_dirty);
+    }
+
+    #[test]
+    fn next_ball_size_marks_view_dirty_when_ball_tool_is_active() {
+        let mut state = build_test_state();
+        state.active_tool = OperatorTool::Ball;
+
+        let affects_view = state.process_action(InputAction::NextBallSize, None, None);
+
+        assert!(!affects_view);
+        assert_eq!(state.current_ball_size_idx, 3);
+        assert!(state.view_dirty);
     }
 }

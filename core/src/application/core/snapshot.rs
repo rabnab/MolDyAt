@@ -91,6 +91,7 @@ impl MainContent {
                 line_segments: self.line_segments.segments().to_vec(),
                 valve_segments: self.valve_segments.valves().to_vec(),
                 source_spheres: self.source_spheres.spheres().to_vec(),
+                thermostats: self.thermostats.thermostats().to_vec(),
             },
             ..{
                 let (cell_temperature, cell_pressure, thermo_grid_spec) =

@@ -49,7 +49,7 @@ pub struct PrepareContext<'a> {
     pub view_proj: [[f32; 4]; 4],
     pub cursor_world_pos: (f32, f32),
     pub current_ball_radius: f32,
-    pub ctrl_pressed: bool,
+    pub show_ball_outline: bool,
     pub window_size: (u32, u32),
     pub margin: Margins,
     pub thermo_display: ThermoDisplayMode,

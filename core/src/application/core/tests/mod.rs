@@ -8,6 +8,7 @@ mod wall_momentum;
 mod line_segments;
 mod snapshot;
 mod source_spheres;
+mod thermostats;
 mod valves;
 
 use crate::application::MainContent;
