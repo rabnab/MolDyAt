@@ -27,7 +27,7 @@ fn test_add_candidate() {
         .add_candidate_at_pos((x, y).into())
         .expect("Could not add candidate");
 
-    assert_eq!(main_content.num_balls, 1);
+    assert_eq!(main_content.balls.len(), 1);
 
     // Ensure the added ball is in the correct position
     {
@@ -53,7 +53,11 @@ fn test_add_candidate() {
         main_content
             .add_candidate_at_pos((coord.get_tl().0 - 0.1, coord.get_tl().1 - 0.1).into())
             .expect_err("Could not add candidate");
-        assert_eq!(main_content.num_balls, 1, "Ball added out of valid region");
+        assert_eq!(
+            main_content.balls.len(),
+            1,
+            "Ball added out of valid region"
+        );
     }
 }
 

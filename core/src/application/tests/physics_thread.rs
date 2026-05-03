@@ -1,7 +1,27 @@
 use crate::application::GameLogic;
 use crate::application::MainContent;
-use crate::application::physics_thread::{PhysicsCommand, PhysicsThread, ShutdownSignal};
+use crate::application::physics_thread::{
+    CommandHandler, PhysicsCommand, PhysicsRuntime, PhysicsThread, ShutdownSignal,
+};
 use crate::objects2d::Rect;
+
+struct RecordingHandler<T> {
+    commands: Vec<T>,
+}
+
+impl<T> RecordingHandler<T> {
+    fn new() -> Self {
+        Self {
+            commands: Vec::new(),
+        }
+    }
+}
+
+impl<T> CommandHandler<T> for RecordingHandler<T> {
+    fn handle_command(&mut self, command: T) {
+        self.commands.push(command);
+    }
+}
 
 #[test]
 fn test_shutdown_signal_initial_state() {
@@ -210,4 +230,38 @@ fn test_command_channel_speed_control() {
     physics_thread
         .shutdown_and_join()
         .expect("Failed to shutdown physics thread");
+}
+
+#[test]
+fn test_runtime_drains_all_available_commands() {
+    let runtime = PhysicsRuntime::default();
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let mut handler = RecordingHandler::new();
+
+    sender.send(1usize).expect("send should succeed");
+    sender.send(2usize).expect("send should succeed");
+    sender.send(3usize).expect("send should succeed");
+
+    runtime.drain_commands(&receiver, &mut handler);
+
+    assert_eq!(handler.commands, vec![1, 2, 3]);
+}
+
+#[test]
+fn test_physics_thread_shutdown_and_join_is_graceful() {
+    use std::time::{Duration, Instant};
+
+    let world_rect = Rect::new(0.0, 0.0, 100.0, 100.0);
+    let main_content = MainContent::new(world_rect).expect("Failed to create MainContent");
+    let physics_thread = PhysicsThread::spawn(main_content, Box::new(|| {}));
+
+    let start = Instant::now();
+    physics_thread
+        .shutdown_and_join()
+        .expect("Failed to shutdown physics thread");
+
+    assert!(
+        start.elapsed() < Duration::from_secs(2),
+        "physics thread shutdown should complete promptly"
+    );
 }

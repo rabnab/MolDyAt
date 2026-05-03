@@ -177,7 +177,8 @@ fn test_remove_invalid_balls_clears_neighbor_indices() {
 
     // Verify the invalid ball was removed
     assert_eq!(
-        main_content.num_balls, 2,
+        main_content.balls.len(),
+        2,
         "Should have 2 balls after removing 1 invalid ball"
     );
 

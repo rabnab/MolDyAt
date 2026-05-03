@@ -10,7 +10,6 @@ use std::cmp::Ordering;
 impl MainContent {
     /// Add ball to simulation without collision checks.
     /// Ball is added to both the balls vector and the cell grid.
-    /// Updates num_balls counter.
     ///
     /// # Arguments
     /// * `candidate` - Ball to add to simulation
@@ -24,9 +23,6 @@ impl MainContent {
         self.world.clear_balls();
         self.get_ball_factory().reset_id_counter();
         self.clear_all_operators();
-    }
-    pub(crate) fn get_number_of_balls(&self) -> usize {
-        self.balls.len()
     }
     pub(crate) fn get_balls(&self) -> &[Ball2D] {
         &self.balls
@@ -224,13 +220,11 @@ impl SimulationWorld {
         let ball_idx = self.balls.len();
         self.balls.push(candidate);
         self.cell_grid.add_ball(ball_idx, &mut self.balls);
-        self.num_balls = self.balls.len();
     }
 
     pub(crate) fn clear_balls(&mut self) {
         self.balls.clear();
         self.cell_grid.clear_all_cells();
-        self.num_balls = 0;
     }
 
     pub(crate) fn rebuild_cell_grid(&mut self) {
@@ -238,7 +232,6 @@ impl SimulationWorld {
         for i in 0..self.balls.len() {
             self.cell_grid.add_ball(i, &mut self.balls);
         }
-        self.num_balls = self.balls.len();
     }
 
     pub(crate) fn move_ball_in_cell_grid(

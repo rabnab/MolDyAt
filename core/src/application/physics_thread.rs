@@ -7,14 +7,21 @@
 //! ARCHITECTURAL CONSTRAINT: This module must not depend on ggez.
 //! All ggez-specific code belongs in src/application/ggez/.
 
+use crate::application::MainContent;
 use crate::application::operator_command::OperatorCommand;
-use crate::application::{GameLogic, MainContent};
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::Ball2D;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
+use std::sync::mpsc::{self, Sender};
 use std::thread::{self, JoinHandle};
+
+mod command_handler;
+mod runtime;
+
+#[cfg(test)]
+pub(crate) use runtime::CommandHandler;
+pub(crate) use runtime::PhysicsRuntime;
 
 /// Commands that can be sent from the main thread to the physics thread
 #[derive(Debug)]
@@ -93,13 +100,6 @@ impl ShutdownSignal {
     pub fn should_shutdown(&self) -> bool {
         self.should_stop.load(Ordering::Acquire)
     }
-
-    /// Clone the signal for sharing across threads
-    pub fn clone_signal(&self) -> Self {
-        Self {
-            should_stop: Arc::clone(&self.should_stop),
-        }
-    }
 }
 
 impl Default for ShutdownSignal {
@@ -113,7 +113,6 @@ pub struct PhysicsThread {
     thread_handle: Option<JoinHandle<()>>,
     shutdown_signal: ShutdownSignal,
     command_sender: Sender<PhysicsCommand>,
-    wakeup_callback: Option<Arc<dyn Fn() + Send + Sync>>,
 }
 
 impl PhysicsThread {
@@ -129,202 +128,28 @@ impl PhysicsThread {
         wakeup_callback: Box<dyn Fn() + Send + Sync + 'static>,
     ) -> Self {
         let shutdown_signal = ShutdownSignal::new();
-        let thread_signal = shutdown_signal.clone_signal();
+        let thread_signal = shutdown_signal.clone();
 
         // Create command channel
         let (command_sender, command_receiver) = mpsc::channel();
 
-        let wakeup = Arc::new(wakeup_callback);
+        let wakeup: Arc<dyn Fn() + Send + Sync> = Arc::from(wakeup_callback);
         let thread_wakeup = Arc::clone(&wakeup);
 
         let thread_handle = thread::spawn(move || {
-            // Log physics thread startup
-            println!(
-                "Physics thread ID: {:?} - Started!",
-                std::thread::current().id()
+            let runtime = PhysicsRuntime::default();
+            runtime.run(
+                &mut main_content,
+                &command_receiver,
+                &thread_signal,
+                &thread_wakeup,
             );
-            println!("Entering physics loop (running as fast as possible)...");
-
-            // Snapshot throttling: only publish at ~60 Hz to match typical vsync
-            // This prevents expensive snapshot creation from slowing down physics
-            // 60 Hz provides smooth rendering while minimizing CPU overhead
-            let snapshot_interval = std::time::Duration::from_micros(16667); // ~60 Hz
-            let mut last_snapshot_time = std::time::Instant::now();
-
-            // Physics performance tracking
-            let mut physics_step_count: u64 = 0;
-            let mut last_perf_report = std::time::Instant::now();
-            let mut snapshot_time_total = std::time::Duration::ZERO;
-            let mut snapshot_count = 0u64;
-
-            // Physics loop: run simulation as fast as possible
-            while !thread_signal.should_shutdown() {
-                // Process all pending commands
-                Self::process_commands(&mut main_content, &command_receiver);
-
-                // Get current wait time
-                let wait_time_ms = main_content.get_wait_time();
-                if wait_time_ms > 0 {
-                    std::thread::sleep(std::time::Duration::from_millis(wait_time_ms));
-                }
-                // Run one simulation step per iteration
-                let was_paused = main_content.sim.is_paused();
-                let _ = main_content.simulation_step();
-                // Only count steps where physics actually ran (not paused idle loops
-                // which would otherwise inflate the reported step rate).
-                if !was_paused {
-                    physics_step_count += 1;
-                }
-
-                // Publish snapshot for renderer only at throttled rate (~60 Hz)
-                // This prevents expensive snapshot creation from slowing down physics
-                let now = std::time::Instant::now();
-                if now.duration_since(last_snapshot_time) >= snapshot_interval {
-                    let snapshot_start = std::time::Instant::now();
-                    main_content.publish_snapshot();
-                    // Call wakeup callback to notify renderer of new snapshot
-                    thread_wakeup();
-
-                    snapshot_time_total += snapshot_start.elapsed();
-                    snapshot_count += 1;
-                    last_snapshot_time = now;
-                }
-
-                // Update physics FPS counter (lock-free atomic write)
-                if now.duration_since(last_perf_report).as_secs() >= 1 {
-                    let elapsed = now.duration_since(last_perf_report).as_secs_f32();
-                    let physics_fps = physics_step_count as f32 / elapsed;
-
-                    main_content.set_physics_fps(physics_fps);
-
-                    // Calculate snapshot overhead
-                    if snapshot_count > 0 {
-                        let avg_snapshot_us =
-                            snapshot_time_total.as_micros() / snapshot_count as u128;
-                        let snapshot_hz = snapshot_count as f32 / elapsed;
-                        let total_overhead_pct =
-                            (snapshot_time_total.as_secs_f32() / elapsed) * 100.0;
-                        log::debug!(
-                            "Physics thread: {:.0} steps/sec | Snapshots: {:.1} Hz, {:.0} µs avg ({:.1}% overhead)",
-                            physics_fps,
-                            snapshot_hz,
-                            avg_snapshot_us,
-                            total_overhead_pct
-                        );
-                    } else {
-                        log::debug!("Physics thread: {:.0} steps/sec", physics_fps);
-                    }
-
-                    physics_step_count = 0;
-                    snapshot_time_total = std::time::Duration::ZERO;
-                    snapshot_count = 0;
-                    last_perf_report = now;
-                }
-
-                // Optional: Add a small yield to prevent CPU starvation
-                // This can be tuned based on performance requirements
-                std::thread::yield_now();
-            }
         });
 
         Self {
             thread_handle: Some(thread_handle),
             shutdown_signal,
             command_sender,
-            wakeup_callback: Some(wakeup),
-        }
-    }
-
-    /// Process commands from the command channel
-    fn process_commands(main_content: &mut MainContent, receiver: &Receiver<PhysicsCommand>) {
-        // Process all available commands without blocking
-        loop {
-            match receiver.try_recv() {
-                Ok(command) => {
-                    Self::execute_command(main_content, command);
-                }
-                Err(TryRecvError::Empty) => break,
-                Err(TryRecvError::Disconnected) => break,
-            }
-        }
-    }
-
-    /// Execute a single command
-    fn execute_command(main_content: &mut MainContent, command: PhysicsCommand) {
-        match command {
-            PhysicsCommand::Pause => {
-                if !main_content.sim.is_paused() {
-                    main_content.toggle_pause();
-                }
-            }
-            PhysicsCommand::Resume => {
-                if main_content.sim.is_paused() {
-                    main_content.toggle_pause();
-                }
-            }
-            PhysicsCommand::TogglePause => {
-                main_content.toggle_pause();
-            }
-            PhysicsCommand::AddBall(pos) => {
-                let _ = main_content.add_candidate_at_pos(pos);
-            }
-            PhysicsCommand::AddBallWithVelocity(ball) => {
-                let _ = main_content.add_candidate_ball(ball, 0.);
-            }
-            PhysicsCommand::AddRandomBalls(count) => {
-                main_content.add_random_candidates(count);
-            }
-            PhysicsCommand::ClearBalls => {
-                main_content.clear_points();
-            }
-            PhysicsCommand::StopAllBalls => {
-                main_content.stop_all_balls();
-            }
-            PhysicsCommand::RandomizeSpeeds => {
-                main_content.randomize_speeds();
-            }
-            PhysicsCommand::EnableRandomBallSpeed => {
-                main_content.enable_random_ball_speed();
-            }
-            PhysicsCommand::NextBallSize => {
-                main_content.next_ball_size();
-            }
-            PhysicsCommand::IncreaseWaitTime => {
-                main_content.increase_wait_time();
-            }
-            PhysicsCommand::DecreaseWaitTime => {
-                main_content.decrease_wait_time();
-            }
-            PhysicsCommand::DoubleTimeStep => {
-                main_content.double_time_step();
-            }
-            PhysicsCommand::HalveTimeStep => {
-                main_content.halve_time_step();
-            }
-            PhysicsCommand::ToggleRealData => {
-                main_content.toggle_real_data();
-            }
-            PhysicsCommand::ToggleStepwise => {
-                main_content.toggle_stepwise();
-            }
-            PhysicsCommand::ToggleTimingDisplay => {
-                main_content.toggle_timing_display();
-            }
-            PhysicsCommand::ToggleBallStats => {
-                main_content.toggle_show_ball_stats();
-            }
-            PhysicsCommand::StartVerbosityInput => {
-                main_content.start_handling_verbosity_input();
-            }
-            PhysicsCommand::Resize { world_rect } => {
-                main_content.resize(world_rect);
-            }
-            PhysicsCommand::ResumeAfterResize => {
-                main_content.unpause_after_resize();
-            }
-            PhysicsCommand::Operator(cmd) => {
-                cmd.execute(main_content);
-            }
         }
     }
 
@@ -339,11 +164,6 @@ impl PhysicsThread {
         self.command_sender
             .send(command)
             .map_err(|_| "Physics thread command channel disconnected".to_string())
-    }
-
-    /// Get a clone of the command sender for sharing across threads
-    pub fn get_command_sender(&self) -> Sender<PhysicsCommand> {
-        self.command_sender.clone()
     }
 
     /// Signal the physics thread to shutdown

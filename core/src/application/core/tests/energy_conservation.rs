@@ -66,8 +66,6 @@ fn test_energy_conservation_1000_balls() {
             balls_added += 1;
         }
     }
-
-    main_content.num_balls = balls_added;
     println!("Successfully added {} balls", balls_added);
 
     // Add balls to cell grid
