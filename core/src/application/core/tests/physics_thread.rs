@@ -22,8 +22,7 @@ fn test_physics_thread_spawning() {
     thread::sleep(Duration::from_millis(100));
 
     // Send a command to verify the channel works
-    let command_sender = physics_thread.get_command_sender();
-    let _ = command_sender.send(crate::application::physics_thread::PhysicsCommand::Pause);
+    let _ = physics_thread.send_command(crate::application::physics_thread::PhysicsCommand::Pause);
 
     // Give it time to process
     thread::sleep(Duration::from_millis(50));

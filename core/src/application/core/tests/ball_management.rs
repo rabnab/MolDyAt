@@ -53,7 +53,11 @@ fn test_add_candidate() {
         main_content
             .add_candidate_at_pos((coord.get_tl().0 - 0.1, coord.get_tl().1 - 0.1).into())
             .expect_err("Could not add candidate");
-        assert_eq!(main_content.balls.len(), 1, "Ball added out of valid region");
+        assert_eq!(
+            main_content.balls.len(),
+            1,
+            "Ball added out of valid region"
+        );
     }
 }
 

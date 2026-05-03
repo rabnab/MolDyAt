@@ -1,4 +1,5 @@
-use super::{CommandHandler, PhysicsCommand};
+use super::PhysicsCommand;
+use super::runtime::CommandHandler;
 use crate::application::MainContent;
 
 pub(crate) struct PhysicsCommandHandler<'a> {

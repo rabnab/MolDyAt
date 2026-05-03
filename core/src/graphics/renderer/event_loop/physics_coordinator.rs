@@ -4,22 +4,17 @@ use crate::application::physics_thread::{PhysicsCommand, PhysicsThread};
 use crate::application::renderer_snapshot::RendererSnapshot;
 use arc_swap::ArcSwapOption;
 use std::sync::Arc;
-use std::sync::mpsc::Sender;
 
 /// Coordinates communication between render thread and physics thread
 pub struct PhysicsCoordinator {
     physics_thread: Option<PhysicsThread>,
-    command_sender: Option<Sender<PhysicsCommand>>,
     snapshot_slot: Option<Arc<ArcSwapOption<RendererSnapshot>>>,
 
     // Step tracking
-    last_processed_step: u64,
     last_displayed_step: u64,
     steps_per_frame: f32,
 
     // Performance metrics
-    last_step_time: std::time::Instant,
-    simulation_fps: f32,
     render_fps: u32,
     last_reported_render_fps: f32,
     render_report_interval: std::time::Instant,
@@ -39,17 +34,11 @@ impl PhysicsCoordinator {
 
         // Spawn physics thread
         let physics_thread = PhysicsThread::spawn(application, wakeup_callback);
-        let command_sender = physics_thread.get_command_sender();
-
         Self {
             physics_thread: Some(physics_thread),
-            command_sender: Some(command_sender),
             snapshot_slot: Some(snapshot_slot),
-            last_processed_step: 0,
             last_displayed_step: 0,
             steps_per_frame: 0.0,
-            last_step_time: std::time::Instant::now(),
-            simulation_fps: 0.0,
             render_fps: 0,
             last_reported_render_fps: 0.0,
             render_report_interval: std::time::Instant::now(),
@@ -58,8 +47,8 @@ impl PhysicsCoordinator {
 
     /// Send command to physics thread
     pub fn send_command(&self, command: PhysicsCommand) {
-        if let Some(sender) = &self.command_sender {
-            let _ = sender.send(command);
+        if let Some(thread) = self.physics_thread.as_ref() {
+            let _ = thread.send_command(command);
         }
     }
 
@@ -146,13 +135,9 @@ impl PhysicsCoordinator {
     pub fn new_disconnected() -> Self {
         Self {
             physics_thread: None,
-            command_sender: None,
             snapshot_slot: None,
-            last_processed_step: 0,
             last_displayed_step: 0,
             steps_per_frame: 0.0,
-            last_step_time: std::time::Instant::now(),
-            simulation_fps: 0.0,
             render_fps: 0,
             last_reported_render_fps: 0.0,
             render_report_interval: std::time::Instant::now(),
@@ -180,13 +165,9 @@ mod tests {
     fn test_steps_per_frame_ema() {
         let mut coord = PhysicsCoordinator {
             physics_thread: None,
-            command_sender: None,
             snapshot_slot: None,
-            last_processed_step: 0,
             last_displayed_step: 0,
             steps_per_frame: 0.0,
-            last_step_time: std::time::Instant::now(),
-            simulation_fps: 0.0,
             render_fps: 0,
             last_reported_render_fps: 0.0,
             render_report_interval: std::time::Instant::now(),
@@ -206,13 +187,9 @@ mod tests {
     fn test_render_fps_update() {
         let mut coord = PhysicsCoordinator {
             physics_thread: None,
-            command_sender: None,
             snapshot_slot: None,
-            last_processed_step: 0,
             last_displayed_step: 0,
             steps_per_frame: 0.0,
-            last_step_time: std::time::Instant::now(),
-            simulation_fps: 0.0,
             render_fps: 60,
             last_reported_render_fps: 0.0,
             render_report_interval: std::time::Instant::now() - std::time::Duration::from_secs(2),

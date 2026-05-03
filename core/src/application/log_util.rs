@@ -57,7 +57,7 @@ impl LogStuff for MainContent {
         if !self.show_ball_stats {
             return None;
         }
-        let num_balls = self.get_number_of_balls();
+        let num_balls = self.balls.len();
         let return_value = if self.real_data {
             self.sim.get_status_text_real(fps, num_balls, dt)
         } else {

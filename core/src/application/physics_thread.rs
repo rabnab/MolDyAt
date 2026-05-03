@@ -19,7 +19,9 @@ use std::thread::{self, JoinHandle};
 mod command_handler;
 mod runtime;
 
-pub(crate) use runtime::{CommandHandler, PhysicsRuntime};
+#[cfg(test)]
+pub(crate) use runtime::CommandHandler;
+pub(crate) use runtime::PhysicsRuntime;
 
 /// Commands that can be sent from the main thread to the physics thread
 #[derive(Debug)]
@@ -162,11 +164,6 @@ impl PhysicsThread {
         self.command_sender
             .send(command)
             .map_err(|_| "Physics thread command channel disconnected".to_string())
-    }
-
-    /// Get a clone of the command sender for sharing across threads
-    pub fn get_command_sender(&self) -> Sender<PhysicsCommand> {
-        self.command_sender.clone()
     }
 
     /// Signal the physics thread to shutdown

@@ -4,10 +4,12 @@ use crate::objects2d::ball_impl::BallFactory;
 use crate::objects2d::operator::{is_degenerate, remap_point};
 
 impl MainContent {
+    #[cfg(test)]
     pub(crate) fn world(&self) -> &SimulationWorld {
         &self.world
     }
 
+    #[cfg(test)]
     pub(crate) fn world_mut(&mut self) -> &mut SimulationWorld {
         &mut self.world
     }
@@ -72,7 +74,7 @@ impl MainContent {
             self.pause_for_resize()
         }
 
-        let world = self.world_mut();
+        let world = &mut self.world;
 
         // Rescale all operator positions so they keep their relative
         // position within the world (e.g. 20%/50% stays 20%/50%).

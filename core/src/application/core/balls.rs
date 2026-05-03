@@ -24,9 +24,6 @@ impl MainContent {
         self.get_ball_factory().reset_id_counter();
         self.clear_all_operators();
     }
-    pub(crate) fn get_number_of_balls(&self) -> usize {
-        self.balls.len()
-    }
     pub(crate) fn get_balls(&self) -> &[Ball2D] {
         &self.balls
     }
