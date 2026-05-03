@@ -4,11 +4,11 @@
 //! is handled uniformly.  Adding a new operator type means adding it
 //! to `operator_collections_mut()` — nothing else here changes.
 
-use super::MainContent;
+use super::{MainContent, SimulationWorld};
 use crate::objects2d::Rect;
 use crate::objects2d::operator::OperatorCollection;
 
-impl MainContent {
+impl SimulationWorld {
     /// Return mutable references to every operator collection.
     ///
     /// New operator types extend this list.
@@ -33,5 +33,15 @@ impl MainContent {
         for col in self.operator_collections_mut() {
             col.rescale(old_rect, new_rect);
         }
+    }
+}
+
+impl MainContent {
+    pub(crate) fn clear_all_operators(&mut self) {
+        self.world.clear_all_operators();
+    }
+
+    pub(crate) fn rescale_all_operators(&mut self, old_rect: &Rect, new_rect: &Rect) {
+        self.world.rescale_all_operators(old_rect, new_rect);
     }
 }

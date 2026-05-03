@@ -3,6 +3,7 @@ mod energy_conservation;
 mod physics_thread;
 mod resize;
 mod simulation;
+mod simulation_engine;
 mod wall_momentum;
 
 mod line_segments;

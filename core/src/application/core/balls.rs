@@ -15,19 +15,14 @@ impl MainContent {
     /// # Arguments
     /// * `candidate` - Ball to add to simulation
     pub fn add_candidate_to_vec(&mut self, candidate: Ball2D) {
-        let ball_idx = self.balls.len();
-        self.balls.push(candidate);
-        self.cell_grid.add_ball(ball_idx, &mut self.balls);
-        self.num_balls = self.balls.len();
+        self.world.add_ball_and_register(candidate);
     }
     /// Remove all balls from simulation and reset ID counter.
     /// Clears both balls vector and all cells in the grid.
     /// Also clears all placed operators.
     pub(crate) fn clear_points(&mut self) {
-        self.balls.clear();
-        self.cell_grid.clear_all_cells();
+        self.world.clear_balls();
         self.get_ball_factory().reset_id_counter();
-        self.num_balls = 0;
         self.clear_all_operators();
     }
     pub(crate) fn get_number_of_balls(&self) -> usize {
@@ -210,12 +205,7 @@ impl MainContent {
         }
 
         // Rebuild cell grid with valid balls
-        self.cell_grid.clear_all_cells();
-        for i in 0..self.balls.len() {
-            self.cell_grid.add_ball(i, &mut self.balls);
-        }
-
-        self.num_balls = self.balls.len();
+        self.world.rebuild_cell_grid();
     }
 
     pub(crate) fn stop_all_balls(&mut self) {
@@ -226,5 +216,50 @@ impl MainContent {
 
     pub(crate) fn next_ball_size(&mut self) {
         self.game_data.get_ball_factory().next_ball_size_idx();
+    }
+}
+
+impl SimulationWorld {
+    pub(crate) fn add_ball_and_register(&mut self, candidate: Ball2D) {
+        let ball_idx = self.balls.len();
+        self.balls.push(candidate);
+        self.cell_grid.add_ball(ball_idx, &mut self.balls);
+        self.num_balls = self.balls.len();
+    }
+
+    pub(crate) fn clear_balls(&mut self) {
+        self.balls.clear();
+        self.cell_grid.clear_all_cells();
+        self.num_balls = 0;
+    }
+
+    pub(crate) fn rebuild_cell_grid(&mut self) {
+        self.cell_grid.clear_all_cells();
+        for i in 0..self.balls.len() {
+            self.cell_grid.add_ball(i, &mut self.balls);
+        }
+        self.num_balls = self.balls.len();
+    }
+
+    pub(crate) fn move_ball_in_cell_grid(
+        &mut self,
+        ball_idx: usize,
+        old_pos: &Vec2D,
+        new_pos: &Vec2D,
+    ) {
+        self.cell_grid
+            .move_ball(ball_idx, &mut self.balls, old_pos, new_pos);
+    }
+
+    pub(crate) fn resize_cell_grid(
+        &mut self,
+        world_rect: crate::objects2d::Rect,
+        cutoff_and_skin: f32,
+        max_radius: f32,
+    ) {
+        self.world_rect = world_rect;
+        self.cell_grid = CellGrid::new(self.world_rect, cutoff_and_skin, max_radius)
+            .expect("Failed to create cell grid on resize");
+        self.rebuild_cell_grid();
     }
 }

@@ -11,11 +11,12 @@ use crate::objects2d::{
     Vec2D, VerboseInfoMode,
 };
 use arc_swap::ArcSwapOption;
+use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
-pub struct MainContent {
+pub struct SimulationWorld {
     /// World bounds for physics simulation
-    world_rect: Rect,
+    pub(crate) world_rect: Rect,
     pub(crate) physics: BallPhysics,
 
     pub(crate) sim: SimStats,
@@ -28,20 +29,11 @@ pub struct MainContent {
     pub(crate) show_ball_stats: bool,
     pub(crate) step_count: usize,
 
-    game_data: GameLogicData,
-    was_paused_for_resize: bool,
-    update_hood_at_frame_start: usize,
+    pub(crate) was_paused_for_resize: bool,
     /// Override for speed limit (None = use default calculation, Some(f32::INFINITY) = disable)
     pub(crate) speed_limit_override: Option<f32>,
-    /// ms to wait between simulation steps
-    wait_time: u64,
-
-    /// Snapshot slot for lock-free communication with renderer
-    snapshot_slot: Arc<ArcSwapOption<RendererSnapshot>>,
     /// Cached force results from last physics step for reuse in rendering
     pub(crate) cached_force_results: Vec<ForceResult>,
-    /// Actual physics FPS for display (updated and read only by physics thread)
-    physics_fps: f32,
     /// Rolling-window averager for per-cell T/P fields
     pub(crate) thermo_history: ThermoFieldHistory,
     /// Line segment barriers placed by the operator panel
@@ -52,6 +44,34 @@ pub struct MainContent {
     pub(crate) source_spheres: SourceSphereCollection,
     /// Nosé-Hoover thermostats that control local regions.
     pub(crate) thermostats: ThermostatCollection,
+}
+
+pub struct MainContent {
+    world: SimulationWorld,
+
+    game_data: GameLogicData,
+    update_hood_at_frame_start: usize,
+    /// ms to wait between simulation steps
+    wait_time: u64,
+
+    /// Snapshot slot for lock-free communication with renderer
+    snapshot_slot: Arc<ArcSwapOption<RendererSnapshot>>,
+    /// Actual physics FPS for display (updated and read only by physics thread)
+    physics_fps: f32,
+}
+
+impl Deref for MainContent {
+    type Target = SimulationWorld;
+
+    fn deref(&self) -> &Self::Target {
+        &self.world
+    }
+}
+
+impl DerefMut for MainContent {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.world
+    }
 }
 
 pub struct StatsAccumulator {
@@ -69,11 +89,14 @@ mod ctor;
 mod line_segments;
 mod operators;
 mod sim;
+mod simulation_engine;
 mod snapshot;
 mod source_spheres;
 mod thermostats;
 mod valves;
 mod verbose;
+
+pub(crate) use simulation_engine::SimulationEngine;
 
 #[cfg(test)]
 mod tests;
