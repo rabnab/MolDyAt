@@ -20,7 +20,6 @@ pub struct SimulationWorld {
     pub(crate) physics: BallPhysics,
 
     pub(crate) sim: SimStats,
-    pub(crate) num_balls: usize, // consider removing later
     pub(crate) balls: Vec<Ball2D>,
     pub(crate) cell_grid: CellGrid,
     pub(crate) real_data: bool,

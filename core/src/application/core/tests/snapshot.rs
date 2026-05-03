@@ -18,8 +18,6 @@ fn create_test_main_content_with_balls(ball_count: usize) -> MainContent {
         main_content.balls.push(ball);
     }
 
-    main_content.num_balls = ball_count;
-
     // Add balls to cell grid
     main_content.world_mut().rebuild_cell_grid();
 

@@ -21,7 +21,6 @@ impl MainContent {
                 cell_grid: my_cell_grid,
                 world_rect,
                 sim: SimStats::default(),
-                num_balls: 0,
                 real_data: false,
                 step_by_step: false,
                 step_count: 0,
