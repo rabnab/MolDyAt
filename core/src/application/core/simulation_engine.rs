@@ -180,29 +180,30 @@ impl SimulationEngine {
             content.physics.get_cutoff_distance() + content.physics.get_skin_thickness();
         let max_radius = BallFactory::get_max_radius();
         let min_movement = content.physics.get_min_movement_for_update_hood(max_radius);
-        let (grid_rows, grid_cols) = content.cell_grid.get_grid_size();
+        let world = &mut content.world;
+        let cell_grid = &world.cell_grid;
+        let balls = &mut world.balls;
+        let (grid_rows, grid_cols) = cell_grid.get_grid_size();
 
         for row in 0..grid_rows {
             for col in 0..grid_cols {
-                let cell_ball_indices = if let Some(cell) = content.cell_grid.get_cell(row, col) {
-                    cell.get_ball_indices().to_vec()
+                let cell_ball_indices = if let Some(cell) = cell_grid.get_cell(row, col) {
+                    cell.get_ball_indices()
                 } else {
                     continue;
                 };
 
                 neighbor_buf.clear();
-                content
-                    .cell_grid
-                    .collect_ball_indices_into(row, col, neighbor_buf);
+                cell_grid.collect_ball_indices_into(row, col, neighbor_buf);
 
-                for ball_idx in cell_ball_indices {
+                for &ball_idx in cell_ball_indices {
                     Verlet::update_hood(
                         ball_idx,
                         dt,
                         neighbor_buf,
                         cutoff_and_skin,
                         min_movement,
-                        &mut content.balls,
+                        balls,
                     );
                 }
             }

@@ -2,7 +2,7 @@ use super::super::SimulationEngine;
 use super::DT_GOAL;
 use super::create_main_content;
 use crate::application::GameLogic;
-use crate::objects2d::{OperatorCollection, Vec2D};
+use crate::objects2d::Vec2D;
 
 #[test]
 fn test_simulation_engine_advances_main_content_state() {

@@ -62,15 +62,17 @@ impl SimulationWorld {
         let mut total_px = 0.0_f32;
         let mut total_py = 0.0_f32;
 
-        let segments = self.line_segments.segments().to_vec();
-        let valves = self.valve_segments.valves().to_vec();
+        let (line_segments, valve_segments, balls) =
+            (&self.line_segments, &self.valve_segments, &mut self.balls);
+        let segments = line_segments.segments();
+        let valves = valve_segments.valves();
 
         for seg in segments {
             if seg.length_sq() < 1e-12 {
                 continue; // degenerate segment
             }
 
-            for ball in &mut self.balls {
+            for ball in balls.iter_mut() {
                 let t = seg.closest_t(ball.get_position());
                 if valves
                     .iter()
