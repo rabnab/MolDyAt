@@ -1,7 +1,9 @@
 mod action_processor;
 mod domain_command_adapter;
 mod energy_window_manager;
+mod frame_orchestrator;
 mod input_handler;
+mod input_orchestrator;
 mod line_segment_tool;
 pub mod metrics;
 pub mod operator_tool_handler;

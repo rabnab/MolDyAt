@@ -20,14 +20,13 @@ use crate::graphics::renderer::state_layers::RendererConfig;
 use crate::objects2d::{Rect, Vec2D};
 use std::sync::{Arc, Mutex};
 
-use super::action_processor::process_action_common;
 use super::energy_window_manager::EnergyWindowManager;
+use super::frame_orchestrator::FrameOrchestrator;
 use super::input_handler::{InputAction, InputHandler, OperatorTool};
+use super::input_orchestrator::InputOrchestrator;
 use super::line_segment_tool::LineSegmentToolHandler;
 use super::metrics::MetricsCollector;
-use super::operator_tool_handler::{
-    OperatorToolHandler, ToolContext, ToolPreview, scroll_y_from_delta,
-};
+use super::operator_tool_handler::{OperatorToolHandler, ToolContext, ToolPreview};
 use super::physics_coordinator::PhysicsCoordinator;
 use super::source_sphere_tool::SourceSphereToolHandler;
 use super::thermostat_tool::ThermostatToolHandler;
@@ -138,11 +137,7 @@ impl UnifiedRenderState {
     /// Pulls the latest physics snapshot.  Does **not** start the metrics
     /// timer — call [`begin_render`] for that.
     pub fn begin_frame(&mut self) {
-        // Grab latest snapshot from the physics thread.
-        if let Some(snapshot) = self.physics.get_latest_snapshot() {
-            self.last_snapshot = Some(snapshot);
-            self.update_energy_from_snapshot();
-        }
+        FrameOrchestrator::begin_frame(self);
     }
 
     /// Start the per-frame metrics timer.
@@ -150,12 +145,12 @@ impl UnifiedRenderState {
     /// Call this once per frame, immediately before issuing draw calls.
     /// Paired with [`end_frame`] which finalises the metrics.
     pub fn begin_render(&mut self) {
-        self.metrics.begin_render();
+        FrameOrchestrator::begin_render(self);
     }
 
     /// Whether the renderer should draw a frame right now.
     pub fn should_render(&self) -> bool {
-        self.config.render_drawing && (self.physics.is_new_step_available() || self.view_dirty)
+        FrameOrchestrator::should_render(self)
     }
 
     /// Call after a frame has been drawn.
@@ -164,29 +159,7 @@ impl UnifiedRenderState {
     /// marks the current simulation step as displayed so `should_render`
     /// won't re-trigger for the same data.
     pub fn end_frame(&mut self) {
-        self.view_dirty = false;
-        self.metrics.end_frame();
-        if let Some(snapshot) = &self.last_snapshot {
-            self.physics.mark_step_displayed(snapshot.simulation_step);
-        }
-    }
-
-    // ── Snapshot & energy bookkeeping ────────────────────────────────
-
-    /// Feed the latest snapshot into the energy window.
-    ///
-    /// Safe to call every frame — `EnergyWindowManager` internally
-    /// deduplicates by simulation step.
-    fn update_energy_from_snapshot(&mut self) {
-        if let Some(snapshot) = &self.last_snapshot {
-            let frame_metrics = self.metrics.current().clone();
-            self.energy_manager.update_from_snapshot(
-                snapshot,
-                self.metrics.average_fps(),
-                self.physics.steps_per_frame(),
-                &frame_metrics,
-            );
-        }
+        FrameOrchestrator::end_frame(self);
     }
 
     /// Smoothed render FPS (rolling average over the last 60 frames).
@@ -232,7 +205,7 @@ impl UnifiedRenderState {
     /// `fallback` default.  Callers that also need `&mut self.tool_handler`
     /// should invoke this with explicit field borrows to avoid conflicting
     /// `&self` / `&mut self` borrows.
-    fn make_tool_context_from<'a>(
+    pub(super) fn make_tool_context_from<'a>(
         snapshot: Option<&'a RendererSnapshot>,
         fallback: &'a OperatorSnapshot,
         viewport: &crate::graphics::renderer::ViewportTransform,
@@ -257,7 +230,7 @@ impl UnifiedRenderState {
     }
 
     /// Create a handler for the given tool, or `None` if no tool selected.
-    fn handler_for_tool(tool: OperatorTool) -> Option<Box<dyn OperatorToolHandler>> {
+    pub(super) fn handler_for_tool(tool: OperatorTool) -> Option<Box<dyn OperatorToolHandler>> {
         match tool {
             OperatorTool::Ball => None,
             OperatorTool::LineSegment => Some(Box::new(LineSegmentToolHandler::new())),
@@ -289,61 +262,7 @@ impl UnifiedRenderState {
         window_target: Option<&winit::event_loop::ActiveEventLoop>,
         main_window: Option<&winit::window::Window>,
     ) -> bool {
-        match action {
-            InputAction::ResetView => {
-                self.reset_view();
-                true
-            }
-            InputAction::NextBallSize => {
-                self.next_ball_size();
-                if self.active_tool == OperatorTool::Ball {
-                    self.view_dirty = true;
-                }
-                false
-            }
-            InputAction::ToggleEnergyWindow => {
-                if let Some(target) = window_target {
-                    self.toggle_energy_window(target, main_window);
-                }
-                false
-            }
-            InputAction::SelectOperatorTool(tool) => {
-                if let Some(handler) = self.tool_handler.as_mut() {
-                    handler.reset();
-                }
-                self.active_tool = tool;
-                self.tool_handler = Self::handler_for_tool(tool);
-                self.config.draw_cursor = tool == OperatorTool::Ball;
-                self.view_dirty = true;
-                false
-            }
-            InputAction::AddBall { position } => {
-                // Suppress ball placement when the cursor is near an operator
-                // so Ctrl-release doesn't accidentally create a ball on top of
-                // a line segment, valve, or source sphere.
-                let operators = self
-                    .last_snapshot
-                    .as_deref()
-                    .map(|s| &s.operators)
-                    .unwrap_or(&self.default_operator_snapshot);
-                if operators.is_near_any_operator(position) {
-                    return false;
-                }
-                process_action_common(
-                    InputAction::AddBall { position },
-                    &self.physics,
-                    &mut self.config,
-                );
-                false
-            }
-            other => {
-                let affects_view = process_action_common(other, &self.physics, &mut self.config);
-                if affects_view {
-                    self.view_dirty = true;
-                }
-                affects_view
-            }
-        }
+        InputOrchestrator::process_action(self, action, window_target, main_window)
     }
 
     // ── Viewport helpers ─────────────────────────────────────────────
@@ -448,18 +367,7 @@ impl UnifiedRenderState {
     /// Processes MouseInput, CursorMoved, and MouseWheel events.
     /// Returns true if the action affects the viewport.
     pub fn handle_mouse_event(&mut self, event: &winit::event::WindowEvent) -> bool {
-        match event {
-            winit::event::WindowEvent::MouseInput { state, button, .. } => {
-                self.handle_mouse_input_event(*button, *state)
-            }
-            winit::event::WindowEvent::CursorMoved { position, .. } => {
-                self.handle_cursor_moved_event(position.x as f32, position.y as f32)
-            }
-            winit::event::WindowEvent::MouseWheel { delta, .. } => {
-                self.handle_mouse_wheel_event(*delta)
-            }
-            _ => false,
-        }
+        InputOrchestrator::handle_mouse_event(self, event)
     }
 
     /// Handle mouse button input event.
@@ -472,73 +380,7 @@ impl UnifiedRenderState {
         button: winit::event::MouseButton,
         state: winit::event::ElementState,
     ) -> bool {
-        // On any mouse button release, check if we are waiting to resume after resize.
-        if state == winit::event::ElementState::Released {
-            self.resume_after_resize_if_pending();
-        }
-
-        let world_pos = self.input.cursor_pos();
-        let screen_pos = self.input.cursor_pos_px();
-        let pan_offset = self.viewport.pan_offset();
-
-        // Sidebar icon click detection (left press only)
-        if button == winit::event::MouseButton::Left
-            && state == winit::event::ElementState::Pressed
-            && let Some(icon_idx) = self.sidebar_icon_at(screen_pos)
-        {
-            let tool = Self::operator_tool_for_icon(icon_idx);
-            let new_tool = if self.active_tool == tool {
-                OperatorTool::None
-            } else {
-                tool
-            };
-            let action = InputAction::SelectOperatorTool(new_tool);
-            self.process_action(action, None, None);
-            return true;
-        }
-
-        // Ball operator tool: left release places one ball at cursor.
-        if self.active_tool == OperatorTool::Ball
-            && button == winit::event::MouseButton::Left
-            && state == winit::event::ElementState::Released
-        {
-            return self.process_action(
-                InputAction::AddBall {
-                    position: world_pos,
-                },
-                None,
-                None,
-            );
-        }
-
-        // Delegate to active tool handler
-        if let Some(handler) = &mut self.tool_handler {
-            let ctx = Self::make_tool_context_from(
-                self.last_snapshot.as_deref(),
-                &self.default_operator_snapshot,
-                &self.viewport,
-                self.cursor_world_pos,
-            );
-            let resp = handler.handle_mouse_button(button, state, world_pos, &ctx);
-            if resp.consumed {
-                if let Some(cmd) = resp.action {
-                    let action = InputAction::OperatorAction(cmd);
-                    self.process_action(action, None, None);
-                }
-                if resp.view_dirty {
-                    self.view_dirty = true;
-                }
-                return true;
-            }
-        }
-
-        if let Some(action) = self
-            .input
-            .handle_mouse_button(button, state, screen_pos, world_pos, pan_offset)
-        {
-            return self.process_action(action, None, None);
-        }
-        false
+        InputOrchestrator::handle_mouse_input_event(self, button, state)
     }
 
     /// Handle cursor moved event.
@@ -548,39 +390,7 @@ impl UnifiedRenderState {
     /// snap indicators update continuously.
     /// Returns true if the action affects the viewport.
     pub fn handle_cursor_moved_event(&mut self, x: f32, y: f32) -> bool {
-        // Update cursor position using shared state logic
-        self.update_cursor_world_pos(&[x, y]);
-
-        // Delegate to active tool handler.
-        if let Some(handler) = &mut self.tool_handler {
-            let world_pos = self.input.cursor_pos();
-            let ctx = Self::make_tool_context_from(
-                self.last_snapshot.as_deref(),
-                &self.default_operator_snapshot,
-                &self.viewport,
-                self.cursor_world_pos,
-            );
-            let resp = handler.handle_cursor_move(world_pos, &ctx);
-            if resp.consumed {
-                if let Some(cmd) = resp.action {
-                    let action = InputAction::OperatorAction(cmd);
-                    self.process_action(action, None, None);
-                }
-                if resp.view_dirty {
-                    self.view_dirty = true;
-                }
-            }
-        }
-
-        if let Some(action) = self.input.handle_mouse_motion(x, y) {
-            if let InputAction::PanUpdate { delta } = &action {
-                self.apply_pan_from_input(*delta);
-                return true;
-            } else {
-                return self.process_action(action, None, None);
-            }
-        }
-        false
+        InputOrchestrator::handle_cursor_moved_event(self, x, y)
     }
 
     /// Handle mouse wheel event.
@@ -590,66 +400,14 @@ impl UnifiedRenderState {
     /// event stops. Otherwise falls through to zoom.
     /// Returns true if the action affects the viewport.
     pub fn handle_mouse_wheel_event(&mut self, delta: winit::event::MouseScrollDelta) -> bool {
-        let cursor_pos = self.input.cursor_pos();
-
-        // Delegate to active tool handler
-        if let Some(handler) = &mut self.tool_handler {
-            let scroll_y = scroll_y_from_delta(delta);
-            if scroll_y.abs() > f32::EPSILON {
-                let ctrl_held = self
-                    .input
-                    .is_key_pressed(winit::keyboard::KeyCode::ControlLeft)
-                    || self
-                        .input
-                        .is_key_pressed(winit::keyboard::KeyCode::ControlRight);
-                let fallback = &self.default_operator_snapshot;
-                let ctx = Self::make_tool_context_from(
-                    self.last_snapshot.as_deref(),
-                    fallback,
-                    &self.viewport,
-                    self.cursor_world_pos,
-                );
-                let resp = handler.handle_scroll(scroll_y, cursor_pos, ctrl_held, &ctx);
-                if resp.consumed {
-                    if let Some(cmd) = resp.action {
-                        let action = InputAction::OperatorAction(cmd);
-                        self.process_action(action, None, None);
-                    }
-                    if resp.view_dirty {
-                        self.view_dirty = true;
-                    }
-                    return true;
-                }
-            }
-        }
-
-        if let Some(action) = self.input.handle_mouse_wheel(delta, cursor_pos) {
-            match &action {
-                InputAction::ZoomIn { center } => {
-                    self.zoom_at_point(center, 1.1);
-                    self.process_action(action, None, None);
-                    return true;
-                }
-                InputAction::ZoomOut { center } => {
-                    self.zoom_at_point(center, 1.0 / 1.1);
-                    self.process_action(action, None, None);
-                    return true;
-                }
-                InputAction::ResetView => {
-                    self.reset_view();
-                    self.process_action(action, None, None);
-                    return true;
-                }
-                _ => return self.process_action(action, None, None),
-            }
-        }
-        false
+        InputOrchestrator::handle_mouse_wheel_event(self, delta)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::graphics::renderer::event_loop::action_processor::process_action_common;
 
     // ── Helpers ──────────────────────────────────────────────────────
 
