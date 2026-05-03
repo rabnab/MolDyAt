@@ -20,8 +20,8 @@ impl InputOrchestrator {
             }
             InputAction::NextBallSize => {
                 state.next_ball_size();
-                if state.active_tool == OperatorTool::Ball {
-                    state.view_dirty = true;
+                if state.render.active_tool == OperatorTool::Ball {
+                    state.render.view_dirty = true;
                 }
                 false
             }
@@ -32,35 +32,37 @@ impl InputOrchestrator {
                 false
             }
             InputAction::SelectOperatorTool(tool) => {
-                if let Some(handler) = state.tool_handler.as_mut() {
+                if let Some(handler) = state.render.tool_handler.as_mut() {
                     handler.reset();
                 }
-                state.active_tool = tool;
-                state.tool_handler = UnifiedRenderState::handler_for_tool(tool);
-                state.config.draw_cursor = tool == OperatorTool::Ball;
-                state.view_dirty = true;
+                state.render.active_tool = tool;
+                state.render.tool_handler = UnifiedRenderState::handler_for_tool(tool);
+                state.render.config.draw_cursor = tool == OperatorTool::Ball;
+                state.render.view_dirty = true;
                 false
             }
             InputAction::AddBall { position } => {
                 let operators = state
+                    .render
                     .last_snapshot
                     .as_deref()
                     .map(|s| &s.operators)
-                    .unwrap_or(&state.default_operator_snapshot);
+                    .unwrap_or(&state.render.default_operator_snapshot);
                 if operators.is_near_any_operator(position) {
                     return false;
                 }
                 process_action_common(
                     InputAction::AddBall { position },
                     &state.physics,
-                    &mut state.config,
+                    &mut state.render.config,
                 );
                 false
             }
             other => {
-                let affects_view = process_action_common(other, &state.physics, &mut state.config);
+                let affects_view =
+                    process_action_common(other, &state.physics, &mut state.render.config);
                 if affects_view {
-                    state.view_dirty = true;
+                    state.render.view_dirty = true;
                 }
                 affects_view
             }
@@ -98,14 +100,14 @@ impl InputOrchestrator {
 
         let world_pos = state.input.cursor_pos();
         let screen_pos = state.input.cursor_pos_px();
-        let pan_offset = state.viewport.pan_offset();
+        let pan_offset = state.render.viewport.pan_offset();
 
         if button == winit::event::MouseButton::Left
             && element_state == winit::event::ElementState::Pressed
             && let Some(icon_idx) = state.sidebar_icon_at(screen_pos)
         {
             let tool = UnifiedRenderState::operator_tool_for_icon(icon_idx);
-            let new_tool = if state.active_tool == tool {
+            let new_tool = if state.render.active_tool == tool {
                 OperatorTool::None
             } else {
                 tool
@@ -114,7 +116,7 @@ impl InputOrchestrator {
             return true;
         }
 
-        if state.active_tool == OperatorTool::Ball
+        if state.render.active_tool == OperatorTool::Ball
             && button == winit::event::MouseButton::Left
             && element_state == winit::event::ElementState::Released
         {
@@ -128,12 +130,12 @@ impl InputOrchestrator {
             );
         }
 
-        if let Some(handler) = &mut state.tool_handler {
+        if let Some(handler) = &mut state.render.tool_handler {
             let ctx = UnifiedRenderState::make_tool_context_from(
-                state.last_snapshot.as_deref(),
-                &state.default_operator_snapshot,
-                &state.viewport,
-                state.cursor_world_pos,
+                state.render.last_snapshot.as_deref(),
+                &state.render.default_operator_snapshot,
+                &state.render.viewport,
+                state.render.cursor_world_pos,
             );
             let resp = handler.handle_mouse_button(button, element_state, world_pos, &ctx);
             if resp.consumed {
@@ -141,7 +143,7 @@ impl InputOrchestrator {
                     Self::process_action(state, InputAction::OperatorAction(cmd), None, None);
                 }
                 if resp.view_dirty {
-                    state.view_dirty = true;
+                    state.render.view_dirty = true;
                 }
                 return true;
             }
@@ -166,13 +168,13 @@ impl InputOrchestrator {
     ) -> bool {
         state.update_cursor_world_pos(&[x, y]);
 
-        if let Some(handler) = &mut state.tool_handler {
+        if let Some(handler) = &mut state.render.tool_handler {
             let world_pos = state.input.cursor_pos();
             let ctx = UnifiedRenderState::make_tool_context_from(
-                state.last_snapshot.as_deref(),
-                &state.default_operator_snapshot,
-                &state.viewport,
-                state.cursor_world_pos,
+                state.render.last_snapshot.as_deref(),
+                &state.render.default_operator_snapshot,
+                &state.render.viewport,
+                state.render.cursor_world_pos,
             );
             let resp = handler.handle_cursor_move(world_pos, &ctx);
             if resp.consumed {
@@ -180,7 +182,7 @@ impl InputOrchestrator {
                     Self::process_action(state, InputAction::OperatorAction(cmd), None, None);
                 }
                 if resp.view_dirty {
-                    state.view_dirty = true;
+                    state.render.view_dirty = true;
                 }
             }
         }
@@ -201,7 +203,7 @@ impl InputOrchestrator {
     ) -> bool {
         let cursor_pos = state.input.cursor_pos();
 
-        if let Some(handler) = &mut state.tool_handler {
+        if let Some(handler) = &mut state.render.tool_handler {
             let scroll_y = scroll_y_from_delta(delta);
             if scroll_y.abs() > f32::EPSILON {
                 let ctrl_held = state
@@ -211,10 +213,10 @@ impl InputOrchestrator {
                         .input
                         .is_key_pressed(winit::keyboard::KeyCode::ControlRight);
                 let ctx = UnifiedRenderState::make_tool_context_from(
-                    state.last_snapshot.as_deref(),
-                    &state.default_operator_snapshot,
-                    &state.viewport,
-                    state.cursor_world_pos,
+                    state.render.last_snapshot.as_deref(),
+                    &state.render.default_operator_snapshot,
+                    &state.render.viewport,
+                    state.render.cursor_world_pos,
                 );
                 let resp = handler.handle_scroll(scroll_y, cursor_pos, ctrl_held, &ctx);
                 if resp.consumed {
@@ -222,7 +224,7 @@ impl InputOrchestrator {
                         Self::process_action(state, InputAction::OperatorAction(cmd), None, None);
                     }
                     if resp.view_dirty {
-                        state.view_dirty = true;
+                        state.render.view_dirty = true;
                     }
                     return true;
                 }
@@ -266,7 +268,9 @@ mod tests {
     };
     use crate::graphics::renderer::event_loop::metrics::MetricsCollector;
     use crate::graphics::renderer::event_loop::physics_coordinator::PhysicsCoordinator;
-    use crate::graphics::renderer::event_loop::unified_render_state::UnifiedRenderState;
+    use crate::graphics::renderer::event_loop::unified_render_state::{
+        RenderStateData, UnifiedRenderState,
+    };
     use crate::graphics::renderer::margins::Margins;
     use crate::graphics::renderer::state_layers::RendererConfig;
     use crate::objects2d::{Rect, Vec2D};
@@ -282,18 +286,20 @@ mod tests {
         UnifiedRenderState {
             input: InputHandler::new(),
             physics: PhysicsCoordinator::new_disconnected(),
-            viewport: dummy_viewport(),
-            energy_manager: EnergyWindowManager::new(energy_data),
-            config: RendererConfig::default(),
-            view_dirty: false,
-            last_snapshot: None,
-            cursor_world_pos: Vec2D::zero(),
-            current_ball_size_idx: 2,
-            metrics: MetricsCollector::new(),
-            active_tool: OperatorTool::None,
-            tool_handler: None,
-            default_operator_snapshot: OperatorSnapshot::default(),
-            resize_pending: false,
+            render: RenderStateData {
+                viewport: dummy_viewport(),
+                energy_manager: EnergyWindowManager::new(energy_data),
+                config: RendererConfig::default(),
+                view_dirty: false,
+                last_snapshot: None,
+                cursor_world_pos: Vec2D::zero(),
+                current_ball_size_idx: 2,
+                metrics: MetricsCollector::new(),
+                active_tool: OperatorTool::None,
+                tool_handler: None,
+                default_operator_snapshot: OperatorSnapshot::default(),
+                resize_pending: false,
+            },
         }
     }
 
@@ -309,21 +315,21 @@ mod tests {
         );
 
         assert!(!affects_view);
-        assert_eq!(state.active_tool, OperatorTool::Ball);
-        assert!(state.config.draw_cursor);
-        assert!(state.view_dirty);
+        assert_eq!(state.render.active_tool, OperatorTool::Ball);
+        assert!(state.render.config.draw_cursor);
+        assert!(state.render.view_dirty);
     }
 
     #[test]
     fn next_ball_size_marks_view_dirty_when_ball_tool_active() {
         let mut state = build_test_state();
-        state.active_tool = OperatorTool::Ball;
+        state.render.active_tool = OperatorTool::Ball;
 
         let affects_view =
             InputOrchestrator::process_action(&mut state, InputAction::NextBallSize, None, None);
 
         assert!(!affects_view);
-        assert_eq!(state.current_ball_size_idx, 3);
-        assert!(state.view_dirty);
+        assert_eq!(state.render.current_ball_size_idx, 3);
+        assert!(state.render.view_dirty);
     }
 }

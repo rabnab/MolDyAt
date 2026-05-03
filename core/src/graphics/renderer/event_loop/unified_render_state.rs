@@ -31,8 +31,25 @@ use super::physics_coordinator::PhysicsCoordinator;
 use super::source_sphere_tool::SourceSphereToolHandler;
 use super::thermostat_tool::ThermostatToolHandler;
 use super::valve_segment_tool::ValveSegmentToolHandler;
+use super::viewport_orchestrator::ViewportOrchestrator;
 
 use crate::application::DomainCommand;
+
+/// Owned renderer state that backs the event-loop orchestrators.
+pub(super) struct RenderStateData {
+    pub(super) viewport: ViewportTransform,
+    pub(super) energy_manager: EnergyWindowManager,
+    pub(super) config: RendererConfig,
+    pub(super) view_dirty: bool,
+    pub(super) last_snapshot: Option<Arc<RendererSnapshot>>,
+    pub(super) cursor_world_pos: Vec2D,
+    pub(super) current_ball_size_idx: usize,
+    pub(super) metrics: MetricsCollector,
+    pub(super) active_tool: OperatorTool,
+    pub(super) tool_handler: Option<Box<dyn OperatorToolHandler>>,
+    pub(super) default_operator_snapshot: OperatorSnapshot,
+    pub(super) resize_pending: bool,
+}
 
 /// Unified state shared by every renderer backend.
 ///
@@ -46,47 +63,8 @@ pub struct UnifiedRenderState {
     // ── Physics thread bridge ──────────────────────────────────────────
     pub physics: PhysicsCoordinator,
 
-    // ── Viewport ──────────────────────────────────────────────────────
-    pub viewport: ViewportTransform,
-
-    // ── Energy window ─────────────────────────────────────────────────
-    pub energy_manager: EnergyWindowManager,
-
-    // ── Renderer config ─────────────────────────────────────────────
-    /// Shared renderer configuration (plot type, cursor toggle, render enable).
-    pub config: RendererConfig,
-
-    // ── Frame flags ───────────────────────────────────────────────────
-    /// Set whenever the viewport changes; cleared after a frame is drawn.
-    pub view_dirty: bool,
-
-    // ── Snapshot bookkeeping ──────────────────────────────────────────
-    /// The most recent snapshot handed off by the physics thread.
-    pub last_snapshot: Option<Arc<RendererSnapshot>>,
-
-    // ── Cursor / ball-size ────────────────────────────────────────────
-    /// Current cursor position in world coordinates.
-    pub cursor_world_pos: Vec2D,
-    /// Active ball-size index (cycled with right-click).
-    pub current_ball_size_idx: usize,
-
-    // ── Per-frame metrics ────────────────────────────────────────────
-    /// Renderer-agnostic frame metrics (FPS, draw calls, etc.).
-    pub metrics: MetricsCollector,
-
-    // ── Operator tool ────────────────────────────────────────────────
-    /// Currently selected operator tool from the sidebar panel.
-    pub active_tool: OperatorTool,
-    /// Active tool handler (trait dispatch).  `None` when no tool is selected.
-    pub tool_handler: Option<Box<dyn OperatorToolHandler>>,
-    /// Default empty operator snapshot, used when no physics snapshot is
-    /// available yet.  Avoids per-frame heap allocation and `LazyLock`.
-    pub(super) default_operator_snapshot: OperatorSnapshot,
-
-    // ── Resize tracking ───────────────────────────────────────────────
-    /// Set when a window resize occurs; cleared when any mouse button is released.
-    /// While set, the simulation is paused; releasing the mouse unpauses it.
-    pub(super) resize_pending: bool,
+    // ── Owned renderer state ──────────────────────────────────────────
+    pub(super) render: RenderStateData,
 }
 
 impl UnifiedRenderState {
@@ -115,19 +93,61 @@ impl UnifiedRenderState {
         Self {
             input: InputHandler::new(),
             physics,
-            viewport,
-            energy_manager,
-            config: RendererConfig::default(),
-            view_dirty: true,
-            last_snapshot: None,
-            cursor_world_pos: Vec2D::zero(),
-            current_ball_size_idx: 2, // default mid-size
-            metrics: MetricsCollector::new(),
-            active_tool: OperatorTool::None,
-            tool_handler: None,
-            default_operator_snapshot: OperatorSnapshot::default(),
-            resize_pending: false,
+            render: RenderStateData {
+                viewport,
+                energy_manager,
+                config: RendererConfig::default(),
+                view_dirty: true,
+                last_snapshot: None,
+                cursor_world_pos: Vec2D::zero(),
+                current_ball_size_idx: 2,
+                metrics: MetricsCollector::new(),
+                active_tool: OperatorTool::None,
+                tool_handler: None,
+                default_operator_snapshot: OperatorSnapshot::default(),
+                resize_pending: false,
+            },
         }
+    }
+
+    pub fn viewport(&self) -> &ViewportTransform {
+        &self.render.viewport
+    }
+
+    pub fn energy_manager(&self) -> &EnergyWindowManager {
+        &self.render.energy_manager
+    }
+
+    pub fn energy_manager_mut(&mut self) -> &mut EnergyWindowManager {
+        &mut self.render.energy_manager
+    }
+
+    pub fn config(&self) -> &RendererConfig {
+        &self.render.config
+    }
+
+    pub fn last_snapshot(&self) -> Option<&Arc<RendererSnapshot>> {
+        self.render.last_snapshot.as_ref()
+    }
+
+    pub fn cursor_world_pos(&self) -> Vec2D {
+        self.render.cursor_world_pos
+    }
+
+    pub fn current_ball_size_idx(&self) -> usize {
+        self.render.current_ball_size_idx
+    }
+
+    pub fn active_tool(&self) -> OperatorTool {
+        self.render.active_tool
+    }
+
+    pub fn metrics_mut(&mut self) -> &mut MetricsCollector {
+        &mut self.render.metrics
+    }
+
+    pub fn merge_view_dirty(&mut self, dirty: bool) {
+        self.render.view_dirty |= dirty;
     }
 
     // ── Frame lifecycle ──────────────────────────────────────────────
@@ -164,7 +184,7 @@ impl UnifiedRenderState {
 
     /// Smoothed render FPS (rolling average over the last 60 frames).
     pub fn render_fps(&self) -> f32 {
-        self.metrics.average_fps()
+        self.render.metrics.average_fps()
     }
 
     /// Collect all operator preview geometry for the current frame.
@@ -175,7 +195,7 @@ impl UnifiedRenderState {
         let ctx = self.make_tool_context();
 
         let (line_segment, valve_segment, snap_indicators) =
-            if let Some(handler) = &self.tool_handler {
+            if let Some(handler) = &self.render.tool_handler {
                 let preview = handler.preview(&ctx);
                 let snaps = handler.snap_indicators(&ctx);
                 match preview {
@@ -222,10 +242,10 @@ impl UnifiedRenderState {
     /// Convenience wrapper when no mutable self-borrow is needed.
     fn make_tool_context(&self) -> ToolContext<'_> {
         Self::make_tool_context_from(
-            self.last_snapshot.as_deref(),
-            &self.default_operator_snapshot,
-            &self.viewport,
-            self.cursor_world_pos,
+            self.render.last_snapshot.as_deref(),
+            &self.render.default_operator_snapshot,
+            &self.render.viewport,
+            self.render.cursor_world_pos,
         )
     }
 
@@ -269,14 +289,12 @@ impl UnifiedRenderState {
 
     /// Zoom the viewport so that `world_point` stays fixed on screen.
     pub fn zoom_at_point(&mut self, world_point: &Vec2D, factor: f32) {
-        self.viewport.zoom_at_point(world_point, factor);
-        self.view_dirty = true;
+        ViewportOrchestrator::zoom_at_point(self, world_point, factor);
     }
 
     /// Reset viewport to default zoom and pan.
     pub fn reset_view(&mut self) {
-        self.viewport.reset();
-        self.view_dirty = true;
+        ViewportOrchestrator::reset_view(self);
     }
 
     /// Handle a window resize.
@@ -284,13 +302,7 @@ impl UnifiedRenderState {
     /// Updates the viewport **and** notifies the physics thread so the
     /// simulation world matches the new window dimensions.
     pub fn handle_resize(&mut self, new_width: f32, new_height: f32, margin_px: Margins) {
-        self.viewport.set_margins(margin_px);
-        let world_rect = ViewportTransform::compute_world_bounds_from_window_size(
-            new_width as u32,
-            new_height as u32,
-            margin_px,
-        );
-        self.handle_resize_with_world_rect(new_width, new_height, world_rect);
+        ViewportOrchestrator::handle_resize(self, new_width, new_height, margin_px);
     }
 
     /// Handle window resize with pre-computed world bounds.
@@ -303,38 +315,25 @@ impl UnifiedRenderState {
         new_height: f32,
         world_rect: crate::objects2d::Rect,
     ) {
-        self.physics
-            .send_domain_command(DomainCommand::Resize { world_rect });
-        self.viewport.set_world_bounds(world_rect);
-        self.viewport.on_window_resize((new_width, new_height));
-        self.view_dirty = true;
-        self.resize_pending = true;
+        ViewportOrchestrator::handle_resize_with_world_rect(
+            self, new_width, new_height, world_rect,
+        );
     }
 
     /// Resume physics after resize if a resize completion is pending.
     pub fn resume_after_resize_if_pending(&mut self) {
-        if self.resize_pending {
-            self.resize_pending = false;
-            self.physics
-                .send_domain_command(DomainCommand::ResumeAfterResize);
-        }
+        ViewportOrchestrator::resume_after_resize_if_pending(self);
     }
 
     /// Apply a pan delta (in pixels) originating from a drag gesture.
     pub fn apply_pan_from_input(&mut self, delta: Vec2D) {
-        let start_offset = self.input.pan_start_offset();
-        let zoom = self.viewport.zoom();
-        let new_pan = ViewportTransform::apply_pan_delta(delta, start_offset, zoom);
-        self.viewport.pan(new_pan);
-        self.view_dirty = true;
+        ViewportOrchestrator::apply_pan_from_input(self, delta);
     }
 
     /// Convert a screen-pixel position to world coordinates and update the
     /// stored cursor position.
     pub fn update_cursor_world_pos(&mut self, px: &[f32; 2]) {
-        let world = self.viewport.px_to_world(px);
-        self.cursor_world_pos = world;
-        self.input.set_cursor_pos(world, *px);
+        ViewportOrchestrator::update_cursor_world_pos(self, px);
     }
 
     // ── Energy window helpers ────────────────────────────────────────
@@ -345,7 +344,9 @@ impl UnifiedRenderState {
         window_target: &winit::event_loop::ActiveEventLoop,
         main_window: Option<&winit::window::Window>,
     ) {
-        self.energy_manager.toggle(window_target, main_window);
+        self.render
+            .energy_manager
+            .toggle(window_target, main_window);
     }
 
     // ── Ball size helpers ────────────────────────────────────────────
@@ -355,7 +356,8 @@ impl UnifiedRenderState {
     /// Updates the local size index and sends command to physics thread.
     pub fn next_ball_size(&mut self) {
         use crate::objects2d::ball_impl::NUM_BALL_SIZES;
-        self.current_ball_size_idx = (self.current_ball_size_idx + 1) % NUM_BALL_SIZES;
+        self.render.current_ball_size_idx =
+            (self.render.current_ball_size_idx + 1) % NUM_BALL_SIZES;
         self.physics
             .send_domain_command(DomainCommand::NextBallSize);
     }
@@ -523,18 +525,20 @@ mod tests {
         UnifiedRenderState {
             input: InputHandler::new(),
             physics: make_disconnected_coordinator(),
-            viewport: dummy_viewport(),
-            energy_manager: EnergyWindowManager::new(energy_data),
-            config: RendererConfig::default(),
-            view_dirty: false,
-            last_snapshot: None,
-            cursor_world_pos: Vec2D::zero(),
-            current_ball_size_idx: 2,
-            metrics: MetricsCollector::new(),
-            active_tool: OperatorTool::None,
-            tool_handler: None,
-            default_operator_snapshot: OperatorSnapshot::default(),
-            resize_pending: false,
+            render: RenderStateData {
+                viewport: dummy_viewport(),
+                energy_manager: EnergyWindowManager::new(energy_data),
+                config: RendererConfig::default(),
+                view_dirty: false,
+                last_snapshot: None,
+                cursor_world_pos: Vec2D::zero(),
+                current_ball_size_idx: 2,
+                metrics: MetricsCollector::new(),
+                active_tool: OperatorTool::None,
+                tool_handler: None,
+                default_operator_snapshot: OperatorSnapshot::default(),
+                resize_pending: false,
+            },
         }
     }
 
@@ -549,16 +553,16 @@ mod tests {
         );
 
         assert!(!affects_view);
-        assert_eq!(state.active_tool, OperatorTool::Ball);
-        assert!(state.config.draw_cursor);
-        assert!(state.view_dirty);
+        assert_eq!(state.render.active_tool, OperatorTool::Ball);
+        assert!(state.render.config.draw_cursor);
+        assert!(state.render.view_dirty);
     }
 
     #[test]
     fn switching_away_from_ball_tool_disables_cursor_preview() {
         let mut state = build_test_state();
-        state.active_tool = OperatorTool::Ball;
-        state.config.draw_cursor = true;
+        state.render.active_tool = OperatorTool::Ball;
+        state.render.config.draw_cursor = true;
 
         let affects_view = state.process_action(
             InputAction::SelectOperatorTool(OperatorTool::LineSegment),
@@ -567,20 +571,20 @@ mod tests {
         );
 
         assert!(!affects_view);
-        assert_eq!(state.active_tool, OperatorTool::LineSegment);
-        assert!(!state.config.draw_cursor);
-        assert!(state.view_dirty);
+        assert_eq!(state.render.active_tool, OperatorTool::LineSegment);
+        assert!(!state.render.config.draw_cursor);
+        assert!(state.render.view_dirty);
     }
 
     #[test]
     fn next_ball_size_marks_view_dirty_when_ball_tool_is_active() {
         let mut state = build_test_state();
-        state.active_tool = OperatorTool::Ball;
+        state.render.active_tool = OperatorTool::Ball;
 
         let affects_view = state.process_action(InputAction::NextBallSize, None, None);
 
         assert!(!affects_view);
-        assert_eq!(state.current_ball_size_idx, 3);
-        assert!(state.view_dirty);
+        assert_eq!(state.render.current_ball_size_idx, 3);
+        assert!(state.render.view_dirty);
     }
 }

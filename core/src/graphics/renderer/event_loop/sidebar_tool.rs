@@ -18,7 +18,7 @@ impl UnifiedRenderState {
             icon_display_size_for_margin, icon_spacing_for_margin, visible_icon_count_for_margin,
         };
 
-        let margins = self.viewport.margins();
+        let margins = self.render.viewport.margins();
         let icon_display_size = icon_display_size_for_margin(margins.left);
         let icon_spacing = icon_spacing_for_margin(margins.left);
         let pad_x = (margins.left - icon_display_size) * 0.5;
@@ -29,7 +29,7 @@ impl UnifiedRenderState {
             return None;
         }
 
-        let (_, win_h) = self.viewport.window_size_px();
+        let (_, win_h) = self.render.viewport.window_size_px();
         let visible =
             visible_icon_count_for_margin(win_h, margins.top, margins.bottom, margins.left);
 
@@ -60,7 +60,9 @@ impl UnifiedRenderState {
     /// Derived from [`SIDEBAR_TOOLS`](crate::graphics::sidebar::SIDEBAR_TOOLS).
     pub fn selected_sidebar_icon(&self) -> Option<usize> {
         use crate::graphics::sidebar::SIDEBAR_TOOLS;
-        SIDEBAR_TOOLS.iter().position(|&t| t == self.active_tool)
+        SIDEBAR_TOOLS
+            .iter()
+            .position(|&t| t == self.render.active_tool)
     }
 }
 
@@ -69,6 +71,7 @@ mod tests {
     use super::*;
     use crate::graphics::energy_plot::{EnergyData, SharedEnergyData};
     use crate::graphics::renderer::event_loop::metrics::MetricsCollector;
+    use crate::graphics::renderer::event_loop::unified_render_state::RenderStateData;
     use crate::graphics::renderer::event_loop::{EnergyWindowManager, InputHandler};
     use crate::graphics::renderer::state_layers::RendererConfig;
     use crate::graphics::renderer::{Margins, ViewportTransform};
@@ -95,18 +98,20 @@ mod tests {
         UnifiedRenderState {
             input: InputHandler::new(),
             physics,
-            viewport,
-            energy_manager: EnergyWindowManager::new(energy_data),
-            config: RendererConfig::default(),
-            view_dirty: false,
-            last_snapshot: None,
-            cursor_world_pos: Vec2D::zero(),
-            current_ball_size_idx: 2,
-            metrics: MetricsCollector::new(),
-            active_tool: OperatorTool::None,
-            tool_handler: None,
-            default_operator_snapshot: Default::default(),
-            resize_pending: false,
+            render: RenderStateData {
+                viewport,
+                energy_manager: EnergyWindowManager::new(energy_data),
+                config: RendererConfig::default(),
+                view_dirty: false,
+                last_snapshot: None,
+                cursor_world_pos: Vec2D::zero(),
+                current_ball_size_idx: 2,
+                metrics: MetricsCollector::new(),
+                active_tool: OperatorTool::None,
+                tool_handler: None,
+                default_operator_snapshot: Default::default(),
+                resize_pending: false,
+            },
         }
     }
 

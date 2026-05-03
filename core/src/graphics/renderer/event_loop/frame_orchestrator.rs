@@ -8,36 +8,37 @@ impl FrameOrchestrator {
     /// snapshot-derived views such as the energy plot.
     pub(super) fn begin_frame(state: &mut UnifiedRenderState) {
         if let Some(snapshot) = state.physics.get_latest_snapshot() {
-            state.last_snapshot = Some(snapshot);
+            state.render.last_snapshot = Some(snapshot);
             Self::update_energy_from_snapshot(state);
         }
     }
 
     /// Start render metrics collection for the current frame.
     pub(super) fn begin_render(state: &mut UnifiedRenderState) {
-        state.metrics.begin_render();
+        state.render.metrics.begin_render();
     }
 
     /// Determine whether the backend should draw a frame.
     pub(super) fn should_render(state: &UnifiedRenderState) -> bool {
-        state.config.render_drawing && (state.physics.is_new_step_available() || state.view_dirty)
+        state.render.config.render_drawing
+            && (state.physics.is_new_step_available() || state.render.view_dirty)
     }
 
     /// Finalize frame bookkeeping after drawing completes.
     pub(super) fn end_frame(state: &mut UnifiedRenderState) {
-        state.view_dirty = false;
-        state.metrics.end_frame();
-        if let Some(snapshot) = &state.last_snapshot {
+        state.render.view_dirty = false;
+        state.render.metrics.end_frame();
+        if let Some(snapshot) = &state.render.last_snapshot {
             state.physics.mark_step_displayed(snapshot.simulation_step);
         }
     }
 
     fn update_energy_from_snapshot(state: &mut UnifiedRenderState) {
-        if let Some(snapshot) = &state.last_snapshot {
-            let frame_metrics = state.metrics.current().clone();
-            state.energy_manager.update_from_snapshot(
+        if let Some(snapshot) = &state.render.last_snapshot {
+            let frame_metrics = state.render.metrics.current().clone();
+            state.render.energy_manager.update_from_snapshot(
                 snapshot,
-                state.metrics.average_fps(),
+                state.render.metrics.average_fps(),
                 state.physics.steps_per_frame(),
                 &frame_metrics,
             );
@@ -55,7 +56,9 @@ mod tests {
     use crate::graphics::renderer::event_loop::input_handler::{InputHandler, OperatorTool};
     use crate::graphics::renderer::event_loop::metrics::MetricsCollector;
     use crate::graphics::renderer::event_loop::physics_coordinator::PhysicsCoordinator;
-    use crate::graphics::renderer::event_loop::unified_render_state::UnifiedRenderState;
+    use crate::graphics::renderer::event_loop::unified_render_state::{
+        RenderStateData, UnifiedRenderState,
+    };
     use crate::graphics::renderer::margins::Margins;
     use crate::graphics::renderer::state_layers::RendererConfig;
     use crate::objects2d::{Rect, Vec2D};
@@ -71,25 +74,27 @@ mod tests {
         UnifiedRenderState {
             input: InputHandler::new(),
             physics: PhysicsCoordinator::new_disconnected(),
-            viewport: dummy_viewport(),
-            energy_manager: EnergyWindowManager::new(energy_data),
-            config: RendererConfig::default(),
-            view_dirty: false,
-            last_snapshot: None,
-            cursor_world_pos: Vec2D::zero(),
-            current_ball_size_idx: 2,
-            metrics: MetricsCollector::new(),
-            active_tool: OperatorTool::None,
-            tool_handler: None,
-            default_operator_snapshot: OperatorSnapshot::default(),
-            resize_pending: false,
+            render: RenderStateData {
+                viewport: dummy_viewport(),
+                energy_manager: EnergyWindowManager::new(energy_data),
+                config: RendererConfig::default(),
+                view_dirty: false,
+                last_snapshot: None,
+                cursor_world_pos: Vec2D::zero(),
+                current_ball_size_idx: 2,
+                metrics: MetricsCollector::new(),
+                active_tool: OperatorTool::None,
+                tool_handler: None,
+                default_operator_snapshot: OperatorSnapshot::default(),
+                resize_pending: false,
+            },
         }
     }
 
     #[test]
     fn should_render_uses_view_dirty_when_rendering_enabled() {
         let mut state = build_test_state();
-        state.view_dirty = true;
+        state.render.view_dirty = true;
 
         assert!(FrameOrchestrator::should_render(&state));
     }
@@ -97,8 +102,8 @@ mod tests {
     #[test]
     fn should_render_respects_rendering_toggle() {
         let mut state = build_test_state();
-        state.view_dirty = true;
-        state.config.render_drawing = false;
+        state.render.view_dirty = true;
+        state.render.config.render_drawing = false;
 
         assert!(!FrameOrchestrator::should_render(&state));
     }
@@ -106,10 +111,10 @@ mod tests {
     #[test]
     fn end_frame_clears_view_dirty() {
         let mut state = build_test_state();
-        state.view_dirty = true;
+        state.render.view_dirty = true;
 
         FrameOrchestrator::end_frame(&mut state);
 
-        assert!(!state.view_dirty);
+        assert!(!state.render.view_dirty);
     }
 }

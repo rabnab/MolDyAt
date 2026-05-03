@@ -159,7 +159,7 @@ impl ApplicationHandler<UserEvent> for WgpuApp {
                     window.request_redraw();
 
                     // actually redraw for energy window if it's open
-                    state.energy_manager.handle_redraw();
+                    state.energy_manager_mut().handle_redraw();
                 }
             }
         }
@@ -200,7 +200,7 @@ impl ApplicationHandler<UserEvent> for WgpuApp {
                 state.begin_render();
 
                 // Render from snapshot if available
-                if let Some(snapshot) = &state.last_snapshot {
+                if let Some(snapshot) = state.last_snapshot() {
                     let Some(ctx) = self.ctx.as_mut() else {
                         return;
                     };
@@ -209,14 +209,15 @@ impl ApplicationHandler<UserEvent> for WgpuApp {
                     };
 
                     // Compute view-projection matrix
-                    let pan = state.viewport.pan_offset();
-                    let zoom = state.viewport.zoom();
+                    let pan = state.viewport().pan_offset();
+                    let zoom = state.viewport().zoom();
                     let view_proj = compute_view_proj(&snapshot.grid_spec, pan.x, pan.y, zoom);
 
                     // Update all pipelines from snapshot
-                    let show_ball_outline = state.active_tool
+                    let show_ball_outline = state.active_tool()
                         == rust_thermo_core::graphics::renderer::event_loop::OperatorTool::Ball;
-                    let cursor_wp = (state.cursor_world_pos.x, state.cursor_world_pos.y);
+                    let cursor_world_pos = state.cursor_world_pos();
+                    let cursor_wp = (cursor_world_pos.x, cursor_world_pos.y);
                     let ball_count = snapshot.balls.len() as u32;
                     let operator_previews = state.operator_previews();
                     if let Err(e) = pipelines.prepare_from_snapshot(
@@ -224,22 +225,22 @@ impl ApplicationHandler<UserEvent> for WgpuApp {
                         snapshot,
                         view_proj,
                         cursor_wp,
-                        BallFactory::radius_for_size_idx(state.current_ball_size_idx),
+                        BallFactory::radius_for_size_idx(state.current_ball_size_idx()),
                         show_ball_outline,
-                        state.config.thermo_display,
-                        state.viewport.margins(),
+                        state.config().thermo_display,
+                        state.viewport().margins(),
                         operator_previews,
                     ) {
                         eprintln!("Pipeline prepare error: {:?}", e);
                     }
 
-                    state.metrics.record_balls_rendered(ball_count);
+                    state.metrics_mut().record_balls_rendered(ball_count);
                     for _ in 0..6 {
-                        state.metrics.record_draw_call(0);
+                        state.metrics_mut().record_draw_call(0);
                     }
 
                     // Render frame
-                    if let Err(e) = render_frame(ctx, pipelines, state.viewport.margins()) {
+                    if let Err(e) = render_frame(ctx, pipelines, state.viewport().margins()) {
                         log::error!("Render error: {:?}", e);
                         if e == wgpu::SurfaceError::OutOfMemory {
                             event_loop.exit();
@@ -256,8 +257,8 @@ impl ApplicationHandler<UserEvent> for WgpuApp {
         }
 
         // Check if this event is for the energy window
-        if state.energy_manager.is_energy_window_event(window_id) {
-            state.energy_manager.handle_event(event);
+        if state.energy_manager().is_energy_window_event(window_id) {
+            state.energy_manager_mut().handle_event(event);
             return;
         }
 
@@ -323,7 +324,8 @@ fn handle_window_event(
         WindowEvent::MouseInput { .. }
         | WindowEvent::CursorMoved { .. }
         | WindowEvent::MouseWheel { .. } => {
-            state.view_dirty |= state.handle_mouse_event(&event);
+            let dirty = state.handle_mouse_event(&event);
+            state.merge_view_dirty(dirty);
         }
         WindowEvent::KeyboardInput { event, .. } => {
             let PhysicalKey::Code(key) = event.physical_key else {
@@ -337,7 +339,7 @@ fn handle_window_event(
             };
 
             if let Some(action) = action {
-                state.view_dirty |= execute_input_action(
+                let dirty = execute_input_action(
                     action,
                     state,
                     pipelines,
@@ -345,6 +347,7 @@ fn handle_window_event(
                     window_target,
                     main_window,
                 );
+                state.merge_view_dirty(dirty);
             }
         }
         _ => {}
