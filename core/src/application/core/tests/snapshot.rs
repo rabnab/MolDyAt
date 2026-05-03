@@ -21,9 +21,7 @@ fn create_test_main_content_with_balls(ball_count: usize) -> MainContent {
     main_content.num_balls = ball_count;
 
     // Add balls to cell grid
-    for i in 0..main_content.balls.len() {
-        main_content.cell_grid.add_ball(i, &mut main_content.balls);
-    }
+    main_content.world_mut().rebuild_cell_grid();
 
     main_content
 }

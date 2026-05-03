@@ -1,6 +1,6 @@
 //! Nosé-Hoover thermostat operator — placement, control, and per-step application.
 
-use super::{MainContent, StatsAccumulator};
+use super::{MainContent, SimulationWorld, StatsAccumulator};
 use crate::application::thermo_field::LocalKineticStats;
 use crate::objects2d::{
     THERMOSTAT_CHAIN_MAX, THERMOSTAT_CHAIN_MIN, THERMOSTAT_RADIUS_STEP,
@@ -27,24 +27,58 @@ impl ThermostatBucket {
 impl MainContent {
     /// Place a new thermostat at `position`.
     pub(crate) fn add_thermostat(&mut self, position: Vec2D) {
-        self.thermostats.add(position);
+        self.world.add_thermostat(position);
     }
 
     /// Toggle the on/off state of an existing thermostat.
+    pub(crate) fn toggle_thermostat(&mut self, thermostat_id: usize) {
+        self.world.toggle_thermostat(thermostat_id);
+    }
+
+    /// Move an existing thermostat to a new world-space position.
+    pub(crate) fn move_thermostat(&mut self, thermostat_id: usize, new_pos: Vec2D) {
+        self.world.move_thermostat(thermostat_id, new_pos);
+    }
+
+    /// Adjust the target temperature of a thermostat.
+    pub(crate) fn adjust_thermostat_target_temperature(
+        &mut self,
+        thermostat_id: usize,
+        delta_steps: f32,
+    ) {
+        self.world
+            .adjust_thermostat_target_temperature(thermostat_id, delta_steps);
+    }
+
+    /// Adjust the radius of a thermostat.
+    pub(crate) fn adjust_thermostat_radius(&mut self, thermostat_id: usize, delta_steps: f32) {
+        self.world
+            .adjust_thermostat_radius(thermostat_id, delta_steps);
+    }
+
+    /// Apply all active thermostats after force/collision resolution.
+    pub(crate) fn apply_thermostats(&mut self, dt: f32, stats_accumulator: &mut StatsAccumulator) {
+        self.world.apply_thermostats(dt, stats_accumulator);
+    }
+}
+
+impl SimulationWorld {
+    pub(crate) fn add_thermostat(&mut self, position: Vec2D) {
+        self.thermostats.add(position);
+    }
+
     pub(crate) fn toggle_thermostat(&mut self, thermostat_id: usize) {
         if let Some(thermostat) = self.thermostats.find_mut(thermostat_id) {
             thermostat.state.toggle();
         }
     }
 
-    /// Move an existing thermostat to a new world-space position.
     pub(crate) fn move_thermostat(&mut self, thermostat_id: usize, new_pos: Vec2D) {
         if let Some(thermostat) = self.thermostats.find_mut(thermostat_id) {
             thermostat.position = new_pos;
         }
     }
 
-    /// Adjust the target temperature of a thermostat.
     pub(crate) fn adjust_thermostat_target_temperature(
         &mut self,
         thermostat_id: usize,
@@ -55,14 +89,12 @@ impl MainContent {
         }
     }
 
-    /// Adjust the radius of a thermostat.
     pub(crate) fn adjust_thermostat_radius(&mut self, thermostat_id: usize, delta_steps: f32) {
         if let Some(thermostat) = self.thermostats.find_mut(thermostat_id) {
             thermostat.adjust_radius(delta_steps * THERMOSTAT_RADIUS_STEP);
         }
     }
 
-    /// Apply all active thermostats after force/collision resolution.
     pub(crate) fn apply_thermostats(&mut self, dt: f32, stats_accumulator: &mut StatsAccumulator) {
         let active_ids: Vec<usize> = self
             .thermostats
@@ -167,7 +199,10 @@ impl MainContent {
             return false;
         };
 
-        if thermostat.target_temperature <= f32::EPSILON {
+        let target_temperature = thermostat.target_temperature;
+        let tau = thermostat.tau;
+
+        if target_temperature <= f32::EPSILON {
             for &ball_idx in &bucket.ball_indices {
                 self.balls[ball_idx].v = Vec2D::zero();
             }
@@ -175,12 +210,11 @@ impl MainContent {
             return !bucket.ball_indices.is_empty();
         }
 
-        let tau_sq = thermostat.tau * thermostat.tau;
+        let tau_sq = tau * tau;
         if tau_sq <= f32::EPSILON {
             return false;
         }
 
-        let target_temperature = thermostat.target_temperature;
         let xi = thermostat.chain0_mut();
         *xi += dt * (local_temp / target_temperature - 1.0) / tau_sq;
         *xi = xi.clamp(THERMOSTAT_CHAIN_MIN, THERMOSTAT_CHAIN_MAX);

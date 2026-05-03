@@ -1,10 +1,17 @@
 use super::*;
 use crate::objects2d::Rect;
-use crate::objects2d::ball_cell::cell_grid;
 use crate::objects2d::ball_impl::BallFactory;
 use crate::objects2d::operator::{is_degenerate, remap_point};
 
 impl MainContent {
+    pub(crate) fn world(&self) -> &SimulationWorld {
+        &self.world
+    }
+
+    pub(crate) fn world_mut(&mut self) -> &mut SimulationWorld {
+        &mut self.world
+    }
+
     pub(crate) fn get_game_logic_data(&mut self) -> &mut GameLogicData {
         &mut self.game_data
     }
@@ -65,15 +72,17 @@ impl MainContent {
             self.pause_for_resize()
         }
 
+        let world = self.world_mut();
+
         // Rescale all operator positions so they keep their relative
         // position within the world (e.g. 20%/50% stays 20%/50%).
-        let old = self.world_rect;
-        self.rescale_all_operators(&old, &world_rect);
+        let old = world.world_rect;
+        world.rescale_all_operators(&old, &world_rect);
 
         // Keep ball centers and cached position state at the same fractional
         // location in the new world rect, matching operator resize behavior.
         if !is_degenerate(&old) {
-            for ball in &mut self.balls {
+            for ball in &mut world.balls {
                 let new_pos = remap_point(*ball.get_position(), &old, &world_rect);
                 ball.set_position_and_update_tail(new_pos);
                 ball.pre_update_pos = remap_point(ball.pre_update_pos, &old, &world_rect);
@@ -82,24 +91,15 @@ impl MainContent {
             }
         }
 
-        // Update world_rect with correctly computed world coordinates
-        self.world_rect = world_rect;
-
         // Rebuild cell grid with new dimensions
         let cutoff_and_skin =
-            self.physics.get_cutoff_distance() + self.physics.get_skin_thickness();
+            world.physics.get_cutoff_distance() + world.physics.get_skin_thickness();
         let max_radius = BallFactory::get_max_radius();
-        self.cell_grid = cell_grid::CellGrid::new(self.world_rect, cutoff_and_skin, max_radius)
-            .expect("Failed to create cell grid on resize");
-
-        // Re-add all balls to the new cell grid
-        for i in 0..self.balls.len() {
-            self.cell_grid.add_ball(i, &mut self.balls);
-        }
+        world.resize_cell_grid(world_rect, cutoff_and_skin, max_radius);
 
         // Discard stale thermo history — accumulated grids used the old
         // world rect and would produce incorrect cell-to-world mapping.
-        self.thermo_history.clear();
+        world.thermo_history.clear();
     }
 
     pub(crate) fn double_time_step(&mut self) {
@@ -119,7 +119,8 @@ impl MainContent {
     }
 
     pub(crate) fn end_frame(&mut self) {
-        self.sim.update_hood_cnt(self.update_hood_at_frame_start);
+        let update_hood_at_frame_start = self.update_hood_at_frame_start;
+        self.sim.update_hood_cnt(update_hood_at_frame_start);
     }
 
     pub(crate) fn get_wait_time(&self) -> u64 {

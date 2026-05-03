@@ -40,7 +40,7 @@ fn test_single_ball_wall_bounce_momentum() {
     let ball_mass = ball.mass;
 
     main_content.balls.push(ball);
-    main_content.cell_grid.add_ball(0, &mut main_content.balls);
+    main_content.world_mut().rebuild_cell_grid();
 
     let bound_rect = main_content.world_region();
 
@@ -174,9 +174,7 @@ fn test_wall_momentum_performance_impact() {
     }
 
     // Add balls to cell grid
-    for i in 0..main_content.balls.len() {
-        main_content.cell_grid.add_ball(i, &mut main_content.balls);
-    }
+    main_content.world_mut().rebuild_cell_grid();
 
     let bound_rect = main_content.world_region();
 

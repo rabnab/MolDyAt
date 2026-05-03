@@ -72,9 +72,7 @@ fn test_energy_conservation_1000_balls() {
 
     // Add balls to cell grid
     println!("\nAdding balls to cell grid...");
-    for i in 0..main_content.balls.len() {
-        main_content.cell_grid.add_ball(i, &mut main_content.balls);
-    }
+    main_content.world_mut().rebuild_cell_grid();
 
     // Initialize neighbor lists
     println!("\nInitializing neighbor lists...");

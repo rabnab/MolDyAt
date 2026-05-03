@@ -5,7 +5,7 @@
 //! emitted every [`emit_period`](crate::objects2d::SimSourceSphere::emit_period)
 //! simulation steps.
 
-use super::MainContent;
+use super::{MainContent, SimulationWorld};
 use crate::objects2d::{SOURCE_SPHERE_RADIUS, Vec2D};
 use rand::RngExt;
 
@@ -19,35 +19,28 @@ struct EmissionParams {
 impl MainContent {
     /// Place a new source sphere at `center`.
     pub(crate) fn add_source_sphere(&mut self, center: Vec2D) {
-        self.source_spheres.add(center);
+        self.world.add_source_sphere(center);
     }
 
     /// Toggle the on/off state of an existing source sphere.
     pub(crate) fn toggle_source_sphere(&mut self, sphere_id: usize) {
-        if let Some(sphere) = self.source_spheres.find_mut(sphere_id) {
-            sphere.state.toggle();
-        }
+        self.world.toggle_source_sphere(sphere_id);
     }
 
     /// Cycle the emitted ball size for a source sphere.
     pub(crate) fn cycle_source_sphere_ball_size(&mut self, sphere_id: usize) {
-        if let Some(sphere) = self.source_spheres.find_mut(sphere_id) {
-            sphere.cycle_ball_size();
-        }
+        self.world.cycle_source_sphere_ball_size(sphere_id);
     }
 
     /// Adjust the emission speed of a source sphere.
     pub(crate) fn adjust_source_sphere_speed(&mut self, sphere_id: usize, delta: f32) {
-        if let Some(sphere) = self.source_spheres.find_mut(sphere_id) {
-            sphere.adjust_emission_speed(delta);
-        }
+        self.world.adjust_source_sphere_speed(sphere_id, delta);
     }
 
     /// Adjust the emission period of a source sphere.
     pub(crate) fn adjust_source_sphere_emit_period(&mut self, sphere_id: usize, delta_steps: i32) {
-        if let Some(sphere) = self.source_spheres.find_mut(sphere_id) {
-            sphere.adjust_emit_period(delta_steps);
-        }
+        self.world
+            .adjust_source_sphere_emit_period(sphere_id, delta_steps);
     }
 
     /// Emit balls from all active source spheres.
@@ -59,19 +52,7 @@ impl MainContent {
     /// speed magnitude and ball size class.
     pub(crate) fn emit_from_source_spheres(&mut self) {
         let step = self.step_count;
-
-        // Collect emission parameters to avoid borrowing self twice.
-        let emissions: Vec<EmissionParams> = self
-            .source_spheres
-            .spheres()
-            .iter()
-            .filter(|s| s.is_emitting() && step.is_multiple_of(s.emit_period))
-            .map(|s| EmissionParams {
-                center: s.center,
-                ball_size_idx: s.ball_size_idx,
-                emission_speed: s.emission_speed,
-            })
-            .collect();
+        let emissions = self.world.collect_source_emissions(step);
 
         let mut rng = rand::rng();
         for params in emissions {
@@ -94,5 +75,48 @@ impl MainContent {
             let _ =
                 self.add_candidate_ball(candidate, self.get_ball_factory().get_new_ball_radius());
         }
+    }
+}
+
+impl SimulationWorld {
+    pub(crate) fn add_source_sphere(&mut self, center: Vec2D) {
+        self.source_spheres.add(center);
+    }
+
+    pub(crate) fn toggle_source_sphere(&mut self, sphere_id: usize) {
+        if let Some(sphere) = self.source_spheres.find_mut(sphere_id) {
+            sphere.state.toggle();
+        }
+    }
+
+    pub(crate) fn cycle_source_sphere_ball_size(&mut self, sphere_id: usize) {
+        if let Some(sphere) = self.source_spheres.find_mut(sphere_id) {
+            sphere.cycle_ball_size();
+        }
+    }
+
+    pub(crate) fn adjust_source_sphere_speed(&mut self, sphere_id: usize, delta: f32) {
+        if let Some(sphere) = self.source_spheres.find_mut(sphere_id) {
+            sphere.adjust_emission_speed(delta);
+        }
+    }
+
+    pub(crate) fn adjust_source_sphere_emit_period(&mut self, sphere_id: usize, delta_steps: i32) {
+        if let Some(sphere) = self.source_spheres.find_mut(sphere_id) {
+            sphere.adjust_emit_period(delta_steps);
+        }
+    }
+
+    fn collect_source_emissions(&self, step: usize) -> Vec<EmissionParams> {
+        self.source_spheres
+            .spheres()
+            .iter()
+            .filter(|s| s.is_emitting() && step.is_multiple_of(s.emit_period))
+            .map(|s| EmissionParams {
+                center: s.center,
+                ball_size_idx: s.ball_size_idx,
+                emission_speed: s.emission_speed,
+            })
+            .collect()
     }
 }
