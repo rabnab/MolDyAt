@@ -163,4 +163,18 @@ mod tests {
 
         assert!(!state.render.view_dirty);
     }
+
+    #[test]
+    fn end_frame_advances_displayed_simulation_step() {
+        let mut snapshot = RendererSnapshot::new();
+        snapshot.simulation_step = 42;
+
+        let mut state = build_test_state_with_physics(PhysicsCoordinator::with_snapshot(snapshot));
+        // Load the snapshot into render state so end_frame can mark it displayed.
+        FrameOrchestrator::begin_frame(&mut state);
+
+        FrameOrchestrator::end_frame(&mut state);
+
+        assert_eq!(state.physics.last_displayed_step(), 42);
+    }
 }

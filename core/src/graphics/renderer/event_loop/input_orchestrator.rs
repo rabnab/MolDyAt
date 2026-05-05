@@ -233,7 +233,7 @@ impl InputOrchestrator {
 #[cfg(test)]
 mod tests {
     use super::InputOrchestrator;
-    use crate::application::renderer_snapshot::OperatorSnapshot;
+    use crate::application::renderer_snapshot::{OperatorSnapshot, RendererSnapshot};
     use crate::graphics::energy_plot::{EnergyData, SharedEnergyData};
     use crate::graphics::renderer::ViewportTransform;
     use crate::graphics::renderer::event_loop::energy_window_manager::EnergyWindowManager;
@@ -248,7 +248,7 @@ mod tests {
     use crate::graphics::renderer::margins::Margins;
     use crate::graphics::renderer::state_layers::RendererConfig;
     use crate::graphics::sidebar::{icon_display_size_for_margin, icon_spacing_for_margin};
-    use crate::objects2d::{Rect, Vec2D};
+    use crate::objects2d::{OperatorState, Rect, SimSourceSphere, Vec2D};
     use std::sync::{Arc, Mutex};
     use winit::event::{DeviceId, ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 
@@ -257,11 +257,11 @@ mod tests {
         ViewportTransform::new(world, (1280.0, 720.0), Margins::symmetric(50.0, 50.0))
     }
 
-    fn build_test_state() -> UnifiedRenderState {
+    fn build_state_with_physics(physics: PhysicsCoordinator) -> UnifiedRenderState {
         let energy_data: SharedEnergyData = Arc::new(Mutex::new(EnergyData::new()));
         UnifiedRenderState {
             input: InputHandler::new(),
-            physics: PhysicsCoordinator::new_disconnected(),
+            physics,
             render: RenderStateData {
                 viewport: dummy_viewport(),
                 energy_manager: EnergyWindowManager::new(energy_data),
@@ -277,6 +277,10 @@ mod tests {
                 resize_pending: false,
             },
         }
+    }
+
+    fn build_test_state() -> UnifiedRenderState {
+        build_state_with_physics(PhysicsCoordinator::new_disconnected())
     }
 
     fn first_sidebar_icon_center(state: &UnifiedRenderState) -> [f32; 2] {
@@ -389,5 +393,44 @@ mod tests {
 
         assert!(affects_view);
         assert!(state.viewport().zoom() > initial_zoom);
+    }
+
+    #[test]
+    fn add_ball_blocked_when_position_is_near_an_operator() {
+        let sphere_center = Vec2D::new(5.0, 5.0);
+
+        // Build a snapshot containing a source sphere at sphere_center.
+        let mut snapshot = RendererSnapshot::new();
+        snapshot.operators.source_spheres.push(SimSourceSphere {
+            id: 1,
+            center: sphere_center,
+            state: OperatorState::On,
+            emit_period: 60,
+            ball_size_idx: 2,
+            emission_speed: 1.0,
+        });
+
+        // Use a recording coordinator so we can assert no AddBall command is sent.
+        let (physics, log) = PhysicsCoordinator::new_recording();
+        let mut state = build_state_with_physics(physics);
+        state.render.active_tool = OperatorTool::Ball;
+        state.render.last_snapshot = Some(std::sync::Arc::new(snapshot));
+
+        // Attempt to place a ball exactly on top of the operator.
+        let result = InputOrchestrator::process_action(
+            &mut state,
+            InputAction::AddBall {
+                position: sphere_center,
+            },
+            None,
+            None,
+        );
+
+        assert!(!result, "blocked ball placement should return false");
+        let commands = log.lock().expect("command log lock should succeed");
+        assert!(
+            commands.iter().all(|c| !c.starts_with("AddBall")),
+            "no AddBall command should be sent when placement is blocked; got: {commands:?}"
+        );
     }
 }
