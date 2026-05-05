@@ -143,6 +143,20 @@ impl PhysicsCoordinator {
             render_report_interval: std::time::Instant::now(),
         }
     }
+
+    /// Create a disconnected coordinator with a preloaded snapshot.
+    #[cfg(test)]
+    pub fn with_snapshot(snapshot: RendererSnapshot) -> Self {
+        Self {
+            physics_thread: None,
+            snapshot_slot: Some(Arc::new(ArcSwapOption::new(Some(Arc::new(snapshot))))),
+            last_displayed_step: 0,
+            steps_per_frame: 0.0,
+            render_fps: 0,
+            last_reported_render_fps: 0.0,
+            render_report_interval: std::time::Instant::now(),
+        }
+    }
 }
 
 impl Drop for PhysicsCoordinator {

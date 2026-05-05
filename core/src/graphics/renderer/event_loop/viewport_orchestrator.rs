@@ -155,6 +155,16 @@ mod tests {
     }
 
     #[test]
+    fn resume_after_resize_clears_pending_flag() {
+        let mut state = build_test_state();
+        state.render.resize_pending = true;
+
+        ViewportOrchestrator::resume_after_resize_if_pending(&mut state);
+
+        assert!(!state.render.resize_pending);
+    }
+
+    #[test]
     fn update_cursor_world_pos_tracks_input_and_state() {
         let mut state = build_test_state();
 

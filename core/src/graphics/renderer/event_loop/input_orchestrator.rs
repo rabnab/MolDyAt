@@ -247,8 +247,10 @@ mod tests {
     };
     use crate::graphics::renderer::margins::Margins;
     use crate::graphics::renderer::state_layers::RendererConfig;
+    use crate::graphics::sidebar::{icon_display_size_for_margin, icon_spacing_for_margin};
     use crate::objects2d::{Rect, Vec2D};
     use std::sync::{Arc, Mutex};
+    use winit::event::{DeviceId, ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 
     fn dummy_viewport() -> ViewportTransform {
         let world = Rect::new(-18.0, 12.0, 36.0, -24.0);
@@ -275,6 +277,23 @@ mod tests {
                 resize_pending: false,
             },
         }
+    }
+
+    fn first_sidebar_icon_center(state: &UnifiedRenderState) -> [f32; 2] {
+        let margins = state.viewport().margins();
+        let icon_display_size = icon_display_size_for_margin(margins.left);
+        let icon_spacing = icon_spacing_for_margin(margins.left);
+        let pad_x = (margins.left - icon_display_size) * 0.5;
+        let first_icon_top = margins.top + icon_spacing;
+        [
+            pad_x + icon_display_size * 0.5,
+            first_icon_top + icon_display_size * 0.5,
+        ]
+    }
+
+    fn dummy_device_id() -> DeviceId {
+        // Test-only synthetic device id for constructing winit window events.
+        DeviceId::dummy()
     }
 
     #[test]
@@ -305,5 +324,70 @@ mod tests {
         assert!(!affects_view);
         assert_eq!(state.render.current_ball_size_idx, 3);
         assert!(state.render.view_dirty);
+    }
+
+    #[test]
+    fn handle_mouse_event_dispatches_sidebar_selection() {
+        let mut state = build_test_state();
+        let screen_pos = first_sidebar_icon_center(&state);
+        state.input.set_cursor_pos(Vec2D::zero(), screen_pos);
+
+        let event = WindowEvent::MouseInput {
+            device_id: dummy_device_id(),
+            state: ElementState::Pressed,
+            button: MouseButton::Left,
+        };
+
+        let affects_view = InputOrchestrator::handle_mouse_event(&mut state, &event);
+
+        assert!(affects_view);
+        assert_eq!(state.render.active_tool, OperatorTool::Ball);
+    }
+
+    #[test]
+    fn handle_mouse_input_event_forwards_to_active_tool_handler() {
+        let mut state = build_test_state();
+        state.select_operator_tool(OperatorTool::LineSegment);
+        state.render.view_dirty = false;
+        state
+            .input
+            .set_cursor_pos(Vec2D::new(3.0, 4.0), [200.0, 200.0]);
+
+        let affects_view = InputOrchestrator::handle_mouse_input_event(
+            &mut state,
+            MouseButton::Left,
+            ElementState::Pressed,
+        );
+
+        assert!(affects_view);
+        assert!(state.render.view_dirty);
+        assert_eq!(state.render.active_tool, OperatorTool::LineSegment);
+    }
+
+    #[test]
+    fn handle_cursor_moved_event_applies_pan_fallthrough() {
+        let mut state = build_test_state();
+        state.input.start_pan([100.0, 200.0], Vec2D::zero());
+
+        let affects_view = InputOrchestrator::handle_cursor_moved_event(&mut state, 150.0, 260.0);
+
+        assert!(affects_view);
+        assert!(state.render.view_dirty);
+        assert!(state.input.is_panning());
+    }
+
+    #[test]
+    fn handle_mouse_wheel_event_applies_zoom_fallthrough() {
+        let mut state = build_test_state();
+        state.input.set_cursor_pos(Vec2D::zero(), [120.0, 140.0]);
+        let initial_zoom = state.viewport().zoom();
+
+        let affects_view = InputOrchestrator::handle_mouse_wheel_event(
+            &mut state,
+            MouseScrollDelta::LineDelta(0.0, 1.0),
+        );
+
+        assert!(affects_view);
+        assert!(state.viewport().zoom() > initial_zoom);
     }
 }

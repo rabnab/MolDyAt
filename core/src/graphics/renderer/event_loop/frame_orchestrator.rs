@@ -50,6 +50,7 @@ impl FrameOrchestrator {
 mod tests {
     use super::FrameOrchestrator;
     use crate::application::renderer_snapshot::OperatorSnapshot;
+    use crate::application::renderer_snapshot::RendererSnapshot;
     use crate::graphics::energy_plot::{EnergyData, SharedEnergyData};
     use crate::graphics::renderer::ViewportTransform;
     use crate::graphics::renderer::event_loop::energy_window_manager::EnergyWindowManager;
@@ -69,11 +70,11 @@ mod tests {
         ViewportTransform::new(world, (1280.0, 720.0), Margins::symmetric(50.0, 50.0))
     }
 
-    fn build_test_state() -> UnifiedRenderState {
+    fn build_test_state_with_physics(physics: PhysicsCoordinator) -> UnifiedRenderState {
         let energy_data: SharedEnergyData = Arc::new(Mutex::new(EnergyData::new()));
         UnifiedRenderState {
             input: InputHandler::new(),
-            physics: PhysicsCoordinator::new_disconnected(),
+            physics,
             render: RenderStateData {
                 viewport: dummy_viewport(),
                 energy_manager: EnergyWindowManager::new(energy_data),
@@ -89,6 +90,51 @@ mod tests {
                 resize_pending: false,
             },
         }
+    }
+
+    fn build_test_state() -> UnifiedRenderState {
+        build_test_state_with_physics(PhysicsCoordinator::new_disconnected())
+    }
+
+    #[test]
+    fn begin_frame_pulls_snapshot_and_updates_energy_window() {
+        let mut snapshot = RendererSnapshot::new();
+        snapshot.simulation_step = 7;
+        snapshot.kinetic_energy = 1.5;
+        snapshot.potential_energy = 2.5;
+        snapshot.time = 3.0;
+        snapshot.physics_fps = 120.0;
+        snapshot.status_text = Some("fps 0".to_string());
+
+        let physics = PhysicsCoordinator::with_snapshot(snapshot);
+        let mut state = build_test_state_with_physics(physics);
+
+        FrameOrchestrator::begin_frame(&mut state);
+
+        let snapshot = state
+            .render
+            .last_snapshot
+            .as_ref()
+            .expect("snapshot should be stored");
+        assert_eq!(snapshot.simulation_step, 7);
+
+        let energy_data = state
+            .render
+            .energy_manager
+            .energy_data()
+            .lock()
+            .expect("energy data lock should succeed");
+        assert_eq!(energy_data.v_kin.len(), 1);
+        assert_eq!(energy_data.v_pot.len(), 1);
+        assert_eq!(energy_data.v_kin[0], 1.5);
+        assert_eq!(energy_data.v_pot[0], 2.5);
+        assert_eq!(energy_data.time, 3.0);
+        assert!(
+            energy_data
+                .status_text
+                .as_deref()
+                .is_some_and(|status| status.contains("render: 0 fps"))
+        );
     }
 
     #[test]

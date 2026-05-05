@@ -1,7 +1,7 @@
 //! Shared renderer event-loop state for both ggez and wgpu backends.
 //!
-//! `UnifiedRenderState` is now a thin compatibility facade over owned renderer
-//! state and focused orchestrators so both backends still follow the same frame
+//! `UnifiedRenderState` is now a thin facade over owned renderer state and
+//! focused orchestrators so both backends still follow the same frame
 //! lifecycle:
 //!
 //! ```text
@@ -11,7 +11,8 @@
 //! `RenderStateData` holds shared renderer data such as the viewport, energy
 //! window state, cursor/tool bookkeeping, and frame metrics. Orchestrators own
 //! the higher-level input, frame, and viewport coordination while
-//! `UnifiedRenderState` preserves the external API during the migration.
+//! `UnifiedRenderState` exposes the narrowed public surface used by the active
+//! backends.
 
 use crate::application::MainContent;
 use crate::application::renderer_snapshot::{OperatorSnapshot, RendererSnapshot};
