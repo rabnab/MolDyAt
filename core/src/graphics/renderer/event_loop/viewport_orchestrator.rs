@@ -98,11 +98,11 @@ mod tests {
         ViewportTransform::new(world, (1280.0, 720.0), Margins::symmetric(50.0, 50.0))
     }
 
-    fn build_test_state() -> UnifiedRenderState {
+    fn build_state_with_physics(physics: PhysicsCoordinator) -> UnifiedRenderState {
         let energy_data: SharedEnergyData = Arc::new(Mutex::new(EnergyData::new()));
         UnifiedRenderState {
             input: InputHandler::new(),
-            physics: PhysicsCoordinator::new_disconnected(),
+            physics,
             render: RenderStateData {
                 viewport: dummy_viewport(),
                 energy_manager: EnergyWindowManager::new(energy_data),
@@ -120,28 +120,13 @@ mod tests {
         }
     }
 
+    fn build_test_state() -> UnifiedRenderState {
+        build_state_with_physics(PhysicsCoordinator::new_disconnected())
+    }
+
     fn build_test_state_recording() -> (UnifiedRenderState, Arc<Mutex<Vec<String>>>) {
-        let energy_data: SharedEnergyData = Arc::new(Mutex::new(EnergyData::new()));
         let (physics, log) = PhysicsCoordinator::new_recording();
-        let state = UnifiedRenderState {
-            input: InputHandler::new(),
-            physics,
-            render: RenderStateData {
-                viewport: dummy_viewport(),
-                energy_manager: EnergyWindowManager::new(energy_data),
-                config: RendererConfig::default(),
-                view_dirty: false,
-                last_snapshot: None,
-                cursor_world_pos: Vec2D::zero(),
-                current_ball_size_idx: 2,
-                metrics: MetricsCollector::new(),
-                active_tool: OperatorTool::None,
-                tool_handler: None,
-                default_operator_snapshot: OperatorSnapshot::default(),
-                resize_pending: false,
-            },
-        };
-        (state, log)
+        (build_state_with_physics(physics), log)
     }
 
     #[test]

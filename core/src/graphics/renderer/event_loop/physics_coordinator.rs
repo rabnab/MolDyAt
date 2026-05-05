@@ -164,7 +164,7 @@ impl PhysicsCoordinator {
     /// Each entry is the `Debug` representation of the `DomainCommand`.
     #[cfg(test)]
     pub fn new_recording() -> (Self, Arc<std::sync::Mutex<Vec<String>>>) {
-        let log: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let log = Arc::new(std::sync::Mutex::new(Vec::new()));
         let coordinator = Self {
             physics_thread: None,
             snapshot_slot: None,
