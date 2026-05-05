@@ -120,6 +120,30 @@ mod tests {
         }
     }
 
+    fn build_test_state_recording() -> (UnifiedRenderState, Arc<Mutex<Vec<String>>>) {
+        let energy_data: SharedEnergyData = Arc::new(Mutex::new(EnergyData::new()));
+        let (physics, log) = PhysicsCoordinator::new_recording();
+        let state = UnifiedRenderState {
+            input: InputHandler::new(),
+            physics,
+            render: RenderStateData {
+                viewport: dummy_viewport(),
+                energy_manager: EnergyWindowManager::new(energy_data),
+                config: RendererConfig::default(),
+                view_dirty: false,
+                last_snapshot: None,
+                cursor_world_pos: Vec2D::zero(),
+                current_ball_size_idx: 2,
+                metrics: MetricsCollector::new(),
+                active_tool: OperatorTool::None,
+                tool_handler: None,
+                default_operator_snapshot: OperatorSnapshot::default(),
+                resize_pending: false,
+            },
+        };
+        (state, log)
+    }
+
     #[test]
     fn zoom_at_point_marks_view_dirty() {
         let mut state = build_test_state();
@@ -155,6 +179,24 @@ mod tests {
     }
 
     #[test]
+    fn handle_resize_sends_resize_command_to_physics() {
+        let (mut state, log) = build_test_state_recording();
+
+        ViewportOrchestrator::handle_resize(
+            &mut state,
+            1024.0,
+            768.0,
+            Margins::symmetric(50.0, 50.0),
+        );
+
+        let commands = log.lock().expect("command log lock should succeed");
+        assert!(
+            commands.iter().any(|c| c.starts_with("Resize {")),
+            "expected a Resize command to be forwarded to physics; got: {commands:?}"
+        );
+    }
+
+    #[test]
     fn resume_after_resize_clears_pending_flag() {
         let mut state = build_test_state();
         state.render.resize_pending = true;
@@ -162,6 +204,20 @@ mod tests {
         ViewportOrchestrator::resume_after_resize_if_pending(&mut state);
 
         assert!(!state.render.resize_pending);
+    }
+
+    #[test]
+    fn resume_after_resize_sends_resume_command_to_physics() {
+        let (mut state, log) = build_test_state_recording();
+        state.render.resize_pending = true;
+
+        ViewportOrchestrator::resume_after_resize_if_pending(&mut state);
+
+        let commands = log.lock().expect("command log lock should succeed");
+        assert!(
+            commands.iter().any(|c| c == "ResumeAfterResize"),
+            "expected a ResumeAfterResize command to be forwarded to physics; got: {commands:?}"
+        );
     }
 
     #[test]
