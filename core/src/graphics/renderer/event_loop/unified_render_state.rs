@@ -1,15 +1,17 @@
-//! Unified render state for both ggez and wgpu renderers.
+//! Shared renderer event-loop state for both ggez and wgpu backends.
 //!
-//! Consolidates all shared event-loop state into a single struct so that
-//! both renderer backends follow the same frame lifecycle:
+//! `UnifiedRenderState` is now a thin compatibility facade over owned renderer
+//! state and focused orchestrators so both backends still follow the same frame
+//! lifecycle:
 //!
 //! ```text
 //! begin_frame() → handle events → should_render() → render → end_frame()
 //! ```
 //!
-//! `UnifiedRenderState` owns the `ViewportTransform`, `EnergyWindowManager`,
-//! cursor state, ball-size tracking, and per-step energy bookkeeping that
-//! unifies renderer state management across both ggez and wgpu backends.
+//! `RenderStateData` holds shared renderer data such as the viewport, energy
+//! window state, cursor/tool bookkeeping, and frame metrics. Orchestrators own
+//! the higher-level input, frame, and viewport coordination while
+//! `UnifiedRenderState` preserves the external API during the migration.
 
 use crate::application::MainContent;
 use crate::application::renderer_snapshot::{OperatorSnapshot, RendererSnapshot};
@@ -148,6 +150,61 @@ impl UnifiedRenderState {
 
     pub fn merge_view_dirty(&mut self, dirty: bool) {
         self.render.view_dirty |= dirty;
+    }
+
+    pub(super) fn mark_view_dirty(&mut self) {
+        self.render.view_dirty = true;
+    }
+
+    pub(super) fn is_active_tool(&self, tool: OperatorTool) -> bool {
+        self.render.active_tool == tool
+    }
+
+    pub(super) fn select_operator_tool(&mut self, tool: OperatorTool) {
+        if let Some(handler) = self.render.tool_handler.as_mut() {
+            handler.reset();
+        }
+        self.render.active_tool = tool;
+        self.render.tool_handler = Self::handler_for_tool(tool);
+        self.render.config.draw_cursor = tool == OperatorTool::Ball;
+        self.render.view_dirty = true;
+    }
+
+    fn current_operator_snapshot(&self) -> &OperatorSnapshot {
+        self.render
+            .last_snapshot
+            .as_deref()
+            .map(|snapshot| &snapshot.operators)
+            .unwrap_or(&self.render.default_operator_snapshot)
+    }
+
+    pub(super) fn can_add_ball_at(&self, position: Vec2D) -> bool {
+        !self
+            .current_operator_snapshot()
+            .is_near_any_operator(position)
+    }
+
+    pub(super) fn with_tool_handler<R>(
+        &mut self,
+        f: impl FnOnce(&mut dyn OperatorToolHandler, ToolContext<'_>) -> R,
+    ) -> Option<R> {
+        let render = &mut self.render;
+        let RenderStateData {
+            tool_handler,
+            last_snapshot,
+            default_operator_snapshot,
+            viewport,
+            cursor_world_pos,
+            ..
+        } = render;
+        let handler = tool_handler.as_deref_mut()?;
+        let ctx = Self::make_tool_context_from(
+            last_snapshot.as_deref(),
+            default_operator_snapshot,
+            viewport,
+            *cursor_world_pos,
+        );
+        Some(f(handler, ctx))
     }
 
     // ── Frame lifecycle ──────────────────────────────────────────────

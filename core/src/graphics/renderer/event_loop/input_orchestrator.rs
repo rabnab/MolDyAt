@@ -20,8 +20,8 @@ impl InputOrchestrator {
             }
             InputAction::NextBallSize => {
                 state.next_ball_size();
-                if state.render.active_tool == OperatorTool::Ball {
-                    state.render.view_dirty = true;
+                if state.is_active_tool(OperatorTool::Ball) {
+                    state.mark_view_dirty();
                 }
                 false
             }
@@ -32,23 +32,11 @@ impl InputOrchestrator {
                 false
             }
             InputAction::SelectOperatorTool(tool) => {
-                if let Some(handler) = state.render.tool_handler.as_mut() {
-                    handler.reset();
-                }
-                state.render.active_tool = tool;
-                state.render.tool_handler = UnifiedRenderState::handler_for_tool(tool);
-                state.render.config.draw_cursor = tool == OperatorTool::Ball;
-                state.render.view_dirty = true;
+                state.select_operator_tool(tool);
                 false
             }
             InputAction::AddBall { position } => {
-                let operators = state
-                    .render
-                    .last_snapshot
-                    .as_deref()
-                    .map(|s| &s.operators)
-                    .unwrap_or(&state.render.default_operator_snapshot);
-                if operators.is_near_any_operator(position) {
+                if !state.can_add_ball_at(position) {
                     return false;
                 }
                 process_action_common(
@@ -62,7 +50,7 @@ impl InputOrchestrator {
                 let affects_view =
                     process_action_common(other, &state.physics, &mut state.render.config);
                 if affects_view {
-                    state.render.view_dirty = true;
+                    state.mark_view_dirty();
                 }
                 affects_view
             }
@@ -100,14 +88,14 @@ impl InputOrchestrator {
 
         let world_pos = state.input.cursor_pos();
         let screen_pos = state.input.cursor_pos_px();
-        let pan_offset = state.render.viewport.pan_offset();
+        let pan_offset = state.viewport().pan_offset();
 
         if button == winit::event::MouseButton::Left
             && element_state == winit::event::ElementState::Pressed
             && let Some(icon_idx) = state.sidebar_icon_at(screen_pos)
         {
             let tool = UnifiedRenderState::operator_tool_for_icon(icon_idx);
-            let new_tool = if state.render.active_tool == tool {
+            let new_tool = if state.is_active_tool(tool) {
                 OperatorTool::None
             } else {
                 tool
@@ -116,7 +104,7 @@ impl InputOrchestrator {
             return true;
         }
 
-        if state.render.active_tool == OperatorTool::Ball
+        if state.is_active_tool(OperatorTool::Ball)
             && button == winit::event::MouseButton::Left
             && element_state == winit::event::ElementState::Released
         {
@@ -130,23 +118,17 @@ impl InputOrchestrator {
             );
         }
 
-        if let Some(handler) = &mut state.render.tool_handler {
-            let ctx = UnifiedRenderState::make_tool_context_from(
-                state.render.last_snapshot.as_deref(),
-                &state.render.default_operator_snapshot,
-                &state.render.viewport,
-                state.render.cursor_world_pos,
-            );
-            let resp = handler.handle_mouse_button(button, element_state, world_pos, &ctx);
-            if resp.consumed {
-                if let Some(cmd) = resp.action {
-                    Self::process_action(state, InputAction::OperatorAction(cmd), None, None);
-                }
-                if resp.view_dirty {
-                    state.render.view_dirty = true;
-                }
-                return true;
+        if let Some(resp) = state.with_tool_handler(|handler, ctx| {
+            handler.handle_mouse_button(button, element_state, world_pos, &ctx)
+        }) && resp.consumed
+        {
+            if let Some(cmd) = resp.action {
+                Self::process_action(state, InputAction::OperatorAction(cmd), None, None);
             }
+            if resp.view_dirty {
+                state.mark_view_dirty();
+            }
+            return true;
         }
 
         if let Some(action) = state.input.handle_mouse_button(
@@ -167,23 +149,17 @@ impl InputOrchestrator {
         y: f32,
     ) -> bool {
         state.update_cursor_world_pos(&[x, y]);
+        let world_pos = state.input.cursor_pos();
 
-        if let Some(handler) = &mut state.render.tool_handler {
-            let world_pos = state.input.cursor_pos();
-            let ctx = UnifiedRenderState::make_tool_context_from(
-                state.render.last_snapshot.as_deref(),
-                &state.render.default_operator_snapshot,
-                &state.render.viewport,
-                state.render.cursor_world_pos,
-            );
-            let resp = handler.handle_cursor_move(world_pos, &ctx);
-            if resp.consumed {
-                if let Some(cmd) = resp.action {
-                    Self::process_action(state, InputAction::OperatorAction(cmd), None, None);
-                }
-                if resp.view_dirty {
-                    state.render.view_dirty = true;
-                }
+        if let Some(resp) =
+            state.with_tool_handler(|handler, ctx| handler.handle_cursor_move(world_pos, &ctx))
+            && resp.consumed
+        {
+            if let Some(cmd) = resp.action {
+                Self::process_action(state, InputAction::OperatorAction(cmd), None, None);
+            }
+            if resp.view_dirty {
+                state.mark_view_dirty();
             }
         }
 
@@ -202,33 +178,31 @@ impl InputOrchestrator {
         delta: winit::event::MouseScrollDelta,
     ) -> bool {
         let cursor_pos = state.input.cursor_pos();
+        let ctrl_held = state
+            .input
+            .is_key_pressed(winit::keyboard::KeyCode::ControlLeft)
+            || state
+                .input
+                .is_key_pressed(winit::keyboard::KeyCode::ControlRight);
 
-        if let Some(handler) = &mut state.render.tool_handler {
-            let scroll_y = scroll_y_from_delta(delta);
-            if scroll_y.abs() > f32::EPSILON {
-                let ctrl_held = state
-                    .input
-                    .is_key_pressed(winit::keyboard::KeyCode::ControlLeft)
-                    || state
-                        .input
-                        .is_key_pressed(winit::keyboard::KeyCode::ControlRight);
-                let ctx = UnifiedRenderState::make_tool_context_from(
-                    state.render.last_snapshot.as_deref(),
-                    &state.render.default_operator_snapshot,
-                    &state.render.viewport,
-                    state.render.cursor_world_pos,
-                );
-                let resp = handler.handle_scroll(scroll_y, cursor_pos, ctrl_held, &ctx);
-                if resp.consumed {
-                    if let Some(cmd) = resp.action {
-                        Self::process_action(state, InputAction::OperatorAction(cmd), None, None);
-                    }
-                    if resp.view_dirty {
-                        state.render.view_dirty = true;
-                    }
-                    return true;
+        if let Some(resp) = state
+            .with_tool_handler(|handler, ctx| {
+                let scroll_y = scroll_y_from_delta(delta);
+                if scroll_y.abs() <= f32::EPSILON {
+                    return None;
                 }
+                Some(handler.handle_scroll(scroll_y, cursor_pos, ctrl_held, &ctx))
+            })
+            .flatten()
+            && resp.consumed
+        {
+            if let Some(cmd) = resp.action {
+                Self::process_action(state, InputAction::OperatorAction(cmd), None, None);
             }
+            if resp.view_dirty {
+                state.mark_view_dirty();
+            }
+            return true;
         }
 
         if let Some(action) = state.input.handle_mouse_wheel(delta, cursor_pos) {
