@@ -1,21 +1,31 @@
 //! WGPU rendering backend
 //!
 //! This module contains the wgpu-based renderer implementation.
+//! After issue #140, the runtime wiring is split into focused pieces:
+//! [`app_lifecycle::AppLifecycle`] bootstraps the window and renderer state,
+//! [`event_router::EventRouter`] classifies and dispatches winit events, and
+//! [`frame_renderer::FrameRenderer`] prepares pipelines and submits redraws.
 //!
 //! # Components
+//! - [`app_lifecycle::AppLifecycle`]: Window, context, pipeline, and shared-state bootstrap
+//! - [`event_router::EventRouter`]: Window and device event classification and dispatch
+//! - [`frame_renderer::FrameRenderer`]: Snapshot preparation and frame submission
 //! - [`WgpuContext`]: Core GPU resources (Device, Queue, Surface, Adapter)
-//! - [`WgpuWindow`]: Window management and event loop
+//! - [`WgpuWindow`]: Thin event-loop shell that wires lifecycle, routing, and rendering
 //! - [`WgpuPipelines`]: Collection of all rendering pipelines
 //! - [`GridPipeline`]: Instanced grid rendering pipeline
 //! - [`BallPipeline`]: Instanced ball rendering pipeline with storage buffers
 //! - [`CrosshairPipeline`]: Crosshair and ball placement cursor pipeline
 //! - [`FramePipeline`]: Screen-space frame border rendering pipeline
 //! - [`TextPipeline`]: Text rendering pipeline using a texture atlas
-//! - [`EnergyWindowManager`]: Manages the energy plot window lifecycle and data updates
+//! - `EnergyWindowManager`: Managed through the shared core renderer state layer
 
+mod app_lifecycle;
 mod ball_pipeline;
 mod crosshair_pipeline;
+mod event_router;
 mod frame_pipeline;
+mod frame_renderer;
 mod grid_pipeline;
 mod line_pipeline;
 mod render_graph;
