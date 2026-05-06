@@ -1,7 +1,9 @@
 mod action_processor;
 mod domain_command_adapter;
 mod energy_window_manager;
+mod frame_orchestrator;
 mod input_handler;
+mod input_orchestrator;
 mod line_segment_tool;
 pub mod metrics;
 pub mod operator_tool_handler;
@@ -13,11 +15,12 @@ mod tests;
 mod thermostat_tool;
 mod unified_render_state;
 mod valve_segment_tool;
+mod viewport_orchestrator;
 
 // Shared event loop infrastructure for both ggez and wgpu renderers
 
-// EnergyWindowManager is a public field in UnifiedRenderState, must be exported
-// even though ggez accesses it only through the field (type needs to be public)
+// EnergyWindowManager is exposed through UnifiedRenderState accessors and must
+// remain exported so backend code can name the type.
 #[allow(unused_imports)]
 pub use energy_window_manager::EnergyWindowManager;
 pub use input_handler::{InputAction, InputHandler, KeyCode, OperatorTool};

@@ -18,6 +18,10 @@ pub struct PhysicsCoordinator {
     render_fps: u32,
     last_reported_render_fps: f32,
     render_report_interval: std::time::Instant,
+
+    /// Test-only: captures the debug representation of every domain command sent.
+    #[cfg(test)]
+    recorded_commands: Option<Arc<std::sync::Mutex<Vec<String>>>>,
 }
 
 impl PhysicsCoordinator {
@@ -42,6 +46,8 @@ impl PhysicsCoordinator {
             render_fps: 0,
             last_reported_render_fps: 0.0,
             render_report_interval: std::time::Instant::now(),
+            #[cfg(test)]
+            recorded_commands: None,
         }
     }
 
@@ -54,6 +60,13 @@ impl PhysicsCoordinator {
 
     /// Send a domain-level command through the existing runtime adapter.
     pub fn send_domain_command(&self, command: DomainCommand) {
+        #[cfg(test)]
+        if let Some(recorded) = &self.recorded_commands {
+            recorded
+                .lock()
+                .expect("recorded_commands lock should succeed")
+                .push(format!("{command:?}"));
+        }
         self.send_command(command.into());
     }
 
@@ -141,6 +154,42 @@ impl PhysicsCoordinator {
             render_fps: 0,
             last_reported_render_fps: 0.0,
             render_report_interval: std::time::Instant::now(),
+            recorded_commands: None,
+        }
+    }
+
+    /// Create a disconnected coordinator that records every domain command sent.
+    ///
+    /// Returns the coordinator and a shared handle to the recorded command log.
+    /// Each entry is the `Debug` representation of the `DomainCommand`.
+    #[cfg(test)]
+    pub fn new_recording() -> (Self, Arc<std::sync::Mutex<Vec<String>>>) {
+        let log = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let coordinator = Self {
+            physics_thread: None,
+            snapshot_slot: None,
+            last_displayed_step: 0,
+            steps_per_frame: 0.0,
+            render_fps: 0,
+            last_reported_render_fps: 0.0,
+            render_report_interval: std::time::Instant::now(),
+            recorded_commands: Some(Arc::clone(&log)),
+        };
+        (coordinator, log)
+    }
+
+    /// Create a disconnected coordinator with a preloaded snapshot.
+    #[cfg(test)]
+    pub fn with_snapshot(snapshot: RendererSnapshot) -> Self {
+        Self {
+            physics_thread: None,
+            snapshot_slot: Some(Arc::new(ArcSwapOption::new(Some(Arc::new(snapshot))))),
+            last_displayed_step: 0,
+            steps_per_frame: 0.0,
+            render_fps: 0,
+            last_reported_render_fps: 0.0,
+            render_report_interval: std::time::Instant::now(),
+            recorded_commands: None,
         }
     }
 }
@@ -171,6 +220,7 @@ mod tests {
             render_fps: 0,
             last_reported_render_fps: 0.0,
             render_report_interval: std::time::Instant::now(),
+            recorded_commands: None,
         };
 
         // First step initializes
@@ -193,6 +243,7 @@ mod tests {
             render_fps: 60,
             last_reported_render_fps: 0.0,
             render_report_interval: std::time::Instant::now() - std::time::Duration::from_secs(2),
+            recorded_commands: None,
         };
 
         let fps = coord.update_render_fps();
