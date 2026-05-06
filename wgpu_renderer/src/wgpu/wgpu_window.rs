@@ -4,23 +4,20 @@
 //! Renders a background grid and balls using instanced quads.
 //! Integrates with the physics thread via PhysicsCoordinator to receive simulation snapshots.
 
+use super::app_lifecycle::AppLifecycle;
+use super::event_router::EventRouter;
+use super::frame_renderer::FrameRenderer;
 use super::wgpu_context::WgpuContext;
-use super::wgpu_input::execute_input_action;
-use super::wgpu_pipelines::{WgpuPipelines, compute_view_proj};
-use crate::wgpu::margins_for_scale_factor;
+use super::wgpu_pipelines::WgpuPipelines;
 use rust_thermo_core::application::MainContent;
 use rust_thermo_core::graphics::renderer::event_loop::UnifiedRenderState;
-use rust_thermo_core::objects2d::Rect;
-use rust_thermo_core::objects2d::ball_impl::BallFactory;
 use std::sync::Arc;
 use winit::event_loop::EventLoopProxy;
 
 use winit::{
     application::ApplicationHandler,
-    dpi::LogicalSize,
-    event::{DeviceEvent, ElementState, WindowEvent},
+    event::{DeviceEvent, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
-    keyboard::PhysicalKey,
     window::Window,
 };
 
@@ -58,7 +55,7 @@ impl WgpuWindow {
 }
 
 #[derive(Debug)]
-enum UserEvent {
+pub(super) enum UserEvent {
     /// Triggered when new snapshot data is available from the physics thread.
     NewSnapshot,
 }
@@ -89,55 +86,16 @@ impl WgpuApp {
             return;
         }
 
-        let window_attrs = Window::default_attributes()
-            .with_title("Molecular Dynamics Simulation (WGPU)")
-            .with_inner_size(LogicalSize::new(1280.0, 720.0))
-            .with_min_inner_size(LogicalSize::new(320.0, 240.0));
-        let window = Arc::new(
-            event_loop
-                .create_window(window_attrs)
-                .expect("Failed to create window"),
-        );
-
-        // Hide system cursor - we render our own crosshair
-        window.set_cursor_visible(false);
-
-        // Initialize WGPU context
-        let ctx = WgpuContext::new(Arc::clone(&window));
-        log::debug!("WGPU context initialized, window size: {:?}", ctx.size());
-
-        // Initialize all rendering pipelines
-        let pipelines = WgpuPipelines::new(&ctx.device, &ctx.queue, ctx.format);
-
-        // Build UnifiedRenderState (spawns physics thread internally)
-        let initial_world_bounds = Rect::new(-18.0, 12.0, 36.0, -24.0);
-        let window_size = (ctx.size().0 as f32, ctx.size().1 as f32);
         let application = self
             .application
             .take()
             .expect("Application state already consumed");
-        let margins = margins_for_scale_factor(window.scale_factor());
+        let initialized = AppLifecycle::initialize(event_loop, application, self.proxy.clone());
 
-        let proxy = Arc::new(self.proxy.clone());
-        let wakeup_fn = move || {
-            proxy
-                .send_event(UserEvent::NewSnapshot)
-                .expect("Failed to send NewSnapshot event");
-        };
-
-        let state = UnifiedRenderState::new(
-            application,
-            initial_world_bounds,
-            window_size,
-            margins,
-            Box::new(wakeup_fn),
-        );
-        log::info!("Physics thread spawned, main thread: rendering (WGPU)");
-
-        self.window = Some(window);
-        self.ctx = Some(ctx);
-        self.pipelines = Some(pipelines);
-        self.state = Some(state);
+        self.window = Some(initialized.window);
+        self.ctx = Some(initialized.ctx);
+        self.pipelines = Some(initialized.pipelines);
+        self.state = Some(initialized.state);
     }
 }
 
@@ -153,13 +111,7 @@ impl ApplicationHandler<UserEvent> for WgpuApp {
             UserEvent::NewSnapshot => {
                 // Pull latest snapshot and request redraws for both windows
                 if let (Some(state), Some(window)) = (self.state.as_mut(), self.window.as_ref()) {
-                    state.begin_frame();
-
-                    // Request redraw for main window
-                    window.request_redraw();
-
-                    // actually redraw for energy window if it's open
-                    state.energy_manager_mut().handle_redraw();
+                    FrameRenderer::handle_new_snapshot(state, window.as_ref());
                 }
             }
         }
@@ -175,105 +127,13 @@ impl ApplicationHandler<UserEvent> for WgpuApp {
             return;
         };
 
-        if event == WindowEvent::RedrawRequested {
-            log::trace!(
-                "Handling redraw for  window with id {:?} and should_render: {}",
-                window_id,
-                state.should_render()
-            );
-            // Check if redraw is for energy window
-            // if state.should_render() && state.energy_manager.is_energy_window_event(window_id) {
-            //     state.energy_manager.handle_redraw();
-            //     return;
-            // }
+        let ctx = self.ctx.as_mut();
+        let pipelines = self.pipelines.as_mut();
+        let window = self.window.as_deref();
 
-            // Render main window
-            let Some(window) = self.window.as_ref() else {
-                return;
-            };
-            if window_id != window.id() {
-                return;
-            }
-
-            if state.should_render() {
-                // Start metrics timer just before issuing draw calls.
-                state.begin_render();
-
-                // Render from snapshot if available
-                if let Some(snapshot) = state.last_snapshot() {
-                    let Some(ctx) = self.ctx.as_mut() else {
-                        return;
-                    };
-                    let Some(pipelines) = self.pipelines.as_mut() else {
-                        return;
-                    };
-
-                    // Compute view-projection matrix
-                    let pan = state.viewport().pan_offset();
-                    let zoom = state.viewport().zoom();
-                    let view_proj = compute_view_proj(&snapshot.grid_spec, pan.x, pan.y, zoom);
-
-                    // Update all pipelines from snapshot
-                    let show_ball_outline = state.active_tool()
-                        == rust_thermo_core::graphics::renderer::event_loop::OperatorTool::Ball;
-                    let cursor_world_pos = state.cursor_world_pos();
-                    let cursor_wp = (cursor_world_pos.x, cursor_world_pos.y);
-                    let ball_count = snapshot.balls.len() as u32;
-                    let operator_previews = state.operator_previews();
-                    if let Err(e) = pipelines.prepare_from_snapshot(
-                        ctx,
-                        snapshot,
-                        view_proj,
-                        cursor_wp,
-                        BallFactory::radius_for_size_idx(state.current_ball_size_idx()),
-                        show_ball_outline,
-                        state.config().thermo_display,
-                        state.viewport().margins(),
-                        operator_previews,
-                    ) {
-                        eprintln!("Pipeline prepare error: {:?}", e);
-                    }
-
-                    state.metrics_mut().record_balls_rendered(ball_count);
-                    for _ in 0..6 {
-                        state.metrics_mut().record_draw_call(0);
-                    }
-
-                    // Render frame
-                    if let Err(e) = render_frame(ctx, pipelines, state.viewport().margins()) {
-                        log::error!("Render error: {:?}", e);
-                        if e == wgpu::SurfaceError::OutOfMemory {
-                            event_loop.exit();
-                        }
-                    }
-                }
-
-                // Finalise metrics and mark frame as displayed so
-                // should_render() won't re-trigger for the same data.
-                state.end_frame();
-            }
-
-            return;
-        }
-
-        // Check if this event is for the energy window
-        if state.energy_manager().is_energy_window_event(window_id) {
-            state.energy_manager_mut().handle_event(event);
-            return;
-        }
-
-        let Some(ctx) = self.ctx.as_mut() else {
-            return;
-        };
-        let Some(pipelines) = self.pipelines.as_mut() else {
-            return;
-        };
-
-        // Main window events
-        let Some(window) = self.window.as_ref() else {
-            return;
-        };
-        handle_window_event(event, ctx, state, pipelines, event_loop, window.as_ref());
+        EventRouter::route_window_event(
+            window_id, event, ctx, state, pipelines, event_loop, window,
+        );
     }
 
     fn device_event(
@@ -286,119 +146,6 @@ impl ApplicationHandler<UserEvent> for WgpuApp {
             return;
         };
 
-        // Window-border resize may not emit a client-area MouseInput release.
-        // DeviceEvent::Button release is a reliable signal to finish resize pause.
-        if let DeviceEvent::Button {
-            state: ElementState::Released,
-            ..
-        } = event
-        {
-            state.resume_after_resize_if_pending();
-        }
+        EventRouter::route_device_event(event, state);
     }
-}
-
-/// Handle window events (resize, input, etc.)
-fn handle_window_event(
-    event: WindowEvent,
-    ctx: &mut WgpuContext,
-    state: &mut UnifiedRenderState,
-    pipelines: &mut WgpuPipelines,
-    window_target: &ActiveEventLoop,
-    main_window: &Window,
-) {
-    match event {
-        WindowEvent::CloseRequested => {
-            log::info!("Window close requested");
-            window_target.exit();
-        }
-        WindowEvent::Resized(size) => {
-            log::debug!("Window resized to {}x{}", size.width, size.height);
-            ctx.resize(size.width, size.height);
-            let margins = margins_for_scale_factor(main_window.scale_factor());
-            state.handle_resize(size.width as f32, size.height as f32, margins);
-        }
-        WindowEvent::ScaleFactorChanged { .. } => {
-            // A follow-up `Resized` event updates the surface dimensions.
-        }
-        WindowEvent::MouseInput { .. }
-        | WindowEvent::CursorMoved { .. }
-        | WindowEvent::MouseWheel { .. } => {
-            let dirty = state.handle_mouse_event(&event);
-            state.merge_view_dirty(dirty);
-        }
-        WindowEvent::KeyboardInput { event, .. } => {
-            let PhysicalKey::Code(key) = event.physical_key else {
-                return;
-            };
-
-            // Use InputHandler to process keyboard input
-            let action = match event.state {
-                ElementState::Pressed => state.input.handle_key_down(key, event.repeat),
-                ElementState::Released => state.input.handle_key_up(key),
-            };
-
-            if let Some(action) = action {
-                let dirty = execute_input_action(
-                    action,
-                    state,
-                    pipelines,
-                    &ctx.queue,
-                    window_target,
-                    main_window,
-                );
-                state.merge_view_dirty(dirty);
-            }
-        }
-        _ => {}
-    }
-}
-
-/// Render a single frame.
-fn render_frame(
-    ctx: &WgpuContext,
-    pipelines: &WgpuPipelines,
-    margin: rust_thermo_core::graphics::renderer::Margins,
-) -> Result<(), wgpu::SurfaceError> {
-    let output = ctx.surface.get_current_texture()?;
-    let view = output
-        .texture
-        .create_view(&wgpu::TextureViewDescriptor::default());
-
-    let mut encoder = ctx
-        .device
-        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Render Encoder"),
-        });
-
-    {
-        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("Main Render Pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &view,
-                resolve_target: None,
-                depth_slice: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.0,
-                        g: 0.0,
-                        b: 0.0,
-                        a: 1.0,
-                    }),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            occlusion_query_set: None,
-            timestamp_writes: None,
-            multiview_mask: None,
-        });
-
-        pipelines.render_all(&mut render_pass, ctx, margin);
-    }
-
-    ctx.queue.submit(std::iter::once(encoder.finish()));
-    output.present();
-
-    Ok(())
 }
