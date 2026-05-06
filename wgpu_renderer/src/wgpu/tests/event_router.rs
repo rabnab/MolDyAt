@@ -30,6 +30,13 @@ fn main_window_events_require_render_resources() {
 }
 
 #[test]
+fn non_energy_events_for_other_windows_are_ignored() {
+    let route = EventRouter::classify_window_event(&WindowEvent::CloseRequested, false, false);
+
+    assert_eq!(route, WindowEventRoute::Ignore);
+}
+
+#[test]
 fn non_redraw_events_without_resources_are_ignored() {
     let route = EventRouter::classify_window_event(
         &WindowEvent::MouseWheel {

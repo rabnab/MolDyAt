@@ -32,10 +32,11 @@ impl EventRouter {
         event_loop: &ActiveEventLoop,
         main_window: Option<&Window>,
     ) {
+        let targets_main_window = main_window.is_some_and(|window| window.id() == window_id);
         let route = Self::classify_window_event(
             &event,
             state.energy_manager().is_energy_window_event(window_id),
-            ctx.is_some() && pipelines.is_some() && main_window.is_some(),
+            ctx.is_some() && pipelines.is_some() && targets_main_window,
         );
 
         match route {
