@@ -34,7 +34,6 @@ impl SimulationEngine {
     }
 
     pub(crate) fn simulation_step(content: &mut MainContent) -> AppResult<()> {
-        content.sim.inc_frame_since_draw();
         if content.sim.is_paused() {
             return Ok(());
         }
@@ -110,7 +109,6 @@ impl SimulationEngine {
 
         let bounce_infos = Self::update_positions(content, dt, bound_rect);
         Self::update_old_positions(content);
-        content.sim.reset_min_dist(bound_rect);
 
         let force_results = Self::compute_forces(content);
         let (wall_px, wall_py) = Self::apply_forces_and_collect_stats(
@@ -339,7 +337,6 @@ impl SimulationEngine {
         let mass = ball.mass;
         let ball_id = ball.get_id();
 
-        content.sim.update_min_dist(result.min_dist);
         stats_accumulator.pot += result.potential_energy * 0.5;
         stats_accumulator.v_com += momentum;
         stats_accumulator.kin += speed_sq * mass * 0.5;

@@ -36,7 +36,6 @@ impl MainContent {
                 thermostats: Default::default(),
             },
             game_data: <Self as GameLogic>::init_game_logic(),
-            update_hood_at_frame_start: 0,
             snapshot_slot: Arc::new(ArcSwapOption::from(None)),
             wait_time: 0,
             physics_fps: 0.0,

@@ -1,7 +1,7 @@
 use crate::application::core::StatsAccumulator;
 use crate::application::thermo_field::LocalKineticStats;
+use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::Ball2D;
-use crate::objects2d::{Rect, Vec2D};
 use std::collections::VecDeque;
 use std::collections::vec_deque::Iter;
 
@@ -17,25 +17,27 @@ const TIME_SCALE_NS: f32 = 2.156E-3; // TIME_SCALE * 1E9
 const KBOLTZMANN_J_P_K: f32 = 1.380649E-23;
 const TEMP_SCALE: f32 = 122.; //=ENERGY_SCALE_J / KBOLTZMANN_J_P_K; //exact 122K
 
+/// Simulation statistics updated once per physics step.
+///
+/// Owns energy, temperature, velocity, and timing metrics that are
+/// accumulated during each step and read by snapshot creation.
+/// Does **not** own frame-render bookkeeping or neighbor-update
+/// scheduling — those responsibilities belong to their respective
+/// orchestrators.
 pub struct SimStats {
     energy_pot: f32,
     energy_kin: f32,
     temperature: f32,
     max_v: f32,
     max_id: usize,
-    min_dist: f32,
     v_com: Vec2D,
     time: f32,
     step: usize,
     pause: bool,
 
-    frames_since_draw: u32,
     v_pot: VecDeque<f32>,
     v_kin: VecDeque<f32>,
     max_neighbours: usize,
-    update_hood_cnt: usize,
-
-    min_dist_initial: f32,
 
     // Wall momentum tracking
     pub wall_momentum_x: f32,
@@ -60,13 +62,6 @@ impl SimStats {
         self.pause
     }
 
-    pub(crate) fn reset_frame_since_draw(&mut self) {
-        self.frames_since_draw = 0;
-    }
-    pub(crate) fn inc_frame_since_draw(&mut self) {
-        self.frames_since_draw += 1
-    }
-
     pub fn iter_vkin(&self) -> Iter<'_, f32> {
         self.v_kin.iter()
     }
@@ -86,28 +81,6 @@ impl SimStats {
     pub fn clear_energy(&mut self) {
         self.v_kin.clear();
         self.v_pot.clear();
-    }
-
-    /// Reset minimum distance tracking to boundary dimensions.
-    /// Initial value is set to sum of boundary width and height.
-    ///
-    /// # Arguments
-    /// * `bound_rect` - Simulation boundary rectangle
-    pub fn reset_min_dist(&mut self, bound_rect: &Rect) {
-        self.min_dist_initial = bound_rect.w + bound_rect.h;
-        self.min_dist = 0.;
-    }
-
-    /// Update minimum distance if new value is smaller than current minimum.
-    /// Only updates if distance is positive and less than previously recorded minimum.
-    ///
-    /// # Arguments
-    /// * `min_dist` - New minimum distance candidate
-    pub fn update_min_dist(&mut self, min_dist: f32) {
-        if self.min_dist_initial > min_dist && min_dist > 0. {
-            self.min_dist_initial = min_dist;
-            self.min_dist = min_dist;
-        }
     }
 
     pub fn get_status_text_real(&self, fps: u32, num_balls: usize, dt: f32) -> String {
@@ -141,13 +114,12 @@ impl SimStats {
         dt: f32,
     ) -> String {
         format!(
-            "fps {} time: {:.1} (dt:{:.4})\n#Balls: {} #hoodCnt: {}/{}\nmaxNeig: {}\n\
+            "fps {} time: {:.1} (dt:{:.4})\n#Balls: {} #hoodCnt: {}\nmaxNeig: {}\n\
                 TotalE: {:.3E}\nEkin: {:.3E}\nEpot: {:.3E}\nTemp: {:.3}\nmaxV: {:.2}\nvCOM: {}",
             fps,
             self.time,
             dt,
             num_balls,
-            self.update_hood_cnt,
             hood_cnt,
             self.max_neighbours,
             self.energy_pot + self.energy_kin,
@@ -155,7 +127,6 @@ impl SimStats {
             self.energy_pot,
             self.temperature,
             self.max_v,
-            //self.sim.min_dist,
             self.v_com,
         )
     }
@@ -226,14 +197,6 @@ impl SimStats {
         self.temperature = kinetic.temperature().unwrap_or(0.0);
     }
 
-    pub(crate) fn get_update_hood_cnt(&self) -> usize {
-        self.update_hood_cnt
-    }
-
-    pub(crate) fn update_hood_cnt(&mut self, update_hood_at_frame_start: usize) {
-        self.update_hood_cnt = self.get_update_hood_cnt() - update_hood_at_frame_start;
-    }
-
     pub(crate) fn get_kinetic_energy(&self) -> f32 {
         self.energy_kin
     }
@@ -255,17 +218,13 @@ impl Default for SimStats {
             temperature: 0.,
             max_v: 0.,
             max_id: 0,
-            min_dist: 0.,
             v_com: Vec2D::new(0., 0.),
             time: 0.,
             step: 0,
             pause: false,
-            frames_since_draw: 0,
             v_pot: VecDeque::with_capacity(100),
             v_kin: VecDeque::with_capacity(100),
             max_neighbours: 0,
-            update_hood_cnt: 0,
-            min_dist_initial: f32::MAX,
             wall_momentum_x: 0.,
             wall_momentum_y: 0.,
         }
@@ -359,5 +318,48 @@ mod tests {
         stats.calculate_temperature_fast(&refs);
 
         assert!((stats.temperature - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_status_text_shows_hood_cnt_parameter() {
+        let stats = SimStats::default();
+        let text = stats.get_status_text(60, 10, 42, 0.01);
+        assert!(
+            text.contains("42"),
+            "status text should include the passed-in hood_cnt (42), got: {}",
+            text
+        );
+    }
+
+    #[test]
+    fn test_clear_energy_empties_deques() {
+        let mut stats = SimStats::default();
+        // Manually push some values into the energy deques
+        stats.v_kin.push_back(1.0);
+        stats.v_kin.push_back(2.0);
+        stats.v_pot.push_back(3.0);
+
+        assert_eq!(stats.len_v_energy(), 2);
+
+        stats.clear_energy();
+
+        assert_eq!(
+            stats.len_v_energy(),
+            0,
+            "energy deques should be empty after clear_energy"
+        );
+    }
+
+    #[test]
+    fn test_wall_momentum_accumulates() {
+        let mut stats = SimStats::default();
+        assert_eq!(stats.wall_momentum_x, 0.0);
+        assert_eq!(stats.wall_momentum_y, 0.0);
+
+        stats.wall_momentum_x += 3.5;
+        stats.wall_momentum_y += 1.2;
+
+        assert!((stats.wall_momentum_x - 3.5).abs() < 1e-6);
+        assert!((stats.wall_momentum_y - 1.2).abs() < 1e-6);
     }
 }
