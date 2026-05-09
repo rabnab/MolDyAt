@@ -114,7 +114,7 @@ impl SimStats {
         dt: f32,
     ) -> String {
         format!(
-            "fps {} time: {:.1} (dt:{:.4})\n#Balls: {} #hoodCnt: {}\nmaxNeig: {}\n\
+            "fps {} time: {:.1} (dt:{:.4})\n#Balls: {} #hood: {}\nmaxNeig: {}\n\
                 TotalE: {:.3E}\nEkin: {:.3E}\nEpot: {:.3E}\nTemp: {:.3}\nmaxV: {:.2}\nvCOM: {}",
             fps,
             self.time,

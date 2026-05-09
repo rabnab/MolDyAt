@@ -63,8 +63,12 @@ pub struct SimulationWorld {
 /// (optional sleep between steps), the atomic snapshot slot, and the
 /// rolling physics-FPS measurement.
 ///
-/// Frame-render bookkeeping (hood-update counters, frames-since-draw)
-/// has been removed — those concerns now live in the renderer orchestrators.
+/// Stale frame-render coordination that previously lived here (dead
+/// `start_frame`/`end_frame` methods and the `update_hood_at_frame_start`
+/// scratch field they relied on, as well as the `frames_since_draw` and
+/// `update_hood_cnt` tracking in [`SimStats`]) has been removed — frame
+/// orchestration now lives in the renderer orchestrators and [`SimStats`]
+/// owns only actively-consumed physics metrics.
 pub struct MainContent {
     world: SimulationWorld,
 
