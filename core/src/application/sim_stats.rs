@@ -355,7 +355,7 @@ mod tests {
         // Place a single ball just inside the right wall moving toward it.
         // After a few simulation steps the ball bounces, and SimStats must
         // record a non-zero wall momentum transferred during the impact.
-        use crate::application::{MainContent, VerletIntegration};
+        use crate::application::MainContent;
         use crate::objects2d::ball_impl::BallFactory;
         use crate::objects2d::{Rect, Vec2D};
 
