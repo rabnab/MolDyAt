@@ -131,8 +131,9 @@ wgpu_renderer/
 
 ## Documentation
 
-
 * [Contributing Guide](CONTRIBUTING.md)
+* [Runtime Architecture](docs/architecture.md)
+* [Simulation Coordinate Systems](docs/simulation.md)
 * [Copilot Instructions](.github/copilot-instructions.md)
 
 ## Contributing
