@@ -4,6 +4,8 @@
 
 This is a **molecular dynamics physics simulation** implementing Lennard-Jones particle interactions with Verlet neighbor lists, spatial partitioning, and force capping. The simulation is written in Rust and uses the ggez game framework for rendering.
 
+For coordinate-system conventions across simulation space, viewport transforms, and derived grids, see `docs/simulation.md`.
+
 **Critical Physics Constraint**: Energy conservation is the primary concern. Any changes to physics calculations (especially force capping, collision handling, or integration methods) must preserve total system energy. Verify energy conservation when modifying physics code - the force cap feature uses a linear potential extrapolation beyond `r_cap` to maintain energy continuity.
 
 ## Architecture Overview
