@@ -1,5 +1,5 @@
-use super::PhysicsCommand;
 use super::runtime::CommandHandler;
+use crate::application::DomainCommand;
 use crate::application::MainContent;
 
 pub(crate) struct PhysicsCommandHandler<'a> {
@@ -12,80 +12,80 @@ impl<'a> PhysicsCommandHandler<'a> {
     }
 }
 
-impl CommandHandler<PhysicsCommand> for PhysicsCommandHandler<'_> {
-    fn handle_command(&mut self, command: PhysicsCommand) {
+impl CommandHandler<DomainCommand> for PhysicsCommandHandler<'_> {
+    fn handle_command(&mut self, command: DomainCommand) {
         match command {
-            PhysicsCommand::Pause => {
+            DomainCommand::Pause => {
                 if !self.main_content.sim.is_paused() {
                     self.main_content.toggle_pause();
                 }
             }
-            PhysicsCommand::Resume => {
+            DomainCommand::Resume => {
                 if self.main_content.sim.is_paused() {
                     self.main_content.toggle_pause();
                 }
             }
-            PhysicsCommand::TogglePause => {
+            DomainCommand::TogglePause => {
                 self.main_content.toggle_pause();
             }
-            PhysicsCommand::AddBall(pos) => {
+            DomainCommand::AddBall(pos) => {
                 let _ = self.main_content.add_candidate_at_pos(pos);
             }
-            PhysicsCommand::AddBallWithVelocity(ball) => {
+            DomainCommand::AddBallWithVelocity(ball) => {
                 let _ = self.main_content.add_candidate_ball(ball, 0.);
             }
-            PhysicsCommand::AddRandomBalls(count) => {
+            DomainCommand::AddRandomBalls(count) => {
                 self.main_content.add_random_candidates(count);
             }
-            PhysicsCommand::ClearBalls => {
+            DomainCommand::ClearBalls => {
                 self.main_content.clear_points();
             }
-            PhysicsCommand::StopAllBalls => {
+            DomainCommand::StopAllBalls => {
                 self.main_content.stop_all_balls();
             }
-            PhysicsCommand::RandomizeSpeeds => {
+            DomainCommand::RandomizeSpeeds => {
                 self.main_content.randomize_speeds();
             }
-            PhysicsCommand::EnableRandomBallSpeed => {
+            DomainCommand::EnableRandomBallSpeed => {
                 self.main_content.enable_random_ball_speed();
             }
-            PhysicsCommand::NextBallSize => {
+            DomainCommand::NextBallSize => {
                 self.main_content.next_ball_size();
             }
-            PhysicsCommand::IncreaseWaitTime => {
+            DomainCommand::IncreaseWaitTime => {
                 self.main_content.increase_wait_time();
             }
-            PhysicsCommand::DecreaseWaitTime => {
+            DomainCommand::DecreaseWaitTime => {
                 self.main_content.decrease_wait_time();
             }
-            PhysicsCommand::DoubleTimeStep => {
+            DomainCommand::DoubleTimeStep => {
                 self.main_content.double_time_step();
             }
-            PhysicsCommand::HalveTimeStep => {
+            DomainCommand::HalveTimeStep => {
                 self.main_content.halve_time_step();
             }
-            PhysicsCommand::ToggleRealData => {
+            DomainCommand::ToggleRealData => {
                 self.main_content.toggle_real_data();
             }
-            PhysicsCommand::ToggleStepwise => {
+            DomainCommand::ToggleStepwise => {
                 self.main_content.toggle_stepwise();
             }
-            PhysicsCommand::ToggleTimingDisplay => {
+            DomainCommand::ToggleTimingDisplay => {
                 self.main_content.toggle_timing_display();
             }
-            PhysicsCommand::ToggleBallStats => {
+            DomainCommand::ToggleBallStats => {
                 self.main_content.toggle_show_ball_stats();
             }
-            PhysicsCommand::StartVerbosityInput => {
+            DomainCommand::StartVerbosityInput => {
                 self.main_content.start_handling_verbosity_input();
             }
-            PhysicsCommand::Resize { world_rect } => {
+            DomainCommand::Resize { world_rect } => {
                 self.main_content.resize(world_rect);
             }
-            PhysicsCommand::ResumeAfterResize => {
+            DomainCommand::ResumeAfterResize => {
                 self.main_content.unpause_after_resize();
             }
-            PhysicsCommand::Operator(cmd) => {
+            DomainCommand::Operator(cmd) => {
                 cmd.execute(self.main_content);
             }
         }

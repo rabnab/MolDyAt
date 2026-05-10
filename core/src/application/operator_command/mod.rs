@@ -2,14 +2,14 @@
 //!
 //! Operator commands are self-contained structs that know how to apply a
 //! single operator mutation to [`MainContent`]. Commands are routed via
-//! [`crate::application::physics_thread::PhysicsCommand::Operator`] so adding
+//! [`crate::application::DomainCommand::Operator`] so adding
 //! a new operator type requires only:
 //!
 //! 1. Define a new struct in the appropriate sub-module.
 //! 2. Implement [`OperatorCommand`] for it.
 //! 3. Re-export it below.
 //!
-//! No changes to `PhysicsCommand`, `InputAction`, or the action processor
+//! No changes to `DomainCommand`, `InputAction`, or the action processor
 //! are needed.
 //!
 //! # Sub-modules
@@ -45,7 +45,7 @@ pub use valve::{AddValveSegment, MoveValveSegment, ToggleValve};
 ///
 /// Operator commands encapsulate all data needed for a single operator
 /// mutation. New operator types define concrete structs implementing this
-/// trait — no changes to `PhysicsCommand`, `InputAction`, or the action
+/// trait — no changes to `DomainCommand`, `InputAction`, or the action
 /// processor are required.
 pub trait OperatorCommand: Send + std::fmt::Debug {
     fn execute(self: Box<Self>, content: &mut MainContent);

@@ -416,8 +416,7 @@ impl UnifiedRenderState {
         use crate::objects2d::ball_impl::NUM_BALL_SIZES;
         self.render.current_ball_size_idx =
             (self.render.current_ball_size_idx + 1) % NUM_BALL_SIZES;
-        self.physics
-            .send_domain_command(DomainCommand::NextBallSize);
+        self.physics.send_command(DomainCommand::NextBallSize);
     }
 
     // ── Centralized mouse event handlers ──────────────────────────────

@@ -1,8 +1,8 @@
 use super::ShutdownSignal;
 use super::command_handler::PhysicsCommandHandler;
+use crate::application::DomainCommand;
 use crate::application::GameLogic;
 use crate::application::MainContent;
-use crate::application::physics_thread::PhysicsCommand;
 use std::sync::Arc;
 use std::sync::mpsc::Receiver;
 use std::time::{Duration, Instant};
@@ -32,7 +32,7 @@ impl PhysicsRuntime {
     pub(crate) fn run(
         &self,
         simulation: &mut MainContent,
-        receiver: &Receiver<PhysicsCommand>,
+        receiver: &Receiver<DomainCommand>,
         shutdown_signal: &ShutdownSignal,
         wakeup: &Arc<dyn Fn() + Send + Sync>,
     ) {

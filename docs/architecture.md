@@ -185,12 +185,11 @@ The current write path for simulation mutations is:
 
 1. backend input is interpreted into renderer actions
 2. renderer action processing emits `DomainCommand`
-3. `PhysicsCoordinator` forwards that command through the existing runtime adapter
-4. the physics thread receives a `PhysicsCommand`
-5. `PhysicsCommandHandler` applies the command against `MainContent`
-6. `SimulationEngine` and operator commands mutate the world state as needed
+3. `PhysicsCoordinator` forwards the `DomainCommand` directly to the physics thread
+4. `PhysicsCommandHandler` applies the command against `MainContent`
+5. `SimulationEngine` and operator commands mutate the world state as needed
 
-That path keeps renderer code on the application-facing command boundary even though the runtime still uses `PhysicsCommand` internally.
+`DomainCommand` is the single command type used from input handling all the way through to the physics thread.
 
 ## Snapshot Flow
 
@@ -228,18 +227,6 @@ Why it still exists:
 
 - it avoids a large temporary abstraction jump while the refactor is still converging
 
-### `DomainCommand` still adapts into `PhysicsCommand`
-
-Renderer-side code now targets `DomainCommand`, but the physics thread still receives `PhysicsCommand` through an adapter.
-
-Why it still exists:
-
-- it lets the command-boundary cleanup land before the runtime transport is fully simplified
-
-Expected end state:
-
-- fewer legacy command-path concepts once the migration shims are removed
-
 ### `UnifiedRenderState` is still a facade
 
 `UnifiedRenderState` is much smaller than before, but it still serves as the backend-facing surface over `RenderStateData` and the orchestrators.
@@ -276,8 +263,8 @@ Avoid these placements:
 
 ## Relationship To Remaining Work
 
-This document describes the target structure after issues `#144`, `#141`, `#145`, `#139`, `#140`, `#143`, `#138`, and `#146`.
+This document describes the target structure after issues `#144`, `#141`, `#145`, `#139`, `#140`, `#143`, `#138`, `#146`, and `#147`.
 
-The main remaining convergence item is issue `#147`, which should remove the remaining migration shims and enforce the final boundaries more strictly.
+Issue `#147` removed the `DomainCommand` → `PhysicsCommand` runtime adapter so that `DomainCommand` is now the single command type from input handling all the way into the physics thread. The remaining migration shims (`MainContent` as facade, `SimulationEngine` operating on `MainContent`, and operator command root re-exports) are intentional transition seams that will be tightened in subsequent cleanup.
 
-Until then, contributors should treat the boundaries described here as the intended direction even when a thin facade or adapter still exists for compatibility.
+Contributors should treat the boundaries described here as the intended direction even when a thin facade still exists for compatibility.

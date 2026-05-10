@@ -14,7 +14,7 @@ pub fn process_action_common(
 
     match DomainCommand::try_from(action) {
         Ok(command) => {
-            physics.send_domain_command(command);
+            physics.send_command(command);
         }
         Err(action) => match action {
             InputAction::ZoomIn { .. } | InputAction::ZoomOut { .. } => {

@@ -7,10 +7,8 @@
 //! ARCHITECTURAL CONSTRAINT: This module must not depend on ggez.
 //! All ggez-specific code belongs in src/application/ggez/.
 
+use crate::application::DomainCommand;
 use crate::application::MainContent;
-use crate::application::operator_command::OperatorCommand;
-use crate::objects2d::Vec2D;
-use crate::objects2d::ball_impl::Ball2D;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Sender};
@@ -22,58 +20,6 @@ mod runtime;
 #[cfg(test)]
 pub(crate) use runtime::CommandHandler;
 pub(crate) use runtime::PhysicsRuntime;
-
-/// Commands that can be sent from the main thread to the physics thread
-#[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
-pub enum PhysicsCommand {
-    /// Pause the simulation
-    Pause,
-    /// Resume the simulation
-    Resume,
-    /// Toggle pause state
-    TogglePause,
-    /// Add a ball at the specified position with zero velocity
-    AddBall(Vec2D),
-    /// Add a specific ball (with position and velocity)
-    AddBallWithVelocity(Ball2D),
-    /// Add multiple random balls
-    AddRandomBalls(usize),
-    /// Clear all balls
-    ClearBalls,
-    /// Stop all ball movement (set velocities to zero)
-    StopAllBalls,
-    /// Randomize ball velocities
-    RandomizeSpeeds,
-    /// Enable random ball speed mode
-    EnableRandomBallSpeed,
-    /// Cycle to next ball size
-    NextBallSize,
-    /// Double the simulation time step (faster, less accurate)
-    DoubleTimeStep,
-    /// Halve the simulation time step (slower, more accurate)
-    HalveTimeStep,
-    /// Increase wait time between simulation steps
-    IncreaseWaitTime,
-    /// Decrease wait time between simulation steps
-    DecreaseWaitTime,
-    /// Toggle real data display
-    ToggleRealData,
-    /// Toggle step-by-step mode
-    ToggleStepwise,
-    /// Toggle timing display
-    ToggleTimingDisplay,
-    /// Toggle ball stats display
-    ToggleBallStats,
-    /// Start handling verbosity input
-    StartVerbosityInput,
-    /// Resize the world region
-    Resize { world_rect: crate::objects2d::Rect },
-    /// Unpause the simulation after a resize, triggered by mouse button release.
-    ResumeAfterResize,
-    /// A self-contained operator command (line segment, valve, etc.).
-    Operator(Box<dyn OperatorCommand>),
-}
 
 /// Shutdown signal shared between threads
 #[derive(Clone)]
@@ -112,7 +58,7 @@ impl Default for ShutdownSignal {
 pub struct PhysicsThread {
     thread_handle: Option<JoinHandle<()>>,
     shutdown_signal: ShutdownSignal,
-    command_sender: Sender<PhysicsCommand>,
+    command_sender: Sender<DomainCommand>,
 }
 
 impl PhysicsThread {
@@ -160,7 +106,7 @@ impl PhysicsThread {
     ///
     /// # Returns
     /// `Ok(())` if the command was sent successfully, `Err` if the channel is disconnected
-    pub fn send_command(&self, command: PhysicsCommand) -> Result<(), String> {
+    pub fn send_command(&self, command: DomainCommand) -> Result<(), String> {
         self.command_sender
             .send(command)
             .map_err(|_| "Physics thread command channel disconnected".to_string())
