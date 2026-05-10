@@ -325,8 +325,8 @@ mod tests {
         let stats = SimStats::default();
         let text = stats.get_status_text(60, 10, 42, 0.01);
         assert!(
-            text.contains("42"),
-            "status text should include the passed-in hood_cnt (42), got: {}",
+            text.contains("#hood: 42"),
+            "status text should include the '#hood: 42' label/value pair for the passed-in hood_cnt, got: {}",
             text
         );
     }
