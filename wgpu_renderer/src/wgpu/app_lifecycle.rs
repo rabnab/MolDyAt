@@ -2,9 +2,9 @@ use super::wgpu_context::WgpuContext;
 use super::wgpu_pipelines::WgpuPipelines;
 use super::wgpu_window::UserEvent;
 use crate::wgpu::margins_for_scale_factor;
+use crate::wgpu::{DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH};
 use rust_thermo_core::application::MainContent;
 use rust_thermo_core::graphics::renderer::event_loop::UnifiedRenderState;
-use rust_thermo_core::objects2d::Rect;
 use std::sync::Arc;
 use winit::dpi::LogicalSize;
 use winit::event_loop::{ActiveEventLoop, EventLoopProxy};
@@ -28,7 +28,10 @@ impl AppLifecycle {
     ) -> InitializedApp {
         let window_attrs = Window::default_attributes()
             .with_title("Molecular Dynamics Simulation (WGPU)")
-            .with_inner_size(LogicalSize::new(1280.0, 720.0))
+            .with_inner_size(LogicalSize::new(
+                DEFAULT_WINDOW_WIDTH,
+                DEFAULT_WINDOW_HEIGHT,
+            ))
             .with_min_inner_size(LogicalSize::new(320.0, 240.0));
         let window = Arc::new(
             event_loop
@@ -43,7 +46,7 @@ impl AppLifecycle {
 
         let pipelines = WgpuPipelines::new(&ctx.device, &ctx.queue, ctx.format);
 
-        let initial_world_bounds = Rect::new(-18.0, 12.0, 36.0, -24.0);
+        let initial_world_bounds = application.world_region();
         let window_size = (ctx.size().0 as f32, ctx.size().1 as f32);
         let margins = margins_for_scale_factor(window.scale_factor());
 

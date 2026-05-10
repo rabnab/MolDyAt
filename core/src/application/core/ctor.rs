@@ -1,12 +1,25 @@
 use super::{BallPhysics, CellGrid, MainContent, SimStats};
 use crate::application::thermo_field::ThermoFieldHistory;
 use crate::application::{AppResult, GameLogic};
+use crate::graphics::renderer::{Margins, ViewportTransform};
 use crate::objects2d::Rect;
 use crate::objects2d::ball_impl::BallFactory;
 use arc_swap::ArcSwapOption;
 use std::sync::Arc;
 
 impl MainContent {
+    /// Compute the default startup world rectangle for a window and viewport margins.
+    ///
+    /// This centralizes the initial world bootstrap policy so renderer entrypoints
+    /// do not need to duplicate the world-size math.
+    pub fn bootstrap_world_rect(window_width: u32, window_height: u32, margins: Margins) -> Rect {
+        ViewportTransform::compute_world_bounds_from_window_size(
+            window_width,
+            window_height,
+            margins,
+        )
+    }
+
     pub fn new(world_rect: Rect) -> AppResult<Self> {
         let loc_physics = BallPhysics::default();
         let cutoff_and_skin = loc_physics.get_cutoff_and_skin();
