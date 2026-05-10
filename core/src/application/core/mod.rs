@@ -14,6 +14,15 @@ use arc_swap::ArcSwapOption;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
+/// Persistent simulation domain state.
+///
+/// Owns the particle data, physics engine, spatial structures, and
+/// operator collections (line segments, valves, source spheres,
+/// thermostats). This is the single source of truth for the physical
+/// state of the simulation world.
+///
+/// Stepping and update orchestration live in [`SimulationEngine`];
+/// this struct is a pure state holder.
 pub struct SimulationWorld {
     /// World bounds for physics simulation
     pub(crate) world_rect: Rect,
@@ -45,11 +54,25 @@ pub struct SimulationWorld {
     pub(crate) thermostats: ThermostatCollection,
 }
 
+/// Physics-thread facade that pairs a [`SimulationWorld`] with runtime bookkeeping.
+///
+/// `MainContent` is exclusively owned by the physics thread. It exposes the
+/// simulation domain through `Deref`/`DerefMut` to `SimulationWorld` and
+/// holds only the fields that belong to the physics-thread runtime:
+/// `game_data` (time-step and ball-factory settings), `wait_time`
+/// (optional sleep between steps), the atomic snapshot slot, and the
+/// rolling physics-FPS measurement.
+///
+/// Stale frame-render coordination that previously lived here (dead
+/// `start_frame`/`end_frame` methods and the `update_hood_at_frame_start`
+/// scratch field they relied on, as well as the `frames_since_draw` and
+/// `update_hood_cnt` tracking in [`SimStats`]) has been removed — frame
+/// orchestration now lives in the renderer orchestrators and [`SimStats`]
+/// owns only actively-consumed physics metrics.
 pub struct MainContent {
     world: SimulationWorld,
 
     game_data: GameLogicData,
-    update_hood_at_frame_start: usize,
     /// ms to wait between simulation steps
     wait_time: u64,
 

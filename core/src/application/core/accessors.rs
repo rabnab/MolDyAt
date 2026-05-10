@@ -115,16 +115,6 @@ impl MainContent {
     pub(crate) fn get_time_step(&self) -> f32 {
         self.game_data.get_time_step()
     }
-    pub(crate) fn start_frame(&mut self) {
-        self.sim.reset_frame_since_draw();
-        self.update_hood_at_frame_start = self.sim.get_update_hood_cnt();
-    }
-
-    pub(crate) fn end_frame(&mut self) {
-        let update_hood_at_frame_start = self.update_hood_at_frame_start;
-        self.sim.update_hood_cnt(update_hood_at_frame_start);
-    }
-
     pub(crate) fn get_wait_time(&self) -> u64 {
         self.wait_time
     }

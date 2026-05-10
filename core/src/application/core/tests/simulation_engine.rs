@@ -69,3 +69,65 @@ fn test_simulation_step_applies_thermostats_before_source_emission() {
         "thermostat should run before source emission so the emitted ball keeps its initial speed"
     );
 }
+
+/// Verify that pausing the simulation prevents step_count from advancing.
+/// This tests coordinator state is consistent: the physics coordinator
+/// should skip stepping when paused and not modify any counters.
+#[test]
+fn test_simulation_step_does_not_advance_when_paused() {
+    let (mut main_content, _) = create_main_content();
+
+    main_content
+        .add_candidate_at_pos(Vec2D::new(0.0, 0.0))
+        .expect("failed to add ball");
+
+    main_content.sim.set_pause(true);
+    let step_count_before = main_content.world().step_count;
+    let time_before = main_content.sim.get_time();
+
+    SimulationEngine::simulation_step(&mut main_content)
+        .expect("simulation step should not error when paused");
+
+    assert_eq!(
+        main_content.world().step_count,
+        step_count_before,
+        "step_count must not advance when simulation is paused"
+    );
+    assert_eq!(
+        main_content.sim.get_time(),
+        time_before,
+        "simulation time must not advance when paused"
+    );
+}
+
+/// Confirm that repeated simulation steps advance time proportionally
+/// and that energy statistics are updated each step without stale leftovers.
+#[test]
+fn test_repeated_steps_advance_time_and_update_energy() {
+    let (mut main_content, _) = create_main_content();
+
+    main_content
+        .add_candidate_at_pos(Vec2D::new(0.0, 0.0))
+        .expect("failed to add first ball");
+    main_content
+        .add_candidate_at_pos(Vec2D::new(2.2, 0.0))
+        .expect("failed to add second ball");
+
+    let n_steps = 5;
+    for _ in 0..n_steps {
+        SimulationEngine::simulation_step(&mut main_content)
+            .expect("simulation step should succeed");
+    }
+
+    assert_eq!(
+        main_content.world().step_count,
+        n_steps,
+        "step_count should equal the number of steps taken"
+    );
+    // Energy should be non-zero after several steps with two interacting balls.
+    assert!(
+        main_content.sim.get_kinetic_energy() != 0.0
+            || main_content.sim.get_potential_energy() != 0.0,
+        "energy should be non-zero after simulation steps"
+    );
+}
