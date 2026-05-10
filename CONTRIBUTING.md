@@ -24,6 +24,11 @@ These instructions cover:
 - Testing strategy
 - Git workflow requirements
 
+For architectural placement and migration-boundary guidance, also review:
+
+- **[Runtime Architecture](docs/architecture.md)** - Target ownership boundaries, command flow, and current migration shims
+- **[Simulation Coordinate Systems](docs/simulation.md)** - World, viewport, and grid-space conventions
+
 ## Development Workflow
 
 ### Before Making Changes
