@@ -115,7 +115,6 @@ fn test_repeated_steps_advance_time_and_update_energy() {
 
     let n_steps = 5;
     for _ in 0..n_steps {
-        main_content.collect_neighbours_by_cell(DT_GOAL);
         SimulationEngine::simulation_step(&mut main_content)
             .expect("simulation step should succeed");
     }
