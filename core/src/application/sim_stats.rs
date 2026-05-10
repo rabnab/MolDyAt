@@ -234,7 +234,7 @@ impl Default for SimStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::objects2d::ball_impl::Ball2D;
+    use crate::{application::VerletIntegration, objects2d::ball_impl::Ball2D};
 
     fn make_ball(id: usize, velocity: Vec2D) -> Ball2D {
         let mut ball = Ball2D::new(id, Vec2D::zero(), (0, 1.0));
