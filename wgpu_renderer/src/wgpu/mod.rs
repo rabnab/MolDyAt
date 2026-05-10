@@ -48,6 +48,9 @@ pub use wgpu_window::WgpuWindow;
 
 use rust_thermo_core::graphics::renderer::margins::Margins;
 
+pub const DEFAULT_WINDOW_WIDTH: f64 = 1280.0;
+pub const DEFAULT_WINDOW_HEIGHT: f64 = 720.0;
+
 pub const MARGIN_LEFT: f32 = 110.;
 pub const MARGIN_RIGHT: f32 = 50.;
 pub const MARGIN_TOP: f32 = 50.;

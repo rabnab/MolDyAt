@@ -2,9 +2,7 @@
 
 mod wgpu;
 
-use rust_thermo_core::objects2d::Rect;
-
-use crate::wgpu::MARGINS;
+use crate::wgpu::{DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH, MARGINS};
 
 /// Initialize Rayon thread pool for parallel physics computations.
 ///
@@ -50,22 +48,10 @@ fn run_wgpu_renderer() {
 
     log::info!("Renderer: wgpu");
 
-    // Compute initial world bounds based on default window size (same as ggez)
-    // LEN_TO_PX = 0.1 means 1 world unit = 10 pixels
-    const LEN_TO_PX: f32 = 0.1;
-    let default_width: f32 = 1280.0;
-    let default_height: f32 = 720.0;
-    let region_width = default_width - MARGINS.horizontal();
-    let region_height = default_height - MARGINS.vertical();
-    let world_width = region_width * LEN_TO_PX;
-    let world_height = region_height * LEN_TO_PX;
-
-    // Create world rect centered at origin (matching ggez behavior)
-    let world_rect = Rect::new(
-        -world_width / 2.0,
-        world_height / 2.0,
-        world_width,
-        -world_height,
+    let world_rect = MainContent::bootstrap_world_rect(
+        DEFAULT_WINDOW_WIDTH as u32,
+        DEFAULT_WINDOW_HEIGHT as u32,
+        MARGINS,
     );
 
     let application = MainContent::new(world_rect).expect("Failed to create MainContent");
