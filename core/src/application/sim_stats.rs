@@ -351,15 +351,53 @@ mod tests {
     }
 
     #[test]
-    fn test_wall_momentum_accumulates() {
-        let mut stats = SimStats::default();
-        assert_eq!(stats.wall_momentum_x, 0.0);
-        assert_eq!(stats.wall_momentum_y, 0.0);
+    fn test_wall_momentum_accumulates_via_wall_bounce() {
+        // Place a single ball just inside the right wall moving toward it.
+        // After a few simulation steps the ball bounces, and SimStats must
+        // record a non-zero wall momentum transferred during the impact.
+        use crate::application::{MainContent, VerletIntegration};
+        use crate::objects2d::ball_impl::BallFactory;
+        use crate::objects2d::{Rect, Vec2D};
 
-        stats.wall_momentum_x += 3.5;
-        stats.wall_momentum_y += 1.2;
+        // Tiny world: x in [0, 10], y in [0, -10]
+        let world_rect = Rect::new(0.0, 0.0, 10.0, -10.0);
+        let mut mc = MainContent::new(world_rect).expect("failed to create simulation");
+        mc.speed_limit_override = Some(f32::INFINITY);
 
-        assert!((stats.wall_momentum_x - 3.5).abs() < 1e-6);
-        assert!((stats.wall_momentum_y - 1.2).abs() < 1e-6);
+        let factory = BallFactory::new();
+        let ball_radius = factory.get_new_ball_radius();
+        // Start close to the right wall (x = world_rect.x + world_rect.w = 10.0)
+        // and move rightward so a bounce is guaranteed within a few steps.
+        let ball = factory.create_massive_with_velocity(
+            Vec2D::new(10.0 - ball_radius - 0.05, -5.0),
+            Vec2D::new(10.0, 0.0),
+        );
+        let ball_mass = ball.mass;
+        mc.balls.push(ball);
+        mc.world_mut().rebuild_cell_grid();
+
+        let bound = mc.world_region();
+
+        for _ in 0..10 {
+            mc.update_sim(0.01, &bound);
+        }
+
+        // After the bounce the ball reverses direction, so ball_momentum < 0,
+        // while wall_momentum_x > 0 (wall absorbed rightward momentum).
+        // Together they should approximately conserve the initial momentum.
+        let p_ball = ball_mass * mc.balls[0].v.x;
+        let p_wall = mc.sim.wall_momentum_x;
+
+        assert!(
+            p_wall > 0.0,
+            "wall_momentum_x must be positive after rightward wall bounce, got {p_wall}"
+        );
+        // Momentum conservation: p_ball + p_wall ≈ initial momentum (ball_mass * 10.0)
+        let initial = ball_mass * 10.0;
+        let error = ((p_ball + p_wall) - initial).abs();
+        assert!(
+            error < 1e-3,
+            "momentum not conserved: p_ball={p_ball:.6}, p_wall={p_wall:.6}, initial={initial:.6}, error={error:.2e}"
+        );
     }
 }
