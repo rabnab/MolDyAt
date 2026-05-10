@@ -146,7 +146,9 @@ backend shells
                     → simulation world
 ```
 
-The same structure as a dependency diagram:
+That is the compile-time dependency direction.
+
+The runtime command and snapshot flow is a separate concern. The following diagram is a data-flow view, not a compile-time dependency graph:
 
 ```mermaid
 flowchart LR
@@ -168,7 +170,7 @@ flowchart LR
     Renderer --> Backend
 ```
 
-Read the left-to-right edges as "depends on / sends commands toward" for the write path, and the `SimulationWorld -> RendererSnapshot -> Renderer -> Backend` path as the read-only rendering path.
+Read `Backend -> Renderer -> Domain -> Runtime -> Engine -> World` as the write path for user intent and `World -> RendererSnapshot -> Renderer -> Backend` as the read-only rendering path.
 
 Important consequences:
 
