@@ -219,14 +219,14 @@ impl SimulationWorld {
         *xi += dt * (local_temp / target_temperature - 1.0) / tau_sq;
         *xi = xi.clamp(THERMOSTAT_CHAIN_MIN, THERMOSTAT_CHAIN_MAX);
         let friction = dt * *xi;
+        let damping_scale = (1.0 - friction).max(0.0);
 
         for &ball_idx in &bucket.ball_indices {
-            // Temperature is measured in the bucket COM frame, so only the
-            // peculiar velocity should be thermostatted. Preserving `v_com`
-            // avoids spuriously slowing or accelerating a rigidly drifting
-            // cluster that has zero local thermal motion.
+            // Thermostat only the peculiar velocity in the local COM frame.
+            // Clamping the linear damping scale at zero avoids reversing the
+            // peculiar component when `dt * xi > 1`.
             let peculiar_velocity = self.balls[ball_idx].v - &v_com;
-            self.balls[ball_idx].v = v_com.add_scaled(&peculiar_velocity, 1.0 - friction);
+            self.balls[ball_idx].v = v_com.add_scaled(&peculiar_velocity, damping_scale);
         }
 
         !bucket.ball_indices.is_empty()
