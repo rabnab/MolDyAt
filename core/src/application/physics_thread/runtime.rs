@@ -1,8 +1,8 @@
 use super::ShutdownSignal;
 use super::command_handler::DomainCommandHandler;
 use crate::application::DomainCommand;
-use crate::application::GameLogic;
 use crate::application::MainContent;
+use crate::application::core::SimulationEngine;
 use std::sync::Arc;
 use std::sync::mpsc::Receiver;
 use std::time::{Duration, Instant};
@@ -54,13 +54,16 @@ impl PhysicsRuntime {
                 self.drain_commands(receiver, &mut handler);
             }
 
-            let wait_time_ms = simulation.get_wait_time();
+            let wait_time_ms = simulation.runtime().wait_time();
             if wait_time_ms > 0 {
                 std::thread::sleep(Duration::from_millis(wait_time_ms));
             }
 
             let was_paused = simulation.sim.is_paused();
-            let _ = simulation.simulation_step();
+            {
+                let (world, game_data) = simulation.world_and_game_data();
+                let _ = SimulationEngine::simulation_step(world, game_data);
+            }
             if !was_paused {
                 physics_step_count += 1;
             }
@@ -68,7 +71,8 @@ impl PhysicsRuntime {
             let now = Instant::now();
             if now.duration_since(last_snapshot_time) >= self.snapshot_interval {
                 let snapshot_start = Instant::now();
-                simulation.publish_snapshot();
+                let snapshot = simulation.create_snapshot();
+                simulation.runtime().publish_snapshot(snapshot);
                 wakeup();
 
                 snapshot_time_total += snapshot_start.elapsed();
@@ -80,7 +84,7 @@ impl PhysicsRuntime {
                 let elapsed = now.duration_since(last_perf_report).as_secs_f32();
                 let physics_fps = physics_step_count as f32 / elapsed;
 
-                simulation.set_physics_fps(physics_fps);
+                simulation.runtime_mut().set_physics_fps(physics_fps);
 
                 if snapshot_count > 0 {
                     let avg_snapshot_us = snapshot_time_total.as_micros() / snapshot_count as u128;

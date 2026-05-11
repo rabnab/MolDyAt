@@ -146,12 +146,12 @@ impl MainContent {
     /// Lock-free publication allows physics thread to continue without waiting for renderer.
     pub fn publish_snapshot(&self) {
         let snapshot = self.create_snapshot();
-        self.snapshot_slot.store(Some(Arc::new(snapshot)));
+        self.runtime.publish_snapshot(snapshot);
     }
 
     /// Get clone of Arc-wrapped snapshot slot for sharing with renderer thread.
     /// Renderer can load snapshots without blocking physics thread.
     pub fn get_snapshot_slot(&self) -> Arc<arc_swap::ArcSwapOption<RendererSnapshot>> {
-        self.snapshot_slot.clone()
+        self.runtime.snapshot_slot()
     }
 }

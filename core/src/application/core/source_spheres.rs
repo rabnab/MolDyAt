@@ -6,6 +6,7 @@
 //! simulation steps.
 
 use super::{MainContent, SimulationWorld};
+use crate::objects2d::ball_impl::BallFactory;
 use crate::objects2d::{SOURCE_SPHERE_RADIUS, Vec2D};
 use rand::RngExt;
 
@@ -51,30 +52,8 @@ impl MainContent {
     /// Emitted balls have a random direction and the sphere's configured
     /// speed magnitude and ball size class.
     pub(crate) fn emit_from_source_spheres(&mut self) {
-        let step = self.step_count;
-        let emissions = self.world.collect_source_emissions(step);
-
-        let mut rng = rand::rng();
-        for params in emissions {
-            let angle: f32 = rng.random_range(0.0..std::f32::consts::TAU);
-            let velocity = Vec2D::new(
-                params.emission_speed * angle.cos(),
-                params.emission_speed * angle.sin(),
-            );
-            let emit_pos = Vec2D::new(
-                params.center.x + SOURCE_SPHERE_RADIUS * angle.cos(),
-                params.center.y + SOURCE_SPHERE_RADIUS * angle.sin(),
-            );
-
-            let candidate = self.get_ball_factory().create_with_size_and_velocity(
-                emit_pos,
-                params.ball_size_idx,
-                velocity,
-            );
-
-            let _ =
-                self.add_candidate_ball(candidate, self.get_ball_factory().get_new_ball_radius());
-        }
+        let (world, game_data) = self.world_and_game_data();
+        world.emit_from_source_spheres(game_data.get_ball_factory());
     }
 }
 
@@ -104,6 +83,32 @@ impl SimulationWorld {
     pub(crate) fn adjust_source_sphere_emit_period(&mut self, sphere_id: usize, delta_steps: i32) {
         if let Some(sphere) = self.source_spheres.find_mut(sphere_id) {
             sphere.adjust_emit_period(delta_steps);
+        }
+    }
+
+    pub(crate) fn emit_from_source_spheres(&mut self, ball_factory: &BallFactory) {
+        let step = self.step_count;
+        let emissions = self.collect_source_emissions(step);
+
+        let mut rng = rand::rng();
+        for params in emissions {
+            let angle: f32 = rng.random_range(0.0..std::f32::consts::TAU);
+            let velocity = Vec2D::new(
+                params.emission_speed * angle.cos(),
+                params.emission_speed * angle.sin(),
+            );
+            let emit_pos = Vec2D::new(
+                params.center.x + SOURCE_SPHERE_RADIUS * angle.cos(),
+                params.center.y + SOURCE_SPHERE_RADIUS * angle.sin(),
+            );
+
+            let candidate = ball_factory.create_with_size_and_velocity(
+                emit_pos,
+                params.ball_size_idx,
+                velocity,
+            );
+
+            let _ = self.add_candidate_ball(candidate, ball_factory.get_new_ball_radius());
         }
     }
 

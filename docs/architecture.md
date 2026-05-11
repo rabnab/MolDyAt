@@ -221,11 +221,11 @@ Expected end state:
 
 ### `SimulationEngine` still operates on `MainContent`
 
-The engine owns stepping logic, but step entrypoints still start from `MainContent` because they need runtime-owned fields such as `GameLogicData`, logging, snapshot cadence, and source-emission ball creation. The pure world-mutation slice already runs on `SimulationWorld` directly.
+The engine owns stepping logic, but the only remaining runtime dependency is `GameLogicData`. Step entrypoints now run on `SimulationWorld` plus read-only game-logic configuration rather than the full `MainContent` facade.
 
 Why it still exists:
 
-- the remaining coupling is now limited to runtime-owned orchestration instead of the full physics update path
+- `MainContent` still owns the runtime container and is the place where world state and game-logic configuration are split for callers
 
 ### `UnifiedRenderState` is still a facade
 

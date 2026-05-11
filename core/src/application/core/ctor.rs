@@ -49,9 +49,11 @@ impl MainContent {
                 thermostats: Default::default(),
             },
             game_data: <Self as GameLogic>::init_game_logic(),
-            snapshot_slot: Arc::new(ArcSwapOption::from(None)),
-            wait_time: 0,
-            physics_fps: 0.0,
+            runtime: super::PhysicsRuntimeState {
+                snapshot_slot: Arc::new(ArcSwapOption::from(None)),
+                wait_time: 0,
+                physics_fps: 0.0,
+            },
         })
     }
 }

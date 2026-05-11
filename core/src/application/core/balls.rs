@@ -130,7 +130,7 @@ impl MainContent {
                 .get_ball_factory()
                 .create_massive_with_velocity(pos, Vec2D::zero())
         };
-        self.add_candidate_ball(candidate, 0.)
+        self.world.add_candidate_ball(candidate, 0.)
     }
 
     /// Add ball if it's within region and not colliding.
@@ -143,19 +143,7 @@ impl MainContent {
     /// # Returns
     /// Ok if ball was added, Err if out of bounds or colliding
     pub(crate) fn add_candidate_ball(&mut self, candidate: Ball2D, margin: f32) -> AppResult {
-        if !self.is_ball_in_region(&candidate) {
-            return Err(AppError::CustomError(
-                "new ball not within region".to_string(),
-            ));
-        }
-        if self.is_ball_colliding(&candidate, margin) {
-            return Err(AppError::CustomError(
-                "new ball colliding with existing ball".to_string(),
-            ));
-        }
-        self.add_candidate_to_vec(candidate);
-        self.sim.clear_energy();
-        Ok(())
+        self.world.add_candidate_ball(candidate, margin)
     }
 
     pub(crate) fn randomize_speeds(&mut self) {
@@ -175,6 +163,22 @@ impl MainContent {
         let sig = f32::sqrt(f32::sqrt(sx2 / (n - 1.5) * sy2 / (n - 1.5)));
         Normal::new(0., f32::max(0.3, sig)).expect("Invalid distribution parameters")
     }
+    pub(crate) fn remove_invalid_balls(&mut self) {
+        self.world.remove_invalid_balls();
+    }
+
+    pub(crate) fn stop_all_balls(&mut self) {
+        for ball in &mut self.balls {
+            ball.v = Vec2D::new(0., 0.);
+        }
+    }
+
+    pub(crate) fn next_ball_size(&mut self) {
+        self.game_data.get_ball_factory().next_ball_size_idx();
+    }
+}
+
+impl SimulationWorld {
     pub(crate) fn remove_invalid_balls(&mut self) {
         let mut removed_some_balls = false;
         // Remove invalid balls and rebuild cell grid
@@ -201,21 +205,51 @@ impl MainContent {
         }
 
         // Rebuild cell grid with valid balls
-        self.world.rebuild_cell_grid();
-    }
-
-    pub(crate) fn stop_all_balls(&mut self) {
-        for ball in &mut self.balls {
-            ball.v = Vec2D::new(0., 0.);
-        }
-    }
-
-    pub(crate) fn next_ball_size(&mut self) {
-        self.game_data.get_ball_factory().next_ball_size_idx();
+        self.rebuild_cell_grid();
     }
 }
 
 impl SimulationWorld {
+    pub(crate) fn is_ball_in_region(&self, pt: &Ball2D) -> bool {
+        let inner_margin = pt.radius;
+        let region = self.world_rect;
+        let tl = region.get_tl();
+        let world = Rect::new(
+            tl.0 + inner_margin,
+            tl.1 - inner_margin,
+            region.w - 2.0 * inner_margin,
+            region.h + 2.0 * inner_margin,
+        );
+        let pos = pt.get_position();
+
+        pos.x >= world.x
+            && pos.x <= (world.x + world.w)
+            && pos.y >= (world.y + world.h)
+            && pos.y <= world.y
+    }
+
+    pub(crate) fn is_ball_colliding(&self, pt: &Ball2D, margin: f32) -> bool {
+        self.balls
+            .iter()
+            .any(|ball| self.physics.is_colliding(pt, ball, margin))
+    }
+
+    pub(crate) fn add_candidate_ball(&mut self, candidate: Ball2D, margin: f32) -> AppResult {
+        if !self.is_ball_in_region(&candidate) {
+            return Err(AppError::CustomError(
+                "new ball not within region".to_string(),
+            ));
+        }
+        if self.is_ball_colliding(&candidate, margin) {
+            return Err(AppError::CustomError(
+                "new ball colliding with existing ball".to_string(),
+            ));
+        }
+        self.add_ball_and_register(candidate);
+        self.sim.clear_energy();
+        Ok(())
+    }
+
     pub(crate) fn add_ball_and_register(&mut self, candidate: Ball2D) {
         let ball_idx = self.balls.len();
         self.balls.push(candidate);

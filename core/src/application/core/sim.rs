@@ -6,11 +6,11 @@ use crate::objects2d::ball_impl::BallFactory;
 
 impl MainContent {
     pub(crate) fn increase_wait_time(&mut self) {
-        self.wait_time = (self.wait_time + 1).min(100);
+        self.runtime.increase_wait_time();
     }
 
     pub(crate) fn decrease_wait_time(&mut self) {
-        self.wait_time = self.wait_time.saturating_sub(1);
+        self.runtime.decrease_wait_time();
     }
 
     /// Pause simulation when window resize is detected.

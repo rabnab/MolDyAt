@@ -12,6 +12,21 @@ impl MainContent {
         &mut self.world
     }
 
+    pub(crate) fn runtime(&self) -> &PhysicsRuntimeState {
+        &self.runtime
+    }
+
+    pub(crate) fn runtime_mut(&mut self) -> &mut PhysicsRuntimeState {
+        &mut self.runtime
+    }
+
+    pub(crate) fn world_and_game_data(&mut self) -> (&mut SimulationWorld, &GameLogicData) {
+        let Self {
+            world, game_data, ..
+        } = self;
+        (world, game_data)
+    }
+
     pub(crate) fn get_game_logic_data(&mut self) -> &mut GameLogicData {
         &mut self.game_data
     }
@@ -113,17 +128,48 @@ impl MainContent {
     pub(crate) fn get_time_step(&self) -> f32 {
         self.game_data.get_time_step()
     }
+
     pub(crate) fn get_wait_time(&self) -> u64 {
-        self.wait_time
+        self.runtime.wait_time()
     }
 
     /// Get current physics FPS value
     pub fn get_physics_fps(&self) -> f32 {
-        self.physics_fps
+        self.runtime.physics_fps()
     }
 
     /// Set current physics FPS value
     pub fn set_physics_fps(&mut self, fps: f32) {
+        self.runtime.set_physics_fps(fps);
+    }
+}
+
+impl PhysicsRuntimeState {
+    pub(crate) fn wait_time(&self) -> u64 {
+        self.wait_time
+    }
+
+    pub(crate) fn increase_wait_time(&mut self) {
+        self.wait_time = (self.wait_time + 1).min(100);
+    }
+
+    pub(crate) fn decrease_wait_time(&mut self) {
+        self.wait_time = self.wait_time.saturating_sub(1);
+    }
+
+    pub(crate) fn physics_fps(&self) -> f32 {
+        self.physics_fps
+    }
+
+    pub(crate) fn set_physics_fps(&mut self, fps: f32) {
         self.physics_fps = fps;
+    }
+
+    pub(crate) fn publish_snapshot(&self, snapshot: RendererSnapshot) {
+        self.snapshot_slot.store(Some(Arc::new(snapshot)));
+    }
+
+    pub(crate) fn snapshot_slot(&self) -> Arc<arc_swap::ArcSwapOption<RendererSnapshot>> {
+        self.snapshot_slot.clone()
     }
 }

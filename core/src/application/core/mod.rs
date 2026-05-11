@@ -58,9 +58,9 @@ pub struct SimulationWorld {
 ///
 /// `MainContent` is exclusively owned by the physics thread. It exposes the
 /// simulation domain through `Deref`/`DerefMut` to `SimulationWorld` and
-/// holds only the fields that belong to the physics-thread runtime:
-/// `game_data` (time-step and ball-factory settings), `wait_time`
-/// (optional sleep between steps), the atomic snapshot slot, and the
+/// holds the remaining thread-owned coordination state: `game_data`
+/// (time-step and ball-factory settings) plus the dedicated
+/// [`PhysicsRuntimeState`] for sleeping, snapshot publication, and
 /// rolling physics-FPS measurement.
 ///
 /// Stale frame-render coordination that previously lived here (dead
@@ -73,9 +73,14 @@ pub struct MainContent {
     world: SimulationWorld,
 
     game_data: GameLogicData,
+
+    runtime: PhysicsRuntimeState,
+}
+
+/// Runtime-only state owned by the physics thread loop.
+pub(crate) struct PhysicsRuntimeState {
     /// ms to wait between simulation steps
     wait_time: u64,
-
     /// Snapshot slot for lock-free communication with renderer
     snapshot_slot: Arc<ArcSwapOption<RendererSnapshot>>,
     /// Actual physics FPS for display (updated and read only by physics thread)

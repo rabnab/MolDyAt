@@ -18,7 +18,8 @@ fn test_simulation_engine_advances_main_content_state() {
     main_content.collect_neighbours_by_cell(DT_GOAL);
     let initial_step_count = main_content.world().step_count;
 
-    SimulationEngine::simulation_step(&mut main_content).expect("simulation step should succeed");
+    let (world, game_data) = main_content.world_and_game_data();
+    SimulationEngine::simulation_step(world, game_data).expect("simulation step should succeed");
 
     assert_eq!(main_content.world().step_count, initial_step_count + 1);
     assert!(main_content.sim.get_time() > 0.0);
@@ -50,7 +51,8 @@ fn test_simulation_step_applies_thermostats_before_source_emission() {
     let source_id = main_content.source_spheres.spheres()[0].id;
     main_content.toggle_source_sphere(source_id);
 
-    SimulationEngine::simulation_step(&mut main_content).expect("simulation step should succeed");
+    let (world, game_data) = main_content.world_and_game_data();
+    SimulationEngine::simulation_step(world, game_data).expect("simulation step should succeed");
 
     assert_eq!(
         main_content.balls.len(),
@@ -85,7 +87,8 @@ fn test_simulation_step_does_not_advance_when_paused() {
     let step_count_before = main_content.world().step_count;
     let time_before = main_content.sim.get_time();
 
-    SimulationEngine::simulation_step(&mut main_content)
+    let (world, game_data) = main_content.world_and_game_data();
+    SimulationEngine::simulation_step(world, game_data)
         .expect("simulation step should not error when paused");
 
     assert_eq!(
@@ -115,7 +118,8 @@ fn test_repeated_steps_advance_time_and_update_energy() {
 
     let n_steps = 5;
     for _ in 0..n_steps {
-        SimulationEngine::simulation_step(&mut main_content)
+        let (world, game_data) = main_content.world_and_game_data();
+        SimulationEngine::simulation_step(world, game_data)
             .expect("simulation step should succeed");
     }
 
