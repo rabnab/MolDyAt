@@ -18,8 +18,7 @@ mod command_handler;
 mod runtime;
 
 #[cfg(test)]
-pub(crate) use runtime::CommandHandler;
-pub(crate) use runtime::PhysicsRuntime;
+pub(crate) use runtime::{CommandHandler, PhysicsRuntime};
 
 /// Shutdown signal shared between threads
 #[derive(Clone)]
@@ -83,7 +82,7 @@ impl PhysicsThread {
         let thread_wakeup = Arc::clone(&wakeup);
 
         let thread_handle = thread::spawn(move || {
-            let runtime = PhysicsRuntime::default();
+            let runtime = runtime::PhysicsRuntime::default();
             runtime.run(
                 &mut main_content,
                 &command_receiver,

@@ -1,5 +1,5 @@
 use crate::application::DomainCommand;
-use crate::application::operator_command::AddLineSegment;
+use crate::application::operator_command::line::AddLineSegment;
 use crate::objects2d::{Rect, Vec2D};
 
 #[test]

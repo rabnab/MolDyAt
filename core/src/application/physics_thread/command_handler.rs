@@ -2,17 +2,17 @@ use super::runtime::CommandHandler;
 use crate::application::DomainCommand;
 use crate::application::MainContent;
 
-pub(crate) struct PhysicsCommandHandler<'a> {
+pub(crate) struct DomainCommandHandler<'a> {
     main_content: &'a mut MainContent,
 }
 
-impl<'a> PhysicsCommandHandler<'a> {
+impl<'a> DomainCommandHandler<'a> {
     pub(crate) fn new(main_content: &'a mut MainContent) -> Self {
         Self { main_content }
     }
 }
 
-impl CommandHandler<DomainCommand> for PhysicsCommandHandler<'_> {
+impl CommandHandler<DomainCommand> for DomainCommandHandler<'_> {
     fn handle_command(&mut self, command: DomainCommand) {
         match command {
             DomainCommand::Pause => {

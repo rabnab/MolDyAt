@@ -1,5 +1,5 @@
 use super::create_main_content;
-use crate::application::physics_thread::PhysicsThread;
+use crate::application::PhysicsThread;
 use crate::objects2d::Vec2D;
 use std::thread;
 use std::time::Duration;

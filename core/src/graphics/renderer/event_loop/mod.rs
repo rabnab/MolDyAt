@@ -1,5 +1,5 @@
 mod action_processor;
-mod domain_command_adapter;
+mod domain_command_mapping;
 mod energy_window_manager;
 mod frame_orchestrator;
 mod input_handler;

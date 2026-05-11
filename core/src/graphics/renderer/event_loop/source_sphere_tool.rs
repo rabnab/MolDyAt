@@ -4,7 +4,10 @@
 //! for the source-sphere interaction: click to place/toggle, right-click to
 //! cycle ball size, scroll to adjust speed/emission period.
 
-use crate::application::operator_command;
+use crate::application::operator_command::source::{
+    AdjustSourceSphereEmitPeriod, AdjustSourceSphereSpeed, CycleSourceSphereBallSize,
+    PlaceSourceSphere, ToggleSourceSphere,
+};
 use crate::objects2d::{EMISSION_SPEED_STEP, SOURCE_SPHERE_RADIUS, Vec2D};
 use winit::event::{ElementState, MouseButton};
 
@@ -49,21 +52,15 @@ impl OperatorToolHandler for SourceSphereToolHandler {
             // Left release: toggle existing sphere or place new
             (MouseButton::Left, ElementState::Released) => {
                 if let Some(sphere_id) = Self::find_source_sphere_at(world_pos, ctx) {
-                    ToolResponse::consumed_with(Box::new(operator_command::ToggleSourceSphere {
-                        sphere_id,
-                    }))
+                    ToolResponse::consumed_with(Box::new(ToggleSourceSphere { sphere_id }))
                 } else {
-                    ToolResponse::consumed_with(Box::new(operator_command::PlaceSourceSphere {
-                        center: world_pos,
-                    }))
+                    ToolResponse::consumed_with(Box::new(PlaceSourceSphere { center: world_pos }))
                 }
             }
             // Right press on existing sphere: cycle ball size
             (MouseButton::Right, ElementState::Pressed) => {
                 if let Some(sphere_id) = Self::find_source_sphere_at(world_pos, ctx) {
-                    ToolResponse::consumed_with(Box::new(
-                        operator_command::CycleSourceSphereBallSize { sphere_id },
-                    ))
+                    ToolResponse::consumed_with(Box::new(CycleSourceSphereBallSize { sphere_id }))
                 } else {
                     ToolResponse::default()
                 }
@@ -99,7 +96,7 @@ impl OperatorToolHandler for SourceSphereToolHandler {
                 // Scroll down → increase emit period (less frequent)
                 EMISSION_PERIOD_DELTA
             };
-            ToolResponse::consumed_with(Box::new(operator_command::AdjustSourceSphereEmitPeriod {
+            ToolResponse::consumed_with(Box::new(AdjustSourceSphereEmitPeriod {
                 sphere_id,
                 delta_steps,
             }))
@@ -109,7 +106,7 @@ impl OperatorToolHandler for SourceSphereToolHandler {
             } else {
                 -EMISSION_SPEED_STEP
             };
-            ToolResponse::consumed_with(Box::new(operator_command::AdjustSourceSphereSpeed {
+            ToolResponse::consumed_with(Box::new(AdjustSourceSphereSpeed {
                 sphere_id,
                 delta: speed_delta,
             }))

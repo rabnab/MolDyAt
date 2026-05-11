@@ -4,12 +4,10 @@ use crate::objects2d::ball_impl::BallFactory;
 use crate::objects2d::operator::{is_degenerate, remap_point};
 
 impl MainContent {
-    #[cfg(test)]
     pub(crate) fn world(&self) -> &SimulationWorld {
         &self.world
     }
 
-    #[cfg(test)]
     pub(crate) fn world_mut(&mut self) -> &mut SimulationWorld {
         &mut self.world
     }

@@ -1,7 +1,5 @@
-use crate::application::MainContent;
-use crate::application::domain_command::DomainCommand;
-use crate::application::physics_thread::PhysicsThread;
 use crate::application::renderer_snapshot::RendererSnapshot;
+use crate::application::{DomainCommand, MainContent, PhysicsThread};
 use arc_swap::ArcSwapOption;
 use std::sync::Arc;
 

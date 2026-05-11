@@ -8,7 +8,7 @@ The refactor should start by introducing a single application-level command cont
 
 That order fits both the explicit sub-issue dependencies and the current code structure:
 
-- Command flow is currently split across `InputAction`, `PhysicsCommand`, and `OperatorCommand`.
+- Command flow still spans `InputAction`, `DomainCommand`, and `OperatorCommand`, but the runtime-facing `PhysicsCommand` layer is gone.
 - Simulation ownership and stepping behavior are still coupled in the core application layer.
 - Runtime lifecycle and domain mutation are both handled in the physics-thread path.
 - Renderer state and renderer orchestration are concentrated in `UnifiedRenderState`.
@@ -21,10 +21,10 @@ That order fits both the explicit sub-issue dependencies and the current code st
 The same user intent currently crosses multiple command layers:
 
 - renderer-facing `InputAction`
-- runtime-facing `PhysicsCommand`
+- application-facing `DomainCommand`
 - domain-facing `OperatorCommand`
 
-This creates translation logic at the renderer and runtime boundaries and makes it harder to reason about where new actions should be added.
+This still creates translation logic at the renderer boundary and leaves operator mutations as a separate command family, which makes it harder to reason about where new actions should be added.
 
 ### 2. Simulation state and stepping are not clearly separated
 
@@ -67,12 +67,12 @@ Why first:
 
 - It gives UI, renderer, and runtime code one canonical application-level command model.
 - It removes ambiguity about whether new behavior belongs in renderer actions, runtime commands, or operator commands.
-- Both the domain split and renderer split depend on having this boundary available, even if they use temporary adapters during migration.
+- Both the domain split and renderer split depend on having this boundary available, even if intermediate mapping code remains during migration.
 
 Expected outcome:
 
 - user actions are translated into `DomainCommand`
-- temporary adapters bridge `DomainCommand` into the current runtime path
+- the physics runtime consumes `DomainCommand` directly
 - focused tests cover representative action-to-command mappings
 
 ### 2. `#141` Split simulation state from simulation stepping logic

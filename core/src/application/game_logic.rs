@@ -64,11 +64,11 @@ impl GameLogicData {
 
 impl GameLogic for MainContent {
     fn is_ball_in_region(&self, pt: &Ball2D) -> bool {
-        SimulationEngine::is_ball_in_region(self, pt)
+        SimulationEngine::is_ball_in_region(self.world(), pt)
     }
 
     fn is_ball_colliding(&self, pt: &Ball2D, margin: f32) -> bool {
-        SimulationEngine::is_ball_colliding(self, pt, margin)
+        SimulationEngine::is_ball_colliding(self.world(), pt, margin)
     }
 
     fn collect_neighbours_by_cell(&mut self, dt: f32) {

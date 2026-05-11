@@ -48,6 +48,6 @@ impl MainContent {
 
 impl VerletIntegration for MainContent {
     fn update_sim(&mut self, dt: f32, bound_rect: &Rect) {
-        SimulationEngine::update_sim(self, dt, bound_rect);
+        SimulationEngine::update_sim(self.world_mut(), dt, bound_rect);
     }
 }

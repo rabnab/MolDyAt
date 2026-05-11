@@ -1,9 +1,7 @@
 use crate::application::DomainCommand;
 use crate::application::GameLogic;
 use crate::application::MainContent;
-use crate::application::physics_thread::{
-    CommandHandler, PhysicsRuntime, PhysicsThread, ShutdownSignal,
-};
+use crate::application::{CommandHandler, PhysicsRuntime, PhysicsThread, ShutdownSignal};
 use crate::objects2d::Rect;
 
 struct RecordingHandler<T> {

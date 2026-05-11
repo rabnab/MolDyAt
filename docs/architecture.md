@@ -1,6 +1,6 @@
 # Runtime Architecture
 
-This document describes the target runtime architecture for the refactor track started in issue `#137`, the boundaries that are already implemented, and the migration shims that still exist until the final cleanup issue `#147`.
+This document describes the target runtime architecture for the refactor track started in issue `#137`, the boundaries that are already implemented, and the transitional seams that still remain after the cleanup in issue `#147`.
 
 It is not a sequencing document. For the implementation order of the refactor issues, see [refactor_architecture.md](refactor_architecture.md).
 
@@ -186,7 +186,7 @@ The current write path for simulation mutations is:
 1. backend input is interpreted into renderer actions
 2. renderer action processing emits `DomainCommand`
 3. `PhysicsCoordinator` forwards the `DomainCommand` directly to the physics thread
-4. `PhysicsCommandHandler` applies the command against `MainContent`
+4. `DomainCommandHandler` applies the command against `MainContent`
 5. `SimulationEngine` and operator commands mutate the world state as needed
 
 `DomainCommand` is the single command type used from input handling all the way through to the physics thread.
@@ -203,7 +203,7 @@ The current read path for rendering is:
 
 This keeps rendering read-only with respect to the simulation world.
 
-## Current Migration Shims
+## Current Transitional Seams
 
 The refactor is not fully converged yet. These seams still exist intentionally:
 
@@ -221,11 +221,11 @@ Expected end state:
 
 ### `SimulationEngine` still operates on `MainContent`
 
-The engine owns stepping logic, but its methods still take `MainContent` rather than a smaller final-state interface.
+The engine owns stepping logic, but step entrypoints still start from `MainContent` because they need runtime-owned fields such as `GameLogicData`, logging, snapshot cadence, and source-emission ball creation. The pure world-mutation slice already runs on `SimulationWorld` directly.
 
 Why it still exists:
 
-- it avoids a large temporary abstraction jump while the refactor is still converging
+- the remaining coupling is now limited to runtime-owned orchestration instead of the full physics update path
 
 ### `UnifiedRenderState` is still a facade
 
@@ -234,14 +234,6 @@ Why it still exists:
 Why it still exists:
 
 - both backends need a stable shared renderer API while internal responsibilities are being decomposed
-
-### Operator command root re-exports remain
-
-`application::operator_command` is now split by feature area, but the root module still re-exports the concrete command types for compatibility.
-
-Why it still exists:
-
-- it keeps call sites stable while the package structure becomes clearer
 
 ## Where New Logic Should Live
 
@@ -265,6 +257,6 @@ Avoid these placements:
 
 This document describes the target structure after issues `#144`, `#141`, `#145`, `#139`, `#140`, `#143`, `#138`, `#146`, and `#147`.
 
-Issue `#147` removed the `DomainCommand` → `PhysicsCommand` runtime adapter so that `DomainCommand` is now the single command type from input handling all the way into the physics thread. The remaining migration shims (`MainContent` as facade, `SimulationEngine` operating on `MainContent`, and operator command root re-exports) are intentional transition seams that will be tightened in subsequent cleanup.
+Issue `#147` removed the `DomainCommand` → `PhysicsCommand` runtime adapter so that `DomainCommand` is now the single command type from input handling all the way into the physics thread. The remaining transitional seams (`MainContent` as facade and `SimulationEngine` operating on `MainContent`) are intentional and can be tightened independently from the command path.
 
 Contributors should treat the boundaries described here as the intended direction even when a thin facade still exists for compatibility.

@@ -1,5 +1,5 @@
 use super::ShutdownSignal;
-use super::command_handler::PhysicsCommandHandler;
+use super::command_handler::DomainCommandHandler;
 use crate::application::DomainCommand;
 use crate::application::GameLogic;
 use crate::application::MainContent;
@@ -50,7 +50,7 @@ impl PhysicsRuntime {
 
         while !shutdown_signal.should_shutdown() {
             {
-                let mut handler = PhysicsCommandHandler::new(simulation);
+                let mut handler = DomainCommandHandler::new(simulation);
                 self.drain_commands(receiver, &mut handler);
             }
 

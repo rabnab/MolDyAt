@@ -7,7 +7,6 @@
 //!
 //! 1. Define a new struct in the appropriate sub-module.
 //! 2. Implement [`OperatorCommand`] for it.
-//! 3. Re-export it below.
 //!
 //! No changes to `DomainCommand`, `InputAction`, or the action processor
 //! are needed.
@@ -27,19 +26,6 @@ pub mod line;
 pub mod source;
 pub mod thermostat;
 pub mod valve;
-
-// ── Re-exports for call-site compatibility ────────────────────────────
-
-pub use line::{AddLineSegment, MoveLineSegmentEndpoint};
-pub use source::{
-    AdjustSourceSphereEmitPeriod, AdjustSourceSphereSpeed, CycleSourceSphereBallSize,
-    PlaceSourceSphere, ToggleSourceSphere,
-};
-pub use thermostat::{
-    AdjustThermostatRadius, AdjustThermostatTargetTemperature, MoveThermostat, PlaceThermostat,
-    ToggleThermostat,
-};
-pub use valve::{AddValveSegment, MoveValveSegment, ToggleValve};
 
 /// A self-contained operator command that knows how to apply itself.
 ///
