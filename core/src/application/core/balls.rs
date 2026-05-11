@@ -24,13 +24,6 @@ impl MainContent {
         self.game_data.get_ball_factory().reset_id_counter();
         self.world.clear_all_operators();
     }
-    pub(crate) fn get_balls(&self) -> &[Ball2D] {
-        &self.world.balls
-    }
-
-    pub(crate) fn get_balls_mut(&mut self) -> &mut [Ball2D] {
-        &mut self.world.balls
-    }
 
     // /// Add a new ball candidate at the given position with zero initial velocity.
     // pub(crate) fn add_cursor_candidate(&mut self, pos: Vec2D) {

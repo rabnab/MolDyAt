@@ -63,7 +63,7 @@ fn test_collect_neighbours() {
 
     // Initial state check
     {
-        let balls = main_content.get_balls();
+        let balls = &main_content.world().balls;
         let ball1: &Ball2D = &balls[0];
         let ball2: &Ball2D = &balls[1];
         let ball3: &Ball2D = &balls[2];
@@ -91,7 +91,7 @@ fn test_collect_neighbours() {
         main_content.collect_neighbours_by_cell(DT_GOAL);
 
         // After collecting neighbors, Ball1 and Ball2 should be neighbors
-        let balls = main_content.get_balls();
+        let balls = &main_content.world().balls;
         let ball1: &Ball2D = &balls[0];
         let ball2: &Ball2D = &balls[1];
         let ball3: &Ball2D = &balls[2];
@@ -152,7 +152,7 @@ fn test_remove_invalid_balls_clears_neighbor_indices() {
 
     // Verify initial neighbor relationships exist
     {
-        let balls = main_content.get_balls();
+        let balls = &main_content.world().balls;
         assert!(
             balls[0].hood.get_neighbour_indices().len() > 0,
             "Ball 0 should have neighbors before removal"
@@ -181,7 +181,7 @@ fn test_remove_invalid_balls_clears_neighbor_indices() {
 
     // Verify all neighbor lists are cleared
     {
-        let balls = main_content.get_balls();
+        let balls = &main_content.world().balls;
         for (idx, ball) in balls.iter().enumerate() {
             assert_eq!(
                 ball.hood.get_neighbour_indices().len(),
@@ -209,7 +209,7 @@ fn test_remove_invalid_balls_clears_neighbor_indices() {
 
     // Verify neighbor indices are valid (don't point beyond array bounds)
     {
-        let balls = main_content.get_balls();
+        let balls = &main_content.world().balls;
         let num_balls = balls.len();
         for (ball_idx, ball) in balls.iter().enumerate() {
             for &neighbor_idx in ball.hood.get_neighbour_indices() {
@@ -231,7 +231,7 @@ fn test_remove_invalid_balls_clears_neighbor_indices() {
 
     // Verify we can access neighbors without panic
     {
-        let balls = main_content.get_balls();
+        let balls = &main_content.world().balls;
         for ball in balls {
             let neighbor_names = ball.get_neighbour_names(balls);
             // Just verify this doesn't panic - actual neighbor counts may vary

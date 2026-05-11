@@ -236,12 +236,6 @@ impl EnergyPlotRenderer {
         (output, color_lines)
     }
 
-    /// Generate a text-based visualization (backward compatibility)
-    pub fn render_to_string(&self, status_text: Option<&str>, display_mode: DisplayMode) -> String {
-        let (text, _) = self.render_to_colored_string(status_text, display_mode);
-        text
-    }
-
     fn create_legend_line(&self, display_mode: DisplayMode, time: f32) -> (String, Vec<u32>) {
         let mut line = String::from("  ");
         let mut colors = vec![COLOR_TEXT; 2];
@@ -602,7 +596,7 @@ mod tests {
     fn test_renderer_new() {
         let energy_data = Arc::new(Mutex::new(EnergyData::new()));
         let renderer = EnergyPlotRenderer::new(energy_data);
-        let output = renderer.render_to_string(None, DisplayMode::All);
+        let (output, _) = renderer.render_to_colored_string(None, DisplayMode::All);
 
         // Should show waiting message when no data
         assert!(output.contains("Waiting for simulation data"));
@@ -626,7 +620,7 @@ mod tests {
         }
 
         let renderer = EnergyPlotRenderer::new(energy_data);
-        let output = renderer.render_to_string(None, DisplayMode::All);
+        let (output, _) = renderer.render_to_colored_string(None, DisplayMode::All);
 
         // Should show energy plot
         assert!(output.contains("ENERGY PLOT"));
@@ -648,7 +642,7 @@ mod tests {
         }
 
         let renderer = EnergyPlotRenderer::new(energy_data);
-        let output = renderer.render_to_string(None, DisplayMode::Kin);
+        let (output, _) = renderer.render_to_colored_string(None, DisplayMode::Kin);
 
         assert!(output.contains("Time: 0.50"));
         assert!(!output.contains("Waiting for simulation data"));
@@ -665,7 +659,7 @@ mod tests {
         }
 
         let renderer = EnergyPlotRenderer::new(energy_data);
-        let output = renderer.render_to_string(None, DisplayMode::Pot);
+        let (output, _) = renderer.render_to_colored_string(None, DisplayMode::Pot);
 
         assert!(output.contains("Time: 0.50"));
         assert!(!output.contains("Waiting for simulation data"));
@@ -675,7 +669,7 @@ mod tests {
     fn test_waiting_message_format() {
         let energy_data = Arc::new(Mutex::new(EnergyData::new()));
         let renderer = EnergyPlotRenderer::new(energy_data);
-        let output = renderer.render_to_string(None, DisplayMode::All);
+        let (output, _) = renderer.render_to_colored_string(None, DisplayMode::All);
 
         assert!(output.contains("═══════════════════════"));
         assert!(output.contains("Add some balls to see the energy plot!"));
@@ -695,7 +689,7 @@ mod tests {
 
         let renderer = EnergyPlotRenderer::new(energy_data);
         let status = "fps 60 time: 1.0\n#Balls: 100";
-        let output = renderer.render_to_string(Some(status), DisplayMode::All);
+        let (output, _) = renderer.render_to_colored_string(Some(status), DisplayMode::All);
 
         assert!(output.contains("fps 60"));
         assert!(output.contains("#Balls: 100"));
