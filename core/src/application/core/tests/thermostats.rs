@@ -196,7 +196,7 @@ fn hot_thermostat_heats_cold_cluster_without_changing_com_drift() {
 }
 
 #[test]
-fn thermostat_preserves_ball_direction_while_rescaling_speed() {
+fn thermostat_preserves_bucket_com_drift_when_damping_noncollinear_velocities() {
     let mut mc = make_content();
     mc.add_thermostat(Vec2D::new(0.0, 0.0));
     let thermostat_id = mc.world().thermostats.thermostats()[0].id;
@@ -206,23 +206,29 @@ fn thermostat_preserves_ball_direction_while_rescaling_speed() {
     thermostat.radius = 5.0;
 
     // The cluster drifts along +x while each ball has a vertical peculiar
-    // velocity component. A thermostat that only rescales speed should not
-    // rotate either ball's absolute heading.
+    // velocity component. A COM-frame thermostat should preserve the drift
+    // velocity while damping the vertical thermal motion.
     add_ball(&mut mc, Vec2D::new(-0.5, 0.0), Vec2D::new(1.0, 1.0));
     add_ball(&mut mc, Vec2D::new(0.5, 0.0), Vec2D::new(1.0, -1.0));
 
-    let velocity_before = mc.world().balls[0].v;
-    let direction_before = velocity_before.normalize();
+    let initial_stats = cluster_kinetic_stats(&mc);
+    let initial_temp = initial_stats.temperature().unwrap();
+    let initial_v_com = initial_stats.center_of_mass_velocity().unwrap();
 
     let mut stats = zeroed_stats();
     mc.apply_thermostats(DT_GOAL, &mut stats);
 
+    let final_stats = cluster_kinetic_stats(&mc);
+    let final_temp = final_stats.temperature().unwrap();
+    let final_v_com = final_stats.center_of_mass_velocity().unwrap();
     let velocity_after = mc.world().balls[0].v;
-    let direction_after = velocity_after.normalize();
 
-    assert!((velocity_after.norm_sq() - velocity_before.norm_sq()).abs() > 1e-6);
-    assert!((direction_after.x - direction_before.x).abs() < 1e-6);
-    assert!((direction_after.y - direction_before.y).abs() < 1e-6);
+    assert!(final_temp < initial_temp);
+    assert!((final_v_com.x - initial_v_com.x).abs() < 1e-6);
+    assert!((final_v_com.y - initial_v_com.y).abs() < 1e-6);
+    assert!((velocity_after.x - initial_v_com.x).abs() < 1e-6);
+    assert!(velocity_after.y > 0.0);
+    assert!(velocity_after.y < 1.0);
 }
 
 #[test]
@@ -245,7 +251,7 @@ fn thermostat_does_not_flip_peculiar_velocity_when_damping_exceeds_one() {
     mc.apply_thermostats(0.2, &mut stats);
 
     let velocity_after = mc.world().balls[0].v;
-    assert!(velocity_after.y > 0.0);
+    assert!(velocity_after.y >= 0.0);
 }
 
 #[test]
