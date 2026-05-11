@@ -21,7 +21,7 @@ fn test_single_ball_wall_bounce_momentum() {
     let (mut main_content, _) = create_main_content_for_region(100.0, 100.0);
 
     // Disable speed limit for momentum conservation testing
-    main_content.speed_limit_override = Some(f32::INFINITY);
+    main_content.world_mut().speed_limit_override = Some(f32::INFINITY);
 
     let factory = BallFactory::new();
 
@@ -39,13 +39,13 @@ fn test_single_ball_wall_bounce_momentum() {
     let ball = factory.create_massive_with_velocity(pos, initial_velocity);
     let ball_mass = ball.mass;
 
-    main_content.balls.push(ball);
+    main_content.world_mut().balls.push(ball);
     main_content.world_mut().rebuild_cell_grid();
 
-    let bound_rect = main_content.world_region();
+    let bound_rect = main_content.world().world_region();
 
     // Verify gravity is zero
-    let gravity_value = main_content.physics.constants.gravity;
+    let gravity_value = main_content.world().physics.constants.gravity;
     assert_eq!(gravity_value, 0.0, "Gravity should be 0 for this test");
 
     println!("\n=== Single Ball Wall Bounce Test ===");
@@ -73,7 +73,7 @@ fn test_single_ball_wall_bounce_momentum() {
         main_content.update_sim(DT_GOAL, &bound_rect);
         step += 1;
 
-        let ball = &main_content.balls[0];
+        let ball = &main_content.world().balls[0];
         let v_x = ball.v.x;
         let pos_x = ball.get_position().x;
 
@@ -108,15 +108,16 @@ fn test_single_ball_wall_bounce_momentum() {
             println!("  Ball momentum change:  {:.6}", ball_momentum_change);
             println!(
                 "  Wall momentum:         {:.6}",
-                main_content.sim.wall_momentum_x
+                main_content.world().sim.wall_momentum_x
             );
             println!(
                 "  System momentum:       {:.6}",
-                final_ball_momentum + main_content.sim.wall_momentum_x
+                final_ball_momentum + main_content.world().sim.wall_momentum_x
             );
 
-            let momentum_conservation_error =
-                (final_ball_momentum + main_content.sim.wall_momentum_x) - initial_ball_momentum;
+            let momentum_conservation_error = (final_ball_momentum
+                + main_content.world().sim.wall_momentum_x)
+                - initial_ball_momentum;
             println!(
                 "  Conservation error:    {:.10}",
                 momentum_conservation_error
@@ -128,13 +129,14 @@ fn test_single_ball_wall_bounce_momentum() {
             // - System momentum should be conserved
 
             let expected_wall_momentum = -ball_momentum_change;
-            let wall_momentum_error = main_content.sim.wall_momentum_x - expected_wall_momentum;
+            let wall_momentum_error =
+                main_content.world().sim.wall_momentum_x - expected_wall_momentum;
 
             println!("\nExpected vs Actual:");
             println!("  Expected wall momentum: {:.6}", expected_wall_momentum);
             println!(
                 "  Actual wall momentum:   {:.6}",
-                main_content.sim.wall_momentum_x
+                main_content.world().sim.wall_momentum_x
             );
             println!("  Wall momentum error:    {:.10}", wall_momentum_error);
 
@@ -170,13 +172,13 @@ fn test_wall_momentum_performance_impact() {
         let pos = Vec2D::new(x, y);
         let vel = Vec2D::new((i as f32 * 0.1).sin(), (i as f32 * 0.1).cos());
         let ball = factory.create_massive_with_velocity(pos, vel);
-        main_content.balls.push(ball);
+        main_content.world_mut().balls.push(ball);
     }
 
     // Add balls to cell grid
     main_content.world_mut().rebuild_cell_grid();
 
-    let bound_rect = main_content.world_region();
+    let bound_rect = main_content.world().world_region();
 
     // Warm up
     for _ in 0..10 {
@@ -195,6 +197,7 @@ fn test_wall_momentum_performance_impact() {
     println!("Per step: {:?}", elapsed / 100);
     println!(
         "Wall momentum accumulated: ({:.2}, {:.2})",
-        main_content.sim.wall_momentum_x, main_content.sim.wall_momentum_y
+        main_content.world().sim.wall_momentum_x,
+        main_content.world().sim.wall_momentum_y
     );
 }

@@ -21,15 +21,15 @@ impl MainContent {
     /// Also clears all placed operators.
     pub(crate) fn clear_points(&mut self) {
         self.world.clear_balls();
-        self.get_ball_factory().reset_id_counter();
-        self.clear_all_operators();
+        self.game_data.get_ball_factory().reset_id_counter();
+        self.world.clear_all_operators();
     }
     pub(crate) fn get_balls(&self) -> &[Ball2D] {
-        &self.balls
+        &self.world.balls
     }
 
     pub(crate) fn get_balls_mut(&mut self) -> &mut [Ball2D] {
-        &mut self.balls
+        &mut self.world.balls
     }
 
     // /// Add a new ball candidate at the given position with zero initial velocity.
@@ -44,13 +44,10 @@ impl MainContent {
     /// # Arguments
     /// * `count` - Target number of balls to add
     pub(crate) fn add_random_candidates(&mut self, count: usize) {
-        let time_step = self.get_game_logic_data().get_time_step();
-        let cur_radius = self
-            .get_game_logic_data()
-            .get_ball_factory()
-            .get_new_ball_radius();
+        let time_step = self.game_data.get_time_step();
+        let cur_radius = self.game_data.get_ball_factory().get_new_ball_radius();
 
-        let world = self.world_region_inset(cur_radius);
+        let world = self.world.world_region_inset(cur_radius);
         let min_pos = &(world.get_tl().into());
         let max_pos = &world.get_br().into();
 
@@ -59,10 +56,10 @@ impl MainContent {
         let max_attempts = count * 4;
         for _ in 0..max_attempts {
             let nu_ball = self
-                .get_game_logic_data()
+                .game_data
                 .get_ball_factory()
                 .create_random((min_pos, max_pos), (0.0, 0.0));
-            let margin = self.physics.equilibrium_edge_distance();
+            let margin = self.world.physics.equilibrium_edge_distance();
             if self.add_candidate_ball(nu_ball, margin).is_ok() {
                 balls_added += 1;
                 if balls_added >= count {
@@ -82,11 +79,11 @@ impl MainContent {
         // Collect all neighbor pairs with their distances
         let mut pairs: Vec<(usize, usize, f32)> = Vec::new();
 
-        for (i, ball) in self.balls.iter().enumerate() {
+        for (i, ball) in self.world.balls.iter().enumerate() {
             for &neighbor_idx in ball.hood.get_neighbour_indices() {
                 // Only count each pair once (i < neighbor_idx)
                 if i < neighbor_idx {
-                    let other = &self.balls[neighbor_idx];
+                    let other = &self.world.balls[neighbor_idx];
                     let distance = ball.get_edge_distance(other);
                     pairs.push((i, neighbor_idx, distance));
                 }
@@ -100,8 +97,8 @@ impl MainContent {
         let count = pairs.len().min(10);
         log::info!("\n=== {} Closest Ball Pairs ===", count);
         for (idx, &(i, j, dist)) in pairs.iter().take(10).enumerate() {
-            let ball_i = &self.balls[i];
-            let ball_j = &self.balls[j];
+            let ball_i = &self.world.balls[i];
+            let ball_j = &self.world.balls[j];
             log::info!(
                 "{}. Ball {} (r={:.2}) at ({:.2}, {:.2}) <-> Ball {} (r={:.2}) at ({:.2}, {:.2}) | distance: {:.4}",
                 idx + 1,
@@ -125,11 +122,10 @@ impl MainContent {
     }
 
     pub(crate) fn add_candidate_at_pos(&mut self, pos: Vec2D) -> AppResult {
-        let candidate = {
-            self.get_game_logic_data()
-                .get_ball_factory()
-                .create_massive_with_velocity(pos, Vec2D::zero())
-        };
+        let candidate = self
+            .game_data
+            .get_ball_factory()
+            .create_massive_with_velocity(pos, Vec2D::zero());
         self.world.add_candidate_ball(candidate, 0.)
     }
 
@@ -150,16 +146,16 @@ impl MainContent {
         let normal = self.calculate_normal_distribution_of_speed();
         let mut r = rng();
 
-        for ball in &mut self.balls {
+        for ball in &mut self.world.balls {
             ball.v.x = normal.sample(&mut r);
             ball.v.y = normal.sample(&mut r);
         }
     }
     pub(crate) fn calculate_normal_distribution_of_speed(&mut self) -> Normal<f32> {
-        let (sx2, sy2) = self.balls.iter().fold((0., 0.), |(ax, ay), b| {
+        let (sx2, sy2) = self.world.balls.iter().fold((0., 0.), |(ax, ay), b| {
             (ax + b.v.x.powi(2), ay + b.v.y.powi(2))
         });
-        let n = self.balls.len() as f32;
+        let n = self.world.balls.len() as f32;
         let sig = f32::sqrt(f32::sqrt(sx2 / (n - 1.5) * sy2 / (n - 1.5)));
         Normal::new(0., f32::max(0.3, sig)).expect("Invalid distribution parameters")
     }
@@ -168,7 +164,7 @@ impl MainContent {
     }
 
     pub(crate) fn stop_all_balls(&mut self) {
-        for ball in &mut self.balls {
+        for ball in &mut self.world.balls {
             ball.v = Vec2D::new(0., 0.);
         }
     }

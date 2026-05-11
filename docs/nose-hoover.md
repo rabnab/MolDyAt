@@ -26,7 +26,7 @@ The implementation should not:
 The thermostat should follow the same architectural path as line segments, valves, and source spheres:
 
 - world-state data in `core/src/objects2d/operator/`
-- storage on `MainContent`
+- storage in `SimulationWorld`, owned by `MainContent`
 - mutations through `OperatorCommand`
 - rendering through `RendererSnapshot`
 
@@ -87,9 +87,9 @@ The collection should mirror the source-sphere pattern:
 
 Radius rescaling should use a single isotropic scale factor so the control region stays circular after world resize.
 
-## Phase 2: MainContent Wiring
+## Phase 2: SimulationWorld Wiring
 
-Extend `MainContent` to store a thermostat collection alongside line segments, valves, and source spheres.
+Extend `SimulationWorld` to store a thermostat collection alongside line segments, valves, and source spheres, with `MainContent` continuing to own the world plus runtime state.
 
 Update the constructor and shared operator lifecycle wiring so thermostats:
 
@@ -222,7 +222,7 @@ The code should also avoid directly mixing thermostat logic into unrelated hot p
 ## Todo List
 
 - Add a thermostat operator type and collection under `core/src/objects2d/operator/`.
-- Wire thermostat storage into `MainContent`, constructor setup, clear, and rescale paths.
+- Wire thermostat storage into `SimulationWorld`, constructor setup, clear, and rescale paths.
 - Extract the local temperature formula from `thermo_field.rs` into a shared helper.
 - Implement per-step thermostat ownership, local temperature measurement, chain update, and velocity scaling.
 - Refresh velocity-derived stats after thermostat application and before `self.sim.update(...)`.

@@ -1,6 +1,6 @@
 # Runtime Architecture
 
-This document describes the target runtime architecture for the refactor track started in issue `#137`, the boundaries that are already implemented, and the transitional seams that still remain after the cleanup in issue `#147`.
+This document describes the target runtime architecture for the refactor track started in issue `#137`, the boundaries that are already implemented, and the small remaining transitional seam after the cleanup in issue `#147`.
 
 It is not a sequencing document. For the implementation order of the refactor issues, see [refactor_architecture.md](refactor_architecture.md).
 
@@ -205,27 +205,7 @@ This keeps rendering read-only with respect to the simulation world.
 
 ## Current Transitional Seams
 
-The refactor is not fully converged yet. These seams still exist intentionally:
-
-### `MainContent` remains a compatibility facade
-
-`MainContent` still pairs `SimulationWorld` with physics-thread runtime bookkeeping and exposes the world through `Deref`/`DerefMut`.
-
-Why it still exists:
-
-- it preserves current physics-thread ownership and call sites while the split between state, stepping, and runtime stays incremental
-
-Expected end state:
-
-- narrower coordination surface once the remaining migration cleanup lands
-
-### `SimulationEngine` still operates on `MainContent`
-
-The engine owns stepping logic, but the only remaining runtime dependency is `GameLogicData`. Step entrypoints now run on `SimulationWorld` plus read-only game-logic configuration rather than the full `MainContent` facade.
-
-Why it still exists:
-
-- `MainContent` still owns the runtime container and is the place where world state and game-logic configuration are split for callers
+The runtime cleanup in issue `#147` removed the command-path adapter and the `MainContent` world facade. The only intentionally transitional backend-facing seam that still remains is described below.
 
 ### `UnifiedRenderState` is still a facade
 
@@ -257,6 +237,6 @@ Avoid these placements:
 
 This document describes the target structure after issues `#144`, `#141`, `#145`, `#139`, `#140`, `#143`, `#138`, `#146`, and `#147`.
 
-Issue `#147` removed the `DomainCommand` → `PhysicsCommand` runtime adapter so that `DomainCommand` is now the single command type from input handling all the way into the physics thread. The remaining transitional seams (`MainContent` as facade and `SimulationEngine` operating on `MainContent`) are intentional and can be tightened independently from the command path.
+Issue `#147` removed the `DomainCommand` → `PhysicsCommand` runtime adapter so that `DomainCommand` is now the single command type from input handling all the way into the physics thread. `SimulationEngine` now operates on `SimulationWorld` plus read-only game-logic configuration, and `MainContent` no longer exposes the world as a transparent facade.
 
-Contributors should treat the boundaries described here as the intended direction even when a thin facade still exists for compatibility.
+Contributors should treat the boundaries described here as the intended structure while the remaining renderer-side facade is decomposed further.

@@ -59,7 +59,7 @@ impl PhysicsRuntime {
                 std::thread::sleep(Duration::from_millis(wait_time_ms));
             }
 
-            let was_paused = simulation.sim.is_paused();
+            let was_paused = simulation.world().sim.is_paused();
             {
                 let (world, game_data) = simulation.world_and_game_data();
                 let _ = SimulationEngine::simulation_step(world, game_data);

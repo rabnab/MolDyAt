@@ -1,37 +1,34 @@
 use super::{create_main_content, create_main_content_for_region};
 use crate::application::GameLogic;
 use crate::objects2d::Vec2D;
-use crate::objects2d::ball_impl::Ball2D;
+use crate::objects2d::ball_impl::{Ball2D, BallFactory};
 use float_cmp::approx_eq;
 
 #[test]
 fn test_add_candidate() {
     let (mut main_content, _) = create_main_content();
 
-    let new_ball_size = main_content
-        .get_game_logic_data()
-        .get_ball_factory()
-        .get_new_ball_radius();
+    let new_ball_size = BallFactory::new().get_new_ball_radius();
     // Add a valid candidate
-    let coord = main_content.world_region_inset(new_ball_size * 1.1);
+    let coord = main_content.world().world_region_inset(new_ball_size * 1.1);
     let (x, y) = coord.get_tl();
 
     println!(
         "test adding ball at world ({},{}) with radius {new_ball_size} in inset {:?}",
         x,
         y,
-        main_content.world_region_inset(0.)
+        main_content.world().world_region_inset(0.)
     );
 
     main_content
         .add_candidate_at_pos((x, y).into())
         .expect("Could not add candidate");
 
-    assert_eq!(main_content.balls.len(), 1);
+    assert_eq!(main_content.world().balls.len(), 1);
 
     // Ensure the added ball is in the correct position
     {
-        let ball = &main_content.balls[0];
+        let ball = &main_content.world().balls[0];
         let ball_pos = ball.get_position();
         assert!(
             approx_eq!(f32, ball_pos.x, x, ulps = 2),
@@ -49,12 +46,12 @@ fn test_add_candidate() {
 
     // Attempt to add a candidate out of the region
     {
-        let coord = main_content.world_region();
+        let coord = main_content.world().world_region();
         main_content
             .add_candidate_at_pos((coord.get_tl().0 - 0.1, coord.get_tl().1 - 0.1).into())
             .expect_err("Could not add candidate");
         assert_eq!(
-            main_content.balls.len(),
+            main_content.world().balls.len(),
             1,
             "Ball added out of valid region"
         );
@@ -65,7 +62,7 @@ fn test_add_candidate() {
 fn test_is_ball_in_region() {
     let (main_content, _) = create_main_content();
 
-    let tl = main_content.world_region().get_tl();
+    let tl = main_content.world().world_region().get_tl();
     let ball_coord = (0., 0.);
     println!("ball coordinates are {:?}", ball_coord,);
     let ball_radius = 5.;
@@ -83,10 +80,8 @@ fn test_ball_collision() {
 
     // Add two overlapping balls
 
-    let ball_radius = main_content
-        .get_game_logic_data()
-        .get_ball_factory()
-        .get_new_ball_radius();
+    let factory = BallFactory::new();
+    let ball_radius = factory.get_new_ball_radius();
 
     let ball_coord = Vec2D::zero();
     main_content
@@ -97,10 +92,8 @@ fn test_ball_collision() {
         ball_coord.x + 0.5 * ball_radius,
         ball_coord.y + 0.5 * ball_radius,
     );
-    let colliding_ball = main_content
-        .get_game_logic_data()
-        .get_ball_factory()
-        .create_massive_with_velocity(new_ball_coord.clone(), Vec2D::zero());
+    let colliding_ball =
+        factory.create_massive_with_velocity(new_ball_coord.clone(), Vec2D::zero());
     // main_content. coord_to_px(&new_ball_coord),
 
     println!(

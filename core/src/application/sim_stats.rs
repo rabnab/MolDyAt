@@ -362,7 +362,7 @@ mod tests {
         // Tiny world: x in [0, 10], y in [0, -10]
         let world_rect = Rect::new(0.0, 0.0, 10.0, -10.0);
         let mut mc = MainContent::new(world_rect).expect("failed to create simulation");
-        mc.speed_limit_override = Some(f32::INFINITY);
+        mc.world_mut().speed_limit_override = Some(f32::INFINITY);
 
         let factory = BallFactory::new();
         let ball_radius = factory.get_new_ball_radius();
@@ -373,10 +373,10 @@ mod tests {
             Vec2D::new(10.0, 0.0),
         );
         let ball_mass = ball.mass;
-        mc.balls.push(ball);
+        mc.world_mut().balls.push(ball);
         mc.world_mut().rebuild_cell_grid();
 
-        let bound = mc.world_region();
+        let bound = mc.world().world_region();
 
         for _ in 0..10 {
             mc.update_sim(0.01, &bound);
@@ -385,8 +385,8 @@ mod tests {
         // After the bounce the ball reverses direction, so ball_momentum < 0,
         // while wall_momentum_x > 0 (wall absorbed rightward momentum).
         // Together they should approximately conserve the initial momentum.
-        let p_ball = ball_mass * mc.balls[0].v.x;
-        let p_wall = mc.sim.wall_momentum_x;
+        let p_ball = ball_mass * mc.world().balls[0].v.x;
+        let p_wall = mc.world().sim.wall_momentum_x;
 
         assert!(
             p_wall > 0.0,

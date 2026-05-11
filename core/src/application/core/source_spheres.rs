@@ -43,18 +43,6 @@ impl MainContent {
         self.world
             .adjust_source_sphere_emit_period(sphere_id, delta_steps);
     }
-
-    /// Emit balls from all active source spheres.
-    ///
-    /// Should be called once per simulation step (from `update_sim`).
-    /// Each sphere emits at most one ball per call, gated by its
-    /// [`emit_period`](crate::objects2d::SimSourceSphere::emit_period).
-    /// Emitted balls have a random direction and the sphere's configured
-    /// speed magnitude and ball size class.
-    pub(crate) fn emit_from_source_spheres(&mut self) {
-        let (world, game_data) = self.world_and_game_data();
-        world.emit_from_source_spheres(game_data.get_ball_factory());
-    }
 }
 
 impl SimulationWorld {

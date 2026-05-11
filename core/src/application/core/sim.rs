@@ -15,24 +15,24 @@ impl MainContent {
 
     /// Pause simulation when window resize is detected.
     pub(crate) fn pause_for_resize(&mut self) {
-        self.was_paused_for_resize = true;
-        self.sim.toggle_pause();
+        self.world.was_paused_for_resize = true;
+        self.world.sim.toggle_pause();
     }
 
     /// Unpause after resize, triggered when the mouse button is released.
     /// Unpauses simulation and reconstructs cell grid to match new world boundaries.
     pub(crate) fn unpause_after_resize(&mut self) {
-        if !self.was_paused_for_resize {
+        if !self.world.was_paused_for_resize {
             return;
         }
 
-        if self.sim.is_paused() {
-            self.sim.toggle_pause();
+        if self.world.sim.is_paused() {
+            self.world.sim.toggle_pause();
         }
 
         let max_radius = BallFactory::get_max_radius();
-        let nu_rect = self.world_region();
-        let cutoff_and_skin = self.physics.get_cutoff_and_skin();
+        let nu_rect = self.world.world_region();
+        let cutoff_and_skin = self.world.physics.get_cutoff_and_skin();
         let nu_grid = CellGrid::resize(
             &mut self.world.cell_grid,
             nu_rect,

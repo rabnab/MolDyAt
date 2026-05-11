@@ -16,12 +16,12 @@ impl CommandHandler<DomainCommand> for DomainCommandHandler<'_> {
     fn handle_command(&mut self, command: DomainCommand) {
         match command {
             DomainCommand::Pause => {
-                if !self.main_content.sim.is_paused() {
+                if !self.main_content.world().sim.is_paused() {
                     self.main_content.toggle_pause();
                 }
             }
             DomainCommand::Resume => {
-                if self.main_content.sim.is_paused() {
+                if self.main_content.world().sim.is_paused() {
                     self.main_content.toggle_pause();
                 }
             }

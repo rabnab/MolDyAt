@@ -32,7 +32,7 @@ fn add_ball_with_size(mc: &mut MainContent, pos: Vec2D, velocity: Vec2D, size_id
 
 fn cluster_kinetic_stats(mc: &MainContent) -> LocalKineticStats {
     let mut stats = LocalKineticStats::new();
-    for ball in &mc.balls {
+    for ball in &mc.world().balls {
         stats.add_ball(ball);
     }
     stats
@@ -43,14 +43,14 @@ fn add_thermostat_increases_count() {
     let mut mc = make_content();
     mc.add_thermostat(Vec2D::new(0.0, 0.0));
     mc.add_thermostat(Vec2D::new(5.0, 5.0));
-    assert_eq!(mc.thermostats.thermostats().len(), 2);
+    assert_eq!(mc.world().thermostats.thermostats().len(), 2);
 }
 
 #[test]
 fn added_thermostat_starts_off() {
     let mut mc = make_content();
     mc.add_thermostat(Vec2D::new(0.0, 0.0));
-    let thermostat = &mc.thermostats.thermostats()[0];
+    let thermostat = &mc.world().thermostats.thermostats()[0];
     assert_eq!(thermostat.state, OperatorState::Off);
     assert!(!thermostat.is_active());
 }
@@ -60,9 +60,9 @@ fn thermostat_ids_reset_after_clear() {
     let mut mc = make_content();
     mc.add_thermostat(Vec2D::new(0.0, 0.0));
     mc.add_thermostat(Vec2D::new(1.0, 0.0));
-    mc.thermostats.clear();
+    mc.world_mut().thermostats.clear();
     mc.add_thermostat(Vec2D::new(2.0, 0.0));
-    assert_eq!(mc.thermostats.thermostats()[0].id, 0);
+    assert_eq!(mc.world().thermostats.thermostats()[0].id, 0);
 }
 
 #[test]
@@ -72,9 +72,9 @@ fn rescale_remaps_center_and_radius() {
     let old_rect = Rect::new(-20.0, 20.0, 40.0, -40.0);
     let new_rect = Rect::new(-40.0, 40.0, 80.0, -80.0);
 
-    mc.thermostats.rescale(&old_rect, &new_rect);
+    mc.world_mut().thermostats.rescale(&old_rect, &new_rect);
 
-    let thermostat = &mc.thermostats.thermostats()[0];
+    let thermostat = &mc.world().thermostats.thermostats()[0];
     assert!((thermostat.position.x - 0.0).abs() < 1e-4);
     assert!((thermostat.position.y - 0.0).abs() < 1e-4);
     assert!(thermostat.radius > 5.0);
@@ -84,17 +84,18 @@ fn rescale_remaps_center_and_radius() {
 fn fewer_than_two_balls_is_noop() {
     let mut mc = make_content();
     mc.add_thermostat(Vec2D::new(0.0, 0.0));
-    let thermostat_id = mc.thermostats.thermostats()[0].id;
+    let thermostat_id = mc.world().thermostats.thermostats()[0].id;
     mc.toggle_thermostat(thermostat_id);
     add_ball(&mut mc, Vec2D::new(0.5, 0.0), Vec2D::new(1.0, 0.0));
 
-    let velocity_before = mc.balls[0].v;
+    let velocity_before = mc.world().balls[0].v;
     let mut stats = zeroed_stats();
     mc.apply_thermostats(DT_GOAL, &mut stats);
 
-    assert_eq!(mc.balls[0].v, velocity_before);
+    assert_eq!(mc.world().balls[0].v, velocity_before);
     assert!(
-        mc.thermostats
+        mc.world()
+            .thermostats
             .find(thermostat_id)
             .unwrap()
             .current_local_temp
@@ -106,7 +107,7 @@ fn fewer_than_two_balls_is_noop() {
 fn rigid_bucket_drift_is_preserved() {
     let mut mc = make_content();
     mc.add_thermostat(Vec2D::new(0.0, 0.0));
-    let thermostat_id = mc.thermostats.thermostats()[0].id;
+    let thermostat_id = mc.world().thermostats.thermostats()[0].id;
     mc.toggle_thermostat(thermostat_id);
 
     // Two balls with identical velocities have zero local temperature in the
@@ -119,10 +120,11 @@ fn rigid_bucket_drift_is_preserved() {
     let mut stats = zeroed_stats();
     mc.apply_thermostats(DT_GOAL, &mut stats);
 
-    assert_eq!(mc.balls[0].v, drift_velocity);
-    assert_eq!(mc.balls[1].v, drift_velocity);
+    assert_eq!(mc.world().balls[0].v, drift_velocity);
+    assert_eq!(mc.world().balls[1].v, drift_velocity);
     assert!(
-        mc.thermostats
+        mc.world()
+            .thermostats
             .find(thermostat_id)
             .unwrap()
             .current_local_temp
@@ -135,9 +137,9 @@ fn rigid_bucket_drift_is_preserved() {
 fn hot_thermostat_heats_cold_cluster_without_changing_com_drift() {
     let mut mc = make_content();
     mc.add_thermostat(Vec2D::new(5.0, 0.0));
-    let thermostat_id = mc.thermostats.thermostats()[0].id;
+    let thermostat_id = mc.world().thermostats.thermostats()[0].id;
     mc.toggle_thermostat(thermostat_id);
-    let thermostat = mc.thermostats.find_mut(thermostat_id).unwrap();
+    let thermostat = mc.world_mut().thermostats.find_mut(thermostat_id).unwrap();
     thermostat.target_temperature = 1.0;
     thermostat.radius = 12.0;
 
@@ -169,7 +171,7 @@ fn hot_thermostat_heats_cold_cluster_without_changing_com_drift() {
         add_ball_with_size(&mut mc, pos, drift_velocity + thermal_velocity, 0);
     }
 
-    assert_eq!(mc.balls.len(), 10);
+    assert_eq!(mc.world().balls.len(), 10);
 
     let initial_stats = cluster_kinetic_stats(&mc);
     let initial_temp = initial_stats.temperature().unwrap();
@@ -197,24 +199,25 @@ fn hot_thermostat_heats_cold_cluster_without_changing_com_drift() {
 fn zero_target_temperature_freezes_owned_balls() {
     let mut mc = make_content();
     mc.add_thermostat(Vec2D::new(0.0, 0.0));
-    let thermostat_id = mc.thermostats.thermostats()[0].id;
+    let thermostat_id = mc.world().thermostats.thermostats()[0].id;
     mc.toggle_thermostat(thermostat_id);
-    let thermostat = mc.thermostats.find_mut(thermostat_id).unwrap();
+    let thermostat = mc.world_mut().thermostats.find_mut(thermostat_id).unwrap();
     thermostat.target_temperature = 0.0;
 
     add_ball(&mut mc, Vec2D::new(0.5, 0.0), Vec2D::new(1.0, 0.5));
     add_ball(&mut mc, Vec2D::new(-0.5, 0.0), Vec2D::new(-0.5, 1.0));
     add_ball(&mut mc, Vec2D::new(10.0, 10.0), Vec2D::new(0.25, 0.25));
 
-    let far_velocity_before = mc.balls[2].v;
+    let far_velocity_before = mc.world().balls[2].v;
     let mut stats = zeroed_stats();
     mc.apply_thermostats(DT_GOAL, &mut stats);
 
-    assert_eq!(mc.balls[0].v, Vec2D::zero());
-    assert_eq!(mc.balls[1].v, Vec2D::zero());
-    assert_eq!(mc.balls[2].v, far_velocity_before);
+    assert_eq!(mc.world().balls[0].v, Vec2D::zero());
+    assert_eq!(mc.world().balls[1].v, Vec2D::zero());
+    assert_eq!(mc.world().balls[2].v, far_velocity_before);
     assert!(
-        mc.thermostats
+        mc.world()
+            .thermostats
             .find(thermostat_id)
             .unwrap()
             .current_local_temp
@@ -229,12 +232,17 @@ fn overlapping_thermostats_assign_ball_to_nearest_owner() {
     mc.add_thermostat(Vec2D::new(-1.0, 0.0));
     mc.add_thermostat(Vec2D::new(1.0, 0.0));
 
-    let left_id = mc.thermostats.thermostats()[0].id;
-    let right_id = mc.thermostats.thermostats()[1].id;
+    let left_id = mc.world().thermostats.thermostats()[0].id;
+    let right_id = mc.world().thermostats.thermostats()[1].id;
     mc.toggle_thermostat(left_id);
     mc.toggle_thermostat(right_id);
-    mc.thermostats.find_mut(left_id).unwrap().target_temperature = 0.0;
-    mc.thermostats
+    mc.world_mut()
+        .thermostats
+        .find_mut(left_id)
+        .unwrap()
+        .target_temperature = 0.0;
+    mc.world_mut()
+        .thermostats
         .find_mut(right_id)
         .unwrap()
         .target_temperature = 0.5;
@@ -244,22 +252,22 @@ fn overlapping_thermostats_assign_ball_to_nearest_owner() {
     add_ball(&mut mc, Vec2D::new(0.25, 0.0), Vec2D::new(1.0, 0.0));
     add_ball(&mut mc, Vec2D::new(0.5, -0.1), Vec2D::new(0.8, -0.2));
 
-    let right_velocity_before = mc.balls[2].v;
+    let right_velocity_before = mc.world().balls[2].v;
     let mut stats = zeroed_stats();
     mc.apply_thermostats(DT_GOAL, &mut stats);
 
-    assert_eq!(mc.balls[0].v, Vec2D::zero());
-    assert_eq!(mc.balls[1].v, Vec2D::zero());
-    assert_ne!(mc.balls[2].v, Vec2D::zero());
-    assert_ne!(mc.balls[3].v, Vec2D::zero());
-    assert_ne!(mc.balls[2].v, right_velocity_before);
+    assert_eq!(mc.world().balls[0].v, Vec2D::zero());
+    assert_eq!(mc.world().balls[1].v, Vec2D::zero());
+    assert_ne!(mc.world().balls[2].v, Vec2D::zero());
+    assert_ne!(mc.world().balls[3].v, Vec2D::zero());
+    assert_ne!(mc.world().balls[2].v, right_velocity_before);
 }
 
 #[test]
 fn snapshot_includes_thermostats() {
     let mut mc = make_content();
     mc.add_thermostat(Vec2D::new(3.0, 4.0));
-    mc.toggle_thermostat(mc.thermostats.thermostats()[0].id);
+    mc.toggle_thermostat(mc.world().thermostats.thermostats()[0].id);
 
     let snapshot = mc.create_snapshot();
     assert_eq!(snapshot.operators.thermostats.len(), 1);

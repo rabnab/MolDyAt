@@ -1,6 +1,6 @@
 use super::{DT_GOAL, create_main_content, create_main_content_for_region};
 use crate::application::GameLogic;
-use crate::objects2d::ball_impl::{Ball2D, Named};
+use crate::objects2d::ball_impl::{Ball2D, BallFactory, Named};
 use crate::objects2d::{Vec2D, VerboseInfoMode};
 
 #[test]
@@ -9,10 +9,7 @@ fn test_global_update() {
 
     // Add some balls
 
-    let ball_radius = main_content
-        .get_game_logic_data()
-        .get_ball_factory()
-        .get_new_ball_radius();
+    let ball_radius = BallFactory::new().get_new_ball_radius();
 
     let ball_coord = Vec2D::zero();
     main_content
@@ -26,9 +23,9 @@ fn test_global_update() {
 
     // Validate that the balls' velocities, positions, and energies are updated correctly
     assert!(
-        main_content.sim.get_kinetic_energy() > 0.0,
+        main_content.world().sim.get_kinetic_energy() > 0.0,
         "Kinetic energy should be positive but was {}",
-        main_content.sim.get_kinetic_energy()
+        main_content.world().sim.get_kinetic_energy()
     );
     //assert!(main_content.sim.energy_pot >= 0.0, "Potential energy should be non-negative");
 }
@@ -87,7 +84,7 @@ fn test_collect_neighbours() {
 
     // Call collect_neighbours with the appropriate timestep (let's assume step_count is divisible by 10)
     {
-        main_content.step_count = 10;
+        main_content.world_mut().step_count = 10;
         println!("--------------------------------");
         main_content.collect_neighbours_by_cell(DT_GOAL);
         println!("--------------------------------");
@@ -149,7 +146,7 @@ fn test_remove_invalid_balls_clears_neighbor_indices() {
         .unwrap();
 
     // Set up neighbor relationships by running collect_neighbours
-    main_content.step_count = 10;
+    main_content.world_mut().step_count = 10;
     main_content.collect_neighbours_by_cell(DT_GOAL);
     main_content.collect_neighbours_by_cell(DT_GOAL);
 
@@ -167,7 +164,7 @@ fn test_remove_invalid_balls_clears_neighbor_indices() {
     }
 
     // Make ball 1 (middle ball) invalid by setting NaN position
-    main_content.balls[1].set_position_and_update_tail(Vec2D::new(f32::NAN, f32::NAN));
+    main_content.world_mut().balls[1].set_position_and_update_tail(Vec2D::new(f32::NAN, f32::NAN));
 
     // Remove invalid balls - this should:
     // 1. Remove ball at index 1
@@ -177,7 +174,7 @@ fn test_remove_invalid_balls_clears_neighbor_indices() {
 
     // Verify the invalid ball was removed
     assert_eq!(
-        main_content.balls.len(),
+        main_content.world().balls.len(),
         2,
         "Should have 2 balls after removing 1 invalid ball"
     );

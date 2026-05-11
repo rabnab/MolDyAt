@@ -4,7 +4,7 @@ use crate::application::{AppResult, LogStuff};
 use crate::objects2d::ball_impl::ball_core::BounceInfo;
 use crate::objects2d::ball_impl::simd_forces::force_simd;
 use crate::objects2d::ball_impl::verlet::Verlet;
-use crate::objects2d::ball_impl::{Ball2D, BallFactory, ForceResult};
+use crate::objects2d::ball_impl::{BallFactory, ForceResult};
 use crate::objects2d::{Rect, Vec2D};
 use crate::timing_monad::TimingMonad;
 use rayon::prelude::*;
@@ -144,14 +144,6 @@ impl SimulationEngine {
             .v_com
             .scaled(1. / stats_accumulator.sum_mass);
         world.sim.update(dt, stats_accumulator);
-    }
-
-    pub(crate) fn is_ball_in_region(world: &SimulationWorld, pt: &Ball2D) -> bool {
-        world.is_ball_in_region(pt)
-    }
-
-    pub(crate) fn is_ball_colliding(world: &SimulationWorld, pt: &Ball2D, margin: f32) -> bool {
-        world.is_ball_colliding(pt, margin)
     }
 
     fn update_sim_and_move_balls(

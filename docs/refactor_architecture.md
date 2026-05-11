@@ -2,6 +2,9 @@
 
 This note analyzes issue #137, `Refactor runtime architecture for clearer ownership boundaries`, and recommends an implementation order for its sub-issues.
 
+Status:
+This is a historical planning note for the refactor sequence. Issues `#142` and `#147` have landed; use [architecture.md](architecture.md) for the current runtime structure and remaining active seams.
+
 ## Summary
 
 The refactor should start by introducing a single application-level command contract, then split the simulation domain from its runtime, then decompose renderer orchestration, and only after that clean up remaining coordinator state, bootstrap policy, and migration shims.
@@ -223,6 +226,12 @@ Expected outcome:
 - final module boundaries are enforced
 - CI verifies the simplified architecture without fallback paths
 
+Status now:
+
+- `DomainCommand` is the single runtime command type end-to-end
+- the `MainContent` compatibility facade has been removed
+- current boundary documentation lives in [architecture.md](architecture.md)
+
 ## Recommended Phases
 
 The work naturally groups into four phases:
@@ -247,4 +256,4 @@ Use this sequential order for the mainline refactor:
 9. `#142`
 10. `#147`
 
-This order matches the dependency graph, fits the current coupling points in the codebase, minimizes churn in the largest refactor slices, and leaves shim removal until the new ownership boundaries are actually stable.
+This order matched the dependency graph, fit the coupling points that existed before the final cleanup, minimized churn in the largest refactor slices, and left shim removal until the new ownership boundaries were actually stable.

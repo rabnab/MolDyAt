@@ -46,7 +46,7 @@ impl AppLifecycle {
 
         let pipelines = WgpuPipelines::new(&ctx.device, &ctx.queue, ctx.format);
 
-        let initial_world_bounds = application.world_region();
+        let initial_world_bounds = application.world().world_region();
         let window_size = (ctx.size().0 as f32, ctx.size().1 as f32);
         let margins = margins_for_scale_factor(window.scale_factor());
 
