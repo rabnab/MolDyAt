@@ -21,6 +21,7 @@ pub enum DomainCommand {
     RandomizeSpeeds,
     EnableRandomBallSpeed,
     NextBallSize,
+    ToggleGravity,
     DoubleTimeStep,
     HalveTimeStep,
     IncreaseWaitTime,

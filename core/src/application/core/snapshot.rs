@@ -4,6 +4,7 @@ use crate::application::renderer_snapshot::{
     BallRenderData, OperatorSnapshot, RendererSnapshot, ThermoGridSpec, get_special_ball_color,
     size_class_to_rgba,
 };
+use crate::application::sim_stats::NORMAL_GRAVITY;
 use crate::application::thermo_field::ThermoGrid;
 use std::sync::Arc;
 
@@ -70,6 +71,9 @@ impl MainContent {
             status_text: self.status_text(0, self.game_data.get_time_step()), // FPS not available during snapshot creation
             cell_grid_bounds: self.world.cell_grid.world_rect(),
             cursor_ball_size_idx: self.game_data.get_ball_factory().get_new_ball_size_idx(),
+            gravity_force_multiple: current_gravity_force_multiple(
+                self.world.physics.constants.gravity,
+            ),
             created_at: std::time::Instant::now(),
             // Create lightweight grid spec instead of cloning the full CellGrid
             // This avoids cloning the cell vector while providing all info needed for rendering
@@ -156,4 +160,8 @@ impl MainContent {
     pub fn get_snapshot_slot(&self) -> Arc<arc_swap::ArcSwapOption<RendererSnapshot>> {
         self.runtime.snapshot_slot()
     }
+}
+
+fn current_gravity_force_multiple(gravity: f32) -> u8 {
+    (gravity / NORMAL_GRAVITY) as u8
 }

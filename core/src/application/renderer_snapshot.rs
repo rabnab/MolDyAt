@@ -199,6 +199,9 @@ pub struct RendererSnapshot {
     /// Current ball size index for cursor display
     pub cursor_ball_size_idx: usize,
 
+    /// Current gravity preset as a multiple of Earth gravity (0, 1, or 2).
+    pub gravity_force_multiple: u8,
+
     /// Timestamp for debugging
     pub created_at: Instant,
 
@@ -246,6 +249,7 @@ impl RendererSnapshot {
             status_text: None,
             cell_grid_bounds: crate::objects2d::Rect::new(0.0, 0.0, 0.0, 0.0),
             cursor_ball_size_idx: 0,
+            gravity_force_multiple: 0,
             created_at: Instant::now(),
             grid_spec: CellGridSpec {
                 rows: 0,
@@ -279,6 +283,7 @@ impl RendererSnapshot {
             status_text: None,
             cell_grid_bounds: crate::objects2d::Rect::new(0.0, 0.0, 0.0, 0.0),
             cursor_ball_size_idx: 0,
+            gravity_force_multiple: 0,
             created_at: Instant::now(),
             grid_spec: CellGridSpec {
                 rows: 0,
@@ -354,6 +359,7 @@ mod tests {
         let snapshot = RendererSnapshot::new();
         assert_eq!(snapshot.len(), 0);
         assert!(snapshot.is_empty());
+        assert_eq!(snapshot.gravity_force_multiple, 0);
     }
 
     #[test]

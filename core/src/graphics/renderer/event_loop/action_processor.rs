@@ -53,6 +53,7 @@ pub fn process_action_common(
             | InputAction::StopAllBalls
             | InputAction::ClearBalls
             | InputAction::TogglePause
+            | InputAction::ToggleGravity
             | InputAction::ToggleStepwise
             | InputAction::RandomizeSpeeds
             | InputAction::EnableRandomBallSpeed

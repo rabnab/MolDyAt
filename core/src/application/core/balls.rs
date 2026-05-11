@@ -239,7 +239,8 @@ impl SimulationWorld {
         Ok(())
     }
 
-    pub(crate) fn add_ball_and_register(&mut self, candidate: Ball2D) {
+    pub(crate) fn add_ball_and_register(&mut self, mut candidate: Ball2D) {
+        candidate.accel.y -= self.physics.constants.gravity;
         let ball_idx = self.balls.len();
         self.balls.push(candidate);
         self.cell_grid.add_ball(ball_idx, &mut self.balls);

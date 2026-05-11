@@ -308,6 +308,8 @@ impl TextPipeline {
             },
         );
 
+        let [u_max, v_max] = active_text_uv_max(self.texture_size, (width_px, height_px));
+
         // Position: bottom-right of the simulation pane, inside the bottom margin.
         let win_w = window_size.0 as f32;
         let win_h = window_size.1 as f32;
@@ -333,15 +335,15 @@ impl TextPipeline {
             },
             TextVertex {
                 position: to_ndc(left_px, bottom_px),
-                uv: [0.0, 1.0],
+                uv: [0.0, v_max],
             },
             TextVertex {
                 position: to_ndc(right_px, top_px),
-                uv: [1.0, 0.0],
+                uv: [u_max, 0.0],
             },
             TextVertex {
                 position: to_ndc(right_px, bottom_px),
-                uv: [1.0, 1.0],
+                uv: [u_max, v_max],
             },
         ];
 
@@ -354,6 +356,21 @@ impl TextPipeline {
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.draw(0..self.vertex_count, 0..1);
     }
+}
+
+pub(super) fn active_text_uv_max(texture_size: (u32, u32), content_size: (u32, u32)) -> [f32; 2] {
+    let u_max = if texture_size.0 == 0 {
+        1.0
+    } else {
+        content_size.0 as f32 / texture_size.0 as f32
+    };
+    let v_max = if texture_size.1 == 0 {
+        1.0
+    } else {
+        content_size.1 as f32 / texture_size.1 as f32
+    };
+
+    [u_max.clamp(0.0, 1.0), v_max.clamp(0.0, 1.0)]
 }
 
 // ── RenderPipeline trait implementation ─────────────────────────────
@@ -372,8 +389,8 @@ impl RenderPipeline for TextPipeline {
 
     fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
         let cursor_text = format!(
-            "({:.2}, {:.2})",
-            ctx.cursor_world_pos.0, ctx.cursor_world_pos.1
+            "({:.2}, {:.2})  {}g",
+            ctx.cursor_world_pos.0, ctx.cursor_world_pos.1, ctx.snapshot.gravity_force_multiple
         );
         self.update_text(
             ctx.device,

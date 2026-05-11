@@ -28,6 +28,9 @@ impl CommandHandler<DomainCommand> for DomainCommandHandler<'_> {
             DomainCommand::TogglePause => {
                 self.main_content.toggle_pause();
             }
+            DomainCommand::ToggleGravity => {
+                self.main_content.toggle_gravity();
+            }
             DomainCommand::AddBall(pos) => {
                 let _ = self.main_content.add_candidate_at_pos(pos);
             }

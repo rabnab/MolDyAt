@@ -1,4 +1,5 @@
 use super::*;
+use crate::application::sim_stats::{HIGH_GRAVITY, NORMAL_GRAVITY};
 use crate::objects2d::Rect;
 use crate::objects2d::ball_impl::BallFactory;
 use crate::objects2d::operator::{is_degenerate, remap_point};
@@ -29,6 +30,24 @@ impl MainContent {
 
     pub(crate) fn toggle_pause(&mut self) {
         self.world.sim.toggle_pause();
+    }
+
+    pub(crate) fn toggle_gravity(&mut self) {
+        let gravity = self.world.physics.constants.gravity;
+        let new_gravity = if gravity == 0.0 {
+            NORMAL_GRAVITY
+        } else if gravity == NORMAL_GRAVITY {
+            HIGH_GRAVITY
+        } else {
+            0.0
+        };
+
+        let delta_gravity = new_gravity - gravity;
+        self.world.physics.constants.gravity = new_gravity;
+
+        for ball in &mut self.world.balls {
+            ball.accel.y -= delta_gravity;
+        }
     }
 
     pub(crate) fn toggle_real_data(&mut self) {

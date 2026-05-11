@@ -39,6 +39,7 @@ pub enum InputAction {
 
     // Simulation control
     TogglePause,
+    ToggleGravity,
     ToggleStepwise,
     RandomizeSpeeds,
     EnableRandomBallSpeed,
@@ -232,6 +233,7 @@ impl InputHandler {
             KeyCode::F3 => Some(InputAction::ToggleCutoffRings),
             KeyCode::KeyH => Some(InputAction::PrintHelp),
             KeyCode::KeyD => Some(InputAction::ToggleRealData),
+            KeyCode::KeyG => Some(InputAction::ToggleGravity),
             KeyCode::KeyS => Some(InputAction::ToggleStepwise),
             KeyCode::KeyT => Some(InputAction::CycleThermoDisplay),
             KeyCode::F4 => Some(InputAction::ToggleTimingDisplay),

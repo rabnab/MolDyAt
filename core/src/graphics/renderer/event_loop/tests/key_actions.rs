@@ -85,6 +85,13 @@ fn test_d_toggles_real_data() {
 }
 
 #[test]
+fn test_g_toggles_gravity() {
+    let mut handler = InputHandler::new();
+    let action = handler.handle_key_up(KeyCode::KeyG);
+    assert!(matches!(action, Some(InputAction::ToggleGravity)));
+}
+
+#[test]
 fn test_f3_toggles_cutoff_rings() {
     let mut handler = InputHandler::new();
     let action = handler.handle_key_up(KeyCode::F3);

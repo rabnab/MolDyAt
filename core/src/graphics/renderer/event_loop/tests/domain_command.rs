@@ -11,6 +11,12 @@ fn test_input_action_toggle_pause_maps_to_domain_command() {
 }
 
 #[test]
+fn test_input_action_toggle_gravity_maps_to_domain_command() {
+    let command = DomainCommand::try_from(InputAction::ToggleGravity);
+    assert!(matches!(command, Ok(DomainCommand::ToggleGravity)));
+}
+
+#[test]
 fn test_input_action_add_ball_preserves_position() {
     let position = Vec2D::new(10.0, 20.0);
     let command = DomainCommand::try_from(InputAction::AddBall { position });

@@ -1,3 +1,4 @@
+use crate::application::sim_stats::{HIGH_GRAVITY_MPS2, NORMAL_GRAVITY_MPS2};
 use crate::application::{LogStuff, MainContent};
 use crate::objects2d::ball_impl::{Ball2D, Named, get_update_hood_call_cnt};
 
@@ -11,6 +12,10 @@ impl LogStuff for MainContent {
         const HELP_KEYS_INFO: &str = "HELP: The following Keys are available:";
         const HELP_OPTION_H: &str = "H - Show this help message.";
         const HELP_OPTION_D: &str = "D - Toggle the display of real data.";
+        let help_option_g = format!(
+            "G - Cycle gravity: off -> {:.2} m/s^2 -> {:.2} m/s^2.",
+            NORMAL_GRAVITY_MPS2, HIGH_GRAVITY_MPS2
+        );
         const HELP_OPTION_S: &str = "S - Toggle step-by-step mode.";
         const HELP_OPTION_T: &str = "T - Toggle the display of timing information.";
         const HELP_OPTION_INCREASE_SPEED: &str = "+ - Increase the simulation speed.";
@@ -28,6 +33,7 @@ impl LogStuff for MainContent {
             "{header}\n\
              {opt_h}\n\
              {opt_d}\n\
+             {opt_g}\n\
              {opt_s}\n\
              {opt_t}\n\
              {opt_plus}\n\
@@ -39,6 +45,7 @@ impl LogStuff for MainContent {
             header = HELP_KEYS_INFO,
             opt_h = HELP_OPTION_H,
             opt_d = HELP_OPTION_D,
+            opt_g = help_option_g,
             opt_s = HELP_OPTION_S,
             opt_t = HELP_OPTION_T,
             opt_plus = HELP_OPTION_INCREASE_SPEED,

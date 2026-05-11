@@ -1,6 +1,7 @@
 mod ball_management;
 mod bootstrap;
 mod energy_conservation;
+mod gravity;
 mod physics_thread;
 mod resize;
 mod simulation;

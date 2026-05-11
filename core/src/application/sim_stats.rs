@@ -16,6 +16,15 @@ const TIME_SCALE: f32 = 2.156E-12; // sqrt(MASS_SCALE * LEN_SCALE^2 / ENERGY_SCA
 const TIME_SCALE_NS: f32 = 2.156E-3; // TIME_SCALE * 1E9
 const KBOLTZMANN_J_P_K: f32 = 1.380649E-23;
 const TEMP_SCALE: f32 = 122.; //=ENERGY_SCALE_J / KBOLTZMANN_J_P_K; //exact 122K
+pub(super) const NORMAL_GRAVITY_MPS2: f32 = 9.81;
+pub(super) const HIGH_GRAVITY_MPS2: f32 = NORMAL_GRAVITY_MPS2 * 5.0;
+
+const fn sim_acceleration_from_mps2(accel_mps2: f32) -> f32 {
+    accel_mps2 * TIME_SCALE * TIME_SCALE / LEN_SCALE_M
+}
+
+pub(super) const NORMAL_GRAVITY: f32 = sim_acceleration_from_mps2(NORMAL_GRAVITY_MPS2);
+pub(super) const HIGH_GRAVITY: f32 = sim_acceleration_from_mps2(HIGH_GRAVITY_MPS2);
 
 /// Simulation statistics updated once per physics step.
 ///

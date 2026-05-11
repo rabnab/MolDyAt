@@ -12,6 +12,7 @@ impl TryFrom<InputAction> for DomainCommand {
             InputAction::StopAllBalls => Ok(DomainCommand::StopAllBalls),
             InputAction::ClearBalls => Ok(DomainCommand::ClearBalls),
             InputAction::TogglePause => Ok(DomainCommand::TogglePause),
+            InputAction::ToggleGravity => Ok(DomainCommand::ToggleGravity),
             InputAction::ToggleStepwise => Ok(DomainCommand::ToggleStepwise),
             InputAction::RandomizeSpeeds => Ok(DomainCommand::RandomizeSpeeds),
             InputAction::EnableRandomBallSpeed => Ok(DomainCommand::EnableRandomBallSpeed),
