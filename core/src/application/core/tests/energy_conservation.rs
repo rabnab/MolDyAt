@@ -11,7 +11,7 @@ fn test_energy_conservation_1000_balls() {
     let (mut main_content, win_def) = create_main_content_for_region(500.0, 500.0);
 
     // Disable speed limit for momentum conservation testing
-    main_content.speed_limit_override = Some(f32::INFINITY);
+    main_content.world_mut().speed_limit_override = Some(f32::INFINITY);
 
     let world_rect = win_def.world_bounds();
     println!("World rect: {:?}", world_rect);
@@ -62,7 +62,7 @@ fn test_energy_conservation_1000_balls() {
 
             // Create ball with small random velocity
             let ball = factory.create_massive_with_velocity(pos, vel);
-            main_content.balls.push(ball);
+            main_content.world_mut().balls.push(ball);
             balls_added += 1;
         }
     }
@@ -78,26 +78,26 @@ fn test_energy_conservation_1000_balls() {
 
     // Helper function to calculate total energy
     let calculate_energy = |main_content: &MainContent| -> (f32, f32, f32) {
+        let world = main_content.world();
         let mut kinetic = 0.0f32;
         let mut potential = 0.0f32;
 
         // Kinetic energy
-        for ball in &main_content.balls {
+        for ball in &world.balls {
             let speed_sq = ball.v.x * ball.v.x + ball.v.y * ball.v.y;
             kinetic += 0.5 * ball.mass * speed_sq;
         }
 
         // Potential energy (count each pair once)
-        for i in 0..main_content.balls.len() {
-            for j in (i + 1)..main_content.balls.len() {
-                let dist_vec = main_content.balls[j]
+        for i in 0..world.balls.len() {
+            for j in (i + 1)..world.balls.len() {
+                let dist_vec = world.balls[j]
                     .get_position()
-                    .dist(main_content.balls[i].get_position());
+                    .dist(world.balls[i].get_position());
                 let center_dist = dist_vec.norm();
-                let edge_dist =
-                    center_dist - (main_content.balls[i].radius + main_content.balls[j].radius);
+                let edge_dist = center_dist - (world.balls[i].radius + world.balls[j].radius);
 
-                let pair_potential = main_content.physics.potential(edge_dist);
+                let pair_potential = world.physics.potential(edge_dist);
                 potential += pair_potential;
             }
         }
@@ -112,7 +112,7 @@ fn test_energy_conservation_1000_balls() {
     // Calculate initial momentum
     let mut total_px_initial = 0.0f32;
     let mut total_py_initial = 0.0f32;
-    for ball in &main_content.balls {
+    for ball in &main_content.world().balls {
         total_px_initial += ball.mass * ball.v.x;
         total_py_initial += ball.mass * ball.v.y;
     }
@@ -132,7 +132,7 @@ fn test_energy_conservation_1000_balls() {
 
     // Run simulation for 100 steps
     println!("\nRunning simulation for 100 steps...");
-    let bound_rect = main_content.world_region();
+    let bound_rect = main_content.world().world_region();
 
     for step in 0..100 {
         main_content.update_sim(DT_GOAL, &bound_rect);
@@ -149,9 +149,10 @@ fn test_energy_conservation_1000_balls() {
             // Calculate current momentum
             let mut total_px = 0.0f32;
             let mut total_py = 0.0f32;
-            let num_balls = main_content.balls.len();
+            let world = main_content.world();
+            let num_balls = world.balls.len();
             let mut nan_count = 0;
-            for ball in &main_content.balls {
+            for ball in &world.balls {
                 if ball.get_position().x.is_nan() || ball.get_position().y.is_nan() {
                     nan_count += 1;
                 }
@@ -164,8 +165,8 @@ fn test_energy_conservation_1000_balls() {
             let p_drift_mag = (p_drift_x * p_drift_x + p_drift_y * p_drift_y).sqrt();
 
             // Get wall momentum
-            let wall_px = main_content.sim.wall_momentum_x;
-            let wall_py = main_content.sim.wall_momentum_y;
+            let wall_px = world.sim.wall_momentum_x;
+            let wall_py = world.sim.wall_momentum_y;
             let wall_p_mag = (wall_px * wall_px + wall_py * wall_py).sqrt();
 
             // Total system momentum (balls + walls)
@@ -262,7 +263,7 @@ fn test_cutoff_energy_loss() {
     let (mut main_content, _win_def) = create_main_content_for_region(-50.0, 50.0);
 
     let factory = BallFactory::new();
-    let cutoff = main_content.physics.get_cutoff_distance();
+    let cutoff = main_content.world().physics.get_cutoff_distance();
 
     println!("Cutoff distance: {:.6}", cutoff);
 
@@ -287,7 +288,8 @@ fn test_cutoff_energy_loss() {
 
     println!(
         "Initial separation (edge-to-edge): {:.6}",
-        initial_separation - (main_content.balls[0].radius + main_content.balls[1].radius)
+        initial_separation
+            - (main_content.world().balls[0].radius + main_content.world().balls[1].radius)
     );
 
     // // Add balls to cell grid
@@ -295,32 +297,39 @@ fn test_cutoff_energy_loss() {
     //     main_content.cell_grid.add_ball(i, &mut main_content.balls);
     // }
 
-    println!("Ball 0 in cell: {:?}", main_content.balls[0].current_cell);
-    println!("Ball 1 in cell: {:?}", main_content.balls[1].current_cell);
+    println!(
+        "Ball 0 in cell: {:?}",
+        main_content.world().balls[0].current_cell
+    );
+    println!(
+        "Ball 1 in cell: {:?}",
+        main_content.world().balls[1].current_cell
+    );
 
     // Initialize neighbor lists
     main_content.collect_neighbours_by_cell(DT_GOAL);
 
     // Helper to calculate exact energy (no cutoff)
     let calculate_exact_energy = |main_content: &MainContent| -> (f32, f32, f32) {
+        let world = main_content.world();
         let mut kinetic = 0.0f32;
         let mut potential = 0.0f32;
 
         // Kinetic energy
-        for ball in &main_content.balls {
+        for ball in &world.balls {
             let speed_sq = ball.v.x * ball.v.x + ball.v.y * ball.v.y;
             kinetic += 0.5 * ball.mass * speed_sq;
         }
 
         // Potential energy - calculate for ALL pairs regardless of cutoff
-        let ball0 = &main_content.balls[0];
-        let ball1 = &main_content.balls[1];
+        let ball0 = &world.balls[0];
+        let ball1 = &world.balls[1];
         let dist_vec = ball1.get_position().dist(ball0.get_position());
         let center_dist = dist_vec.norm();
         let edge_dist = center_dist - (ball0.radius + ball1.radius);
 
         // Use physics calculation but without cutoff check
-        let pair_potential = main_content.physics.potential(edge_dist);
+        let pair_potential = world.physics.potential(edge_dist);
         potential += pair_potential;
 
         (kinetic, potential, kinetic + potential)
@@ -330,8 +339,8 @@ fn test_cutoff_energy_loss() {
     let (ke_initial, pe_initial, total_initial) = calculate_exact_energy(&main_content);
 
     // Calculate initial momentum
-    let ball0 = &main_content.balls[0];
-    let ball1 = &main_content.balls[1];
+    let ball0 = &main_content.world().balls[0];
+    let ball1 = &main_content.world().balls[1];
     let p0_x_initial = ball0.mass * ball0.v.x;
     let p0_y_initial = ball0.mass * ball0.v.y;
     let p1_x_initial = ball1.mass * ball1.v.x;
@@ -362,8 +371,8 @@ fn test_cutoff_energy_loss() {
         main_content.simulation_step().unwrap();
 
         // Check current separation
-        let ball0 = &main_content.balls[0];
-        let ball1 = &main_content.balls[1];
+        let ball0 = &main_content.world().balls[0];
+        let ball1 = &main_content.world().balls[1];
         let dist_vec = ball1.get_position().dist(ball0.get_position());
         let center_dist = dist_vec.norm();
         let edge_dist = center_dist - (ball0.radius + ball1.radius);
@@ -387,8 +396,8 @@ fn test_cutoff_energy_loss() {
             let relative_drift = (drift / total_initial).abs() * 100.0;
 
             // Check ball velocities and accelerations
-            let ball0 = &main_content.balls[0];
-            let ball1 = &main_content.balls[1];
+            let ball0 = &main_content.world().balls[0];
+            let ball1 = &main_content.world().balls[1];
             let ball0_v = &ball0.v;
             let ball1_v = &ball1.v;
             let ball0_a = &ball0.accel;
@@ -404,8 +413,8 @@ fn test_cutoff_energy_loss() {
             let total_p_mag = (total_px * total_px + total_py * total_py).sqrt();
 
             // Get wall momentum
-            let wall_px = main_content.sim.wall_momentum_x;
-            let wall_py = main_content.sim.wall_momentum_y;
+            let wall_px = main_content.world().sim.wall_momentum_x;
+            let wall_py = main_content.world().sim.wall_momentum_y;
             let wall_p_mag = (wall_px * wall_px + wall_py * wall_py).sqrt();
 
             // Total system momentum (balls + walls)

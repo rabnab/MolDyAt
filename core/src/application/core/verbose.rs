@@ -44,17 +44,17 @@ impl MainContent {
     }
 
     pub(crate) fn make_all_verbose(&mut self, mode: VerboseInfoMode) {
-        for b in &mut self.balls {
+        for b in &mut self.world.balls {
             Self::toggle_ball_internal(b, &mode);
         }
     }
     fn toggle_ball_verbose(&mut self, number: usize, mode: VerboseInfoMode) {
-        if let Some(ball) = self.balls.iter_mut().find(|b| b.get_id() == number) {
+        if let Some(ball) = self.world.balls.iter_mut().find(|b| b.get_id() == number) {
             Self::toggle_ball_internal(ball, &mode);
         }
     }
     fn clear_verbose_balls(&mut self) {
-        for b in &mut self.balls {
+        for b in &mut self.world.balls {
             b.verbose.clear_all();
         }
     }

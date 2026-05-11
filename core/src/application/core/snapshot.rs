@@ -12,11 +12,11 @@ impl MainContent {
     /// Conditionally clones expensive data (neighbors, tail) only when needed for visualization.
     /// Uses cached force magnitudes from last physics step for neighbor line rendering.
     pub fn create_snapshot(&self) -> RendererSnapshot {
-        let ball_count = self.balls.len();
+        let ball_count = self.world.balls.len();
         let mut balls = Vec::with_capacity(ball_count);
 
         // Create BallRenderData for each ball
-        for (ball_idx, ball) in self.balls.iter().enumerate() {
+        for (ball_idx, ball) in self.world.balls.iter().enumerate() {
             // Determine color: special colors (verbose/braking) override size class color
             let color = get_special_ball_color(
                 ball.verbose.console || ball.verbose.lines(),
@@ -29,9 +29,11 @@ impl MainContent {
 
             // Only clone expensive data if it will actually be used
             let neighbors: Vec<(usize, f32)> =
-                if show_neighbor_lines && ball_idx < self.cached_force_results.len() {
+                if show_neighbor_lines && ball_idx < self.world.cached_force_results.len() {
                     // Use cached force magnitudes from last physics step only if needed
-                    self.cached_force_results[ball_idx].neighbor_forces.clone()
+                    self.world.cached_force_results[ball_idx]
+                        .neighbor_forces
+                        .clone()
                 } else {
                     // Skip cloning if neighbor lines won't be drawn
                     Vec::new()
@@ -61,20 +63,20 @@ impl MainContent {
 
         RendererSnapshot {
             balls,
-            simulation_step: self.step_count as u64,
-            kinetic_energy: self.sim.get_kinetic_energy(),
-            potential_energy: self.sim.get_potential_energy(),
-            time: self.sim.get_time(),
+            simulation_step: self.world.step_count as u64,
+            kinetic_energy: self.world.sim.get_kinetic_energy(),
+            potential_energy: self.world.sim.get_potential_energy(),
+            time: self.world.sim.get_time(),
             status_text: self.status_text(0, self.game_data.get_time_step()), // FPS not available during snapshot creation
-            cell_grid_bounds: self.cell_grid.world_rect(),
-            cursor_ball_size_idx: self.get_ball_factory().get_new_ball_size_idx(),
+            cell_grid_bounds: self.world.cell_grid.world_rect(),
+            cursor_ball_size_idx: self.game_data.get_ball_factory().get_new_ball_size_idx(),
             created_at: std::time::Instant::now(),
             // Create lightweight grid spec instead of cloning the full CellGrid
             // This avoids cloning the cell vector while providing all info needed for rendering
             grid_spec: {
-                let (rows, cols) = self.cell_grid.get_grid_size();
-                let (cell_width, cell_height) = self.cell_grid.get_cell_size();
-                let world_rect = self.cell_grid.world_rect();
+                let (rows, cols) = self.world.cell_grid.get_grid_size();
+                let (cell_width, cell_height) = self.world.cell_grid.get_cell_size();
+                let world_rect = self.world.cell_grid.world_rect();
                 crate::application::renderer_snapshot::CellGridSpec {
                     rows,
                     cols,
@@ -84,14 +86,14 @@ impl MainContent {
                     origin_y: world_rect.y,
                 }
             },
-            physics_fps: self.get_physics_fps(),
-            equilibrium_edge_distance: self.physics.equilibrium_edge_distance(),
-            cutoff_distance: self.physics.get_cutoff_distance(),
+            physics_fps: self.runtime.physics_fps(),
+            equilibrium_edge_distance: self.world.physics.equilibrium_edge_distance(),
+            cutoff_distance: self.world.physics.get_cutoff_distance(),
             operators: OperatorSnapshot {
-                line_segments: self.line_segments.segments().to_vec(),
-                valve_segments: self.valve_segments.valves().to_vec(),
-                source_spheres: self.source_spheres.spheres().to_vec(),
-                thermostats: self.thermostats.thermostats().to_vec(),
+                line_segments: self.world.line_segments.segments().to_vec(),
+                valve_segments: self.world.valve_segments.valves().to_vec(),
+                source_spheres: self.world.source_spheres.spheres().to_vec(),
+                thermostats: self.world.thermostats.thermostats().to_vec(),
             },
             ..{
                 let (cell_temperature, cell_pressure, thermo_grid_spec) =
@@ -111,11 +113,11 @@ impl MainContent {
     /// Returns `(temperature_grid, pressure_grid, grid_spec)` without constructing
     /// an intermediate `RendererSnapshot`.
     fn build_thermo_snapshot_fields(&self) -> (ThermoGrid, ThermoGrid, Option<ThermoGridSpec>) {
-        let world = self.world_region();
+        let world = self.world.world_region();
         let ww = world.w.abs();
         let wh = world.h.abs();
 
-        match self.thermo_history.average() {
+        match self.world.thermo_history.average() {
             Some((avg_t, avg_p)) => {
                 let (rows, cols) = avg_t.shape();
                 let cell_width = ww / cols as f32;
@@ -146,12 +148,12 @@ impl MainContent {
     /// Lock-free publication allows physics thread to continue without waiting for renderer.
     pub fn publish_snapshot(&self) {
         let snapshot = self.create_snapshot();
-        self.snapshot_slot.store(Some(Arc::new(snapshot)));
+        self.runtime.publish_snapshot(snapshot);
     }
 
     /// Get clone of Arc-wrapped snapshot slot for sharing with renderer thread.
     /// Renderer can load snapshots without blocking physics thread.
     pub fn get_snapshot_slot(&self) -> Arc<arc_swap::ArcSwapOption<RendererSnapshot>> {
-        self.snapshot_slot.clone()
+        self.runtime.snapshot_slot()
     }
 }

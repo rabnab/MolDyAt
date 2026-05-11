@@ -1,103 +1,115 @@
-use super::{MainContent, StatsAccumulator};
+use super::{GameLogicData, MainContent, SimulationWorld, StatsAccumulator};
 use crate::application::thermo_field::compute_cell_thermo;
 use crate::application::{AppResult, LogStuff};
 use crate::objects2d::ball_impl::ball_core::BounceInfo;
 use crate::objects2d::ball_impl::simd_forces::force_simd;
 use crate::objects2d::ball_impl::verlet::Verlet;
-use crate::objects2d::ball_impl::{Ball2D, BallFactory, ForceResult};
+use crate::objects2d::ball_impl::{BallFactory, ForceResult};
 use crate::objects2d::{Rect, Vec2D};
 use crate::timing_monad::TimingMonad;
 use rayon::prelude::*;
 
-/// Stepping/update behavior over the persistent simulation state held by `MainContent`.
+/// Stepping/update behavior over the persistent simulation state.
 ///
-/// `MainContent` remains the compatibility facade for now, while simulation-step
-/// orchestration and Verlet update logic live here.
+/// `MainContent` still owns runtime-only bookkeeping and high-level step
+/// orchestration, while the world-only update path here now operates on
+/// [`SimulationWorld`] directly.
 pub(crate) struct SimulationEngine;
 
 impl SimulationEngine {
-    pub(crate) fn collect_neighbours_by_cell(content: &mut MainContent, dt: f32) {
-        if content
+    pub(crate) fn collect_neighbours_by_cell(
+        world: &mut SimulationWorld,
+        game_data: &GameLogicData,
+        dt: f32,
+    ) {
+        if world
             .step_count
-            .is_multiple_of(content.get_game_logic_data().neighbour_update_interval())
+            .is_multiple_of(game_data.neighbour_update_interval())
         {
             let mut neighbor_buf: Vec<usize> = Vec::with_capacity(30);
             let mut timer = TimingMonad::new();
             timer.time("update neighbours", || {
-                Self::update_neighbor_hoods_for_occupied_cells(content, dt, &mut neighbor_buf)
+                Self::update_neighbor_hoods_for_occupied_cells(world, dt, &mut neighbor_buf)
             });
             timer.time("update statistics", || {
-                Self::update_neighbor_statistics(content)
+                Self::update_neighbor_statistics(world)
             });
-            content.log_timings(timer);
+            if world.show_timings {
+                timer.log();
+            }
         }
     }
 
-    pub(crate) fn simulation_step(content: &mut MainContent) -> AppResult<()> {
-        if content.sim.is_paused() {
+    pub(crate) fn simulation_step(
+        world: &mut SimulationWorld,
+        game_data: &GameLogicData,
+    ) -> AppResult<()> {
+        if world.sim.is_paused() {
             return Ok(());
         }
-        if content.any_log() {
+        if world.show_timings {
             MainContent::log_separator_line();
         }
-        if content.step_by_step {
-            content.sim.set_pause(true);
+        if world.step_by_step {
+            world.sim.set_pause(true);
         }
 
-        let dt = content.get_game_logic_data().get_time_step();
-        let bound_rect = content.world_region();
+        let dt = game_data.get_time_step();
+        let bound_rect = world.world_rect;
 
         #[cfg(feature = "measure-time")]
         let mut timer = TimingMonad::new();
 
         #[cfg(feature = "measure-time")]
         timer.time("collect_neighbours", || {
-            Self::collect_neighbours_by_cell(content, dt)
+            Self::collect_neighbours_by_cell(world, game_data, dt)
         });
         #[cfg(not(feature = "measure-time"))]
-        Self::collect_neighbours_by_cell(content, dt);
+        Self::collect_neighbours_by_cell(world, game_data, dt);
 
         #[cfg(feature = "measure-time")]
         timer.time("update_sim", || {
-            Self::update_sim_and_move_balls(content, dt, &bound_rect);
+            Self::update_sim_and_move_balls(world, game_data, dt, &bound_rect);
         });
         #[cfg(not(feature = "measure-time"))]
-        Self::update_sim_and_move_balls(content, dt, &bound_rect);
+        Self::update_sim_and_move_balls(world, game_data, dt, &bound_rect);
 
         #[cfg(feature = "measure-time")]
         timer.time("calculate_temperature", || {
-            let (sim, balls) = (&mut content.world.sim, &content.world.balls);
+            let (sim, balls) = (&mut world.sim, &world.balls);
             sim.calculate_temperature_from_balls(balls);
         });
         #[cfg(not(feature = "measure-time"))]
         {
-            let (sim, balls) = (&mut content.world.sim, &content.world.balls);
+            let (sim, balls) = (&mut world.sim, &world.balls);
             sim.calculate_temperature_from_balls(balls);
         }
 
         #[cfg(feature = "measure-time")]
-        content.log_timings(timer);
+        if world.show_timings {
+            timer.log();
+        }
 
-        if content.balls.len() == content.cached_force_results.len() {
-            let world = content.world_region();
-            let (phys_rows, phys_cols) = content.cell_grid.get_grid_size();
+        if world.balls.len() == world.cached_force_results.len() {
+            let world_rect = world.world_rect;
+            let (phys_rows, phys_cols) = world.cell_grid.get_grid_size();
             let grid_rows = (phys_rows / 2).max(1);
             let grid_cols = (phys_cols / 2).max(1);
             let (t_grid, p_grid) = compute_cell_thermo(
-                &content.balls,
-                &content.cached_force_results,
-                &world,
+                &world.balls,
+                &world.cached_force_results,
+                &world_rect,
                 grid_rows,
                 grid_cols,
             );
-            content.thermo_history.push(t_grid, p_grid);
+            world.thermo_history.push(t_grid, p_grid);
         }
 
-        content.step_count += 1;
+        world.step_count += 1;
         Ok(())
     }
 
-    pub(crate) fn update_sim(content: &mut MainContent, dt: f32, bound_rect: &Rect) {
+    pub(crate) fn update_sim(world: &mut SimulationWorld, dt: f32, bound_rect: &Rect) {
         let mut stats_accumulator = StatsAccumulator {
             pot: 0.,
             kin: 0.,
@@ -107,12 +119,12 @@ impl SimulationEngine {
             max_id: 0,
         };
 
-        let bounce_infos = Self::update_positions(content, dt, bound_rect);
-        Self::update_old_positions(content);
+        let bounce_infos = Self::update_positions(world, dt, bound_rect);
+        Self::update_old_positions(world);
 
-        let force_results = Self::compute_forces(content);
+        let force_results = Self::compute_forces(world);
         let (wall_px, wall_py) = Self::apply_forces_and_collect_stats(
-            content,
+            world,
             &force_results,
             &bounce_infos,
             dt,
@@ -120,65 +132,52 @@ impl SimulationEngine {
             &mut stats_accumulator,
         );
 
-        content.cached_force_results = force_results;
+        world.cached_force_results = force_results;
 
-        let (seg_px, seg_py) = content.resolve_line_segment_collisions();
-        content.apply_thermostats(dt, &mut stats_accumulator);
-        content.emit_from_source_spheres();
+        let (seg_px, seg_py) = world.resolve_line_segment_collisions();
+        world.apply_thermostats(dt, &mut stats_accumulator);
 
-        content.sim.wall_momentum_x += wall_px + seg_px;
-        content.sim.wall_momentum_y += wall_py + seg_py;
+        world.sim.wall_momentum_x += wall_px + seg_px;
+        world.sim.wall_momentum_y += wall_py + seg_py;
 
         stats_accumulator.v_com = stats_accumulator
             .v_com
             .scaled(1. / stats_accumulator.sum_mass);
-        content.sim.update(dt, stats_accumulator);
+        world.sim.update(dt, stats_accumulator);
     }
 
-    pub(crate) fn is_ball_in_region(content: &MainContent, pt: &Ball2D) -> bool {
-        let world = content.world_region_inset(pt.radius);
-        let pos = pt.get_position();
-
-        pos.x >= world.x
-            && pos.x <= (world.x + world.w)
-            && pos.y >= (world.y + world.h)
-            && pos.y <= world.y
-    }
-
-    pub(crate) fn is_ball_colliding(content: &MainContent, pt: &Ball2D, margin: f32) -> bool {
-        content
-            .get_balls()
-            .iter()
-            .any(|ball| content.physics.is_colliding(pt, ball, margin))
-    }
-
-    fn update_sim_and_move_balls(content: &mut MainContent, dt: f32, bound_rect: &Rect) {
-        let old_positions: Vec<_> = content
-            .get_balls()
+    fn update_sim_and_move_balls(
+        world: &mut SimulationWorld,
+        game_data: &GameLogicData,
+        dt: f32,
+        bound_rect: &Rect,
+    ) {
+        let old_positions: Vec<_> = world
+            .balls
             .iter()
             .map(|ball| *ball.get_position())
             .collect();
 
-        Self::update_sim(content, dt, bound_rect);
+        Self::update_sim(world, dt, bound_rect);
+        world.emit_from_source_spheres(game_data.get_ball_factory());
 
         for (i, old_pos) in old_positions.iter().enumerate() {
-            let new_pos = *content.world.balls[i].get_position();
-            content.world.move_ball_in_cell_grid(i, old_pos, &new_pos);
+            let new_pos = *world.balls[i].get_position();
+            world.move_ball_in_cell_grid(i, old_pos, &new_pos);
         }
 
-        content.remove_invalid_balls();
+        world.remove_invalid_balls();
     }
 
     fn update_neighbor_hoods_for_occupied_cells(
-        content: &mut MainContent,
+        world: &mut SimulationWorld,
         dt: f32,
         neighbor_buf: &mut Vec<usize>,
     ) {
         let cutoff_and_skin =
-            content.physics.get_cutoff_distance() + content.physics.get_skin_thickness();
+            world.physics.get_cutoff_distance() + world.physics.get_skin_thickness();
         let max_radius = BallFactory::get_max_radius();
-        let min_movement = content.physics.get_min_movement_for_update_hood(max_radius);
-        let world = &mut content.world;
+        let min_movement = world.physics.get_min_movement_for_update_hood(max_radius);
         let cell_grid = &world.cell_grid;
         let balls = &mut world.balls;
         let (grid_rows, grid_cols) = cell_grid.get_grid_size();
@@ -208,8 +207,8 @@ impl SimulationEngine {
         }
     }
 
-    fn update_neighbor_statistics(content: &mut MainContent) {
-        let balls = &content.world.balls;
+    fn update_neighbor_statistics(world: &mut SimulationWorld) {
+        let balls = &world.balls;
         let stats: Vec<(usize, usize, f32, f32, bool)> = (0..balls.len())
             .into_par_iter()
             .map(|i| {
@@ -237,42 +236,44 @@ impl SimulationEngine {
             .collect();
 
         for (i, num_neighbours, nearest, farthest, should_toggle) in stats.into_iter() {
-            if content.balls[i].hood.hood_dirty {
-                let ball_hood = &mut content.balls[i].hood;
+            if world.balls[i].hood.hood_dirty {
+                let ball_hood = &mut world.balls[i].hood;
                 ball_hood.num_neighbours = num_neighbours;
                 ball_hood.nearest = nearest;
                 ball_hood.farthest = farthest;
                 ball_hood.hood_dirty = false;
 
                 if should_toggle {
-                    content.balls[i].verbose.toggle_other_neighbour();
+                    world.balls[i].verbose.toggle_other_neighbour();
                 }
-                MainContent::log_closeness_update(&content.balls[i]);
+                MainContent::log_closeness_update(&world.balls[i]);
             }
         }
     }
 
-    fn update_positions(content: &mut MainContent, dt: f32, bound_rect: &Rect) -> Vec<BounceInfo> {
-        let physics = &content.world.physics;
-        content
-            .world
+    fn update_positions(
+        world: &mut SimulationWorld,
+        dt: f32,
+        bound_rect: &Rect,
+    ) -> Vec<BounceInfo> {
+        let physics = &world.physics;
+        world
             .balls
             .par_iter_mut()
             .map(|ball| physics.update_positions(ball, dt, bound_rect))
             .collect()
     }
 
-    fn update_old_positions(content: &mut MainContent) {
-        content
-            .world
+    fn update_old_positions(world: &mut SimulationWorld) {
+        world
             .balls
             .par_iter_mut()
             .for_each(|ball| ball.update_old_pos());
     }
 
-    fn compute_forces(content: &MainContent) -> Vec<ForceResult> {
-        let physics = &content.physics;
-        let balls = &content.balls;
+    fn compute_forces(world: &SimulationWorld) -> Vec<ForceResult> {
+        let physics = &world.physics;
+        let balls = &world.balls;
         (0..balls.len())
             .into_par_iter()
             .map(|i| force_simd(physics, i, balls))
@@ -280,7 +281,7 @@ impl SimulationEngine {
     }
 
     fn apply_single_force_and_collect_stats(
-        content: &mut MainContent,
+        world: &mut SimulationWorld,
         ball_idx: usize,
         result: &ForceResult,
         bounce_info: &BounceInfo,
@@ -288,8 +289,8 @@ impl SimulationEngine {
         speed_limit: f32,
         stats_accumulator: &mut StatsAccumulator,
     ) -> (f32, f32) {
-        let gravity = content.world.physics.constants.gravity;
-        let ball = &mut content.world.balls[ball_idx];
+        let gravity = world.physics.constants.gravity;
+        let ball = &mut world.balls[ball_idx];
 
         let mut wall_px = 0.0;
         let mut wall_py = 0.0;
@@ -350,14 +351,14 @@ impl SimulationEngine {
     }
 
     fn apply_forces_and_collect_stats(
-        content: &mut MainContent,
+        world: &mut SimulationWorld,
         force_results: &[ForceResult],
         bounce_infos: &[BounceInfo],
         dt: f32,
         bound_rect: &Rect,
         stats_accumulator: &mut StatsAccumulator,
     ) -> (f32, f32) {
-        let speed_limit = content
+        let speed_limit = world
             .speed_limit_override
             .unwrap_or_else(|| f32::min(bound_rect.w, bound_rect.h) * 0.2);
         let mut total_wall_px = 0.0;
@@ -365,7 +366,7 @@ impl SimulationEngine {
 
         for (i, result) in force_results.iter().enumerate() {
             let (wall_px, wall_py) = Self::apply_single_force_and_collect_stats(
-                content,
+                world,
                 i,
                 result,
                 &bounce_infos[i],

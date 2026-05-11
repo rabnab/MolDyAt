@@ -4,7 +4,7 @@
 //! for the line-segment drawing state machine, snap-to-wall / snap-to-endpoint
 //! helpers, ghost-preview queries, and the endpoint find/drag interaction.
 
-use crate::application::operator_command;
+use crate::application::operator_command::line::{AddLineSegment, MoveLineSegmentEndpoint};
 use crate::objects2d::Vec2D;
 use crate::objects2d::line_segment::snap_position;
 use winit::event::{ElementState, MouseButton};
@@ -103,9 +103,7 @@ impl OperatorToolHandler for LineSegmentToolHandler {
                     LineSegmentDrawState::Drawing { start } => {
                         let end = Self::snap_world_pos(world_pos, ctx);
                         if start.distance_squared(&end) > 0.01 {
-                            ToolResponse::consumed_with(Box::new(
-                                operator_command::AddLineSegment { start, end },
-                            ))
+                            ToolResponse::consumed_with(Box::new(AddLineSegment { start, end }))
                         } else {
                             ToolResponse::consumed_dirty()
                         }
@@ -115,13 +113,11 @@ impl OperatorToolHandler for LineSegmentToolHandler {
                         move_start,
                     } => {
                         let snapped = Self::snap_world_pos(world_pos, ctx);
-                        ToolResponse::consumed_with(Box::new(
-                            operator_command::MoveLineSegmentEndpoint {
-                                segment_id,
-                                new_pos: snapped,
-                                move_start,
-                            },
-                        ))
+                        ToolResponse::consumed_with(Box::new(MoveLineSegmentEndpoint {
+                            segment_id,
+                            new_pos: snapped,
+                            move_start,
+                        }))
                     }
                     LineSegmentDrawState::Idle => ToolResponse::consumed_dirty(),
                 };

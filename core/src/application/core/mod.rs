@@ -11,7 +11,6 @@ use crate::objects2d::{
     Vec2D, VerboseInfoMode,
 };
 use arc_swap::ArcSwapOption;
-use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
 /// Persistent simulation domain state.
@@ -54,13 +53,13 @@ pub struct SimulationWorld {
     pub(crate) thermostats: ThermostatCollection,
 }
 
-/// Physics-thread facade that pairs a [`SimulationWorld`] with runtime bookkeeping.
+/// Physics-thread owner that pairs a [`SimulationWorld`] with runtime bookkeeping.
 ///
-/// `MainContent` is exclusively owned by the physics thread. It exposes the
-/// simulation domain through `Deref`/`DerefMut` to `SimulationWorld` and
-/// holds only the fields that belong to the physics-thread runtime:
-/// `game_data` (time-step and ball-factory settings), `wait_time`
-/// (optional sleep between steps), the atomic snapshot slot, and the
+/// `MainContent` is exclusively owned by the physics thread. It keeps the
+/// simulation domain in `world` and holds the remaining thread-owned
+/// coordination state: `game_data`
+/// (time-step and ball-factory settings) plus the dedicated
+/// [`PhysicsRuntimeState`] for sleeping, snapshot publication, and
 /// rolling physics-FPS measurement.
 ///
 /// Stale frame-render coordination that previously lived here (dead
@@ -73,27 +72,18 @@ pub struct MainContent {
     world: SimulationWorld,
 
     game_data: GameLogicData,
+
+    runtime: PhysicsRuntimeState,
+}
+
+/// Runtime-only state owned by the physics thread loop.
+pub(crate) struct PhysicsRuntimeState {
     /// ms to wait between simulation steps
     wait_time: u64,
-
     /// Snapshot slot for lock-free communication with renderer
     snapshot_slot: Arc<ArcSwapOption<RendererSnapshot>>,
     /// Actual physics FPS for display (updated and read only by physics thread)
     physics_fps: f32,
-}
-
-impl Deref for MainContent {
-    type Target = SimulationWorld;
-
-    fn deref(&self) -> &Self::Target {
-        &self.world
-    }
-}
-
-impl DerefMut for MainContent {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.world
-    }
 }
 
 pub struct StatsAccumulator {

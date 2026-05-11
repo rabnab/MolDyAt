@@ -1,8 +1,7 @@
+use crate::application::DomainCommand;
 use crate::application::GameLogic;
 use crate::application::MainContent;
-use crate::application::physics_thread::{
-    CommandHandler, PhysicsCommand, PhysicsRuntime, PhysicsThread, ShutdownSignal,
-};
+use crate::application::{CommandHandler, PhysicsRuntime, PhysicsThread, ShutdownSignal};
 use crate::objects2d::Rect;
 
 struct RecordingHandler<T> {
@@ -134,7 +133,7 @@ fn test_command_channel_toggle_pause() {
 
     // Send pause command
     physics_thread
-        .send_command(PhysicsCommand::Pause)
+        .send_command(DomainCommand::Pause)
         .expect("Failed to send pause command");
 
     // Wait long enough for the command to be processed
@@ -162,7 +161,7 @@ fn test_command_channel_toggle_pause() {
 
     // Send resume command
     physics_thread
-        .send_command(PhysicsCommand::Resume)
+        .send_command(DomainCommand::Resume)
         .expect("Failed to send resume command");
 
     // Wait for simulation to advance (spin-wait with timeout)
@@ -210,7 +209,7 @@ fn test_command_channel_speed_control() {
     // Send commands to increase speed multiple times
     for _ in 0..3 {
         physics_thread
-            .send_command(PhysicsCommand::DoubleTimeStep)
+            .send_command(DomainCommand::DoubleTimeStep)
             .expect("Failed to send increase speed command");
     }
 

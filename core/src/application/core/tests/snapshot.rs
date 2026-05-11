@@ -15,7 +15,7 @@ fn create_test_main_content_with_balls(ball_count: usize) -> MainContent {
     for _ in 0..ball_count {
         let ball =
             factory.create_random((&Vec2D::new(0.0, 0.0), &Vec2D::new(10.0, 10.0)), (0.0, 1.0));
-        main_content.balls.push(ball);
+        main_content.world_mut().balls.push(ball);
     }
 
     // Add balls to cell grid
@@ -104,7 +104,7 @@ fn test_snapshot_updates_on_republish() {
     let mut main_content = create_test_main_content_with_balls(5);
 
     // Publish first snapshot
-    main_content.step_count = 100;
+    main_content.world_mut().step_count = 100;
     main_content.publish_snapshot();
 
     let slot = main_content.get_snapshot_slot();
@@ -112,7 +112,7 @@ fn test_snapshot_updates_on_republish() {
     assert_eq!(snapshot1.as_ref().unwrap().simulation_step, 100);
 
     // Update step count and republish
-    main_content.step_count = 200;
+    main_content.world_mut().step_count = 200;
     main_content.publish_snapshot();
 
     let snapshot2 = slot.load();
@@ -247,7 +247,7 @@ fn test_thermo_spec_dimensions_match_world() {
     let mc = create_main_content_and_step(50);
     let snap = mc.create_snapshot();
     let spec = snap.thermo_grid_spec.as_ref().expect("spec should be Some");
-    let world = mc.world_region();
+    let world = mc.world().world_region();
     let world_w = world.w.abs();
     let world_h = world.h.abs();
     let grid_w = spec.cols as f32 * spec.cell_width;

@@ -1,6 +1,9 @@
 //! Thermostat operator tool — placement, toggle, drag, and adjustments.
 
-use crate::application::operator_command;
+use crate::application::operator_command::thermostat::{
+    AdjustThermostatRadius, AdjustThermostatTargetTemperature, MoveThermostat, PlaceThermostat,
+    ToggleThermostat,
+};
 use crate::objects2d::Vec2D;
 use winit::event::{ElementState, MouseButton};
 
@@ -77,15 +80,11 @@ impl OperatorToolHandler for ThermostatToolHandler {
                 match drag_state {
                     DragState::Dragging { .. } => ToolResponse::consumed_dirty(),
                     DragState::Pressed { thermostat_id, .. } => {
-                        ToolResponse::consumed_with(Box::new(operator_command::ToggleThermostat {
-                            thermostat_id,
-                        }))
+                        ToolResponse::consumed_with(Box::new(ToggleThermostat { thermostat_id }))
                     }
-                    DragState::Idle => {
-                        ToolResponse::consumed_with(Box::new(operator_command::PlaceThermostat {
-                            position: world_pos,
-                        }))
-                    }
+                    DragState::Idle => ToolResponse::consumed_with(Box::new(PlaceThermostat {
+                        position: world_pos,
+                    })),
                 }
             }
             _ => ToolResponse::default(),
@@ -100,7 +99,7 @@ impl OperatorToolHandler for ThermostatToolHandler {
             } => {
                 if world_pos.distance_squared(&press_pos) >= DRAG_THRESHOLD * DRAG_THRESHOLD {
                     self.drag_state = DragState::Dragging { thermostat_id };
-                    ToolResponse::consumed_with(Box::new(operator_command::MoveThermostat {
+                    ToolResponse::consumed_with(Box::new(MoveThermostat {
                         thermostat_id,
                         new_pos: world_pos,
                     }))
@@ -109,7 +108,7 @@ impl OperatorToolHandler for ThermostatToolHandler {
                 }
             }
             DragState::Dragging { thermostat_id } => {
-                ToolResponse::consumed_with(Box::new(operator_command::MoveThermostat {
+                ToolResponse::consumed_with(Box::new(MoveThermostat {
                     thermostat_id,
                     new_pos: world_pos,
                 }))
@@ -135,17 +134,15 @@ impl OperatorToolHandler for ThermostatToolHandler {
 
         let delta_steps = if scroll_y > 0.0 { 1.0 } else { -1.0 };
         if ctrl_held {
-            ToolResponse::consumed_with(Box::new(operator_command::AdjustThermostatRadius {
+            ToolResponse::consumed_with(Box::new(AdjustThermostatRadius {
                 thermostat_id,
                 delta_steps,
             }))
         } else {
-            ToolResponse::consumed_with(Box::new(
-                operator_command::AdjustThermostatTargetTemperature {
-                    thermostat_id,
-                    delta_steps,
-                },
-            ))
+            ToolResponse::consumed_with(Box::new(AdjustThermostatTargetTemperature {
+                thermostat_id,
+                delta_steps,
+            }))
         }
     }
 

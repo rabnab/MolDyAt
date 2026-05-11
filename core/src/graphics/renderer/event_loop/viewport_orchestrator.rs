@@ -41,7 +41,7 @@ impl ViewportOrchestrator {
     ) {
         state
             .physics
-            .send_domain_command(DomainCommand::Resize { world_rect });
+            .send_command(DomainCommand::Resize { world_rect });
         state.render.viewport.set_world_bounds(world_rect);
         state
             .render
@@ -54,9 +54,7 @@ impl ViewportOrchestrator {
     pub(super) fn resume_after_resize_if_pending(state: &mut UnifiedRenderState) {
         if state.render.resize_pending {
             state.render.resize_pending = false;
-            state
-                .physics
-                .send_domain_command(DomainCommand::ResumeAfterResize);
+            state.physics.send_command(DomainCommand::ResumeAfterResize);
         }
     }
 

@@ -1,5 +1,5 @@
 use crate::application::DomainCommand;
-use crate::application::operator_command::AddLineSegment;
+use crate::application::operator_command::line::AddLineSegment;
 use crate::graphics::renderer::InputAction;
 use crate::objects2d::Vec2D;
 use std::convert::TryFrom;

@@ -18,10 +18,11 @@ fn test_simulation_engine_advances_main_content_state() {
     main_content.collect_neighbours_by_cell(DT_GOAL);
     let initial_step_count = main_content.world().step_count;
 
-    SimulationEngine::simulation_step(&mut main_content).expect("simulation step should succeed");
+    let (world, game_data) = main_content.world_and_game_data();
+    SimulationEngine::simulation_step(world, game_data).expect("simulation step should succeed");
 
     assert_eq!(main_content.world().step_count, initial_step_count + 1);
-    assert!(main_content.sim.get_time() > 0.0);
+    assert!(main_content.world().sim.get_time() > 0.0);
     assert_eq!(
         main_content.world().cached_force_results.len(),
         main_content.world().balls.len()
@@ -37,9 +38,10 @@ fn test_simulation_step_applies_thermostats_before_source_emission() {
         .expect("failed to add stationary ball");
 
     main_content.add_thermostat(Vec2D::zero());
-    let thermostat_id = main_content.thermostats.thermostats()[0].id;
+    let thermostat_id = main_content.world().thermostats.thermostats()[0].id;
     main_content.toggle_thermostat(thermostat_id);
     let thermostat = main_content
+        .world_mut()
         .thermostats
         .find_mut(thermostat_id)
         .expect("thermostat should exist");
@@ -47,18 +49,20 @@ fn test_simulation_step_applies_thermostats_before_source_emission() {
     thermostat.radius = 10.0;
 
     main_content.add_source_sphere(Vec2D::zero());
-    let source_id = main_content.source_spheres.spheres()[0].id;
+    let source_id = main_content.world().source_spheres.spheres()[0].id;
     main_content.toggle_source_sphere(source_id);
 
-    SimulationEngine::simulation_step(&mut main_content).expect("simulation step should succeed");
+    let (world, game_data) = main_content.world_and_game_data();
+    SimulationEngine::simulation_step(world, game_data).expect("simulation step should succeed");
 
     assert_eq!(
-        main_content.balls.len(),
+        main_content.world().balls.len(),
         2,
         "source sphere should emit one ball"
     );
 
     let moving_balls = main_content
+        .world()
         .balls
         .iter()
         .filter(|ball| ball.v.norm_sq() > 1e-8)
@@ -81,11 +85,12 @@ fn test_simulation_step_does_not_advance_when_paused() {
         .add_candidate_at_pos(Vec2D::new(0.0, 0.0))
         .expect("failed to add ball");
 
-    main_content.sim.set_pause(true);
+    main_content.world_mut().sim.set_pause(true);
     let step_count_before = main_content.world().step_count;
-    let time_before = main_content.sim.get_time();
+    let time_before = main_content.world().sim.get_time();
 
-    SimulationEngine::simulation_step(&mut main_content)
+    let (world, game_data) = main_content.world_and_game_data();
+    SimulationEngine::simulation_step(world, game_data)
         .expect("simulation step should not error when paused");
 
     assert_eq!(
@@ -94,7 +99,7 @@ fn test_simulation_step_does_not_advance_when_paused() {
         "step_count must not advance when simulation is paused"
     );
     assert_eq!(
-        main_content.sim.get_time(),
+        main_content.world().sim.get_time(),
         time_before,
         "simulation time must not advance when paused"
     );
@@ -115,7 +120,8 @@ fn test_repeated_steps_advance_time_and_update_energy() {
 
     let n_steps = 5;
     for _ in 0..n_steps {
-        SimulationEngine::simulation_step(&mut main_content)
+        let (world, game_data) = main_content.world_and_game_data();
+        SimulationEngine::simulation_step(world, game_data)
             .expect("simulation step should succeed");
     }
 
@@ -126,8 +132,8 @@ fn test_repeated_steps_advance_time_and_update_energy() {
     );
     // Energy should be non-zero after several steps with two interacting balls.
     assert!(
-        main_content.sim.get_kinetic_energy() != 0.0
-            || main_content.sim.get_potential_energy() != 0.0,
+        main_content.world().sim.get_kinetic_energy() != 0.0
+            || main_content.world().sim.get_potential_energy() != 0.0,
         "energy should be non-zero after simulation steps"
     );
 }

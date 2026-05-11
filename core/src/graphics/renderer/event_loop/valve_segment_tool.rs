@@ -4,7 +4,7 @@
 //! for the valve-segment interaction state machine, hit-testing on existing
 //! line segments, and preview queries.
 
-use crate::application::operator_command;
+use crate::application::operator_command::valve::{AddValveSegment, MoveValveSegment, ToggleValve};
 use crate::objects2d::Vec2D;
 use winit::event::{ElementState, MouseButton};
 
@@ -157,14 +157,12 @@ impl OperatorToolHandler for ValveSegmentToolHandler {
                         {
                             let t_end = Self::snap_t(t_end);
                             if (t_start - t_end).abs() > 0.02 {
-                                ToolResponse::consumed_with(Box::new(
-                                    operator_command::AddValveSegment {
-                                        line_id,
-                                        t_start,
-                                        t_end,
-                                        is_closed: true,
-                                    },
-                                ))
+                                ToolResponse::consumed_with(Box::new(AddValveSegment {
+                                    line_id,
+                                    t_start,
+                                    t_end,
+                                    is_closed: true,
+                                }))
                             } else {
                                 ToolResponse::consumed_dirty()
                             }
@@ -186,17 +184,13 @@ impl OperatorToolHandler for ValveSegmentToolHandler {
                         if let Some((_, t_center)) = dragged {
                             let new_start = (t_center - t_half_width).clamp(0.0, 1.0);
                             let new_end = (t_center + t_half_width).clamp(0.0, 1.0);
-                            ToolResponse::consumed_with(Box::new(
-                                operator_command::MoveValveSegment {
-                                    valve_id,
-                                    t_start: new_start,
-                                    t_end: new_end,
-                                },
-                            ))
-                        } else {
-                            ToolResponse::consumed_with(Box::new(operator_command::ToggleValve {
+                            ToolResponse::consumed_with(Box::new(MoveValveSegment {
                                 valve_id,
+                                t_start: new_start,
+                                t_end: new_end,
                             }))
+                        } else {
+                            ToolResponse::consumed_with(Box::new(ToggleValve { valve_id }))
                         }
                     }
                     ValveDrawState::Idle => ToolResponse::consumed_dirty(),

@@ -1,7 +1,5 @@
-use crate::application::MainContent;
-use crate::application::domain_command::DomainCommand;
-use crate::application::physics_thread::{PhysicsCommand, PhysicsThread};
 use crate::application::renderer_snapshot::RendererSnapshot;
+use crate::application::{DomainCommand, MainContent, PhysicsThread};
 use arc_swap::ArcSwapOption;
 use std::sync::Arc;
 
@@ -51,15 +49,8 @@ impl PhysicsCoordinator {
         }
     }
 
-    /// Send command to physics thread
-    pub fn send_command(&self, command: PhysicsCommand) {
-        if let Some(thread) = self.physics_thread.as_ref() {
-            let _ = thread.send_command(command);
-        }
-    }
-
-    /// Send a domain-level command through the existing runtime adapter.
-    pub fn send_domain_command(&self, command: DomainCommand) {
+    /// Send a domain-level command to the physics thread.
+    pub fn send_command(&self, command: DomainCommand) {
         #[cfg(test)]
         if let Some(recorded) = &self.recorded_commands {
             recorded
@@ -67,7 +58,9 @@ impl PhysicsCoordinator {
                 .expect("recorded_commands lock should succeed")
                 .push(format!("{command:?}"));
         }
-        self.send_command(command.into());
+        if let Some(thread) = self.physics_thread.as_ref() {
+            let _ = thread.send_command(command);
+        }
     }
 
     /// Get latest snapshot if available

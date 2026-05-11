@@ -3,7 +3,7 @@ use crate::objects2d::ball_impl::{Ball2D, Named, get_update_hood_call_cnt};
 
 impl LogStuff for MainContent {
     fn any_log(&self) -> bool {
-        self.show_timings //|| self.show_ball_stats
+        self.world().show_timings //|| self.world().show_ball_stats
     }
 
     /// Print comprehensive help message with all available keyboard shortcuts.
@@ -54,14 +54,16 @@ impl LogStuff for MainContent {
     /// Returns None if ball stats display is disabled.
     /// Uses real units (SI) if real_data flag is set, otherwise simulation units.
     fn status_text(&self, fps: u32, dt: f32) -> Option<String> {
-        if !self.show_ball_stats {
+        if !self.world().show_ball_stats {
             return None;
         }
-        let num_balls = self.balls.len();
-        let return_value = if self.real_data {
-            self.sim.get_status_text_real(fps, num_balls, dt)
+        let world = self.world();
+        let num_balls = world.balls.len();
+        let return_value = if world.real_data {
+            world.sim.get_status_text_real(fps, num_balls, dt)
         } else {
-            self.sim
+            world
+                .sim
                 .get_status_text(fps, num_balls, get_update_hood_call_cnt(), dt)
         };
         Some(return_value)
@@ -89,7 +91,7 @@ impl LogStuff for MainContent {
     }
 
     fn log_timings(&self, timer: crate::timing_monad::TimingMonad) {
-        if self.show_timings {
+        if self.world().show_timings {
             timer.log();
         }
     }

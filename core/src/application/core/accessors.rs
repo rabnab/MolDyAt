@@ -4,63 +4,47 @@ use crate::objects2d::ball_impl::BallFactory;
 use crate::objects2d::operator::{is_degenerate, remap_point};
 
 impl MainContent {
-    #[cfg(test)]
-    pub(crate) fn world(&self) -> &SimulationWorld {
+    pub fn world(&self) -> &SimulationWorld {
         &self.world
     }
 
-    #[cfg(test)]
     pub(crate) fn world_mut(&mut self) -> &mut SimulationWorld {
         &mut self.world
     }
 
-    pub(crate) fn get_game_logic_data(&mut self) -> &mut GameLogicData {
-        &mut self.game_data
+    pub(crate) fn runtime(&self) -> &PhysicsRuntimeState {
+        &self.runtime
     }
 
-    pub(crate) fn get_ball_factory(&self) -> &BallFactory {
-        self.game_data.get_ball_factory()
+    pub(crate) fn runtime_mut(&mut self) -> &mut PhysicsRuntimeState {
+        &mut self.runtime
     }
 
-    /// Get world boundary rectangle for simulation area.
-    pub fn world_region(&self) -> Rect {
-        self.world_rect
-    }
-
-    /// Get world boundary rectangle with inset margin.
-    /// Useful for preventing balls from spawning too close to walls.
-    ///
-    /// # Arguments
-    /// * `inner_margin` - Distance to inset from each boundary
-    pub fn world_region_inset(&self, inner_margin: f32) -> Rect {
-        let world_region = self.world_region();
-        let tl = world_region.get_tl();
-        Rect::new(
-            tl.0 + inner_margin,
-            tl.1 - inner_margin,
-            world_region.w - 2.0 * inner_margin,
-            world_region.h + 2.0 * inner_margin,
-        )
+    pub(crate) fn world_and_game_data(&mut self) -> (&mut SimulationWorld, &GameLogicData) {
+        let Self {
+            world, game_data, ..
+        } = self;
+        (world, game_data)
     }
 
     pub(crate) fn toggle_pause(&mut self) {
-        self.sim.toggle_pause();
+        self.world.sim.toggle_pause();
     }
 
     pub(crate) fn toggle_real_data(&mut self) {
-        self.real_data = !self.real_data;
+        self.world.real_data = !self.world.real_data;
     }
 
     pub(crate) fn toggle_show_ball_stats(&mut self) {
-        self.show_ball_stats = !self.show_ball_stats;
+        self.world.show_ball_stats = !self.world.show_ball_stats;
     }
 
     pub(crate) fn toggle_stepwise(&mut self) {
-        self.step_by_step = !self.step_by_step;
+        self.world.step_by_step = !self.world.step_by_step;
     }
 
     pub(crate) fn toggle_timing_display(&mut self) {
-        self.show_timings = !self.show_timings;
+        self.world.show_timings = !self.world.show_timings;
     }
 
     /// Resize simulation world and reconstruct cell grid.
@@ -70,7 +54,7 @@ impl MainContent {
     /// # Arguments
     /// * `world_rect` - New world boundary rectangle
     pub(crate) fn resize(&mut self, world_rect: crate::objects2d::Rect) {
-        if !self.sim.is_paused() {
+        if !self.world.sim.is_paused() {
             self.pause_for_resize()
         }
 
@@ -111,21 +95,54 @@ impl MainContent {
     pub(crate) fn halve_time_step(&mut self) {
         self.game_data.halve_time_step();
     }
+}
 
-    pub(crate) fn get_time_step(&self) -> f32 {
-        self.game_data.get_time_step()
+impl SimulationWorld {
+    /// Get world boundary rectangle for simulation area.
+    pub fn world_region(&self) -> Rect {
+        self.world_rect
     }
-    pub(crate) fn get_wait_time(&self) -> u64 {
+
+    /// Get world boundary rectangle with inset margin.
+    /// Useful for preventing balls from spawning too close to walls.
+    pub fn world_region_inset(&self, inner_margin: f32) -> Rect {
+        let world_region = self.world_region();
+        let tl = world_region.get_tl();
+        Rect::new(
+            tl.0 + inner_margin,
+            tl.1 - inner_margin,
+            world_region.w - 2.0 * inner_margin,
+            world_region.h + 2.0 * inner_margin,
+        )
+    }
+}
+
+impl PhysicsRuntimeState {
+    pub(crate) fn wait_time(&self) -> u64 {
         self.wait_time
     }
 
-    /// Get current physics FPS value
-    pub fn get_physics_fps(&self) -> f32 {
+    pub(crate) fn increase_wait_time(&mut self) {
+        self.wait_time = (self.wait_time + 1).min(100);
+    }
+
+    pub(crate) fn decrease_wait_time(&mut self) {
+        self.wait_time = self.wait_time.saturating_sub(1);
+    }
+
+    pub(crate) fn physics_fps(&self) -> f32 {
         self.physics_fps
     }
 
-    /// Set current physics FPS value
-    pub fn set_physics_fps(&mut self, fps: f32) {
+    pub(crate) fn set_physics_fps(&mut self, fps: f32) {
         self.physics_fps = fps;
+    }
+
+    pub(crate) fn publish_snapshot(&self, snapshot: RendererSnapshot) {
+        self.snapshot_slot.store(Some(Arc::new(snapshot)));
+    }
+
+    pub(crate) fn snapshot_slot(&self) -> Arc<arc_swap::ArcSwapOption<RendererSnapshot>> {
+        self.snapshot_slot.clone()
     }
 }

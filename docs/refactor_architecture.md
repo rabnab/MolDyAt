@@ -2,13 +2,16 @@
 
 This note analyzes issue #137, `Refactor runtime architecture for clearer ownership boundaries`, and recommends an implementation order for its sub-issues.
 
+Status:
+This is a historical planning note for the refactor sequence. Issues `#142` and `#147` have landed; use [architecture.md](architecture.md) for the current runtime structure and remaining active seams.
+
 ## Summary
 
 The refactor should start by introducing a single application-level command contract, then split the simulation domain from its runtime, then decompose renderer orchestration, and only after that clean up remaining coordinator state, bootstrap policy, and migration shims.
 
 That order fits both the explicit sub-issue dependencies and the current code structure:
 
-- Command flow is currently split across `InputAction`, `PhysicsCommand`, and `OperatorCommand`.
+- Command flow still spans `InputAction`, `DomainCommand`, and `OperatorCommand`, but the runtime-facing `PhysicsCommand` layer is gone.
 - Simulation ownership and stepping behavior are still coupled in the core application layer.
 - Runtime lifecycle and domain mutation are both handled in the physics-thread path.
 - Renderer state and renderer orchestration are concentrated in `UnifiedRenderState`.
@@ -21,10 +24,10 @@ That order fits both the explicit sub-issue dependencies and the current code st
 The same user intent currently crosses multiple command layers:
 
 - renderer-facing `InputAction`
-- runtime-facing `PhysicsCommand`
+- application-facing `DomainCommand`
 - domain-facing `OperatorCommand`
 
-This creates translation logic at the renderer and runtime boundaries and makes it harder to reason about where new actions should be added.
+This still creates translation logic at the renderer boundary and leaves operator mutations as a separate command family, which makes it harder to reason about where new actions should be added.
 
 ### 2. Simulation state and stepping are not clearly separated
 
@@ -67,12 +70,12 @@ Why first:
 
 - It gives UI, renderer, and runtime code one canonical application-level command model.
 - It removes ambiguity about whether new behavior belongs in renderer actions, runtime commands, or operator commands.
-- Both the domain split and renderer split depend on having this boundary available, even if they use temporary adapters during migration.
+- Both the domain split and renderer split depend on having this boundary available, even if intermediate mapping code remains during migration.
 
 Expected outcome:
 
 - user actions are translated into `DomainCommand`
-- temporary adapters bridge `DomainCommand` into the current runtime path
+- the physics runtime consumes `DomainCommand` directly
 - focused tests cover representative action-to-command mappings
 
 ### 2. `#141` Split simulation state from simulation stepping logic
@@ -223,6 +226,12 @@ Expected outcome:
 - final module boundaries are enforced
 - CI verifies the simplified architecture without fallback paths
 
+Status now:
+
+- `DomainCommand` is the single runtime command type end-to-end
+- the `MainContent` compatibility facade has been removed
+- current boundary documentation lives in [architecture.md](architecture.md)
+
 ## Recommended Phases
 
 The work naturally groups into four phases:
@@ -247,4 +256,4 @@ Use this sequential order for the mainline refactor:
 9. `#142`
 10. `#147`
 
-This order matches the dependency graph, fits the current coupling points in the codebase, minimizes churn in the largest refactor slices, and leaves shim removal until the new ownership boundaries are actually stable.
+This order matched the dependency graph, fit the coupling points that existed before the final cleanup, minimized churn in the largest refactor slices, and left shim removal until the new ownership boundaries were actually stable.

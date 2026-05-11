@@ -1,9 +1,9 @@
 mod core;
-pub mod domain_command;
+mod domain_command;
 mod game_logic;
 mod log_util;
 pub mod operator_command;
-pub mod physics_thread;
+mod physics_thread;
 pub mod renderer_snapshot;
 mod sim_stats;
 pub mod thermo_field;
@@ -17,6 +17,10 @@ use crate::objects2d::ball_impl::Ball2D;
 use crate::timing_monad::TimingMonad;
 pub use core::MainContent;
 pub use domain_command::DomainCommand;
+pub(crate) use physics_thread::PhysicsThread;
+
+#[cfg(test)]
+pub(crate) use physics_thread::{CommandHandler, PhysicsRuntime, ShutdownSignal};
 
 // Re-export error types so existing `crate::application::AppResult` paths still work
 pub use crate::error::AppError;

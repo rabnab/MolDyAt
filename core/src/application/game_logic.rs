@@ -64,19 +64,21 @@ impl GameLogicData {
 
 impl GameLogic for MainContent {
     fn is_ball_in_region(&self, pt: &Ball2D) -> bool {
-        SimulationEngine::is_ball_in_region(self, pt)
+        self.world().is_ball_in_region(pt)
     }
 
     fn is_ball_colliding(&self, pt: &Ball2D, margin: f32) -> bool {
-        SimulationEngine::is_ball_colliding(self, pt, margin)
+        self.world().is_ball_colliding(pt, margin)
     }
 
     fn collect_neighbours_by_cell(&mut self, dt: f32) {
-        SimulationEngine::collect_neighbours_by_cell(self, dt);
+        let (world, game_data) = self.world_and_game_data();
+        SimulationEngine::collect_neighbours_by_cell(world, game_data, dt);
     }
 
     fn simulation_step(&mut self) -> AppResult<()> {
-        SimulationEngine::simulation_step(self)
+        let (world, game_data) = self.world_and_game_data();
+        SimulationEngine::simulation_step(world, game_data)
     }
 
     // Helper to encapsulate the simulation update + cell grid updates + cleanup.
