@@ -196,6 +196,59 @@ fn hot_thermostat_heats_cold_cluster_without_changing_com_drift() {
 }
 
 #[test]
+fn thermostat_preserves_ball_direction_while_rescaling_speed() {
+    let mut mc = make_content();
+    mc.add_thermostat(Vec2D::new(0.0, 0.0));
+    let thermostat_id = mc.world().thermostats.thermostats()[0].id;
+    mc.toggle_thermostat(thermostat_id);
+    let thermostat = mc.world_mut().thermostats.find_mut(thermostat_id).unwrap();
+    thermostat.target_temperature = 0.01;
+    thermostat.radius = 5.0;
+
+    // The cluster drifts along +x while each ball has a vertical peculiar
+    // velocity component. A thermostat that only rescales speed should not
+    // rotate either ball's absolute heading.
+    add_ball(&mut mc, Vec2D::new(-0.5, 0.0), Vec2D::new(1.0, 1.0));
+    add_ball(&mut mc, Vec2D::new(0.5, 0.0), Vec2D::new(1.0, -1.0));
+
+    let velocity_before = mc.world().balls[0].v;
+    let direction_before = velocity_before.normalize();
+
+    let mut stats = zeroed_stats();
+    mc.apply_thermostats(DT_GOAL, &mut stats);
+
+    let velocity_after = mc.world().balls[0].v;
+    let direction_after = velocity_after.normalize();
+
+    assert!((velocity_after.norm_sq() - velocity_before.norm_sq()).abs() > 1e-6);
+    assert!((direction_after.x - direction_before.x).abs() < 1e-6);
+    assert!((direction_after.y - direction_before.y).abs() < 1e-6);
+}
+
+#[test]
+fn thermostat_does_not_flip_peculiar_velocity_when_damping_exceeds_one() {
+    let mut mc = make_content();
+    mc.add_thermostat(Vec2D::new(0.0, 0.0));
+    let thermostat_id = mc.world().thermostats.thermostats()[0].id;
+    mc.toggle_thermostat(thermostat_id);
+    let thermostat = mc.world_mut().thermostats.find_mut(thermostat_id).unwrap();
+    thermostat.target_temperature = 0.01;
+    thermostat.radius = 5.0;
+    thermostat.chain = vec![10.0];
+
+    // With a large enough `dt`, the current implementation can make
+    // `1.0 - friction` negative and invert the peculiar velocity.
+    add_ball(&mut mc, Vec2D::new(-0.5, 0.0), Vec2D::new(1.0, 1.0));
+    add_ball(&mut mc, Vec2D::new(0.5, 0.0), Vec2D::new(1.0, -1.0));
+
+    let mut stats = zeroed_stats();
+    mc.apply_thermostats(0.2, &mut stats);
+
+    let velocity_after = mc.world().balls[0].v;
+    assert!(velocity_after.y > 0.0);
+}
+
+#[test]
 fn zero_target_temperature_freezes_owned_balls() {
     let mut mc = make_content();
     mc.add_thermostat(Vec2D::new(0.0, 0.0));
