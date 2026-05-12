@@ -7,6 +7,7 @@ use crate::graphics::energy_plot::{
     DisplayMode, EnergyPlotWindow, SharedEnergyData, split_screen_layout_for_monitor,
 };
 use crate::graphics::renderer::event_loop::metrics::FrameMetrics;
+use std::time::{Duration, Instant};
 use winit::event::{ElementState, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::{KeyCode, PhysicalKey};
@@ -23,7 +24,21 @@ pub struct EnergyWindowManager {
     energy_data: SharedEnergyData,
     /// Last processed simulation step (to avoid duplicate updates)
     last_processed_step: u64,
+    /// Instant of the most recent energy window render completion.
+    last_redraw_instant: Option<Instant>,
+    /// `true` while a `request_redraw()` has been sent but the corresponding
+    /// `RedrawRequested` event has not yet been handled.  Prevents queuing
+    /// more than one pending redraw at a time.
+    redraw_pending: bool,
 }
+
+/// Minimum interval between energy-window redraws (≈12 Hz).
+///
+/// The energy window renders CPU-side text and a bitmap plot on every
+/// `RedrawRequested` event.  Throttling to this interval avoids saturating
+/// the CPU when the OS services the window more aggressively (e.g., when it
+/// has input focus).
+const ENERGY_REDRAW_MIN_INTERVAL: Duration = Duration::from_millis(83);
 
 /// Maximum number of energy samples to keep in buffer
 const MAX_ENERGY_SAMPLES: usize = 1000;
@@ -38,6 +53,8 @@ impl EnergyWindowManager {
             window: None,
             energy_data,
             last_processed_step: 0,
+            last_redraw_instant: None,
+            redraw_pending: false,
         }
     }
 
@@ -153,10 +170,15 @@ impl EnergyWindowManager {
 
     /// Handle a redraw request for the energy window.
     ///
+    /// Records the completion time and clears the pending flag so subsequent
+    /// [`Self::request_redraw`] calls can schedule the next redraw.
+    ///
     /// # Returns
     /// `true` if render was performed, `false` if not energy window's redraw.
     pub fn handle_redraw(&mut self) -> bool {
         log::trace!("EnergyWindowManager: handle_redraw called");
+        self.redraw_pending = false;
+        self.last_redraw_instant = Some(Instant::now());
         if let Some(window) = &mut self.window {
             let _ = window.render();
             true
@@ -166,9 +188,29 @@ impl EnergyWindowManager {
     }
 
     /// Request a redraw for the energy window if it is open.
-    pub fn request_redraw(&self) {
+    ///
+    /// Requests are **throttled** to at most [`ENERGY_REDRAW_MIN_INTERVAL`] and
+    /// **coalesced** so that at most one redraw is pending at any time.  This
+    /// prevents the OS (especially when the energy window has input focus) from
+    /// driving the CPU-heavy software renderer faster than needed.
+    pub fn request_redraw(&mut self) {
+        if self.window.is_none() {
+            return;
+        }
+        // Skip if a redraw is already queued but not yet serviced.
+        if self.redraw_pending {
+            return;
+        }
+        // Skip if the minimum interval since the last completed render hasn't
+        // elapsed yet.
+        if let Some(last) = self.last_redraw_instant
+            && last.elapsed() < ENERGY_REDRAW_MIN_INTERVAL
+        {
+            return;
+        }
         if let Some(window) = &self.window {
             window.request_redraw();
+            self.redraw_pending = true;
         }
     }
 
@@ -197,9 +239,11 @@ impl EnergyWindowManager {
         self.last_processed_step = snapshot.simulation_step;
 
         if let Ok(mut data) = self.energy_data.lock() {
-            data.v_kin.push_back(snapshot.kinetic_energy);
-            data.v_pot.push_back(snapshot.potential_energy);
-            data.time = snapshot.time;
+            data.push_sample(
+                snapshot.kinetic_energy,
+                snapshot.potential_energy,
+                snapshot.time,
+            );
 
             // Update status text with FPS and per-frame metrics
             if let Some(ref status) = snapshot.status_text {
@@ -231,6 +275,33 @@ impl EnergyWindowManager {
     /// Get a reference to the shared energy data.
     pub fn energy_data(&self) -> &SharedEnergyData {
         &self.energy_data
+    }
+
+    /// Returns `true` when a `request_redraw()` call has been sent to the OS
+    /// but the corresponding `RedrawRequested` event has not yet been handled.
+    ///
+    /// Exposed primarily for testing.
+    #[cfg(test)]
+    pub fn is_redraw_pending(&self) -> bool {
+        self.redraw_pending
+    }
+
+    /// Override the last-redraw instant (test helper).
+    ///
+    /// Allows tests to simulate a recent or past render without needing a real
+    /// OS window.
+    #[cfg(test)]
+    pub fn set_last_redraw_instant(&mut self, instant: Option<Instant>) {
+        self.last_redraw_instant = instant;
+    }
+
+    /// Manually put the manager into the "redraw pending" state (test helper).
+    ///
+    /// Simulates the effect of a successful `request_redraw()` call so that
+    /// coalescing behaviour can be verified independently of OS windows.
+    #[cfg(test)]
+    pub fn mark_redraw_pending(&mut self) {
+        self.redraw_pending = true;
     }
 }
 
