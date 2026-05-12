@@ -26,7 +26,8 @@
         "git stash": true,
         "Copy-Item": true,
         "New-Item": true,
-        "Move-Item": true
+        "Move-Item": true,
+        "gh": true
     },
     "rust-analyzer.linkedProjects": [
         "core/Cargo.toml",
