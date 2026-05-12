@@ -278,6 +278,10 @@ pub struct ThermoFieldHistory {
     t_buffer: VecDeque<ThermoGrid>,
     p_buffer: VecDeque<ThermoGrid>,
     shape: (usize, usize),
+    t_sum: Vec<f32>,
+    p_sum: Vec<f32>,
+    t_count: Vec<u32>,
+    p_count: Vec<u32>,
 }
 
 impl Default for ThermoFieldHistory {
@@ -292,6 +296,10 @@ impl ThermoFieldHistory {
             t_buffer: VecDeque::with_capacity(THERMO_WINDOW),
             p_buffer: VecDeque::with_capacity(THERMO_WINDOW),
             shape: (0, 0),
+            t_sum: Vec::new(),
+            p_sum: Vec::new(),
+            t_count: Vec::new(),
+            p_count: Vec::new(),
         }
     }
 
@@ -300,6 +308,10 @@ impl ThermoFieldHistory {
         self.t_buffer.clear();
         self.p_buffer.clear();
         self.shape = (0, 0);
+        self.t_sum.clear();
+        self.p_sum.clear();
+        self.t_count.clear();
+        self.p_count.clear();
     }
 
     /// Push a new pair of T/P grids into the ring buffer.
@@ -308,6 +320,7 @@ impl ThermoFieldHistory {
     /// is cleared before inserting.
     pub fn push(&mut self, t_grid: ThermoGrid, p_grid: ThermoGrid) {
         let new_shape = t_grid.shape();
+        let new_len = new_shape.0 * new_shape.1;
         debug_assert_eq!(p_grid.shape(), new_shape, "p_grid shape must match t_grid");
         debug_assert_eq!(
             t_grid.data.len(),
@@ -321,16 +334,24 @@ impl ThermoFieldHistory {
         );
 
         if new_shape != self.shape {
-            self.t_buffer.clear();
-            self.p_buffer.clear();
+            self.clear();
             self.shape = new_shape;
+            self.reset_accumulators(new_len);
+        } else if self.t_sum.len() != new_len {
+            self.reset_accumulators(new_len);
         }
 
         if self.t_buffer.len() == THERMO_WINDOW {
-            self.t_buffer.pop_front();
-            self.p_buffer.pop_front();
+            if let Some(old_t) = self.t_buffer.pop_front() {
+                Self::remove_grid(&old_t, &mut self.t_sum, &mut self.t_count);
+            }
+            if let Some(old_p) = self.p_buffer.pop_front() {
+                Self::remove_grid(&old_p, &mut self.p_sum, &mut self.p_count);
+            }
         }
 
+        Self::add_grid(&t_grid, &mut self.t_sum, &mut self.t_count);
+        Self::add_grid(&p_grid, &mut self.p_sum, &mut self.p_count);
         self.t_buffer.push_back(t_grid);
         self.p_buffer.push_back(p_grid);
     }
@@ -350,26 +371,47 @@ impl ThermoFieldHistory {
         }
 
         let (rows, cols) = self.shape;
-        let avg_t = Self::average_buffer(&self.t_buffer, rows, cols);
-        let avg_p = Self::average_buffer(&self.p_buffer, rows, cols);
+        let avg_t = Self::average_from_accumulators(&self.t_sum, &self.t_count, rows, cols);
+        let avg_p = Self::average_from_accumulators(&self.p_sum, &self.p_count, rows, cols);
         Some((avg_t, avg_p))
     }
 
-    fn average_buffer(buffer: &VecDeque<ThermoGrid>, rows: usize, cols: usize) -> ThermoGrid {
+    fn reset_accumulators(&mut self, len: usize) {
+        self.t_sum = vec![0.0; len];
+        self.p_sum = vec![0.0; len];
+        self.t_count = vec![0; len];
+        self.p_count = vec![0; len];
+    }
+
+    fn add_grid(grid: &ThermoGrid, sums: &mut [f32], counts: &mut [u32]) {
+        for ((sum, count), value) in sums.iter_mut().zip(counts.iter_mut()).zip(grid.data.iter()) {
+            if value.is_finite() {
+                *sum += *value;
+                *count += 1;
+            }
+        }
+    }
+
+    fn remove_grid(grid: &ThermoGrid, sums: &mut [f32], counts: &mut [u32]) {
+        for ((sum, count), value) in sums.iter_mut().zip(counts.iter_mut()).zip(grid.data.iter()) {
+            if value.is_finite() {
+                *sum -= *value;
+                *count = count.saturating_sub(1);
+            }
+        }
+    }
+
+    fn average_from_accumulators(
+        sums: &[f32],
+        counts: &[u32],
+        rows: usize,
+        cols: usize,
+    ) -> ThermoGrid {
         let len = rows * cols;
         let mut data = vec![f32::NAN; len];
-        for (i, cell) in data.iter_mut().enumerate() {
-            let mut sum = 0.0f32;
-            let mut count = 0u32;
-            for grid in buffer {
-                let val = grid.data[i];
-                if val.is_finite() {
-                    sum += val;
-                    count += 1;
-                }
-            }
-            if count > 0 {
-                *cell = sum / count as f32;
+        for ((cell, sum), count) in data.iter_mut().zip(sums.iter()).zip(counts.iter()) {
+            if *count > 0 {
+                *cell = *sum / *count as f32;
             }
         }
         ThermoGrid { data, rows, cols }

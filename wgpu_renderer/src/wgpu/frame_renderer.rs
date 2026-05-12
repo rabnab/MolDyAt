@@ -8,6 +8,13 @@ use winit::window::{Window, WindowId};
 /// Coordinates redraw handling and frame submission for the WGPU backend.
 pub(super) struct FrameRenderer;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum SurfaceErrorAction {
+    Exit,
+    Reconfigure,
+    RetryLater,
+}
+
 impl FrameRenderer {
     pub(super) fn handle_new_snapshot(state: &mut UnifiedRenderState, window: &Window) {
         state.begin_frame();
@@ -73,14 +80,33 @@ impl FrameRenderer {
 
             if let Err(error) = Self::render_frame(ctx, pipelines, state.viewport().margins()) {
                 log::error!("Render error: {:?}", error);
-                if error == wgpu::SurfaceError::OutOfMemory {
-                    event_loop.exit();
+                match Self::surface_error_action(&error) {
+                    SurfaceErrorAction::Exit => event_loop.exit(),
+                    SurfaceErrorAction::Reconfigure => {
+                        let size = window.inner_size();
+                        ctx.resize(size.width.max(1), size.height.max(1));
+                        window.request_redraw();
+                    }
+                    SurfaceErrorAction::RetryLater => {
+                        window.request_redraw();
+                    }
                 }
             }
         }
 
         state.end_frame();
         true
+    }
+
+    pub(super) fn surface_error_action(error: &wgpu::SurfaceError) -> SurfaceErrorAction {
+        match error {
+            wgpu::SurfaceError::OutOfMemory => SurfaceErrorAction::Exit,
+            wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated => {
+                SurfaceErrorAction::Reconfigure
+            }
+            wgpu::SurfaceError::Timeout => SurfaceErrorAction::RetryLater,
+            wgpu::SurfaceError::Other => SurfaceErrorAction::RetryLater,
+        }
     }
 
     fn render_frame(
