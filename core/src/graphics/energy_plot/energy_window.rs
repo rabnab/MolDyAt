@@ -263,12 +263,13 @@ impl EnergyPlotWindow {
 
             let current_size = (width, height);
 
-            // If data version, window size, and display mode are all unchanged,
-            // the pixel buffer already reflects the current state — skip
-            // re-rasterising.
+            // If data version, status-text presence, window size, and display
+            // mode are all unchanged, the pixel buffer already reflects the
+            // current state — skip re-rasterising.
             let cache_valid = self.cached_data_version == Some(current_version)
                 && self.cached_size == Some(current_size)
-                && self.cached_display_mode == Some(self.display_mode);
+                && self.cached_display_mode == Some(self.display_mode)
+                && self.has_status_text == current_has_status;
 
             if cache_valid {
                 return Ok(());

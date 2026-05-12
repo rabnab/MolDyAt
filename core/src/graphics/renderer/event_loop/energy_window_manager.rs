@@ -171,16 +171,18 @@ impl EnergyWindowManager {
     /// Handle a redraw request for the energy window.
     ///
     /// Records the completion time and clears the pending flag so subsequent
-    /// [`Self::request_redraw`] calls can schedule the next redraw.
+    /// [`Self::request_redraw`] calls can schedule the next redraw.  Both
+    /// state updates are performed only when rendering actually takes place,
+    /// so a spurious call with no window open leaves the throttle state clean.
     ///
     /// # Returns
     /// `true` if render was performed, `false` if not energy window's redraw.
     pub fn handle_redraw(&mut self) -> bool {
         log::trace!("EnergyWindowManager: handle_redraw called");
-        self.redraw_pending = false;
-        self.last_redraw_instant = Some(Instant::now());
         if let Some(window) = &mut self.window {
             let _ = window.render();
+            self.redraw_pending = false;
+            self.last_redraw_instant = Some(Instant::now());
             true
         } else {
             false
