@@ -165,6 +165,13 @@ impl EnergyWindowManager {
         }
     }
 
+    /// Request a redraw for the energy window if it is open.
+    pub fn request_redraw(&self) {
+        if let Some(window) = &self.window {
+            window.request_redraw();
+        }
+    }
+
     /// Update energy data from a snapshot.
     ///
     /// Only updates if this is a new simulation step (avoids duplicates).

@@ -2,8 +2,15 @@ use super::super::event_router::{EventRouter, WindowEventRoute};
 use winit::event::{DeviceEvent, ElementState, MouseScrollDelta, WindowEvent};
 
 #[test]
-fn redraw_events_take_precedence_over_energy_window_routing() {
+fn energy_window_redraw_events_route_to_energy_window() {
     let route = EventRouter::classify_window_event(&WindowEvent::RedrawRequested, true, true);
+
+    assert_eq!(route, WindowEventRoute::EnergyWindow);
+}
+
+#[test]
+fn main_window_redraw_events_route_to_redraw_handler() {
+    let route = EventRouter::classify_window_event(&WindowEvent::RedrawRequested, false, true);
 
     assert_eq!(route, WindowEventRoute::Redraw);
 }

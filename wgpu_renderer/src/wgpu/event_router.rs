@@ -51,7 +51,11 @@ impl EventRouter {
                 );
             }
             WindowEventRoute::EnergyWindow => {
-                state.energy_manager_mut().handle_event(event);
+                if matches!(event, WindowEvent::RedrawRequested) {
+                    state.energy_manager_mut().handle_redraw();
+                } else {
+                    state.energy_manager_mut().handle_event(event);
+                }
             }
             WindowEventRoute::MainWindow => {
                 let (Some(ctx), Some(pipelines), Some(main_window)) = (ctx, pipelines, main_window)
@@ -83,7 +87,9 @@ impl EventRouter {
         has_main_window_resources: bool,
     ) -> WindowEventRoute {
         if matches!(event, WindowEvent::RedrawRequested) {
-            return if has_main_window_resources {
+            return if is_energy_window_event {
+                WindowEventRoute::EnergyWindow
+            } else if has_main_window_resources {
                 WindowEventRoute::Redraw
             } else {
                 WindowEventRoute::Ignore

@@ -19,7 +19,7 @@ impl FrameRenderer {
     pub(super) fn handle_new_snapshot(state: &mut UnifiedRenderState, window: &Window) {
         state.begin_frame();
         window.request_redraw();
-        state.energy_manager_mut().handle_redraw();
+        state.energy_manager().request_redraw();
     }
 
     /// Handles the `RedrawRequested` event for the main window, performing rendering if needed.
