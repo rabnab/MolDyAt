@@ -9,7 +9,7 @@ The implementation should provide:
 - a placeable thermostat operator with world-space position and radius
 - ON/OFF state, target temperature control, and draggable repositioning
 - a finite spherical region of influence
-- Nosé-Hoover velocity control using a single active chain variable stored in a `Vec<f32>`
+- Nosé-Hoover-chain velocity control using 5 active chain variables per thermostat bucket
 - renderer snapshot support for visualization and labels
 - deterministic handling of overlapping thermostat regions
 
@@ -121,20 +121,26 @@ The per-step algorithm should be:
 2. For each bucket, compute `T_local` from the assigned balls.
 3. If fewer than 2 balls are in the bucket, skip the update.
 4. If `target_temperature == 0.0`, zero the assigned velocities.
-5. Otherwise update the first chain variable:
+5. Otherwise integrate a coupled 5-chain Nosé-Hoover system in a reversible
+   split form (multiple small symmetric sub-steps):
 
 $$
-\xi \leftarrow \xi + dt \cdot \frac{T_{local}/T_{target} - 1}{\tau^2}
+\dot{\xi}_0 = \frac{2K - gT_{target}}{Q_0},\qquad
+\dot{\xi}_j = \frac{Q_{j-1}\xi_{j-1}^2 - T_{target}}{Q_j}, \; j=1..4
 $$
 
-6. Clamp $\xi$ to `[-10, 10]`.
-7. Apply velocity-only friction to assigned balls:
+with:
+
+- $g = 2(N-1)$ thermal degrees of freedom in the local COM frame
+- $Q_0 = g T_{target} \tau^2$
+- $Q_1..Q_4 = T_{target}\tau^2$
+
+6. Clamp all chain variables to `[-10, 10]` for numerical safety.
+7. Scale peculiar velocities using only the first chain variable:
 
 $$
-v \leftarrow v - dt \cdot \xi \cdot v
+u_i \leftarrow e^{-\xi_0 dt} u_i,\qquad v_i \leftarrow v_{com} + u_i
 $$
-
-Only `chain[0]` should be used in the first version, but access should stay isolated behind a helper so future chain extension is localized.
 
 ## Phase 5: Stats and Energy Reporting
 
@@ -217,7 +223,8 @@ The code should also avoid directly mixing thermostat logic into unrelated hot p
 - Convert to display units only at the UI boundary if needed.
 - Prefer a dedicated thermostat module rather than embedding the logic in `sim.rs` directly.
 - Reuse the existing operator lifecycle utilities instead of duplicating ID or resize logic.
-- Keep the first implementation limited to single-variable Nosé-Hoover while preserving the `Vec<f32>` API for future chain support.
+- Thermostat state keeps a 5-entry chain by default; if older snapshots provide a different length, the runtime path resizes to 5 before integration.
+- The thermostat always operates in the bucket COM frame (`u_i = v_i - v_com`) so local drift is preserved.
 
 ## Todo List
 

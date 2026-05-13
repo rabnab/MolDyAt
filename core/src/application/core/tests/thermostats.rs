@@ -3,7 +3,9 @@ use crate::application::MainContent;
 use crate::application::core::StatsAccumulator;
 use crate::application::thermo_field::LocalKineticStats;
 use crate::objects2d::ball_impl::BallFactory;
-use crate::objects2d::{OperatorCollection, OperatorState, Rect, Vec2D};
+use crate::objects2d::{
+    DEFAULT_THERMOSTAT_CHAIN_LENGTH, OperatorCollection, OperatorState, Rect, Vec2D,
+};
 
 fn make_content() -> MainContent {
     MainContent::new(Rect::new(-20.0, 20.0, 40.0, -40.0)).unwrap()
@@ -53,6 +55,15 @@ fn added_thermostat_starts_off() {
     let thermostat = &mc.world().thermostats.thermostats()[0];
     assert_eq!(thermostat.state, OperatorState::Off);
     assert!(!thermostat.is_active());
+}
+
+#[test]
+fn added_thermostat_starts_with_five_chain_variables() {
+    let mut mc = make_content();
+    mc.add_thermostat(Vec2D::new(0.0, 0.0));
+    let thermostat = &mc.world().thermostats.thermostats()[0];
+    assert_eq!(thermostat.chain.len(), DEFAULT_THERMOSTAT_CHAIN_LENGTH);
+    assert!(thermostat.chain.iter().all(|&value| value == 0.0));
 }
 
 #[test]
@@ -240,7 +251,7 @@ fn thermostat_does_not_flip_peculiar_velocity_when_damping_exceeds_one() {
     let thermostat = mc.world_mut().thermostats.find_mut(thermostat_id).unwrap();
     thermostat.target_temperature = 0.01;
     thermostat.radius = 5.0;
-    thermostat.chain = vec![10.0];
+    thermostat.chain = vec![10.0, 0.0, 0.0, 0.0, 0.0];
 
     // With a large enough `dt`, the current implementation can make
     // `1.0 - friction` negative and invert the peculiar velocity.
@@ -252,6 +263,58 @@ fn thermostat_does_not_flip_peculiar_velocity_when_damping_exceeds_one() {
 
     let velocity_after = mc.world().balls[0].v;
     assert!(velocity_after.y >= 0.0);
+}
+
+#[test]
+fn thermostat_updates_all_chain_variables() {
+    let mut mc = make_content();
+    mc.add_thermostat(Vec2D::new(0.0, 0.0));
+    let thermostat_id = mc.world().thermostats.thermostats()[0].id;
+    mc.toggle_thermostat(thermostat_id);
+    let thermostat = mc.world_mut().thermostats.find_mut(thermostat_id).unwrap();
+    thermostat.target_temperature = 0.02;
+    thermostat.radius = 8.0;
+
+    add_ball(&mut mc, Vec2D::new(-1.0, -0.2), Vec2D::new(1.2, 1.0));
+    add_ball(&mut mc, Vec2D::new(1.0, 0.2), Vec2D::new(0.8, -1.0));
+    add_ball(&mut mc, Vec2D::new(-0.2, 1.0), Vec2D::new(1.0, 0.9));
+    add_ball(&mut mc, Vec2D::new(0.2, -1.0), Vec2D::new(1.0, -0.9));
+
+    let mut stats = zeroed_stats();
+    for _ in 0..500 {
+        mc.apply_thermostats(DT_GOAL, &mut stats);
+    }
+
+    let chain = &mc.world().thermostats.find(thermostat_id).unwrap().chain;
+    assert_eq!(chain.len(), DEFAULT_THERMOSTAT_CHAIN_LENGTH);
+    assert!(chain.iter().all(|v| v.is_finite()));
+    assert!(chain.iter().skip(1).any(|v| v.abs() > 1.0e-6));
+}
+
+#[test]
+fn thermostat_remains_stable_in_small_bucket_long_run() {
+    let mut mc = make_content();
+    mc.add_thermostat(Vec2D::new(0.0, 0.0));
+    let thermostat_id = mc.world().thermostats.thermostats()[0].id;
+    mc.toggle_thermostat(thermostat_id);
+    let thermostat = mc.world_mut().thermostats.find_mut(thermostat_id).unwrap();
+    thermostat.target_temperature = 0.05;
+    thermostat.radius = 6.0;
+
+    add_ball(&mut mc, Vec2D::new(-0.5, 0.0), Vec2D::new(0.8, 1.0));
+    add_ball(&mut mc, Vec2D::new(0.5, 0.0), Vec2D::new(1.2, -1.0));
+
+    let mut stats = zeroed_stats();
+    for _ in 0..2000 {
+        mc.apply_thermostats(DT_GOAL, &mut stats);
+    }
+
+    let kinetic_stats = cluster_kinetic_stats(&mc);
+    let final_temp = kinetic_stats.temperature().unwrap();
+    let chain = &mc.world().thermostats.find(thermostat_id).unwrap().chain;
+    assert!(final_temp.is_finite());
+    assert!(final_temp < 10.0);
+    assert!(chain.iter().all(|v| v.is_finite()));
 }
 
 #[test]

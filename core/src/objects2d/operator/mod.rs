@@ -22,8 +22,9 @@ pub use source_sphere::{
     EMISSION_SPEED_STEP, SOURCE_SPHERE_RADIUS, SimSourceSphere, SourceSphereCollection,
 };
 pub use thermostat::{
-    DEFAULT_THERMOSTAT_RADIUS, SimThermostat, THERMOSTAT_CHAIN_MAX, THERMOSTAT_CHAIN_MIN,
-    THERMOSTAT_RADIUS_STEP, THERMOSTAT_TARGET_TEMP_STEP, ThermostatCollection,
+    DEFAULT_THERMOSTAT_CHAIN_LENGTH, DEFAULT_THERMOSTAT_RADIUS, SimThermostat,
+    THERMOSTAT_CHAIN_MAX, THERMOSTAT_CHAIN_MIN, THERMOSTAT_RADIUS_STEP,
+    THERMOSTAT_TARGET_TEMP_STEP, ThermostatCollection,
 };
 pub use valve_collection::ValveCollection;
 

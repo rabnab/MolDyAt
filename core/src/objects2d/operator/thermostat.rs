@@ -10,6 +10,8 @@ const DEFAULT_TARGET_TEMPERATURE: f32 = 35.0 / 122.0;
 pub const DEFAULT_THERMOSTAT_RADIUS: f32 = 5.0;
 /// Default Nosé-Hoover coupling constant.
 const DEFAULT_TAU: f32 = 0.5;
+/// Active Nosé-Hoover chain length per thermostat.
+pub const DEFAULT_THERMOSTAT_CHAIN_LENGTH: usize = 5;
 /// Lower bound for chain variables to avoid runaway values.
 pub const THERMOSTAT_CHAIN_MIN: f32 = -10.0;
 /// Upper bound for chain variables to avoid runaway values.
@@ -40,7 +42,7 @@ pub struct SimThermostat {
     pub target_temperature: f32,
     /// Radius of the thermostat region in world units.
     pub radius: f32,
-    /// Nosé-Hoover chain variables. The first element is used for now.
+    /// Nosé-Hoover chain variables (5-chain Nosé-Hoover by default).
     pub chain: Vec<f32>,
     /// Coupling time constant.
     pub tau: f32,
@@ -57,7 +59,7 @@ impl SimThermostat {
             state: OperatorState::Off,
             target_temperature: DEFAULT_TARGET_TEMPERATURE,
             radius: DEFAULT_THERMOSTAT_RADIUS,
-            chain: vec![0.0],
+            chain: vec![0.0; DEFAULT_THERMOSTAT_CHAIN_LENGTH],
             tau: DEFAULT_TAU,
             current_local_temp: 0.0,
         }
@@ -68,12 +70,11 @@ impl SimThermostat {
         self.state.is_on()
     }
 
-    /// Read the first chain variable, inserting it if absent.
-    pub fn chain0_mut(&mut self) -> &mut f32 {
-        if self.chain.is_empty() {
-            self.chain.push(0.0);
+    /// Ensure the thermostat chain has exactly `len` entries.
+    pub fn ensure_chain_len(&mut self, len: usize) {
+        if self.chain.len() != len {
+            self.chain.resize(len, 0.0);
         }
-        &mut self.chain[0]
     }
 
     /// Adjust the target temperature by `delta`, clamped.

@@ -8,9 +8,10 @@ pub mod verbose_info;
 
 pub use line_segment::{SimLineSegment, ValveSegment};
 pub use operator::{
-    DEFAULT_THERMOSTAT_RADIUS, EMISSION_SPEED_STEP, LineSegmentCollection, OperatorCollection,
-    OperatorIdCounter, OperatorState, SOURCE_SPHERE_RADIUS, SimSourceSphere, SimThermostat,
-    SourceSphereCollection, THERMOSTAT_CHAIN_MAX, THERMOSTAT_CHAIN_MIN, THERMOSTAT_RADIUS_STEP,
+    DEFAULT_THERMOSTAT_CHAIN_LENGTH, DEFAULT_THERMOSTAT_RADIUS, EMISSION_SPEED_STEP,
+    LineSegmentCollection, OperatorCollection, OperatorIdCounter, OperatorState,
+    SOURCE_SPHERE_RADIUS, SimSourceSphere, SimThermostat, SourceSphereCollection,
+    THERMOSTAT_CHAIN_MAX, THERMOSTAT_CHAIN_MIN, THERMOSTAT_RADIUS_STEP,
     THERMOSTAT_TARGET_TEMP_STEP, ThermostatCollection, ValveCollection,
 };
 pub use rect_2d::Rect;
