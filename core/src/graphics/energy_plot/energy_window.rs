@@ -99,6 +99,15 @@ pub struct EnergyPlotWindow {
     energy_data: SharedEnergyData,
     display_mode: DisplayMode,
     has_status_text: bool,
+    /// Version of `EnergyData` that the current pixel buffer was rendered from.
+    /// Used to skip re-rasterising when the data and display settings haven't
+    /// changed since the last frame.
+    cached_data_version: Option<u64>,
+    /// Pixel dimensions `(width, height)` of the currently cached buffer, so
+    /// we invalidate the cache on resize.
+    cached_size: Option<(u32, u32)>,
+    /// Cached display mode so we invalidate the cache when it changes.
+    cached_display_mode: Option<DisplayMode>,
 }
 
 impl EnergyPlotWindow {
@@ -115,6 +124,9 @@ impl EnergyPlotWindow {
             energy_data,
             display_mode,
             has_status_text: false,
+            cached_data_version: None,
+            cached_size: None,
+            cached_display_mode: None,
         }
     }
 
@@ -231,14 +243,6 @@ impl EnergyPlotWindow {
 
     pub fn render(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         if let (Some(window), Some(surface)) = (&self.window, &mut self.surface) {
-            // Track status text presence, but keep the current geometry stable
-            // so the window can stay docked to a screen half on small displays.
-            let current_has_status = {
-                let data = self.energy_data.lock().unwrap();
-                data.status_text.is_some()
-            };
-            self.has_status_text = current_has_status;
-
             let size = window.inner_size();
             let width = size.width;
             let height = size.height;
@@ -247,6 +251,31 @@ impl EnergyPlotWindow {
             if width == 0 || height == 0 {
                 return Ok(());
             }
+
+            // Read data version, status-text presence, and display mode before
+            // deciding whether we can reuse the cached frame.
+            let (current_version, current_has_status) = {
+                let data = self.energy_data.lock().unwrap();
+                (data.version, data.status_text.is_some())
+            };
+
+            let current_size = (width, height);
+
+            // If data version, status-text presence, window size, and display
+            // mode are all unchanged, the pixel buffer already reflects the
+            // current state — skip re-rasterising.
+            let cache_valid = self.cached_data_version == Some(current_version)
+                && self.cached_size == Some(current_size)
+                && self.cached_display_mode == Some(self.display_mode)
+                && self.has_status_text == current_has_status;
+
+            if cache_valid {
+                return Ok(());
+            }
+
+            // Track status text presence, but keep the current geometry stable
+            // so the window can stay docked to a screen half on small displays.
+            self.has_status_text = current_has_status;
 
             surface.resize(
                 NonZeroU32::new(width).unwrap(),
@@ -298,6 +327,12 @@ impl EnergyPlotWindow {
             );
 
             buffer.present()?;
+
+            // Update cache metadata so the next redraw can skip re-rasterising
+            // when nothing has changed.
+            self.cached_data_version = Some(current_version);
+            self.cached_size = Some(current_size);
+            self.cached_display_mode = Some(self.display_mode);
         }
         Ok(())
     }

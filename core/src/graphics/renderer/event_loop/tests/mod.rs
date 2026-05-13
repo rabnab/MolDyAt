@@ -1,4 +1,5 @@
 mod domain_command;
+mod energy_window_manager;
 mod key_actions;
 mod key_state;
 mod mouse_input;
