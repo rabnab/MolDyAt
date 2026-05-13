@@ -11,7 +11,9 @@ fn make_content() -> MainContent {
     MainContent::new(Rect::new(-20.0, 20.0, 40.0, -40.0)).unwrap()
 }
 
+/// Threshold below which trailing chain values are treated as effectively zero.
 const MIN_SIGNIFICANT_CHAIN_VALUE: f32 = 1.0e-6;
+/// Coarse upper bound used to detect runaway heating in long-run stability checks.
 const MAX_STABLE_BUCKET_TEMP: f32 = 10.0;
 
 fn zeroed_stats() -> StatsAccumulator {

@@ -36,7 +36,7 @@ fn clamp_chain_variable(value: f32) -> f32 {
     value.clamp(THERMOSTAT_CHAIN_MIN, THERMOSTAT_CHAIN_MAX)
 }
 
-fn thermal_dof(count: usize) -> Option<f32> {
+fn compute_thermal_dof(count: usize) -> Option<f32> {
     if count < 2 {
         return None;
     }
@@ -80,7 +80,7 @@ fn integrate_nhc_chain(
     tau: f32,
 ) -> f32 {
     let mut total_scale = 1.0_f32;
-    let mut kinetic = thermal_kinetic.max(0.0);
+    let mut current_kinetic = thermal_kinetic.max(0.0);
     let masses = derive_nhc_masses(tau, target_temperature, thermal_dof);
     let sub_dt = dt / NHC_SUBSTEPS_F32;
     let quarter_dt = 0.25 * sub_dt;
@@ -92,7 +92,7 @@ fn integrate_nhc_chain(
                 idx,
                 chain,
                 &masses,
-                kinetic,
+                current_kinetic,
                 target_temperature,
                 thermal_dof,
             );
@@ -101,12 +101,19 @@ fn integrate_nhc_chain(
             chain[idx - 1] = clamp_chain_variable(chain[idx - 1] * coupling);
         }
 
-        let drive0 = chain_drive(0, chain, &masses, kinetic, target_temperature, thermal_dof);
+        let drive0 = chain_drive(
+            0,
+            chain,
+            &masses,
+            current_kinetic,
+            target_temperature,
+            thermal_dof,
+        );
         chain[0] = clamp_chain_variable(chain[0] + 0.5 * sub_dt * drive0);
 
         let scale = (-sub_dt * chain[0]).exp();
         total_scale *= scale;
-        kinetic *= scale * scale;
+        current_kinetic *= scale * scale;
 
         for idx in 1..DEFAULT_THERMOSTAT_CHAIN_LENGTH {
             let coupling = (-eighth_dt * chain[idx]).exp();
@@ -115,7 +122,7 @@ fn integrate_nhc_chain(
                 idx,
                 chain,
                 &masses,
-                kinetic,
+                current_kinetic,
                 target_temperature,
                 thermal_dof,
             );
@@ -296,7 +303,7 @@ impl SimulationWorld {
         let Some(v_com) = bucket.kinetic.center_of_mass_velocity() else {
             return false;
         };
-        let Some(thermal_dof) = thermal_dof(bucket.kinetic.count()) else {
+        let Some(thermal_dof) = compute_thermal_dof(bucket.kinetic.count()) else {
             return false;
         };
 
