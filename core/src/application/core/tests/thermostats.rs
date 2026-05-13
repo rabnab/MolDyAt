@@ -11,6 +11,9 @@ fn make_content() -> MainContent {
     MainContent::new(Rect::new(-20.0, 20.0, 40.0, -40.0)).unwrap()
 }
 
+const MIN_SIGNIFICANT_CHAIN_VALUE: f32 = 1.0e-6;
+const MAX_STABLE_BUCKET_TEMP: f32 = 10.0;
+
 fn zeroed_stats() -> StatsAccumulator {
     StatsAccumulator {
         pot: 0.0,
@@ -288,7 +291,12 @@ fn thermostat_updates_all_chain_variables() {
     let chain = &mc.world().thermostats.find(thermostat_id).unwrap().chain;
     assert_eq!(chain.len(), DEFAULT_THERMOSTAT_CHAIN_LENGTH);
     assert!(chain.iter().all(|v| v.is_finite()));
-    assert!(chain.iter().skip(1).any(|v| v.abs() > 1.0e-6));
+    assert!(
+        chain
+            .iter()
+            .skip(1)
+            .any(|v| v.abs() > MIN_SIGNIFICANT_CHAIN_VALUE)
+    );
 }
 
 #[test]
@@ -313,7 +321,7 @@ fn thermostat_remains_stable_in_small_bucket_long_run() {
     let final_temp = kinetic_stats.temperature().unwrap();
     let chain = &mc.world().thermostats.find(thermostat_id).unwrap().chain;
     assert!(final_temp.is_finite());
-    assert!(final_temp < 10.0);
+    assert!(final_temp < MAX_STABLE_BUCKET_TEMP);
     assert!(chain.iter().all(|v| v.is_finite()));
 }
 

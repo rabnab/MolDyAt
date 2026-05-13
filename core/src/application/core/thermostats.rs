@@ -26,6 +26,7 @@ impl ThermostatBucket {
 
 /// Use a few smaller reversible sub-steps for better local thermostat stability.
 const NHC_SUBSTEPS: usize = 4;
+const NHC_SUBSTEPS_F32: f32 = 4.0;
 /// Lower bound for Nosé-Hoover masses to avoid division-by-zero.
 const MIN_CHAIN_MASS: f32 = 1.0e-6;
 /// Lower bound for user-facing time constant when deriving internal masses.
@@ -65,8 +66,8 @@ fn chain_drive(
     if index == 0 {
         (2.0 * thermal_kinetic - thermal_dof * target_temperature) / masses[0]
     } else {
-        (masses[index - 1] * chain[index - 1] * chain[index - 1] - target_temperature)
-            / masses[index]
+        let prev_chain_sq = chain[index - 1] * chain[index - 1];
+        (masses[index - 1] * prev_chain_sq - target_temperature) / masses[index]
     }
 }
 
@@ -81,7 +82,7 @@ fn integrate_nhc_chain(
     let mut total_scale = 1.0_f32;
     let mut kinetic = thermal_kinetic.max(0.0);
     let masses = derive_nhc_masses(tau, target_temperature, thermal_dof);
-    let sub_dt = dt / NHC_SUBSTEPS as f32;
+    let sub_dt = dt / NHC_SUBSTEPS_F32;
     let quarter_dt = 0.25 * sub_dt;
     let eighth_dt = 0.125 * sub_dt;
 
