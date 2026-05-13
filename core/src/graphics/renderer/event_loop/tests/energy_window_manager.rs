@@ -143,20 +143,21 @@ fn request_redraw_skips_when_already_pending() {
 }
 
 #[test]
-fn handle_redraw_then_request_redraw_within_interval_does_not_re_queue() {
+fn request_redraw_with_recent_last_redraw_and_no_window_does_not_queue() {
     // Simulate a very recent last-redraw by directly setting the instant.
-    // The throttle interval (83 ms) should prevent another immediate request
-    // even though the pending flag has been cleared.
+    // In this test setup there is no real OS window, so `request_redraw()`
+    // returns early because the window is absent before any throttle logic
+    // could matter. This still verifies that a recent last-redraw instant
+    // does not cause the manager to mark redraw as pending in the no-window
+    // case.
     let mut manager = make_manager();
     let just_now = Instant::now();
     manager.set_last_redraw_instant(Some(just_now));
-    // Clear any pending state so we can test the time-guard path alone.
-    // (The pending flag is initially false, so this is a no-op, but explicit.)
-    manager.request_redraw(); // no-op: no window, but time-guard fires first
+    manager.request_redraw(); // no-op: no window is present, so nothing is queued
 
     assert!(
         !manager.is_redraw_pending(),
-        "redraw must be throttled when last render was just now"
+        "pending should remain false when no window is available to redraw"
     );
 }
 

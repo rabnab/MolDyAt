@@ -208,6 +208,12 @@ impl EnergyWindowManager {
         if let Some(last) = self.last_redraw_instant
             && last.elapsed() < ENERGY_REDRAW_MIN_INTERVAL
         {
+            // This intentionally drops the redraw instead of deferring it.
+            // If snapshots stop arriving immediately after a render, the most
+            // recent sample may not be shown until a future update triggers
+            // another request. That tradeoff is acceptable here because the
+            // energy window is best-effort diagnostics, and throttling avoids
+            // stealing frame time from the main simulation.
             return;
         }
         if let Some(window) = &self.window {

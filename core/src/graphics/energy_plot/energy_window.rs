@@ -227,7 +227,6 @@ impl EnergyPlotWindow {
 
     pub fn set_display_mode(&mut self, mode: DisplayMode) {
         self.display_mode = mode;
-        self.cached_data_version = None; // invalidate cache on mode change
         // Update window title
         if let Some(window) = &self.window {
             window.set_title(&format!("Energy Plot 🐾 — {}", mode.as_str()));
@@ -236,7 +235,6 @@ impl EnergyPlotWindow {
 
     pub fn cycle_display_mode(&mut self) {
         self.display_mode = self.display_mode.next();
-        self.cached_data_version = None; // invalidate cache on mode change
         // Update window title
         if let Some(window) = &self.window {
             window.set_title(&format!("Energy Plot 🐾 — {}", self.display_mode.as_str()));
