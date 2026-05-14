@@ -15,11 +15,17 @@
 
 /// Which thermodynamic field overlay to display.
 ///
-/// Cycled by the `T` key: Off → Temperature → Pressure → Off.
+/// Cycled by the `T` key: Off → Grid → Temperature → Pressure → Off.
+///
+/// - `Off`: no overlay rendered.
+/// - `Grid`: plain cell-grid overlay only (no heatmap or value labels).
+/// - `Temperature`: thermo heatmap + value labels using temperature field.
+/// - `Pressure`: thermo heatmap + value labels using pressure field.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ThermoDisplayMode {
     #[default]
     Off,
+    Grid,
     Temperature,
     Pressure,
 }
@@ -28,12 +34,18 @@ impl ThermoDisplayMode {
     /// Next variant in the cycle (wraps around).
     pub fn next(self) -> Self {
         let next = match self {
-            Self::Off => Self::Temperature,
+            Self::Off => Self::Grid,
+            Self::Grid => Self::Temperature,
             Self::Temperature => Self::Pressure,
             Self::Pressure => Self::Off,
         };
         log::info!("Thermo display: {self:?} → {next:?}");
         next
+    }
+
+    /// Returns `true` for modes that render the thermo heatmap and value overlay.
+    pub fn is_thermo_active(self) -> bool {
+        matches!(self, Self::Temperature | Self::Pressure)
     }
 }
 
@@ -335,6 +347,8 @@ mod tests {
         let mut cfg = RendererConfig::default();
         assert_eq!(cfg.thermo_display, ThermoDisplayMode::Off);
         cfg.cycle_thermo_display();
+        assert_eq!(cfg.thermo_display, ThermoDisplayMode::Grid);
+        cfg.cycle_thermo_display();
         assert_eq!(cfg.thermo_display, ThermoDisplayMode::Temperature);
         cfg.cycle_thermo_display();
         assert_eq!(cfg.thermo_display, ThermoDisplayMode::Pressure);
@@ -343,10 +357,18 @@ mod tests {
     }
 
     #[test]
-    fn thermo_display_mode_two_presses_is_pressure() {
+    fn thermo_display_mode_two_presses_is_temperature() {
         let mut cfg = RendererConfig::default();
         cfg.cycle_thermo_display();
         cfg.cycle_thermo_display();
-        assert_eq!(cfg.thermo_display, ThermoDisplayMode::Pressure);
+        assert_eq!(cfg.thermo_display, ThermoDisplayMode::Temperature);
+    }
+
+    #[test]
+    fn thermo_display_mode_grid_is_not_thermo_active() {
+        assert!(!ThermoDisplayMode::Off.is_thermo_active());
+        assert!(!ThermoDisplayMode::Grid.is_thermo_active());
+        assert!(ThermoDisplayMode::Temperature.is_thermo_active());
+        assert!(ThermoDisplayMode::Pressure.is_thermo_active());
     }
 }

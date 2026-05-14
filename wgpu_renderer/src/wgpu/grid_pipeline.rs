@@ -56,6 +56,8 @@ pub struct GridPipeline {
     uniform_buffer: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
     uniforms: GridUniforms,
+    /// Set to `true` only when `ThermoDisplayMode::Grid` is active.
+    visible: bool,
 }
 
 impl GridPipeline {
@@ -152,6 +154,7 @@ impl GridPipeline {
             uniform_buffer,
             bind_group,
             uniforms,
+            visible: false,
         }
     }
 
@@ -221,6 +224,7 @@ impl GridPipeline {
 
 use super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
 use rust_thermo_core::application::AppResult;
+use rust_thermo_core::graphics::renderer::state_layers::ThermoDisplayMode;
 
 impl RenderPipeline for GridPipeline {
     fn name(&self) -> &'static str {
@@ -232,11 +236,17 @@ impl RenderPipeline for GridPipeline {
     }
 
     fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
-        self.update_uniforms(ctx.queue, &ctx.snapshot.grid_spec, ctx.view_proj);
+        self.visible = ctx.thermo_display == ThermoDisplayMode::Grid;
+        if self.visible {
+            self.update_uniforms(ctx.queue, &ctx.snapshot.grid_spec, ctx.view_proj);
+        }
         Ok(())
     }
 
     fn render<'rp>(&'rp self, render_pass: &mut wgpu::RenderPass<'rp>) {
+        if !self.visible {
+            return;
+        }
         let cell_count = self.cell_count();
         self.draw(render_pass, cell_count);
     }

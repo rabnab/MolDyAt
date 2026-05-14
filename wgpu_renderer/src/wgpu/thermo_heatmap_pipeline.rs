@@ -301,7 +301,7 @@ impl ThermoHeatmapPipeline {
         let (v_min, v_max) = match mode {
             ThermoDisplayMode::Temperature => (TEMP_MIN, TEMP_MAX),
             ThermoDisplayMode::Pressure => (PRES_MIN, PRES_MAX),
-            ThermoDisplayMode::Off => unreachable!(),
+            ThermoDisplayMode::Off | ThermoDisplayMode::Grid => unreachable!(),
         };
         let inv_range = 1.0 / (v_max - v_min);
 
@@ -389,7 +389,7 @@ impl RenderPipeline for ThermoHeatmapPipeline {
     }
 
     fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
-        if ctx.thermo_display == ThermoDisplayMode::Off {
+        if !ctx.thermo_display.is_thermo_active() {
             self.has_data = false;
             return Ok(());
         }
@@ -403,7 +403,7 @@ impl RenderPipeline for ThermoHeatmapPipeline {
         let grid = match ctx.thermo_display {
             ThermoDisplayMode::Temperature => &ctx.snapshot.cell_temperature,
             ThermoDisplayMode::Pressure => &ctx.snapshot.cell_pressure,
-            ThermoDisplayMode::Off => unreachable!(),
+            ThermoDisplayMode::Off | ThermoDisplayMode::Grid => unreachable!(),
         };
 
         let (grid_rows, grid_cols) = grid.shape();

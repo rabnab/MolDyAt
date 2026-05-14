@@ -17,7 +17,8 @@ impl LogStuff for MainContent {
             NORMAL_GRAVITY_MPS2, HIGH_GRAVITY_MPS2
         );
         const HELP_OPTION_S: &str = "S - Toggle step-by-step mode.";
-        const HELP_OPTION_T: &str = "T - Toggle the display of timing information.";
+        const HELP_OPTION_T: &str =
+            "T - Cycle thermo overlay: Off -> Grid -> Temperature -> Pressure -> Off.";
         const HELP_OPTION_INCREASE_SPEED: &str = "+ - Increase the simulation speed.";
         const HELP_OPTION_DECREASE_SPEED: &str =
             "- - Decrease the simulation speed (minimum speed is 1).";

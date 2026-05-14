@@ -151,17 +151,19 @@ fn test_thermo_display_mode_cycle() {
     use crate::graphics::renderer::state_layers::ThermoDisplayMode;
 
     let mut mode = ThermoDisplayMode::Off;
-    mode = mode.next(); // Off → Temperature
+    mode = mode.next(); // Off → Grid
+    assert_eq!(mode, ThermoDisplayMode::Grid);
+    mode = mode.next(); // Grid → Temperature
     assert_eq!(mode, ThermoDisplayMode::Temperature);
     mode = mode.next(); // Temperature → Pressure
     assert_eq!(mode, ThermoDisplayMode::Pressure);
     mode = mode.next(); // Pressure → Off
     assert_eq!(mode, ThermoDisplayMode::Off);
 
-    // Two presses from Off lands on Pressure
+    // Two presses from Off lands on Temperature
     let mut mode2 = ThermoDisplayMode::Off;
     mode2 = mode2.next().next();
-    assert_eq!(mode2, ThermoDisplayMode::Pressure);
+    assert_eq!(mode2, ThermoDisplayMode::Temperature);
 }
 
 // ── Test 10: No-data guard (None spec or 0×0 grid) ──────────────
