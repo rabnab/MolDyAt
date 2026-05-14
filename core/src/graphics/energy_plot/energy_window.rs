@@ -12,6 +12,8 @@ const DEFAULT_WIDTH: u32 = 1024; // Reduced by 20% from 1280
 const DEFAULT_HEIGHT: u32 = 576; // Reduced by 20% from 720
 const MIN_WINDOW_WIDTH: u32 = 320;
 const MIN_WINDOW_HEIGHT: u32 = 240;
+/// Keep the energy window anchored to the top while leaving room at the bottom.
+const ENERGY_WINDOW_BOTTOM_GAP_PX: u32 = 100;
 
 // Text rendering constants
 const CHAR_WIDTH_PIX: u32 = 13; // pixel width per character (realistic value)
@@ -68,25 +70,35 @@ pub fn split_screen_layout_for_monitor(monitor: &MonitorHandle) -> SplitScreenLa
     split_screen_layout(monitor.position(), monitor.size())
 }
 
+fn preferred_energy_window_size(available_size: PhysicalSize<u32>) -> PhysicalSize<u32> {
+    let width = DEFAULT_WIDTH.min(available_size.width.max(1));
+    let height = available_size
+        .height
+        .saturating_sub(ENERGY_WINDOW_BOTTOM_GAP_PX)
+        .max(1);
+
+    PhysicalSize::new(width, height)
+}
+
 fn split_screen_layout(
     monitor_position: PhysicalPosition<i32>,
     monitor_size: PhysicalSize<u32>,
 ) -> SplitScreenLayout {
     let simulation_width = (monitor_size.width / 2).max(1);
-    let energy_width = (monitor_size.width - simulation_width).max(1);
-    let window_height = monitor_size.height.max(1);
+    let energy_size = preferred_energy_window_size(PhysicalSize::new(
+        (monitor_size.width - simulation_width).max(1),
+        monitor_size.height.max(1),
+    ));
+    let energy_x = monitor_position.x + monitor_size.width as i32 - energy_size.width as i32;
 
     SplitScreenLayout {
         simulation: WindowGeometry {
             position: monitor_position,
-            size: PhysicalSize::new(simulation_width, window_height),
+            size: PhysicalSize::new(simulation_width, monitor_size.height.max(1)),
         },
         energy: WindowGeometry {
-            position: PhysicalPosition::new(
-                monitor_position.x + simulation_width as i32,
-                monitor_position.y,
-            ),
-            size: PhysicalSize::new(energy_width, window_height),
+            position: PhysicalPosition::new(energy_x, monitor_position.y),
+            size: energy_size,
         },
     }
 }
@@ -601,19 +613,16 @@ mod tests {
         assert_eq!(layout.simulation.position, PhysicalPosition::new(100, 50));
         assert_eq!(layout.simulation.size, PhysicalSize::new(800, 900));
         assert_eq!(layout.energy.position, PhysicalPosition::new(900, 50));
-        assert_eq!(layout.energy.size, PhysicalSize::new(800, 900));
+        assert_eq!(layout.energy.size, PhysicalSize::new(800, 800));
     }
 
     #[test]
-    fn test_split_screen_layout_preserves_full_monitor_width_for_odd_sizes() {
+    fn test_split_screen_layout_right_aligns_energy_window_for_odd_sizes() {
         let layout = split_screen_layout(PhysicalPosition::new(0, 0), PhysicalSize::new(1365, 768));
 
-        assert_eq!(
-            layout.simulation.size.width + layout.energy.size.width,
-            1365
-        );
         assert_eq!(layout.simulation.size.height, 768);
-        assert_eq!(layout.energy.size.height, 768);
+        assert_eq!(layout.energy.size, PhysicalSize::new(683, 668));
+        assert_eq!(layout.energy.position, PhysicalPosition::new(682, 0));
     }
 
     #[test]
@@ -621,12 +630,24 @@ mod tests {
         let layout =
             split_screen_layout(PhysicalPosition::new(25, 40), PhysicalSize::new(500, 200));
 
-        assert_eq!(layout.simulation.size.width + layout.energy.size.width, 500);
         assert_eq!(layout.simulation.size.height, 200);
-        assert_eq!(layout.energy.size.height, 200);
-        assert_eq!(
-            layout.energy.position.x,
-            25 + layout.simulation.size.width as i32
-        );
+        assert_eq!(layout.energy.size, PhysicalSize::new(250, 100));
+        assert_eq!(layout.energy.position, PhysicalPosition::new(275, 40));
+    }
+
+    #[test]
+    fn preferred_energy_window_size_caps_height_below_monitor_height() {
+        let size = preferred_energy_window_size(PhysicalSize::new(900, 1080));
+
+        assert_eq!(size.width, 900);
+        assert_eq!(size.height, 980);
+    }
+
+    #[test]
+    fn preferred_energy_window_size_preserves_small_monitor_visibility() {
+        let size = preferred_energy_window_size(PhysicalSize::new(280, 300));
+
+        assert_eq!(size.width, 280);
+        assert_eq!(size.height, 200);
     }
 }

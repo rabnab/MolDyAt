@@ -92,10 +92,6 @@ impl EnergyWindowManager {
                 eprintln!("Failed to create energy window: {}", e);
                 return;
             }
-            if let (Some(layout), Some(main_window)) = (split_layout, main_window) {
-                let _ = main_window.request_inner_size(layout.simulation.size);
-                main_window.set_outer_position(layout.simulation.position);
-            }
             self.window = Some(window);
         } else if let Some(window) = &mut self.window {
             if window.is_open() {
@@ -111,10 +107,6 @@ impl EnergyWindowManager {
                 {
                     eprintln!("Failed to create energy window: {}", e);
                     return;
-                }
-                if let (Some(layout), Some(main_window)) = (split_layout, main_window) {
-                    let _ = main_window.request_inner_size(layout.simulation.size);
-                    main_window.set_outer_position(layout.simulation.position);
                 }
                 self.window = Some(new_window);
             }
