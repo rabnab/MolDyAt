@@ -353,7 +353,7 @@ impl SimulationWorld {
             thermal_dof,
             thermostat.tau,
         );
-        if !damping_scale.is_finite() || damping_scale <= 0.0 {
+        if !damping_scale.is_finite() {
             return false;
         }
 
