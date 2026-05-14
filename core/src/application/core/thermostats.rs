@@ -43,6 +43,14 @@ fn compute_thermal_dof(count: usize) -> Option<f32> {
     Some(2.0 * (count as f32 - 1.0))
 }
 
+/// Derive Nosé–Hoover chain masses from user-level thermostat controls.
+///
+/// `tau` is the only exposed coupling knob, so internal masses are derived as:
+/// - `Q0 = g * T_target * tau^2`, where `g` is local thermal DOF (`2*(N-1)`)
+/// - `Q1..Q4 = T_target * tau^2`
+///
+/// This keeps the primary thermostat coupled to the bucket size while using
+/// uniform trailing masses for the remaining chain links.
 fn derive_nhc_masses(
     tau: f32,
     target_temperature: f32,
@@ -296,6 +304,16 @@ impl SimulationWorld {
         best.map(|(bucket_idx, _)| bucket_idx)
     }
 
+    /// Apply one thermostat bucket update in local COM coordinates.
+    ///
+    /// Steps:
+    /// 1. Measure local COM-frame thermal state (`T_local`, `v_com`, DOF).
+    /// 2. Handle explicit edge cases (`target_temperature == 0.0` => freeze owned balls).
+    /// 3. Integrate the coupled 5-chain Nosé–Hoover variables.
+    /// 4. Scale only peculiar velocities `u_i = v_i - v_com`, then reconstruct
+    ///    `v_i = v_com + u_i'` so bucket drift is preserved.
+    ///
+    /// Returns `true` only when owned velocities were actually modified.
     fn apply_thermostat_bucket(&mut self, bucket: &ThermostatBucket, dt: f32) -> bool {
         let Some(local_temp) = bucket.kinetic.temperature() else {
             return false;
