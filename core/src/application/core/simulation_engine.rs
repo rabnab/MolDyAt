@@ -93,8 +93,8 @@ impl SimulationEngine {
         if world.balls.len() == world.cached_force_results.len() {
             let world_rect = world.world_rect;
             let (phys_rows, phys_cols) = world.cell_grid.get_grid_size();
-            let grid_rows = (phys_rows / 2).max(1);
-            let grid_cols = (phys_cols / 2).max(1);
+            let grid_rows = (phys_rows / 1).max(1);
+            let grid_cols = (phys_cols / 1).max(1);
             let (t_grid, p_grid) = compute_cell_thermo(
                 &world.balls,
                 &world.cached_force_results,
