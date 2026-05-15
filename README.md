@@ -89,7 +89,7 @@ cargo +nightly clippy --workspace -- -D warnings
 | `R` | Randomize ball speeds |
 | `S` | Toggle stepwise mode |
 | `D` | Toggle real-data display |
-| `T` | Toggle timing display |
+| `T` | Cycle thermo overlay (Off → Grid → Temperature → Pressure → Off) |
 | `B` | Toggle ball stats overlay |
 | `P` | Cycle plot content |
 | `H` | Print help to log |

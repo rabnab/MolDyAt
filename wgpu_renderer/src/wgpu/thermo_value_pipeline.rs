@@ -87,7 +87,7 @@ impl RenderPipeline for ThermoValueOverlayPipeline {
     }
 
     fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
-        if ctx.thermo_display == ThermoDisplayMode::Off {
+        if !ctx.thermo_display.is_thermo_active() {
             self.text.clear();
             return Ok(());
         }
@@ -100,7 +100,7 @@ impl RenderPipeline for ThermoValueOverlayPipeline {
         let grid = match ctx.thermo_display {
             ThermoDisplayMode::Temperature => &ctx.snapshot.cell_temperature,
             ThermoDisplayMode::Pressure => &ctx.snapshot.cell_pressure,
-            ThermoDisplayMode::Off => unreachable!(),
+            ThermoDisplayMode::Off | ThermoDisplayMode::Grid => unreachable!(),
         };
 
         let (rows, cols) = grid.shape();
