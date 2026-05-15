@@ -79,8 +79,8 @@ impl Default for BallUniforms {
             eq_edge_distance: 0.56,
             // Default cutoff distance
             cutoff_distance: 4.0,
-            // Show cutoff rings by default
-            show_cutoff_rings: 1,
+            // Hide cutoff rings by default
+            show_cutoff_rings: 0,
             _padding: [0; 3],
         }
     }
