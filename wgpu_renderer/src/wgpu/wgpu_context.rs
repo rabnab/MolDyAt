@@ -7,6 +7,15 @@ use std::sync::Arc;
 use wgpu::{Adapter, Device, Instance, Queue, Surface, SurfaceConfiguration, TextureFormat};
 use winit::window::Window;
 
+#[cfg(target_os = "windows")]
+const PREFERRED_BACKENDS: wgpu::Backends = wgpu::Backends::DX12;
+
+#[cfg(target_os = "linux")]
+const PREFERRED_BACKENDS: wgpu::Backends = wgpu::Backends::VULKAN;
+
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+const PREFERRED_BACKENDS: wgpu::Backends = wgpu::Backends::PRIMARY;
+
 /// Core WGPU rendering context containing GPU resources.
 ///
 /// This struct owns the fundamental WGPU objects needed for rendering:
@@ -42,9 +51,10 @@ impl WgpuContext {
 
     /// Async initialization of WGPU context.
     async fn new_async(window: Arc<Window>) -> Self {
-        // Create wgpu instance with default backends
+        // Create the instance with an explicit native backend per platform.
+        log::info!("WGPU preferred backend set: {:?}", PREFERRED_BACKENDS);
         let instance = Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::all(),
+            backends: PREFERRED_BACKENDS,
             flags: wgpu::InstanceFlags::default(),
             backend_options: wgpu::BackendOptions::default(),
             memory_budget_thresholds: Default::default(),
