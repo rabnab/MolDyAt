@@ -136,7 +136,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     } else {
         // Ball outline - draw circles
         if uniforms.show_ball_outline < 0.5 {
-            discard;
+            return vec4<f32>(0.0, 0.0, 0.0, 0.0);
         }
 
         let dist = length(in.local_pos);
@@ -173,6 +173,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             return vec4<f32>(white.rgb, edge);
         }
 
-        discard;
+        return vec4<f32>(0.0, 0.0, 0.0, 0.0);
     }
 }

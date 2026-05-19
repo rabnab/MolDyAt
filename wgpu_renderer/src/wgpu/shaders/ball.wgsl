@@ -120,7 +120,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     // Discard pixels outside the cutoff circle
     if dist > in.cutoff_radius + STROKE_WIDTH * 0.5 {
-        discard;
+        return vec4<f32>(0.0, 0.0, 0.0, 0.0);
     }
 
     // Colors for the circles
@@ -156,5 +156,5 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     // Between circles - transparent
-    discard;
+    return vec4<f32>(0.0, 0.0, 0.0, 0.0);
 }
