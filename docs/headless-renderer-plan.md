@@ -17,6 +17,7 @@ This mode should be useful for:
 - Avoid introducing renderer-specific dependencies into `core`
 - Keep the default interactive startup path unchanged
 - Preserve energy-conservation behavior by only observing simulation state, not changing physics logic
+- Treat renderer snapshots as an internal observation source, not as the long-term exported file schema
 
 ## Proposed Shape
 
@@ -43,7 +44,21 @@ Proposed loop:
 
 This keeps the implementation close to the existing renderer data contract and avoids coupling headless mode to WGPU internals.
 
+Emit a snapshot at step `0` before stepping begins unless explicitly disabled. This gives deterministic initial-state output for CI, regression fixtures, and energy-drift comparisons.
+
 ## Output Design
+
+Use `RendererSnapshot` as the in-memory source, then map it to a dedicated headless output model owned by `wgpu_renderer`.
+
+Do not treat `RendererSnapshot` itself as the exported contract. It is renderer-shaped and may evolve for rendering needs that should not break headless consumers.
+
+Suggested first export model:
+
+- `RunStart` record: one-time metadata
+- `Frame` record: per-snapshot simulation data
+- `RunEnd` record: optional completion summary
+
+Add a top-level schema version from the start so later format extensions remain compatible.
 
 ### Console Sink
 
@@ -57,13 +72,16 @@ Recommended fields:
 - kinetic energy
 - potential energy
 - total energy
+- total energy delta from initial snapshot
 - operator counts
 
 Example direction:
 
 ```text
-step=120 time=1.20000 balls=32 kinetic=14.72 potential=-21.04 total=-6.32
+step=120 time=1.20000 balls=32 kinetic=14.72 potential=-21.04 total=-6.32 dE=0.00031
 ```
+
+Do not print `status_text` from `RendererSnapshot`. That field is UI-oriented and currently depends on renderer-style display concerns rather than a stable headless contract.
 
 ### File Sink
 
@@ -75,16 +93,45 @@ Preferred first format:
 
 Recommended record contents:
 
+- schema version
+- record type (`run_start`, `frame`, `run_end`)
 - top-level simulation summary
+- world metadata and run configuration
 - operator counts
-- full per-ball positions/radii/neighbor counts
-- optional status text
+- optional full per-ball detail
+- optional thermo data
 
 Reasoning:
 
 - append-friendly
 - easy to inspect manually
 - easy to consume from scripts or notebooks
+
+Default to a summary-oriented frame record and make large payloads opt-in.
+
+Suggested default `frame` fields:
+
+- simulation step
+- simulated time
+- ball count
+- kinetic energy
+- potential energy
+- total energy
+- total energy delta from initial frame
+- gravity preset
+- operator counts
+
+Suggested opt-in detail sections:
+
+- `balls`: per-ball position, velocity, radius, size class, mass
+- `operators`: full operator geometry
+- `thermo`: cell grids and grid specs
+
+Important details:
+
+- Do not export `status_text` as a structured field
+- Do not claim per-ball neighbor counts unless a dedicated, always-populated source is added; the current snapshot only populates `neighbors` for verbose visualization paths
+- Define a JSON policy for non-finite values before exporting thermo grids; if `NaN` can appear, convert to `null` or another explicit representation because standard JSON does not support `NaN`
 
 ## Initial CLI Surface
 
@@ -96,6 +143,9 @@ Suggested flags:
 - `--steps <n>`
 - `--snapshot-every <n>`
 - `--output <path>`
+- `--format jsonl`
+- `--detail <summary|balls>`
+- `--rng-seed <n>`
 - `--stdout`
 - `--no-stdout`
 - `--seed-balls <n>`
@@ -104,7 +154,9 @@ Default behavior in headless mode:
 
 - stdout enabled
 - one step if `--steps` is omitted
+- snapshot emitted at step `0`
 - snapshot emitted on the final step even if the interval does not divide evenly
+- summary-only JSON records unless a higher detail level is requested
 
 ## Seeding Strategy
 
@@ -114,6 +166,8 @@ Recommended first version:
 
 - deterministic grid seeding in world coordinates
 - optional small initial velocities so output changes between frames
+- seeding metadata included in `run_start`
+- when RNG-backed behavior is introduced, require an explicit seed in headless mode to support reproducible CI fixtures
 
 Avoid as a first step:
 
@@ -126,11 +180,13 @@ If deterministic grid seeding proves too limited, a later step can add:
 - public command application helpers
 - seeded random initialization
 
+Document determinism boundaries explicitly. For CI use, headless mode should be deterministic when run with the same RNG seeds and the same relevant simulation configuration.
+
 ## Module Boundaries
 
 ### `core`
 
-No required changes expected for the first version if the mode only:
+Prefer no required changes for the first version if the mode only:
 
 - constructs `MainContent`
 - advances via `GameLogic::simulation_step()`
@@ -139,15 +195,20 @@ No required changes expected for the first version if the mode only:
 
 Only widen `core` visibility if an actual blocker appears.
 
+If export needs data that `RendererSnapshot` does not expose reliably for headless use, prefer adding explicit observer-oriented accessors or a dedicated headless projection over overloading renderer-only fields.
+
 ### `wgpu_renderer`
 
 Place the implementation in a dedicated module such as `wgpu_renderer/src/headless.rs`.
+
+Headless mode should remain in `wgpu_renderer` so the same binary can provide both graphical and non-graphical execution paths.
 
 Suggested responsibilities:
 
 - parse headless args
 - own output sink setup
 - run the direct simulation loop
+- define the versioned headless record schema
 - map `RendererSnapshot` into console/file output formats
 
 ## Testing Plan
@@ -156,8 +217,10 @@ Minimum validation for the first implementation:
 
 1. argument parsing tests
 2. snapshot formatting tests for console output
-3. structured record serialization tests for file output
-4. a smoke test that runs a few steps headlessly and emits at least one snapshot
+3. structured record serialization tests for file output, including schema version and non-finite thermo handling
+4. a smoke test that runs a few steps headlessly and emits an initial snapshot plus at least one stepped snapshot
+5. an energy-delta output test that verifies the initial frame is the delta baseline
+6. a determinism test that runs the same seeded headless configuration twice and verifies identical emitted records
 
 If the implementation touches `core`, add focused tests there rather than only exercising the path from `wgpu_renderer`.
 
@@ -170,27 +233,35 @@ When implementation starts, validate in this order:
 3. `cargo +nightly fmt`
 4. `cargo +nightly clippy -- -D warnings`
 
-For physics-affecting changes, add an energy-drift check. A pure observer/export path should not require physics changes.
+If implementation widens or changes `core`, also run the affected `rust_thermo_core` tests instead of validating only `wgpu_renderer`.
+
+For physics-affecting changes, add an energy-drift check. A pure observer/export path should not require physics changes, but the headless output should still expose enough energy data to detect drift.
 
 ## Risks
 
 - CLI selection logic could accidentally change default startup behavior
 - snapshot files may become large quickly if full ball state is emitted every step
+- tying the exported file contract directly to `RendererSnapshot` would make future renderer changes harder
+- seeded determinism must be preserved for CI fixtures and regression tests
+- thermo export can fail or become non-portable if non-finite values are written without a clear encoding policy
 - deterministic seeding must avoid overlapping balls if it bypasses normal collision checks
 - there may be pressure to grow the mode into a scenario runner; keep the first scope narrow
 
-## Open Questions
+## Resolved Decisions
 
-- Should the file sink contain full ball detail on every emitted frame or support a summary-only mode?
-- Should headless mode live inside `wgpu_renderer`, or should a separate binary crate own non-graphical execution later?
-- Do we want a stable machine-readable schema version in the JSON output from the start?
-- Should CI eventually use headless mode for regression fixtures or snapshot-style tests?
+- Summary-only output is the default; full ball detail is opt-in.
+- Headless mode stays inside `wgpu_renderer` so the same binary supports graphical and headless execution.
+- The first version of detailed ball export should include velocities and masses.
+- CI is expected to use headless mode for regression fixtures and snapshot-style tests.
+- Determinism for CI users should be guaranteed when runs use the same RNG seeds and equivalent simulation configuration.
 
 ## Recommended Implementation Order
 
 1. Add doc-approved CLI contract and startup selection
 2. Add direct `MainContent` stepping loop
-3. Add console summary sink
-4. Add JSONL file sink
-5. Add deterministic seeding
-6. Add focused tests and final lint/format validation
+3. Add versioned headless record schema with `run_start`/`frame`/`run_end`
+4. Add console summary sink
+5. Add JSONL file sink with summary-only default records
+6. Add deterministic seeding
+7. Add optional detailed per-ball export
+8. Add focused tests and final lint/format validation
