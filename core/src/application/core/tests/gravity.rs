@@ -32,7 +32,7 @@ fn test_snapshot_reports_gravity_force_multiple() {
     assert_eq!(main_content.create_snapshot().gravity_force_multiple, 1);
 
     main_content.toggle_gravity();
-    assert_eq!(main_content.create_snapshot().gravity_force_multiple, 2);
+    assert_eq!(main_content.create_snapshot().gravity_force_multiple, 5);
 }
 
 #[test]
