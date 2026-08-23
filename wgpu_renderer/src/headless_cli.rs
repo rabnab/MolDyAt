@@ -2,7 +2,6 @@
 ///
 /// This module handles parsing command-line arguments for headless execution mode
 /// and storing the parsed configuration for use by the headless simulation loop.
-
 use std::env;
 use std::path::PathBuf;
 
@@ -88,7 +87,12 @@ impl CliError {
 /// - `Err(CliError)` if argument validation fails
 pub fn parse_headless_args() -> Result<Option<HeadlessConfig>, CliError> {
     let args: Vec<String> = env::args().collect();
+    parse_headless_args_with_args(&args)
+}
 
+/// Internal function for parsing args. This is public for testing purposes.
+/// In production, use `parse_headless_args()` instead.
+pub fn parse_headless_args_with_args(args: &[String]) -> Result<Option<HeadlessConfig>, CliError> {
     // Check if --headless is present
     if !args.iter().any(|arg| arg == "--headless") {
         return Ok(None);
@@ -158,9 +162,9 @@ pub fn parse_headless_args() -> Result<Option<HeadlessConfig>, CliError> {
                 if i >= args.len() {
                     return Err(CliError::new("--rng-seed requires a value"));
                 }
-                let seed = args[i]
-                    .parse::<u64>()
-                    .map_err(|_| CliError::new("--rng-seed value must be a non-negative integer"))?;
+                let seed = args[i].parse::<u64>().map_err(|_| {
+                    CliError::new("--rng-seed value must be a non-negative integer")
+                })?;
                 config.rng_seed = Some(seed);
             }
             "--stdout" => {
@@ -205,23 +209,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_no_headless_flag_returns_none() {
-        // This test is context-dependent on env::args(), so we verify the behavior
-        // by calling parse_headless_args when --headless is not in args.
-        // We'll use a simpler approach: test with --headless explicitly.
-        let result = parse_headless_args();
-        // If --headless is not in env::args(), this should return Ok(None)
-        match result {
-            Ok(None) => {} // Expected when --headless is not present
-            Ok(Some(_)) => {
-                panic!("Expected Ok(None) when --headless is not in env::args()")
-            }
-            Err(e) => panic!("Unexpected error: {}", e),
-        }
-    }
-
-    #[test]
-    fn test_default_config() {
+    fn test_default_config_values() {
         let config = HeadlessConfig::default();
         assert_eq!(config.steps, 1);
         assert_eq!(config.snapshot_every, 0);
@@ -234,15 +222,326 @@ mod tests {
     }
 
     #[test]
-    fn test_steps_requires_value() {
-        // Note: This is a placeholder test structure. Real tests would need
-        // to mock env::args() or refactor parse_headless_args to accept args.
-        // For now, we document the expected behavior.
+    fn test_no_headless_flag() {
+        let args = vec!["program".to_string()];
+        let result = parse_headless_args_with_args(&args);
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
     }
 
     #[test]
-    fn test_stdout_no_output_requires_file() {
-        // Placeholder: In real tests, we'd verify that having both
-        // --no-stdout and no --output returns an error.
+    fn test_headless_without_flags() {
+        let args = vec!["program".to_string(), "--headless".to_string()];
+        let result = parse_headless_args_with_args(&args);
+        assert!(result.is_ok());
+        let config = result.unwrap().unwrap();
+        assert_eq!(config.steps, 1);
+        assert!(config.stdout);
+    }
+
+    #[test]
+    fn test_steps_flag() {
+        let args = vec![
+            "program".to_string(),
+            "--headless".to_string(),
+            "--steps".to_string(),
+            "100".to_string(),
+        ];
+        let result = parse_headless_args_with_args(&args);
+        assert!(result.is_ok());
+        let config = result.unwrap().unwrap();
+        assert_eq!(config.steps, 100);
+    }
+
+    #[test]
+    fn test_steps_zero_is_error() {
+        let args = vec![
+            "program".to_string(),
+            "--headless".to_string(),
+            "--steps".to_string(),
+            "0".to_string(),
+        ];
+        let result = parse_headless_args_with_args(&args);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_steps_invalid_value() {
+        let args = vec![
+            "program".to_string(),
+            "--headless".to_string(),
+            "--steps".to_string(),
+            "not_a_number".to_string(),
+        ];
+        let result = parse_headless_args_with_args(&args);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_steps_missing_value() {
+        let args = vec![
+            "program".to_string(),
+            "--headless".to_string(),
+            "--steps".to_string(),
+        ];
+        let result = parse_headless_args_with_args(&args);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_snapshot_every_flag() {
+        let args = vec![
+            "program".to_string(),
+            "--headless".to_string(),
+            "--snapshot-every".to_string(),
+            "50".to_string(),
+        ];
+        let result = parse_headless_args_with_args(&args);
+        assert!(result.is_ok());
+        let config = result.unwrap().unwrap();
+        assert_eq!(config.snapshot_every, 50);
+    }
+
+    #[test]
+    fn test_snapshot_every_zero() {
+        let args = vec![
+            "program".to_string(),
+            "--headless".to_string(),
+            "--snapshot-every".to_string(),
+            "0".to_string(),
+        ];
+        let result = parse_headless_args_with_args(&args);
+        assert!(result.is_ok());
+        let config = result.unwrap().unwrap();
+        assert_eq!(config.snapshot_every, 0);
+    }
+
+    #[test]
+    fn test_output_flag() {
+        let args = vec![
+            "program".to_string(),
+            "--headless".to_string(),
+            "--output".to_string(),
+            "/tmp/output.jsonl".to_string(),
+        ];
+        let result = parse_headless_args_with_args(&args);
+        assert!(result.is_ok());
+        let config = result.unwrap().unwrap();
+        assert_eq!(
+            config.output.unwrap().to_string_lossy(),
+            "/tmp/output.jsonl"
+        );
+    }
+
+    #[test]
+    fn test_output_missing_value() {
+        let args = vec![
+            "program".to_string(),
+            "--headless".to_string(),
+            "--output".to_string(),
+        ];
+        let result = parse_headless_args_with_args(&args);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_format_jsonl() {
+        let args = vec![
+            "program".to_string(),
+            "--headless".to_string(),
+            "--format".to_string(),
+            "jsonl".to_string(),
+        ];
+        let result = parse_headless_args_with_args(&args);
+        assert!(result.is_ok());
+        let config = result.unwrap().unwrap();
+        assert_eq!(config.format, OutputFormat::Jsonl);
+    }
+
+    #[test]
+    fn test_format_invalid() {
+        let args = vec![
+            "program".to_string(),
+            "--headless".to_string(),
+            "--format".to_string(),
+            "csv".to_string(),
+        ];
+        let result = parse_headless_args_with_args(&args);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_detail_summary() {
+        let args = vec![
+            "program".to_string(),
+            "--headless".to_string(),
+            "--detail".to_string(),
+            "summary".to_string(),
+        ];
+        let result = parse_headless_args_with_args(&args);
+        assert!(result.is_ok());
+        let config = result.unwrap().unwrap();
+        assert_eq!(config.detail, DetailLevel::Summary);
+    }
+
+    #[test]
+    fn test_detail_balls() {
+        let args = vec![
+            "program".to_string(),
+            "--headless".to_string(),
+            "--detail".to_string(),
+            "balls".to_string(),
+        ];
+        let result = parse_headless_args_with_args(&args);
+        assert!(result.is_ok());
+        let config = result.unwrap().unwrap();
+        assert_eq!(config.detail, DetailLevel::Balls);
+    }
+
+    #[test]
+    fn test_detail_invalid() {
+        let args = vec![
+            "program".to_string(),
+            "--headless".to_string(),
+            "--detail".to_string(),
+            "operators".to_string(),
+        ];
+        let result = parse_headless_args_with_args(&args);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_rng_seed_flag() {
+        let args = vec![
+            "program".to_string(),
+            "--headless".to_string(),
+            "--rng-seed".to_string(),
+            "42".to_string(),
+        ];
+        let result = parse_headless_args_with_args(&args);
+        assert!(result.is_ok());
+        let config = result.unwrap().unwrap();
+        assert_eq!(config.rng_seed, Some(42));
+    }
+
+    #[test]
+    fn test_rng_seed_invalid() {
+        let args = vec![
+            "program".to_string(),
+            "--headless".to_string(),
+            "--rng-seed".to_string(),
+            "not_a_number".to_string(),
+        ];
+        let result = parse_headless_args_with_args(&args);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_stdout_flag() {
+        let args = vec![
+            "program".to_string(),
+            "--headless".to_string(),
+            "--stdout".to_string(),
+        ];
+        let result = parse_headless_args_with_args(&args);
+        assert!(result.is_ok());
+        let config = result.unwrap().unwrap();
+        assert!(config.stdout);
+    }
+
+    #[test]
+    fn test_no_stdout_flag() {
+        let args = vec![
+            "program".to_string(),
+            "--headless".to_string(),
+            "--no-stdout".to_string(),
+            "--output".to_string(),
+            "/tmp/output.jsonl".to_string(),
+        ];
+        let result = parse_headless_args_with_args(&args);
+        assert!(result.is_ok());
+        let config = result.unwrap().unwrap();
+        assert!(!config.stdout);
+    }
+
+    #[test]
+    fn test_no_stdout_without_output_is_error() {
+        let args = vec![
+            "program".to_string(),
+            "--headless".to_string(),
+            "--no-stdout".to_string(),
+        ];
+        let result = parse_headless_args_with_args(&args);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_seed_balls_flag() {
+        let args = vec![
+            "program".to_string(),
+            "--headless".to_string(),
+            "--seed-balls".to_string(),
+            "32".to_string(),
+        ];
+        let result = parse_headless_args_with_args(&args);
+        assert!(result.is_ok());
+        let config = result.unwrap().unwrap();
+        assert_eq!(config.seed_balls, Some(32));
+    }
+
+    #[test]
+    fn test_seed_balls_zero_is_error() {
+        let args = vec![
+            "program".to_string(),
+            "--headless".to_string(),
+            "--seed-balls".to_string(),
+            "0".to_string(),
+        ];
+        let result = parse_headless_args_with_args(&args);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_unknown_flag() {
+        let args = vec![
+            "program".to_string(),
+            "--headless".to_string(),
+            "--unknown-flag".to_string(),
+        ];
+        let result = parse_headless_args_with_args(&args);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_multiple_flags_combined() {
+        let args = vec![
+            "program".to_string(),
+            "--headless".to_string(),
+            "--steps".to_string(),
+            "200".to_string(),
+            "--snapshot-every".to_string(),
+            "20".to_string(),
+            "--output".to_string(),
+            "/tmp/out.jsonl".to_string(),
+            "--format".to_string(),
+            "jsonl".to_string(),
+            "--detail".to_string(),
+            "balls".to_string(),
+            "--rng-seed".to_string(),
+            "123".to_string(),
+            "--seed-balls".to_string(),
+            "16".to_string(),
+        ];
+        let result = parse_headless_args_with_args(&args);
+        assert!(result.is_ok());
+        let config = result.unwrap().unwrap();
+        assert_eq!(config.steps, 200);
+        assert_eq!(config.snapshot_every, 20);
+        assert_eq!(config.output.unwrap().to_string_lossy(), "/tmp/out.jsonl");
+        assert_eq!(config.format, OutputFormat::Jsonl);
+        assert_eq!(config.detail, DetailLevel::Balls);
+        assert_eq!(config.rng_seed, Some(123));
+        assert!(config.stdout);
+        assert_eq!(config.seed_balls, Some(16));
     }
 }

@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+mod headless_cli;
 mod wgpu;
 
 use crate::wgpu::{DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH, MARGINS};
@@ -62,5 +63,23 @@ fn run_wgpu_renderer() {
 
 fn main() {
     print_diagnostics();
-    run_wgpu_renderer();
+
+    match headless_cli::parse_headless_args() {
+        Ok(Some(config)) => {
+            log::info!("Running in headless mode");
+            // Headless mode will be implemented in issue #173
+            log::info!("Headless config: {:?}", config);
+            eprintln!(
+                "Headless mode is not yet fully implemented. Use the graphical mode for now."
+            );
+            std::process::exit(1);
+        }
+        Ok(None) => {
+            run_wgpu_renderer();
+        }
+        Err(e) => {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+    }
 }
