@@ -8,8 +8,20 @@ use std::rc::Rc;
 struct RecordingSink(Rc<RefCell<Vec<u64>>>);
 
 impl HeadlessSnapshotSink for RecordingSink {
-    fn write_snapshot(&mut self, snapshot: &RendererSnapshot) -> io::Result<()> {
+    fn write_run_start(&mut self, _snapshot: &RendererSnapshot) -> io::Result<()> {
+        Ok(())
+    }
+
+    fn write_frame(&mut self, snapshot: &RendererSnapshot) -> io::Result<()> {
         self.0.borrow_mut().push(snapshot.simulation_step);
+        Ok(())
+    }
+
+    fn write_run_end(
+        &mut self,
+        _final_snapshot: &RendererSnapshot,
+        _snapshots_emitted: u32,
+    ) -> io::Result<()> {
         Ok(())
     }
 }
