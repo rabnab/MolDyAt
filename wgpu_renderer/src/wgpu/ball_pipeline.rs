@@ -59,8 +59,8 @@ pub struct BallUniforms {
     pub eq_edge_distance: f32,
     /// Cutoff distance for interactions (typically 4.0)
     pub cutoff_distance: f32,
-    /// Show cutoff rings flag (0 = hide, 1 = show)
-    pub show_cutoff_rings: u32,
+    /// Ring display mode (0 = equilibrium only, 1 = equilibrium + cutoff, 2 = no rings)
+    pub ring_display_mode: u32,
     /// Padding to maintain 16-byte alignment
     _padding: [u32; 3],
 }
@@ -79,8 +79,8 @@ impl Default for BallUniforms {
             eq_edge_distance: 0.56,
             // Default cutoff distance
             cutoff_distance: 4.0,
-            // Hide cutoff rings by default
-            show_cutoff_rings: 0,
+            // Start with equilibrium rings only
+            ring_display_mode: 0,
             _padding: [0; 3],
         }
     }
@@ -283,16 +283,12 @@ impl BallPipeline {
         );
     }
 
-    /// Toggle cutoff ring visibility.
+    /// Cycle ring display mode.
     ///
     /// # Arguments
     /// * `queue` - WGPU queue for buffer writes
-    pub fn toggle_cutoff_rings(&mut self, queue: &wgpu::Queue) {
-        self.uniforms.show_cutoff_rings = if self.uniforms.show_cutoff_rings == 0 {
-            1
-        } else {
-            0
-        };
+    pub fn cycle_ring_display_mode(&mut self, queue: &wgpu::Queue) {
+        self.uniforms.ring_display_mode = (self.uniforms.ring_display_mode + 1) % 3;
         queue.write_buffer(
             &self.uniform_buffer,
             0,
@@ -300,13 +296,13 @@ impl BallPipeline {
         );
     }
 
-    /// Set cutoff ring visibility.
+    /// Set ring display mode.
     ///
     /// # Arguments
     /// * `queue` - WGPU queue for buffer writes
-    /// * `visible` - Whether cutoff rings should be visible
-    pub fn set_cutoff_rings_visible(&mut self, queue: &wgpu::Queue, visible: bool) {
-        self.uniforms.show_cutoff_rings = if visible { 1 } else { 0 };
+    /// * `mode` - 0 = equilibrium only, 1 = equilibrium + cutoff, 2 = no rings
+    pub fn set_ring_display_mode(&mut self, queue: &wgpu::Queue, mode: u32) {
+        self.uniforms.ring_display_mode = mode % 3;
         queue.write_buffer(
             &self.uniform_buffer,
             0,
@@ -486,7 +482,7 @@ mod tests {
         // screen_size: vec2<f32> = 8 bytes
         // eq_edge_distance: f32 = 4 bytes
         // cutoff_distance: f32 = 4 bytes
-        // show_cutoff_rings: u32 = 4 bytes
+        // ring_display_mode: u32 = 4 bytes
         // _padding: [u32; 3] = 12 bytes
         // Total: 96 bytes
         assert_eq!(std::mem::size_of::<BallUniforms>(), 96);

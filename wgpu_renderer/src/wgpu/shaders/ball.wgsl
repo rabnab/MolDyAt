@@ -26,8 +26,8 @@ struct Uniforms {
     eq_edge_distance: f32,
     // Cutoff distance for interactions (typically 4.0)
     cutoff_distance: f32,
-    // Show cutoff rings flag (0 = hide, 1 = show)
-    show_cutoff_rings: u32,
+    // Ring display mode (0 = equilibrium only, 1 = equilibrium + cutoff, 2 = no rings)
+    ring_display_mode: u32,
 }
 
 @group(0) @binding(0)
@@ -128,8 +128,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let gray = vec4<f32>(0.43, 0.43, 0.43, 1.0); // RGB(110, 110, 110)
 
     // Check which region we're in (from outside to inside)
-    // 1. Cutoff circle outline (gray) - only if enabled
-    if uniforms.show_cutoff_rings != 0u {
+    // 1. Cutoff circle outline (gray) - only in mode 1
+    if uniforms.ring_display_mode == 1u {
         let cutoff_inner = in.cutoff_radius - STROKE_WIDTH * 0.5;
         let cutoff_outer = in.cutoff_radius + STROKE_WIDTH * 0.5;
         if dist > cutoff_inner && dist < cutoff_outer {
@@ -139,13 +139,15 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         }
     }
 
-    // 2. Equilibrium circle outline (magenta)
-    let eq_inner = in.eq_radius - STROKE_WIDTH * 0.5;
-    let eq_outer = in.eq_radius + STROKE_WIDTH * 0.5;
-    if dist > eq_inner && dist < eq_outer {
-        let edge = smoothstep(eq_inner, eq_inner + 0.05, dist)
-                 * (1.0 - smoothstep(eq_outer - 0.05, eq_outer, dist));
-        return vec4<f32>(magenta.rgb, edge);
+    // 2. Equilibrium circle outline (magenta) - hidden in mode 2
+    if uniforms.ring_display_mode != 2u {
+        let eq_inner = in.eq_radius - STROKE_WIDTH * 0.5;
+        let eq_outer = in.eq_radius + STROKE_WIDTH * 0.5;
+        if dist > eq_inner && dist < eq_outer {
+            let edge = smoothstep(eq_inner, eq_inner + 0.05, dist)
+                     * (1.0 - smoothstep(eq_outer - 0.05, eq_outer, dist));
+            return vec4<f32>(magenta.rgb, edge);
+        }
     }
 
     // 3. Inner filled circle (ball color)

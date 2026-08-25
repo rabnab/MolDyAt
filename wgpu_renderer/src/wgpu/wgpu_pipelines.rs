@@ -1,7 +1,7 @@
 //! Pipeline collection for WGPU rendering.
 //!
 //! Wraps a [`RenderGraph`] with named handles so callers can still
-//! reference specific pipelines (e.g., toggling cutoff rings on the
+//! reference specific pipelines (e.g., cycling ring display mode on the
 //! ball pipeline).
 
 use super::ball_pipeline::BallPipeline;
@@ -157,13 +157,13 @@ impl WgpuPipelines {
         self.graph.render_all(render_pass, ctx.size(), margin);
     }
 
-    /// Toggle cutoff ring visibility on the ball pipeline.
-    pub fn toggle_cutoff_rings(&mut self, queue: &wgpu::Queue) {
+    /// Cycle ring display mode on the ball pipeline.
+    pub fn cycle_ring_display_mode(&mut self, queue: &wgpu::Queue) {
         if let Some(ball) = self
             .graph
             .get_pipeline_mut::<BallPipeline>(self.handles.ball)
         {
-            ball.toggle_cutoff_rings(queue);
+            ball.cycle_ring_display_mode(queue);
         }
     }
 

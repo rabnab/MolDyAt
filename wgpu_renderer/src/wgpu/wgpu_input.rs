@@ -1,6 +1,6 @@
 //! Input action execution for WGPU renderer.
 //!
-//! Handles WGPU-specific actions (cutoff rings) that require wgpu resources.
+//! Handles WGPU-specific actions (ring display mode) that require wgpu resources.
 //! All other actions are delegated to UnifiedRenderState.
 
 use rust_thermo_core::graphics::renderer::InputAction;
@@ -24,7 +24,7 @@ pub fn execute_input_action(
 ) -> bool {
     // Handle ONLY actions that need wgpu resources
     if let InputAction::ToggleCutoffRings = &action {
-        pipelines.toggle_cutoff_rings(queue);
+        pipelines.cycle_ring_display_mode(queue);
         return false; // doesn't affect view
     }
 
