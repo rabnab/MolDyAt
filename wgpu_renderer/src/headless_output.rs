@@ -63,14 +63,22 @@ impl HeadlessWriterBuilder {
 }
 
 fn snapshot_to_jsonl(snapshot: &RendererSnapshot) -> String {
+    fn f32_value(value: f32) -> serde_json::Value {
+        if value.is_finite() {
+            json!(value)
+        } else {
+            serde_json::Value::Null
+        }
+    }
+
     json!({
         "simulation_step": snapshot.simulation_step,
-        "time": snapshot.time,
-        "kinetic_energy": snapshot.kinetic_energy,
-        "potential_energy": snapshot.potential_energy,
+        "time": f32_value(snapshot.time),
+        "kinetic_energy": f32_value(snapshot.kinetic_energy),
+        "potential_energy": f32_value(snapshot.potential_energy),
         "ball_count": snapshot.balls.len(),
         "gravity_force_multiple": snapshot.gravity_force_multiple,
-        "physics_fps": snapshot.physics_fps,
+        "physics_fps": f32_value(snapshot.physics_fps),
     })
     .to_string()
 }

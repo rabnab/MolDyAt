@@ -87,12 +87,13 @@ impl HeadlessRunner {
 
     pub fn run(mut self) -> io::Result<()> {
         let bound = self.application.world().world_region();
-        let snapshot_every = self.snapshot_every.max(1);
         self.sink
             .write_snapshot(&self.application.create_snapshot())?;
         for step in 0..self.steps {
             self.application.update_sim(self.dt, &bound);
-            if step + 1 == self.steps || (step + 1) % snapshot_every == 0 {
+            if step + 1 == self.steps
+                || (self.snapshot_every != 0 && (step + 1) % self.snapshot_every == 0)
+            {
                 self.sink
                     .write_snapshot(&self.application.create_snapshot())?;
             }

@@ -1,4 +1,5 @@
 use super::*;
+use std::env;
 
 #[test]
 fn test_default_config_values() {
@@ -119,10 +120,7 @@ fn test_output_flag() {
     let result = parse_headless_args_with_args(&args);
     assert!(result.is_ok());
     let config = result.unwrap().unwrap();
-    assert_eq!(
-        config.output.unwrap().to_string_lossy(),
-        "/tmp/output.jsonl"
-    );
+    assert_eq!(config.output.unwrap(), env::temp_dir().join("output.jsonl"));
 }
 
 #[test]
@@ -329,10 +327,22 @@ fn test_multiple_flags_combined() {
     let config = result.unwrap().unwrap();
     assert_eq!(config.steps, 200);
     assert_eq!(config.snapshot_every, 20);
-    assert_eq!(config.output.unwrap().to_string_lossy(), "/tmp/out.jsonl");
+    assert_eq!(config.output.unwrap(), env::temp_dir().join("out.jsonl"));
     assert_eq!(config.format, OutputFormat::Jsonl);
     assert_eq!(config.detail, DetailLevel::Balls);
     assert_eq!(config.rng_seed, Some(123));
     assert!(config.stdout);
     assert_eq!(config.seed_balls, Some(16));
+}
+
+#[test]
+fn test_stdout_and_no_stdout_conflict_is_error() {
+    let args = vec![
+        "program".to_string(),
+        "--headless".to_string(),
+        "--stdout".to_string(),
+        "--no-stdout".to_string(),
+    ];
+    let result = parse_headless_args_with_args(&args);
+    assert!(result.is_err());
 }
