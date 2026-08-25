@@ -2,13 +2,11 @@
 
 mod headless_cli;
 mod headless_output;
+mod headless_runner;
 mod wgpu;
 
-use crate::headless_cli::HeadlessConfig;
 use crate::wgpu::{DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH, MARGINS};
-use rust_thermo_core::application::{MainContent, VerletIntegration};
-use std::io;
-use std::time::Duration;
+use rust_thermo_core::application::MainContent;
 
 /// Initialize Rayon thread pool for parallel physics computations.
 ///
@@ -65,7 +63,7 @@ fn run_wgpu_renderer() {
     window.create_window(application);
 }
 
-fn run_headless_renderer(config: HeadlessConfig) -> io::Result<()> {
+fn run_headless_renderer(config: headless_cli::HeadlessConfig) -> std::io::Result<()> {
     log::info!("Renderer: headless");
 
     let world_rect = MainContent::bootstrap_world_rect(
@@ -73,20 +71,8 @@ fn run_headless_renderer(config: HeadlessConfig) -> io::Result<()> {
         DEFAULT_WINDOW_HEIGHT as u32,
         MARGINS,
     );
-    let mut application = MainContent::new(world_rect).expect("Failed to create MainContent");
-    let mut writer = headless_output::HeadlessWriter::new(config.stdout, config.output.as_deref())?;
-    let bound = application.world().world_region();
-    let snapshot_every = config.snapshot_every.max(1);
-
-    writer.write_snapshot(&application.create_snapshot())?;
-    for step in 0..config.steps {
-        application.update_sim(Duration::from_millis(1).as_secs_f32(), &bound);
-        if step + 1 == config.steps || (step + 1) % snapshot_every == 0 {
-            writer.write_snapshot(&application.create_snapshot())?;
-        }
-    }
-
-    Ok(())
+    let application = headless_runner::build_application(world_rect)?;
+    headless_runner::HeadlessRunner::from_config(config, application)?.run()
 }
 
 fn main() {
