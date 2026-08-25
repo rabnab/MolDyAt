@@ -49,3 +49,20 @@ fn test_run_start_record_contains_config_and_operator_counts() {
     assert_eq!(value["config"]["seed_balls"], 50);
     assert_eq!(value["initial"]["operator_counts"]["line_segments"], 0);
 }
+
+#[test]
+fn test_run_end_record_contains_v1_schema_and_summary_fields() {
+    let mut snapshot = RendererSnapshot::new();
+    snapshot.simulation_step = 10;
+    snapshot.time = 0.5;
+
+    let line = run_end_to_jsonl(&snapshot, 7);
+    let value: serde_json::Value = serde_json::from_str(&line).expect("valid json");
+
+    assert_eq!(value["schema_version"], "headless.v1");
+    assert_eq!(value["record_kind"], "run_end");
+    assert_eq!(value["snapshots_emitted"], 7);
+    assert_eq!(value["final_step"], 10);
+    assert_eq!(value["final_ball_count"], 0);
+}
+
