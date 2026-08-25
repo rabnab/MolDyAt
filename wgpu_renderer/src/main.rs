@@ -90,10 +90,9 @@ fn run_headless_renderer(config: HeadlessConfig) -> io::Result<()> {
 }
 
 fn main() {
-    print_diagnostics();
-
     match headless_cli::parse_headless_args() {
         Ok(Some(config)) => {
+            print_diagnostics();
             log::info!("Running in headless mode");
             if let Err(error) = run_headless_renderer(config) {
                 eprintln!("headless renderer failed: {error}");
@@ -101,6 +100,7 @@ fn main() {
             }
         }
         Ok(None) => {
+            print_diagnostics();
             run_wgpu_renderer();
         }
         Err(e) => {
