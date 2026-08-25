@@ -79,7 +79,12 @@ impl HeadlessWriterBuilder {
             Some(path) => Some(BufWriter::new(File::create(path)?)),
             None => None,
         };
-        let config = self.config.unwrap_or_default();
+        let config = self.config.ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "HeadlessWriterBuilder::config(...) must be provided to emit correct run_start metadata",
+            )
+        })?;
         Ok(HeadlessWriter {
             stdout,
             file,
