@@ -80,7 +80,8 @@ impl HeadlessRunner {
     pub fn from_config(config: HeadlessConfig, application: MainContent) -> io::Result<Self> {
         let sink = HeadlessWriter::builder()
             .stdout(config.stdout)
-            .output(config.output);
+            .output(config.output.clone())
+            .config(config.clone());
         Ok(Self::builder()
             .application(application)
             .sink(Box::new(sink.build()?))
@@ -91,8 +92,9 @@ impl HeadlessRunner {
 
     pub fn run(mut self) -> io::Result<HeadlessRunReport> {
         let mut snapshots_emitted = 0;
-        self.sink
-            .write_snapshot(&self.application.create_snapshot())?;
+        let mut latest_snapshot = self.application.create_snapshot();
+        self.sink.write_run_start(&latest_snapshot)?;
+        self.sink.write_frame(&latest_snapshot)?;
         snapshots_emitted += 1;
         for step in 0..self.steps {
             self.application
@@ -101,11 +103,13 @@ impl HeadlessRunner {
             if step + 1 == self.steps
                 || (self.snapshot_every != 0 && (step + 1) % self.snapshot_every == 0)
             {
-                self.sink
-                    .write_snapshot(&self.application.create_snapshot())?;
+                latest_snapshot = self.application.create_snapshot();
+                self.sink.write_frame(&latest_snapshot)?;
                 snapshots_emitted += 1;
             }
         }
+        self.sink
+            .write_run_end(&latest_snapshot, snapshots_emitted)?;
         Ok(HeadlessRunReport { snapshots_emitted })
     }
 }
