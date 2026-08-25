@@ -159,10 +159,14 @@ fn parse_headless_args_with_args(args: &[String]) -> Result<Option<HeadlessConfi
         i += 1;
     }
 
+    let has_stdout = args.iter().any(|arg| arg == "--stdout");
+    let has_no_stdout = args.iter().any(|arg| arg == "--no-stdout");
+    if has_stdout && has_no_stdout {
+        return Err(CliError::new("Cannot pass both --stdout and --no-stdout"));
+    }
+
     if !config.stdout && config.output.is_none() {
-        return Err(CliError::new(
-            "At least one of --stdout or --output must be enabled",
-        ));
+        return Err(CliError::new("At least one of --stdout or --output must be enabled"));
     }
 
     Ok(Some(config))
