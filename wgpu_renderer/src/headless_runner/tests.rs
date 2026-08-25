@@ -14,7 +14,10 @@ impl HeadlessSnapshotSink for RecordingSink {
     }
 }
 
-fn runner_with_snapshot_steps(steps: u32, snapshot_every: u32) -> (HeadlessRunner, Rc<RefCell<Vec<u64>>>) {
+fn runner_with_snapshot_steps(
+    steps: u32,
+    snapshot_every: u32,
+) -> (HeadlessRunner, Rc<RefCell<Vec<u64>>>) {
     let world_rect = rust_thermo_core::application::MainContent::bootstrap_world_rect(
         1280,
         720,
@@ -45,7 +48,7 @@ fn test_headless_runner_emits_interval_and_final() {
     let (runner, recorded) = runner_with_snapshot_steps(3, 2);
     let report = runner.run().expect("run");
     assert_eq!(report.snapshots_emitted, 3);
-    assert_eq!(*recorded.borrow(), vec![0, 1, 3]);
+    assert_eq!(*recorded.borrow(), vec![0, 2, 3]);
 }
 
 #[test]
