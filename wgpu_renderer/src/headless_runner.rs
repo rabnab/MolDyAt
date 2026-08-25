@@ -1,6 +1,6 @@
 use crate::headless_cli::HeadlessConfig;
 use crate::headless_output::{HeadlessSnapshotSink, HeadlessWriter};
-use rust_thermo_core::application::{MainContent, VerletIntegration};
+use rust_thermo_core::application::{GameLogic, MainContent};
 use rust_thermo_core::objects2d::Rect;
 use std::io;
 use std::time::Duration;
@@ -19,6 +19,10 @@ pub struct HeadlessRunnerBuilder {
     steps: u32,
     snapshot_every: u32,
     dt: f32,
+}
+
+pub struct HeadlessRunReport {
+    pub snapshots_emitted: u32,
 }
 
 impl HeadlessRunnerBuilder {
@@ -85,23 +89,30 @@ impl HeadlessRunner {
             .build())
     }
 
-    pub fn run(mut self) -> io::Result<()> {
-        let bound = self.application.world().world_region();
+    pub fn run(mut self) -> io::Result<HeadlessRunReport> {
+        let mut snapshots_emitted = 0;
         self.sink
             .write_snapshot(&self.application.create_snapshot())?;
+        snapshots_emitted += 1;
         for step in 0..self.steps {
-            self.application.update_sim(self.dt, &bound);
+            self.application
+                .simulation_step()
+                .map_err(|error| io::Error::other(format!("{error:?}")))?;
             if step + 1 == self.steps
                 || (self.snapshot_every != 0 && (step + 1) % self.snapshot_every == 0)
             {
                 self.sink
                     .write_snapshot(&self.application.create_snapshot())?;
+                snapshots_emitted += 1;
             }
         }
-        Ok(())
+        Ok(HeadlessRunReport { snapshots_emitted })
     }
 }
 
 pub fn build_application(world_rect: Rect) -> io::Result<MainContent> {
     MainContent::new(world_rect).map_err(|error| io::Error::other(format!("{error:?}")))
 }
+
+#[cfg(test)]
+mod tests;

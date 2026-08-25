@@ -72,7 +72,8 @@ fn run_headless_renderer(config: headless_cli::HeadlessConfig) -> std::io::Resul
         MARGINS,
     );
     let application = headless_runner::build_application(world_rect)?;
-    headless_runner::HeadlessRunner::from_config(config, application)?.run()
+    headless_runner::HeadlessRunner::from_config(config, application)?.run()?;
+    Ok(())
 }
 
 fn main() {
