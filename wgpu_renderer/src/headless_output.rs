@@ -106,6 +106,10 @@ impl HeadlessWriter {
     }
 }
 
+/// Versioned, machine-readable headless JSONL schema ("headless.v1").
+///
+/// Records are newline-delimited JSON objects with a `schema_version` and `record_kind`.
+/// Consumers should treat unknown `record_kind` values and unknown fields as forward-compatible.
 fn run_start_to_jsonl(config: &HeadlessConfig, snapshot: &RendererSnapshot) -> String {
     json!({
         "schema_version": "headless.v1",
