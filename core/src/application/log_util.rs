@@ -36,8 +36,7 @@ impl LogStuff for MainContent {
             - Enter '0' to disable verbose mode for all balls.";
         const HELP_OPTION_0: &str = "0 - Reset viewport to default view (1.0x zoom, centered).";
         const HELP_OPTION_INCREASE_SPEED: &str = "+ / = - Double the simulation time step.";
-        const HELP_OPTION_DECREASE_SPEED: &str =
-            "- / _ - Halve the simulation time step.";
+        const HELP_OPTION_DECREASE_SPEED: &str = "- / _ - Halve the simulation time step.";
         const HELP_OPTION_ALT_INCREASE_WAIT: &str = "Alt + + / = - Increase wait time.";
         const HELP_OPTION_ALT_DECREASE_WAIT: &str = "Alt + - / _ - Decrease wait time.";
         const HELP_OPTION_SHIFT: &str = "Shift - Enable random ball speed.";

@@ -1,8 +1,12 @@
 #![allow(dead_code)]
 
+mod headless_cli;
+mod headless_output;
+mod headless_runner;
 mod wgpu;
 
 use crate::wgpu::{DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH, MARGINS};
+use rust_thermo_core::application::MainContent;
 
 /// Initialize Rayon thread pool for parallel physics computations.
 ///
@@ -43,7 +47,6 @@ fn print_diagnostics() {
 }
 
 fn run_wgpu_renderer() {
-    use rust_thermo_core::application::MainContent;
     use wgpu::WgpuWindow;
 
     log::info!("Renderer: wgpu");
@@ -60,7 +63,35 @@ fn run_wgpu_renderer() {
     window.create_window(application);
 }
 
+fn run_headless_renderer(config: headless_cli::HeadlessConfig) -> std::io::Result<()> {
+    log::info!("Renderer: headless");
+
+    let world_rect = MainContent::bootstrap_world_rect(
+        DEFAULT_WINDOW_WIDTH as u32,
+        DEFAULT_WINDOW_HEIGHT as u32,
+        MARGINS,
+    );
+    let application = headless_runner::build_application(world_rect)?;
+    headless_runner::HeadlessRunner::from_config(config, application)?.run()
+}
+
 fn main() {
-    print_diagnostics();
-    run_wgpu_renderer();
+    match headless_cli::parse_headless_args() {
+        Ok(Some(config)) => {
+            print_diagnostics();
+            log::info!("Running in headless mode");
+            if let Err(error) = run_headless_renderer(config) {
+                eprintln!("headless renderer failed: {error}");
+                std::process::exit(1);
+            }
+        }
+        Ok(None) => {
+            print_diagnostics();
+            run_wgpu_renderer();
+        }
+        Err(e) => {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+    }
 }
