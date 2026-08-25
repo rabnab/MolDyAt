@@ -60,8 +60,7 @@ pub fn force_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2D]) -> F
     let r_cap = physics.get_force_cap_distance();
 
     // Process neighbors in chunks of 4 for SIMD
-    let chunks = neighbour_indices.chunks_exact(4);
-    let unchunked = chunks.remainder();
+    let (chunks, unchunked) = neighbour_indices.as_chunks::<4>();
     // Pre-calculate U(r_cap) for linear extrapolation in force-capped region
     // This is the "anchor point" where capped and uncapped potentials meet
 

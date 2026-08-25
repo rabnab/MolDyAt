@@ -95,7 +95,7 @@ impl Cell {
     /// # Returns
     /// Vector of all ball indices that were in the cell
     pub fn drain_balls(&mut self) -> Vec<usize> {
-        self.balls.drain(..).collect()
+        std::mem::take(&mut self.balls)
     }
 
     pub fn get_top_left(&self) -> Vec2D {
