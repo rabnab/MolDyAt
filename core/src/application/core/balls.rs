@@ -16,6 +16,14 @@ impl MainContent {
     pub fn add_candidate_to_vec(&mut self, candidate: Ball2D) {
         self.world.add_ball_and_register(candidate);
     }
+
+    /// Seed the simulation with up to `count` randomly placed balls.
+    ///
+    /// Placement obeys world bounds and collision constraints; actual inserted
+    /// count may be lower in dense configurations.
+    pub fn seed_random_balls(&mut self, count: usize) {
+        self.add_random_candidates(count);
+    }
     /// Remove all balls from simulation and reset ID counter.
     /// Clears both balls vector and all cells in the grid.
     /// Also clears all placed operators.

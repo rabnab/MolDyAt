@@ -71,7 +71,10 @@ fn run_headless_renderer(config: headless_cli::HeadlessConfig) -> std::io::Resul
         DEFAULT_WINDOW_HEIGHT as u32,
         MARGINS,
     );
-    let application = headless_runner::build_application(world_rect)?;
+    let mut application = headless_runner::build_application(world_rect)?;
+    if let Some(seed_balls) = config.seed_balls {
+        application.seed_random_balls(seed_balls as usize);
+    }
     headless_runner::HeadlessRunner::from_config(config, application)?.run()?;
     Ok(())
 }
