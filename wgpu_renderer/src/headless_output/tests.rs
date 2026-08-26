@@ -1,5 +1,6 @@
 use super::*;
 use rust_thermo_core::application::renderer_snapshot::RendererSnapshot;
+use std::fs;
 
 #[test]
 fn test_frame_record_contains_v1_schema_and_summary_fields() {
@@ -84,4 +85,110 @@ fn test_console_summary_contains_required_fields() {
     assert!(line.contains("total=1.25000"));
     assert!(line.contains("dE=0.25000"));
     assert!(line.contains("operators=0/0/0/0"));
+}
+
+#[test]
+fn test_jsonl_records_are_valid_json_lines_and_ordered() {
+    let mut start_snapshot = RendererSnapshot::new();
+    start_snapshot.simulation_step = 0;
+    start_snapshot.time = 0.0;
+
+    let mut frame_snapshot = RendererSnapshot::new();
+    frame_snapshot.simulation_step = 2;
+    frame_snapshot.time = 0.02;
+
+    let mut end_snapshot = RendererSnapshot::new();
+    end_snapshot.simulation_step = 3;
+    end_snapshot.time = 0.03;
+
+    let start = run_start_to_jsonl(&HeadlessConfig::default(), &start_snapshot);
+    let frame = frame_to_jsonl(&frame_snapshot, Some(0.0));
+    let end = run_end_to_jsonl(&end_snapshot, 2);
+
+    let lines = vec![start, frame, end];
+    let parsed: Vec<serde_json::Value> = lines
+        .iter()
+        .map(|line| serde_json::from_str(line).expect("valid json line"))
+        .collect();
+
+    assert_eq!(parsed[0]["record_kind"], "run_start");
+    assert_eq!(parsed[1]["record_kind"], "frame");
+    assert_eq!(parsed[2]["record_kind"], "run_end");
+    assert_eq!(parsed[0]["schema_version"], "headless.v1");
+    assert_eq!(parsed[1]["schema_version"], "headless.v1");
+    assert_eq!(parsed[2]["schema_version"], "headless.v1");
+}
+
+#[test]
+fn test_summary_frame_excludes_large_ball_payload() {
+    let mut snapshot = RendererSnapshot::new();
+    snapshot.simulation_step = 1;
+    snapshot.time = 0.01;
+
+    let line = frame_to_jsonl(&snapshot, Some(0.0));
+    let value: serde_json::Value = serde_json::from_str(&line).expect("valid json");
+
+    assert!(value.get("balls").is_none());
+}
+
+#[test]
+fn test_non_finite_values_serialize_as_null() {
+    let mut snapshot = RendererSnapshot::new();
+    snapshot.simulation_step = 1;
+    snapshot.time = f32::NAN;
+    snapshot.kinetic_energy = f32::INFINITY;
+    snapshot.potential_energy = f32::NEG_INFINITY;
+    snapshot.physics_fps = f32::NAN;
+
+    let line = frame_to_jsonl(&snapshot, Some(0.0));
+    let value: serde_json::Value = serde_json::from_str(&line).expect("valid json");
+
+    assert!(value["time"].is_null());
+    assert!(value["kinetic_energy"].is_null());
+    assert!(value["potential_energy"].is_null());
+    assert!(value["physics_fps"].is_null());
+}
+
+#[test]
+fn test_stdout_and_file_outputs_stay_separated_for_frame_records() {
+    let output_path =
+        std::env::temp_dir().join(format!("headless-output-test-{}.jsonl", std::process::id()));
+
+    let config = HeadlessConfig {
+        output: Some(output_path.clone()),
+        ..HeadlessConfig::default()
+    };
+
+    let mut writer = HeadlessWriter::builder()
+        .stdout(true)
+        .output(Some(output_path.clone()))
+        .config(config)
+        .build()
+        .expect("writer");
+
+    let mut snapshot = RendererSnapshot::new();
+    snapshot.simulation_step = 0;
+
+    writer.write_run_start(&snapshot).expect("run_start");
+    writer.write_frame(&snapshot).expect("frame");
+    writer.write_run_end(&snapshot, 1).expect("run_end");
+
+    drop(writer);
+    let file_content = fs::read_to_string(&output_path).expect("read output file");
+    let lines: Vec<&str> = file_content.lines().collect();
+    assert_eq!(lines.len(), 3);
+
+    let kinds: Vec<String> = lines
+        .iter()
+        .map(|line| {
+            serde_json::from_str::<serde_json::Value>(line)
+                .expect("valid jsonl record")["record_kind"]
+                .as_str()
+                .expect("record kind")
+                .to_string()
+        })
+        .collect();
+    assert_eq!(kinds, vec!["run_start", "frame", "run_end"]);
+
+    fs::remove_file(output_path).expect("remove output file");
 }
