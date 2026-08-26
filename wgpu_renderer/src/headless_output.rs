@@ -31,7 +31,7 @@ impl HeadlessSnapshotSink for HeadlessWriter {
     fn write_run_start(&mut self, snapshot: &RendererSnapshot) -> io::Result<()> {
         self.initial_total_energy = Some(snapshot.kinetic_energy + snapshot.potential_energy);
         let line = run_start_to_jsonl(&self.config, snapshot);
-        self.write_jsonl_record(&line)
+        self.write_machine_record(&line)
     }
 
     fn write_frame(&mut self, snapshot: &RendererSnapshot) -> io::Result<()> {
@@ -52,7 +52,7 @@ impl HeadlessSnapshotSink for HeadlessWriter {
         snapshots_emitted: u32,
     ) -> io::Result<()> {
         let line = run_end_to_jsonl(final_snapshot, snapshots_emitted);
-        self.write_jsonl_record(&line)
+        self.write_machine_record(&line)
     }
 }
 
@@ -129,8 +129,10 @@ impl HeadlessWriter {
         Ok(())
     }
 
-    fn write_jsonl_record(&mut self, line: &str) -> io::Result<()> {
-        self.write_stdout_line(line)?;
+    fn write_machine_record(&mut self, line: &str) -> io::Result<()> {
+        if self.config.stdout {
+            self.write_stdout_line(line)?;
+        }
         self.write_file_line(line)?;
         Ok(())
     }
