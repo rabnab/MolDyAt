@@ -35,7 +35,7 @@ fn runner_with_snapshot_steps(
         720,
         rust_thermo_core::graphics::renderer::margins::Margins::new(110.0, 50.0, 50.0, 50.0),
     );
-    let application = build_application(world_rect).expect("application");
+    let application = build_application(world_rect, None).expect("application");
     let recorded = Rc::new(RefCell::new(Vec::new()));
     let sink = RecordingSink(recorded.clone());
     let runner = HeadlessRunner::builder()

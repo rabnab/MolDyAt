@@ -153,6 +153,7 @@ fn run_start_to_jsonl(config: &HeadlessConfig, snapshot: &RendererSnapshot) -> S
             "detail_level": detail_level_name(config.detail),
             "rng_seed": config.rng_seed,
             "seed_balls": config.seed_balls,
+            "seeded_constructor": config.rng_seed.is_some(),
             "stdout": config.stdout,
             "has_output_file": config.output.is_some(),
         },

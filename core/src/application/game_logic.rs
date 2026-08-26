@@ -33,6 +33,13 @@ impl Default for GameLogicData {
 }
 
 impl GameLogicData {
+    pub(crate) fn with_seed(seed: u64) -> Self {
+        Self {
+            ball_factory: BallFactory::with_seed(seed),
+            ..Self::default()
+        }
+    }
+
     pub(crate) fn get_ball_factory(&self) -> &BallFactory {
         &self.ball_factory
     }

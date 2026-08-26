@@ -48,6 +48,7 @@ fn test_run_start_record_contains_config_and_operator_counts() {
     assert_eq!(value["config"]["steps"], 1000);
     assert_eq!(value["config"]["snapshot_every"], 100);
     assert_eq!(value["config"]["seed_balls"], 50);
+    assert_eq!(value["config"]["seeded_constructor"], true);
     assert_eq!(value["initial"]["operator_counts"]["line_segments"], 0);
 }
 
