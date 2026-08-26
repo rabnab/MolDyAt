@@ -66,3 +66,22 @@ fn test_run_end_record_contains_v1_schema_and_summary_fields() {
     assert_eq!(value["final_ball_count"], 0);
 }
 
+#[test]
+fn test_console_summary_contains_required_fields() {
+    let mut snapshot = RendererSnapshot::new();
+    snapshot.simulation_step = 12;
+    snapshot.time = 0.12;
+    snapshot.kinetic_energy = 2.5;
+    snapshot.potential_energy = -1.25;
+
+    let line = frame_to_console_summary(&snapshot, Some(1.0));
+
+    assert!(line.contains("step=12"));
+    assert!(line.contains("time=0.12000"));
+    assert!(line.contains("balls=0"));
+    assert!(line.contains("kinetic=2.50000"));
+    assert!(line.contains("potential=-1.25000"));
+    assert!(line.contains("total=1.25000"));
+    assert!(line.contains("dE=0.25000"));
+    assert!(line.contains("operators=0/0/0/0"));
+}

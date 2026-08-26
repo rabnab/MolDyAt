@@ -34,7 +34,15 @@ impl HeadlessSnapshotSink for HeadlessWriter {
     }
 
     fn write_frame(&mut self, snapshot: &RendererSnapshot) -> io::Result<()> {
-        self.write_line(frame_to_jsonl(snapshot, self.initial_total_energy))
+        if self.config.stdout {
+            let console_line = frame_to_console_summary(snapshot, self.initial_total_energy);
+            self.write_stdout_line(&console_line)?;
+        }
+        if self.config.output.is_some() {
+            let jsonl_line = frame_to_jsonl(snapshot, self.initial_total_energy);
+            self.write_file_line(&jsonl_line)?;
+        }
+        Ok(())
     }
 
     fn write_run_end(
@@ -99,6 +107,20 @@ impl HeadlessWriter {
         if let Some(stdout) = self.stdout.as_mut() {
             writeln!(stdout, "{line}")?;
         }
+        if let Some(file) = self.file.as_mut() {
+            writeln!(file, "{line}")?;
+        }
+        Ok(())
+    }
+
+    fn write_stdout_line(&mut self, line: &str) -> io::Result<()> {
+        if let Some(stdout) = self.stdout.as_mut() {
+            writeln!(stdout, "{line}")?;
+        }
+        Ok(())
+    }
+
+    fn write_file_line(&mut self, line: &str) -> io::Result<()> {
         if let Some(file) = self.file.as_mut() {
             writeln!(file, "{line}")?;
         }
@@ -174,6 +196,32 @@ fn run_end_to_jsonl(snapshot: &RendererSnapshot, snapshots_emitted: u32) -> Stri
         "operator_counts": operator_counts(&snapshot.operators),
     })
     .to_string()
+}
+
+fn frame_to_console_summary(
+    snapshot: &RendererSnapshot,
+    initial_total_energy: Option<f32>,
+) -> String {
+    let total_energy = snapshot.kinetic_energy + snapshot.potential_energy;
+    let delta_energy = initial_total_energy
+        .map(|initial| total_energy - initial)
+        .unwrap_or(0.0);
+    let operator_counts = &snapshot.operators;
+
+    format!(
+        "step={} time={:.5} balls={} kinetic={:.5} potential={:.5} total={:.5} dE={:.5} operators={}/{}/{}/{}",
+        snapshot.simulation_step,
+        snapshot.time,
+        snapshot.balls.len(),
+        snapshot.kinetic_energy,
+        snapshot.potential_energy,
+        total_energy,
+        delta_energy,
+        operator_counts.line_segments.len(),
+        operator_counts.valve_segments.len(),
+        operator_counts.source_spheres.len(),
+        operator_counts.thermostats.len(),
+    )
 }
 
 fn operator_counts(operators: &OperatorSnapshot) -> serde_json::Value {
