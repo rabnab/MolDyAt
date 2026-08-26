@@ -114,8 +114,13 @@ impl HeadlessRunner {
     }
 }
 
-pub fn build_application(world_rect: Rect) -> io::Result<MainContent> {
-    MainContent::new(world_rect).map_err(|error| io::Error::other(format!("{error:?}")))
+pub fn build_application(world_rect: Rect, rng_seed: Option<u64>) -> io::Result<MainContent> {
+    let application = if let Some(seed) = rng_seed {
+        MainContent::new_with_seed(world_rect, seed)
+    } else {
+        MainContent::new(world_rect)
+    };
+    application.map_err(|error| io::Error::other(format!("{error:?}")))
 }
 
 #[cfg(test)]

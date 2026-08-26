@@ -1,4 +1,5 @@
 use super::{BallPhysics, CellGrid, MainContent, SimStats};
+use crate::application::game_logic::GameLogicData;
 use crate::application::thermo_field::ThermoFieldHistory;
 use crate::application::{AppResult, GameLogic};
 use crate::graphics::renderer::{Margins, ViewportTransform};
@@ -21,6 +22,14 @@ impl MainContent {
     }
 
     pub fn new(world_rect: Rect) -> AppResult<Self> {
+        Self::new_internal(world_rect, None)
+    }
+
+    pub fn new_with_seed(world_rect: Rect, seed: u64) -> AppResult<Self> {
+        Self::new_internal(world_rect, Some(seed))
+    }
+
+    fn new_internal(world_rect: Rect, seed: Option<u64>) -> AppResult<Self> {
         let loc_physics = BallPhysics::default();
         let cutoff_and_skin = loc_physics.get_cutoff_and_skin();
         let max_radius = BallFactory::get_max_radius();
@@ -48,7 +57,10 @@ impl MainContent {
                 source_spheres: Default::default(),
                 thermostats: Default::default(),
             },
-            game_data: <Self as GameLogic>::init_game_logic(),
+            game_data: seed.map_or_else(
+                <Self as GameLogic>::init_game_logic,
+                GameLogicData::with_seed,
+            ),
             runtime: super::PhysicsRuntimeState {
                 snapshot_slot: Arc::new(ArcSwapOption::from(None)),
                 wait_time: 0,
