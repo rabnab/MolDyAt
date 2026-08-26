@@ -243,6 +243,12 @@ Use this section when implementing or changing operators (line segment, valve, t
 - Verify energy conservation for physics changes
 - Request reviews from relevant team members
 
+### GitHub CLI Usage (Issues/PRs)
+- Prefer the GitHub CLI (`gh`) for all issue and pull-request operations (create, view, edit, label, assign, milestone, project linking, comments, review requests).
+- Avoid using MCP GitHub tools for issue/PR updates when `gh` is available.
+- Use non-interactive `gh` commands with explicit flags so actions are reproducible in logs and CI-like environments.
+- For project metadata, set milestone and project item links explicitly during PR finalization.
+
 ## Performance Considerations
 
 - **Hot Paths**: Physics calculations, neighbor list updates, collision detection
