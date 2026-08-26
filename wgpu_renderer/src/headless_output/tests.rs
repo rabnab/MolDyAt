@@ -160,7 +160,7 @@ fn test_stdout_and_file_outputs_stay_separated_for_frame_records() {
     };
 
     let mut writer = HeadlessWriter::builder()
-        .stdout(false)
+        .stdout(true)
         .output(Some(output_path.clone()))
         .config(config)
         .build()
