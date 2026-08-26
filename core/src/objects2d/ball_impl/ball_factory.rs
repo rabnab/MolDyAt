@@ -35,6 +35,15 @@ impl BallFactory {
         Self::default()
     }
 
+    /// Create a factory with deterministic RNG state from a fixed seed.
+    pub fn with_seed(seed: u64) -> Self {
+        BallFactory {
+            next_id: RefCell::new(FIRST_BALL_ID),
+            new_ball_size_idx: RefCell::new(2),
+            rng: RefCell::new(StdRng::seed_from_u64(seed)),
+        }
+    }
+
     /// Calculate ball radius for a given size index.
     /// Radii increase exponentially: MIN_BALL_SIZE * 2^size_idx
     ///
