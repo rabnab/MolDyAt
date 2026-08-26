@@ -35,13 +35,12 @@ impl HeadlessSnapshotSink for HeadlessWriter {
 
     fn write_frame(&mut self, snapshot: &RendererSnapshot) -> io::Result<()> {
         if self.config.stdout {
-            self.write_line(frame_to_console_summary(
-                snapshot,
-                self.initial_total_energy,
-            ))?;
+            let console_line = frame_to_console_summary(snapshot, self.initial_total_energy);
+            self.write_stdout_line(&console_line)?;
         }
         if self.config.output.is_some() {
-            self.write_line(frame_to_jsonl(snapshot, self.initial_total_energy))?;
+            let jsonl_line = frame_to_jsonl(snapshot, self.initial_total_energy);
+            self.write_file_line(&jsonl_line)?;
         }
         Ok(())
     }
@@ -108,6 +107,20 @@ impl HeadlessWriter {
         if let Some(stdout) = self.stdout.as_mut() {
             writeln!(stdout, "{line}")?;
         }
+        if let Some(file) = self.file.as_mut() {
+            writeln!(file, "{line}")?;
+        }
+        Ok(())
+    }
+
+    fn write_stdout_line(&mut self, line: &str) -> io::Result<()> {
+        if let Some(stdout) = self.stdout.as_mut() {
+            writeln!(stdout, "{line}")?;
+        }
+        Ok(())
+    }
+
+    fn write_file_line(&mut self, line: &str) -> io::Result<()> {
         if let Some(file) = self.file.as_mut() {
             writeln!(file, "{line}")?;
         }
