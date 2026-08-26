@@ -35,9 +35,8 @@ impl Default for GameLogicData {
 impl GameLogicData {
     pub(crate) fn with_seed(seed: u64) -> Self {
         Self {
-            dt_goal: DT_GOAL,
             ball_factory: BallFactory::with_seed(seed),
-            neighbour_update_interval: 1,
+            ..Self::default()
         }
     }
 
