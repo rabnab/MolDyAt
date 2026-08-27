@@ -127,47 +127,47 @@ fn test_num_neighbours_add_remove() {
     let balls = vec![a, b, c];
 
     // Initially zero
-    v.update_closeness_stats(&balls[0].get_position(), &balls);
+    v.update_closeness_stats(balls[0].get_position(), &balls);
     assert_eq!(v.num_neighbours, 0);
 
     // Add a
     v.add_neighbour(0);
-    v.update_closeness_stats(&balls[0].get_position(), &balls);
+    v.update_closeness_stats(balls[0].get_position(), &balls);
     assert_eq!(v.num_neighbours, 1);
 
     // Add b
     v.add_neighbour(1);
-    v.update_closeness_stats(&balls[1].get_position(), &balls);
+    v.update_closeness_stats(balls[1].get_position(), &balls);
     assert_eq!(v.num_neighbours, 2);
 
     // Add c
     v.add_neighbour(2);
-    v.update_closeness_stats(&balls[2].get_position(), &balls);
+    v.update_closeness_stats(balls[2].get_position(), &balls);
     assert_eq!(v.num_neighbours, 3);
 
     // Add b again (should not increment)
     v.add_neighbour(1);
-    v.update_closeness_stats(&balls[2].get_position(), &balls);
+    v.update_closeness_stats(balls[2].get_position(), &balls);
     assert_eq!(v.num_neighbours, 3);
 
     // Remove b
     v.remove(1);
-    v.update_closeness_stats(&balls[2].get_position(), &balls);
+    v.update_closeness_stats(balls[2].get_position(), &balls);
     assert_eq!(v.num_neighbours, 2);
 
     // Remove a
     v.remove(0);
-    v.update_closeness_stats(&balls[2].get_position(), &balls);
+    v.update_closeness_stats(balls[2].get_position(), &balls);
     assert_eq!(v.num_neighbours, 1);
 
     // Remove c
     v.remove(2);
-    v.update_closeness_stats(&balls[2].get_position(), &balls);
+    v.update_closeness_stats(balls[2].get_position(), &balls);
     assert_eq!(v.num_neighbours, 0);
 
     // Remove non-existent (should not go negative)
     v.remove(0);
-    v.update_closeness_stats(&balls[2].get_position(), &balls);
+    v.update_closeness_stats(balls[2].get_position(), &balls);
     assert_eq!(v.num_neighbours, 0);
 }
 
@@ -180,14 +180,14 @@ fn test_num_neighbours_consistency_with_neighbours_vec() {
 
     v.add_neighbour(0);
     v.add_neighbour(1);
-    v.update_closeness_stats(&balls[0].get_position(), &balls);
+    v.update_closeness_stats(balls[0].get_position(), &balls);
     // num_neighbours should match number of valid neighbours
     let count = v.neighbours.len();
     assert_eq!(v.num_neighbours, count);
 
     // Remove one
     v.remove(0);
-    v.update_closeness_stats(&balls[0].get_position(), &balls);
+    v.update_closeness_stats(balls[0].get_position(), &balls);
     let count = v.neighbours.len();
     assert_eq!(v.num_neighbours, count);
 }

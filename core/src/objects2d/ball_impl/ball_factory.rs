@@ -232,7 +232,7 @@ mod tests {
     fn test_basic_ball_creation() {
         let factory = BallFactory::new();
         let pos = Vec2D::new(1.0, 2.0);
-        let ball = factory.create_basic(pos.clone(), 0);
+        let ball = factory.create_basic(pos, 0);
 
         assert_eq!(ball.get_id(), 1);
         assert_eq!(*ball.get_position(), pos);
@@ -246,7 +246,7 @@ mod tests {
         let factory = BallFactory::new();
         let pos = Vec2D::new(1.0, 2.0);
         let velocity = Vec2D::new(3.0, 4.0);
-        let ball = factory.create_massive_with_velocity(pos.clone(), velocity.clone());
+        let ball = factory.create_massive_with_velocity(pos, velocity);
 
         assert_eq!(ball.get_id(), 1);
         assert_eq!(*ball.get_position(), pos);

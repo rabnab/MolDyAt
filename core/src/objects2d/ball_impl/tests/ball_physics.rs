@@ -16,7 +16,7 @@ fn approx(a: f32, b: f32, eps: f32) {
 fn test_lj_equilibrium() {
     let phys = BallPhysics::default();
     // Using default sigma=1 and eps=1 per file constants
-    let r_eq = 1.122462048309372981_f32; // 2^(1/6)
+    let r_eq = 1.122_462_f32; // 2^(1/6)
     let pot = phys.potential(r_eq);
 
     approx(pot, -1.0, 1e-5);
@@ -62,7 +62,7 @@ fn test_is_colliding_detection() {
 #[test]
 fn test_lenard_jones_force_when_close() {
     let phys = BallPhysics::default();
-    let r_eq = 1.122462048309372981_f32; // 2^(1/6) * sigma with sigma=1
+    let r_eq = 1.122_462_f32; // 2^(1/6) * sigma with sigma=1
     // Slightly below equilibrium -> repulsive -> positive force magnitude returned by pure
     let f_near = phys.force(r_eq * 0.9);
     // Slightly above equilibrium -> attractive -> negative force
@@ -277,8 +277,8 @@ fn test_energy_conservation_two_balls_integration() {
     ball2.v = Vec2D::new(-0.08, -0.03);
 
     // Initialize pre_update positions
-    ball1.pre_update_pos = ball1.get_position().clone();
-    ball2.pre_update_pos = ball2.get_position().clone();
+    ball1.pre_update_pos = *ball1.get_position();
+    ball2.pre_update_pos = *ball2.get_position();
 
     // Set up neighbor lists (each ball sees the other)
     ball1.hood.add_neighbour(1);
@@ -332,8 +332,8 @@ fn test_energy_conservation_two_balls_integration() {
             balls[1].get_position().y + balls[1].v.y * DT,
         );
 
-        balls[0].set_position_and_update_tail(new_pos1.clone());
-        balls[1].set_position_and_update_tail(new_pos2.clone());
+        balls[0].set_position_and_update_tail(new_pos1);
+        balls[1].set_position_and_update_tail(new_pos2);
         balls[0].pre_update_pos = new_pos1;
         balls[1].pre_update_pos = new_pos2;
 

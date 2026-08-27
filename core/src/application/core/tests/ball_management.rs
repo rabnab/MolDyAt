@@ -66,7 +66,7 @@ fn test_is_ball_in_region() {
     let ball_coord = (0., 0.);
     println!("ball coordinates are {:?}", ball_coord,);
     let ball_radius = 5.;
-    let ball = Ball2D::new(0, ball_coord.clone().into(), (0, ball_radius));
+    let ball = Ball2D::new(0, ball_coord.into(), (0, ball_radius));
     assert!(main_content.is_ball_in_region(&ball));
 
     let invalid_ball = Ball2D::new(1, (tl.0 - 0.1, tl.1 - 0.1).into(), (0, ball_radius));
@@ -85,15 +85,14 @@ fn test_ball_collision() {
 
     let ball_coord = Vec2D::zero();
     main_content
-        .add_candidate_at_pos(ball_coord.clone())
-        .expect(format!("could not add ball at {:?}", ball_coord).as_str());
+        .add_candidate_at_pos(ball_coord)
+        .unwrap_or_else(|_| panic!("could not add ball at {:?}", ball_coord));
 
     let new_ball_coord = Vec2D::new(
         ball_coord.x + 0.5 * ball_radius,
         ball_coord.y + 0.5 * ball_radius,
     );
-    let colliding_ball =
-        factory.create_massive_with_velocity(new_ball_coord.clone(), Vec2D::zero());
+    let colliding_ball = factory.create_massive_with_velocity(new_ball_coord, Vec2D::zero());
     // main_content. coord_to_px(&new_ball_coord),
 
     println!(

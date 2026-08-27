@@ -218,7 +218,7 @@ mod tests {
         let x_target: f32 = 4.;
         let y_target: f32 = 1.234E-9;
         let mut v1 = Vec2D::new(x_target, y_target);
-        let v2 = v1.clone();
+        let v2 = v1;
 
         assert_eq!(v2.x, v1.x);
         assert_eq!(v2.y, v1.y);
