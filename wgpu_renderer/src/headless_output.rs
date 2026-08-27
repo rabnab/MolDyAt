@@ -204,7 +204,7 @@ fn frame_to_jsonl_with_config(
 
     if config.detail == DetailLevel::Balls {
         let mut balls: Vec<_> = snapshot.balls.iter().collect();
-        balls.sort_by_key(|ball| ball.id);
+        balls.sort_unstable_by_key(|ball| ball.id);
         let ball_entries = balls
             .into_iter()
             .map(|ball| {

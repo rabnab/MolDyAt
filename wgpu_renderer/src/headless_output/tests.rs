@@ -151,6 +151,22 @@ fn test_detail_balls_includes_ball_fields() {
             tail: Vec::new(),
         },
     );
+    snapshot.balls.push(
+        rust_thermo_core::application::renderer_snapshot::BallRenderData {
+            id: 3,
+            size_idx: 1,
+            position: rust_thermo_core::objects2d::Vec2D::new(-0.5, 0.5),
+            velocity: rust_thermo_core::objects2d::Vec2D::new(-0.1, 0.2),
+            mass: 1.5,
+            color: [0.0, 1.0, 0.0, 1.0],
+            radius: 0.5,
+            show_neighbor_lines: false,
+            show_main_neighbors_only: false,
+            neighbors: Vec::new(),
+            update_counter: 1,
+            tail: Vec::new(),
+        },
+    );
 
     let config = HeadlessConfig {
         detail: DetailLevel::Balls,
@@ -159,15 +175,17 @@ fn test_detail_balls_includes_ball_fields() {
     let line = frame_to_jsonl_with_config(&config, &snapshot, Some(0.0));
     let value: serde_json::Value = serde_json::from_str(&line).expect("valid json");
 
-    assert_eq!(value["balls"][0]["id"], 9);
-    assert_eq!(value["balls"][0]["size_idx"], 2);
-    assert_eq!(value["balls"][0]["size_class"], 2);
-    assert!((value["balls"][0]["position"]["x"].as_f64().unwrap() - 1.5).abs() < 1e-6);
-    assert!((value["balls"][0]["position"]["y"].as_f64().unwrap() + 2.5).abs() < 1e-6);
-    assert!((value["balls"][0]["velocity"]["vx"].as_f64().unwrap() - 0.25).abs() < 1e-6);
-    assert!((value["balls"][0]["velocity"]["vy"].as_f64().unwrap() + 0.5).abs() < 1e-6);
-    assert!((value["balls"][0]["radius"].as_f64().unwrap() - 0.7).abs() < 1e-6);
-    assert!((value["balls"][0]["mass"].as_f64().unwrap() - 3.75).abs() < 1e-6);
+    assert_eq!(value["balls"][0]["id"], 3);
+    assert_eq!(value["balls"][0]["size_idx"], 1);
+    assert_eq!(value["balls"][1]["id"], 9);
+    assert_eq!(value["balls"][1]["size_idx"], 2);
+    assert_eq!(value["balls"][1]["size_class"], 2);
+    assert!((value["balls"][1]["position"]["x"].as_f64().unwrap() - 1.5).abs() < 1e-6);
+    assert!((value["balls"][1]["position"]["y"].as_f64().unwrap() + 2.5).abs() < 1e-6);
+    assert!((value["balls"][1]["velocity"]["vx"].as_f64().unwrap() - 0.25).abs() < 1e-6);
+    assert!((value["balls"][1]["velocity"]["vy"].as_f64().unwrap() + 0.5).abs() < 1e-6);
+    assert!((value["balls"][1]["radius"].as_f64().unwrap() - 0.7).abs() < 1e-6);
+    assert!((value["balls"][1]["mass"].as_f64().unwrap() - 3.75).abs() < 1e-6);
 }
 
 #[test]
