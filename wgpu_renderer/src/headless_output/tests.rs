@@ -1,6 +1,8 @@
 use super::*;
 use rust_thermo_core::application::renderer_snapshot::RendererSnapshot;
 use std::fs;
+use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
 fn test_frame_record_contains_v1_schema_and_summary_fields() {
@@ -291,14 +293,34 @@ fn test_stdout_and_file_outputs_stay_separated_for_frame_records() {
 
 #[test]
 fn test_runs_with_same_seed_and_config_emit_identical_jsonl() {
-    let output_path_a = std::env::temp_dir().join(format!(
-        "headless-determinism-a-{}.jsonl",
-        std::process::id()
-    ));
-    let output_path_b = std::env::temp_dir().join(format!(
-        "headless-determinism-b-{}.jsonl",
-        std::process::id()
-    ));
+    struct TempFileGuard {
+        path: PathBuf,
+    }
+
+    impl Drop for TempFileGuard {
+        fn drop(&mut self) {
+            let _ = fs::remove_file(&self.path);
+        }
+    }
+
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock before unix epoch")
+        .as_nanos();
+    let unique = format!(
+        "{}-{}-{}",
+        std::process::id(),
+        std::thread::current().name().unwrap_or("unnamed"),
+        nanos
+    );
+    let output_path_a = std::env::temp_dir().join(format!("headless-determinism-a-{unique}.jsonl"));
+    let output_path_b = std::env::temp_dir().join(format!("headless-determinism-b-{unique}.jsonl"));
+    let _guard_a = TempFileGuard {
+        path: output_path_a.clone(),
+    };
+    let _guard_b = TempFileGuard {
+        path: output_path_b.clone(),
+    };
 
     let world_rect = rust_thermo_core::application::MainContent::bootstrap_world_rect(
         1280,
@@ -355,7 +377,4 @@ fn test_runs_with_same_seed_and_config_emit_identical_jsonl() {
         serde_json::from_str::<serde_json::Value>(lines_a[5]).expect("run_end json")["record_kind"],
         "run_end"
     );
-
-    fs::remove_file(output_path_a).expect("remove file a");
-    fs::remove_file(output_path_b).expect("remove file b");
 }
