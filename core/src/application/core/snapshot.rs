@@ -52,6 +52,8 @@ impl MainContent {
                 id: ball.get_id(),
                 size_idx: ball.get_size_idx(),
                 position: *ball.get_position(),
+                velocity: *ball.get_velocity(),
+                mass: ball.get_mass(),
                 color,
                 radius: ball.get_radius(),
                 show_neighbor_lines,
