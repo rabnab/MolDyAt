@@ -56,6 +56,74 @@ cargo +nightly build -p rust_thermo_wgpu
 cargo +nightly run   -p rust_thermo_wgpu
 ```
 
+### Headless Mode (Examples)
+
+Headless mode runs the simulation without opening a window and emits structured output for CI, regression checks, scripting, and offline analysis.
+
+```bash
+# Minimal headless run (defaults: --steps 1, summary output, stdout enabled)
+cargo +nightly run -p rust_thermo_wgpu -- --headless
+```
+
+```bash
+# Run 500 steps, emit snapshots every 50 steps to stdout
+cargo +nightly run -p rust_thermo_wgpu -- --headless --steps 500 --snapshot-every 50
+```
+
+```bash
+# Write JSONL records to a file while keeping console summaries
+cargo +nightly run -p rust_thermo_wgpu -- --headless --steps 300 --snapshot-every 25 --output /tmp/headless.jsonl
+```
+
+```bash
+# File-only mode (required when disabling stdout)
+cargo +nightly run -p rust_thermo_wgpu -- --headless --steps 300 --output /tmp/headless.jsonl --no-stdout
+```
+
+```bash
+# Deterministic seeded run for reproducible CI fixtures
+cargo +nightly run -p rust_thermo_wgpu -- --headless --steps 1000 --snapshot-every 100 --rng-seed 12345 --seed-balls 64 --output /tmp/seeded.jsonl --no-stdout
+```
+
+```bash
+# Export summary + per-ball state (larger output)
+cargo +nightly run -p rust_thermo_wgpu -- --headless --steps 200 --snapshot-every 20 --detail balls --output /tmp/balls.jsonl --no-stdout
+```
+
+```bash
+# Export thermo grids (temperature + pressure)
+cargo +nightly run -p rust_thermo_wgpu -- --headless --steps 200 --snapshot-every 20 --detail thermo --output /tmp/thermo.jsonl --no-stdout
+```
+
+```bash
+# Export both balls and thermo sections in each frame record
+cargo +nightly run -p rust_thermo_wgpu -- --headless --steps 200 --snapshot-every 20 --detail balls+thermo --output /tmp/full.jsonl --no-stdout
+```
+
+```bash
+# Same as above, using the accepted alias for balls+thermo
+cargo +nightly run -p rust_thermo_wgpu -- --headless --steps 200 --snapshot-every 20 --detail balls-and-thermo --output /tmp/full.jsonl --no-stdout
+```
+
+```bash
+# Capture output in CI artifact path
+cargo +nightly run -p rust_thermo_wgpu -- --headless --steps 1500 --snapshot-every 150 --rng-seed 7 --seed-balls 100 --output ./artifacts/headless-run.jsonl --no-stdout
+```
+
+```bash
+# Quick smoke check: ensure expected record kinds are present
+cargo +nightly run -p rust_thermo_wgpu -- --headless --steps 10 --snapshot-every 5 --output /tmp/smoke.jsonl --no-stdout
+rg '"record_kind":"run_start"|"record_kind":"frame"|"record_kind":"run_end"' /tmp/smoke.jsonl
+```
+
+Key behavior:
+
+- emits an initial frame at step `0`
+- emits interval frames when `--snapshot-every > 0`
+- always emits a final frame at the last step
+- records are JSON Lines with `schema_version = "headless.v1"`
+- non-finite numbers (`NaN`, `+Inf`, `-Inf`) are encoded as `null`
+
 ### Testing
 
 ```bash
@@ -134,6 +202,7 @@ wgpu_renderer/
 * [Contributing Guide](CONTRIBUTING.md)
 * [Runtime Architecture](docs/architecture.md)
 * [Simulation Coordinate Systems](docs/simulation.md)
+* [Headless Renderer Plan and Contract](docs/headless-renderer-plan.md)
 * [Copilot Instructions](.github/copilot-instructions.md)
 
 ## Contributing

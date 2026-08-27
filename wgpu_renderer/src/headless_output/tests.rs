@@ -288,3 +288,74 @@ fn test_stdout_and_file_outputs_stay_separated_for_frame_records() {
 
     fs::remove_file(output_path).expect("remove output file");
 }
+
+#[test]
+fn test_runs_with_same_seed_and_config_emit_identical_jsonl() {
+    let output_path_a = std::env::temp_dir().join(format!(
+        "headless-determinism-a-{}.jsonl",
+        std::process::id()
+    ));
+    let output_path_b = std::env::temp_dir().join(format!(
+        "headless-determinism-b-{}.jsonl",
+        std::process::id()
+    ));
+
+    let world_rect = rust_thermo_core::application::MainContent::bootstrap_world_rect(
+        1280,
+        720,
+        rust_thermo_core::graphics::renderer::margins::Margins::new(110.0, 50.0, 50.0, 50.0),
+    );
+
+    let config_a = HeadlessConfig {
+        steps: 6,
+        snapshot_every: 2,
+        output: Some(output_path_a.clone()),
+        format: OutputFormat::Jsonl,
+        detail: DetailLevel::Summary,
+        rng_seed: Some(12345),
+        stdout: false,
+        seed_balls: Some(24),
+    };
+    let config_b = HeadlessConfig {
+        output: Some(output_path_b.clone()),
+        ..config_a.clone()
+    };
+
+    let mut app_a = super::super::headless_runner::build_application(world_rect, config_a.rng_seed)
+        .expect("build app a");
+    app_a.seed_random_balls(config_a.seed_balls.expect("seed ball count") as usize);
+    let runner_a = super::super::headless_runner::HeadlessRunner::from_config(config_a, app_a)
+        .expect("runner a");
+    let report_a = runner_a.run().expect("run a");
+    assert_eq!(report_a.snapshots_emitted, 4);
+
+    let mut app_b = super::super::headless_runner::build_application(world_rect, config_b.rng_seed)
+        .expect("build app b");
+    app_b.seed_random_balls(config_b.seed_balls.expect("seed ball count") as usize);
+    let runner_b = super::super::headless_runner::HeadlessRunner::from_config(config_b, app_b)
+        .expect("runner b");
+    let report_b = runner_b.run().expect("run b");
+    assert_eq!(report_b.snapshots_emitted, 4);
+
+    let content_a = fs::read_to_string(&output_path_a).expect("read file a");
+    let content_b = fs::read_to_string(&output_path_b).expect("read file b");
+    assert_eq!(content_a, content_b);
+
+    let lines_a: Vec<&str> = content_a.lines().collect();
+    assert_eq!(lines_a.len(), 6);
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(lines_a[0]).expect("run_start json")["record_kind"],
+        "run_start"
+    );
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(lines_a[1]).expect("frame0 json")["record_kind"],
+        "frame"
+    );
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(lines_a[5]).expect("run_end json")["record_kind"],
+        "run_end"
+    );
+
+    fs::remove_file(output_path_a).expect("remove file a");
+    fs::remove_file(output_path_b).expect("remove file b");
+}
