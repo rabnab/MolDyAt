@@ -10,6 +10,11 @@ This mode should be useful for:
 - collecting reproducible output for tests and CI
 - exporting frame-by-frame state for later analysis or visualization
 
+Issue coverage status:
+
+- #179: complete (non-finite JSON policy defined and tested)
+- #180: complete (contract, sequencing, detail modes, stdout/file split, and deterministic seeded output tests)
+
 ## Constraints
 
 - Keep physics ownership in `rust_thermo_core::application::MainContent`
@@ -132,7 +137,23 @@ Important details:
 
 - Do not export `status_text` as a structured field
 - Do not claim per-ball neighbor counts unless a dedicated, always-populated source is added; the current snapshot only populates `neighbors` for verbose visualization paths
-- Define a JSON policy for non-finite values before exporting thermo grids; if `NaN` can appear, convert to `null` or another explicit representation because standard JSON does not support `NaN`
+- JSON non-finite policy (implemented): any non-finite `f32` (`NaN`, `+Inf`, `-Inf`) is encoded as `null` in all exported numeric positions, including thermo grids/specs and summary fields
+
+### Implemented JSONL v1 Contract
+
+The implementation emits versioned JSON Lines records (`schema_version = "headless.v1"`):
+
+- `run_start`: configuration and initial metadata
+- `frame`: periodic simulation snapshots
+- `run_end`: completion metadata
+
+`frame` emission sequence is guaranteed as:
+
+1. initial frame at simulation step `0`
+2. periodic frames at `snapshot_every` boundaries (if non-zero)
+3. final frame at the last step, even when the interval does not divide total steps
+
+This sequencing is covered by runner tests and should be treated as contract behavior for CI fixtures.
 
 ## Initial CLI Surface
 
@@ -222,6 +243,16 @@ Minimum validation for the first implementation:
 4. a smoke test that runs a few steps headlessly and emits an initial snapshot plus at least one stepped snapshot
 5. an energy-delta output test that verifies the initial frame is the delta baseline
 6. a determinism test that runs the same seeded headless configuration twice and verifies identical emitted records
+
+Implemented coverage in `wgpu_renderer` now includes:
+
+- CLI parsing tests for headless flags, defaults, and validation errors
+- contract serialization tests for `run_start` / `frame` / `run_end`
+- sequencing tests for step-0, interval, and final snapshot behavior
+- detail mode tests for summary vs balls and thermo inclusion
+- non-finite encoding tests for summary and thermo payloads
+- stdout/file-path behavior split tests
+- deterministic seeded run test asserting byte-identical JSONL output for same config and seed
 
 If the implementation touches `core`, add focused tests there rather than only exercising the path from `wgpu_renderer`.
 
