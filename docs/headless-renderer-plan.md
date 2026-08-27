@@ -124,8 +124,9 @@ Suggested default `frame` fields:
 Suggested opt-in detail sections:
 
 - `balls`: per-ball position, velocity, radius, size class, mass
-- `operators`: full operator geometry
-- `thermo`: cell grids and grid specs
+- `thermo`: cell temperature/pressure grids and grid specs
+- `balls+thermo`: both sections together
+- `operators`: full operator geometry (planned follow-up; not in the initial v1 export)
 
 Important details:
 
@@ -144,7 +145,7 @@ Suggested flags:
 - `--snapshot-every <n>`
 - `--output <path>`
 - `--format jsonl`
-- `--detail <summary|balls>`
+- `--detail <summary|balls|thermo|balls+thermo>`
 - `--rng-seed <n>`
 - `--stdout`
 - `--no-stdout`

@@ -27,6 +27,18 @@ pub enum OutputFormat {
 pub enum DetailLevel {
     Summary,
     Balls,
+    Thermo,
+    BallsAndThermo,
+}
+
+impl DetailLevel {
+    pub fn includes_balls(self) -> bool {
+        matches!(self, Self::Balls | Self::BallsAndThermo)
+    }
+
+    pub fn includes_thermo(self) -> bool {
+        matches!(self, Self::Thermo | Self::BallsAndThermo)
+    }
 }
 
 impl Default for HeadlessConfig {
@@ -127,6 +139,8 @@ fn parse_headless_args_with_args(args: &[String]) -> Result<Option<HeadlessConfi
                 config.detail = match args[i].as_str() {
                     "summary" => DetailLevel::Summary,
                     "balls" => DetailLevel::Balls,
+                    "thermo" => DetailLevel::Thermo,
+                    "balls+thermo" | "balls-and-thermo" => DetailLevel::BallsAndThermo,
                     other => return Err(CliError::new(format!("Unknown detail level: {}", other))),
                 };
             }

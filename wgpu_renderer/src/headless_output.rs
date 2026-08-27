@@ -1,5 +1,8 @@
 use crate::headless_cli::{DetailLevel, HeadlessConfig, OutputFormat};
-use rust_thermo_core::application::renderer_snapshot::{OperatorSnapshot, RendererSnapshot};
+use rust_thermo_core::application::renderer_snapshot::{
+    OperatorSnapshot, RendererSnapshot, ThermoGridSpec,
+};
+use rust_thermo_core::application::thermo_field::ThermoGrid;
 use serde_json::json;
 use std::fs::File;
 use std::io::{self, BufWriter, Write};
@@ -178,14 +181,6 @@ fn frame_to_jsonl_with_config(
     snapshot: &RendererSnapshot,
     initial_total_energy: Option<f32>,
 ) -> String {
-    fn f32_value(value: f32) -> serde_json::Value {
-        if value.is_finite() {
-            json!(value)
-        } else {
-            serde_json::Value::Null
-        }
-    }
-
     let total_energy = snapshot.kinetic_energy + snapshot.potential_energy;
     let delta_energy = initial_total_energy.map(|initial| total_energy - initial);
     let mut frame = json!({
@@ -202,7 +197,7 @@ fn frame_to_jsonl_with_config(
         "operator_counts": operator_counts(&snapshot.operators),
     });
 
-    if config.detail == DetailLevel::Balls {
+    if config.detail.includes_balls() {
         let mut balls: Vec<_> = snapshot.balls.iter().collect();
         balls.sort_unstable_by_key(|ball| ball.id);
         let ball_entries = balls
@@ -226,6 +221,10 @@ fn frame_to_jsonl_with_config(
             })
             .collect::<Vec<_>>();
         frame["balls"] = serde_json::Value::Array(ball_entries);
+    }
+
+    if config.detail.includes_thermo() {
+        frame["thermo"] = thermo_to_json(snapshot);
     }
 
     frame.to_string()
@@ -289,7 +288,48 @@ fn detail_level_name(detail: DetailLevel) -> &'static str {
     match detail {
         DetailLevel::Summary => "summary",
         DetailLevel::Balls => "balls",
+        DetailLevel::Thermo => "thermo",
+        DetailLevel::BallsAndThermo => "balls+thermo",
     }
+}
+
+fn thermo_to_json(snapshot: &RendererSnapshot) -> serde_json::Value {
+    let mut thermo = json!({
+        "temperature": thermo_grid_to_json(&snapshot.cell_temperature),
+        "pressure": thermo_grid_to_json(&snapshot.cell_pressure),
+    });
+
+    if let Some(spec) = &snapshot.thermo_grid_spec {
+        thermo["grid_spec"] = thermo_grid_spec_to_json(spec);
+    }
+
+    thermo
+}
+
+fn thermo_grid_to_json(grid: &ThermoGrid) -> serde_json::Value {
+    let (rows, cols) = grid.shape();
+    let values = grid
+        .as_slice()
+        .iter()
+        .map(|value| f32_value(*value))
+        .collect::<Vec<_>>();
+
+    json!({
+        "rows": rows,
+        "cols": cols,
+        "values": values,
+    })
+}
+
+fn thermo_grid_spec_to_json(spec: &ThermoGridSpec) -> serde_json::Value {
+    json!({
+        "rows": spec.rows,
+        "cols": spec.cols,
+        "cell_width": f32_value(spec.cell_width),
+        "cell_height": f32_value(spec.cell_height),
+        "origin_x": f32_value(spec.origin_x),
+        "origin_y": f32_value(spec.origin_y),
+    })
 }
 
 fn f32_value(value: f32) -> serde_json::Value {

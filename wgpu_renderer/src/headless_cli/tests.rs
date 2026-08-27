@@ -189,6 +189,34 @@ fn test_detail_balls() {
 }
 
 #[test]
+fn test_detail_thermo() {
+    let args = vec![
+        "program".to_string(),
+        "--headless".to_string(),
+        "--detail".to_string(),
+        "thermo".to_string(),
+    ];
+    let result = parse_headless_args_with_args(&args);
+    assert!(result.is_ok());
+    let config = result.unwrap().unwrap();
+    assert_eq!(config.detail, DetailLevel::Thermo);
+}
+
+#[test]
+fn test_detail_balls_and_thermo() {
+    let args = vec![
+        "program".to_string(),
+        "--headless".to_string(),
+        "--detail".to_string(),
+        "balls+thermo".to_string(),
+    ];
+    let result = parse_headless_args_with_args(&args);
+    assert!(result.is_ok());
+    let config = result.unwrap().unwrap();
+    assert_eq!(config.detail, DetailLevel::BallsAndThermo);
+}
+
+#[test]
 fn test_detail_invalid() {
     let args = vec![
         "program".to_string(),

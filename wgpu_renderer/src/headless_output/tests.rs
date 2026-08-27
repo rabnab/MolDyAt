@@ -207,6 +207,45 @@ fn test_non_finite_values_serialize_as_null() {
 }
 
 #[test]
+fn test_thermo_detail_serializes_grids_and_non_finite_values_as_null() {
+    let mut snapshot = RendererSnapshot::new();
+    snapshot.simulation_step = 7;
+    snapshot.cell_temperature =
+        rust_thermo_core::application::thermo_field::ThermoGrid::filled(1, 3, 1.0);
+    snapshot.cell_temperature.set(0, 1, f32::NAN);
+    snapshot.cell_pressure =
+        rust_thermo_core::application::thermo_field::ThermoGrid::filled(1, 3, 2.0);
+    snapshot.cell_pressure.set(0, 2, f32::INFINITY);
+    snapshot.thermo_grid_spec = Some(
+        rust_thermo_core::application::renderer_snapshot::ThermoGridSpec {
+            rows: 1,
+            cols: 3,
+            cell_width: 4.0,
+            cell_height: 5.0,
+            origin_x: -1.5,
+            origin_y: 2.5,
+        },
+    );
+
+    let config = HeadlessConfig {
+        detail: DetailLevel::Thermo,
+        ..HeadlessConfig::default()
+    };
+    let line = frame_to_jsonl_with_config(&config, &snapshot, Some(0.0));
+    let value: serde_json::Value = serde_json::from_str(&line).expect("valid json");
+
+    assert_eq!(value["thermo"]["temperature"]["rows"], 1);
+    assert_eq!(value["thermo"]["temperature"]["cols"], 3);
+    assert!(value["thermo"]["temperature"]["values"][0].is_number());
+    assert!(value["thermo"]["temperature"]["values"][1].is_null());
+    assert_eq!(value["thermo"]["pressure"]["values"][0], 2.0);
+    assert!(value["thermo"]["pressure"]["values"][2].is_null());
+    assert_eq!(value["thermo"]["grid_spec"]["rows"], 1);
+    assert_eq!(value["thermo"]["grid_spec"]["cols"], 3);
+    assert_eq!(value["thermo"]["grid_spec"]["cell_width"], 4.0);
+}
+
+#[test]
 fn test_stdout_and_file_outputs_stay_separated_for_frame_records() {
     let output_path =
         std::env::temp_dir().join(format!("headless-output-test-{}.jsonl", std::process::id()));
