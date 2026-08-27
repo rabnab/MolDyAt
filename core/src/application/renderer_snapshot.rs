@@ -146,6 +146,12 @@ pub struct BallRenderData {
     /// Ball position in 2D space
     pub position: Vec2D,
 
+    /// Ball velocity in 2D space
+    pub velocity: Vec2D,
+
+    /// Ball mass for export and physics inspection
+    pub mass: f32,
+
     /// Ball color as RGBA [r, g, b, a] in range [0.0, 1.0]
     /// NOT ggez::Color to maintain framework independence
     pub color: [f32; 4],

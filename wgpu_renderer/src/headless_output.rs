@@ -40,7 +40,8 @@ impl HeadlessSnapshotSink for HeadlessWriter {
             self.write_stdout_line(&console_line)?;
         }
         if self.config.output.is_some() {
-            let jsonl_line = frame_to_jsonl(snapshot, self.initial_total_energy);
+            let jsonl_line =
+                frame_to_jsonl_with_config(&self.config, snapshot, self.initial_total_energy);
             self.write_file_line(&jsonl_line)?;
         }
         Ok(())
@@ -169,6 +170,14 @@ fn run_start_to_jsonl(config: &HeadlessConfig, snapshot: &RendererSnapshot) -> S
 }
 
 fn frame_to_jsonl(snapshot: &RendererSnapshot, initial_total_energy: Option<f32>) -> String {
+    frame_to_jsonl_with_config(&HeadlessConfig::default(), snapshot, initial_total_energy)
+}
+
+fn frame_to_jsonl_with_config(
+    config: &HeadlessConfig,
+    snapshot: &RendererSnapshot,
+    initial_total_energy: Option<f32>,
+) -> String {
     fn f32_value(value: f32) -> serde_json::Value {
         if value.is_finite() {
             json!(value)
@@ -179,8 +188,7 @@ fn frame_to_jsonl(snapshot: &RendererSnapshot, initial_total_energy: Option<f32>
 
     let total_energy = snapshot.kinetic_energy + snapshot.potential_energy;
     let delta_energy = initial_total_energy.map(|initial| total_energy - initial);
-
-    json!({
+    let mut frame = json!({
         "schema_version": "headless.v1",
         "record_kind": "frame",
         "step": snapshot.simulation_step,
@@ -192,8 +200,35 @@ fn frame_to_jsonl(snapshot: &RendererSnapshot, initial_total_energy: Option<f32>
         "gravity_force_multiple": snapshot.gravity_force_multiple,
         "physics_fps": f32_value(snapshot.physics_fps),
         "operator_counts": operator_counts(&snapshot.operators),
-    })
-    .to_string()
+    });
+
+    if config.detail == DetailLevel::Balls {
+        let mut balls: Vec<_> = snapshot.balls.iter().collect();
+        balls.sort_by_key(|ball| ball.id);
+        let ball_entries = balls
+            .into_iter()
+            .map(|ball| {
+                json!({
+                    "id": ball.id,
+                    "size_idx": ball.size_idx,
+                    "size_class": ball.size_idx,
+                    "position": {
+                        "x": f32_value(ball.position.x),
+                        "y": f32_value(ball.position.y),
+                    },
+                    "velocity": {
+                        "vx": f32_value(ball.velocity.x),
+                        "vy": f32_value(ball.velocity.y),
+                    },
+                    "radius": f32_value(ball.radius),
+                    "mass": f32_value(ball.mass),
+                })
+            })
+            .collect::<Vec<_>>();
+        frame["balls"] = serde_json::Value::Array(ball_entries);
+    }
+
+    frame.to_string()
 }
 
 fn run_end_to_jsonl(snapshot: &RendererSnapshot, snapshots_emitted: u32) -> String {
