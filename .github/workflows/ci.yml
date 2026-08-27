@@ -12,6 +12,9 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
 
+permissions:
+  contents: read
+
 jobs:
   fmt:
     name: rustfmt (nightly)
@@ -29,7 +32,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Check formatting
-        run: cargo +nightly fmt -- --check
+        run: cargo fmt -- --check
 
   clippy:
     name: clippy (workspace, deny warnings)
@@ -47,7 +50,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Run clippy
-        run: cargo +nightly clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
   test:
     name: test (workspace)
@@ -63,4 +66,4 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Run tests
-        run: cargo +nightly test --workspace
+        run: cargo test --workspace
