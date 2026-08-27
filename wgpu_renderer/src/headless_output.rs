@@ -181,14 +181,6 @@ fn frame_to_jsonl_with_config(
     snapshot: &RendererSnapshot,
     initial_total_energy: Option<f32>,
 ) -> String {
-    fn f32_value(value: f32) -> serde_json::Value {
-        if value.is_finite() {
-            json!(value)
-        } else {
-            serde_json::Value::Null
-        }
-    }
-
     let total_energy = snapshot.kinetic_energy + snapshot.potential_energy;
     let delta_energy = initial_total_energy.map(|initial| total_energy - initial);
     let mut frame = json!({
