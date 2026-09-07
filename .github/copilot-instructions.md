@@ -1,13 +1,105 @@
 # Copilot Instructions for Molecular Lennard-Jones Simulation
 
-## Project Overview
+This file guides Copilot-style assistants for making correct, safe, and useful edits in this repository.
 
-This is a **molecular dynamics physics simulation** implementing Lennard-Jones particle interactions with Verlet neighbor lists, spatial partitioning, and force capping. The simulation is written in Rust and uses the ggez game framework for rendering.
+NOTE: keep edits here aligned with CONTRIBUTING.md and README.md. Consult `docs/` for architecture details.
 
-For coordinate-system conventions across simulation space, viewport transforms, and derived grids, see `docs/simulation.md`.
+---
 
-**Critical Physics Constraint**: Energy conservation is the primary concern. Any changes to physics calculations (especially force capping, collision handling, or integration methods) must preserve total system energy. Verify energy conservation when modifying physics code - the force cap feature uses a linear potential extrapolation beyond `r_cap` to maintain energy continuity.
+## Quick build, test and lint commands (explicit)
 
+Toolchain is pinned in `rust-toolchain.toml` (nightly). Use `+nightly` in Cargo invocations.
+
+General (workspace):
+- Build workspace: `cargo +nightly build`
+- Run all tests: `cargo +nightly test --workspace`
+- Format: `cargo +nightly fmt`
+- Lint (deny warnings): `cargo +nightly clippy --workspace -- -D warnings`
+
+Per-package / single-target examples:
+- Build single package: `cargo +nightly build -p rust_thermo_wgpu`
+- Test single package: `cargo +nightly test -p rust_thermo_core`
+- Run a single test (name substring):
+  `cargo +nightly test -p rust_thermo_core test_remove_invalid_balls`
+- Run an exact test name (use `-- --exact` forwarded to the test binary):
+  `cargo +nightly test -p rust_thermo_core test_remove_invalid_balls -- --exact`
+- Run a single integration test file (named `tests/<name>.rs`):
+  `cargo +nightly test -p rust_thermo_core --test integration_file_name`
+
+Headless/run examples (useful for CI & regression):
+- Minimal headless run: `cargo +nightly run -p rust_thermo_wgpu -- --headless`
+- Deterministic seeded run (reproducible):
+  `cargo +nightly run -p rust_thermo_wgpu -- --headless --steps 1000 --rng-seed 12345 --no-stdout`
+
+CI helpers:
+- To check formatting only: `cargo +nightly fmt -- --check`
+- To lint workspace only: `cargo +nightly clippy --workspace -- -D warnings`
+
+---
+
+## High-level architecture (concise)
+
+- Workspace members: `core/` (rust_thermo_core) contains simulation, physics, operator logic, and tests; `wgpu_renderer/` (rust_thermo_wgpu) contains entrypoint, windowing and GPU pipelines.
+- Simulation single-source-of-truth: world-space state lives in `core` (ball positions, velocities, operators). Renderer consumes that state via a `Renderer` trait.
+- Physics hot path: `simulation_step()` → parallel force computation (Rayon) → SIMD force kernels (multiversion) → position update. Neighbor discovery: spatial CellGrid → Verlet neighbor lists (index-based Vec<usize>).
+- Index contracts: cells and Verlet lists store indices into the primary `Vec<Ball2D>`; any operation that reorders or removes entries (e.g., `Vec::retain()`, `swap_remove`) invalidates indices and MUST trigger neighbor/cell rebuilds.
+- Energy preservation: force-capping uses a linear potential beyond `r_cap` (computed via Newton's method) to ensure energy continuity. Any physics change must preserve this invariant and be validated with energy checks.
+
+Relevant locations:
+- core/src/objects2d/ball_impl/ (physics, verlet, simd_forces)
+- core/src/objects2d/ball_cell/ (cell grid)
+- core/src/frame/renderer/ (Renderer trait, viewport transforms)
+- wgpu_renderer/src/wgpu/ (render pipelines, shaders)
+- docs/ (architecture and simulation coordinate conventions)
+
+---
+
+## Key repository-specific conventions and gotchas
+
+- Rust nightly required (see `rust-toolchain.toml`). Always run `cargo +nightly fmt` and `cargo +nightly clippy -- -D warnings` before committing.
+- Neighbor lists are index-based and inexpensive to update when valid; do not try to cache indices across structural vector modifications.
+- After any index-affecting mutation (remove/retain/swap_remove) clear all neighbor lists and rebuild cell indexes immediately.
+- Force capping is implemented to preserve energy. If altering force or potential functions, implement matching potential extrapolation to avoid energy discontinuities.
+- Movement threshold: Verlet lists rebuild when tracked displacement exceeds a threshold (≈ 0.75 × effective_cutoff). Look for movement-tracking helpers in the verlet module.
+- SIMD kernels are multiversioned for CPU targets (SSE2/AVX2/NEON). Avoid changing calling conventions or ABI assumptions in simd_forces without updating multiversion attributes.
+- Parallel physics: parallel iteration uses Rayon `par_iter()` with read-only neighbor access. Avoid introducing shared mutable state inside force loops.
+- Viewport/coordinate rules: world-space is the canonical simulation space (see `docs/simulation.md`). Renderer flips Y for pixel-space; use `ViewportTransform` helpers.
+- Tests organization: topic-based test files live next to the code under `tests/` directories. Use descriptive test names so targeted runs are easy.
+
+---
+
+## What Copilot-style assistants should do (short checklist)
+
+- Respect the energy-conservation constraint for any physics edits; add unit tests verifying energy behaviour for changes affecting forces/integration.
+- When changing data structures that store indices, update all dependent subsystems (cell grid, verlet lists, any cached indices).
+- Prefer small, surgical edits. Run the minimal package tests and clippy/format before suggesting a PR.
+- For performance/algorithm changes, include a brief benchmark or a `cargo bench` hint and a simple correctness test (energy or conserved quantity).
+- If adding or renaming operator tools, update all three locations listed under the Operator Single-Source rules in this repo.
+
+---
+
+## Helpful links in-tree
+
+- README.md — quick start and headless examples
+- CONTRIBUTING.md — workflow and mandatory checks
+- docs/simulation.md — coordinate systems and viewport rules
+- core/src/objects2d/ball_impl/ — physics, verlet, simd
+- core/src/objects2d/ball_cell/ — spatial partitioning
+- wgpu_renderer/src/wgpu/ — render pipelines and shaders
+
+---
+
+## Git/PR details
+
+- Branch names: `feature/master/*`, `bugfix/master/*` (follow CONTRIBUTING.md)
+- Commit trailer: include the Co-authored-by trailer in commits when using Copilot-assisted commits unless the author requests otherwise:
+
+  Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+
+- Use `gh` CLI for PRs when scripting or creating reproducible CI-like commands.
+
+---
+ 
 ## Architecture Overview
 
 ### Core Components
