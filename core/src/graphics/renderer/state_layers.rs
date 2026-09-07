@@ -324,8 +324,10 @@ mod tests {
 
     #[test]
     fn frame_state_cursor_survives_reset() {
-        let mut fs = FrameState::default();
-        fs.cursor_pos_px = [100.0, 200.0];
+        let mut fs = FrameState {
+            cursor_pos_px: [100.0, 200.0],
+            ..Default::default()
+        };
         fs.reset();
         assert_eq!(fs.cursor_pos_px, [100.0, 200.0]);
     }

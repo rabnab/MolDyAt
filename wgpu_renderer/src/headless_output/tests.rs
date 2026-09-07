@@ -108,7 +108,7 @@ fn test_jsonl_records_are_valid_json_lines_and_ordered() {
     let frame = frame_to_jsonl(&frame_snapshot, Some(0.0));
     let end = run_end_to_jsonl(&end_snapshot, 2);
 
-    let lines = vec![start, frame, end];
+    let lines = [start, frame, end];
     let parsed: Vec<serde_json::Value> = lines
         .iter()
         .map(|line| serde_json::from_str(line).expect("valid json line"))

@@ -428,13 +428,15 @@ mod tests {
 
     #[test]
     fn test_accel_with_speed_limit() {
-        let mut b = Ball2D::default();
-        b.mass = 2.0;
-        b.v = Vec2D::new(3.0, 4.0); // speed 5
+        let mut b = Ball2D {
+            mass: 2.0,
+            v: Vec2D::new(3.0, 4.0),
+            ..Default::default()
+        };
         let dt = 0.1;
         // Case 1: limit above current speed -> no braking
         let acc = b.accel_with_speed_limit(&Vec2D::new(2.0, 0.0), 0., 10.0, dt);
-        assert_eq!(b.braking, false);
+        assert!(!b.braking);
         assert!((acc.x - 1.0).abs() < 1e-6 && (acc.y - 0.0).abs() < 1e-6);
 
         // Case 2: limit below speed -> braking engaged and accel opposes v
@@ -447,10 +449,12 @@ mod tests {
 
     #[test]
     fn test_execute_update_pos_and_bounce() {
-        let mut b = Ball2D::default();
-        b.radius = 1.0;
-        b.pos = Vec2D::new(0.0, 0.0);
-        b.v = Vec2D::new(10.0, 0.0);
+        let mut b = Ball2D {
+            radius: 1.0,
+            pos: Vec2D::new(0.0, 0.0),
+            v: Vec2D::new(10.0, 0.0),
+            ..Default::default()
+        };
         b.set_accel(Vec2D::zero());
         let bound = Rect::new(-2.0, -2.0, 4.0, 4.0); // square from -2..2
         // Move with dt so that we cross right boundary (max x = 2 - radius = 1)
@@ -477,14 +481,20 @@ mod tests {
 
     #[test]
     fn test_ball_name_and_id_and_moment_and_eq() {
-        let mut b1 = Ball2D::default();
-        b1.id = 17;
-        b1.mass = 5.0;
-        b1.radius = 4.0;
-        let mut b2 = Ball2D::default();
-        b2.id = 17; // same id -> equal
-        let mut b3 = Ball2D::default();
-        b3.id = 16; // different id -> not equal
+        let mut b1 = Ball2D {
+            id: 17,
+            mass: 5.0,
+            radius: 4.0,
+            ..Default::default()
+        };
+        let b2 = Ball2D {
+            id: 17,
+            ..Default::default()
+        };
+        let b3 = Ball2D {
+            id: 16,
+            ..Default::default()
+        };
 
         assert_eq!(b1.get_name(), "Ball17");
         assert_eq!(b1.get_id(), 17);

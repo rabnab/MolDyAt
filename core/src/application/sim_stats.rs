@@ -288,10 +288,12 @@ mod tests {
 
     #[test]
     fn test_energy_getters_independence() {
-        let mut stats = SimStats::default();
-        stats.energy_kin = 10.0;
-        stats.energy_pot = 20.0;
-        stats.time = 5.0;
+        let stats = SimStats {
+            energy_kin: 10.0,
+            energy_pot: 20.0,
+            time: 5.0,
+            ..Default::default()
+        };
 
         assert_eq!(stats.get_kinetic_energy(), 10.0);
         assert_eq!(stats.get_potential_energy(), 20.0);

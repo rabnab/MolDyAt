@@ -1,5 +1,6 @@
 mod ball_management;
 mod bootstrap;
+mod drift_harness;
 mod energy_conservation;
 mod gravity;
 mod physics_thread;

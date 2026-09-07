@@ -197,8 +197,7 @@ impl CellGrid {
         let r_max = (row + 1).min(self.grid_height - 1);
         let c_max = (col + 1).min(self.grid_width - 1);
 
-        for r in r_min..=r_max {
-            let row_ref = &self.cells[r];
+        for row_ref in self.cells.iter().take(r_max + 1).skip(r_min) {
             for cell in row_ref.iter().take(c_max + 1).skip(c_min) {
                 f(cell);
             }

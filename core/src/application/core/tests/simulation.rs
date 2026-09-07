@@ -12,9 +12,7 @@ fn test_global_update() {
     let ball_radius = BallFactory::new().get_new_ball_radius();
 
     let ball_coord = Vec2D::zero();
-    main_content
-        .add_candidate_at_pos(ball_coord.clone().into())
-        .unwrap();
+    main_content.add_candidate_at_pos(ball_coord).unwrap();
 
     let ball_coord = ball_coord + Vec2D::new(1., 1.) * ball_radius * 2.1;
     main_content.add_candidate_at_pos(ball_coord).unwrap();
@@ -51,15 +49,9 @@ fn test_collect_neighbours() {
         ball1_coord, ball2_coord, ball3_coord
     );
 
-    main_content
-        .add_candidate_at_pos(ball1_coord.clone())
-        .unwrap();
-    main_content
-        .add_candidate_at_pos(ball2_coord.clone())
-        .unwrap();
-    main_content
-        .add_candidate_at_pos(ball3_coord.clone())
-        .unwrap();
+    main_content.add_candidate_at_pos(ball1_coord).unwrap();
+    main_content.add_candidate_at_pos(ball2_coord).unwrap();
+    main_content.add_candidate_at_pos(ball3_coord).unwrap();
 
     // Initial state check
     {
@@ -135,15 +127,9 @@ fn test_remove_invalid_balls_clears_neighbor_indices() {
     let ball2_coord = Vec2D::new(5.5, 5.5);
     let ball3_coord = Vec2D::new(8.0, 8.0);
 
-    main_content
-        .add_candidate_at_pos(ball1_coord.clone())
-        .unwrap();
-    main_content
-        .add_candidate_at_pos(ball2_coord.clone())
-        .unwrap();
-    main_content
-        .add_candidate_at_pos(ball3_coord.clone())
-        .unwrap();
+    main_content.add_candidate_at_pos(ball1_coord).unwrap();
+    main_content.add_candidate_at_pos(ball2_coord).unwrap();
+    main_content.add_candidate_at_pos(ball3_coord).unwrap();
 
     // Set up neighbor relationships by running collect_neighbours
     main_content.world_mut().step_count = 10;
@@ -154,11 +140,11 @@ fn test_remove_invalid_balls_clears_neighbor_indices() {
     {
         let balls = &main_content.world().balls;
         assert!(
-            balls[0].hood.get_neighbour_indices().len() > 0,
+            !balls[0].hood.get_neighbour_indices().is_empty(),
             "Ball 0 should have neighbors before removal"
         );
         assert!(
-            balls[1].hood.get_neighbour_indices().len() > 0,
+            !balls[1].hood.get_neighbour_indices().is_empty(),
             "Ball 1 should have neighbors before removal"
         );
     }
