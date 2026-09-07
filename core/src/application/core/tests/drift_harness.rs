@@ -1,5 +1,5 @@
 use super::{DT_GOAL, create_main_content_for_region};
-use crate::application::{GameLogic, MainContent, VerletIntegration};
+use crate::application::{GameLogic, MainContent};
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::BallFactory;
 
@@ -102,18 +102,49 @@ pub fn run_drift_harness(
 ) -> DriftRunMetrics {
     let mut samples = Vec::new();
     let mut neighbor_rebuild_count = 0usize;
-    let mut prev_total_neighbors = total_neighbor_links(main_content);
     let initial = sample_step(main_content, 0);
     samples.push(initial);
-    let bound_rect = main_content.world().world_region();
+
+    // Track last_update_hood_pos to detect when neighbour lists were rebuilt.
+    let mut prev_last_update: Vec<_> = main_content
+        .world()
+        .balls
+        .iter()
+        .map(|b| b.last_update_hood_pos)
+        .collect();
 
     for step in 1..=cfg.steps {
-        main_content.update_sim(cfg.dt, &bound_rect);
-        let current_neighbors = total_neighbor_links(main_content);
-        if current_neighbors == 0 && prev_total_neighbors > 0 {
+        // Use the real simulation_step orchestration so the harness matches real behaviour
+        // (neighbour updates, position updates, cell-grid moves, removals, and step_count).
+        main_content
+            .simulation_step()
+            .expect("simulation_step failed in harness");
+
+        // Detect if any ball's last_update_hood_pos changed -> neighbour rebuild occurred
+        let balls = &main_content.world().balls;
+        let mut any_changed = false;
+        if balls.len() != prev_last_update.len() {
+            any_changed = true;
+        } else {
+            for (i, ball) in balls.iter().enumerate() {
+                let prev = prev_last_update[i];
+                let curr = ball.last_update_hood_pos;
+                if prev.x != curr.x || prev.y != curr.y {
+                    any_changed = true;
+                    break;
+                }
+            }
+        }
+        if any_changed {
             neighbor_rebuild_count += 1;
         }
-        prev_total_neighbors = current_neighbors;
+
+        prev_last_update = main_content
+            .world()
+            .balls
+            .iter()
+            .map(|b| b.last_update_hood_pos)
+            .collect();
 
         let should_sample =
             step == cfg.steps || (cfg.sample_every != 0 && step % cfg.sample_every == 0);
