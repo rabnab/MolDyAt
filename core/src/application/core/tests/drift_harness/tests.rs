@@ -197,7 +197,7 @@ fn test_two_body_drift_converges_with_smaller_timestep() {
         &mut coarse,
         DriftHarnessConfig {
             steps: coarse_steps,
-            sample_every: coarse_steps / 10,
+            sample_every: (coarse_steps / 10).max(1),
             dt: dt_coarse,
         },
     );
@@ -207,7 +207,7 @@ fn test_two_body_drift_converges_with_smaller_timestep() {
         &mut fine,
         DriftHarnessConfig {
             steps: fine_steps,
-            sample_every: fine_steps / 10,
+            sample_every: (fine_steps / 10).max(1),
             dt: dt_fine,
         },
     );

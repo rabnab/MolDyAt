@@ -260,10 +260,10 @@ If the implementation touches `core`, add focused tests there rather than only e
 
 When implementation starts, validate in this order:
 
-1. `cargo +nightly test -p rust_thermo_wgpu`
-2. `cargo +nightly build -p rust_thermo_wgpu`
-3. `cargo +nightly fmt`
-4. `cargo +nightly clippy -- -D warnings`
+1. `cargo test -p rust_thermo_wgpu`
+2. `cargo build -p rust_thermo_wgpu`
+3. `cargo fmt`
+4. `cargo clippy -- -D warnings`
 
 If implementation widens or changes `core`, also run the affected `rust_thermo_core` tests instead of validating only `wgpu_renderer`.
 

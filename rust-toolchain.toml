@@ -1,4 +1,4 @@
 # rust-toolchain.toml (recommended)
 [toolchain]
-channel = "nightly-2026-09-01"                    # or "nightly-2025-01-01" or "1.78.0"
+channel = "nightly-2026-09-01"                    # use plain `cargo` (not `cargo +nightly`) so this pin is respected
 components = ["rustfmt", "clippy", "rust-src", "llvm-tools-preview"]       # optional components to install
