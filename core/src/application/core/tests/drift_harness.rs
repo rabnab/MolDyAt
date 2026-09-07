@@ -116,11 +116,12 @@ pub fn run_drift_harness(
         .collect();
 
     for step in 1..=cfg.steps {
-        // Use the real simulation_step orchestration so the harness matches real behaviour
+        // Use the real simulation_step orchestration with caller-provided dt so the
+        // harness matches real behaviour while supporting timestep studies.
         // (neighbour updates, position updates, cell-grid moves, removals, and step_count).
         main_content
-            .simulation_step()
-            .expect("simulation_step failed in harness");
+            .simulation_step_with_dt(cfg.dt)
+            .expect("simulation_step_with_dt failed in harness");
 
         // Detect if any ball's last_update_hood_pos changed -> neighbour rebuild occurred
         let balls = &main_content.world().balls;

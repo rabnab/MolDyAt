@@ -98,3 +98,10 @@ impl GameLogic for MainContent {
         }
     }
 }
+
+impl MainContent {
+    pub(crate) fn simulation_step_with_dt(&mut self, dt: f32) -> AppResult<()> {
+        let (world, game_data) = self.world_and_game_data();
+        SimulationEngine::simulation_step_with_dt(world, game_data, dt)
+    }
+}
