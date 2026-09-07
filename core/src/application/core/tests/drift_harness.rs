@@ -1,7 +1,8 @@
 use super::{DT_GOAL, create_main_content_for_region};
 use crate::application::{GameLogic, MainContent};
 use crate::objects2d::Vec2D;
-use crate::objects2d::ball_impl::BallFactory;
+use crate::objects2d::ball_impl::ball_physics::PhysicsConstants;
+use crate::objects2d::ball_impl::{BallFactory, BallPhysics};
 
 #[derive(Debug, Clone, Copy)]
 pub struct DriftHarnessConfig {
@@ -244,4 +245,136 @@ fn test_drift_harness_collects_metrics() {
     assert!(metrics.samples.len() >= 2);
     assert!(metrics.relative_energy_drift().is_finite());
     assert!(metrics.momentum_drift_magnitude().is_finite());
+}
+
+#[test]
+fn test_two_body_lj_baseline_drift() {
+    let mut main_content = create_dense_harness_with_seed(101);
+    main_content.world_mut().speed_limit_override = Some(f32::INFINITY);
+
+    let factory = BallFactory::new();
+    let r_eq = 2.0_f32.powf(1.0 / 6.0);
+    let edge_dist = r_eq * 1.05;
+    let center_sep = 2.0 * factory.get_new_ball_radius() + edge_dist;
+    let center = Vec2D::new(550.0, 450.0);
+    let x_off = center_sep * 0.5;
+
+    let b1 = factory
+        .create_massive_with_velocity(Vec2D::new(center.x - x_off, center.y), Vec2D::new(0.2, 0.0));
+    let b2 = factory.create_massive_with_velocity(
+        Vec2D::new(center.x + x_off, center.y),
+        Vec2D::new(-0.2, 0.0),
+    );
+
+    main_content
+        .add_candidate_ball(b1, 0.0)
+        .expect("could not add first baseline ball");
+    main_content
+        .add_candidate_ball(b2, 0.0)
+        .expect("could not add second baseline ball");
+    main_content.world_mut().rebuild_cell_grid();
+    main_content.collect_neighbours_by_cell(DT_GOAL);
+
+    let metrics = run_drift_harness(
+        &mut main_content,
+        DriftHarnessConfig {
+            steps: 2_000,
+            sample_every: 100,
+            dt: DT_GOAL,
+        },
+    );
+
+    const MAX_REL_ENERGY_DRIFT: f32 = 3.0e-2;
+    const MAX_MOMENTUM_DRIFT: f32 = 1.0e-3;
+    assert!(
+        metrics.relative_energy_drift() <= MAX_REL_ENERGY_DRIFT,
+        "two-body LJ energy drift too high: drift={}, threshold={}, initial_total={}, final_total={}",
+        metrics.relative_energy_drift(),
+        MAX_REL_ENERGY_DRIFT,
+        metrics.initial.total_energy,
+        metrics.final_sample.total_energy
+    );
+    assert!(
+        metrics.momentum_drift_magnitude() <= MAX_MOMENTUM_DRIFT,
+        "two-body LJ momentum drift too high: drift={}, threshold={}, initial_p={:?}, final_p={:?}",
+        metrics.momentum_drift_magnitude(),
+        MAX_MOMENTUM_DRIFT,
+        metrics.initial.momentum,
+        metrics.final_sample.momentum
+    );
+}
+
+#[test]
+fn test_force_cap_transition_drift() {
+    let mut main_content = create_dense_harness_with_seed(202);
+    main_content.world_mut().speed_limit_override = Some(f32::INFINITY);
+
+    // Use a lower force cap to ensure repeated crossings of r_cap.
+    let capped_constants = PhysicsConstants::new_for_test(1.0, 1.0, 10.0);
+    main_content.world_mut().physics = BallPhysics::new(capped_constants);
+
+    let factory = BallFactory::new();
+    let r_cap = main_content.world().physics.get_force_cap_distance();
+    let edge_dist = r_cap * 0.95;
+    let center_sep = 2.0 * factory.get_new_ball_radius() + edge_dist;
+    let center = Vec2D::new(550.0, 450.0);
+    let x_off = center_sep * 0.5;
+
+    let b1 = factory
+        .create_massive_with_velocity(Vec2D::new(center.x - x_off, center.y), Vec2D::new(0.8, 0.0));
+    let b2 = factory.create_massive_with_velocity(
+        Vec2D::new(center.x + x_off, center.y),
+        Vec2D::new(-0.8, 0.0),
+    );
+
+    main_content
+        .add_candidate_ball(b1, 0.0)
+        .expect("could not add first cap-transition ball");
+    main_content
+        .add_candidate_ball(b2, 0.0)
+        .expect("could not add second cap-transition ball");
+    main_content.world_mut().rebuild_cell_grid();
+    main_content.collect_neighbours_by_cell(DT_GOAL);
+
+    let metrics = run_drift_harness(
+        &mut main_content,
+        DriftHarnessConfig {
+            steps: 300,
+            sample_every: 50,
+            dt: DT_GOAL,
+        },
+    );
+
+    const MAX_REL_ENERGY_DRIFT: f32 = 7.0e-1;
+    const MAX_MOMENTUM_DRIFT: f32 = 2.0e-3;
+    const MIN_CAP_HIT_RATIO: f32 = 1.0e-2;
+    let max_cap_hit_ratio = metrics
+        .samples
+        .iter()
+        .map(|s| s.cap_hit_ratio)
+        .fold(0.0f32, f32::max);
+
+    assert!(
+        metrics.relative_energy_drift() <= MAX_REL_ENERGY_DRIFT,
+        "force-cap transition energy drift too high: drift={}, threshold={}, initial_total={}, final_total={}",
+        metrics.relative_energy_drift(),
+        MAX_REL_ENERGY_DRIFT,
+        metrics.initial.total_energy,
+        metrics.final_sample.total_energy
+    );
+    assert!(
+        metrics.momentum_drift_magnitude() <= MAX_MOMENTUM_DRIFT,
+        "force-cap transition momentum drift too high: drift={}, threshold={}, initial_p={:?}, final_p={:?}",
+        metrics.momentum_drift_magnitude(),
+        MAX_MOMENTUM_DRIFT,
+        metrics.initial.momentum,
+        metrics.final_sample.momentum
+    );
+    assert!(
+        max_cap_hit_ratio >= MIN_CAP_HIT_RATIO,
+        "force-cap transition did not exercise capped region enough: max_cap_hit_ratio={}, threshold={}, r_cap={}",
+        max_cap_hit_ratio,
+        MIN_CAP_HIT_RATIO,
+        r_cap
+    );
 }
