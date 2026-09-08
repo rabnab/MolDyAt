@@ -130,6 +130,9 @@ Key behavior:
 cargo test --workspace
 ```
 
+Contributor command policy (including targeted test/lint commands) is maintained in
+`.github/copilot-instructions.md#quick-build-test-and-lint-commands-explicit`.
+
 ### Linting & Formatting
 
 ```bash

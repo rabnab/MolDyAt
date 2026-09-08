@@ -42,15 +42,17 @@
 - [ ] Feature works as expected
 - [ ] No visual regressions
 - [ ] Performance acceptable (no significant regressions)
-- [ ] `cargo clippy -- -D warnings` passes
+- [ ] Validation commands match the canonical policy in `.github/copilot-instructions.md#validation-policy-source-of-truth`
 - [ ] `cargo fmt` applied
-- [ ] Tests pass: `cargo test`
+- [ ] `cargo clippy --workspace -- -D warnings` passes
+- [ ] Tests pass (scope documented below)
 
 ## Testing Commands
 ```bash
-# Add relevant commands to test this PR
-cargo build
-cargo test
+# List the exact commands you ran for this PR.
+# Prefer targeted commands first; include full-workspace runs when used.
+# Canonical reference:
+# .github/copilot-instructions.md#quick-build-test-and-lint-commands-explicit
 ```
 
 ## Dependencies

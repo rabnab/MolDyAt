@@ -124,6 +124,56 @@ For each scenario, print one concise line:
 
 This makes CI failures diagnosable without rendering.
 
+## CI Integration
+
+Drift scenarios are part of CI through a dedicated workflow step that executes:
+
+```bash
+cargo test -p rust_thermo_core drift_harness -- --nocapture
+```
+
+The command is intentionally run with `--nocapture` so each scenario emits one machine-readable `DRIFT_SCENARIO ...` summary line directly in CI logs.
+
+Canonical command policy reference:
+- `.github/copilot-instructions.md#cargo-command-policy-source-of-truth`
+- `.github/copilot-instructions.md#quick-build-test-and-lint-commands-explicit`
+
+## Threshold Calibration and Change-Control
+
+Threshold updates are allowed only when behavior changed intentionally (for example integrator/physics updates) and the PR provides baseline evidence. Never loosen thresholds only to clear unrelated failures.
+
+### Baseline capture procedure
+
+1. Run drift scenarios locally with deterministic inputs:
+   ```bash
+   cargo test -p rust_thermo_core drift_harness -- --nocapture
+   ```
+2. Collect the `DRIFT_SCENARIO` lines from:
+   - current `master` (before change),
+   - your branch (after change).
+3. Keep the same seed/steps/scenario setup for both runs.
+
+### Threshold derivation rule
+
+- Keep thresholds per scenario and per metric.
+- Start from observed baseline on the changed branch.
+- Use an explicit safety margin (for example 1.5-2.0x baseline drift) and round to a stable scientific-notation value.
+- Prefer the smallest threshold that keeps deterministic reruns stable.
+
+### Required PR justification for threshold changes
+
+Any PR that modifies drift thresholds must include:
+
+- reason for the physical/numerical behavior shift,
+- before/after baseline summary lines,
+- chosen threshold and margin rationale,
+- linked issue describing the intended behavior change.
+
+Use this compact table in the PR description:
+
+| Scenario | Metric | Old threshold | New threshold | Baseline before | Baseline after | Margin | Reason |
+|---|---|---:|---:|---:|---:|---:|---|
+| two_body_lj_baseline | relative_energy_drift | 3.0e-2 | 4.5e-2 | 1.8e-2 | 2.2e-2 | 2.0x | Integrator update |
 ## Recommended Rollout
 
 1. Add harness + scenario #1 and #2 first (fastest high-signal checks).

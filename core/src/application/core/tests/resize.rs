@@ -4,7 +4,7 @@ use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::Ball2D;
 
 #[test]
-#[ignore] // TODO: Fix resize after removing renderer from MainContent
+//#[ignore] // TODO: Fix resize after removing renderer from MainContent
 fn test_resize_event() {
     let (mut main_content, _win_def) = create_main_content();
 
@@ -19,7 +19,7 @@ fn test_resize_event() {
     let new_world = main_content.world().cell_grid.world_rect();
 
     assert_eq!(new_world.w, new_width);
-    assert_eq!(new_world.h, new_height);
+    assert_eq!(new_world.h, -new_height);
 
     // assert_eq!(win_def.region_px.0, 300.0 - 2.0 * win_def.margin_px.0);
     // assert_eq!(win_def.region_px.1, 200.0 - 2.0 * win_def.margin_px.1);

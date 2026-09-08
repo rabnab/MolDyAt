@@ -6,9 +6,35 @@ NOTE: keep edits here aligned with CONTRIBUTING.md and README.md. Consult `docs/
 
 ---
 
+## Canonical command and policy references
+
+Use this file as the single source of truth for commands and process rules. Other docs should link here instead of duplicating normative command lists.
+
+### Cargo command policy (source of truth)
+
+- Rust nightly is pinned by `rust-toolchain.toml`; use plain `cargo` commands.
+- Prefer targeted package/test commands first, then expand scope only when needed.
+
+### Validation policy (source of truth)
+
+- Required before commit: `cargo fmt` and `cargo clippy --workspace -- -D warnings`.
+- Run tests when `.rs`, `.toml`, or `.lock` files change; use the smallest command that covers modified behavior.
+
+### Branch and PR policy (source of truth)
+
+- Work on feature/bugfix branches only (`feature/master/*`, `bugfix/master/*`).
+- Never commit directly to `master`; all changes go through PR review and CI.
+
+### Drift threshold policy (source of truth)
+
+- Drift thresholds may change only with intentional behavior changes and baseline evidence.
+- Follow the process in `docs/drift-test.md` for baseline capture and PR justification.
+
+---
+
 ## Quick build, test and lint commands (explicit)
 
-Toolchain is pinned in `rust-toolchain.toml` (nightly). Use `+nightly` in Cargo invocations.
+Toolchain is pinned in `rust-toolchain.toml` (nightly). Use plain `cargo`.
 
 General (workspace):
 - Build workspace: `cargo build`
@@ -56,7 +82,7 @@ Relevant locations:
 
 ## Key repository-specific conventions and gotchas
 
-- Rust nightly required (see `rust-toolchain.toml`). Always run `cargo fmt` and `cargo clippy -- -D warnings` before committing.
+- Rust nightly required (see `rust-toolchain.toml`). Always run `cargo fmt` and `cargo clippy --workspace -- -D warnings` before committing.
 - Neighbor lists are index-based and inexpensive to update when valid; do not try to cache indices across structural vector modifications.
 - After any index-affecting mutation (remove/retain/swap_remove) clear all neighbor lists and rebuild cell indexes immediately.
 - Force capping is implemented to preserve energy. If altering force or potential functions, implement matching potential extrapolation to avoid energy discontinuities.
@@ -131,17 +157,17 @@ Relevant locations:
 - **Build Command**: `cargo build`
 - **Test Command**: `cargo test`
 - **Format Command**: `cargo fmt`
-- **Lint Command**: `cargo clippy -- -D warnings`
+- **Lint Command**: `cargo clippy --workspace -- -D warnings`
 
 ## Code Quality Standards
 
 ### Formatting & Linting (MANDATORY)
 - **REQUIRED before every commit**:
   1. Run `cargo fmt` to ensure consistent formatting
-  2. Run `cargo clippy -- -D warnings` to catch all warnings/errors
+  2. Run `cargo clippy --workspace -- -D warnings` to catch all warnings/errors
   3. Both must pass without errors before committing
 - Address all clippy warnings unless there's a documented reason to allow them
-- CI checks enforce: `cargo fmt -- --check` and `cargo clippy -- -D warnings`
+- CI checks enforce: `cargo fmt -- --check` and `cargo clippy --workspace -- -D warnings`
 - **Never commit code that fails formatting or clippy checks**
 - **Always run formatting and clippy before committing - no exceptions**
 
