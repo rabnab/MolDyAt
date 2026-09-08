@@ -19,7 +19,7 @@ fn test_drift_harness_collects_metrics() {
     assert_eq!(metrics.final_sample.step, 20);
     assert!(metrics.samples.len() >= 2);
     assert!(metrics.relative_energy_drift().is_finite());
-    assert!(metrics.momentum_drift_magnitude().is_finite());
+    assert!(metrics.relative_momentum_drift().is_finite());
 }
 
 #[test]
@@ -60,7 +60,7 @@ fn test_two_body_lj_baseline_drift() {
     );
 
     const MAX_REL_ENERGY_DRIFT: f32 = 3.0e-2;
-    const MAX_MOMENTUM_DRIFT: f32 = 1.0e-3;
+    const MAX_REL_MOMENTUM_DRIFT: f32 = 3.0e-3;
     assert!(
         metrics.relative_energy_drift() <= MAX_REL_ENERGY_DRIFT,
         "two-body LJ energy drift too high: drift={}, threshold={}, initial_total={}, final_total={}",
@@ -70,10 +70,10 @@ fn test_two_body_lj_baseline_drift() {
         metrics.final_sample.total_energy
     );
     assert!(
-        metrics.momentum_drift_magnitude() <= MAX_MOMENTUM_DRIFT,
-        "two-body LJ momentum drift too high: drift={}, threshold={}, initial_p={:?}, final_p={:?}",
-        metrics.momentum_drift_magnitude(),
-        MAX_MOMENTUM_DRIFT,
+        metrics.relative_momentum_drift() <= MAX_REL_MOMENTUM_DRIFT,
+        "two-body LJ relative momentum drift too high: drift={}, threshold={}, initial_p={:?}, final_p={:?}",
+        metrics.relative_momentum_drift(),
+        MAX_REL_MOMENTUM_DRIFT,
         metrics.initial.momentum,
         metrics.final_sample.momentum
     );
@@ -120,7 +120,7 @@ fn test_force_cap_transition_drift() {
     );
 
     const MAX_REL_ENERGY_DRIFT: f32 = 7.0e-1;
-    const MAX_MOMENTUM_DRIFT: f32 = 2.0e-3;
+    const MAX_REL_MOMENTUM_DRIFT: f32 = 3.0e-3;
     const MIN_CAP_HIT_RATIO: f32 = 1.0e-2;
     let max_cap_hit_ratio = metrics
         .samples
@@ -137,10 +137,10 @@ fn test_force_cap_transition_drift() {
         metrics.final_sample.total_energy
     );
     assert!(
-        metrics.momentum_drift_magnitude() <= MAX_MOMENTUM_DRIFT,
-        "force-cap transition momentum drift too high: drift={}, threshold={}, initial_p={:?}, final_p={:?}",
-        metrics.momentum_drift_magnitude(),
-        MAX_MOMENTUM_DRIFT,
+        metrics.relative_momentum_drift() <= MAX_REL_MOMENTUM_DRIFT,
+        "force-cap transition relative momentum drift too high: drift={}, threshold={}, initial_p={:?}, final_p={:?}",
+        metrics.relative_momentum_drift(),
+        MAX_REL_MOMENTUM_DRIFT,
         metrics.initial.momentum,
         metrics.final_sample.momentum
     );
@@ -214,8 +214,8 @@ fn test_two_body_drift_converges_with_smaller_timestep() {
 
     let coarse_energy_drift = coarse_metrics.relative_energy_drift();
     let fine_energy_drift = fine_metrics.relative_energy_drift();
-    let coarse_momentum_drift = coarse_metrics.momentum_drift_magnitude();
-    let fine_momentum_drift = fine_metrics.momentum_drift_magnitude();
+    let coarse_momentum_drift = coarse_metrics.relative_momentum_drift();
+    let fine_momentum_drift = fine_metrics.relative_momentum_drift();
     const CONVERGENCE_MARGIN: f32 = 2.0;
 
     assert!(

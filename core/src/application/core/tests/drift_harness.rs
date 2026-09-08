@@ -29,6 +29,7 @@ pub struct DriftSample {
     pub potential: f32,
     pub total_energy: f32,
     pub momentum: Vec2D,
+    pub momentum_scale: f32,
     pub max_overlap_depth: f32,
     pub cap_hit_ratio: f32,
 }
@@ -52,6 +53,11 @@ impl DriftRunMetrics {
             .momentum
             .dist(&self.initial.momentum)
             .norm()
+    }
+
+    pub fn relative_momentum_drift(&self) -> f32 {
+        let denom = self.initial.momentum_scale.max(1e-10);
+        self.momentum_drift_magnitude() / denom
     }
 }
 
@@ -170,6 +176,7 @@ fn sample_step(main_content: &MainContent, step: usize) -> DriftSample {
     let mut kinetic = 0.0f32;
     let mut potential = 0.0f32;
     let mut momentum = Vec2D::new(0.0, 0.0);
+    let mut momentum_scale = 0.0f32;
     let mut max_overlap_depth = 0.0f32;
     let mut cap_hits = 0usize;
     let mut pair_count = 0usize;
@@ -177,9 +184,11 @@ fn sample_step(main_content: &MainContent, step: usize) -> DriftSample {
 
     for ball in &world.balls {
         let speed_sq = ball.v.x * ball.v.x + ball.v.y * ball.v.y;
+        let speed = speed_sq.sqrt();
         kinetic += 0.5 * ball.mass * speed_sq;
         momentum.x += ball.mass * ball.v.x;
         momentum.y += ball.mass * ball.v.y;
+        momentum_scale += ball.mass * speed;
     }
 
     for i in 0..world.balls.len() {
@@ -215,6 +224,7 @@ fn sample_step(main_content: &MainContent, step: usize) -> DriftSample {
         potential,
         total_energy: kinetic + potential,
         momentum,
+        momentum_scale,
         max_overlap_depth,
         cap_hit_ratio,
     }
