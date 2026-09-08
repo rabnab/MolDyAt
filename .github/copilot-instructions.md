@@ -367,6 +367,22 @@ Use this section when implementing or changing operators (line segment, valve, t
 - Use non-interactive `gh` commands with explicit flags so actions are reproducible in logs and CI-like environments.
 - For project metadata, set milestone and project item links explicitly during PR finalization.
 
+### Non-interactive Git in CLI sessions
+- Prefer non-interactive git commands in automated/CLI agent sessions.
+- Disable pagers in scripted calls to avoid stuck sessions:
+  - `git --no-pager status -sb`
+  - `git --no-pager log --oneline -n 20`
+- When continuing rebase/cherry-pick in a non-TTY shell, set an editor override to avoid Vim prompts:
+  - `GIT_EDITOR=true git rebase --continue`
+  - `GIT_EDITOR=true git cherry-pick --continue`
+- Before pushing, verify divergence explicitly:
+  - `git --no-pager rev-list --left-right --count HEAD...@{upstream}`
+  - If behind, use `git pull --rebase --autostash` before push.
+- After history rewrite (rebase/squash), prefer safe force push:
+  - `git push --force-with-lease`
+- If rebase stops on conflicts, resolve files, `git add <paths>`, then continue;
+  skip only commits that are intentionally obsolete or already upstream.
+
 ## Performance Considerations
 
 - **Hot Paths**: Physics calculations, neighbor list updates, collision detection
