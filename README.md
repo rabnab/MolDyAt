@@ -52,8 +52,8 @@ A molecular dynamics simulation of a Lennard-Jones gas in a finite box, written 
 ### Building & Running
 
 ```bash
-cargo +nightly build -p rust_thermo_wgpu
-cargo +nightly run   -p rust_thermo_wgpu
+cargo build -p rust_thermo_wgpu
+cargo run   -p rust_thermo_wgpu
 ```
 
 ### Headless Mode (Examples)
@@ -62,57 +62,57 @@ Headless mode runs the simulation without opening a window and emits structured 
 
 ```bash
 # Minimal headless run (defaults: --steps 1, summary output, stdout enabled)
-cargo +nightly run -p rust_thermo_wgpu -- --headless
+cargo run -p rust_thermo_wgpu -- --headless
 ```
 
 ```bash
 # Run 500 steps, emit snapshots every 50 steps to stdout
-cargo +nightly run -p rust_thermo_wgpu -- --headless --steps 500 --snapshot-every 50
+cargo run -p rust_thermo_wgpu -- --headless --steps 500 --snapshot-every 50
 ```
 
 ```bash
 # Write JSONL records to a file while keeping console summaries
-cargo +nightly run -p rust_thermo_wgpu -- --headless --steps 300 --snapshot-every 25 --output /tmp/headless.jsonl
+cargo run -p rust_thermo_wgpu -- --headless --steps 300 --snapshot-every 25 --output /tmp/headless.jsonl
 ```
 
 ```bash
 # File-only mode (required when disabling stdout)
-cargo +nightly run -p rust_thermo_wgpu -- --headless --steps 300 --output /tmp/headless.jsonl --no-stdout
+cargo run -p rust_thermo_wgpu -- --headless --steps 300 --output /tmp/headless.jsonl --no-stdout
 ```
 
 ```bash
 # Deterministic seeded run for reproducible CI fixtures
-cargo +nightly run -p rust_thermo_wgpu -- --headless --steps 1000 --snapshot-every 100 --rng-seed 12345 --seed-balls 64 --output /tmp/seeded.jsonl --no-stdout
+cargo run -p rust_thermo_wgpu -- --headless --steps 1000 --snapshot-every 100 --rng-seed 12345 --seed-balls 64 --output /tmp/seeded.jsonl --no-stdout
 ```
 
 ```bash
 # Export summary + per-ball state (larger output)
-cargo +nightly run -p rust_thermo_wgpu -- --headless --steps 200 --snapshot-every 20 --detail balls --output /tmp/balls.jsonl --no-stdout
+cargo run -p rust_thermo_wgpu -- --headless --steps 200 --snapshot-every 20 --detail balls --output /tmp/balls.jsonl --no-stdout
 ```
 
 ```bash
 # Export thermo grids (temperature + pressure)
-cargo +nightly run -p rust_thermo_wgpu -- --headless --steps 200 --snapshot-every 20 --detail thermo --output /tmp/thermo.jsonl --no-stdout
+cargo run -p rust_thermo_wgpu -- --headless --steps 200 --snapshot-every 20 --detail thermo --output /tmp/thermo.jsonl --no-stdout
 ```
 
 ```bash
 # Export both balls and thermo sections in each frame record
-cargo +nightly run -p rust_thermo_wgpu -- --headless --steps 200 --snapshot-every 20 --detail balls+thermo --output /tmp/full.jsonl --no-stdout
+cargo run -p rust_thermo_wgpu -- --headless --steps 200 --snapshot-every 20 --detail balls+thermo --output /tmp/full.jsonl --no-stdout
 ```
 
 ```bash
 # Same as above, using the accepted alias for balls+thermo
-cargo +nightly run -p rust_thermo_wgpu -- --headless --steps 200 --snapshot-every 20 --detail balls-and-thermo --output /tmp/full.jsonl --no-stdout
+cargo run -p rust_thermo_wgpu -- --headless --steps 200 --snapshot-every 20 --detail balls-and-thermo --output /tmp/full.jsonl --no-stdout
 ```
 
 ```bash
 # Capture output in CI artifact path
-cargo +nightly run -p rust_thermo_wgpu -- --headless --steps 1500 --snapshot-every 150 --rng-seed 7 --seed-balls 100 --output ./artifacts/headless-run.jsonl --no-stdout
+cargo run -p rust_thermo_wgpu -- --headless --steps 1500 --snapshot-every 150 --rng-seed 7 --seed-balls 100 --output ./artifacts/headless-run.jsonl --no-stdout
 ```
 
 ```bash
 # Quick smoke check: ensure expected record kinds are present
-cargo +nightly run -p rust_thermo_wgpu -- --headless --steps 10 --snapshot-every 5 --output /tmp/smoke.jsonl --no-stdout
+cargo run -p rust_thermo_wgpu -- --headless --steps 10 --snapshot-every 5 --output /tmp/smoke.jsonl --no-stdout
 rg '"record_kind":"run_start"|"record_kind":"frame"|"record_kind":"run_end"' /tmp/smoke.jsonl
 ```
 
@@ -127,14 +127,14 @@ Key behavior:
 ### Testing
 
 ```bash
-cargo +nightly test --workspace
+cargo test --workspace
 ```
 
 ### Linting & Formatting
 
 ```bash
-cargo +nightly fmt
-cargo +nightly clippy --workspace -- -D warnings
+cargo fmt
+cargo clippy --workspace -- -D warnings
 ```
 
 ## Controls

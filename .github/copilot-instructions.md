@@ -11,29 +11,29 @@ NOTE: keep edits here aligned with CONTRIBUTING.md and README.md. Consult `docs/
 Toolchain is pinned in `rust-toolchain.toml` (nightly). Use `+nightly` in Cargo invocations.
 
 General (workspace):
-- Build workspace: `cargo +nightly build`
-- Run all tests: `cargo +nightly test --workspace`
-- Format: `cargo +nightly fmt`
-- Lint (deny warnings): `cargo +nightly clippy --workspace -- -D warnings`
+- Build workspace: `cargo build`
+- Run all tests: `cargo test --workspace`
+- Format: `cargo fmt`
+- Lint (deny warnings): `cargo clippy --workspace -- -D warnings`
 
 Per-package / single-target examples:
-- Build single package: `cargo +nightly build -p rust_thermo_wgpu`
-- Test single package: `cargo +nightly test -p rust_thermo_core`
+- Build single package: `cargo build -p rust_thermo_wgpu`
+- Test single package: `cargo test -p rust_thermo_core`
 - Run a single test (name substring):
-  `cargo +nightly test -p rust_thermo_core test_remove_invalid_balls`
+  `cargo test -p rust_thermo_core test_remove_invalid_balls`
 - Run an exact test name (use `-- --exact` forwarded to the test binary):
-  `cargo +nightly test -p rust_thermo_core test_remove_invalid_balls -- --exact`
+  `cargo test -p rust_thermo_core test_remove_invalid_balls -- --exact`
 - Run a single integration test file (named `tests/<name>.rs`):
-  `cargo +nightly test -p rust_thermo_core --test integration_file_name`
+  `cargo test -p rust_thermo_core --test integration_file_name`
 
 Headless/run examples (useful for CI & regression):
-- Minimal headless run: `cargo +nightly run -p rust_thermo_wgpu -- --headless`
+- Minimal headless run: `cargo run -p rust_thermo_wgpu -- --headless`
 - Deterministic seeded run (reproducible):
-  `cargo +nightly run -p rust_thermo_wgpu -- --headless --steps 1000 --rng-seed 12345 --no-stdout`
+  `cargo run -p rust_thermo_wgpu -- --headless --steps 1000 --rng-seed 12345 --no-stdout`
 
 CI helpers:
-- To check formatting only: `cargo +nightly fmt -- --check`
-- To lint workspace only: `cargo +nightly clippy --workspace -- -D warnings`
+- To check formatting only: `cargo fmt -- --check`
+- To lint workspace only: `cargo clippy --workspace -- -D warnings`
 
 ---
 
@@ -56,7 +56,7 @@ Relevant locations:
 
 ## Key repository-specific conventions and gotchas
 
-- Rust nightly required (see `rust-toolchain.toml`). Always run `cargo +nightly fmt` and `cargo +nightly clippy -- -D warnings` before committing.
+- Rust nightly required (see `rust-toolchain.toml`). Always run `cargo fmt` and `cargo clippy -- -D warnings` before committing.
 - Neighbor lists are index-based and inexpensive to update when valid; do not try to cache indices across structural vector modifications.
 - After any index-affecting mutation (remove/retain/swap_remove) clear all neighbor lists and rebuild cell indexes immediately.
 - Force capping is implemented to preserve energy. If altering force or potential functions, implement matching potential extrapolation to avoid energy discontinuities.
@@ -128,20 +128,20 @@ Relevant locations:
   compatibility.
 - **CI/CD**: Set up continuous integration to run tests, formatting checks, and clippy on every pull request.
 - **When to test**: only test when .rs, .toml or .lock files change
-- **Build Command**: `cargo +nightly build`
-- **Test Command**: `cargo +nightly test`
-- **Format Command**: `cargo +nightly fmt`
-- **Lint Command**: `cargo +nightly clippy -- -D warnings`
+- **Build Command**: `cargo build`
+- **Test Command**: `cargo test`
+- **Format Command**: `cargo fmt`
+- **Lint Command**: `cargo clippy -- -D warnings`
 
 ## Code Quality Standards
 
 ### Formatting & Linting (MANDATORY)
 - **REQUIRED before every commit**:
-  1. Run `cargo +nightly fmt` to ensure consistent formatting
-  2. Run `cargo +nightly clippy -- -D warnings` to catch all warnings/errors
+  1. Run `cargo fmt` to ensure consistent formatting
+  2. Run `cargo clippy -- -D warnings` to catch all warnings/errors
   3. Both must pass without errors before committing
 - Address all clippy warnings unless there's a documented reason to allow them
-- CI checks enforce: `cargo +nightly fmt -- --check` and `cargo +nightly clippy -- -D warnings`
+- CI checks enforce: `cargo fmt -- --check` and `cargo clippy -- -D warnings`
 - **Never commit code that fails formatting or clippy checks**
 - **Always run formatting and clippy before committing - no exceptions**
 

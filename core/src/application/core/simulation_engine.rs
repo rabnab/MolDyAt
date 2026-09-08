@@ -44,6 +44,15 @@ impl SimulationEngine {
         world: &mut SimulationWorld,
         game_data: &GameLogicData,
     ) -> AppResult<()> {
+        let dt = game_data.get_time_step();
+        Self::simulation_step_with_dt(world, game_data, dt)
+    }
+
+    pub(crate) fn simulation_step_with_dt(
+        world: &mut SimulationWorld,
+        game_data: &GameLogicData,
+        dt: f32,
+    ) -> AppResult<()> {
         if world.sim.is_paused() {
             return Ok(());
         }
@@ -54,7 +63,6 @@ impl SimulationEngine {
             world.sim.set_pause(true);
         }
 
-        let dt = game_data.get_time_step();
         let bound_rect = world.world_rect;
 
         #[cfg(feature = "measure-time")]

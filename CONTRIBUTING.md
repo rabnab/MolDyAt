@@ -50,26 +50,26 @@ For architectural placement and migration-boundary guidance, also review:
 
 2. **Run tests frequently**:
    ```bash
-   cargo +nightly test
+   cargo test
    ```
 
 3. **Format your code**:
    ```bash
-   cargo +nightly fmt
+   cargo fmt
    ```
 
 4. **Run linter**:
    ```bash
-   cargo +nightly clippy -- -D warnings
+   cargo clippy -- -D warnings
    ```
 
 ### Before Committing
 
 **MANDATORY steps before every commit:**
 
-1. Run formatting: `cargo +nightly fmt`
-2. Run clippy: `cargo +nightly clippy -- -D warnings`
-3. Run tests: `cargo +nightly test` (only if .rs, .toml, or .lock files changed)
+1. Run formatting: `cargo fmt`
+2. Run clippy: `cargo clippy -- -D warnings`
+3. Run tests: `cargo test` (only if .rs, .toml, or .lock files changed)
 
 Both formatting and linting must pass without errors.
 

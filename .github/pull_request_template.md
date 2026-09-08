@@ -42,15 +42,15 @@
 - [ ] Feature works as expected
 - [ ] No visual regressions
 - [ ] Performance acceptable (no significant regressions)
-- [ ] `cargo +nightly clippy -- -D warnings` passes
-- [ ] `cargo +nightly fmt` applied
-- [ ] Tests pass: `cargo +nightly test`
+- [ ] `cargo clippy -- -D warnings` passes
+- [ ] `cargo fmt` applied
+- [ ] Tests pass: `cargo test`
 
 ## Testing Commands
 ```bash
 # Add relevant commands to test this PR
-cargo +nightly build
-cargo +nightly test
+cargo build
+cargo test
 ```
 
 ## Dependencies
@@ -68,7 +68,7 @@ cargo +nightly test
 
 ## Review Checklist for AI Agents
 - [ ] All clippy warnings resolved (`-D warnings` enforced)
-- [ ] Code formatted with `cargo +nightly fmt`
+- [ ] Code formatted with `cargo fmt`
 - [ ] No unsafe code without proper documentation and justification
 - [ ] Method length kept reasonable (< 100 lines per function)
 - [ ] Builder pattern used for dependency injection where appropriate
