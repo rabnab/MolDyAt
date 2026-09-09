@@ -258,12 +258,13 @@ If the implementation touches `core`, add focused tests there rather than only e
 
 ## Validation Plan
 
+Canonical command policy lives in `.github/copilot-instructions.md#quick-build-test-and-lint-commands-explicit`.
 When implementation starts, validate in this order:
 
 1. `cargo test -p rust_thermo_wgpu`
 2. `cargo build -p rust_thermo_wgpu`
 3. `cargo fmt`
-4. `cargo clippy -- -D warnings`
+4. `cargo clippy --workspace -- -D warnings`
 
 If implementation widens or changes `core`, also run the affected `rust_thermo_core` tests instead of validating only `wgpu_renderer`.
 

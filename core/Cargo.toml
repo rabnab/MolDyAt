@@ -11,8 +11,6 @@ workspace = true
 rand = "0.10.0"
 rand_distr = "0.6.0"
 rayon = "1.10.0"
-wide = "1.1"
-num_cpus = "1.16"
 arc-swap = "1.7"
 
 # Logging

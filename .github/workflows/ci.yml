@@ -1,10 +1,15 @@
 name: CI
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
     branches:
       - master
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -16,6 +21,7 @@ jobs:
   fmt:
     name: rustfmt (nightly)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,6 +40,7 @@ jobs:
   clippy:
     name: clippy (workspace, deny warnings)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -52,6 +59,7 @@ jobs:
   test:
     name: test (workspace)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -63,4 +71,31 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Run tests
-        run: cargo test --workspace
+        run: cargo test --workspace -- --skip drift_harness
+
+  drift:
+    name: drift harness (core)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Cache cargo registry and build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run drift harness tests with scenario summaries
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p rust_thermo_core drift_harness -- --nocapture | tee drift-harness.log
+
+      - name: Upload drift harness log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: drift-harness-log
+          path: drift-harness.log

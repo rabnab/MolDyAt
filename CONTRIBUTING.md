@@ -29,6 +29,15 @@ For architectural placement and migration-boundary guidance, also review:
 - **[Runtime Architecture](docs/architecture.md)** - Target ownership boundaries, command flow, and current migration shims
 - **[Simulation Coordinate Systems](docs/simulation.md)** - World, viewport, and grid-space conventions
 
+### Canonical command and policy references
+
+To avoid documentation drift, treat these sections in `.github/copilot-instructions.md` as authoritative:
+
+- [Cargo command policy](.github/copilot-instructions.md#cargo-command-policy-source-of-truth)
+- [Validation policy](.github/copilot-instructions.md#validation-policy-source-of-truth)
+- [Branch and PR policy](.github/copilot-instructions.md#branch-and-pr-policy-source-of-truth)
+- [Quick build, test and lint commands](.github/copilot-instructions.md#quick-build-test-and-lint-commands-explicit)
+
 ## Development Workflow
 
 ### Before Making Changes
@@ -50,7 +59,7 @@ For architectural placement and migration-boundary guidance, also review:
 
 2. **Run tests frequently**:
    ```bash
-   cargo test
+   cargo test --workspace
    ```
 
 3. **Format your code**:
@@ -60,7 +69,7 @@ For architectural placement and migration-boundary guidance, also review:
 
 4. **Run linter**:
    ```bash
-   cargo clippy -- -D warnings
+   cargo clippy --workspace -- -D warnings
    ```
 
 ### Before Committing
@@ -68,8 +77,8 @@ For architectural placement and migration-boundary guidance, also review:
 **MANDATORY steps before every commit:**
 
 1. Run formatting: `cargo fmt`
-2. Run clippy: `cargo clippy -- -D warnings`
-3. Run tests: `cargo test` (only if .rs, .toml, or .lock files changed)
+2. Run clippy: `cargo clippy --workspace -- -D warnings`
+3. Run tests: `cargo test --workspace` (only if .rs, .toml, or .lock files changed)
 
 Both formatting and linting must pass without errors.
 
