@@ -56,18 +56,25 @@ fn runner_with_snapshot_steps(
 }
 
 fn seeded_headless_output() -> String {
+    struct TempFileGuard {
+        path: std::path::PathBuf,
+    }
+
+    impl Drop for TempFileGuard {
+        fn drop(&mut self) {
+            let _ = fs::remove_file(&self.path);
+        }
+    }
+
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("system clock before unix epoch")
         .as_nanos();
-    let unique = format!(
-        "{}-{}-{}",
-        std::process::id(),
-        std::thread::current().name().unwrap_or("unnamed"),
-        nanos
-    );
+    let unique = format!("{}-{}", std::process::id(), nanos);
     let output_path = std::env::temp_dir().join(format!("headless-regression-{unique}.jsonl"));
-
+    let _output_guard = TempFileGuard {
+        path: output_path.clone(),
+    };
     let world_rect = rust_thermo_core::application::MainContent::bootstrap_world_rect(
         1280,
         720,
