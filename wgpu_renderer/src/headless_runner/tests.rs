@@ -8,6 +8,11 @@ use std::io;
 use std::rc::Rc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+const SEEDED_HEADLESS_FIXTURE_PATH: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/src/headless_runner/fixtures/seeded_headless_regression.jsonl"
+);
+
 struct RecordingSink(Rc<RefCell<Vec<u64>>>);
 
 impl HeadlessSnapshotSink for RecordingSink {
@@ -103,6 +108,19 @@ fn parse_jsonl_records(input: &str) -> Vec<serde_json::Value> {
         .collect()
 }
 
+fn non_empty_lines(input: &str) -> Vec<&str> {
+    input
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .collect()
+}
+
+fn maybe_update_seeded_fixture(actual: &str) {
+    if std::env::var_os("UPDATE_HEADLESS_FIXTURE").is_some() {
+        fs::write(SEEDED_HEADLESS_FIXTURE_PATH, actual).expect("update seeded fixture");
+    }
+}
+
 #[test]
 fn test_headless_runner_emits_step_zero_and_final() {
     let (runner, recorded) = runner_with_snapshot_steps(1, 0);
@@ -129,11 +147,39 @@ fn test_headless_runner_zero_interval_skips_periodic_snapshots() {
 
 #[test]
 fn test_seeded_headless_regression_fixture_matches_checked_in_jsonl() {
-    let actual = parse_jsonl_records(&seeded_headless_output());
-    let expected = parse_jsonl_records(include_str!("fixtures/seeded_headless_regression.jsonl"));
+    let actual_text = seeded_headless_output();
+    maybe_update_seeded_fixture(&actual_text);
+    let expected_text =
+        fs::read_to_string(SEEDED_HEADLESS_FIXTURE_PATH).expect("read seeded fixture");
+
+    let actual_records = parse_jsonl_records(&actual_text);
+    let expected_records = parse_jsonl_records(&expected_text);
+    let actual_lines = non_empty_lines(&actual_text);
+    let expected_lines = non_empty_lines(&expected_text);
+
+    if actual_lines != expected_lines {
+        let first_diff = actual_lines
+            .iter()
+            .zip(expected_lines.iter())
+            .position(|(actual, expected)| actual != expected);
+
+        match first_diff {
+            Some(index) => panic!(
+                "seeded headless regression output drifted at line {}\nexpected: {}\nactual:   {}",
+                index + 1,
+                expected_lines[index],
+                actual_lines[index]
+            ),
+            None => panic!(
+                "seeded headless regression output line count drifted: expected {}, actual {}",
+                expected_lines.len(),
+                actual_lines.len()
+            ),
+        }
+    }
 
     assert_eq!(
-        actual, expected,
+        actual_records, expected_records,
         "seeded headless regression output drifted from the checked-in fixture"
     );
 }

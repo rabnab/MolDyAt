@@ -124,6 +124,23 @@ Key behavior:
 - records are JSON Lines with `schema_version = "headless.v1"`
 - non-finite numbers (`NaN`, `+Inf`, `-Inf`) are encoded as `null`
 
+Seeded regression fixture workflow (used by CI):
+
+```bash
+# Run the fixture regression check used in CI
+cargo test -p rust_thermo_wgpu seeded_headless_regression_fixture_matches_checked_in_jsonl
+```
+
+```bash
+# Intentionally refresh the checked-in fixture after approved contract changes
+UPDATE_HEADLESS_FIXTURE=1 cargo test -p rust_thermo_wgpu seeded_headless_regression_fixture_matches_checked_in_jsonl
+```
+
+Fixture file:
+
+- `wgpu_renderer/src/headless_runner/fixtures/seeded_headless_regression.jsonl`
+- Regenerate only when changes to headless output are intentional and reviewed.
+
 ### Testing
 
 ```bash
