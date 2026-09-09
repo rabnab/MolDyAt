@@ -11,7 +11,7 @@ rust_thermo_core = { path = "../core" }
 
 # WGPU rendering
 wgpu = "28"
-pollster = "0.4"
+pollster = "1"
 bytemuck = { version = "1.14", features = ["derive"] }
 font8x8 = "0.3"
 
