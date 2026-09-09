@@ -73,6 +73,23 @@ jobs:
       - name: Run tests
         run: cargo test --workspace -- --skip drift_harness
 
+  headless-regression:
+    name: headless regression (wgpu fixture)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Cache cargo registry and build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run seeded headless regression fixture
+        run: cargo test -p rust_thermo_wgpu seeded_headless_regression_fixture_matches_checked_in_jsonl
+
   drift:
     name: drift harness (core)
     runs-on: ubuntu-latest
