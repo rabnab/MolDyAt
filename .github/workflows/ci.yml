@@ -71,7 +71,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Run tests
-        run: cargo test --workspace -- --skip drift_harness
+        run: cargo test --workspace -- --skip drift_harness --skip seeded_headless_regression_fixture_matches_checked_in_jsonl
 
   headless-regression:
     name: headless regression (wgpu fixture)
