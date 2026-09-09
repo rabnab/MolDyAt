@@ -123,7 +123,7 @@ fn non_empty_lines(input: &str) -> Vec<&str> {
 }
 
 fn maybe_update_seeded_fixture(actual: &str) {
-    if std::env::var_os("UPDATE_HEADLESS_FIXTURE").is_some() {
+    if std::env::var("UPDATE_HEADLESS_FIXTURE").ok().as_deref() == Some("1") {
         fs::write(SEEDED_HEADLESS_FIXTURE_PATH, actual).expect("update seeded fixture");
     }
 }
