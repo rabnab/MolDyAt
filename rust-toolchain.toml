@@ -1,4 +1,6 @@
-# rust-toolchain.toml (recommended)
+# rust-toolchain.toml (single source of truth for the pinned nightly)
+# CI reads this automatically via dtolnay/rust-toolchain@nightly (no
+# separate toolchain input needed) — update the version only here.
 [toolchain]
-channel = "nightly-2026-09-01"                    # use plain `cargo` (not `cargo +nightly`) so this pin is respected
-components = ["rustfmt", "clippy", "rust-src", "llvm-tools-preview"]       # optional components to install
+channel = "nightly-2026-09-01"
+components = ["rustfmt", "clippy"]

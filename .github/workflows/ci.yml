@@ -16,6 +16,9 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  SCCACHE_GHA_ENABLED: "true"
+  RUSTC_WRAPPER: "sccache"
 
 jobs:
   fmt:
@@ -24,7 +27,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install Rust nightly
         uses: dtolnay/rust-toolchain@nightly
@@ -37,13 +40,16 @@ jobs:
       - name: Check formatting
         run: cargo fmt -- --check
 
-  verify:
-    name: clippy + tests (workspace)
+  clippy:
+    name: clippy (workspace)
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install Rust nightly
         uses: dtolnay/rust-toolchain@nightly
@@ -53,11 +59,54 @@ jobs:
       - name: Cache cargo registry and build artifacts
         uses: Swatinem/rust-cache@v2
 
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+
+      - name: Install clippy-sarif and sarif-fmt
+        uses: taiki-e/install-action@v2
+        with:
+          tool: clippy-sarif,sarif-fmt
+
       - name: Run clippy
-        run: cargo ci-clippy
+        run: |
+          set -o pipefail
+          cargo ci-clippy | clippy-sarif | tee clippy-results.sarif | sarif-fmt
+
+      - name: Upload clippy SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: clippy-results.sarif
+
+  test:
+    name: tests (workspace)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Cache cargo registry and build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
 
       - name: Run tests
-        run: cargo ci-test
+        run: cargo nextest run --workspace --profile ci
+
+      - name: Upload test results (JUnit)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results
+          path: target/nextest/ci/junit.xml
 
   headless-regression:
     name: headless regression (wgpu fixture)
@@ -65,7 +114,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install Rust nightly
         uses: dtolnay/rust-toolchain@nightly
@@ -73,8 +122,21 @@ jobs:
       - name: Cache cargo registry and build artifacts
         uses: Swatinem/rust-cache@v2
 
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+
       - name: Run seeded headless regression fixture
-        run: cargo ci-test-headless-regression
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo ci-test-headless-regression | tee headless-regression.log
+
+      - name: Upload headless regression log
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: headless-regression-log
+          path: headless-regression.log
 
   drift:
     name: drift harness (core)
@@ -82,13 +144,16 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install Rust nightly
         uses: dtolnay/rust-toolchain@nightly
 
       - name: Cache cargo registry and build artifacts
         uses: Swatinem/rust-cache@v2
+
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
 
       - name: Run drift harness tests with scenario summaries
         shell: bash
@@ -97,8 +162,8 @@ jobs:
           cargo ci-test-drift | tee drift-harness.log
 
       - name: Upload drift harness log
-        if: always()
-        uses: actions/upload-artifact@v4
+        if: failure()
+        uses: actions/upload-artifact@v7
         with:
           name: drift-harness-log
           path: drift-harness.log
