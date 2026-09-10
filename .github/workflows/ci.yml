@@ -37,10 +37,10 @@ jobs:
       - name: Check formatting
         run: cargo fmt -- --check
 
-  clippy:
-    name: clippy (workspace, deny warnings)
+  verify:
+    name: clippy + tests (workspace)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -54,12 +54,15 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Run clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo ci-clippy
 
-  test:
-    name: test (workspace)
+      - name: Run tests
+        run: cargo ci-test
+
+  headless-regression:
+    name: headless regression (wgpu fixture)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -70,8 +73,8 @@ jobs:
       - name: Cache cargo registry and build artifacts
         uses: Swatinem/rust-cache@v2
 
-      - name: Run tests
-        run: cargo test --workspace -- --skip drift_harness
+      - name: Run seeded headless regression fixture
+        run: cargo ci-test-headless-regression
 
   drift:
     name: drift harness (core)
@@ -91,7 +94,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          cargo test -p rust_thermo_core drift_harness -- --nocapture | tee drift-harness.log
+          cargo ci-test-drift | tee drift-harness.log
 
       - name: Upload drift harness log
         if: always()

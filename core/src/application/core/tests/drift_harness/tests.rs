@@ -3,6 +3,7 @@ use crate::objects2d::ball_impl::BallPhysics;
 use crate::objects2d::ball_impl::ball_physics::PhysicsConstants;
 
 #[test]
+#[ignore = "suite:drift"]
 fn test_drift_harness_collects_metrics() {
     let mut main_content = create_dense_harness_with_seed(12345);
     main_content.world_mut().speed_limit_override = Some(f32::INFINITY);
@@ -23,6 +24,7 @@ fn test_drift_harness_collects_metrics() {
 }
 
 #[test]
+#[ignore = "suite:drift"]
 fn test_two_body_lj_baseline_drift() {
     let mut main_content = create_dense_harness_with_seed(101);
     main_content.world_mut().speed_limit_override = Some(f32::INFINITY);
@@ -80,6 +82,7 @@ fn test_two_body_lj_baseline_drift() {
 }
 
 #[test]
+#[ignore = "suite:drift"]
 fn test_force_cap_transition_drift() {
     let mut main_content = create_dense_harness_with_seed(202);
     main_content.world_mut().speed_limit_override = Some(f32::INFINITY);
@@ -154,6 +157,7 @@ fn test_force_cap_transition_drift() {
 }
 
 #[test]
+#[ignore = "suite:drift"]
 fn test_two_body_drift_converges_with_smaller_timestep() {
     let make_two_body = || {
         let mut main_content = create_dense_harness_with_seed(303);

@@ -253,6 +253,28 @@ Implemented coverage in `wgpu_renderer` now includes:
 - non-finite encoding tests for summary and thermo payloads
 - stdout/file-path behavior split tests
 - deterministic seeded run test asserting byte-identical JSONL output for same config and seed
+- checked-in seeded regression fixture comparison test for CI drift detection
+
+### CI Fixture Strategy (Implemented)
+
+Fixture strategy uses a checked-in golden JSONL file:
+
+- fixture path: `wgpu_renderer/src/headless_runner/fixtures/seeded_headless_regression.jsonl`
+- test gate: `seeded_headless_regression_fixture_matches_checked_in_jsonl`
+- CI job: `headless regression (wgpu fixture)` in `.github/workflows/ci.yml`
+
+Failure behavior:
+
+- CI fails when any record ordering, field value, or line count drifts from the fixture
+- failure output identifies the first mismatching JSONL line (expected vs actual)
+
+Intentional fixture update workflow:
+
+1. Apply the intended headless contract change.
+2. Refresh the fixture:
+   `UPDATE_HEADLESS_FIXTURE=1 cargo test -p rust_thermo_wgpu seeded_headless_regression_fixture_matches_checked_in_jsonl`
+3. Re-run the same test without `UPDATE_HEADLESS_FIXTURE` to confirm stability.
+4. Include the fixture diff in PR review as contract evidence.
 
 If the implementation touches `core`, add focused tests there rather than only exercising the path from `wgpu_renderer`.
 

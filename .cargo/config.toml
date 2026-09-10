@@ -1,0 +1,5 @@
+[alias]
+ci-clippy = "clippy --workspace --all-targets -- -D warnings"
+ci-test = "test --workspace"
+ci-test-headless-regression = "test -p rust_thermo_wgpu -- --ignored"
+ci-test-drift = "test -p rust_thermo_core -- --ignored --nocapture"
