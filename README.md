@@ -147,6 +147,17 @@ Fixture file:
 cargo test --workspace
 ```
 
+Suite aliases (centralized in `.cargo/config.toml`):
+
+```bash
+# default workspace suite (excludes ignored specialty suites)
+cargo ci-test
+
+# specialty suites
+cargo ci-test-headless-regression
+cargo ci-test-drift
+```
+
 Contributor command policy (including targeted test/lint commands) is maintained in
 `.github/copilot-instructions.md#quick-build-test-and-lint-commands-explicit`.
 

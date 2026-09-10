@@ -153,6 +153,7 @@ fn test_headless_runner_zero_interval_skips_periodic_snapshots() {
 }
 
 #[test]
+#[ignore = "suite:headless-regression"]
 fn test_seeded_headless_regression_fixture_matches_checked_in_jsonl() {
     let actual_text = seeded_headless_output();
     maybe_update_seeded_fixture(&actual_text);
