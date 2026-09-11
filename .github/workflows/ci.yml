@@ -17,8 +17,7 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  SCCACHE_GHA_ENABLED: "true"
-  RUSTC_WRAPPER: "sccache"
+  RUST_NIGHTLY: "nightly-2026-09-01" # keep in sync with rust-toolchain.toml
 
 jobs:
   fmt:
@@ -33,6 +32,7 @@ jobs:
         uses: dtolnay/rust-toolchain@nightly
         with:
           components: rustfmt
+          toolchain: ${{ env.RUST_NIGHTLY }}
 
       - name: Cache cargo registry and build artifacts
         uses: Swatinem/rust-cache@v2
@@ -44,9 +44,14 @@ jobs:
     name: clippy (workspace)
     runs-on: ubuntu-latest
     timeout-minutes: 35
-    permissions:
-      contents: read
-      security-events: write
+    #only needed for upload sarif
+    #permissions:
+    #  contents: read
+    #  security-events: write
+    #  actions: read
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -55,6 +60,7 @@ jobs:
         uses: dtolnay/rust-toolchain@nightly
         with:
           components: clippy
+          toolchain: ${{ env.RUST_NIGHTLY }}
 
       - name: Cache cargo registry and build artifacts
         uses: Swatinem/rust-cache@v2
@@ -72,22 +78,31 @@ jobs:
           set -o pipefail
           cargo ci-clippy | clippy-sarif | tee clippy-results.sarif | sarif-fmt
 
-      - name: Upload clippy SARIF
-        if: always()
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: clippy-results.sarif
+      # only in public repo or for organisations
+      #- name: Upload clippy SARIF
+      #  if: always()
+      #  uses: github/codeql-action/upload-sarif@v4
+      #  with:
+      #    sarif_file: clippy-results.sarif
 
   test:
     name: tests (workspace)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      checks: write
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
       - name: Install Rust nightly
         uses: dtolnay/rust-toolchain@nightly
+        with:
+          toolchain: ${{ env.RUST_NIGHTLY }}
 
       - name: Cache cargo registry and build artifacts
         uses: Swatinem/rust-cache@v2
@@ -108,16 +123,29 @@ jobs:
           name: test-results
           path: target/nextest/ci/junit.xml
 
+      - name: Test report
+        uses: dorny/test-reporter@v3
+        if: always()
+        with:
+          name: Test Results
+          path: target/nextest/ci/junit.xml
+          reporter: java-junit
+
   headless-regression:
     name: headless regression (wgpu fixture)
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
       - name: Install Rust nightly
         uses: dtolnay/rust-toolchain@nightly
+        with:
+          toolchain: ${{ env.RUST_NIGHTLY }}
 
       - name: Cache cargo registry and build artifacts
         uses: Swatinem/rust-cache@v2
@@ -142,12 +170,17 @@ jobs:
     name: drift harness (core)
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
       - name: Install Rust nightly
         uses: dtolnay/rust-toolchain@nightly
+        with:
+          toolchain: ${{ env.RUST_NIGHTLY }}
 
       - name: Cache cargo registry and build artifacts
         uses: Swatinem/rust-cache@v2
