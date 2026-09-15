@@ -1,0 +1,89 @@
+//! Endpoint marker pipeline.
+//!
+//! Draws a small red square with a black outline at both endpoints of every
+//! line segment, so endpoints are easy to see, grab and snap to. See `endpoint.wgsl`.
+
+use super::super::instanced_gpu::InstancedGpu;
+use super::super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
+use bytemuck::{Pod, Zeroable};
+use rust_thermo_core::application::AppResult;
+
+/// Half the marker's side, as a fraction of the world extent (tune to taste).
+const MARKER_HALF_SIZE_FRAC: f32 = 0.004;
+/// Outline width as a fraction of the marker's half size.
+const MARKER_BORDER_FRAC: f32 = 0.4;
+
+/// Per-marker GPU instance. Layout must match `Inst` in endpoint.wgsl.
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Pod, Zeroable)]
+pub struct EndpointInstance {
+    pub center: [f32; 2],
+    pub half_size: f32,
+    pub border: f32,
+}
+
+const ENDPOINT_ATTRS: [wgpu::VertexAttribute; 3] =
+    wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32, 2 => Float32];
+
+pub struct EndpointPipeline {
+    gpu: InstancedGpu<EndpointInstance>,
+    /// Reused every frame to avoid reallocating
+    instances: Vec<EndpointInstance>,
+}
+
+impl EndpointPipeline {
+    pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
+        let source = format!(
+            "{}\n{}",
+            include_str!("../shaders/common.wgsl"),
+            include_str!("../shaders/endpoint.wgsl"),
+        );
+        Self {
+            gpu: InstancedGpu::new(
+                device,
+                format,
+                "Endpoint Pipeline",
+                &source,
+                &ENDPOINT_ATTRS,
+            ),
+            instances: Vec::new(),
+        }
+    }
+}
+
+impl RenderPipeline for EndpointPipeline {
+    fn name(&self) -> &'static str {
+        "endpoints"
+    }
+
+    fn viewport_mode(&self) -> ViewportMode {
+        ViewportMode::Inset
+    }
+
+    fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
+        self.gpu.update_uniforms(ctx.queue, ctx.view_proj, 0.0);
+
+        let bounds = &ctx.snapshot.cell_grid_bounds;
+        let world_extent = bounds.w.abs().max(bounds.h.abs()).max(1.0);
+        let half_size = world_extent * MARKER_HALF_SIZE_FRAC;
+        let border = half_size * MARKER_BORDER_FRAC;
+
+        self.instances.clear();
+        for seg in &ctx.snapshot.operators.line_segments {
+            for p in [seg.start, seg.end] {
+                self.instances.push(EndpointInstance {
+                    center: [p.x, p.y],
+                    half_size,
+                    border,
+                });
+            }
+        }
+
+        self.gpu.flush(ctx.device, ctx.queue, &self.instances);
+        Ok(())
+    }
+
+    fn render<'rp>(&'rp self, render_pass: &mut wgpu::RenderPass<'rp>) {
+        self.gpu.draw(render_pass);
+    }
+}

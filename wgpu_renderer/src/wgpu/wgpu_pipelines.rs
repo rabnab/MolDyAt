@@ -4,19 +4,24 @@
 //! reference specific pipelines (e.g., cycling ring display mode on the
 //! ball pipeline).
 
-use super::ball_pipeline::BallPipeline;
-use super::crosshair_pipeline::CrosshairPipeline;
-use super::frame_pipeline::FramePipeline;
-use super::grid_pipeline::{GridPipeline, build_view_proj_matrix};
-use super::line_pipeline::LinePipeline;
-use super::render_graph::{PipelineHandle, PrepareContext, RenderGraph};
-use super::sidebar_pipeline::SidebarPipeline;
-use super::source_sphere_pipeline::SourceSpherePipeline;
-use super::text_pipeline::TextPipeline;
-use super::thermo_heatmap_pipeline::ThermoHeatmapPipeline;
-use super::thermo_value_pipeline::ThermoValueOverlayPipeline;
-use super::thermostat_label_pipeline::ThermostatLabelPipeline;
-use super::wgpu_context::WgpuContext;
+use crate::wgpu::pipelines::ball_pipeline::BallPipeline;
+use crate::wgpu::pipelines::crosshair_pipeline::CrosshairPipeline;
+use crate::wgpu::pipelines::endpoint_pipeline::EndpointPipeline;
+use crate::wgpu::pipelines::frame_pipeline::FramePipeline;
+use crate::wgpu::pipelines::grid_pipeline::{GridPipeline, build_view_proj_matrix};
+use crate::wgpu::pipelines::line_pipeline::LinePipeline;
+use crate::wgpu::pipelines::sidebar_pipeline::SidebarPipeline;
+use crate::wgpu::pipelines::source_label_pipeline::SourceLabelPipeline;
+use crate::wgpu::pipelines::source_sphere_pipeline::SourceSpherePipeline;
+use crate::wgpu::pipelines::text_pipeline::TextPipeline;
+use crate::wgpu::pipelines::thermo_heatmap_pipeline::ThermoHeatmapPipeline;
+use crate::wgpu::pipelines::thermo_value_pipeline::ThermoValueOverlayPipeline;
+use crate::wgpu::pipelines::thermostat_label_pipeline::ThermostatLabelPipeline;
+use crate::wgpu::pipelines::thermostat_pipeline::ThermostatPipeline;
+use crate::wgpu::pipelines::valve_pipeline::ValvePipeline;
+use crate::wgpu::pipelines::wall_pipeline::WallPipeline;
+use crate::wgpu::render_graph::{PipelineHandle, PrepareContext, RenderGraph};
+use crate::wgpu::wgpu_context::WgpuContext;
 use rust_thermo_core::application::AppResult;
 use rust_thermo_core::application::renderer_snapshot::{CellGridSpec, RendererSnapshot};
 use rust_thermo_core::graphics::renderer::Margins;
@@ -37,7 +42,10 @@ pub struct PipelineHandles {
     pub grid: PipelineHandle,
     pub thermo_heatmap: PipelineHandle,
     pub thermo_value_overlay: PipelineHandle,
+    pub wall: PipelineHandle,
+    pub valve: PipelineHandle,
     pub line: PipelineHandle,
+    pub endpoint: PipelineHandle,
     pub ball: PipelineHandle,
     pub crosshair: PipelineHandle,
     pub text: PipelineHandle,
@@ -74,7 +82,19 @@ impl WgpuPipelines {
         )));
         let thermo_value_overlay =
             graph.add_pipeline(Box::new(ThermoValueOverlayPipeline::new(device, format)));
+        let wall = graph.add_pipeline(Box::new(WallPipeline::new(device, format)));
+        let valve = graph.add_pipeline(Box::new(ValvePipeline::new(device, format)));
         let line = graph.add_pipeline(Box::new(LinePipeline::new(device, format, LINE_SHADER)));
+        let endpoint = graph.add_pipeline(Box::new(EndpointPipeline::new(device, format)));
+        let _thermostat = graph.add_pipeline(Box::new(ThermostatPipeline::new(
+            device,
+            queue,
+            format,
+            include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/src/wgpu/icons/thermo.png"
+            )),
+        )));
         let source_sphere =
             graph.add_pipeline(Box::new(SourceSpherePipeline::new(device, queue, format)));
         let ball = graph.add_pipeline(Box::new(BallPipeline::new(device, format, BALL_SHADER)));
@@ -84,6 +104,7 @@ impl WgpuPipelines {
             CROSSHAIR_SHADER,
         )));
         graph.add_pipeline(Box::new(ThermostatLabelPipeline::new(device, format)));
+        graph.add_pipeline(Box::new(SourceLabelPipeline::new(device, format)));
         let text = graph.add_pipeline(Box::new(TextPipeline::new(device, format)));
 
         log::debug!(
@@ -99,7 +120,10 @@ impl WgpuPipelines {
                 grid,
                 thermo_heatmap,
                 thermo_value_overlay,
+                wall,
+                valve,
                 line,
+                endpoint,
                 ball,
                 crosshair,
                 text,
@@ -147,7 +171,7 @@ impl WgpuPipelines {
     /// Render all enabled pipelines into a render pass.
     ///
     /// The graph handles viewport switching automatically based on each
-    /// pipeline's [`ViewportMode`](super::render_graph::ViewportMode).
+    /// pipeline's [`ViewportMode`](crate::wgpu::render_graph::ViewportMode).
     pub fn render_all<'rp>(
         &'rp self,
         render_pass: &mut wgpu::RenderPass<'rp>,

@@ -14,7 +14,7 @@ mod source_sphere_tool;
 mod tests;
 mod thermostat_tool;
 mod unified_render_state;
-mod valve_segment_tool;
+pub mod valve_segment_tool;
 mod viewport_orchestrator;
 
 // Shared event loop infrastructure for both ggez and wgpu renderers

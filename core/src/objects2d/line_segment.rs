@@ -6,6 +6,9 @@
 
 use super::Vec2D;
 
+const DEFAULT_THICKNESS: f32 = 1.0;
+pub const THICKNESS_TO_WORLD: f32 = 1.0;
+
 /// A line segment barrier in simulation space.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SimLineSegment {
@@ -15,6 +18,8 @@ pub struct SimLineSegment {
     pub start: Vec2D,
     /// End point in world coordinates.
     pub end: Vec2D,
+    /// thickness of the wall.
+    pub thickness: f32,
 }
 
 /// Valve section defined on a parent line segment using parametric coordinates.
@@ -58,7 +63,12 @@ impl ValveSegment {
 impl SimLineSegment {
     /// Create a new line segment.
     pub fn new(id: usize, start: Vec2D, end: Vec2D) -> Self {
-        Self { id, start, end }
+        Self {
+            id,
+            start,
+            end,
+            thickness: DEFAULT_THICKNESS,
+        }
     }
 
     /// Direction vector from start to end.

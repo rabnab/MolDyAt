@@ -35,6 +35,8 @@ const LINE_THICKNESS: f32 = 0.1;
 // Stroke thickness for circle outlines in world units
 const STROKE_WIDTH: f32 = 0.15;
 
+const OUTLINE: f32 = 0.06; //dark border width in world_units
+
 @vertex
 fn vs_main(
     @builtin(vertex_index) vertex_index: u32,
@@ -42,7 +44,7 @@ fn vs_main(
 ) -> VertexOutput {
     var out: VertexOutput;
 
-    // Instance 0: crosshair (4 line segments = 8 triangles = 24 vertices)
+    // Instance 0: crosshair (4 line segments = 8 quads = 48 vertices)
     // Instance 1: ball outline (if enabled)
 
     if instance_index == 0u {
@@ -50,8 +52,11 @@ fn vs_main(
         out.vertex_type = 0u;
 
         var local_pos: vec2<f32>;
-        let quad_idx = vertex_index / 6u;
-        let vert_in_quad = vertex_index % 6u;
+        let quad_idx = vertex_index / 6u;          // 0..7 (0-3 outline, 4-7 white)
+        let vert_in_quad = vertex_index % 6u;      // 0..5, the missing line
+        let bar = quad_idx % 4u;                   // which of the 4 bars
+        let is_outline = quad_idx < 4u;
+        out.vertex_type = select(0u, 2u, is_outline);
 
         // Define the 4 quads for the crosshair
         // Quad 0: horizontal line left
@@ -62,7 +67,7 @@ fn vs_main(
         var quad_center: vec2<f32>;
         var quad_size: vec2<f32>;
 
-        switch quad_idx {
+        switch bar {
             case 0u: { // Left horizontal
                 quad_center = vec2<f32>(-CROSSHAIR_SIZE * 0.5, 0.0);
                 quad_size = vec2<f32>(CROSSHAIR_SIZE * 0.4, LINE_THICKNESS);
@@ -97,7 +102,8 @@ fn vs_main(
             default: { offset = vec2<f32>(0.0, 0.0); }
         }
 
-        local_pos = quad_center + offset * quad_size;
+        let grow = select(0.0, 2.0 * OUTLINE, is_outline);
+        local_pos = quad_center + offset * (quad_size + vec2<f32>(grow, grow));
         out.local_pos = local_pos;
 
         let world_pos = uniforms.cursor_pos + local_pos;
@@ -133,6 +139,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     if in.vertex_type == 0u {
         // Crosshair - solid white
         return vec4<f32>(1.0, 1.0, 1.0, 1.0);
+    } else if in.vertex_type == 2u {
+        return vec4<f32>(0.0, 0.0, 0.0, 0.85);
     } else {
         // Ball outline - draw circles
         if uniforms.show_ball_outline < 0.5 {

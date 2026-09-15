@@ -222,7 +222,7 @@ impl GridPipeline {
 
 // ── RenderPipeline trait implementation ─────────────────────────────
 
-use super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
+use super::super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
 use rust_thermo_core::application::AppResult;
 use rust_thermo_core::graphics::renderer::state_layers::ThermoDisplayMode;
 

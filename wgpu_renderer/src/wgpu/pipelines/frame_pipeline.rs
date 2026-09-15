@@ -144,7 +144,7 @@ impl FramePipeline {
 
 // ── RenderPipeline trait implementation ─────────────────────────────
 
-use super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
+use super::super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
 use rust_thermo_core::application::AppResult;
 
 impl RenderPipeline for FramePipeline {

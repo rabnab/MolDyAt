@@ -150,11 +150,26 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         }
     }
 
-    // 3. Inner filled circle (ball color)
-    if dist < in.ball_radius {
-        // Anti-aliased edge
+    // 3. Inner filled circle (ball color) — now shaded as a sphere
+    if dist < in.ball_radius + 0.05 {
         let alpha = 1.0 - smoothstep(in.ball_radius - 0.05, in.ball_radius, dist);
-        return vec4<f32>(in.color.rgb, in.color.a * alpha);
+
+        // Normalized position within the ball, clamped so sqrt stays real
+        let p = in.uv / in.ball_radius;
+        let d2 = min(dot(p, p), 1.0);
+        let z = sqrt(1.0 - d2);
+        let normal = normalize(vec3<f32>(p, z));
+
+        let light_dir = normalize(vec3<f32>(-0.4, 0.4, 0.8));
+        let diffuse = max(dot(normal, light_dir), 0.0);
+        let view_dir = vec3<f32>(0.0, 0.0, 1.0);
+        let half_vec = normalize(light_dir + view_dir);
+        let specular = pow(max(dot(normal, half_vec), 0.0), 32.0);
+
+        let ambient = 0.35;
+        let shaded = in.color.rgb * (ambient + diffuse * 0.65) + vec3<f32>(specular * 0.5);
+
+        return vec4<f32>(shaded, in.color.a * alpha);
     }
 
     // Between circles - transparent

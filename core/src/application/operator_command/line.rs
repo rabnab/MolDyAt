@@ -32,6 +32,18 @@ impl OperatorCommand for MoveLineSegmentEndpoint {
     }
 }
 
+#[derive(Debug)]
+pub struct ChangeLineThickness {
+    pub segment_id: usize,
+    pub steps: i32,
+}
+
+impl OperatorCommand for ChangeLineThickness {
+    fn execute(self: Box<Self>, content: &mut MainContent) {
+        content.change_thickness(self.segment_id, self.steps);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

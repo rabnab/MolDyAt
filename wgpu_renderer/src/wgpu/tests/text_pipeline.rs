@@ -1,4 +1,4 @@
-use super::super::text_pipeline::active_text_uv_max;
+use crate::wgpu::pipelines::text_pipeline::active_text_uv_max;
 
 #[test]
 fn active_text_uv_uses_full_texture_when_sizes_match() {

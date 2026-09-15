@@ -6,8 +6,8 @@
 //! Reuses the existing `text.wgsl` shader (same vertex format) and a compact
 //! 8×8 bitmap font atlas built once from `font8x8`.
 
-use super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
-use super::world_text::{
+use super::super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
+use super::super::world_text::{
     BLACK_TEXT_COLOR, TextVertex, WorldTextPipeline, apply_view_proj, inset_glyph_ndc_size,
     push_label_vertices,
 };

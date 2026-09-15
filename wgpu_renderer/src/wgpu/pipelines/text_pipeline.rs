@@ -40,7 +40,7 @@ impl TextPipeline {
     pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Text Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/text.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/text.wgsl").into()),
         });
 
         // Minimal texture to start; resized on first update.
@@ -358,7 +358,7 @@ impl TextPipeline {
     }
 }
 
-pub(super) fn active_text_uv_max(texture_size: (u32, u32), content_size: (u32, u32)) -> [f32; 2] {
+pub(crate) fn active_text_uv_max(texture_size: (u32, u32), content_size: (u32, u32)) -> [f32; 2] {
     let u_max = if texture_size.0 == 0 {
         1.0
     } else {
@@ -375,7 +375,7 @@ pub(super) fn active_text_uv_max(texture_size: (u32, u32), content_size: (u32, u
 
 // ── RenderPipeline trait implementation ─────────────────────────────
 
-use super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
+use crate::wgpu::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
 use rust_thermo_core::application::AppResult;
 
 impl RenderPipeline for TextPipeline {

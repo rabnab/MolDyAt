@@ -1,10 +1,16 @@
 use super::{MainContent, SimulationWorld};
 use crate::objects2d::Vec2D;
+// Single source of truth for thickness units, shared with the renderer.
+// Add to objects2d/line_segment.rs:  pub const THICKNESS_TO_WORLD: f32 = 0.05;
+use crate::objects2d::line_segment::THICKNESS_TO_WORLD;
 
-/// Collision tolerance: balls closer than `radius + EPSILON` are considered colliding.
+/// Collision tolerance: balls closer than `radius + half_thickness + EPSILON`
+/// to a wall's centre line are considered colliding.
 const COLLISION_EPSILON: f32 = 0.01;
 /// Velocity gate: only reflect if ball is moving toward the segment.
 const VELOCITY_GATE_EPSILON: f32 = -1e-6;
+
+const THICKNESS_STEP: f32 = 1.0;
 
 impl MainContent {
     /// Add a new line segment barrier.
@@ -25,10 +31,16 @@ impl MainContent {
             .move_line_segment_endpoint(segment_id, new_pos, move_start);
     }
 
+    pub(crate) fn change_thickness(&mut self, segment_id: usize, steps: i32) {
+        self.world.change_line_thickness(segment_id, steps);
+    }
+
     /// Resolve ball–line-segment collisions for all balls.
     ///
-    /// For each ball that overlaps a segment (surface distance < 0) and is
-    /// moving toward it (`v · n < 0`), the ball is:
+    /// Each wall is a capsule: its centre line inflated by half its thickness
+    /// (`thickness * THICKNESS_TO_WORLD / 2`), with rounded ends. For each ball
+    /// that overlaps a wall (centre-line distance < radius + half thickness) and
+    /// is moving toward it (`v · n < 0`), the ball is:
     /// 1. Position-corrected so it no longer overlaps.
     /// 2. Velocity-reflected: `v' = v − 2(v · n̂) n̂` (elastic, |v| preserved).
     ///
@@ -58,6 +70,12 @@ impl SimulationWorld {
         }
     }
 
+    pub(crate) fn change_line_thickness(&mut self, segment_id: usize, steps: i32) {
+        if let Some(seg) = self.line_segments.find_mut(segment_id) {
+            seg.thickness = f32::clamp(seg.thickness + steps as f32 * THICKNESS_STEP, 1.0, 20.0);
+        }
+    }
+
     pub(crate) fn resolve_line_segment_collisions(&mut self) -> (f32, f32) {
         let mut total_px = 0.0_f32;
         let mut total_py = 0.0_f32;
@@ -72,6 +90,11 @@ impl SimulationWorld {
                 continue; // degenerate segment
             }
 
+            // The wall is a capsule: the centre line inflated by half its thickness.
+            // closest_point() clamps to the endpoints, so the ends are rounded,
+            // matching what wall.wgsl draws.
+            let half_thickness = 0.5 * seg.thickness * THICKNESS_TO_WORLD;
+
             for ball in balls.iter_mut() {
                 let t = seg.closest_t(ball.get_position());
                 if valves
@@ -85,14 +108,29 @@ impl SimulationWorld {
                 let to_ball = closest.dist(ball.get_position());
                 let center_dist = to_ball.norm();
 
-                if center_dist >= ball.radius + COLLISION_EPSILON {
+                // Ball touches the wall surface when its centre is closer to the
+                // centre line than this.
+                let reach = ball.radius + half_thickness + COLLISION_EPSILON;
+                if center_dist >= reach {
                     continue; // no collision
                 }
-                if center_dist < 1e-12 {
-                    continue; // ball center exactly on segment, skip
-                }
 
-                let normal = to_ball.scaled(1.0 / center_dist);
+                let normal = if center_dist > 1e-12 {
+                    to_ball.scaled(1.0 / center_dist)
+                } else {
+                    // Centre exactly on the centre line (possible with a thick wall):
+                    // use the wall's perpendicular, on the side opposing the velocity.
+                    let len = seg.length_sq().sqrt();
+                    let n = Vec2D::new(
+                        -(seg.end.y - seg.start.y) / len,
+                        (seg.end.x - seg.start.x) / len,
+                    );
+                    if n.x * ball.v.x + n.y * ball.v.y > 0.0 {
+                        Vec2D::new(-n.x, -n.y)
+                    } else {
+                        n
+                    }
+                };
 
                 // Velocity gate: only reflect if moving toward the segment
                 let v_dot_n = ball.v.x * normal.x + ball.v.y * normal.y;
@@ -100,8 +138,8 @@ impl SimulationWorld {
                     continue; // moving away or parallel
                 }
 
-                // Position correction: push ball out so surface touches segment
-                let overlap = ball.radius + COLLISION_EPSILON - center_dist;
+                // Position correction: push ball out so its surface touches the wall surface
+                let overlap = reach - center_dist;
                 let corrected_pos = ball.get_position().add_scaled(&normal, overlap);
                 ball.set_position_and_update_tail(corrected_pos);
 

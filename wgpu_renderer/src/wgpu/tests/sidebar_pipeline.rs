@@ -1,4 +1,4 @@
-use super::super::sidebar_pipeline::*;
+use crate::wgpu::pipelines::sidebar_pipeline::*;
 use crate::wgpu::{MARGIN_BOTTOM, MARGIN_LEFT, MARGIN_TOP};
 use rust_thermo_core::graphics::sidebar::{ICON_COUNT, ICON_DISPLAY_SIZE, ICON_SPACING};
 

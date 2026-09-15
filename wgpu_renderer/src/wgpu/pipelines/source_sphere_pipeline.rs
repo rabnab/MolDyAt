@@ -13,14 +13,14 @@
 use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
 
-use super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
+use super::super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
 use super::sidebar_pipeline::decode_icon;
 use rust_thermo_core::application::AppResult;
 use rust_thermo_core::objects2d::{OperatorState, SOURCE_SPHERE_RADIUS};
 
 /// Embedded icon assets.
-const ICON_SOURCE_OPEN: &[u8] = include_bytes!("icons/sourceOpen.png");
-const ICON_SOURCE_CLOSED: &[u8] = include_bytes!("icons/sourceClosed.png");
+const ICON_SOURCE_OPEN: &[u8] = include_bytes!("../icons/sourceOpen.png");
+const ICON_SOURCE_CLOSED: &[u8] = include_bytes!("../icons/sourceClosed.png");
 
 /// Atlas resolution per icon (square, same as sidebar).
 const ATLAS_CELL: u32 = 64;
@@ -64,7 +64,7 @@ impl Default for SphereUniforms {
     }
 }
 
-const SPHERE_SHADER: &str = include_str!("shaders/source_sphere.wgsl");
+const SPHERE_SHADER: &str = include_str!("../shaders/source_sphere.wgsl");
 
 /// Pipeline that renders placed source spheres as icons.
 pub struct SourceSpherePipeline {

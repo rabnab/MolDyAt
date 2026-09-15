@@ -4,15 +4,20 @@
 //! for the line-segment drawing state machine, snap-to-wall / snap-to-endpoint
 //! helpers, ghost-preview queries, and the endpoint find/drag interaction.
 
-use crate::application::operator_command::line::{AddLineSegment, MoveLineSegmentEndpoint};
+use crate::application::operator_command::line::{
+    AddLineSegment, ChangeLineThickness, MoveLineSegmentEndpoint,
+};
 use crate::objects2d::Vec2D;
-use crate::objects2d::line_segment::snap_position;
+use crate::objects2d::line_segment::{THICKNESS_TO_WORLD, snap_position};
 use winit::event::{ElementState, MouseButton};
 
 use super::operator_tool_handler::{OperatorToolHandler, ToolContext, ToolPreview, ToolResponse};
 
 /// Snap threshold in world units.
 const SNAP_THRESHOLD: f32 = 0.5;
+
+/// Extra reach (world units) around a wall's surface that still counts as hovering it.
+const HOVER_MARGIN: f32 = 0.2;
 
 /// State machine for drawing a line segment.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -67,6 +72,34 @@ impl LineSegmentToolHandler {
             if d_end < best_dist_sq {
                 best_dist_sq = d_end;
                 best = Some((seg.id, false));
+            }
+        }
+        best
+    }
+
+    /// Squared distance from point `p` to the segment `a`–`b`.
+    fn point_segment_dist_sq(p: Vec2D, a: Vec2D, b: Vec2D) -> f32 {
+        let (abx, aby) = (b.x - a.x, b.y - a.y);
+        let len_sq = abx * abx + aby * aby;
+        let t = if len_sq > f32::EPSILON {
+            (((p.x - a.x) * abx + (p.y - a.y) * aby) / len_sq).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        let (dx, dy) = (p.x - (a.x + t * abx), p.y - (a.y + t * aby));
+        dx * dx + dy * dy
+    }
+
+    /// Find the segment whose body is closest to `pos`, within HOVER_THRESHOLD.
+    fn find_segment_at(pos: Vec2D, ctx: &ToolContext) -> Option<usize> {
+        let mut best_gap = HOVER_MARGIN;
+        let mut best = None;
+        for seg in &ctx.operators.line_segments {
+            let half = 0.5 * seg.thickness * THICKNESS_TO_WORLD;
+            let gap = Self::point_segment_dist_sq(pos, seg.start, seg.end).sqrt() - half;
+            if gap < best_gap {
+                best_gap = gap;
+                best = Some(seg.id);
             }
         }
         best
@@ -133,12 +166,25 @@ impl OperatorToolHandler for LineSegmentToolHandler {
 
     fn handle_scroll(
         &mut self,
-        _scroll_y: f32,
-        _world_pos: Vec2D,
-        _ctrl_held: bool,
-        _ctx: &ToolContext,
+        scroll_y: f32,
+        world_pos: Vec2D,
+        ctrl_held: bool,
+        ctx: &ToolContext,
     ) -> ToolResponse {
-        ToolResponse::default()
+        // Only while idle, so scrolling can't change a wall mid-draw or mid-drag.
+        if !ctrl_held || scroll_y == 0.0 || !matches!(self.state, LineSegmentDrawState::Idle) {
+            return ToolResponse::default();
+        }
+
+        match Self::find_segment_at(world_pos, ctx) {
+            Some(segment_id) => ToolResponse::consumed_with(Box::new(ChangeLineThickness {
+                segment_id,
+                steps: scroll_y.signum() as i32, // wheel up = +1, down = -1
+            })),
+            // Not over a wall: leave the event unconsumed so Ctrl+scroll can still do
+            // whatever it does elsewhere (e.g. zoom).
+            None => ToolResponse::default(),
+        }
     }
 
     fn preview(&self, ctx: &ToolContext) -> ToolPreview {
@@ -421,5 +467,31 @@ mod tests {
         assert!(!indicators.is_empty(), "Should show start indicator");
         assert!((indicators[0][0] - 1.0).abs() < 1e-6);
         assert!((indicators[0][1] - 2.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn ctrl_scroll_over_segment_emits_thickness_command() {
+        let seg = SimLineSegment::new(4, Vec2D::new(0.0, 0.0), Vec2D::new(10.0, 0.0));
+        let (snap, world) = make_ctx_data(vec![seg]);
+        let ctx = make_tool_ctx(&snap, &world, Vec2D::zero());
+        let mut tool = LineSegmentToolHandler::new();
+
+        let resp = tool.handle_scroll(1.0, Vec2D::new(5.0, 0.2), true, &ctx);
+        assert!(resp.consumed);
+        assert!(resp.action.is_some());
+    }
+
+    #[test]
+    fn scroll_without_ctrl_or_away_from_segment_is_ignored() {
+        let seg = SimLineSegment::new(4, Vec2D::new(0.0, 0.0), Vec2D::new(10.0, 0.0));
+        let (snap, world) = make_ctx_data(vec![seg]);
+        let ctx = make_tool_ctx(&snap, &world, Vec2D::zero());
+        let mut tool = LineSegmentToolHandler::new();
+
+        let no_ctrl = tool.handle_scroll(1.0, Vec2D::new(5.0, 0.2), false, &ctx);
+        assert!(!no_ctrl.consumed);
+
+        let far_away = tool.handle_scroll(1.0, Vec2D::new(5.0, 5.0), true, &ctx);
+        assert!(!far_away.consumed);
     }
 }

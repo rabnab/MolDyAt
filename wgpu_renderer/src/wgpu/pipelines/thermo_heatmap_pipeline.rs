@@ -1,31 +1,41 @@
 //! Thermo heatmap overlay pipeline for WGPU.
 //!
 //! Renders a single quad covering the simulation world area.  The scalar T/P
-//! field is uploaded as an `R8Unorm` texture (one texel per cell) and sampled
-//! with a **linear** filter, so the GPU performs bilinear interpolation
-//! automatically — the overlay looks smooth and continuous at no extra CPU cost.
+//! field is uploaded as an `R8Unorm` texture (one texel per cell) and
+//! reconstructed in the fragment shader with a cubic B-spline filter (four
+//! bilinear taps), so a coarse grid looks like a smooth surface.
 //!
-//! Encoding scheme (R8Unorm, value 0..1 mapped from byte 0..255):
-//!   • `0`      → NaN sentinel (still-unfilled cell); discarded in fragment shader.
-//!   • `1..255` → field value normalised to `[0, 1]`.
+//! To keep the picture calm the field is smoothed before upload:
+//!   1. NaN cells are filled from their neighbours,
+//!   2. a small spatial blur removes cell-to-cell noise,
+//!   3. an exponential moving average over time removes frame-to-frame jiggle.
 //!
-//! The normalisation range `[v_min, v_max]` is computed on the CPU after the
-//! NaN-fill pass; the per-frame byte encoding is therefore a simple clamp+scale.
+//! Encoding (R8Unorm): the field value normalised to `[0, 1]` maps to bytes
+//! `0..=255`. There is no "no data" sentinel: NaN cells are filled first, and an
+//! all-NaN field simply isn't drawn.
 
 use rust_thermo_core::application::renderer_snapshot::ThermoGridSpec;
 use rust_thermo_core::application::thermo_field::ThermoGrid;
 use rust_thermo_core::graphics::renderer::interpolation::fill_nans;
 use rust_thermo_core::graphics::renderer::state_layers::ThermoDisplayMode;
+use std::time::Instant;
 use wgpu::util::DeviceExt;
 
-use super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
+use super::super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
 use rust_thermo_core::application::AppResult;
 
 // min and max values for thermo heatmap normalisation
 const TEMP_MIN: f32 = 0.0;
-const TEMP_MAX: f32 = 1.0; // tune to your simulation's typical range
-const PRES_MIN: f32 = -1.0;
-const PRES_MAX: f32 = 1.0; // tune similarly
+const TEMP_MAX: f32 = 5.0; // tune to your simulation's typical range
+const PRES_MIN: f32 = -4.0;
+const PRES_MAX: f32 = 4.0; // tune similarly
+
+/// Number of 3x3 spatial blur passes (weights 1-2-1 per axis) applied to the
+/// field before upload. 0 = off, 1 = gentle, 2 = strong.
+const SPATIAL_BLUR_PASSES: usize = 1;
+/// Time constant (seconds) of the moving average applied to the displayed
+/// field. Larger = calmer but slower to follow real changes.
+const TEMPORAL_SMOOTHING_SECS: f32 = 0.75;
 
 // ── GPU types ──────────────────────────────────────────────────────
 
@@ -74,6 +84,12 @@ pub struct ThermoHeatmapPipeline {
     /// Height (rows) of the current texture in texels.
     tex_rows: u32,
     has_data: bool,
+    /// Time-smoothed field currently on screen (row-major, all finite).
+    smoothed: Vec<f32>,
+    smoothed_dims: (usize, usize),
+    /// Display mode `smoothed` belongs to (temperature vs pressure).
+    smoothed_mode: Option<std::mem::Discriminant<ThermoDisplayMode>>,
+    last_smooth: Instant,
 }
 
 impl ThermoHeatmapPipeline {
@@ -160,6 +176,10 @@ impl ThermoHeatmapPipeline {
             tex_cols: 1,
             tex_rows: 1,
             has_data: false,
+            smoothed: Vec::new(),
+            smoothed_dims: (0, 0),
+            smoothed_mode: None,
+            last_smooth: Instant::now(),
         }
     }
 
@@ -251,6 +271,43 @@ impl ThermoHeatmapPipeline {
         (texture, view)
     }
 
+    /// Exponential moving average over time, in place.
+    ///
+    /// Restarts from the current field when the grid shape or the display mode
+    /// (temperature / pressure) changes. The weight is derived from the elapsed
+    /// time, so the smoothing doesn't depend on the frame rate, and after a long
+    /// pause (e.g. the overlay was switched off) the field snaps to the current
+    /// values instead of sliding from stale ones.
+    fn smooth_in_time(
+        &mut self,
+        field: &mut [f32],
+        rows: usize,
+        cols: usize,
+        mode: ThermoDisplayMode,
+    ) {
+        let now = Instant::now();
+        let dt = now.duration_since(self.last_smooth).as_secs_f32();
+        self.last_smooth = now;
+
+        let mode_id = std::mem::discriminant(&mode);
+        let restart = self.smoothed.len() != field.len()
+            || self.smoothed_dims != (rows, cols)
+            || self.smoothed_mode != Some(mode_id);
+        if restart {
+            self.smoothed.clear();
+            self.smoothed.extend_from_slice(field);
+            self.smoothed_dims = (rows, cols);
+            self.smoothed_mode = Some(mode_id);
+            return;
+        }
+
+        let alpha = 1.0 - (-dt / TEMPORAL_SMOOTHING_SECS).exp();
+        for (shown, &target) in self.smoothed.iter_mut().zip(field.iter()) {
+            *shown += (target - *shown) * alpha;
+        }
+        field.copy_from_slice(&self.smoothed);
+    }
+
     /// Upload scalar field data to the GPU texture and update uniforms.
     ///
     /// Applies NaN-fill, computes the normalisation range, encodes each cell
@@ -276,12 +333,18 @@ impl ThermoHeatmapPipeline {
         }
 
         // --- NaN fill --------------------------------------------------
-        let filled = fill_nans(grid.as_slice(), rows, cols);
+        let mut filled = fill_nans(grid.as_slice(), rows, cols);
 
         if filled.iter().all(|v| !v.is_finite()) {
             self.has_data = false;
             return false;
         }
+
+        // --- Smoothing (everything is finite from here on) --------------
+        for _ in 0..SPATIAL_BLUR_PASSES {
+            filled = blur_3x3(&filled, rows, cols);
+        }
+        self.smooth_in_time(&mut filled, rows, cols, mode);
 
         // --- Normalisation range ---------------------------------------
         // let (v_min, v_max) = filled
@@ -305,19 +368,14 @@ impl ThermoHeatmapPipeline {
         };
         let inv_range = 1.0 / (v_max - v_min);
 
-        // --- Encode bytes (R8Unorm) ------------------------------------
+        // --- Encode bytes (R8Unorm, full 0..=255 range) ----------------
         // Row 0 of ThermoGrid = world bottom → becomes texture row 0
         // (texture UV V=0 is sampled there for world bottom, matching vertex UV).
         let bytes: Vec<u8> = filled
             .iter()
             .map(|&v| {
-                if v.is_finite() {
-                    let t = ((v - v_min) * inv_range).clamp(0.0, 1.0);
-                    // Map [0,1] → bytes 1..255  (0 is the NaN sentinel)
-                    1u8.saturating_add((t * 254.0) as u8)
-                } else {
-                    0u8 // NaN sentinel
-                }
+                let t = ((v - v_min) * inv_range).clamp(0.0, 1.0);
+                (t * 255.0).round() as u8
             })
             .collect();
 
@@ -375,6 +433,39 @@ impl ThermoHeatmapPipeline {
         self.has_data = true;
         true
     }
+}
+
+// ── Field smoothing ─────────────────────────────────────────────────
+
+/// One separable 3x3 blur pass with weights 1-2-1 per axis. Edges replicate
+/// the border cell, so the field isn't pulled towards zero at the boundary.
+fn blur_3x3(data: &[f32], rows: usize, cols: usize) -> Vec<f32> {
+    if rows == 0 || cols == 0 {
+        return data.to_vec();
+    }
+
+    // Horizontal pass
+    let mut tmp = vec![0.0_f32; data.len()];
+    for r in 0..rows {
+        for c in 0..cols {
+            let left = data[r * cols + c.saturating_sub(1)];
+            let mid = data[r * cols + c];
+            let right = data[r * cols + (c + 1).min(cols - 1)];
+            tmp[r * cols + c] = 0.25 * left + 0.5 * mid + 0.25 * right;
+        }
+    }
+
+    // Vertical pass
+    let mut out = vec![0.0_f32; data.len()];
+    for r in 0..rows {
+        let up = r.saturating_sub(1);
+        let down = (r + 1).min(rows - 1);
+        for c in 0..cols {
+            out[r * cols + c] =
+                0.25 * tmp[up * cols + c] + 0.5 * tmp[r * cols + c] + 0.25 * tmp[down * cols + c];
+        }
+    }
+    out
 }
 
 // ── RenderPipeline trait implementation ─────────────────────────────

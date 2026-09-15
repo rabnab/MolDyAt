@@ -1,4 +1,4 @@
-use super::super::thermostat_label_pipeline::ThermostatLabelPipeline;
+use crate::wgpu::pipelines::thermostat_label_pipeline::ThermostatLabelPipeline;
 use rust_thermo_core::objects2d::{SimThermostat, Vec2D};
 
 fn identity_view_proj() -> [[f32; 4]; 4] {
