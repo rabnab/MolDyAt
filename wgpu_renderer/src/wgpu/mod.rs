@@ -21,20 +21,11 @@
 //! - `EnergyWindowManager`: Managed through the shared core renderer state layer
 
 mod app_lifecycle;
-mod ball_pipeline;
-mod crosshair_pipeline;
 mod event_router;
-mod frame_pipeline;
 mod frame_renderer;
-mod grid_pipeline;
-mod line_pipeline;
+mod instanced_gpu;
+mod pipelines;
 mod render_graph;
-mod sidebar_pipeline;
-mod source_sphere_pipeline;
-mod text_pipeline;
-mod thermo_heatmap_pipeline;
-mod thermo_value_pipeline;
-mod thermostat_label_pipeline;
 mod wgpu_context;
 mod wgpu_input;
 mod wgpu_pipelines;
@@ -43,6 +34,7 @@ mod world_text;
 
 #[cfg(test)]
 mod tests;
+pub mod util;
 
 pub use wgpu_window::WgpuWindow;
 

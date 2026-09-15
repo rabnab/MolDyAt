@@ -1,0 +1,126 @@
+//! Valve rendering pipeline.
+//!
+//! Draws each valve as an outlined rectangle laid over its wall:
+//! blocking (closed) = dark red outline + diagonal stripes,
+//! passable (open) = dark green outline, no fill. See `valve.wgsl`.
+
+use super::super::instanced_gpu::InstancedGpu;
+use super::super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
+use bytemuck::{Pod, Zeroable};
+use rust_thermo_core::application::AppResult;
+// Same constant the physics and WallPipeline use (adjust the path if yours differs).
+use rust_thermo_core::graphics::renderer::event_loop::valve_segment_tool::ValveSegmentToolHandler;
+use std::collections::HashMap;
+
+/// Outline width as a fraction of the world extent.
+const VALVE_BORDER_FRAC: f32 = 0.003;
+
+const STYLE_PASSABLE: f32 = 0.0;
+const STYLE_BLOCKING: f32 = 1.0;
+const STYLE_PREVIEW: f32 = 2.0;
+
+/// Per-valve GPU instance. Layout must match `Inst` in valve.wgsl.
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Pod, Zeroable)]
+pub struct ValveInstance {
+    pub p0: [f32; 2],
+    pub p1: [f32; 2],
+    pub half_width: f32,
+    pub border: f32,
+    pub style: f32,
+}
+
+const VALVE_ATTRS: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
+    0 => Float32x2, 1 => Float32x2, 2 => Float32, 3 => Float32, 4 => Float32
+];
+
+pub struct ValvePipeline {
+    gpu: InstancedGpu<ValveInstance>,
+    /// Reused every frame to avoid reallocating
+    instances: Vec<ValveInstance>,
+}
+
+impl ValvePipeline {
+    pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
+        let source = format!(
+            "{}\n{}",
+            include_str!("../shaders/common.wgsl"),
+            include_str!("../shaders/valve.wgsl"),
+        );
+        Self {
+            gpu: InstancedGpu::new(device, format, "Valve Pipeline", &source, &VALVE_ATTRS),
+            instances: Vec::new(),
+        }
+    }
+}
+
+impl RenderPipeline for ValvePipeline {
+    fn name(&self) -> &'static str {
+        "valves"
+    }
+
+    fn viewport_mode(&self) -> ViewportMode {
+        ViewportMode::Inset
+    }
+
+    fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
+        self.gpu.update_uniforms(ctx.queue, ctx.view_proj, 0.0);
+
+        let bounds = &ctx.snapshot.cell_grid_bounds;
+        let world_extent = bounds.w.abs().max(bounds.h.abs()).max(1.0);
+
+        let border = world_extent * VALVE_BORDER_FRAC;
+
+        // Lookup table for O(1) segment resolution by ID.
+        let seg_by_id: HashMap<usize, &_> = ctx
+            .snapshot
+            .operators
+            .line_segments
+            .iter()
+            .map(|s| (s.id, s))
+            .collect();
+
+        self.instances.clear();
+
+        // Committed valves
+        for valve in &ctx.snapshot.operators.valve_segments {
+            if let Some(&seg) = seg_by_id.get(&valve.line_id) {
+                let p0 = seg.point_at_t(valve.t_start);
+                let p1 = seg.point_at_t(valve.t_end);
+                self.instances.push(ValveInstance {
+                    p0: [p0.x, p0.y],
+                    p1: [p1.x, p1.y],
+                    half_width: ValveSegmentToolHandler::valve_half_width(seg, world_extent),
+                    border,
+                    style: if valve.is_closed {
+                        STYLE_BLOCKING
+                    } else {
+                        STYLE_PASSABLE
+                    },
+                });
+            }
+        }
+
+        // Ghost preview while drawing a valve
+        if let Some((line_id, t_start, t_end)) = ctx.operator_previews.valve_segment
+            && let Some(&seg) = seg_by_id.get(&line_id)
+        {
+            let p0 = seg.point_at_t(t_start);
+            let p1 = seg.point_at_t(t_end);
+            self.instances.push(ValveInstance {
+                p0: [p0.x, p0.y],
+                p1: [p1.x, p1.y],
+                half_width: ValveSegmentToolHandler::valve_half_width(seg, world_extent),
+                border,
+                style: STYLE_PREVIEW,
+            });
+        }
+
+        self.gpu.flush(ctx.device, ctx.queue, &self.instances);
+        Ok(())
+    }
+
+    fn render<'rp>(&'rp self, render_pass: &mut wgpu::RenderPass<'rp>) {
+        self.gpu.draw(render_pass);
+    }
+}

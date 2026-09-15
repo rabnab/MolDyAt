@@ -27,12 +27,14 @@ fn valve_moving_holds_fields() {
         line_id: 1,
         t_half_width: 0.15,
         t_center_at_press: 0.5,
+        t_grab: 0.0,
     };
     if let ValveDrawState::Moving {
         valve_id,
         line_id,
         t_half_width,
         t_center_at_press,
+        ..
     } = state
     {
         assert_eq!(valve_id, 3);

@@ -178,7 +178,7 @@ impl CrosshairPipeline {
         render_pass.set_bind_group(0, &self.bind_group, &[]);
         // Instance 0: crosshair (4 quads = 24 vertices)
         // Instance 1: ball outline (1 quad = 6 vertices)
-        render_pass.draw(0..24, 0..1); // Crosshair
+        render_pass.draw(0..48, 0..2); // Crosshair
         if self.uniforms.show_ball_outline > 0.5 {
             render_pass.draw(0..6, 1..2); // Ball outline
         }
@@ -187,7 +187,7 @@ impl CrosshairPipeline {
 
 // ── RenderPipeline trait implementation ─────────────────────────────
 
-use super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
+use super::super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
 use rust_thermo_core::application::AppResult;
 
 impl RenderPipeline for CrosshairPipeline {

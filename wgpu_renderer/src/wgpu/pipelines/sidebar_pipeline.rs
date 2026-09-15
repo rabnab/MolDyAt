@@ -7,7 +7,7 @@
 use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
 
-use super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
+use super::super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
 use crate::wgpu::MARGINS;
 use rust_thermo_core::application::AppResult;
 use rust_thermo_core::graphics::renderer::Margins;
@@ -17,13 +17,13 @@ use rust_thermo_core::graphics::sidebar::{
     visible_icon_count_for_margin,
 };
 
-const SIDEBAR_SHADER: &str = include_str!("shaders/sidebar.wgsl");
+const SIDEBAR_SHADER: &str = include_str!("../shaders/sidebar.wgsl");
 
 /// Embedded PNG icon data (compile-time).
-pub(crate) const ICON_WALL: &[u8] = include_bytes!("icons/wall.png");
-pub(crate) const ICON_VALVE: &[u8] = include_bytes!("icons/valve.png");
-pub(crate) const ICON_THERMO: &[u8] = include_bytes!("icons/thermo.png");
-pub(crate) const ICON_SOURCE_OPEN: &[u8] = include_bytes!("icons/sourceOpen.png");
+pub(crate) const ICON_WALL: &[u8] = include_bytes!("../icons/wall.png");
+pub(crate) const ICON_VALVE: &[u8] = include_bytes!("../icons/valve.png");
+pub(crate) const ICON_THERMO: &[u8] = include_bytes!("../icons/thermo.png");
+pub(crate) const ICON_SOURCE_OPEN: &[u8] = include_bytes!("../icons/sourceOpen.png");
 
 /// Number of texture-backed sidebar icons in the atlas.
 const TEXTURE_ICON_COUNT: u32 = 4;
