@@ -204,9 +204,7 @@ impl SimulationWorld {
         // Rebuild cell grid with valid balls
         self.rebuild_cell_grid();
     }
-}
 
-impl SimulationWorld {
     pub(crate) fn is_ball_in_region(&self, pt: &Ball2D) -> bool {
         let inner_margin = pt.radius;
         let region = self.world_rect;
@@ -242,6 +240,10 @@ impl SimulationWorld {
                 "new ball colliding with existing ball".to_string(),
             ));
         }
+        if self.overlaps_any_wall(candidate.get_position(), candidate.get_radius()) {
+            return Err(AppError::CustomError("overlaps with wall".to_string()));
+        }
+
         self.add_ball_and_register(candidate);
         self.sim.clear_energy();
         Ok(())

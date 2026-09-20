@@ -16,6 +16,10 @@ use super::operator_tool_handler::{OperatorToolHandler, ToolContext, ToolPreview
 /// Snap threshold in world units.
 const SNAP_THRESHOLD: f32 = 0.5;
 
+/// Squared distance below which a piece endpoint is taken to coincide with a
+/// wall endpoint (piece ends are recomputed from the wall, so float noise only).
+const WALL_ENDPOINT_MATCH_SQ: f32 = 1e-6;
+
 /// Extra reach (world units) around a wall's surface that still counts as hovering it.
 const HOVER_MARGIN: f32 = 0.2;
 
@@ -57,7 +61,18 @@ impl LineSegmentToolHandler {
         )
     }
 
-    /// Find a segment whose endpoint is within threshold of `pos`.
+    /// True if `p` is one of a wall's own two endpoints, as opposed to an
+    /// internal piece boundary next to a valve (not draggable, no marker).
+    fn is_wall_endpoint(p: Vec2D, ctx: &ToolContext) -> bool {
+        ctx.operators.wall_endpoints.iter().any(|(start, end)| {
+            p.distance_squared(start) < WALL_ENDPOINT_MATCH_SQ
+                || p.distance_squared(end) < WALL_ENDPOINT_MATCH_SQ
+        })
+    }
+
+    /// Find a wall endpoint within threshold of `pos`, as `(piece_id, is_start)`.
+    ///
+    /// Piece boundaries created by valves are skipped: they are not draggable.
     fn find_near_endpoint(pos: Vec2D, ctx: &ToolContext) -> Option<(usize, bool)> {
         let threshold_sq = SNAP_THRESHOLD * SNAP_THRESHOLD;
         let mut best_dist_sq = threshold_sq;
@@ -65,11 +80,11 @@ impl LineSegmentToolHandler {
         for seg in &ctx.operators.line_segments {
             let d_start = pos.distance_squared(&seg.start);
             let d_end = pos.distance_squared(&seg.end);
-            if d_start < best_dist_sq {
+            if d_start < best_dist_sq && Self::is_wall_endpoint(seg.start, ctx) {
                 best_dist_sq = d_start;
                 best = Some((seg.id, true));
             }
-            if d_end < best_dist_sq {
+            if d_end < best_dist_sq && Self::is_wall_endpoint(seg.end, ctx) {
                 best_dist_sq = d_end;
                 best = Some((seg.id, false));
             }
@@ -227,8 +242,10 @@ mod tests {
     use crate::application::renderer_snapshot::OperatorSnapshot;
     use crate::objects2d::{Rect, SimLineSegment};
 
+    /// Every segment is treated as its own unsplit wall.
     fn make_ctx_data(segments: Vec<SimLineSegment>) -> (OperatorSnapshot, Rect) {
         let snap = OperatorSnapshot {
+            wall_endpoints: segments.iter().map(|s| (s.start, s.end)).collect(),
             line_segments: segments,
             ..Default::default()
         };
@@ -493,5 +510,31 @@ mod tests {
 
         let far_away = tool.handle_scroll(1.0, Vec2D::new(5.0, 5.0), true, &ctx);
         assert!(!far_away.consumed);
+    }
+
+    #[test]
+    fn press_near_internal_piece_boundary_does_not_grab_it() {
+        // One wall (0,0)-(10,0) split by a valve: pieces end/start at x=4 / x=6,
+        // but the wall's own endpoints are still (0,0) and (10,0).
+        let left = SimLineSegment::new(0, Vec2D::new(0.0, 0.0), Vec2D::new(4.0, 0.0));
+        let right = SimLineSegment::new(1, Vec2D::new(6.0, 0.0), Vec2D::new(10.0, 0.0));
+        let snap = OperatorSnapshot {
+            line_segments: vec![left, right],
+            wall_endpoints: vec![(Vec2D::new(0.0, 0.0), Vec2D::new(10.0, 0.0))],
+            ..Default::default()
+        };
+        let world = Rect::new(-18.0, 12.0, 36.0, -24.0);
+        let ctx = make_tool_ctx(&snap, &world, Vec2D::zero());
+
+        assert!(LineSegmentToolHandler::find_near_endpoint(Vec2D::new(4.0, 0.1), &ctx).is_none());
+        assert!(LineSegmentToolHandler::find_near_endpoint(Vec2D::new(6.0, 0.1), &ctx).is_none());
+        assert_eq!(
+            LineSegmentToolHandler::find_near_endpoint(Vec2D::new(0.1, 0.0), &ctx),
+            Some((0, true))
+        );
+        assert_eq!(
+            LineSegmentToolHandler::find_near_endpoint(Vec2D::new(9.9, 0.0), &ctx),
+            Some((1, false))
+        );
     }
 }

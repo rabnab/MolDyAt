@@ -263,7 +263,7 @@ fn frame_to_console_summary(
         total_energy,
         delta_energy,
         operator_counts.line_segments.len(),
-        operator_counts.valve_segments.len(),
+        operator_counts.valve_spans.len(),
         operator_counts.source_spheres.len(),
         operator_counts.thermostats.len(),
     )
@@ -272,7 +272,7 @@ fn frame_to_console_summary(
 fn operator_counts(operators: &OperatorSnapshot) -> serde_json::Value {
     json!({
         "line_segments": operators.line_segments.len(),
-        "valve_segments": operators.valve_segments.len(),
+        "valve_segments": operators.valve_spans.len(),
         "source_spheres": operators.source_spheres.len(),
         "thermostats": operators.thermostats.len(),
     })

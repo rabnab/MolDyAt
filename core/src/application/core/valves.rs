@@ -1,8 +1,15 @@
 use super::{MainContent, SimulationWorld};
-use crate::objects2d::ValveSegment;
+use crate::application::renderer_snapshot::ValveSpan;
+use crate::objects2d::SimLineSegment;
+use crate::objects2d::line_segment::THICKNESS_TO_WORLD;
+use crate::objects2d::wall_chain::Joint;
+
+/// Extra clearance when pushing balls out of a freshly closed valve.
+const CLOSE_PUSH_EPSILON: f32 = 0.01;
 
 impl MainContent {
-    /// Add a valve section on a parent line segment.
+    /// Add a valve on wall piece `line_id`, given as piece-local fractions
+    /// `t_start`/`t_end`. Splits the piece; see `SimulationWorld::add_valve_on_piece`.
     pub(crate) fn add_valve_segment(
         &mut self,
         line_id: usize,
@@ -11,13 +18,12 @@ impl MainContent {
         is_closed: bool,
     ) {
         self.world
-            .add_valve_segment(line_id, t_start, t_end, is_closed);
+            .add_valve_on_piece(line_id, t_start, t_end, is_closed);
     }
 
     /// Toggle a valve between open and closed states.
     ///
-    /// If toggled to closed, overlapping balls are pushed to the nearest
-    /// non-overlapping side of the parent segment.
+    /// If toggled to closed, overlapping balls are pushed out of the valve.
     pub(crate) fn set_valve_closed(&mut self, valve_id: usize, is_closed: bool) {
         self.world.set_valve_closed(valve_id, is_closed);
     }
@@ -26,27 +32,9 @@ impl MainContent {
     pub(crate) fn toggle_valve(&mut self, valve_id: usize) {
         self.world.toggle_valve(valve_id);
     }
-
-    /// Move an existing valve section along the parent segment.
-    pub(crate) fn move_valve_segment(&mut self, valve_id: usize, t_start: f32, t_end: f32) {
-        self.world.move_valve_segment(valve_id, t_start, t_end);
-    }
 }
 
 impl SimulationWorld {
-    pub(crate) fn add_valve_segment(
-        &mut self,
-        line_id: usize,
-        t_start: f32,
-        t_end: f32,
-        is_closed: bool,
-    ) {
-        if self.line_segments.find(line_id).is_none() {
-            return;
-        }
-        self.valve_segments.add(line_id, t_start, t_end, is_closed);
-    }
-
     pub(crate) fn set_valve_closed(&mut self, valve_id: usize, is_closed: bool) {
         let Some(idx) = self.valve_segments.position(valve_id) else {
             return;
@@ -57,20 +45,20 @@ impl SimulationWorld {
             return;
         }
 
-        let valve = *self.valve_segments.get(idx);
-        let Some(seg) = self.line_segments.find(valve.line_id).copied() else {
+        let Some(thickness) = self.valve_thickness(valve_id) else {
             return;
         };
+        let Some((p0, p1)) = self.wall_chains.valve_span(valve_id) else {
+            return;
+        };
+        let span = SimLineSegment::new(0, p0, p1);
+        let half_thickness = 0.5 * thickness * THICKNESS_TO_WORLD;
 
         for ball in &mut self.balls {
-            let t = seg.closest_t(ball.get_position());
-            if !valve.contains_t(t) {
-                continue;
-            }
-            let closest = seg.closest_point(ball.get_position());
+            let closest = span.closest_point(ball.get_position());
             let to_ball = closest.dist(ball.get_position());
             let center_dist = to_ball.norm();
-            let min_dist = ball.radius + 0.01;
+            let min_dist = ball.radius + half_thickness + CLOSE_PUSH_EPSILON;
             if center_dist >= min_dist || center_dist < 1e-12 {
                 continue;
             }
@@ -89,10 +77,34 @@ impl SimulationWorld {
         self.set_valve_closed(valve_id, new_closed);
     }
 
-    pub(crate) fn move_valve_segment(&mut self, valve_id: usize, t_start: f32, t_end: f32) {
-        if let Some(v) = self.valve_segments.find_mut(valve_id) {
-            let updated = ValveSegment::new(v.id, v.line_id, t_start, t_end, v.is_closed);
-            *v = updated;
+    /// Resolved world-space geometry of every valve, in chain order.
+    ///
+    /// Computed once per snapshot so renderer and hit-testing never repeat
+    /// the chain math.
+    pub(crate) fn valve_spans(&self) -> Vec<ValveSpan> {
+        let mut spans = Vec::new();
+        for chain in self.wall_chains.chains() {
+            for (index, joint) in chain.joints.iter().enumerate() {
+                let Joint::Valve {
+                    valve_id,
+                    t_start,
+                    t_end,
+                } = joint
+                else {
+                    continue;
+                };
+                let Some(valve) = self.valve_segments.find(*valve_id) else {
+                    continue;
+                };
+                spans.push(ValveSpan {
+                    valve_id: *valve_id,
+                    p0: chain.point_at(*t_start),
+                    p1: chain.point_at(*t_end),
+                    thickness: self.joint_thickness(chain, index),
+                    is_closed: valve.is_closed,
+                });
+            }
         }
+        spans
     }
 }

@@ -10,7 +10,6 @@ use bytemuck::{Pod, Zeroable};
 use rust_thermo_core::application::AppResult;
 // Same constant the physics and WallPipeline use (adjust the path if yours differs).
 use rust_thermo_core::graphics::renderer::event_loop::valve_segment_tool::ValveSegmentToolHandler;
-use std::collections::HashMap;
 
 /// Outline width as a fraction of the world extent.
 const VALVE_BORDER_FRAC: f32 = 0.003;
@@ -71,46 +70,42 @@ impl RenderPipeline for ValvePipeline {
 
         let border = world_extent * VALVE_BORDER_FRAC;
 
-        // Lookup table for O(1) segment resolution by ID.
-        let seg_by_id: HashMap<usize, &_> = ctx
-            .snapshot
-            .operators
-            .line_segments
-            .iter()
-            .map(|s| (s.id, s))
-            .collect();
-
         self.instances.clear();
 
-        // Committed valves
-        for valve in &ctx.snapshot.operators.valve_segments {
-            if let Some(&seg) = seg_by_id.get(&valve.line_id) {
-                let p0 = seg.point_at_t(valve.t_start);
-                let p1 = seg.point_at_t(valve.t_end);
-                self.instances.push(ValveInstance {
-                    p0: [p0.x, p0.y],
-                    p1: [p1.x, p1.y],
-                    half_width: ValveSegmentToolHandler::valve_half_width(seg, world_extent),
-                    border,
-                    style: if valve.is_closed {
-                        STYLE_BLOCKING
-                    } else {
-                        STYLE_PASSABLE
-                    },
-                });
-            }
+        // Committed valves (already resolved to world space by the snapshot)
+        for valve in &ctx.snapshot.operators.valve_spans {
+            self.instances.push(ValveInstance {
+                p0: [valve.p0.x, valve.p0.y],
+                p1: [valve.p1.x, valve.p1.y],
+                half_width: ValveSegmentToolHandler::valve_half_width(
+                    valve.thickness,
+                    world_extent,
+                ),
+                border,
+                style: if valve.is_closed {
+                    STYLE_BLOCKING
+                } else {
+                    STYLE_PASSABLE
+                },
+            });
         }
 
-        // Ghost preview while drawing a valve
+        // Ghost preview while drawing a valve: the tool reports piece-local
+        // fractions on the wall piece being drawn on.
         if let Some((line_id, t_start, t_end)) = ctx.operator_previews.valve_segment
-            && let Some(&seg) = seg_by_id.get(&line_id)
+            && let Some(seg) = ctx
+                .snapshot
+                .operators
+                .line_segments
+                .iter()
+                .find(|s| s.id == line_id)
         {
             let p0 = seg.point_at_t(t_start);
             let p1 = seg.point_at_t(t_end);
             self.instances.push(ValveInstance {
                 p0: [p0.x, p0.y],
                 p1: [p1.x, p1.y],
-                half_width: ValveSegmentToolHandler::valve_half_width(seg, world_extent),
+                half_width: ValveSegmentToolHandler::valve_half_width(seg.thickness, world_extent),
                 border,
                 style: STYLE_PREVIEW,
             });

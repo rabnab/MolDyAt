@@ -1,12 +1,13 @@
-//! Valve segment operator tool — drawing, toggling, and dragging valves on line segments.
+//! Valve segment operator tool — drawing and toggling valves on walls.
 //!
 //! Defines [`ValveSegmentToolHandler`] which implements [`OperatorToolHandler`]
 //! for the valve-segment interaction state machine, hit-testing on existing
 //! line segments, and preview queries.
 
-use crate::application::operator_command::valve::{AddValveSegment, MoveValveSegment, ToggleValve};
+use crate::application::operator_command::valve::{AddValveSegment, ToggleValve};
+use crate::application::renderer_snapshot::ValveSpan;
+use crate::objects2d::Vec2D;
 use crate::objects2d::line_segment::THICKNESS_TO_WORLD;
-use crate::objects2d::{SimLineSegment, Vec2D};
 use winit::event::{ElementState, MouseButton};
 
 use super::operator_tool_handler::{OperatorToolHandler, ToolContext, ToolPreview, ToolResponse};
@@ -20,19 +21,11 @@ pub enum ValveDrawState {
     /// Drawing a new valve: user pressed on a line segment and is
     /// dragging to define the valve region.
     Drawing { line_id: usize, t_start: f32 },
-    /// Dragging an existing valve along its parent segment.
-    Moving {
-        valve_id: usize,
-        line_id: usize,
-        /// Half-width of the valve in parametric space, preserved during drag.
-        t_half_width: f32,
-        /// Parametric center of the valve at press time.
-        t_center_at_press: f32,
-        /// Parametric position under the cursor at press time. Used to tell a
-        /// toggle click from a drag, and to move the valve by the drag distance
-        /// (so grabbing away from the centre doesn't make the valve jump).
-        t_grab: f32,
-    },
+    /// Pressed on an existing valve: a click toggles it on release.
+    ///
+    /// Moving/resizing a valve is not supported by the wall-chain model yet,
+    /// so releasing after a drag does nothing.
+    Pressed { valve_id: usize, press_pos: Vec2D },
 }
 
 /// Same padding the renderer uses (move VALVE_PAD_FRAC here from valve_pipeline.rs).
@@ -45,18 +38,9 @@ const T_SNAP_THRESHOLD: f32 = 0.05;
 /// segment for the cursor to be considered "on" that segment.
 const LINE_HIT_DISTANCE: f32 = 0.8;
 
-/// Parametric movement threshold to distinguish a toggle click from a drag.
-const T_MOVE_THRESHOLD: f32 = 0.03;
-
-/// A valve under the cursor.
-struct ValveHit {
-    valve_id: usize,
-    line_id: usize,
-    t_start: f32,
-    t_end: f32,
-    /// Parametric position along the parent segment under the cursor.
-    t_cursor: f32,
-}
+/// Cursor travel (fraction of the world extent) beyond which a press on a
+/// valve counts as a drag instead of a click.
+const CLICK_SLOP_FRAC: f32 = 0.005;
 
 /// Self-contained handler for the valve segment operator tool.
 pub struct ValveSegmentToolHandler {
@@ -94,46 +78,33 @@ impl ValveSegmentToolHandler {
         best
     }
 
-    /// Find a valve whose rectangle contains `pos`.
-    ///
-    /// The rectangle is the same one the renderer draws (see `valve_half_width`).
-    /// If several valves overlap, the one whose centre is closest wins.
-    fn find_valve_at(pos: Vec2D, ctx: &ToolContext) -> Option<ValveHit> {
-        let world_extent = ctx
-            .world_bounds
+    /// Largest world dimension, floored at 1.0 (scale for padding and slop).
+    fn world_extent(ctx: &ToolContext) -> f32 {
+        ctx.world_bounds
             .w
             .abs()
             .max(ctx.world_bounds.h.abs())
-            .max(1.0);
+            .max(1.0)
+    }
+
+    /// Find a valve whose rectangle contains `pos` and return its id.
+    ///
+    /// The rectangle is the same one the renderer draws (see `valve_half_width`).
+    /// If several valves overlap, the one whose centre is closest wins.
+    fn find_valve_at(pos: Vec2D, ctx: &ToolContext) -> Option<usize> {
+        let world_extent = Self::world_extent(ctx);
 
         let mut best_dist = f32::MAX;
-        let mut best: Option<ValveHit> = None;
-        for valve in &ctx.operators.valve_segments {
-            let Some(seg) = ctx
-                .operators
-                .line_segments
-                .iter()
-                .find(|s| s.id == valve.line_id)
-            else {
-                continue;
-            };
-
-            let half_width = Self::valve_half_width(seg, world_extent);
-            if !Self::point_in_valve(pos, seg, valve.t_start, valve.t_end, half_width) {
+        let mut best: Option<usize> = None;
+        for valve in &ctx.operators.valve_spans {
+            let half_width = Self::valve_half_width(valve.thickness, world_extent);
+            if !Self::point_in_valve(pos, valve, half_width) {
                 continue;
             }
-
-            let center = seg.point_at_t((valve.t_start + valve.t_end) * 0.5);
-            let dist = pos.dist(&center).norm();
+            let dist = pos.dist(&valve.center()).norm();
             if dist < best_dist {
                 best_dist = dist;
-                best = Some(ValveHit {
-                    valve_id: valve.id,
-                    line_id: valve.line_id,
-                    t_start: valve.t_start,
-                    t_end: valve.t_end,
-                    t_cursor: seg.closest_t(&pos),
-                });
+                best = Some(valve.valve_id);
             }
         }
         best
@@ -151,20 +122,13 @@ impl ValveSegmentToolHandler {
     }
 
     /// Half-width of a valve rectangle in world units.
-    pub fn valve_half_width(seg: &SimLineSegment, world_extent: f32) -> f32 {
-        0.5 * seg.thickness * THICKNESS_TO_WORLD + world_extent * VALVE_PAD_FRAC
+    pub fn valve_half_width(thickness: f32, world_extent: f32) -> f32 {
+        0.5 * thickness * THICKNESS_TO_WORLD + world_extent * VALVE_PAD_FRAC
     }
 
-    /// True if `pos` lies inside the valve rectangle (oriented along the wall).
-    fn point_in_valve(
-        pos: Vec2D,
-        seg: &SimLineSegment,
-        t_start: f32,
-        t_end: f32,
-        half_width: f32,
-    ) -> bool {
-        let a = seg.point_at_t(t_start);
-        let b = seg.point_at_t(t_end);
+    /// True if `pos` lies inside the valve rectangle (oriented along the valve).
+    fn point_in_valve(pos: Vec2D, valve: &ValveSpan, half_width: f32) -> bool {
+        let (a, b) = (valve.p0, valve.p1);
         let (dx, dy) = (b.x - a.x, b.y - a.y);
         let len = (dx * dx + dy * dy).sqrt();
         if len < 1e-6 {
@@ -192,13 +156,10 @@ impl OperatorToolHandler for ValveSegmentToolHandler {
 
         match state {
             ElementState::Pressed => {
-                if let Some(hit) = Self::find_valve_at(world_pos, ctx) {
-                    self.state = ValveDrawState::Moving {
-                        valve_id: hit.valve_id,
-                        line_id: hit.line_id,
-                        t_half_width: (hit.t_end - hit.t_start) * 0.5,
-                        t_center_at_press: (hit.t_start + hit.t_end) * 0.5,
-                        t_grab: hit.t_cursor,
+                if let Some(valve_id) = Self::find_valve_at(world_pos, ctx) {
+                    self.state = ValveDrawState::Pressed {
+                        valve_id,
+                        press_pos: world_pos,
                     };
                 } else if let Some((line_id, t)) = Self::find_line_at(world_pos, ctx) {
                     let t = Self::snap_t(t);
@@ -230,31 +191,15 @@ impl OperatorToolHandler for ValveSegmentToolHandler {
                             ToolResponse::consumed_dirty()
                         }
                     }
-                    ValveDrawState::Moving {
+                    ValveDrawState::Pressed {
                         valve_id,
-                        line_id,
-                        t_half_width,
-                        t_center_at_press,
-                        t_grab,
+                        press_pos,
                     } => {
-                        // A drag is measured from where the user grabbed the valve,
-                        // not from its centre, so clicking off-centre still toggles.
-                        let dragged = Self::find_line_at(world_pos, ctx).filter(|(hit_line, t)| {
-                            *hit_line == line_id && (*t - t_grab).abs() > T_MOVE_THRESHOLD
-                        });
-
-                        if let Some((_, t_release)) = dragged {
-                            // Move by the drag distance so the valve doesn't jump.
-                            let t_center = t_center_at_press + (t_release - t_grab);
-                            let new_start = (t_center - t_half_width).clamp(0.0, 1.0);
-                            let new_end = (t_center + t_half_width).clamp(0.0, 1.0);
-                            ToolResponse::consumed_with(Box::new(MoveValveSegment {
-                                valve_id,
-                                t_start: new_start,
-                                t_end: new_end,
-                            }))
-                        } else {
+                        let slop = Self::world_extent(ctx) * CLICK_SLOP_FRAC;
+                        if press_pos.dist(&world_pos).norm() <= slop {
                             ToolResponse::consumed_with(Box::new(ToggleValve { valve_id }))
+                        } else {
+                            ToolResponse::consumed_dirty()
                         }
                     }
                     ValveDrawState::Idle => ToolResponse::consumed_dirty(),
@@ -317,19 +262,30 @@ impl OperatorToolHandler for ValveSegmentToolHandler {
 mod tests {
     use super::*;
     use crate::application::renderer_snapshot::OperatorSnapshot;
-    use crate::objects2d::{Rect, SimLineSegment, ValveSegment};
+    use crate::objects2d::{Rect, SimLineSegment};
 
     fn make_ctx_data(
         segments: Vec<SimLineSegment>,
-        valves: Vec<ValveSegment>,
+        valves: Vec<ValveSpan>,
     ) -> (OperatorSnapshot, Rect) {
         let snap = OperatorSnapshot {
             line_segments: segments,
-            valve_segments: valves,
+            valve_spans: valves,
             ..Default::default()
         };
         let world = Rect::new(-18.0, 12.0, 36.0, -24.0);
         (snap, world)
+    }
+
+    /// A closed, thickness-1 valve on the x axis from `x0` to `x1`.
+    fn valve_span(valve_id: usize, x0: f32, x1: f32) -> ValveSpan {
+        ValveSpan {
+            valve_id,
+            p0: Vec2D::new(x0, 0.0),
+            p1: Vec2D::new(x1, 0.0),
+            thickness: 1.0,
+            is_closed: true,
+        }
     }
 
     fn make_tool_ctx<'a>(
@@ -369,15 +325,9 @@ mod tests {
     }
 
     #[test]
-    fn press_on_valve_center_starts_moving() {
+    fn press_on_valve_center_starts_pressed() {
         let seg = SimLineSegment::new(1, Vec2D::new(0.0, 0.0), Vec2D::new(10.0, 0.0));
-        let valve = ValveSegment {
-            id: 5,
-            line_id: 1,
-            t_start: 0.3,
-            t_end: 0.7,
-            is_closed: true,
-        };
+        let valve = valve_span(5, 3.0, 7.0);
         let (snap, world) = make_ctx_data(vec![seg], vec![valve]);
         let ctx = make_tool_ctx(&snap, &world, Vec2D::zero());
 
@@ -387,7 +337,7 @@ mod tests {
         assert!(resp.consumed);
         assert!(matches!(
             tool.state,
-            ValveDrawState::Moving { valve_id: 5, .. }
+            ValveDrawState::Pressed { valve_id: 5, .. }
         ));
     }
 
@@ -422,13 +372,7 @@ mod tests {
     #[test]
     fn release_without_drag_on_valve_toggles() {
         let seg = SimLineSegment::new(1, Vec2D::new(0.0, 0.0), Vec2D::new(10.0, 0.0));
-        let valve = ValveSegment {
-            id: 5,
-            line_id: 1,
-            t_start: 0.3,
-            t_end: 0.7,
-            is_closed: true,
-        };
+        let valve = valve_span(5, 3.0, 7.0);
         let (snap, world) = make_ctx_data(vec![seg], vec![valve]);
 
         let mut tool = ValveSegmentToolHandler::new();
@@ -456,13 +400,7 @@ mod tests {
     #[test]
     fn click_off_centre_inside_valve_toggles() {
         let seg = SimLineSegment::new(1, Vec2D::new(0.0, 0.0), Vec2D::new(10.0, 0.0));
-        let valve = ValveSegment {
-            id: 5,
-            line_id: 1,
-            t_start: 0.3,
-            t_end: 0.7,
-            is_closed: true,
-        };
+        let valve = valve_span(5, 3.0, 7.0);
         let (snap, world) = make_ctx_data(vec![seg], vec![valve]);
         let ctx = make_tool_ctx(&snap, &world, Vec2D::zero());
 
@@ -471,7 +409,7 @@ mod tests {
         tool.handle_mouse_button(MouseButton::Left, ElementState::Pressed, pos, &ctx);
         assert!(matches!(
             tool.state,
-            ValveDrawState::Moving { valve_id: 5, .. }
+            ValveDrawState::Pressed { valve_id: 5, .. }
         ));
 
         // Release at the same spot: a click, not a drag, so it must toggle.
@@ -480,15 +418,33 @@ mod tests {
     }
 
     #[test]
+    fn release_after_drag_on_valve_does_nothing() {
+        let seg = SimLineSegment::new(1, Vec2D::new(0.0, 0.0), Vec2D::new(10.0, 0.0));
+        let (snap, world) = make_ctx_data(vec![seg], vec![valve_span(5, 3.0, 7.0)]);
+        let ctx = make_tool_ctx(&snap, &world, Vec2D::zero());
+
+        let mut tool = ValveSegmentToolHandler::new();
+        tool.handle_mouse_button(
+            MouseButton::Left,
+            ElementState::Pressed,
+            Vec2D::new(5.0, 0.0),
+            &ctx,
+        );
+        let resp = tool.handle_mouse_button(
+            MouseButton::Left,
+            ElementState::Released,
+            Vec2D::new(6.5, 0.0),
+            &ctx,
+        );
+        assert!(resp.consumed);
+        assert!(resp.action.is_none(), "Dragging a valve is unsupported");
+        assert!(matches!(tool.state, ValveDrawState::Idle));
+    }
+
+    #[test]
     fn press_outside_valve_rectangle_does_not_grab_it() {
         let seg = SimLineSegment::new(1, Vec2D::new(0.0, 0.0), Vec2D::new(10.0, 0.0));
-        let valve = ValveSegment {
-            id: 5,
-            line_id: 1,
-            t_start: 0.3,
-            t_end: 0.7,
-            is_closed: true,
-        };
+        let valve = valve_span(5, 3.0, 7.0);
         let (snap, world) = make_ctx_data(vec![seg], vec![valve]);
         let ctx = make_tool_ctx(&snap, &world, Vec2D::zero());
 

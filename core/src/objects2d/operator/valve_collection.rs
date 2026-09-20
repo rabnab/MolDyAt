@@ -16,10 +16,9 @@ impl ValveCollection {
     }
 
     /// Add a new valve, returning its assigned ID.
-    pub fn add(&mut self, line_id: usize, t_start: f32, t_end: f32, is_closed: bool) -> usize {
+    pub fn add(&mut self, is_closed: bool) -> usize {
         let id = self.next_id.next_id();
-        self.valves
-            .push(ValveSegment::new(id, line_id, t_start, t_end, is_closed));
+        self.valves.push(ValveSegment::new(id, is_closed));
         id
     }
 
@@ -61,7 +60,7 @@ impl OperatorCollection for ValveCollection {
     }
 
     fn rescale(&mut self, _old_rect: &Rect, _new_rect: &Rect) {
-        // Valve geometry is parametric on line segments (t_start/t_end),
-        // so line endpoint rescaling is sufficient.
+        // Valve geometry is fractional within its WallChain, so chain
+        // endpoint rescaling is sufficient.
     }
 }

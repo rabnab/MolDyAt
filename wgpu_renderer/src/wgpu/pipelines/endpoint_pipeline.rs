@@ -1,7 +1,7 @@
 //! Endpoint marker pipeline.
 //!
 //! Draws a small red square with a black outline at both endpoints of every
-//! line segment, so endpoints are easy to see, grab and snap to. See `endpoint.wgsl`.
+//! wall (not at the internal boundaries created by valves), so endpoints are easy to see, grab and snap to. See `endpoint.wgsl`.
 
 use super::super::instanced_gpu::InstancedGpu;
 use super::super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
@@ -69,8 +69,10 @@ impl RenderPipeline for EndpointPipeline {
         let border = half_size * MARKER_BORDER_FRAC;
 
         self.instances.clear();
-        for seg in &ctx.snapshot.operators.line_segments {
-            for p in [seg.start, seg.end] {
+        // Only each wall's own endpoints: the piece boundaries next to a
+        // valve are not draggable, so they get no marker.
+        for &(start, end) in &ctx.snapshot.operators.wall_endpoints {
+            for p in [start, end] {
                 self.instances.push(EndpointInstance {
                     center: [p.x, p.y],
                     half_size,

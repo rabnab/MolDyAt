@@ -6,6 +6,7 @@ use crate::application::sim_stats::SimStats;
 use crate::application::thermo_field::ThermoFieldHistory;
 use crate::objects2d::ball_cell::cell_grid::CellGrid;
 use crate::objects2d::ball_impl::{Ball2D, BallPhysics, ForceResult};
+use crate::objects2d::wall_chain::{Selection, WallChainCollection};
 use crate::objects2d::{
     LineSegmentCollection, Rect, SourceSphereCollection, ThermostatCollection, ValveCollection,
     Vec2D, VerboseInfoMode,
@@ -47,6 +48,17 @@ pub struct SimulationWorld {
     pub(crate) line_segments: LineSegmentCollection,
     /// Valve regions placed on top of line segments.
     pub(crate) valve_segments: ValveCollection,
+    /// Ties `line_segments` pieces and `valve_segments` valves together into
+    /// user-drawn walls that may be split by valves. See
+    /// `objects2d::wall_chain` for the full model. `line_segments` and
+    /// `valve_segments` remain the geometry/state owners (a piece's own
+    /// start/end/thickness; a valve's own is_closed/thickness); this is the
+    /// structural layer that says which pieces and valves belong to the same
+    /// wall, and in what order.
+    pub(crate) wall_chains: WallChainCollection,
+    /// Currently hovered/selected object, for highlighting and (once
+    /// implemented) deletion. See `objects2d::wall_chain::Selection`.
+    pub(crate) selection: Selection,
     /// Source spheres that emit balls into the simulation.
     pub(crate) source_spheres: SourceSphereCollection,
     /// Nosé-Hoover thermostats that control local regions.
@@ -100,6 +112,7 @@ mod balls;
 mod ctor;
 mod line_segments;
 mod operators;
+mod selection;
 mod sim;
 mod simulation_engine;
 mod snapshot;
