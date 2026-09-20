@@ -56,6 +56,8 @@ impl MainContent {
                 valve_segments: Default::default(),
                 source_spheres: Default::default(),
                 thermostats: Default::default(),
+                wall_chains: Default::default(),
+                selection: Default::default(),
             },
             game_data: seed.map_or_else(
                 <Self as GameLogic>::init_game_logic,

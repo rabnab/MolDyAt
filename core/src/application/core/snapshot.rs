@@ -97,7 +97,13 @@ impl MainContent {
             cutoff_distance: self.world.physics.get_cutoff_distance(),
             operators: OperatorSnapshot {
                 line_segments: self.world.line_segments.segments().to_vec(),
-                valve_segments: self.world.valve_segments.valves().to_vec(),
+                wall_endpoints: self
+                    .world
+                    .wall_chains
+                    .chains()
+                    .map(|c| (c.start, c.end))
+                    .collect(),
+                valve_spans: self.world.valve_spans(),
                 source_spheres: self.world.source_spheres.spheres().to_vec(),
                 thermostats: self.world.thermostats.thermostats().to_vec(),
             },

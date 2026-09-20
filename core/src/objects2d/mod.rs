@@ -5,6 +5,7 @@ pub mod operator;
 mod rect_2d;
 mod vec_2d;
 pub mod verbose_info;
+pub mod wall_chain;
 
 pub use line_segment::{SimLineSegment, ValveSegment};
 pub use operator::{

@@ -20,10 +20,33 @@
 //! - **Immutability**: Snapshots are immutable after creation, so no need for
 //!   partial field updates that might benefit from SoA.
 
-use crate::objects2d::{SimLineSegment, SimSourceSphere, SimThermostat, ValveSegment, Vec2D};
+use crate::objects2d::{SimLineSegment, SimSourceSphere, SimThermostat, Vec2D};
 use std::time::Instant;
 
 use crate::application::thermo_field::ThermoGrid;
+
+/// A valve resolved to world space (derived from its wall chain).
+///
+/// Consumed by the valve renderer and by valve hit-testing, so neither has
+/// to know how walls are split into chains.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ValveSpan {
+    pub valve_id: usize,
+    /// World-space start of the valve centre line.
+    pub p0: Vec2D,
+    /// World-space end of the valve centre line.
+    pub p1: Vec2D,
+    pub thickness: f32,
+    /// Whether the valve currently blocks passage.
+    pub is_closed: bool,
+}
+
+impl ValveSpan {
+    /// Midpoint of the valve centre line.
+    pub fn center(&self) -> Vec2D {
+        Vec2D::new(0.5 * (self.p0.x + self.p1.x), 0.5 * (self.p0.y + self.p1.y))
+    }
+}
 
 /// All operator data needed for rendering, bundled in one struct.
 ///
@@ -32,10 +55,13 @@ use crate::application::thermo_field::ThermoGrid;
 /// `create_snapshot()` which iterates the operator collections.
 #[derive(Clone, Default)]
 pub struct OperatorSnapshot {
-    /// Line segment barriers placed by the operator panel.
+    /// Wall pieces (a wall split by valves is several pieces).
     pub line_segments: Vec<SimLineSegment>,
-    /// Valve sections on line segments.
-    pub valve_segments: Vec<ValveSegment>,
+    /// The two draggable endpoints of every wall (start, end). Internal
+    /// piece boundaries next to valves are deliberately not listed.
+    pub wall_endpoints: Vec<(Vec2D, Vec2D)>,
+    /// Valves resolved to world space.
+    pub valve_spans: Vec<ValveSpan>,
     /// Source spheres that emit balls into the simulation.
     pub source_spheres: Vec<SimSourceSphere>,
     /// Thermostats that control local spherical regions.
@@ -64,14 +90,10 @@ impl OperatorSnapshot {
             }
         }
 
-        // Valves — parametric midpoint on parent segment.
-        for valve in &self.valve_segments {
-            if let Some(seg) = self.line_segments.iter().find(|s| s.id == valve.line_id) {
-                let t_mid = (valve.t_start + valve.t_end) * 0.5;
-                let center = seg.point_at_t(t_mid);
-                if pos.distance_squared(&center) <= threshold_sq {
-                    return true;
-                }
+        // Valves — midpoint of the valve span.
+        for valve in &self.valve_spans {
+            if pos.distance_squared(&valve.center()) <= threshold_sq {
+                return true;
             }
         }
 

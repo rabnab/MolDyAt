@@ -3,7 +3,10 @@
 use crate::application::MainContent;
 use crate::application::operator_command::OperatorCommand;
 
-/// Add a new valve segment on an existing line segment.
+/// Add a new valve on an existing wall piece.
+///
+/// `t_start`/`t_end` are fractions along the piece `line_id` itself; the
+/// piece is split around the valve (see `SimulationWorld::add_valve_on_piece`).
 #[derive(Debug)]
 pub struct AddValveSegment {
     pub line_id: usize,
@@ -30,20 +33,6 @@ impl OperatorCommand for ToggleValve {
     }
 }
 
-/// Reposition a valve segment along its parent line.
-#[derive(Debug)]
-pub struct MoveValveSegment {
-    pub valve_id: usize,
-    pub t_start: f32,
-    pub t_end: f32,
-}
-
-impl OperatorCommand for MoveValveSegment {
-    fn execute(self: Box<Self>, content: &mut MainContent) {
-        content.move_valve_segment(self.valve_id, self.t_start, self.t_end);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -66,17 +55,5 @@ mod tests {
     fn toggle_valve_fields_round_trip() {
         let cmd = ToggleValve { valve_id: 3 };
         assert_eq!(cmd.valve_id, 3);
-    }
-
-    #[test]
-    fn move_valve_segment_fields_round_trip() {
-        let cmd = MoveValveSegment {
-            valve_id: 2,
-            t_start: 0.2,
-            t_end: 0.8,
-        };
-        assert_eq!(cmd.valve_id, 2);
-        assert!((cmd.t_start - 0.2).abs() < f32::EPSILON);
-        assert!((cmd.t_end - 0.8).abs() < f32::EPSILON);
     }
 }

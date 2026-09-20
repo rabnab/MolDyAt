@@ -6,7 +6,7 @@
 
 use super::Vec2D;
 
-const DEFAULT_THICKNESS: f32 = 1.0;
+pub(crate) const DEFAULT_THICKNESS: f32 = 1.0;
 pub const THICKNESS_TO_WORLD: f32 = 1.0;
 
 /// A line segment barrier in simulation space.
@@ -22,41 +22,23 @@ pub struct SimLineSegment {
     pub thickness: f32,
 }
 
-/// Valve section defined on a parent line segment using parametric coordinates.
+/// Valve state.
+///
+/// Valve geometry (where it sits on a wall) lives in `Joint::Valve` of the
+/// owning `WallChain`, and its thickness follows the pieces around it (see
+/// `SimulationWorld::joint_thickness`); this type only carries per-valve state.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ValveSegment {
     /// Unique identifier (monotonically increasing, reset on clear).
     pub id: usize,
-    /// Parent line segment ID.
-    pub line_id: usize,
-    /// Parametric start on parent line in [0, 1].
-    pub t_start: f32,
-    /// Parametric end on parent line in [0, 1].
-    pub t_end: f32,
     /// Whether this valve section blocks passage.
     pub is_closed: bool,
 }
 
 impl ValveSegment {
-    /// Create a new valve section and normalize/clamp parameter range.
-    pub fn new(id: usize, line_id: usize, t_start: f32, t_end: f32, is_closed: bool) -> Self {
-        let mut a = t_start.clamp(0.0, 1.0);
-        let mut b = t_end.clamp(0.0, 1.0);
-        if a > b {
-            std::mem::swap(&mut a, &mut b);
-        }
-        Self {
-            id,
-            line_id,
-            t_start: a,
-            t_end: b,
-            is_closed,
-        }
-    }
-
-    /// Whether this valve covers parameter `t` on its parent line.
-    pub fn contains_t(&self, t: f32) -> bool {
-        t >= self.t_start && t <= self.t_end
+    /// Create a new valve.
+    pub fn new(id: usize, is_closed: bool) -> Self {
+        Self { id, is_closed }
     }
 }
 
@@ -236,11 +218,9 @@ mod tests {
     }
 
     #[test]
-    fn valve_segment_normalizes_range() {
-        let v = ValveSegment::new(1, 2, 0.9, 0.1, false);
-        assert!((v.t_start - 0.1).abs() < 1e-6);
-        assert!((v.t_end - 0.9).abs() < 1e-6);
-        assert_eq!(v.line_id, 2);
+    fn valve_segment_stores_state() {
+        let v = ValveSegment::new(1, false);
+        assert_eq!(v.id, 1);
         assert!(!v.is_closed);
     }
 

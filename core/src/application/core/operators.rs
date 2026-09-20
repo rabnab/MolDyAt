@@ -12,20 +12,25 @@ impl SimulationWorld {
     /// Return mutable references to every operator collection.
     ///
     /// New operator types extend this list.
-    fn operator_collections_mut(&mut self) -> [&mut dyn OperatorCollection; 4] {
+    fn operator_collections_mut(&mut self) -> [&mut dyn OperatorCollection; 5] {
         [
             &mut self.line_segments,
             &mut self.valve_segments,
+            &mut self.wall_chains,
             &mut self.source_spheres,
             &mut self.thermostats,
         ]
     }
 
     /// Clear all placed operators (called on simulation reset).
+    ///
+    /// Also drops hover/selection, which refer to operator ids that restart
+    /// from zero after a clear.
     pub(crate) fn clear_all_operators(&mut self) {
         for col in self.operator_collections_mut() {
             col.clear();
         }
+        self.selection = Default::default();
     }
 
     /// Rescale all operator positions when the world region changes size.
