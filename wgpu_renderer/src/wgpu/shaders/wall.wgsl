@@ -29,11 +29,9 @@ fn vs_main(@builtin(vertex_index) vi: u32, inst: Inst) -> VOut {
     let hw = inst.thickness * 0.5;
     let pad = inst.thickness * 0.5;   // extra room so the anti-aliased edge isn't clipped
 
-    // TriangleStrip corners: (0,0) (1,0) (0,1) (1,1)
-    let cx = f32(vi & 1u);
-    let cy = f32((vi >> 1u) & 1u);
-    let along = mix(-hw - pad, len + hw + pad, cx);
-    let across = mix(-hw - pad, hw + pad, cy);
+    let c = quad_corner(vi);
+    let along = mix(-hw - pad, len + hw + pad, c.x);
+    let across = mix(-hw - pad, hw + pad, c.y);
 
     let world = inst.p0 + dir * along + nrm * across;
 

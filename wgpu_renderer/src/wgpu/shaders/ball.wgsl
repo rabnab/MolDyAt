@@ -1,177 +1,86 @@
-// Ball shader for WGPU renderer
-// Renders balls as instanced quads with SDF circles for anti-aliased edges
-// Uses storage buffer for ball data (position, radius, color)
-// Draws three circles per ball:
-//   1. Inner filled circle (ball radius) - ball color
-//   2. Equilibrium outline (magenta) - where equal-size balls reach equilibrium
-//   3. Cutoff outline (gray) - interaction range
+// Ball shader: one instance = one ball.
+// Draws up to three circles per ball, from the outside in:
+//   1. cutoff outline (gray)       - interaction range, ring mode 1 only
+//   2. equilibrium outline (magenta) - where equal-size balls reach equilibrium,
+//                                    hidden in ring mode 2
+//   3. filled ball, shaded as a sphere
+//
+// u.params = (equilibrium edge distance, cutoff distance, ring mode, unused)
+//   ring mode: 0 = equilibrium only, 1 = equilibrium + cutoff, 2 = no rings
 
-// Per-ball data stored in a read-only storage buffer
-struct BallData {
-    // Center position in world coordinates (x, y)
-    position: vec2<f32>,
-    // Ball radius in world units
-    radius: f32,
-    // Packed RGBA color as u32 (0xAABBGGRR format)
-    color: u32,
-}
-
-// Uniform buffer for viewport transformation
-struct Uniforms {
-    // 4x4 view-projection matrix (world -> NDC)
-    view_proj: mat4x4<f32>,
-    // Screen size for aspect ratio corrections (if needed)
-    screen_size: vec2<f32>,
-    // Equilibrium edge distance (from LJ potential, typically ~0.56 * lj_sig)
-    eq_edge_distance: f32,
-    // Cutoff distance for interactions (typically 4.0)
-    cutoff_distance: f32,
-    // Ring display mode (0 = equilibrium only, 1 = equilibrium + cutoff, 2 = no rings)
-    ring_display_mode: u32,
-}
-
-@group(0) @binding(0)
-var<uniform> uniforms: Uniforms;
-
-@group(0) @binding(1)
-var<storage, read> balls: array<BallData>;
-
-struct VertexOutput {
-    @builtin(position) position: vec4<f32>,
-    // UV coordinates for SDF circle (-1 to 1 range, scaled by outer radius)
-    @location(0) uv: vec2<f32>,
-    // Ball color passed to fragment shader
-    @location(1) color: vec4<f32>,
-    // Ball radius in world units (for inner circle)
-    @location(2) ball_radius: f32,
-    // Equilibrium radius in world units (for magenta outline)
-    @location(3) eq_radius: f32,
-    // Cutoff radius in world units (for gray outline)
-    @location(4) cutoff_radius: f32,
-}
-
-// Stroke thickness in world units (approximately 2 pixels worth)
-// This is a rough approximation; could be made more precise with screen_size
+// Stroke thickness of the outlines in world units (~2 px at default zoom).
 const STROKE_WIDTH: f32 = 0.15;
 
-// Unpack RGBA color from u32 (0xAABBGGRR format, little-endian)
-fn unpack_color(packed: u32) -> vec4<f32> {
-    let r = f32(packed & 0xFFu) / 255.0;
-    let g = f32((packed >> 8u) & 0xFFu) / 255.0;
-    let b = f32((packed >> 16u) & 0xFFu) / 255.0;
-    let a = f32((packed >> 24u) & 0xFFu) / 255.0;
-    return vec4<f32>(r, g, b, a);
+struct Inst {
+    @location(0) center: vec2<f32>,
+    @location(1) radius: f32,
+    // Packed RGBA, 0xAABBGGRR
+    @location(2) color: u32,
+}
+
+struct VOut {
+    @builtin(position) clip: vec4<f32>,
+    // Offset from the ball centre (world units)
+    @location(0) q: vec2<f32>,
+    @location(1) @interpolate(flat) color: vec4<f32>,
+    // (ball radius, equilibrium radius, cutoff radius, unused)
+    @location(2) @interpolate(flat) radii: vec4<f32>,
 }
 
 @vertex
-fn vs_main(
-    @builtin(vertex_index) vertex_index: u32,
-    @builtin(instance_index) instance_index: u32,
-) -> VertexOutput {
-    var out: VertexOutput;
+fn vs_main(@builtin(vertex_index) vi: u32, inst: Inst) -> VOut {
+    let eq_radius = inst.radius + u.params.x * 0.5;
+    let cutoff_radius = eq_radius + u.params.y;
 
-    // Get ball data from storage buffer
-    let ball = balls[instance_index];
+    // Half a stroke of extra room so the outer ring is never clipped by the
+    // quad edge (that caused holes and flicker at the quadrant points).
+    let reach = cutoff_radius + STROKE_WIDTH * 0.5;
+    let q = (quad_corner(vi) * 2.0 - 1.0) * reach;
 
-    // Calculate the three radii for this ball
-    let ball_radius = ball.radius;
-    // Equilibrium radius: radius + half of equilibrium edge distance
-    let eq_radius = ball_radius + uniforms.eq_edge_distance * 0.5;
-    // Cutoff radius: equilibrium radius + cutoff distance
-    let cutoff_radius = eq_radius + uniforms.cutoff_distance;
-
-    // Generate quad vertices (6 vertices = 2 triangles)
-    // The quad must be large enough to contain the cutoff circle
-    var local_uv: vec2<f32>;
-    switch vertex_index {
-        case 0u: { local_uv = vec2<f32>(-1.0, 1.0); }   // top-left
-        case 1u: { local_uv = vec2<f32>(-1.0, -1.0); }  // bottom-left
-        case 2u: { local_uv = vec2<f32>(1.0, 1.0); }    // top-right
-        case 3u: { local_uv = vec2<f32>(1.0, 1.0); }    // top-right
-        case 4u: { local_uv = vec2<f32>(-1.0, -1.0); }  // bottom-left
-        case 5u: { local_uv = vec2<f32>(1.0, -1.0); }   // bottom-right
-        default: { local_uv = vec2<f32>(0.0, 0.0); }
-    }
-
-    // Expand quad by half-stroke so the outer cutoff ring edge never falls on the
-    // quad boundary. Without this, the stroke at the quadrant points (top/bottom/
-    // left/right) is clipped by the quad edge → holes + flickering.
-    let quad_radius = cutoff_radius + STROKE_WIDTH * 0.5;
-
-    // Calculate world position: center + offset by quad_radius
-    let world_pos = ball.position + local_uv * quad_radius;
-
-    // Transform to clip space
-    out.position = uniforms.view_proj * vec4<f32>(world_pos, 0.0, 1.0);
-    // UV is the world-space offset from ball center; used for SDF distance in fs
-    out.uv = local_uv * quad_radius;
-    out.color = unpack_color(ball.color);
-    out.ball_radius = ball_radius;
-    out.eq_radius = eq_radius;
-    out.cutoff_radius = cutoff_radius;
-
+    var out: VOut;
+    out.clip = u.view_proj * vec4<f32>(inst.center + q, 0.0, 1.0);
+    out.q = q;
+    out.color = unpack4x8unorm(inst.color);
+    out.radii = vec4<f32>(inst.radius, eq_radius, cutoff_radius, 0.0);
     return out;
 }
 
 @fragment
-fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    // Distance from center in world units
-    let dist = length(in.uv);
+fn fs_main(in: VOut) -> @location(0) vec4<f32> {
+    let dist = length(in.q);
+    let ring_mode = u32(u.params.z + 0.5);
 
-    // Discard pixels outside the cutoff circle
-    if dist > in.cutoff_radius + STROKE_WIDTH * 0.5 {
-        return vec4<f32>(0.0, 0.0, 0.0, 0.0);
-    }
-
-    // Colors for the circles
-    let magenta = vec4<f32>(1.0, 0.0, 1.0, 1.0);
-    let gray = vec4<f32>(0.43, 0.43, 0.43, 1.0); // RGB(110, 110, 110)
-
-    // Check which region we're in (from outside to inside)
-    // 1. Cutoff circle outline (gray) - only in mode 1
-    if uniforms.ring_display_mode == 1u {
-        let cutoff_inner = in.cutoff_radius - STROKE_WIDTH * 0.5;
-        let cutoff_outer = in.cutoff_radius + STROKE_WIDTH * 0.5;
-        if dist > cutoff_inner && dist < cutoff_outer {
-            let edge = smoothstep(cutoff_inner, cutoff_inner + 0.05, dist)
-                     * (1.0 - smoothstep(cutoff_outer - 0.05, cutoff_outer, dist));
-            return vec4<f32>(gray.rgb, edge);
+    if ring_mode == 1u {
+        let a = ring_band(dist, in.radii.z, STROKE_WIDTH);
+        if a > 0.0 {
+            return vec4<f32>(0.43, 0.43, 0.43, a);
         }
     }
 
-    // 2. Equilibrium circle outline (magenta) - hidden in mode 2
-    if uniforms.ring_display_mode != 2u {
-        let eq_inner = in.eq_radius - STROKE_WIDTH * 0.5;
-        let eq_outer = in.eq_radius + STROKE_WIDTH * 0.5;
-        if dist > eq_inner && dist < eq_outer {
-            let edge = smoothstep(eq_inner, eq_inner + 0.05, dist)
-                     * (1.0 - smoothstep(eq_outer - 0.05, eq_outer, dist));
-            return vec4<f32>(magenta.rgb, edge);
+    if ring_mode != 2u {
+        let a = ring_band(dist, in.radii.y, STROKE_WIDTH);
+        if a > 0.0 {
+            return vec4<f32>(1.0, 0.0, 1.0, a);
         }
     }
 
-    // 3. Inner filled circle (ball color) — now shaded as a sphere
-    if dist < in.ball_radius + 0.05 {
-        let alpha = 1.0 - smoothstep(in.ball_radius - 0.05, in.ball_radius, dist);
+    let radius = in.radii.x;
+    if dist < radius + 0.05 {
+        let alpha = 1.0 - smoothstep(radius - 0.05, radius, dist);
 
-        // Normalized position within the ball, clamped so sqrt stays real
-        let p = in.uv / in.ball_radius;
-        let d2 = min(dot(p, p), 1.0);
-        let z = sqrt(1.0 - d2);
+        // Normal of a sphere seen from above; clamped so sqrt stays real.
+        let p = in.q / radius;
+        let z = sqrt(1.0 - min(dot(p, p), 1.0));
         let normal = normalize(vec3<f32>(p, z));
 
         let light_dir = normalize(vec3<f32>(-0.4, 0.4, 0.8));
         let diffuse = max(dot(normal, light_dir), 0.0);
-        let view_dir = vec3<f32>(0.0, 0.0, 1.0);
-        let half_vec = normalize(light_dir + view_dir);
+        let half_vec = normalize(light_dir + vec3<f32>(0.0, 0.0, 1.0));
         let specular = pow(max(dot(normal, half_vec), 0.0), 32.0);
 
-        let ambient = 0.35;
-        let shaded = in.color.rgb * (ambient + diffuse * 0.65) + vec3<f32>(specular * 0.5);
-
+        let shaded = in.color.rgb * (0.35 + diffuse * 0.65) + vec3<f32>(specular * 0.5);
         return vec4<f32>(shaded, in.color.a * alpha);
     }
 
-    // Between circles - transparent
-    return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+    return vec4<f32>(0.0);
 }

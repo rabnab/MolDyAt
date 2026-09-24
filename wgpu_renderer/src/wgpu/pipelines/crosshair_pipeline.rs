@@ -1,194 +1,114 @@
-//! Crosshair rendering pipeline for WGPU
+//! Cursor crosshair pipeline.
 //!
-//! Renders a crosshair at the cursor position and optionally a ball outline
-//! when the ball placement tool is active.
+//! Draws a white crosshair with a dark outline at the cursor and, while the
+//! ball tool is active, the placement preview rings (ball, equilibrium and
+//! cutoff radius). Rendered over the full window so it also shows over the
+//! margins. See `solid_rect.wgsl` and `placement_rings.wgsl`.
 
 use bytemuck::{Pod, Zeroable};
-use wgpu::util::DeviceExt;
+use rust_thermo_core::application::AppResult;
 
-/// Uniform buffer data for crosshair rendering.
-/// Must match the `Uniforms` struct in crosshair.wgsl exactly.
+use crate::wgpu::gpu::batch::{BatchDesc, GpuBatch, SceneUniforms};
+use crate::wgpu::gpu::geometry::mat4_mul;
+use crate::wgpu::gpu::shaders;
+use crate::wgpu::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
+
+/// Distance of each bar's centre from the cursor (world units).
+const BAR_OFFSET: f32 = 0.5;
+/// Bar length and thickness (world units).
+const BAR_LENGTH: f32 = 0.4;
+const BAR_THICKNESS: f32 = 0.1;
+/// Dark outline around each bar (world units).
+const OUTLINE: f32 = 0.06;
+const BAR_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
+const OUTLINE_COLOR: [f32; 4] = [0.0, 0.0, 0.0, 0.85];
+
+/// Rectangle instance. Layout must match `Inst` in solid_rect.wgsl.
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Pod, Zeroable)]
-pub struct CrosshairUniforms {
-    /// 4x4 view-projection matrix (world -> NDC)
-    pub view_proj: [[f32; 4]; 4],
-    /// Cursor position in world coordinates
-    pub cursor_pos: [f32; 2],
-    /// Ball radius to show (for outline)
-    pub ball_radius: f32,
-    /// Show ball outline flag (1.0 = show, 0.0 = hide)
-    pub show_ball_outline: f32,
-    /// Equilibrium radius for ball outline
-    pub eq_radius: f32,
-    /// Cutoff radius for ball outline
-    pub cutoff_radius: f32,
-    /// Padding for alignment
-    pub _padding: [f32; 2],
+pub struct RectInstance {
+    pub center: [f32; 2],
+    pub half_size: [f32; 2],
+    pub color: [f32; 4],
 }
 
-impl Default for CrosshairUniforms {
-    fn default() -> Self {
-        Self {
-            view_proj: [
-                [1.0, 0.0, 0.0, 0.0],
-                [0.0, 1.0, 0.0, 0.0],
-                [0.0, 0.0, 1.0, 0.0],
-                [0.0, 0.0, 0.0, 1.0],
-            ],
-            cursor_pos: [0.0, 0.0],
-            ball_radius: 0.6,
-            show_ball_outline: 0.0,
-            eq_radius: 0.88,
-            cutoff_radius: 4.88,
-            _padding: [0.0, 0.0],
-        }
-    }
+/// Placement preview instance. Layout must match `Inst` in placement_rings.wgsl.
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Pod, Zeroable)]
+pub struct RingsInstance {
+    pub center: [f32; 2],
+    /// (ball radius, equilibrium radius, cutoff radius)
+    pub radii: [f32; 3],
 }
 
-/// Crosshair rendering pipeline and resources.
+const RECT_ATTRS: [wgpu::VertexAttribute; 3] =
+    wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2, 2 => Float32x4];
+const RINGS_ATTRS: [wgpu::VertexAttribute; 2] =
+    wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x3];
+
 pub struct CrosshairPipeline {
-    pipeline: wgpu::RenderPipeline,
-    uniform_buffer: wgpu::Buffer,
-    bind_group: wgpu::BindGroup,
-    uniforms: CrosshairUniforms,
+    bars: GpuBatch<RectInstance>,
+    rings: GpuBatch<RingsInstance>,
 }
 
 impl CrosshairPipeline {
-    /// Create a new crosshair pipeline.
-    pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat, shader_source: &str) -> Self {
-        // Create shader module
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Crosshair Shader"),
-            source: wgpu::ShaderSource::Wgsl(shader_source.into()),
-        });
-
-        // Create uniform buffer
-        let uniforms = CrosshairUniforms::default();
-        let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Crosshair Uniform Buffer"),
-            contents: bytemuck::cast_slice(&[uniforms]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-
-        // Create bind group layout
-        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("Crosshair Bind Group Layout"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
-        });
-
-        // Create bind group
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Crosshair Bind Group"),
-            layout: &bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniform_buffer.as_entire_binding(),
-            }],
-        });
-
-        // Create pipeline layout
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Crosshair Pipeline Layout"),
-            bind_group_layouts: &[&bind_group_layout],
-            immediate_size: 0,
-        });
-
-        // Create render pipeline
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Crosshair Pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_main"),
-                compilation_options: Default::default(),
-                buffers: &[],
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs_main"),
-                compilation_options: Default::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: None,
-                polygon_mode: wgpu::PolygonMode::Fill,
-                unclipped_depth: false,
-                conservative: false,
-            },
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
-            multiview_mask: None,
-            cache: None,
-        });
-
+    pub fn new(device: &wgpu::Device, _queue: &wgpu::Queue, format: wgpu::TextureFormat) -> Self {
         Self {
-            pipeline,
-            uniform_buffer,
-            bind_group,
-            uniforms,
-        }
-    }
-
-    /// Update the crosshair uniforms.
-    #[allow(clippy::too_many_arguments)]
-    pub fn update_uniforms(
-        &mut self,
-        queue: &wgpu::Queue,
-        view_proj: [[f32; 4]; 4],
-        cursor_pos: [f32; 2],
-        ball_radius: f32,
-        show_ball_outline: bool,
-        eq_edge_distance: f32,
-        cutoff_distance: f32,
-    ) {
-        self.uniforms.view_proj = view_proj;
-        self.uniforms.cursor_pos = cursor_pos;
-        self.uniforms.ball_radius = ball_radius;
-        self.uniforms.show_ball_outline = if show_ball_outline { 1.0 } else { 0.0 };
-        // Calculate eq_radius and cutoff_radius like in ball shader
-        self.uniforms.eq_radius = ball_radius + eq_edge_distance * 0.5;
-        self.uniforms.cutoff_radius = self.uniforms.eq_radius + cutoff_distance;
-        queue.write_buffer(
-            &self.uniform_buffer,
-            0,
-            bytemuck::cast_slice(&[self.uniforms]),
-        );
-    }
-
-    /// Render the crosshair (and optionally ball outline).
-    pub fn draw<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
-        render_pass.set_pipeline(&self.pipeline);
-        render_pass.set_bind_group(0, &self.bind_group, &[]);
-        // Instance 0: crosshair (4 quads = 24 vertices)
-        // Instance 1: ball outline (1 quad = 6 vertices)
-        render_pass.draw(0..48, 0..2); // Crosshair
-        if self.uniforms.show_ball_outline > 0.5 {
-            render_pass.draw(0..6, 1..2); // Ball outline
+            bars: GpuBatch::new(
+                device,
+                format,
+                BatchDesc::quads("Crosshair Bars", shaders::SOLID_RECT, &RECT_ATTRS),
+            ),
+            rings: GpuBatch::new(
+                device,
+                format,
+                BatchDesc::quads("Placement Rings", shaders::PLACEMENT_RINGS, &RINGS_ATTRS),
+            ),
         }
     }
 }
 
-// ── RenderPipeline trait implementation ─────────────────────────────
+/// Four outlines first, then the four white bars on top.
+fn crosshair_bars(cursor: [f32; 2]) -> [RectInstance; 8] {
+    let horizontal = [BAR_LENGTH * 0.5, BAR_THICKNESS * 0.5];
+    let vertical = [BAR_THICKNESS * 0.5, BAR_LENGTH * 0.5];
+    let bars = [
+        ([-BAR_OFFSET, 0.0], horizontal),
+        ([BAR_OFFSET, 0.0], horizontal),
+        ([0.0, BAR_OFFSET], vertical),
+        ([0.0, -BAR_OFFSET], vertical),
+    ];
+    std::array::from_fn(|i| {
+        let (offset, half) = bars[i % 4];
+        let (grow, color) = if i < 4 {
+            (OUTLINE, OUTLINE_COLOR)
+        } else {
+            (0.0, BAR_COLOR)
+        };
+        RectInstance {
+            center: [cursor[0] + offset[0], cursor[1] + offset[1]],
+            half_size: [half[0] + grow, half[1] + grow],
+            color,
+        }
+    })
+}
 
-use super::super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
-use rust_thermo_core::application::AppResult;
+/// View-projection for the full-window viewport: the inset `view_proj`
+/// followed by the inset-NDC → window-NDC remap.
+fn full_window_view_proj(ctx: &PrepareContext) -> [[f32; 4]; 4] {
+    let (fw, fh) = (ctx.window_size.0 as f32, ctx.window_size.1 as f32);
+    let sx = (fw - ctx.margin.horizontal()).max(1.0) / fw;
+    let sy = (fh - ctx.margin.vertical()).max(1.0) / fh;
+    let ox = (ctx.margin.left - ctx.margin.right) / fw;
+    let oy = (ctx.margin.bottom - ctx.margin.top) / fh;
+    let remap = [
+        [sx, 0.0, 0.0, 0.0],
+        [0.0, sy, 0.0, 0.0],
+        [0.0, 0.0, 1.0, 0.0],
+        [ox, oy, 0.0, 1.0],
+    ];
+    mat4_mul(&remap, &ctx.view_proj)
+}
 
 impl RenderPipeline for CrosshairPipeline {
     fn name(&self) -> &'static str {
@@ -200,47 +120,31 @@ impl RenderPipeline for CrosshairPipeline {
     }
 
     fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
-        // Remap the inset view_proj to full-window NDC so the crosshair
-        // renders across the entire window including the sidebar margin.
-        let (fw, fh) = (ctx.window_size.0 as f32, ctx.window_size.1 as f32);
-        let vp_w = (fw - ctx.margin.horizontal()).max(1.0);
-        let vp_h = (fh - ctx.margin.vertical()).max(1.0);
-        let sx = vp_w / fw;
-        let sy = vp_h / fh;
-        let ox = (ctx.margin.left - ctx.margin.right) / fw;
-        let oy = (ctx.margin.bottom - ctx.margin.top) / fh;
-        // Column-major remap matrix: scale then translate
-        let remap: [[f32; 4]; 4] = [
-            [sx, 0.0, 0.0, 0.0],
-            [0.0, sy, 0.0, 0.0],
-            [0.0, 0.0, 1.0, 0.0],
-            [ox, oy, 0.0, 1.0],
-        ];
-        let full_vp = mat4_mul(&remap, &ctx.view_proj);
-        self.update_uniforms(
-            ctx.queue,
-            full_vp,
-            [ctx.cursor_world_pos.0, ctx.cursor_world_pos.1],
-            ctx.current_ball_radius,
-            ctx.show_ball_outline,
-            ctx.snapshot.equilibrium_edge_distance,
-            ctx.snapshot.cutoff_distance,
-        );
+        let uniforms = SceneUniforms::new(full_window_view_proj(ctx), [0.0; 4]);
+        self.bars.set_uniforms(ctx.queue, uniforms);
+        self.rings.set_uniforms(ctx.queue, uniforms);
+
+        let cursor = [ctx.cursor_world_pos.0, ctx.cursor_world_pos.1];
+        self.bars
+            .flush(ctx.device, ctx.queue, &crosshair_bars(cursor));
+
+        if ctx.show_ball_outline {
+            let ball = ctx.current_ball_radius;
+            let eq = ball + ctx.snapshot.equilibrium_edge_distance * 0.5;
+            let cutoff = eq + ctx.snapshot.cutoff_distance;
+            let rings = RingsInstance {
+                center: cursor,
+                radii: [ball, eq, cutoff],
+            };
+            self.rings.flush(ctx.device, ctx.queue, &[rings]);
+        } else {
+            self.rings.clear();
+        }
         Ok(())
     }
 
     fn render<'rp>(&'rp self, render_pass: &mut wgpu::RenderPass<'rp>) {
-        self.draw(render_pass);
+        self.bars.draw(render_pass);
+        self.rings.draw(render_pass);
     }
-}
-
-/// Multiply two column-major 4×4 matrices: result = a * b.
-fn mat4_mul(a: &[[f32; 4]; 4], b: &[[f32; 4]; 4]) -> [[f32; 4]; 4] {
-    let mut out = [[0.0f32; 4]; 4];
-    for col in 0..4 {
-        for row in 0..4 {
-            out[col][row] = (0..4).map(|k| a[k][row] * b[col][k]).sum();
-        }
-    }
-    out
 }

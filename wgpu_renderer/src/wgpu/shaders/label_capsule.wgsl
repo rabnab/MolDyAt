@@ -2,7 +2,7 @@
 // drawn behind a thermostat text label.
 //
 // Positions are already in NDC (the label code applies view_proj on the CPU),
-// so this pipeline keeps the default identity view_proj from InstancedGpu.
+// so u.view_proj is the identity.
 // Requires common.wgsl to be prepended (Uniforms `u`, aa()).
 
 const CAPSULE_ALPHA: f32 = 0.75;   // opacity of the white capsule
@@ -22,13 +22,7 @@ struct VOut {
 fn vs_main(@builtin(vertex_index) vi: u32, inst: Inst) -> VOut {
     let m = 0.3 * inst.half_ext.y;   // margin so the anti-aliased edge isn't clipped
 
-    // TriangleStrip corners: (0,0) (1,0) (0,1) (1,1)
-    let cx = f32(vi & 1u);
-    let cy = f32((vi >> 1u) & 1u);
-    let q = vec2<f32>(
-        mix(-inst.half_ext.x - m, inst.half_ext.x + m, cx),
-        mix(-inst.half_ext.y - m, inst.half_ext.y + m, cy),
-    );
+    let q = (quad_corner(vi) * 2.0 - 1.0) * (inst.half_ext + m);
 
     var out: VOut;
     out.clip = u.view_proj * vec4<f32>(inst.center + q, 0.0, 1.0);

@@ -4,11 +4,12 @@
 //! reference specific pipelines (e.g., cycling ring display mode on the
 //! ball pipeline).
 
+use crate::wgpu::gpu::geometry::build_view_proj_matrix;
 use crate::wgpu::pipelines::ball_pipeline::BallPipeline;
 use crate::wgpu::pipelines::crosshair_pipeline::CrosshairPipeline;
 use crate::wgpu::pipelines::endpoint_pipeline::EndpointPipeline;
 use crate::wgpu::pipelines::frame_pipeline::FramePipeline;
-use crate::wgpu::pipelines::grid_pipeline::{GridPipeline, build_view_proj_matrix};
+use crate::wgpu::pipelines::grid_pipeline::GridPipeline;
 use crate::wgpu::pipelines::line_pipeline::LinePipeline;
 use crate::wgpu::pipelines::sidebar_pipeline::SidebarPipeline;
 use crate::wgpu::pipelines::source_label_pipeline::SourceLabelPipeline;
@@ -20,7 +21,7 @@ use crate::wgpu::pipelines::thermostat_label_pipeline::ThermostatLabelPipeline;
 use crate::wgpu::pipelines::thermostat_pipeline::ThermostatPipeline;
 use crate::wgpu::pipelines::valve_pipeline::ValvePipeline;
 use crate::wgpu::pipelines::wall_pipeline::WallPipeline;
-use crate::wgpu::render_graph::{PipelineHandle, PrepareContext, RenderGraph};
+use crate::wgpu::render_graph::{PipelineHandle, PrepareContext, RenderGraph, RenderPipeline};
 use crate::wgpu::wgpu_context::WgpuContext;
 use rust_thermo_core::application::AppResult;
 use rust_thermo_core::application::renderer_snapshot::{CellGridSpec, RendererSnapshot};
@@ -28,13 +29,6 @@ use rust_thermo_core::graphics::renderer::Margins;
 use rust_thermo_core::graphics::renderer::event_loop::FramePreviews;
 use rust_thermo_core::graphics::renderer::state_layers::ThermoDisplayMode;
 
-/// Shader source code (embedded at compile time).
-const GRID_SHADER: &str = include_str!("shaders/grid.wgsl");
-const BALL_SHADER: &str = include_str!("shaders/ball.wgsl");
-const CROSSHAIR_SHADER: &str = include_str!("shaders/crosshair.wgsl");
-const LINE_SHADER: &str = include_str!("shaders/line.wgsl");
-const FRAME_SHADER: &str = include_str!("shaders/frame.wgsl");
-const THERMO_HEATMAP_SHADER: &str = include_str!("shaders/thermo_heatmap.wgsl");
 /// Named handles for direct pipeline access.
 pub struct PipelineHandles {
     pub sidebar: PipelineHandle,
@@ -65,47 +59,33 @@ pub struct WgpuPipelines {
 impl WgpuPipelines {
     /// Create all rendering pipelines and register them in the graph.
     ///
-    /// Execution order: sidebar → frame → grid → thermo_heatmap → lines → source_spheres → balls → crosshair → thermostat labels → text.
+    /// Every pipeline is built the same way (`new(device, queue, format)`) and
+    /// registered in execution order (later pipelines draw on top). Each
+    /// pipeline picks its own viewport (full window or inset simulation pane).
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat) -> Self {
         let mut graph = RenderGraph::new();
+        let mut add = |pipeline: Box<dyn RenderPipeline>| graph.add_pipeline(pipeline);
 
-        // Register pipelines in execution order.
-        // Frame renders in FullWindow viewport; grid/thermo_heatmap/lines/balls/crosshair
-        // render in Inset viewport; text renders in FullWindow viewport.
-        let sidebar = graph.add_pipeline(Box::new(SidebarPipeline::new(device, queue, format)));
-        let frame = graph.add_pipeline(Box::new(FramePipeline::new(device, format, FRAME_SHADER)));
-        let grid = graph.add_pipeline(Box::new(GridPipeline::new(device, format, GRID_SHADER)));
-        let thermo_heatmap = graph.add_pipeline(Box::new(ThermoHeatmapPipeline::new(
-            device,
-            format,
-            THERMO_HEATMAP_SHADER,
+        let sidebar = add(Box::new(SidebarPipeline::new(device, queue, format)));
+        let frame = add(Box::new(FramePipeline::new(device, queue, format)));
+        let grid = add(Box::new(GridPipeline::new(device, queue, format)));
+        let thermo_heatmap = add(Box::new(ThermoHeatmapPipeline::new(device, queue, format)));
+        let thermo_value_overlay = add(Box::new(ThermoValueOverlayPipeline::new(
+            device, queue, format,
         )));
-        let thermo_value_overlay =
-            graph.add_pipeline(Box::new(ThermoValueOverlayPipeline::new(device, format)));
-        let wall = graph.add_pipeline(Box::new(WallPipeline::new(device, format)));
-        let valve = graph.add_pipeline(Box::new(ValvePipeline::new(device, format)));
-        let line = graph.add_pipeline(Box::new(LinePipeline::new(device, format, LINE_SHADER)));
-        let endpoint = graph.add_pipeline(Box::new(EndpointPipeline::new(device, format)));
-        let _thermostat = graph.add_pipeline(Box::new(ThermostatPipeline::new(
-            device,
-            queue,
-            format,
-            include_bytes!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/src/wgpu/icons/thermo.png"
-            )),
+        let wall = add(Box::new(WallPipeline::new(device, queue, format)));
+        let valve = add(Box::new(ValvePipeline::new(device, queue, format)));
+        let line = add(Box::new(LinePipeline::new(device, queue, format)));
+        let endpoint = add(Box::new(EndpointPipeline::new(device, queue, format)));
+        add(Box::new(ThermostatPipeline::new(device, queue, format)));
+        let source_sphere = add(Box::new(SourceSpherePipeline::new(device, queue, format)));
+        let ball = add(Box::new(BallPipeline::new(device, queue, format)));
+        let crosshair = add(Box::new(CrosshairPipeline::new(device, queue, format)));
+        add(Box::new(ThermostatLabelPipeline::new(
+            device, queue, format,
         )));
-        let source_sphere =
-            graph.add_pipeline(Box::new(SourceSpherePipeline::new(device, queue, format)));
-        let ball = graph.add_pipeline(Box::new(BallPipeline::new(device, format, BALL_SHADER)));
-        let crosshair = graph.add_pipeline(Box::new(CrosshairPipeline::new(
-            device,
-            format,
-            CROSSHAIR_SHADER,
-        )));
-        graph.add_pipeline(Box::new(ThermostatLabelPipeline::new(device, format)));
-        graph.add_pipeline(Box::new(SourceLabelPipeline::new(device, format)));
-        let text = graph.add_pipeline(Box::new(TextPipeline::new(device, format)));
+        add(Box::new(SourceLabelPipeline::new(device, queue, format)));
+        let text = add(Box::new(TextPipeline::new(device, queue, format)));
 
         log::debug!(
             "{} pipelines registered in RenderGraph",
@@ -165,7 +145,12 @@ impl WgpuPipelines {
             operator_previews,
         };
 
-        self.graph.prepare_all(&prepare_ctx)
+        self.prepare(&prepare_ctx)
+    }
+
+    /// Prepare all enabled pipelines from an already-built context.
+    pub(crate) fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
+        self.graph.prepare_all(ctx)
     }
 
     /// Render all enabled pipelines into a render pass.
@@ -178,16 +163,26 @@ impl WgpuPipelines {
         ctx: &WgpuContext,
         margin: Margins,
     ) {
-        self.graph.render_all(render_pass, ctx.size(), margin);
+        self.render(render_pass, ctx.size(), margin);
     }
 
-    /// Cycle ring display mode on the ball pipeline.
-    pub fn cycle_ring_display_mode(&mut self, queue: &wgpu::Queue) {
+    /// Render all enabled pipelines for a target of `window_size` pixels.
+    pub(crate) fn render<'rp>(
+        &'rp self,
+        render_pass: &mut wgpu::RenderPass<'rp>,
+        window_size: (u32, u32),
+        margin: Margins,
+    ) {
+        self.graph.render_all(render_pass, window_size, margin);
+    }
+
+    /// Cycle ring display mode on the ball pipeline (applied on the next frame).
+    pub fn cycle_ring_display_mode(&mut self) {
         if let Some(ball) = self
             .graph
             .get_pipeline_mut::<BallPipeline>(self.handles.ball)
         {
-            ball.cycle_ring_display_mode(queue);
+            ball.cycle_ring_display_mode();
         }
     }
 

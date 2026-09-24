@@ -133,6 +133,27 @@ Current home:
 
 - `wgpu_renderer/src/wgpu/`
 
+#### Render pipelines
+
+Every visual layer is one `RenderPipeline` in `wgpu_renderer/src/wgpu/pipelines/`,
+registered in draw order in `WgpuPipelines::new`. All of them follow one pattern:
+
+- `new(device, queue, format)`, then `prepare()` fills a `Vec` of `#[repr(C)]`
+  instances or vertices and flushes it to a `GpuBatch`; `render()` only calls
+  `draw()`.
+- `gpu/batch.rs` (`GpuBatch`) is the only place that creates wgpu pipelines,
+  bind groups and buffers. Two draw modes: instanced quads (one element = one
+  quad, corners from `quad_corner()` in the shader) or plain vertex lists.
+- Every shader is registered in `gpu/shaders.rs`, which prepends
+  `shaders/common.wgsl` (uniforms `u.view_proj` / `u.params`, `quad_corner`,
+  `aa`, `ring_band`). `u.params` is pipeline-specific and documented at the top
+  of each shader. An optional texture lives at `@group(1)`.
+- Screen-space layers (sidebar, text, labels, frame) build NDC positions and
+  keep the identity `view_proj`.
+- Tests: `gpu/tests/shaders.rs` validates all WGSL with naga, and
+  `tests/gpu_smoke.rs` builds every pipeline on a real device and renders a
+  populated frame (skipped without a GPU adapter).
+
 ## Dependency Direction
 
 The intended dependency direction is one-way:

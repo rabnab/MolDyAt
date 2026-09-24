@@ -1,37 +1,36 @@
-//! Per-cell thermodynamic value text overlay pipeline for WGPU.
+//! Per-cell thermodynamic value text overlay pipeline.
 //!
 //! Renders a formatted two-decimal label (e.g., "12.34") centred on each grid
-//! cell that holds a finite T/P value.  Hidden when `ThermoDisplayMode::Off`.
-//!
-//! Reuses the existing `text.wgsl` shader (same vertex format) and a compact
-//! 8×8 bitmap font atlas built once from `font8x8`.
+//! cell that holds a finite T/P value. Hidden unless a thermo display mode
+//! (temperature / pressure) is active.
 
-use super::super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
-use super::super::world_text::{
-    BLACK_TEXT_COLOR, TextVertex, WorldTextPipeline, apply_view_proj, inset_glyph_ndc_size,
-    push_label_vertices,
-};
 use rust_thermo_core::application::AppResult;
 use rust_thermo_core::application::renderer_snapshot::ThermoGridSpec;
 use rust_thermo_core::application::thermo_field::ThermoGrid;
 use rust_thermo_core::graphics::renderer::state_layers::ThermoDisplayMode;
 
+use crate::wgpu::gpu::geometry::apply_view_proj;
+use crate::wgpu::gpu::text::{
+    BLACK_TEXT_COLOR, TextBatch, TextVertex, inset_glyph_ndc_size, push_label_vertices,
+};
+use crate::wgpu::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
+
 /// Characters stored in the atlas, in index order.
 const ATLAS_CHARS: [char; 12] = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '-'];
 
 pub struct ThermoValueOverlayPipeline {
-    text: WorldTextPipeline,
+    text: TextBatch,
 }
 
 impl ThermoValueOverlayPipeline {
-    pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
+    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat) -> Self {
         Self {
-            text: WorldTextPipeline::new(
+            text: TextBatch::new(
                 device,
+                queue,
                 format,
                 "Thermo Value Overlay",
                 &ATLAS_CHARS,
-                1024,
                 BLACK_TEXT_COLOR,
             ),
         }
@@ -55,8 +54,6 @@ impl ThermoValueOverlayPipeline {
                     continue;
                 }
 
-                let label = format!("{:.2}", v);
-
                 // Cell centre in world space.
                 let cx = spec.origin_x + (c as f32 + 0.5) * spec.cell_width;
                 let cy = spec.origin_y + (r as f32 + 0.5) * spec.cell_height;
@@ -65,7 +62,7 @@ impl ThermoValueOverlayPipeline {
                 push_label_vertices(
                     &mut verts,
                     &ATLAS_CHARS,
-                    &label,
+                    &format!("{v:.2}"),
                     ndc_x,
                     ndc_y,
                     glyph_ndc_w,
@@ -87,38 +84,26 @@ impl RenderPipeline for ThermoValueOverlayPipeline {
     }
 
     fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
-        if !ctx.thermo_display.is_thermo_active() {
-            self.text.clear();
-            return Ok(());
-        }
-
+        let grid = match ctx.thermo_display {
+            ThermoDisplayMode::Temperature => &ctx.snapshot.cell_temperature,
+            ThermoDisplayMode::Pressure => &ctx.snapshot.cell_pressure,
+            ThermoDisplayMode::Off | ThermoDisplayMode::Grid => {
+                self.text.clear();
+                return Ok(());
+            }
+        };
         let Some(spec) = &ctx.snapshot.thermo_grid_spec else {
             self.text.clear();
             return Ok(());
         };
 
-        let grid = match ctx.thermo_display {
-            ThermoDisplayMode::Temperature => &ctx.snapshot.cell_temperature,
-            ThermoDisplayMode::Pressure => &ctx.snapshot.cell_pressure,
-            ThermoDisplayMode::Off | ThermoDisplayMode::Grid => unreachable!(),
-        };
-
-        let (rows, cols) = grid.shape();
-        if rows == 0 || cols == 0 {
-            self.text.clear();
-            return Ok(());
-        }
-
         let (glyph_ndc_w, glyph_ndc_h) = inset_glyph_ndc_size(ctx.window_size, ctx.margin);
-
         let verts = Self::build_vertices(grid, spec, ctx.view_proj, glyph_ndc_w, glyph_ndc_h);
-
-        self.text.update_vertices(ctx.device, ctx.queue, &verts);
-
+        self.text.upload(ctx.device, ctx.queue, &verts);
         Ok(())
     }
 
     fn render<'rp>(&'rp self, render_pass: &mut wgpu::RenderPass<'rp>) {
-        self.text.render(render_pass);
+        self.text.draw(render_pass);
     }
 }

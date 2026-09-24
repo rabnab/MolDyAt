@@ -1,18 +1,19 @@
-//! Source sphere label overlay pipeline for WGPU.
+//! Source sphere label overlay pipeline.
 //!
 //! Draws two labels per source sphere in the inset simulation viewport:
 //! emission speed (`S:`) above the sphere and emission rate (`R:`) below it,
-//! each on a semi-transparent white capsule (see `label_background.rs`).
+//! each on a semi-transparent white capsule (see `gpu/label_background.rs`).
 //! Mirrors `ThermostatLabelPipeline`.
 
-use crate::wgpu::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
-use crate::wgpu::util::label_background::{CapsuleInstance, LabelBackground, capsule_for_label};
-use crate::wgpu::world_text::{
-    BLACK_TEXT_COLOR, TextVertex, WorldTextPipeline, apply_view_proj, inset_glyph_ndc_size,
-    push_label_vertices,
-};
 use rust_thermo_core::application::AppResult;
 use rust_thermo_core::objects2d::{SOURCE_SPHERE_RADIUS, SimSourceSphere};
+
+use crate::wgpu::gpu::geometry::apply_view_proj;
+use crate::wgpu::gpu::label_background::{CapsuleInstance, LabelBackground, capsule_for_label};
+use crate::wgpu::gpu::text::{
+    BLACK_TEXT_COLOR, TextBatch, TextVertex, inset_glyph_ndc_size, push_label_vertices,
+};
+use crate::wgpu::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
 
 const ATLAS_CHARS: [char; 16] = [
     '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '-', ':', '%', 'S', 'R',
@@ -23,9 +24,8 @@ const ATLAS_CHARS: [char; 16] = [
 const LABEL_RADIUS_FACTOR: f32 = 1.35;
 
 pub struct SourceLabelPipeline {
-    text: WorldTextPipeline,
+    text: TextBatch,
     background: LabelBackground,
-    capsules: Vec<CapsuleInstance>,
 }
 
 /// One label such as `S:65%`; shows `--` for a value that isn't a number.
@@ -37,12 +37,8 @@ fn percent_label(prefix: char, fraction: f32) -> String {
     }
 }
 
-/// Texts for the (speed, rate) labels of one sphere.
-///
-/// NOTE: I haven't seen `SimSourceSphere`, so this shows the same fractions the
-/// arc indicators use, as percentages. To show the real emission speed / rate
-/// instead, change only this function (and add any new characters, such as a
-/// unit, to `ATLAS_CHARS`).
+/// Texts for the (speed, rate) labels of one sphere: the same fractions the
+/// arc indicators show, as percentages.
 fn label_texts(sphere: &SimSourceSphere) -> (String, String) {
     (
         percent_label('S', sphere.speed_fraction()),
@@ -51,18 +47,17 @@ fn label_texts(sphere: &SimSourceSphere) -> (String, String) {
 }
 
 impl SourceLabelPipeline {
-    pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
+    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat) -> Self {
         Self {
-            text: WorldTextPipeline::new(
+            text: TextBatch::new(
                 device,
+                queue,
                 format,
                 "Source Sphere Label",
                 &ATLAS_CHARS,
-                256,
                 BLACK_TEXT_COLOR,
             ),
             background: LabelBackground::new(device, format),
-            capsules: Vec::new(),
         }
     }
 
@@ -127,27 +122,22 @@ impl RenderPipeline for SourceLabelPipeline {
         let spheres = &ctx.snapshot.operators.source_spheres;
         if spheres.is_empty() {
             self.text.clear();
-            self.background.update(ctx.device, ctx.queue, &[]);
+            self.background.upload(ctx.device, ctx.queue, &[]);
             return Ok(());
         }
 
         let (glyph_ndc_w, glyph_ndc_h) = inset_glyph_ndc_size(ctx.window_size, ctx.margin);
-
         let (verts, capsules) =
             Self::build_geometry(spheres, ctx.view_proj, glyph_ndc_w, glyph_ndc_h);
 
-        self.text.update_vertices(ctx.device, ctx.queue, &verts);
-
-        self.capsules = capsules;
-        self.background
-            .update(ctx.device, ctx.queue, &self.capsules);
-
+        self.text.upload(ctx.device, ctx.queue, &verts);
+        self.background.upload(ctx.device, ctx.queue, &capsules);
         Ok(())
     }
 
     fn render<'rp>(&'rp self, render_pass: &mut wgpu::RenderPass<'rp>) {
         // Capsules first, text on top.
         self.background.draw(render_pass);
-        self.text.render(render_pass);
+        self.text.draw(render_pass);
     }
 }

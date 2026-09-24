@@ -1,12 +1,16 @@
 //! Endpoint marker pipeline.
 //!
 //! Draws a small red square with a black outline at both endpoints of every
-//! wall (not at the internal boundaries created by valves), so endpoints are easy to see, grab and snap to. See `endpoint.wgsl`.
+//! wall (not at the internal boundaries created by valves), so endpoints are
+//! easy to see, grab and snap to. See `endpoint.wgsl`.
 
-use super::super::instanced_gpu::InstancedGpu;
-use super::super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
 use bytemuck::{Pod, Zeroable};
 use rust_thermo_core::application::AppResult;
+
+use crate::wgpu::gpu::batch::{BatchDesc, GpuBatch, SceneUniforms};
+use crate::wgpu::gpu::geometry::world_extent;
+use crate::wgpu::gpu::shaders;
+use crate::wgpu::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
 
 /// Half the marker's side, as a fraction of the world extent (tune to taste).
 const MARKER_HALF_SIZE_FRAC: f32 = 0.004;
@@ -26,25 +30,18 @@ const ENDPOINT_ATTRS: [wgpu::VertexAttribute; 3] =
     wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32, 2 => Float32];
 
 pub struct EndpointPipeline {
-    gpu: InstancedGpu<EndpointInstance>,
+    gpu: GpuBatch<EndpointInstance>,
     /// Reused every frame to avoid reallocating
     instances: Vec<EndpointInstance>,
 }
 
 impl EndpointPipeline {
-    pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
-        let source = format!(
-            "{}\n{}",
-            include_str!("../shaders/common.wgsl"),
-            include_str!("../shaders/endpoint.wgsl"),
-        );
+    pub fn new(device: &wgpu::Device, _queue: &wgpu::Queue, format: wgpu::TextureFormat) -> Self {
         Self {
-            gpu: InstancedGpu::new(
+            gpu: GpuBatch::new(
                 device,
                 format,
-                "Endpoint Pipeline",
-                &source,
-                &ENDPOINT_ATTRS,
+                BatchDesc::quads("Endpoint Pipeline", shaders::ENDPOINT, &ENDPOINT_ATTRS),
             ),
             instances: Vec::new(),
         }
@@ -61,11 +58,10 @@ impl RenderPipeline for EndpointPipeline {
     }
 
     fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
-        self.gpu.update_uniforms(ctx.queue, ctx.view_proj, 0.0);
+        self.gpu
+            .set_uniforms(ctx.queue, SceneUniforms::new(ctx.view_proj, [0.0; 4]));
 
-        let bounds = &ctx.snapshot.cell_grid_bounds;
-        let world_extent = bounds.w.abs().max(bounds.h.abs()).max(1.0);
-        let half_size = world_extent * MARKER_HALF_SIZE_FRAC;
+        let half_size = world_extent(ctx.snapshot) * MARKER_HALF_SIZE_FRAC;
         let border = half_size * MARKER_BORDER_FRAC;
 
         self.instances.clear();

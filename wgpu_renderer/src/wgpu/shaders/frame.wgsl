@@ -1,18 +1,16 @@
-// Simple frame outline shader (NDC space)
+// Frame outline shader: LineStrip around the simulation viewport, in NDC
+// (u.view_proj is the identity).
+//
+// u.params: unused
 
-struct VertexOutput {
-    @builtin(position) position: vec4<f32>,
-}
+const FRAME_COLOR: vec4<f32> = vec4<f32>(0.2, 0.4, 1.0, 1.0);
 
 @vertex
-fn vs_main(@location(0) pos: vec2<f32>) -> VertexOutput {
-    var out: VertexOutput;
-    out.position = vec4<f32>(pos, 0.0, 1.0);
-    return out;
+fn vs_main(@location(0) position: vec2<f32>) -> @builtin(position) vec4<f32> {
+    return u.view_proj * vec4<f32>(position, 0.0, 1.0);
 }
 
 @fragment
 fn fs_main() -> @location(0) vec4<f32> {
-    // Match ggez boundary frame color (blue-ish)
-    return vec4<f32>(0.2, 0.4, 1.0, 1.0);
+    return FRAME_COLOR;
 }

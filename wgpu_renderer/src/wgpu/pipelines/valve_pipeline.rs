@@ -4,12 +4,14 @@
 //! blocking (closed) = dark red outline + diagonal stripes,
 //! passable (open) = dark green outline, no fill. See `valve.wgsl`.
 
-use super::super::instanced_gpu::InstancedGpu;
-use super::super::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
 use bytemuck::{Pod, Zeroable};
 use rust_thermo_core::application::AppResult;
-// Same constant the physics and WallPipeline use (adjust the path if yours differs).
 use rust_thermo_core::graphics::renderer::event_loop::valve_segment_tool::ValveSegmentToolHandler;
+
+use crate::wgpu::gpu::batch::{BatchDesc, GpuBatch, SceneUniforms};
+use crate::wgpu::gpu::geometry::world_extent;
+use crate::wgpu::gpu::shaders;
+use crate::wgpu::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
 
 /// Outline width as a fraction of the world extent.
 const VALVE_BORDER_FRAC: f32 = 0.003;
@@ -34,20 +36,19 @@ const VALVE_ATTRS: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
 ];
 
 pub struct ValvePipeline {
-    gpu: InstancedGpu<ValveInstance>,
+    gpu: GpuBatch<ValveInstance>,
     /// Reused every frame to avoid reallocating
     instances: Vec<ValveInstance>,
 }
 
 impl ValvePipeline {
-    pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
-        let source = format!(
-            "{}\n{}",
-            include_str!("../shaders/common.wgsl"),
-            include_str!("../shaders/valve.wgsl"),
-        );
+    pub fn new(device: &wgpu::Device, _queue: &wgpu::Queue, format: wgpu::TextureFormat) -> Self {
         Self {
-            gpu: InstancedGpu::new(device, format, "Valve Pipeline", &source, &VALVE_ATTRS),
+            gpu: GpuBatch::new(
+                device,
+                format,
+                BatchDesc::quads("Valve Pipeline", shaders::VALVE, &VALVE_ATTRS),
+            ),
             instances: Vec::new(),
         }
     }
@@ -63,11 +64,10 @@ impl RenderPipeline for ValvePipeline {
     }
 
     fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
-        self.gpu.update_uniforms(ctx.queue, ctx.view_proj, 0.0);
+        self.gpu
+            .set_uniforms(ctx.queue, SceneUniforms::new(ctx.view_proj, [0.0; 4]));
 
-        let bounds = &ctx.snapshot.cell_grid_bounds;
-        let world_extent = bounds.w.abs().max(bounds.h.abs()).max(1.0);
-
+        let world_extent = world_extent(ctx.snapshot);
         let border = world_extent * VALVE_BORDER_FRAC;
 
         self.instances.clear();

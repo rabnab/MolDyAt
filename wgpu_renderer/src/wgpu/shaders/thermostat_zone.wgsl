@@ -3,6 +3,8 @@
 //   inactive -> constant semi-transparent colour
 // Colour follows the target temperature (blue = cold, red = hot).
 // Requires common.wgsl to be prepended (Uniforms `u`, aa()).
+//
+// u.params = (time in seconds, unused, unused, unused)
 
 const TAU: f32 = 6.28318530718;
 
@@ -30,10 +32,7 @@ struct VOut {
 fn vs_main(@builtin(vertex_index) vi: u32, inst: Inst) -> VOut {
     let reach = inst.radius * 1.1;   // room for the anti-aliased edge
 
-    // TriangleStrip corners: (0,0) (1,0) (0,1) (1,1)
-    let cx = f32(vi & 1u);
-    let cy = f32((vi >> 1u) & 1u);
-    let q = vec2<f32>(mix(-reach, reach, cx), mix(-reach, reach, cy));
+    let q = (quad_corner(vi) * 2.0 - 1.0) * reach;
 
     var out: VOut;
     out.clip = u.view_proj * vec4<f32>(inst.center + q, 0.0, 1.0);

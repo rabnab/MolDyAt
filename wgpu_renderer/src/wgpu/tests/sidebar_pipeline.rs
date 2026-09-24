@@ -1,3 +1,6 @@
+use crate::wgpu::gpu::textures::{
+    ICON_SOURCE_CLOSED, ICON_SOURCE_OPEN, ICON_THERMO, ICON_VALVE, ICON_WALL, decode_icon,
+};
 use crate::wgpu::pipelines::sidebar_pipeline::*;
 use crate::wgpu::{MARGIN_BOTTOM, MARGIN_LEFT, MARGIN_TOP};
 use rust_thermo_core::graphics::sidebar::{ICON_COUNT, ICON_DISPLAY_SIZE, ICON_SPACING};
@@ -15,6 +18,15 @@ fn sidebar_vertex_size_matches_shader_layout() {
 fn rounded_rect_params_size() {
     // size_px: vec2<f32> = 8, corner_radius: f32 = 4, border_width: f32 = 4 → 16 bytes
     assert_eq!(std::mem::size_of::<RoundedRectParams>(), 16);
+}
+
+#[test]
+fn atlas_holds_one_icon_per_textured_tool() {
+    assert_eq!(
+        SIDEBAR_ATLAS_ICONS.len(),
+        ICON_COUNT - 1,
+        "all tools but the ball"
+    );
 }
 
 #[test]
@@ -144,6 +156,7 @@ fn decode_icon_all_embedded_pngs_are_valid() {
         ("valve", ICON_VALVE),
         ("thermo", ICON_THERMO),
         ("sourceOpen", ICON_SOURCE_OPEN),
+        ("sourceClosed", ICON_SOURCE_CLOSED),
     ] {
         let decoded = decode_icon(data, 64);
         assert_eq!(

@@ -1,33 +1,27 @@
-// Line rendering shader for neighbor lines
-// Supports colored lines with position and per-vertex color
+// Hairline shader: LineList of world-space vertices with per-vertex colour
+// (neighbour lines, source-sphere arcs, snap indicators).
+//
+// u.params: unused
 
-// Uniforms for view-projection matrix
-struct Uniforms {
-    view_proj: mat4x4<f32>,
+struct Vertex {
+    @location(0) position: vec2<f32>,
+    @location(1) color: vec4<f32>,
 }
 
-@group(0) @binding(0)
-var<uniform> uniforms: Uniforms;
-
-struct VertexInput {
-    @location(0) position: vec2<f32>,  // World space position
-    @location(1) color: vec4<f32>,     // Per-vertex RGBA color
-}
-
-struct VertexOutput {
-    @builtin(position) clip_position: vec4<f32>,
+struct VOut {
+    @builtin(position) clip: vec4<f32>,
     @location(0) color: vec4<f32>,
 }
 
 @vertex
-fn vs_main(in: VertexInput) -> VertexOutput {
-    var out: VertexOutput;
-    out.clip_position = uniforms.view_proj * vec4<f32>(in.position, 0.0, 1.0);
-    out.color = in.color;
+fn vs_main(v: Vertex) -> VOut {
+    var out: VOut;
+    out.clip = u.view_proj * vec4<f32>(v.position, 0.0, 1.0);
+    out.color = v.color;
     return out;
 }
 
 @fragment
-fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+fn fs_main(in: VOut) -> @location(0) vec4<f32> {
     return in.color;
 }
