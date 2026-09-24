@@ -12,29 +12,27 @@
 //! - [`frame_renderer::FrameRenderer`]: Snapshot preparation and frame submission
 //! - [`WgpuContext`]: Core GPU resources (Device, Queue, Surface, Adapter)
 //! - [`WgpuWindow`]: Thin event-loop shell that wires lifecycle, routing, and rendering
-//! - [`WgpuPipelines`]: Collection of all rendering pipelines
-//! - [`GridPipeline`]: Instanced grid rendering pipeline
-//! - [`BallPipeline`]: Instanced ball rendering pipeline with storage buffers
-//! - [`CrosshairPipeline`]: Crosshair and ball placement cursor pipeline
-//! - [`FramePipeline`]: Screen-space frame border rendering pipeline
-//! - [`TextPipeline`]: Text rendering pipeline using a texture atlas
+//! - [`WgpuPipelines`]: All render pipelines, registered in a `RenderGraph`
+//! - `pipelines/`: one `RenderPipeline` per visual layer (balls, walls,
+//!   sidebar, labels, ...), all built the same way on top of `gpu/`
+//! - `gpu/`: shared building blocks — `GpuBatch` (the only place that creates
+//!   wgpu pipelines and buffers), WGSL sources with the common header,
+//!   textures, bitmap text
 //! - `EnergyWindowManager`: Managed through the shared core renderer state layer
 
 mod app_lifecycle;
 mod event_router;
 mod frame_renderer;
-mod instanced_gpu;
+mod gpu;
 mod pipelines;
 mod render_graph;
 mod wgpu_context;
 mod wgpu_input;
 mod wgpu_pipelines;
 mod wgpu_window;
-mod world_text;
 
 #[cfg(test)]
 mod tests;
-pub mod util;
 
 pub use wgpu_window::WgpuWindow;
 

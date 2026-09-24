@@ -1,11 +1,28 @@
-use crate::wgpu::pipelines::text_pipeline::active_text_uv_max;
+use crate::wgpu::MARGINS;
+use crate::wgpu::pipelines::text_pipeline::cursor_text_vertices;
 
 #[test]
-fn active_text_uv_uses_full_texture_when_sizes_match() {
-    assert_eq!(active_text_uv_max((64, 8), (64, 8)), [1.0, 1.0]);
+fn cursor_text_emits_one_quad_per_character() {
+    let verts = cursor_text_vertices("(1.00, 2.00)  1g", (1280, 720), MARGINS);
+    assert_eq!(verts.len(), 16 * 6);
 }
 
 #[test]
-fn active_text_uv_shrinks_when_content_is_narrower_than_texture() {
-    assert_eq!(active_text_uv_max((80, 8), (64, 8)), [0.8, 1.0]);
+fn cursor_text_sits_in_the_bottom_margin_right_of_the_pane() {
+    let (w, h) = (1280.0_f32, 720.0_f32);
+    let verts = cursor_text_vertices("(1.00, 2.00)", (w as u32, h as u32), MARGINS);
+
+    let pane_right_ndc = ((w - MARGINS.right) / w) * 2.0 - 1.0;
+    let pane_bottom_ndc = 1.0 - ((h - MARGINS.bottom) / h) * 2.0;
+    for v in &verts {
+        assert!(
+            v.position[0] <= pane_right_ndc + 1e-5,
+            "past the pane's right edge"
+        );
+        assert!(
+            v.position[1] <= pane_bottom_ndc + 1e-5,
+            "above the pane's bottom edge"
+        );
+        assert!(v.position[1] >= -1.0, "below the window");
+    }
 }

@@ -156,14 +156,8 @@ impl EventRouter {
                 };
 
                 if let Some(action) = action {
-                    let dirty = execute_input_action(
-                        action,
-                        state,
-                        pipelines,
-                        &ctx.queue,
-                        window_target,
-                        main_window,
-                    );
+                    let dirty =
+                        execute_input_action(action, state, pipelines, window_target, main_window);
                     state.merge_view_dirty(dirty);
                 }
             }

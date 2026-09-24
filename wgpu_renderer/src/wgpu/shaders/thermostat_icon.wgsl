@@ -16,16 +16,12 @@ struct VOut {
 
 @vertex
 fn vs_main(@builtin(vertex_index) vi: u32, inst: Inst) -> VOut {
-    // TriangleStrip corners: (0,0) (1,0) (0,1) (1,1)
-    let cx = f32(vi & 1u);
-    let cy = f32((vi >> 1u) & 1u);
-    let corner = vec2<f32>(mix(-1.0, 1.0, cx), mix(-1.0, 1.0, cy));
+    let c = quad_corner(vi);
 
     var out: VOut;
-    out.clip = u.view_proj * vec4<f32>(inst.center + corner * inst.half_size, 0.0, 1.0);
-    // Image row 0 is the top; world y points up. If the icon shows upside down,
-    // use vec2<f32>(cx, cy) here instead.
-    out.uv = vec2<f32>(cx, 1.0 - cy);
+    out.clip = u.view_proj * vec4<f32>(inst.center + (c * 2.0 - 1.0) * inst.half_size, 0.0, 1.0);
+    // Image row 0 is the top; world y points up.
+    out.uv = vec2<f32>(c.x, 1.0 - c.y);
     return out;
 }
 

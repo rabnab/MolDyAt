@@ -12,7 +12,7 @@ Use this when implementing or changing operators (line segment, valve, thermosta
 - Keep icon-to-tool mapping synchronized across:
   - `core/src/graphics/renderer/event_loop/input_handler.rs` (`OperatorTool` enum)
   - `core/src/graphics/renderer/event_loop/sidebar_tool.rs` (`operator_tool_for_icon()`, `selected_sidebar_icon()`)
-  - `wgpu_renderer/src/wgpu/sidebar_pipeline.rs` icon atlas order (`ICON_WALL`, `ICON_VALVE`, `ICON_THERMO`, `ICON_SOURCE_OPEN`)
+  - `wgpu_renderer/src/wgpu/pipelines/sidebar_pipeline.rs` icon atlas order (`SIDEBAR_ATLAS_ICONS` = `ICON_WALL`, `ICON_VALVE`, `ICON_THERMO`, `ICON_SOURCE_OPEN`) and `atlas_row_for_tool()`
 - If you add/reorder/remove tools, update all three locations in the same change.
 
 ## Event Loop And Command Flow

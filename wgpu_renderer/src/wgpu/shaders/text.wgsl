@@ -1,30 +1,34 @@
-// Simple monochrome text shader for screen-space quads
+// Bitmap text shader: TriangleList of glyph quads in NDC (u.view_proj is the
+// identity), sampling a one-channel glyph atlas at group 1.
+//
+// u.params = text colour (RGBA)
 
-struct VertexOutput {
-    @builtin(position) position: vec4<f32>,
+@group(1) @binding(0) var glyph_tex: texture_2d<f32>;
+@group(1) @binding(1) var glyph_sampler: sampler;
+
+struct Vertex {
+    @location(0) position: vec2<f32>,
+    @location(1) uv: vec2<f32>,
+}
+
+struct VOut {
+    @builtin(position) clip: vec4<f32>,
     @location(0) uv: vec2<f32>,
 }
 
-@group(0) @binding(0)
-var text_tex: texture_2d<f32>;
-@group(0) @binding(1)
-var text_sampler: sampler;
-@group(0) @binding(2)
-var<uniform> text_color: vec4<f32>;
-
 @vertex
-fn vs_main(@location(0) pos: vec2<f32>, @location(1) uv: vec2<f32>) -> VertexOutput {
-    var out: VertexOutput;
-    out.position = vec4<f32>(pos, 0.0, 1.0);
-    out.uv = uv;
+fn vs_main(v: Vertex) -> VOut {
+    var out: VOut;
+    out.clip = u.view_proj * vec4<f32>(v.position, 0.0, 1.0);
+    out.uv = v.uv;
     return out;
 }
 
 @fragment
-fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let alpha = textureSample(text_tex, text_sampler, in.uv).r;
-    if alpha < 0.01 {
+fn fs_main(in: VOut) -> @location(0) vec4<f32> {
+    let coverage = textureSample(glyph_tex, glyph_sampler, in.uv).r;
+    if coverage < 0.01 {
         discard;
     }
-    return vec4<f32>(text_color.rgb, text_color.a * alpha);
+    return vec4<f32>(u.params.rgb, u.params.a * coverage);
 }

@@ -53,7 +53,7 @@ Rules:
 Files:
 - `core/src/graphics/sidebar.rs`
 - `core/src/graphics/renderer/event_loop/sidebar_tool.rs`
-- `wgpu_renderer/src/wgpu/sidebar_pipeline.rs`
+- `wgpu_renderer/src/wgpu/pipelines/sidebar_pipeline.rs` (atlas order in `SIDEBAR_ATLAS_ICONS`; icon bytes in `wgpu_renderer/src/wgpu/gpu/textures.rs`)
 
 Responsibilities:
 - Shared icon constants (`ICON_COUNT`, sizes, spacing)
