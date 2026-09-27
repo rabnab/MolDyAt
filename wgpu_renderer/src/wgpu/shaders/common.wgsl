@@ -30,6 +30,13 @@ fn aa(d: f32) -> f32 {
     return 1.0 - smoothstep(-w, w, d);
 }
 
+// Coverage of an outline band of `width` just inside the edge of a shape with
+// signed distance `d` (world units, negative inside), with the same ~1 px
+// anti-aliased edges as aa(). Uses derivatives: call it before any branching.
+fn inset_band(d: f32, width: f32) -> f32 {
+    return max(aa(d) - aa(d + width), 0.0);
+}
+
 // Coverage of a circular outline of `width` centred on `radius`, at distance
 // `dist` from the centre (all world units). Zero outside the band, with a fixed
 // 0.05 soft edge (no derivatives, so it is safe inside branches).

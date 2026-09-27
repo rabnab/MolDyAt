@@ -77,6 +77,10 @@ impl SimulationWorld {
     pub(crate) fn emit_from_source_spheres(&mut self, ball_factory: &BallFactory) {
         let step = self.step_count;
         let emissions = self.collect_source_emissions(step);
+        if emissions.is_empty() {
+            return;
+        }
+        let obstacles = self.collect_solid_obstacles();
 
         let mut rng = rand::rng();
         for params in emissions {
@@ -96,7 +100,11 @@ impl SimulationWorld {
                 velocity,
             );
 
-            let _ = self.add_candidate_ball(candidate, ball_factory.get_new_ball_radius());
+            let _ = self.add_candidate_ball_among(
+                candidate,
+                ball_factory.get_new_ball_radius(),
+                &obstacles,
+            );
         }
     }
 

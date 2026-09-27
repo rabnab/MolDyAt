@@ -55,10 +55,7 @@ pub fn px_to_ndc(x_px: f32, y_px: f32, win_w: f32, win_h: f32) -> [f32; 2] {
     [(x_px / win_w) * 2.0 - 1.0, 1.0 - (y_px / win_h) * 2.0]
 }
 
-/// Larger side of the simulation world (at least 1). Operator decorations
-/// (wall preview, markers, icons) are sized as a fraction of it so they keep
-/// their look when the world is resized.
+/// Larger side of the simulation world (see `Rect::extent`).
 pub fn world_extent(snapshot: &RendererSnapshot) -> f32 {
-    let bounds = &snapshot.cell_grid_bounds;
-    bounds.w.abs().max(bounds.h.abs()).max(1.0)
+    snapshot.cell_grid_bounds.extent()
 }

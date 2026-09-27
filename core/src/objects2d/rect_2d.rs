@@ -39,4 +39,11 @@ impl Rect {
     pub fn get_br(&self) -> (f32, f32) {
         (self.x + self.w, self.y + self.h)
     }
+
+    /// Larger side of the rect, floored at 1.0. Operator decorations and
+    /// hit-test slop are sized as a fraction of the world's extent so they
+    /// keep their look when the world is resized.
+    pub fn extent(&self) -> f32 {
+        self.w.abs().max(self.h.abs()).max(1.0)
+    }
 }
