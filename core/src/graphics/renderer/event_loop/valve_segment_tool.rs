@@ -78,21 +78,12 @@ impl ValveSegmentToolHandler {
         best
     }
 
-    /// Largest world dimension, floored at 1.0 (scale for padding and slop).
-    fn world_extent(ctx: &ToolContext) -> f32 {
-        ctx.world_bounds
-            .w
-            .abs()
-            .max(ctx.world_bounds.h.abs())
-            .max(1.0)
-    }
-
     /// Find a valve whose rectangle contains `pos` and return its id.
     ///
     /// The rectangle is the same one the renderer draws (see `valve_half_width`).
     /// If several valves overlap, the one whose centre is closest wins.
     fn find_valve_at(pos: Vec2D, ctx: &ToolContext) -> Option<usize> {
-        let world_extent = Self::world_extent(ctx);
+        let world_extent = ctx.world_bounds.extent();
 
         let mut best_dist = f32::MAX;
         let mut best: Option<usize> = None;
@@ -195,7 +186,7 @@ impl OperatorToolHandler for ValveSegmentToolHandler {
                         valve_id,
                         press_pos,
                     } => {
-                        let slop = Self::world_extent(ctx) * CLICK_SLOP_FRAC;
+                        let slop = ctx.world_bounds.extent() * CLICK_SLOP_FRAC;
                         if press_pos.dist(&world_pos).norm() <= slop {
                             ToolResponse::consumed_with(Box::new(ToggleValve { valve_id }))
                         } else {

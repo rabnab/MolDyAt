@@ -2,7 +2,7 @@
 //   style 0 = passable (open):  dark green outline, no fill
 //   style 1 = blocking (closed): dark red outline + diagonal stripe fill
 //   style 2 = preview (while drawing): magenta outline, no fill
-// Requires common.wgsl to be prepended (Uniforms `u`, aa()).
+// Requires common.wgsl to be prepended (Uniforms `u`, aa(), inset_band()).
 
 struct Inst {
     @location(0) p0: vec2<f32>,
@@ -58,9 +58,8 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
 
     // NOTE: everything that uses derivatives (aa, fwidth) is computed here,
     // before any branching, to keep WGSL uniform control flow valid.
-    let outer = aa(d);            // inside the rectangle (outline + interior)
-    let inner = aa(d + border);   // inside the outline band
-    let ring = max(outer - inner, 0.0);
+    let inner = aa(d + border);         // inside the outline band
+    let ring = inset_band(d, border);
 
     // Diagonal stripes, 45 degrees in the valve's own frame.
     let period = max(hw * 0.7, 1e-4);

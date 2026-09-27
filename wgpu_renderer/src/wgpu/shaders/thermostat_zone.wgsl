@@ -2,7 +2,7 @@
 //   active   -> semi-transparent colour that pulses over time
 //   inactive -> constant semi-transparent colour
 // Colour follows the target temperature (blue = cold, red = hot).
-// Requires common.wgsl to be prepended (Uniforms `u`, aa()).
+// Requires common.wgsl to be prepended (Uniforms `u`, aa(), inset_band()).
 //
 // u.params = (time in seconds, unused, unused, unused)
 
@@ -51,9 +51,8 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
     let d = r - radius;                       // signed distance to the disc edge
 
     // Derivative-based values first, no branching (keeps uniform control flow).
-    let px = fwidth(d);
     let inside = aa(d);
-    let ring = max(inside - aa(d + 2.5 * px), 0.0);   // ~2.5 px outline just inside the edge
+    let ring = inset_band(d, 2.5 * fwidth(d));   // ~2.5 px outline just inside the edge
 
     // Pulse (0..1) and the resulting fill alpha, blended by `is_on` without branching.
     let pulse = 0.5 + 0.5 * sin(u.params.x * TAU * PULSE_HZ);

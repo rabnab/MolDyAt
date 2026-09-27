@@ -11,7 +11,7 @@ use crate::objects2d::wall_chain::{ChainPiece, Joint, WallChain};
 /// eliminates the whole "is this contact point inside the open valve's
 /// t-range" bug class: an open valve or a gap simply never produces one of
 /// these, so there's nothing left to get wrong at collision time.
-struct Obstacle {
+pub(crate) struct Obstacle {
     start: Vec2D,
     end: Vec2D,
     thickness: f32,
@@ -290,7 +290,7 @@ impl SimulationWorld {
     /// `self.line_segments.segments()` / `self.valve_segments.valves()`
     /// above. Adjust the accessor name to whatever the actual container
     /// type ends up being called.
-    fn collect_solid_obstacles(&self) -> Vec<Obstacle> {
+    pub(crate) fn collect_solid_obstacles(&self) -> Vec<Obstacle> {
         let mut obstacles = Vec::new();
 
         for chain in self.wall_chains.chains() {
@@ -440,21 +440,19 @@ impl SimulationWorld {
         (total_px, total_py)
     }
 
-    /// True if a ball of `radius` at `pos` would overlap any currently-solid
-    /// obstacle (same flattened list `resolve_line_segment_collisions` uses,
-    /// so spawn placement and collision can never disagree about what counts
-    /// as a wall).
-    pub(crate) fn overlaps_any_wall(&self, pos: &Vec2D, radius: f32) -> bool {
-        for obstacle in &self.collect_solid_obstacles() {
+    /// True if a ball of `radius` at `pos` would overlap any of `obstacles`
+    /// (from `collect_solid_obstacles`, the same list
+    /// `resolve_line_segment_collisions` uses, so spawn placement and
+    /// collision can never disagree about what counts as a wall). Callers
+    /// placing many balls build the list once and reuse it.
+    pub(crate) fn overlaps_any_wall(obstacles: &[Obstacle], pos: &Vec2D, radius: f32) -> bool {
+        obstacles.iter().any(|obstacle| {
             if obstacle.length_sq() < 1e-12 {
-                continue;
+                return false;
             }
             let half = 0.5 * obstacle.thickness * THICKNESS_TO_WORLD;
             let center_dist = obstacle.closest_point(pos).dist(pos).norm();
-            if center_dist < radius + half + COLLISION_EPSILON {
-                return true;
-            }
-        }
-        false
+            center_dist < radius + half + COLLISION_EPSILON
+        })
     }
 }

@@ -1,3 +1,4 @@
+use super::line_segments::Obstacle;
 use super::*;
 use crate::{
     application::{AppError, AppResult, GameLogic},
@@ -53,6 +54,7 @@ impl MainContent {
         let max_pos = &world.get_br().into();
 
         //let mut r = rng();
+        let obstacles = self.world.collect_solid_obstacles();
         let mut balls_added = 0;
         let max_attempts = count * 4;
         for _ in 0..max_attempts {
@@ -61,7 +63,11 @@ impl MainContent {
                 .get_ball_factory()
                 .create_random((min_pos, max_pos), (0.0, 0.0));
             let margin = self.world.physics.equilibrium_edge_distance();
-            if self.add_candidate_ball(nu_ball, margin).is_ok() {
+            if self
+                .world
+                .add_candidate_ball_among(nu_ball, margin, &obstacles)
+                .is_ok()
+            {
                 balls_added += 1;
                 if balls_added >= count {
                     break;
@@ -230,6 +236,18 @@ impl SimulationWorld {
     }
 
     pub(crate) fn add_candidate_ball(&mut self, candidate: Ball2D, margin: f32) -> AppResult {
+        let obstacles = self.collect_solid_obstacles();
+        self.add_candidate_ball_among(candidate, margin, &obstacles)
+    }
+
+    /// `add_candidate_ball` against a prebuilt wall obstacle list, so batch
+    /// spawners flatten the walls once instead of once per candidate.
+    pub(crate) fn add_candidate_ball_among(
+        &mut self,
+        candidate: Ball2D,
+        margin: f32,
+        obstacles: &[Obstacle],
+    ) -> AppResult {
         if !self.is_ball_in_region(&candidate) {
             return Err(AppError::CustomError(
                 "new ball not within region".to_string(),
@@ -240,7 +258,7 @@ impl SimulationWorld {
                 "new ball colliding with existing ball".to_string(),
             ));
         }
-        if self.overlaps_any_wall(candidate.get_position(), candidate.get_radius()) {
+        if Self::overlaps_any_wall(obstacles, candidate.get_position(), candidate.get_radius()) {
             return Err(AppError::CustomError("overlaps with wall".to_string()));
         }
 
