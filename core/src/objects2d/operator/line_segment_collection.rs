@@ -1,6 +1,6 @@
 //! Line-segment operator collection.
 
-use super::{OperatorCollection, OperatorIdCounter, is_degenerate, remap_point};
+use super::{OperatorCollection, OperatorIdCounter, is_degenerate, remap_point, remove_by_id};
 use crate::objects2d::{Rect, SimLineSegment, Vec2D};
 
 /// Owns the `Vec<SimLineSegment>` and its ID counter.
@@ -40,6 +40,11 @@ impl LineSegmentCollection {
     /// Find a segment by ID (mutable).
     pub fn find_mut(&mut self, id: usize) -> Option<&mut SimLineSegment> {
         self.segments.iter_mut().find(|s| s.id == id)
+    }
+
+    /// Remove the line segment with `id`. Returns `false` if there was none.
+    pub fn remove(&mut self, id: usize) -> bool {
+        remove_by_id(&mut self.segments, id, |item| item.id)
     }
 }
 

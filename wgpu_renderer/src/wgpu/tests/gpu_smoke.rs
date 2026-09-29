@@ -7,11 +7,12 @@
 use std::sync::{Arc, Mutex};
 
 use rust_thermo_core::application::renderer_snapshot::{
-    BallRenderData, CellGridSpec, RendererSnapshot, ThermoGridSpec, ValveSpan,
+    BallRenderData, CellGridSpec, RendererSnapshot, ThermoGridSpec, ValveSpan, WallSnapshot,
 };
 use rust_thermo_core::application::thermo_field::ThermoGrid;
 use rust_thermo_core::graphics::renderer::event_loop::FramePreviews;
 use rust_thermo_core::graphics::renderer::state_layers::ThermoDisplayMode;
+use rust_thermo_core::objects2d::wall_chain::ObjectRef;
 use rust_thermo_core::objects2d::{
     OperatorState, Rect, SimLineSegment, SimSourceSphere, SimThermostat, Vec2D,
 };
@@ -79,7 +80,13 @@ fn populated_snapshot() -> RendererSnapshot {
     let ops = &mut snapshot.operators;
     let (a, b) = (Vec2D::new(5.0, 30.0), Vec2D::new(35.0, 30.0));
     ops.line_segments.push(SimLineSegment::new(0, a, b));
-    ops.wall_endpoints.push((a, b));
+    ops.walls.push(WallSnapshot {
+        chain_id: 0,
+        start: a,
+        end: b,
+        piece_ids: vec![0],
+        valve_ids: vec![0],
+    });
     ops.valve_spans.push(ValveSpan {
         valve_id: 0,
         p0: Vec2D::new(15.0, 30.0),
@@ -100,6 +107,7 @@ fn previews() -> FramePreviews {
         line_segment: Some(([2.0, 2.0], [8.0, 8.0])),
         snap_indicators: vec![[5.0, 30.0]],
         selected_sidebar_icon: Some(1),
+        hovered: Some(ObjectRef::Wall(0)),
         ..FramePreviews::default()
     }
 }

@@ -20,6 +20,7 @@
 //! - **Immutability**: Snapshots are immutable after creation, so no need for
 //!   partial field updates that might benefit from SoA.
 
+use crate::objects2d::line_segment::valve_half_width;
 use crate::objects2d::{SimLineSegment, SimSourceSphere, SimThermostat, Vec2D};
 use std::time::Instant;
 
@@ -46,6 +47,39 @@ impl ValveSpan {
     pub fn center(&self) -> Vec2D {
         Vec2D::new(0.5 * (self.p0.x + self.p1.x), 0.5 * (self.p0.y + self.p1.y))
     }
+
+    /// Half-width of the rectangle the valve is drawn and hit-tested as.
+    pub fn half_width(&self, world_extent: f32) -> f32 {
+        valve_half_width(self.thickness, world_extent)
+    }
+
+    /// True if `pos` lies inside the valve's rectangle (oriented along it).
+    pub fn contains(&self, pos: Vec2D, world_extent: f32) -> bool {
+        let (a, b) = (self.p0, self.p1);
+        let (dx, dy) = (b.x - a.x, b.y - a.y);
+        let len = (dx * dx + dy * dy).sqrt();
+        if len < 1e-6 {
+            return false;
+        }
+        let (ux, uy) = (dx / len, dy / len);
+        let (px, py) = (pos.x - a.x, pos.y - a.y);
+        let along = px * ux + py * uy;
+        let across = -px * uy + py * ux;
+        (0.0..=len).contains(&along) && across.abs() <= self.half_width(world_extent)
+    }
+}
+
+/// One user-drawn wall as the renderer and tools see it: its own two
+/// endpoints (the only draggable points) and the pieces it is made of.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WallSnapshot {
+    pub chain_id: usize,
+    pub start: Vec2D,
+    pub end: Vec2D,
+    /// Ids of this wall's pieces in `OperatorSnapshot::line_segments`.
+    pub piece_ids: Vec<usize>,
+    /// Ids of the valves cut into this wall (see `valve_spans`).
+    pub valve_ids: Vec<usize>,
 }
 
 /// All operator data needed for rendering, bundled in one struct.
@@ -57,9 +91,9 @@ impl ValveSpan {
 pub struct OperatorSnapshot {
     /// Wall pieces (a wall split by valves is several pieces).
     pub line_segments: Vec<SimLineSegment>,
-    /// The two draggable endpoints of every wall (start, end). Internal
-    /// piece boundaries next to valves are deliberately not listed.
-    pub wall_endpoints: Vec<(Vec2D, Vec2D)>,
+    /// Every wall with its two draggable endpoints. Internal piece
+    /// boundaries next to valves are deliberately not endpoints.
+    pub walls: Vec<WallSnapshot>,
     /// Valves resolved to world space.
     pub valve_spans: Vec<ValveSpan>,
     /// Source spheres that emit balls into the simulation.
@@ -73,6 +107,29 @@ pub struct OperatorSnapshot {
 const OPERATOR_PROXIMITY_THRESHOLD: f32 = 1.5;
 
 impl OperatorSnapshot {
+    /// The wall that piece `line_id` belongs to.
+    pub fn wall_of_piece(&self, line_id: usize) -> Option<&WallSnapshot> {
+        self.walls.iter().find(|w| w.piece_ids.contains(&line_id))
+    }
+
+    /// The wall that valve `valve_id` is cut into.
+    pub fn wall_of_valve(&self, valve_id: usize) -> Option<&WallSnapshot> {
+        self.walls.iter().find(|w| w.valve_ids.contains(&valve_id))
+    }
+
+    /// The valve whose rectangle contains `pos`; if several overlap, the one
+    /// whose centre is closest.
+    pub fn valve_at(&self, pos: Vec2D, world_extent: f32) -> Option<usize> {
+        self.valve_spans
+            .iter()
+            .filter(|v| v.contains(pos, world_extent))
+            .min_by(|a, b| {
+                pos.distance_squared(&a.center())
+                    .total_cmp(&pos.distance_squared(&b.center()))
+            })
+            .map(|v| v.valve_id)
+    }
+
     /// Returns `true` when `pos` is close to any placed operator.
     ///
     /// Checked operators: line segments, valve midpoints, and source sphere

@@ -8,6 +8,7 @@
 use crate::application::operator_command::OperatorCommand;
 use crate::application::renderer_snapshot::OperatorSnapshot;
 use crate::objects2d::Vec2D;
+use crate::objects2d::wall_chain::ObjectRef;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta};
 
 /// Response returned by a tool handler after processing an event.
@@ -103,6 +104,11 @@ pub trait OperatorToolHandler: Send {
 
     /// Current ghost-preview geometry, if any.
     fn preview(&self, ctx: &ToolContext) -> ToolPreview;
+
+    /// The object of this tool's own kind under the cursor (or being
+    /// dragged), for highlighting and for `Delete`. `None` while drawing a
+    /// new object.
+    fn hovered(&self, ctx: &ToolContext) -> Option<ObjectRef>;
 
     /// Snap indicator positions (world coordinates) for crosshair rendering.
     fn snap_indicators(&self, ctx: &ToolContext) -> Vec<[f32; 2]>;

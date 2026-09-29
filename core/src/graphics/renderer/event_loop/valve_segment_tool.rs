@@ -5,9 +5,9 @@
 //! line segments, and preview queries.
 
 use crate::application::operator_command::valve::{AddValveSegment, ToggleValve};
-use crate::application::renderer_snapshot::ValveSpan;
 use crate::objects2d::Vec2D;
 use crate::objects2d::line_segment::THICKNESS_TO_WORLD;
+use crate::objects2d::wall_chain::ObjectRef;
 use winit::event::{ElementState, MouseButton};
 
 use super::operator_tool_handler::{OperatorToolHandler, ToolContext, ToolPreview, ToolResponse};
@@ -27,9 +27,6 @@ pub enum ValveDrawState {
     /// so releasing after a drag does nothing.
     Pressed { valve_id: usize, press_pos: Vec2D },
 }
-
-/// Same padding the renderer uses (move VALVE_PAD_FRAC here from valve_pipeline.rs).
-pub const VALVE_PAD_FRAC: f32 = 0.008;
 
 /// Snap threshold for parametric distance on a line segment.
 const T_SNAP_THRESHOLD: f32 = 0.05;
@@ -78,27 +75,9 @@ impl ValveSegmentToolHandler {
         best
     }
 
-    /// Find a valve whose rectangle contains `pos` and return its id.
-    ///
-    /// The rectangle is the same one the renderer draws (see `valve_half_width`).
-    /// If several valves overlap, the one whose centre is closest wins.
+    /// Find a valve whose rectangle (as drawn) contains `pos`.
     fn find_valve_at(pos: Vec2D, ctx: &ToolContext) -> Option<usize> {
-        let world_extent = ctx.world_bounds.extent();
-
-        let mut best_dist = f32::MAX;
-        let mut best: Option<usize> = None;
-        for valve in &ctx.operators.valve_spans {
-            let half_width = Self::valve_half_width(valve.thickness, world_extent);
-            if !Self::point_in_valve(pos, valve, half_width) {
-                continue;
-            }
-            let dist = pos.dist(&valve.center()).norm();
-            if dist < best_dist {
-                best_dist = dist;
-                best = Some(valve.valve_id);
-            }
-        }
-        best
+        ctx.operators.valve_at(pos, ctx.world_bounds.extent())
     }
 
     /// Snap parametric coordinate to 0.0 or 1.0 if within threshold.
@@ -110,26 +89,6 @@ impl ValveSegmentToolHandler {
         } else {
             t
         }
-    }
-
-    /// Half-width of a valve rectangle in world units.
-    pub fn valve_half_width(thickness: f32, world_extent: f32) -> f32 {
-        0.5 * thickness * THICKNESS_TO_WORLD + world_extent * VALVE_PAD_FRAC
-    }
-
-    /// True if `pos` lies inside the valve rectangle (oriented along the valve).
-    fn point_in_valve(pos: Vec2D, valve: &ValveSpan, half_width: f32) -> bool {
-        let (a, b) = (valve.p0, valve.p1);
-        let (dx, dy) = (b.x - a.x, b.y - a.y);
-        let len = (dx * dx + dy * dy).sqrt();
-        if len < 1e-6 {
-            return false;
-        }
-        let (ux, uy) = (dx / len, dy / len);
-        let (px, py) = (pos.x - a.x, pos.y - a.y);
-        let along = px * ux + py * uy; // distance along the valve from its start
-        let across = -px * uy + py * ux; // signed distance from the centre line
-        (0.0..=len).contains(&along) && across.abs() <= half_width
     }
 }
 
@@ -240,6 +199,15 @@ impl OperatorToolHandler for ValveSegmentToolHandler {
         ToolPreview::None
     }
 
+    fn hovered(&self, ctx: &ToolContext) -> Option<ObjectRef> {
+        let valve_id = match self.state {
+            ValveDrawState::Idle => Self::find_valve_at(ctx.cursor_world_pos, ctx)?,
+            ValveDrawState::Pressed { valve_id, .. } => valve_id,
+            ValveDrawState::Drawing { .. } => return None,
+        };
+        Some(ObjectRef::Valve(valve_id))
+    }
+
     fn snap_indicators(&self, _ctx: &ToolContext) -> Vec<[f32; 2]> {
         Vec::new()
     }
@@ -252,7 +220,7 @@ impl OperatorToolHandler for ValveSegmentToolHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::application::renderer_snapshot::OperatorSnapshot;
+    use crate::application::renderer_snapshot::{OperatorSnapshot, ValveSpan};
     use crate::objects2d::{Rect, SimLineSegment};
 
     fn make_ctx_data(

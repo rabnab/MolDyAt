@@ -15,11 +15,13 @@
 //! backends.
 
 use crate::application::MainContent;
+use crate::application::operator_command::delete::DeleteObject;
 use crate::application::renderer_snapshot::{OperatorSnapshot, RendererSnapshot};
 use crate::graphics::energy_plot::{EnergyData, SharedEnergyData};
 use crate::graphics::renderer::ViewportTransform;
 use crate::graphics::renderer::margins::Margins;
 use crate::graphics::renderer::state_layers::RendererConfig;
+use crate::objects2d::wall_chain::ObjectRef;
 use crate::objects2d::{Rect, Vec2D};
 use std::sync::{Arc, Mutex};
 
@@ -274,7 +276,28 @@ impl UnifiedRenderState {
             valve_segment,
             snap_indicators,
             selected_sidebar_icon: self.selected_sidebar_icon(),
+            hovered: self.hovered_object(),
         }
+    }
+
+    /// The object the active tool reports under the cursor, if any.
+    pub(super) fn hovered_object(&self) -> Option<ObjectRef> {
+        let handler = self.render.tool_handler.as_deref()?;
+        handler.hovered(&self.make_tool_context())
+    }
+
+    /// Delete the hovered object, if any. The tool is reset first so it
+    /// can't keep dragging or toggling an object that no longer exists.
+    pub(super) fn delete_hovered_object(&mut self) {
+        let Some(target) = self.hovered_object() else {
+            return;
+        };
+        if let Some(handler) = self.render.tool_handler.as_mut() {
+            handler.reset();
+        }
+        self.physics
+            .send_command(DomainCommand::Operator(Box::new(DeleteObject { target })));
+        self.render.view_dirty = true;
     }
 
     /// Build a [`ToolContext`] from the current snapshot.

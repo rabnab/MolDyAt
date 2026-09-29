@@ -6,7 +6,7 @@
 
 use bytemuck::{Pod, Zeroable};
 use rust_thermo_core::application::AppResult;
-use rust_thermo_core::graphics::renderer::event_loop::valve_segment_tool::ValveSegmentToolHandler;
+use rust_thermo_core::objects2d::line_segment::valve_half_width;
 
 use crate::wgpu::gpu::batch::{BatchDesc, GpuBatch, SceneUniforms};
 use crate::wgpu::gpu::geometry::world_extent;
@@ -77,10 +77,7 @@ impl RenderPipeline for ValvePipeline {
             self.instances.push(ValveInstance {
                 p0: [valve.p0.x, valve.p0.y],
                 p1: [valve.p1.x, valve.p1.y],
-                half_width: ValveSegmentToolHandler::valve_half_width(
-                    valve.thickness,
-                    world_extent,
-                ),
+                half_width: valve.half_width(world_extent),
                 border,
                 style: if valve.is_closed {
                     STYLE_BLOCKING
@@ -105,7 +102,7 @@ impl RenderPipeline for ValvePipeline {
             self.instances.push(ValveInstance {
                 p0: [p0.x, p0.y],
                 p1: [p1.x, p1.y],
-                half_width: ValveSegmentToolHandler::valve_half_width(seg.thickness, world_extent),
+                half_width: valve_half_width(seg.thickness, world_extent),
                 border,
                 style: STYLE_PREVIEW,
             });

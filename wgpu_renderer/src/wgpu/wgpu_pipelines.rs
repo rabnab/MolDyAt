@@ -10,6 +10,7 @@ use crate::wgpu::pipelines::crosshair_pipeline::CrosshairPipeline;
 use crate::wgpu::pipelines::endpoint_pipeline::EndpointPipeline;
 use crate::wgpu::pipelines::frame_pipeline::FramePipeline;
 use crate::wgpu::pipelines::grid_pipeline::GridPipeline;
+use crate::wgpu::pipelines::highlight_pipeline::HighlightPipeline;
 use crate::wgpu::pipelines::line_pipeline::LinePipeline;
 use crate::wgpu::pipelines::sidebar_pipeline::SidebarPipeline;
 use crate::wgpu::pipelines::source_label_pipeline::SourceLabelPipeline;
@@ -79,6 +80,7 @@ impl WgpuPipelines {
         let endpoint = add(Box::new(EndpointPipeline::new(device, queue, format)));
         add(Box::new(ThermostatPipeline::new(device, queue, format)));
         let source_sphere = add(Box::new(SourceSpherePipeline::new(device, queue, format)));
+        add(Box::new(HighlightPipeline::new(device, queue, format)));
         let ball = add(Box::new(BallPipeline::new(device, queue, format)));
         let crosshair = add(Box::new(CrosshairPipeline::new(device, queue, format)));
         add(Box::new(ThermostatLabelPipeline::new(

@@ -9,6 +9,7 @@ use crate::application::operator_command::line::{
 };
 use crate::objects2d::Vec2D;
 use crate::objects2d::line_segment::{THICKNESS_TO_WORLD, snap_position};
+use crate::objects2d::wall_chain::ObjectRef;
 use winit::event::{ElementState, MouseButton};
 
 use super::operator_tool_handler::{OperatorToolHandler, ToolContext, ToolPreview, ToolResponse};
@@ -64,9 +65,9 @@ impl LineSegmentToolHandler {
     /// True if `p` is one of a wall's own two endpoints, as opposed to an
     /// internal piece boundary next to a valve (not draggable, no marker).
     fn is_wall_endpoint(p: Vec2D, ctx: &ToolContext) -> bool {
-        ctx.operators.wall_endpoints.iter().any(|(start, end)| {
-            p.distance_squared(start) < WALL_ENDPOINT_MATCH_SQ
-                || p.distance_squared(end) < WALL_ENDPOINT_MATCH_SQ
+        ctx.operators.walls.iter().any(|wall| {
+            p.distance_squared(&wall.start) < WALL_ENDPOINT_MATCH_SQ
+                || p.distance_squared(&wall.end) < WALL_ENDPOINT_MATCH_SQ
         })
     }
 
@@ -214,6 +215,28 @@ impl OperatorToolHandler for LineSegmentToolHandler {
         }
     }
 
+    fn hovered(&self, ctx: &ToolContext) -> Option<ObjectRef> {
+        let ops = ctx.operators;
+        let pos = ctx.cursor_world_pos;
+        let near_endpoint =
+            || Self::find_near_endpoint(pos, ctx).and_then(|(id, _)| ops.wall_of_piece(id));
+        let wall = match self.state {
+            LineSegmentDrawState::Idle => near_endpoint()
+                .or_else(|| Self::find_segment_at(pos, ctx).and_then(|id| ops.wall_of_piece(id)))
+                .or_else(|| {
+                    ops.valve_at(pos, ctx.world_bounds.extent())
+                        .and_then(|id| ops.wall_of_valve(id))
+                }),
+            LineSegmentDrawState::MovingEndpoint { segment_id, .. } => {
+                ops.wall_of_piece(segment_id)
+            }
+            // While drawing, only the wall whose endpoint the new wall would
+            // snap to, so its endpoint markers show up as a target.
+            LineSegmentDrawState::Drawing { .. } => near_endpoint(),
+        };
+        wall.map(|w| ObjectRef::Wall(w.chain_id))
+    }
+
     fn snap_indicators(&self, ctx: &ToolContext) -> Vec<[f32; 2]> {
         let mut indicators = Vec::new();
         if let LineSegmentDrawState::Drawing { start } = self.state {
@@ -239,13 +262,27 @@ impl OperatorToolHandler for LineSegmentToolHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::application::renderer_snapshot::OperatorSnapshot;
+    use crate::application::renderer_snapshot::{OperatorSnapshot, WallSnapshot};
     use crate::objects2d::{Rect, SimLineSegment};
 
-    /// Every segment is treated as its own unsplit wall.
+    /// A wall with the given id, endpoints and pieces (no valves).
+    fn wall(chain_id: usize, start: Vec2D, end: Vec2D, piece_ids: Vec<usize>) -> WallSnapshot {
+        WallSnapshot {
+            chain_id,
+            start,
+            end,
+            piece_ids,
+            valve_ids: Vec::new(),
+        }
+    }
+
+    /// Every segment is treated as its own unsplit wall, with chain id = segment id.
     fn make_ctx_data(segments: Vec<SimLineSegment>) -> (OperatorSnapshot, Rect) {
         let snap = OperatorSnapshot {
-            wall_endpoints: segments.iter().map(|s| (s.start, s.end)).collect(),
+            walls: segments
+                .iter()
+                .map(|s| wall(s.id, s.start, s.end, vec![s.id]))
+                .collect(),
             line_segments: segments,
             ..Default::default()
         };
@@ -520,7 +557,12 @@ mod tests {
         let right = SimLineSegment::new(1, Vec2D::new(6.0, 0.0), Vec2D::new(10.0, 0.0));
         let snap = OperatorSnapshot {
             line_segments: vec![left, right],
-            wall_endpoints: vec![(Vec2D::new(0.0, 0.0), Vec2D::new(10.0, 0.0))],
+            walls: vec![wall(
+                0,
+                Vec2D::new(0.0, 0.0),
+                Vec2D::new(10.0, 0.0),
+                vec![0, 1],
+            )],
             ..Default::default()
         };
         let world = Rect::new(-18.0, 12.0, 36.0, -24.0);

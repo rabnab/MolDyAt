@@ -2,6 +2,7 @@
 
 use super::{
     OperatorCollection, OperatorIdCounter, OperatorState, Rect, Vec2D, is_degenerate, remap_point,
+    remove_by_id,
 };
 
 /// Default thermostat target temperature in LJ reduced units.
@@ -125,6 +126,11 @@ impl ThermostatCollection {
         self.thermostats
             .iter_mut()
             .find(|thermostat| thermostat.id == id)
+    }
+
+    /// Remove the thermostat with `id`. Returns `false` if there was none.
+    pub fn remove(&mut self, id: usize) -> bool {
+        remove_by_id(&mut self.thermostats, id, |item| item.id)
     }
 }
 

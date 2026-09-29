@@ -6,7 +6,7 @@ use crate::application::sim_stats::SimStats;
 use crate::application::thermo_field::ThermoFieldHistory;
 use crate::objects2d::ball_cell::cell_grid::CellGrid;
 use crate::objects2d::ball_impl::{Ball2D, BallPhysics, ForceResult};
-use crate::objects2d::wall_chain::{Selection, WallChainCollection};
+use crate::objects2d::wall_chain::WallChainCollection;
 use crate::objects2d::{
     LineSegmentCollection, Rect, SourceSphereCollection, ThermostatCollection, ValveCollection,
     Vec2D, VerboseInfoMode,
@@ -56,9 +56,6 @@ pub struct SimulationWorld {
     /// structural layer that says which pieces and valves belong to the same
     /// wall, and in what order.
     pub(crate) wall_chains: WallChainCollection,
-    /// Currently hovered/selected object, for highlighting and (once
-    /// implemented) deletion. See `objects2d::wall_chain::Selection`.
-    pub(crate) selection: Selection,
     /// Source spheres that emit balls into the simulation.
     pub(crate) source_spheres: SourceSphereCollection,
     /// Nosé-Hoover thermostats that control local regions.
@@ -111,8 +108,8 @@ mod accessors;
 mod balls;
 mod ctor;
 mod line_segments;
+mod object_deletion;
 mod operators;
-mod selection;
 mod sim;
 mod simulation_engine;
 mod snapshot;

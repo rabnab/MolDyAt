@@ -10,6 +10,7 @@ mod simulation_engine;
 mod wall_momentum;
 
 mod line_segments;
+mod object_deletion;
 mod snapshot;
 mod source_spheres;
 mod thermostats;

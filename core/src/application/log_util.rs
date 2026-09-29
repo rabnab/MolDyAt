@@ -18,6 +18,7 @@ impl LogStuff for MainContent {
         const HELP_OPTION_TAB: &str = "TAB - Toggle the energy window.";
         const HELP_OPTION_H: &str = "H - Show this help message.";
         const HELP_OPTION_ESC: &str = "ESC - Clear all balls.";
+        const HELP_OPTION_DEL: &str = "DEL / BACKSPACE - Delete the highlighted object (hover it with its sidebar tool selected).";
         const HELP_OPTION_SPACE: &str = "SPACE - Pause or resume the simulation.";
         const HELP_OPTION_D: &str = "D - Toggle the display of real data.";
         let help_option_g = format!(
@@ -51,6 +52,7 @@ impl LogStuff for MainContent {
              {opt_tab}\n\
              {opt_h}\n\
              {opt_esc}\n\
+             {opt_del}\n\
              {opt_space}\n\
              {opt_d}\n\
              {opt_g}\n\
@@ -75,6 +77,7 @@ impl LogStuff for MainContent {
             opt_tab = HELP_OPTION_TAB,
             opt_h = HELP_OPTION_H,
             opt_esc = HELP_OPTION_ESC,
+            opt_del = HELP_OPTION_DEL,
             opt_space = HELP_OPTION_SPACE,
             opt_d = HELP_OPTION_D,
             opt_g = help_option_g,

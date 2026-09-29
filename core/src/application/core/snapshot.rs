@@ -1,8 +1,8 @@
 use crate::application::LogStuff;
 use crate::application::MainContent;
 use crate::application::renderer_snapshot::{
-    BallRenderData, OperatorSnapshot, RendererSnapshot, ThermoGridSpec, get_special_ball_color,
-    size_class_to_rgba,
+    BallRenderData, OperatorSnapshot, RendererSnapshot, ThermoGridSpec, WallSnapshot,
+    get_special_ball_color, size_class_to_rgba,
 };
 use crate::application::sim_stats::NORMAL_GRAVITY;
 use crate::application::thermo_field::ThermoGrid;
@@ -97,11 +97,17 @@ impl MainContent {
             cutoff_distance: self.world.physics.get_cutoff_distance(),
             operators: OperatorSnapshot {
                 line_segments: self.world.line_segments.segments().to_vec(),
-                wall_endpoints: self
+                walls: self
                     .world
                     .wall_chains
                     .chains()
-                    .map(|c| (c.start, c.end))
+                    .map(|c| WallSnapshot {
+                        chain_id: c.id,
+                        start: c.start,
+                        end: c.end,
+                        piece_ids: c.pieces.iter().map(|p| p.line_id).collect(),
+                        valve_ids: c.valve_ids().collect(),
+                    })
                     .collect(),
                 valve_spans: self.world.valve_spans(),
                 source_spheres: self.world.source_spheres.spheres().to_vec(),

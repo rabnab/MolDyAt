@@ -3,6 +3,7 @@ pub(crate) mod crosshair_pipeline;
 pub(crate) mod endpoint_pipeline;
 pub(crate) mod frame_pipeline;
 pub(crate) mod grid_pipeline;
+pub(crate) mod highlight_pipeline;
 pub(crate) mod line_pipeline;
 pub(crate) mod sidebar_pipeline;
 pub(crate) mod source_label_pipeline;

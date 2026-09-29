@@ -3,6 +3,7 @@ mod energy_window_manager;
 mod key_actions;
 mod key_state;
 mod mouse_input;
+mod object_hover;
 mod source_sphere_tool;
 mod thermostat_tool;
 mod tool_switch;

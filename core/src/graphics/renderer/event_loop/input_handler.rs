@@ -85,6 +85,8 @@ pub enum InputAction {
 
     // Operator panel
     SelectOperatorTool(OperatorTool),
+    /// Delete the object the active tool highlights under the cursor.
+    DeleteHovered,
     /// A self-contained operator command routed to the physics thread.
     OperatorAction(Box<dyn OperatorCommand>),
 }
@@ -208,12 +210,12 @@ impl InputHandler {
     pub fn handle_key_down(&mut self, key: KeyCode, is_repeat: bool) -> Option<InputAction> {
         self.register_key_pressed(key);
 
-        let _ = is_repeat;
-
         match key {
             KeyCode::Space => Some(InputAction::TogglePause),
             KeyCode::ControlLeft | KeyCode::ControlRight => None,
             KeyCode::Escape => Some(InputAction::ClearBalls),
+            // Backspace too: many laptop keyboards have no Delete key.
+            KeyCode::Delete | KeyCode::Backspace if !is_repeat => Some(InputAction::DeleteHovered),
             KeyCode::ShiftLeft | KeyCode::ShiftRight => Some(InputAction::EnableRandomBallSpeed),
             KeyCode::Minus | KeyCode::Equal => {
                 // These are handled separately for alt-key tracking

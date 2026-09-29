@@ -1,11 +1,12 @@
 //! Endpoint marker pipeline.
 //!
-//! Draws a small red square with a black outline at both endpoints of every
-//! wall (not at the internal boundaries created by valves), so endpoints are
-//! easy to see, grab and snap to. See `endpoint.wgsl`.
+//! Draws a small red square with a black outline at both endpoints of the
+//! highlighted wall only (never at the internal boundaries created by
+//! valves), so its endpoints are easy to see and grab. See `endpoint.wgsl`.
 
 use bytemuck::{Pod, Zeroable};
 use rust_thermo_core::application::AppResult;
+use rust_thermo_core::objects2d::wall_chain::ObjectRef;
 
 use crate::wgpu::gpu::batch::{BatchDesc, GpuBatch, SceneUniforms};
 use crate::wgpu::gpu::geometry::world_extent;
@@ -65,10 +66,19 @@ impl RenderPipeline for EndpointPipeline {
         let border = half_size * MARKER_BORDER_FRAC;
 
         self.instances.clear();
-        // Only each wall's own endpoints: the piece boundaries next to a
-        // valve are not draggable, so they get no marker.
-        for &(start, end) in &ctx.snapshot.operators.wall_endpoints {
-            for p in [start, end] {
+        // Only the hovered wall's own endpoints: the piece boundaries next
+        // to a valve are not draggable, so they get no marker.
+        let hovered_wall = match ctx.operator_previews.hovered {
+            Some(ObjectRef::Wall(chain_id)) => ctx
+                .snapshot
+                .operators
+                .walls
+                .iter()
+                .find(|w| w.chain_id == chain_id),
+            _ => None,
+        };
+        if let Some(wall) = hovered_wall {
+            for p in [wall.start, wall.end] {
                 self.instances.push(EndpointInstance {
                     center: [p.x, p.y],
                     half_size,

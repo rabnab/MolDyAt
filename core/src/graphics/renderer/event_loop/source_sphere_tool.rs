@@ -8,6 +8,7 @@ use crate::application::operator_command::source::{
     AdjustSourceSphereEmitPeriod, AdjustSourceSphereSpeed, CycleSourceSphereBallSize,
     PlaceSourceSphere, ToggleSourceSphere,
 };
+use crate::objects2d::wall_chain::ObjectRef;
 use crate::objects2d::{EMISSION_SPEED_STEP, SOURCE_SPHERE_RADIUS, Vec2D};
 use winit::event::{ElementState, MouseButton};
 
@@ -115,6 +116,10 @@ impl OperatorToolHandler for SourceSphereToolHandler {
 
     fn preview(&self, _ctx: &ToolContext) -> ToolPreview {
         ToolPreview::None
+    }
+
+    fn hovered(&self, ctx: &ToolContext) -> Option<ObjectRef> {
+        Self::find_source_sphere_at(ctx.cursor_world_pos, ctx).map(ObjectRef::SourceSphere)
     }
 
     fn snap_indicators(&self, _ctx: &ToolContext) -> Vec<[f32; 2]> {

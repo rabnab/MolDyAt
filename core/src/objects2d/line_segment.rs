@@ -9,6 +9,16 @@ use super::Vec2D;
 pub(crate) const DEFAULT_THICKNESS: f32 = 1.0;
 pub const THICKNESS_TO_WORLD: f32 = 1.0;
 
+/// Extra half-width of a valve's rectangle beyond its wall, as a fraction of
+/// the world extent, so thin valves stay visible and clickable.
+pub const VALVE_PAD_FRAC: f32 = 0.008;
+
+/// Half-width (world units) of the rectangle a valve is drawn and hit-tested
+/// as, for a wall of `thickness` in a world whose larger side is `world_extent`.
+pub fn valve_half_width(thickness: f32, world_extent: f32) -> f32 {
+    0.5 * thickness * THICKNESS_TO_WORLD + world_extent * VALVE_PAD_FRAC
+}
+
 /// A line segment barrier in simulation space.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SimLineSegment {

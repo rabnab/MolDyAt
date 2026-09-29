@@ -5,6 +5,7 @@ use crate::application::operator_command::thermostat::{
     ToggleThermostat,
 };
 use crate::objects2d::Vec2D;
+use crate::objects2d::wall_chain::ObjectRef;
 use winit::event::{ElementState, MouseButton};
 
 use super::operator_tool_handler::{OperatorToolHandler, ToolContext, ToolPreview, ToolResponse};
@@ -148,6 +149,16 @@ impl OperatorToolHandler for ThermostatToolHandler {
 
     fn preview(&self, _ctx: &ToolContext) -> ToolPreview {
         ToolPreview::None
+    }
+
+    fn hovered(&self, ctx: &ToolContext) -> Option<ObjectRef> {
+        let thermostat_id = match self.drag_state {
+            DragState::Idle => Self::find_thermostat_at(ctx.cursor_world_pos, ctx)?,
+            DragState::Pressed { thermostat_id, .. } | DragState::Dragging { thermostat_id } => {
+                thermostat_id
+            }
+        };
+        Some(ObjectRef::Thermostat(thermostat_id))
     }
 
     fn snap_indicators(&self, _ctx: &ToolContext) -> Vec<[f32; 2]> {

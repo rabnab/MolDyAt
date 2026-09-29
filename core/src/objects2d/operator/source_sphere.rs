@@ -2,6 +2,7 @@
 
 use super::{
     OperatorCollection, OperatorIdCounter, OperatorState, Rect, Vec2D, is_degenerate, remap_point,
+    remove_by_id,
 };
 
 // ── Source Sphere ────────────────────────────────────────────────────
@@ -150,6 +151,11 @@ impl SourceSphereCollection {
     /// Find a sphere by ID (mutable).
     pub fn find_mut(&mut self, id: usize) -> Option<&mut SimSourceSphere> {
         self.spheres.iter_mut().find(|s| s.id == id)
+    }
+
+    /// Remove the source sphere with `id`. Returns `false` if there was none.
+    pub fn remove(&mut self, id: usize) -> bool {
+        remove_by_id(&mut self.spheres, id, |item| item.id)
     }
 }
 

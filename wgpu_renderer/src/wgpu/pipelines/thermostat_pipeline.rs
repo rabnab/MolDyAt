@@ -17,7 +17,7 @@ use crate::wgpu::gpu::textures::{ICON_THERMO, mipmapped_icon};
 use crate::wgpu::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
 
 /// Icon half-size as a fraction of the world extent (tune to taste).
-const ICON_HALF_SIZE_FRAC: f32 = 0.02;
+pub(crate) const ICON_HALF_SIZE_FRAC: f32 = 0.02;
 
 /// Zone instance. Layout must match `Inst` in thermostat_zone.wgsl.
 #[repr(C)]

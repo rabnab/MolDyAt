@@ -47,9 +47,7 @@ pub enum Joint {
     },
     /// A deleted valve's permanent hole: no collision, no rendering, but
     /// keeps its fractional span so the chain still stretches correctly
-    /// around it. (Deletion itself is not yet implemented -- see
-    /// `Selection::delete_selected` -- this variant is the landing spot
-    /// for it.)
+    /// around it (see `SimulationWorld::delete_object`).
     Gap { t_start: f32, t_end: f32 },
 }
 
@@ -111,6 +109,14 @@ impl WallChain {
         )
     }
 
+    /// Ids of every valve cut into this chain.
+    pub fn valve_ids(&self) -> impl Iterator<Item = usize> + '_ {
+        self.joints.iter().filter_map(|joint| match joint {
+            Joint::Valve { valve_id, .. } => Some(*valve_id),
+            Joint::Gap { .. } => None,
+        })
+    }
+
     /// True if `line_id` is one of this chain's pieces.
     pub fn contains_piece(&self, line_id: usize) -> bool {
         self.pieces.iter().any(|p| p.line_id == line_id)
@@ -149,6 +155,26 @@ impl WallChainCollection {
 
     pub fn chains(&self) -> impl Iterator<Item = &WallChain> {
         self.chains.iter()
+    }
+
+    /// Remove chain `id`, returning it so the caller can drop its pieces and
+    /// valves from their own collections.
+    pub fn remove(&mut self, id: usize) -> Option<WallChain> {
+        let index = self.chains.iter().position(|c| c.id == id)?;
+        Some(self.chains.remove(index))
+    }
+
+    /// Mutable twin of `find_valve_joint`.
+    pub fn find_valve_joint_mut(&mut self, valve_id: usize) -> Option<(&mut WallChain, usize)> {
+        self.chains.iter_mut().find_map(|chain| {
+            chain
+                .joints
+                .iter()
+                .position(
+                    |joint| matches!(joint, Joint::Valve { valve_id: id, .. } if *id == valve_id),
+                )
+                .map(|index| (chain, index))
+        })
     }
 
     /// Find the chain that owns piece `line_id`, if any. Every piece should
@@ -209,35 +235,14 @@ impl OperatorCollection for WallChainCollection {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-// General object selection / highlighting
-// ─────────────────────────────────────────────────────────────────────────
-
-/// A reference to any interactive object in the simulation world. Used for
-/// hover/selection highlighting now, and as the landing spot for a future
-/// "delete selected" action -- deliberately flat and `Copy` so it's cheap to
-/// store and compare, and deliberately NOT tied to any one object type's
-/// collection, so a single `Selection` can represent "the user is pointing
-/// at a wall piece" just as well as "...a valve" or "...a thermostat" without
-/// each tool inventing its own hover-tracking.
+/// A reference to any operator object in the simulation world: what a tool
+/// reports as hovered (for highlighting) and what `Delete` removes. Flat and
+/// `Copy` so it is cheap to store, compare and send to the physics thread.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ObjectRef {
-    /// A single wall piece (`SimLineSegment` id) -- NOT a whole chain. Most
-    /// interactions (thickness, endpoint drag) are already per-piece; only
-    /// "drag the wall's own endpoint" and (once implemented) "delete this
-    /// wall" need to resolve the owning chain first.
-    WallPiece(usize),
+    /// A whole wall (`WallChain` id), including every piece and valve on it.
+    Wall(usize),
     Valve(usize),
     SourceSphere(usize),
     Thermostat(usize),
-}
-
-/// What's currently hovered/selected. Lives once on `SimulationWorld` so
-/// every tool and the renderer share a single source of truth instead of
-/// each tool tracking its own ad hoc hover state, and so highlighting a
-/// valve (say) doesn't require the valve tool specifically to be active.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct Selection {
-    pub hovered: Option<ObjectRef>,
-    pub selected: Option<ObjectRef>,
 }
