@@ -185,7 +185,8 @@ impl SimulationEngine {
         let cutoff_and_skin =
             world.physics.get_cutoff_distance() + world.physics.get_skin_thickness();
         let max_radius = BallFactory::get_max_radius();
-        let min_movement = world.physics.get_min_movement_for_update_hood(max_radius);
+        let min_movement = world.physics.get_min_movement_for_update_hood(max_radius)
+            * world.neighbor_movement_fault_scale();
         let cell_grid = &world.cell_grid;
         let balls = &mut world.balls;
         let (grid_rows, grid_cols) = cell_grid.get_grid_size();
@@ -298,6 +299,7 @@ impl SimulationEngine {
         stats_accumulator: &mut StatsAccumulator,
     ) -> (f32, f32) {
         let gravity = world.physics.constants.gravity;
+        let restitution = world.wall_restitution_fault();
         let ball = &mut world.balls[ball_idx];
 
         let mut wall_px = 0.0;
@@ -318,12 +320,12 @@ impl SimulationEngine {
             }
 
             let v_after_bounce_x = if bounce_info.bounced_x {
-                -v_at_collision_x
+                -restitution * v_at_collision_x
             } else {
                 v_at_collision_x
             };
             let v_after_bounce_y = if bounce_info.bounced_y {
-                -v_at_collision_y
+                -restitution * v_at_collision_y
             } else {
                 v_at_collision_y
             };

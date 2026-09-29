@@ -1,7 +1,9 @@
 use super::{DT_GOAL, create_main_content_for_region};
 use crate::application::{GameLogic, MainContent};
 use crate::objects2d::Vec2D;
-use crate::objects2d::ball_impl::BallFactory;
+use crate::objects2d::ball_impl::{BallFactory, BallId};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 
 #[derive(Debug, Clone, Copy)]
 pub struct DriftHarnessConfig {
@@ -31,9 +33,23 @@ pub struct DriftSample {
     pub max_overlap_depth: f32,
     pub cap_hit_ratio: f32,
     pub ball_count: usize,
-    /// Pairs within the LJ cutoff that are missing from both neighbour lists
-    /// (a stale Verlet list silently drops their interaction).
+}
+
+/// Pair diagnostics collected after every step (not only on sample steps), so
+/// short-lived artifacts such as a stale neighbour list are not missed.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct PairStepStats {
+    pub step: usize,
+    /// Pairs within the LJ cutoff that are missing from either neighbour list
+    /// (a stale Verlet list silently drops or halves their interaction).
     pub missed_neighbor_pairs: usize,
+    /// Pairs listed by only one of the two balls (one-sided force).
+    pub asymmetric_neighbor_pairs: usize,
+    /// Deepest edge overlap this step as (id_a, id_b, depth).
+    pub deepest_overlap: Option<(BallId, BallId, f32)>,
+    pub cap_hits: usize,
+    pub pair_count: usize,
+    pub min_edge_distance: f32,
 }
 
 #[derive(Debug)]
@@ -41,12 +57,17 @@ pub struct DriftRunMetrics {
     pub initial: DriftSample,
     pub final_sample: DriftSample,
     pub samples: Vec<DriftSample>,
+    /// One entry per step, including step 0.
+    pub pair_history: Vec<PairStepStats>,
     pub steps: usize,
     pub dt: f32,
     /// Steps in which at least one ball rebuilt its neighbour list.
     pub neighbor_rebuild_count: usize,
     /// Per-ball neighbour-list rebuilds summed over the whole run.
     pub ball_rebuild_events: usize,
+    /// Hash of every sample, every step's pair stats and the final positions
+    /// and velocities (bit-exact).
+    pub trajectory_hash: u64,
 }
 
 impl DriftRunMetrics {
@@ -78,62 +99,119 @@ impl DriftRunMetrics {
 
     /// Fraction of (ball, step) slots in which a neighbour-list rebuild happened.
     pub fn ball_rebuild_rate(&self) -> f32 {
-        let slots = self.initial_ball_count() * self.steps;
+        let slots = self.initial.ball_count * self.steps;
         if slots == 0 {
             return 0.0;
         }
         self.ball_rebuild_events as f32 / slots as f32
     }
 
+    /// Largest per-step fraction of pairs sitting in the force-cap region.
     pub fn max_cap_hit_ratio(&self) -> f32 {
-        self.samples
+        self.pair_history
             .iter()
-            .map(|s| s.cap_hit_ratio)
+            .filter(|p| p.pair_count > 0)
+            .map(|p| p.cap_hits as f32 / p.pair_count as f32)
+            .fold(0.0f32, f32::max)
+    }
+
+    pub fn total_cap_hits(&self) -> usize {
+        self.pair_history.iter().map(|p| p.cap_hits).sum()
+    }
+
+    pub fn min_edge_distance(&self) -> f32 {
+        self.pair_history
+            .iter()
+            .map(|p| p.min_edge_distance)
+            .fold(f32::INFINITY, f32::min)
+    }
+
+    pub fn max_overlap_depth(&self) -> f32 {
+        self.pair_history
+            .iter()
+            .filter_map(|p| p.deepest_overlap.map(|(_, _, d)| d))
             .fold(0.0f32, f32::max)
     }
 
     pub fn max_missed_neighbor_pairs(&self) -> usize {
-        self.samples
+        self.pair_history
             .iter()
-            .map(|s| s.missed_neighbor_pairs)
+            .map(|p| p.missed_neighbor_pairs)
             .max()
             .unwrap_or(0)
     }
 
-    /// Longest run of consecutive samples whose max overlap exceeds `depth`.
-    pub fn longest_overlap_streak(&self, depth: f32) -> usize {
-        let mut longest = 0usize;
+    pub fn first_missed_neighbor_step(&self) -> Option<usize> {
+        self.pair_history
+            .iter()
+            .find(|p| p.missed_neighbor_pairs > 0)
+            .map(|p| p.step)
+    }
+
+    pub fn max_asymmetric_neighbor_pairs(&self) -> usize {
+        self.pair_history
+            .iter()
+            .map(|p| p.asymmetric_neighbor_pairs)
+            .max()
+            .unwrap_or(0)
+    }
+
+    pub fn first_asymmetric_neighbor_step(&self) -> Option<usize> {
+        self.pair_history
+            .iter()
+            .find(|p| p.asymmetric_neighbor_pairs > 0)
+            .map(|p| p.step)
+    }
+
+    /// Longest run of consecutive steps in which the *same* pair is the
+    /// deepest overlap and deeper than `depth`: (steps, pair ids).
+    pub fn longest_overlap_streak(&self, depth: f32) -> (usize, Option<(BallId, BallId)>) {
+        let mut longest = (0usize, None);
         let mut current = 0usize;
-        for s in &self.samples {
-            if s.max_overlap_depth > depth {
-                current += 1;
-                longest = longest.max(current);
-            } else {
-                current = 0;
+        let mut current_pair = None;
+        for p in &self.pair_history {
+            match p.deepest_overlap {
+                Some((a, b, d)) if d > depth => {
+                    if current_pair == Some((a, b)) {
+                        current += 1;
+                    } else {
+                        current = 1;
+                        current_pair = Some((a, b));
+                    }
+                    if current > longest.0 {
+                        longest = (current, current_pair);
+                    }
+                }
+                _ => {
+                    current = 0;
+                    current_pair = None;
+                }
             }
         }
         longest
     }
 
-    fn initial_ball_count(&self) -> usize {
-        self.initial.ball_count
-    }
-
     /// One machine-readable summary line per scenario (see `docs/drift-test.md`).
     pub fn report(&self, scenario: &str, passed: bool) {
         println!(
-            "DRIFT_SCENARIO name={} steps={} dt={} balls={} max_rel_energy_drift={:.3e} final_rel_energy_drift={:.3e} rel_momentum_drift={:.3e} max_cap_hit_ratio={:.3e} rebuild_steps={} ball_rebuild_rate={:.3e} max_missed_neighbor_pairs={} result={}",
+            "DRIFT_SCENARIO name={} steps={} dt={} balls={} final_balls={} max_rel_energy_drift={:.3e} final_rel_energy_drift={:.3e} rel_momentum_drift={:.3e} max_cap_hit_ratio={:.3e} cap_hits={} min_edge_distance={:.3} max_overlap_depth={:.3e} rebuild_steps={} ball_rebuild_rate={:.3e} max_missed_neighbor_pairs={} max_asymmetric_neighbor_pairs={} trajectory_hash={:016x} result={}",
             scenario,
             self.steps,
             self.dt,
             self.initial.ball_count,
+            self.final_sample.ball_count,
             self.max_relative_energy_drift(),
             self.relative_energy_drift(),
             self.relative_momentum_drift(),
             self.max_cap_hit_ratio(),
+            self.total_cap_hits(),
+            self.min_edge_distance(),
+            self.max_overlap_depth(),
             self.neighbor_rebuild_count,
             self.ball_rebuild_rate(),
             self.max_missed_neighbor_pairs(),
+            self.max_asymmetric_neighbor_pairs(),
+            self.trajectory_hash,
             if passed { "pass" } else { "fail" }
         );
     }
@@ -197,10 +275,12 @@ pub fn run_drift_harness_with_observer(
     mut observe: impl FnMut(usize, &MainContent),
 ) -> DriftRunMetrics {
     let mut samples = Vec::new();
+    let mut pair_history = Vec::with_capacity(cfg.steps + 1);
     let mut neighbor_rebuild_count = 0usize;
     let mut ball_rebuild_events = 0usize;
     let initial = sample_step(main_content, 0);
     samples.push(initial);
+    pair_history.push(pair_step_stats(main_content, 0));
 
     // Track last_update_hood_pos to detect when neighbour lists were rebuilt.
     let mut prev_last_update: Vec<_> = main_content
@@ -244,6 +324,7 @@ pub fn run_drift_harness_with_observer(
             .map(|b| b.last_update_hood_pos)
             .collect();
 
+        pair_history.push(pair_step_stats(main_content, step));
         observe(step, main_content);
 
         let should_sample =
@@ -254,15 +335,95 @@ pub fn run_drift_harness_with_observer(
     }
 
     let final_sample = *samples.last().expect("at least one sample");
+    let trajectory_hash = trajectory_hash(main_content, &samples, &pair_history);
     DriftRunMetrics {
         initial,
         final_sample,
         samples,
+        pair_history,
         steps: cfg.steps,
         dt: cfg.dt,
         neighbor_rebuild_count,
         ball_rebuild_events,
+        trajectory_hash,
     }
+}
+
+fn trajectory_hash(
+    main_content: &MainContent,
+    samples: &[DriftSample],
+    pair_history: &[PairStepStats],
+) -> u64 {
+    let mut h = DefaultHasher::new();
+    for s in samples {
+        s.step.hash(&mut h);
+        for v in [
+            s.kinetic,
+            s.potential,
+            s.total_energy,
+            s.momentum.x,
+            s.momentum.y,
+            s.max_overlap_depth,
+        ] {
+            v.to_bits().hash(&mut h);
+        }
+        s.ball_count.hash(&mut h);
+    }
+    for p in pair_history {
+        p.missed_neighbor_pairs.hash(&mut h);
+        p.asymmetric_neighbor_pairs.hash(&mut h);
+        p.cap_hits.hash(&mut h);
+        p.min_edge_distance.to_bits().hash(&mut h);
+    }
+    for b in &main_content.world().balls {
+        let pos = b.get_position();
+        for v in [pos.x, pos.y, b.v.x, b.v.y] {
+            v.to_bits().hash(&mut h);
+        }
+    }
+    h.finish()
+}
+
+fn pair_step_stats(main_content: &MainContent, step: usize) -> PairStepStats {
+    let world = main_content.world();
+    let balls = &world.balls;
+    let lj_cutoff = world.physics.constants.lj_cutoff;
+    let max_force = world.physics.constants.max_force;
+    let mut stats = PairStepStats {
+        step,
+        min_edge_distance: f32::INFINITY,
+        ..Default::default()
+    };
+
+    for i in 0..balls.len() {
+        for j in (i + 1)..balls.len() {
+            let center_dist = balls[j].get_position().dist(balls[i].get_position()).norm();
+            let edge_dist = center_dist - (balls[i].radius + balls[j].radius);
+            stats.pair_count += 1;
+            stats.min_edge_distance = stats.min_edge_distance.min(edge_dist);
+
+            let i_lists_j = balls[i].hood.is_a_neighbour_idx(j);
+            let j_lists_i = balls[j].hood.is_a_neighbour_idx(i);
+            if i_lists_j != j_lists_i {
+                stats.asymmetric_neighbor_pairs += 1;
+            }
+            if edge_dist < lj_cutoff && !(i_lists_j && j_lists_i) {
+                stats.missed_neighbor_pairs += 1;
+            }
+
+            if edge_dist < 0.0
+                && stats
+                    .deepest_overlap
+                    .is_none_or(|(_, _, depth)| -edge_dist > depth)
+            {
+                stats.deepest_overlap = Some((balls[i].get_id(), balls[j].get_id(), -edge_dist));
+            }
+            if max_force.is_finite() && world.physics.force(edge_dist).abs() >= max_force * 0.999 {
+                stats.cap_hits += 1;
+            }
+        }
+    }
+    stats
 }
 
 fn sample_step(main_content: &MainContent, step: usize) -> DriftSample {
@@ -275,8 +436,6 @@ fn sample_step(main_content: &MainContent, step: usize) -> DriftSample {
     let mut cap_hits = 0usize;
     let mut pair_count = 0usize;
     let max_force = world.physics.constants.max_force;
-    let lj_cutoff = world.physics.constants.lj_cutoff;
-    let mut missed_neighbor_pairs = 0usize;
 
     for ball in &world.balls {
         let speed_sq = ball.v.x * ball.v.x + ball.v.y * ball.v.y;
@@ -296,12 +455,6 @@ fn sample_step(main_content: &MainContent, step: usize) -> DriftSample {
             let edge_dist = center_dist - (world.balls[i].radius + world.balls[j].radius);
             potential += world.physics.potential(edge_dist);
             pair_count += 1;
-            if edge_dist < lj_cutoff
-                && !world.balls[i].hood.is_a_neighbour_idx(j)
-                && !world.balls[j].hood.is_a_neighbour_idx(i)
-            {
-                missed_neighbor_pairs += 1;
-            }
             if edge_dist < 0.0 {
                 max_overlap_depth = max_overlap_depth.max(-edge_dist);
             }
@@ -330,7 +483,6 @@ fn sample_step(main_content: &MainContent, step: usize) -> DriftSample {
         max_overlap_depth,
         cap_hit_ratio,
         ball_count: world.balls.len(),
-        missed_neighbor_pairs,
     }
 }
 

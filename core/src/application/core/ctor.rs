@@ -58,6 +58,8 @@ impl MainContent {
                 thermostats: Default::default(),
                 ghost_wall: None,
                 wall_chains: Default::default(),
+                #[cfg(test)]
+                test_faults: Default::default(),
             },
             game_data: seed.map_or_else(
                 <Self as GameLogic>::init_game_logic,
