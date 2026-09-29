@@ -56,6 +56,7 @@ impl MainContent {
                 valve_segments: Default::default(),
                 source_spheres: Default::default(),
                 thermostats: Default::default(),
+                ghost_wall: None,
                 wall_chains: Default::default(),
             },
             game_data: seed.map_or_else(

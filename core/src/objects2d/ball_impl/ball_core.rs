@@ -45,6 +45,10 @@ pub struct Ball2D {
     pub show_update_count: usize,
     /// The cell this ball currently occupies (row, col). None if not assigned to any cell.
     pub current_cell: Option<(usize, usize)>,
+    /// A wall appeared or changed on top of this ball (a valve closed, a wall
+    /// was drawn, moved or thickened over it). Until it no longer touches any
+    /// wall, it passes through the walls it overlaps instead of being pushed.
+    pub leaving_wall: bool,
 }
 
 impl Default for Ball2D {
@@ -66,6 +70,7 @@ impl Default for Ball2D {
             tail: VecDeque::with_capacity(DEFAULT_TAIL_LENGTH),
             show_update_count: 0,
             current_cell: None,
+            leaving_wall: false,
         }
     }
 }

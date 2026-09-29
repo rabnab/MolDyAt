@@ -70,19 +70,82 @@ fn closed_valve_reflects_like_wall() {
     assert!(mc.world().balls[0].v.y > 0.0);
 }
 
+/// Step the balls' positions by `v * dt` and resolve wall collisions,
+/// `steps` times (no inter-ball forces, so only the walls act).
+fn move_and_collide(mc: &mut MainContent, steps: usize, dt: f32) {
+    for _ in 0..steps {
+        for ball in &mut mc.world_mut().balls {
+            let next = ball.get_position().add_scaled(&ball.v, dt);
+            ball.set_position_and_update_tail(next);
+        }
+        let _ = mc.resolve_line_segment_collisions();
+    }
+}
+
 #[test]
-fn closing_valve_pushes_overlapping_ball_out() {
+fn ball_caught_in_a_closing_valve_leaves_without_gaining_energy() {
     let mut mc = make_content_with_wall();
     mc.add_valve_segment(0, 0.0, 1.0, false);
 
     let mut ball = Ball2D::new(1, Vec2D::new(0.0, 0.1), (0, 1.0));
-    ball.v = Vec2D::new(0.0, 0.0);
+    ball.v = Vec2D::new(0.3, -5.0);
     mc.world_mut().balls.push(ball);
 
     let id = mc.world().valve_segments.valves()[0].id;
     mc.set_valve_closed(id, true);
+    assert_eq!(*mc.world().balls[0].get_position(), Vec2D::new(0.0, 0.1));
 
-    assert!(mc.world().balls[0].get_position().y.abs() >= 1.0);
+    move_and_collide(&mut mc, 30, 0.02);
+
+    let ball = &mc.world().balls[0];
+    assert!(
+        ball.get_position().y < -(ball.radius + 0.5),
+        "ball should have left the valve downwards: {:?}",
+        ball.get_position()
+    );
+    assert_eq!(
+        ball.v,
+        Vec2D::new(0.3, -5.0),
+        "speed and direction unchanged"
+    );
+}
+
+#[test]
+fn ball_trapped_near_a_valve_end_is_not_deflected_by_the_next_piece() {
+    let mut mc = make_content_with_wall();
+    // Valve over x = -5..5; piece 0 ends at x = -5 with a rounded cap.
+    mc.add_valve_segment(0, 0.25, 0.75, false);
+
+    // Centre inside the valve, body overlapping piece 0's end cap.
+    let mut ball = Ball2D::new(1, Vec2D::new(-4.8, 0.1), (0, 1.0));
+    ball.v = Vec2D::new(0.0, -5.0);
+    mc.world_mut().balls.push(ball);
+    let id = mc.world().valve_segments.valves()[0].id;
+    mc.set_valve_closed(id, true);
+
+    let _ = mc.resolve_line_segment_collisions();
+
+    assert_eq!(mc.world().balls[0].v, Vec2D::new(0.0, -5.0));
+    assert_eq!(*mc.world().balls[0].get_position(), Vec2D::new(-4.8, 0.1));
+}
+
+#[test]
+fn ball_approaching_a_closed_valve_from_outside_still_bounces() {
+    let mut mc = make_content_with_wall();
+    mc.add_valve_segment(0, 0.25, 0.75, true);
+
+    let mut ball = Ball2D::new(1, Vec2D::new(0.0, 3.0), (0, 1.0));
+    ball.v = Vec2D::new(0.0, -5.0);
+    mc.world_mut().balls.push(ball);
+
+    move_and_collide(&mut mc, 30, 0.02);
+
+    let ball = &mc.world().balls[0];
+    assert!(ball.get_position().y > 0.0, "ball must stay above the wall");
+    assert!(
+        (ball.v.norm() - 5.0).abs() < 1e-4,
+        "elastic bounce keeps speed"
+    );
 }
 
 #[test]
@@ -141,9 +204,10 @@ fn closed_valve_collides_at_wall_thickness_changed_after_creation() {
     // Thicken piece 0 from 1.0 to 4.0 (half-thickness 2.0).
     mc.change_thickness(0, 3);
 
-    // Above the valve centre, outside the old reach (0.5 + radius) but
-    // inside the new one (2.0 + radius), and far from the pieces' ends.
-    let mut ball = Ball2D::new(1, Vec2D::new(0.0, 1.5), (0, 1.0));
+    // Above the valve centre: outside the old reach (0.5 + radius) and
+    // outside the new wall body (2.0), but inside the new reach
+    // (2.0 + radius), and far from the pieces' ends.
+    let mut ball = Ball2D::new(1, Vec2D::new(0.0, 2.2), (0, 1.0));
     ball.v = Vec2D::new(0.0, -5.0);
     mc.world_mut().balls.push(ball);
 

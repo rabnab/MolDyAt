@@ -19,6 +19,18 @@ pub fn valve_half_width(thickness: f32, world_extent: f32) -> f32 {
     0.5 * thickness * THICKNESS_TO_WORLD + world_extent * VALVE_PAD_FRAC
 }
 
+/// A wall the user is still drawing or dragging (the yellow ghost line).
+/// It collides like a real wall, and balls it lands on are flagged to leave
+/// it on their own (see `Ball2D::leaving_wall`). A dragged wall's ghost is
+/// one solid capsule from end to end: it ignores the wall's open valves and
+/// gaps until the drag is released.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GhostWall {
+    pub start: Vec2D,
+    pub end: Vec2D,
+    pub thickness: f32,
+}
+
 /// A line segment barrier in simulation space.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SimLineSegment {

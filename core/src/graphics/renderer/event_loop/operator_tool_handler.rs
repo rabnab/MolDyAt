@@ -51,8 +51,13 @@ pub enum ToolPreview {
     /// No preview to render.
     #[default]
     None,
-    /// Ghost line segment from `start` to `end` (world coordinates).
-    LineSegment { start: [f32; 2], end: [f32; 2] },
+    /// Ghost wall from `start` to `end` (world coordinates), `thickness`
+    /// in the same units as `SimLineSegment::thickness`.
+    LineSegment {
+        start: [f32; 2],
+        end: [f32; 2],
+        thickness: f32,
+    },
     /// Ghost valve overlay on `line_id` from `t_start` to `t_end`.
     ValveSegment {
         line_id: usize,

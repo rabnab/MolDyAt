@@ -9,6 +9,7 @@ mod simulation;
 mod simulation_engine;
 mod wall_momentum;
 
+mod ghost_wall;
 mod line_segments;
 mod object_deletion;
 mod snapshot;

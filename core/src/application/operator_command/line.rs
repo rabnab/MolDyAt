@@ -3,6 +3,7 @@
 use crate::application::MainContent;
 use crate::application::operator_command::OperatorCommand;
 use crate::objects2d::Vec2D;
+use crate::objects2d::line_segment::GhostWall;
 
 /// Add a new line-segment barrier from `start` to `end`.
 #[derive(Debug)]
@@ -29,6 +30,19 @@ pub struct MoveLineSegmentEndpoint {
 impl OperatorCommand for MoveLineSegmentEndpoint {
     fn execute(self: Box<Self>, content: &mut MainContent) {
         content.move_line_segment_endpoint(self.segment_id, self.new_pos, self.move_start);
+    }
+}
+
+/// Set (or clear, with `None`) the wall currently being drawn or dragged,
+/// so it collides like a real wall before it is committed.
+#[derive(Debug)]
+pub struct SetGhostWall {
+    pub ghost: Option<GhostWall>,
+}
+
+impl OperatorCommand for SetGhostWall {
+    fn execute(self: Box<Self>, content: &mut MainContent) {
+        content.set_ghost_wall(self.ghost);
     }
 }
 

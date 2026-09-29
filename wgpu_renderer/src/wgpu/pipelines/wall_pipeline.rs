@@ -8,12 +8,9 @@ use rust_thermo_core::application::AppResult;
 use rust_thermo_core::objects2d::line_segment::THICKNESS_TO_WORLD;
 
 use crate::wgpu::gpu::batch::{BatchDesc, GpuBatch, SceneUniforms};
-use crate::wgpu::gpu::geometry::world_extent;
 use crate::wgpu::gpu::shaders;
 use crate::wgpu::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
 
-/// Wall thickness as a fraction of the world extent (tune to taste).
-const WALL_THICKNESS_FRAC: f32 = 0.006;
 const WALL_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 const WALL_PREVIEW_COLOR: [f32; 4] = [1.0, 1.0, 0.0, 0.5];
 
@@ -75,12 +72,13 @@ impl RenderPipeline for WallPipeline {
             });
         }
 
-        // Ghost preview while drawing a wall
-        if let Some((start, end)) = ctx.operator_previews.line_segment {
+        // Ghost wall while drawing a wall or dragging an endpoint, at its
+        // real thickness: it already collides like the wall it will become.
+        if let Some((start, end, thickness)) = ctx.operator_previews.line_segment {
             self.instances.push(WallInstance {
                 p0: start,
                 p1: end,
-                thickness: world_extent(ctx.snapshot) * WALL_THICKNESS_FRAC,
+                thickness: THICKNESS_TO_WORLD * thickness,
                 color: WALL_PREVIEW_COLOR,
             });
         }
