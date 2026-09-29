@@ -38,8 +38,9 @@ pub use unified_render_state::UnifiedRenderState;
 /// preview just extends this struct — no signature changes elsewhere.
 #[derive(Debug, Clone, Default)]
 pub struct FramePreviews {
-    /// Ghost-preview line segment while the user is drawing (world coords).
-    pub line_segment: Option<([f32; 2], [f32; 2])>,
+    /// Ghost wall while the user draws a wall or drags a wall endpoint:
+    /// `(start, end, thickness)` in world coordinates / wall thickness units.
+    pub line_segment: Option<([f32; 2], [f32; 2], f32)>,
     /// Ghost-preview valve segment while the user is drawing.
     /// `(line_id, t_start, t_end)` — resolve to world coords via committed segments.
     pub valve_segment: Option<(usize, f32, f32)>,

@@ -1,11 +1,6 @@
 use super::{MainContent, SimulationWorld};
 use crate::application::renderer_snapshot::ValveSpan;
-use crate::objects2d::SimLineSegment;
-use crate::objects2d::line_segment::THICKNESS_TO_WORLD;
 use crate::objects2d::wall_chain::Joint;
-
-/// Extra clearance when pushing balls out of a freshly closed valve.
-const CLOSE_PUSH_EPSILON: f32 = 0.01;
 
 impl MainContent {
     /// Add a valve on wall piece `line_id`, given as piece-local fractions
@@ -21,9 +16,8 @@ impl MainContent {
             .add_valve_on_piece(line_id, t_start, t_end, is_closed);
     }
 
-    /// Toggle a valve between open and closed states.
-    ///
-    /// If toggled to closed, overlapping balls are pushed out of the valve.
+    /// Open or close a valve. Balls inside it when it closes are not moved;
+    /// they leave through either side on their own.
     pub(crate) fn set_valve_closed(&mut self, valve_id: usize, is_closed: bool) {
         self.world.set_valve_closed(valve_id, is_closed);
     }
@@ -40,32 +34,10 @@ impl SimulationWorld {
             return;
         };
         self.valve_segments.get_mut(idx).is_closed = is_closed;
-
-        if !is_closed {
-            return;
-        }
-
-        let Some(thickness) = self.valve_thickness(valve_id) else {
-            return;
-        };
-        let Some((p0, p1)) = self.wall_chains.valve_span(valve_id) else {
-            return;
-        };
-        let span = SimLineSegment::new(0, p0, p1);
-        let half_thickness = 0.5 * thickness * THICKNESS_TO_WORLD;
-
-        for ball in &mut self.balls {
-            let closest = span.closest_point(ball.get_position());
-            let to_ball = closest.dist(ball.get_position());
-            let center_dist = to_ball.norm();
-            let min_dist = ball.radius + half_thickness + CLOSE_PUSH_EPSILON;
-            if center_dist >= min_dist || center_dist < 1e-12 {
-                continue;
-            }
-            let normal = to_ball.scaled(1.0 / center_dist);
-            let overlap = min_dist - center_dist;
-            let corrected = ball.get_position().add_scaled(&normal, overlap);
-            ball.set_position_and_update_tail(corrected);
+        // Balls in the span when it closes are not moved: they leave on
+        // their own (see `resolve_line_segment_collisions`).
+        if is_closed {
+            self.flag_balls_overlapping_valve(valve_id);
         }
     }
 

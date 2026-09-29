@@ -60,6 +60,8 @@ pub struct SimulationWorld {
     pub(crate) source_spheres: SourceSphereCollection,
     /// Nosé-Hoover thermostats that control local regions.
     pub(crate) thermostats: ThermostatCollection,
+    /// Wall being drawn or dragged right now; collides like a real wall.
+    pub(crate) ghost_wall: Option<crate::objects2d::line_segment::GhostWall>,
 }
 
 /// Physics-thread owner that pairs a [`SimulationWorld`] with runtime bookkeeping.

@@ -27,6 +27,7 @@ impl SimulationWorld {
         for col in self.operator_collections_mut() {
             col.clear();
         }
+        self.ghost_wall = None;
     }
 
     /// Rescale all operator positions when the world region changes size.
@@ -34,6 +35,9 @@ impl SimulationWorld {
         for col in self.operator_collections_mut() {
             col.rescale(old_rect, new_rect);
         }
+        // Stale after a resize; the wall tool sends a fresh one on the next
+        // cursor move.
+        self.ghost_wall = None;
     }
 }
 

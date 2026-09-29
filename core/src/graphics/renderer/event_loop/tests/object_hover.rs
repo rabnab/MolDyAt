@@ -213,9 +213,12 @@ fn delete_hovered_sends_delete_for_the_highlighted_object() {
     InputOrchestrator::process_action(&mut state, InputAction::DeleteHovered, None, None);
 
     let commands = log.lock().expect("command log lock");
-    assert_eq!(commands.len(), 1, "got: {commands:?}");
-    assert!(commands[0].contains("DeleteObject"), "got: {commands:?}");
-    assert!(commands[0].contains("Wall(4)"), "got: {commands:?}");
+    let deletes: Vec<&String> = commands
+        .iter()
+        .filter(|c| c.contains("DeleteObject"))
+        .collect();
+    assert_eq!(deletes.len(), 1, "got: {commands:?}");
+    assert!(deletes[0].contains("Wall(4)"), "got: {commands:?}");
 }
 
 #[test]
@@ -265,5 +268,30 @@ fn cursor_moving_onto_or_off_an_object_redraws() {
     assert!(
         state.render.view_dirty,
         "moving off the sphere should redraw"
+    );
+}
+
+#[test]
+fn switching_tools_mid_drag_clears_the_ghost_wall() {
+    let (physics, log) = PhysicsCoordinator::new_recording();
+    let mut state = build_state(physics, operators());
+    state.select_operator_tool(OperatorTool::LineSegment);
+    let start = Vec2D::new(0.0, 8.0);
+    state.input.set_cursor_pos(start, [640.0, 360.0]);
+    state.render.cursor_world_pos = start;
+    InputOrchestrator::handle_mouse_input_event(
+        &mut state,
+        winit::event::MouseButton::Left,
+        winit::event::ElementState::Pressed,
+    );
+    state.render.cursor_world_pos = Vec2D::new(5.0, 8.0);
+
+    state.select_operator_tool(OperatorTool::Thermostat);
+
+    let commands = log.lock().expect("command log lock");
+    assert_eq!(
+        commands.last().map(String::as_str),
+        Some("Operator(SetGhostWall { ghost: None })"),
+        "got: {commands:?}"
     );
 }

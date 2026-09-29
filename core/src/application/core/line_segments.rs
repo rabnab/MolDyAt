@@ -1,8 +1,6 @@
 use super::{MainContent, SimulationWorld};
 use crate::objects2d::Vec2D;
-// Single source of truth for thickness units, shared with the renderer.
-// Add to objects2d/line_segment.rs:  pub const THICKNESS_TO_WORLD: f32 = 0.05;
-use crate::objects2d::line_segment::{DEFAULT_THICKNESS, THICKNESS_TO_WORLD};
+use crate::objects2d::line_segment::{DEFAULT_THICKNESS, GhostWall, THICKNESS_TO_WORLD};
 use crate::objects2d::wall_chain::{ChainPiece, Joint, WallChain};
 
 /// A plain capsule obstacle for collision purposes: either a chain piece or
@@ -15,9 +13,18 @@ pub(crate) struct Obstacle {
     start: Vec2D,
     end: Vec2D,
     thickness: f32,
+    /// The wall being drawn or dragged: collides, but its hits don't count
+    /// towards the wall momentum (pressure) totals.
+    ghost: bool,
 }
 
 impl Obstacle {
+    /// True if a ball of `radius` at `pos` touches the obstacle.
+    fn overlaps(&self, pos: &Vec2D, radius: f32) -> bool {
+        let half_thickness = 0.5 * self.thickness * THICKNESS_TO_WORLD;
+        self.closest_point(pos).dist(pos).norm() < radius + half_thickness + COLLISION_EPSILON
+    }
+
     fn length_sq(&self) -> f32 {
         let dx = self.end.x - self.start.x;
         let dy = self.end.y - self.start.y;
@@ -78,6 +85,10 @@ impl MainContent {
         self.world.change_line_thickness(segment_id, steps);
     }
 
+    pub(crate) fn set_ghost_wall(&mut self, ghost: Option<GhostWall>) {
+        self.world.set_ghost_wall(ghost);
+    }
+
     /// Resolve ball–line-segment collisions for all balls.
     ///
     /// Each wall is a capsule: its centre line inflated by half its thickness
@@ -99,7 +110,64 @@ impl SimulationWorld {
     /// the piece into a `WallChain`.)
     pub(crate) fn add_line_segment(&mut self, start: Vec2D, end: Vec2D) {
         let line_id = self.line_segments.add(start, end);
-        self.wall_chains.add(start, end, line_id);
+        let chain_id = self.wall_chains.add(start, end, line_id);
+        self.ghost_wall = None;
+        self.flag_balls_overlapping_chain(chain_id);
+    }
+
+    /// Set (or clear) the wall being drawn or dragged. It collides like a
+    /// real wall; balls it lands on are flagged to leave it on their own.
+    pub(crate) fn set_ghost_wall(&mut self, ghost: Option<GhostWall>) {
+        self.ghost_wall = ghost;
+        if let Some(g) = ghost {
+            self.flag_balls_overlapping(&Obstacle {
+                start: g.start,
+                end: g.end,
+                thickness: g.thickness,
+                ghost: true,
+            });
+        }
+    }
+
+    /// Mark every ball overlapping `obstacle` as `leaving_wall`: it was
+    /// there before the wall was, so it gets out on its own path instead of
+    /// being moved (which would add energy or land it on another ball).
+    fn flag_balls_overlapping(&mut self, obstacle: &Obstacle) {
+        for ball in &mut self.balls {
+            if obstacle.overlaps(ball.get_position(), ball.radius) {
+                ball.leaving_wall = true;
+            }
+        }
+    }
+
+    /// `flag_balls_overlapping` for every solid part (pieces and closed
+    /// valves) of chain `chain_id`.
+    fn flag_balls_overlapping_chain(&mut self, chain_id: usize) {
+        let Some(chain) = self.wall_chains.find(chain_id) else {
+            return;
+        };
+        let mut obstacles = Vec::new();
+        self.chain_obstacles(chain, &mut obstacles);
+        for obstacle in &obstacles {
+            self.flag_balls_overlapping(obstacle);
+        }
+    }
+
+    /// `flag_balls_overlapping` for valve `valve_id`'s span (called when it
+    /// closes).
+    pub(crate) fn flag_balls_overlapping_valve(&mut self, valve_id: usize) {
+        let (Some((start, end)), Some(thickness)) = (
+            self.wall_chains.valve_span(valve_id),
+            self.valve_thickness(valve_id),
+        ) else {
+            return;
+        };
+        self.flag_balls_overlapping(&Obstacle {
+            start,
+            end,
+            thickness,
+            ghost: false,
+        });
     }
 
     /// Move one of a chain's own two endpoints. `segment_id` is a PIECE id;
@@ -136,12 +204,22 @@ impl SimulationWorld {
         } else {
             chain.end = new_pos;
         }
+        let chain_id = chain.id;
         self.retarget_chain(segment_id);
+        self.ghost_wall = None;
+        self.flag_balls_overlapping_chain(chain_id);
     }
 
     pub(crate) fn change_line_thickness(&mut self, segment_id: usize, steps: i32) {
         if let Some(seg) = self.line_segments.find_mut(segment_id) {
             seg.thickness = f32::clamp(seg.thickness + steps as f32 * THICKNESS_STEP, 1.0, 20.0);
+        }
+        if let Some(chain_id) = self
+            .wall_chains
+            .find_containing_piece(segment_id)
+            .map(|c| c.id)
+        {
+            self.flag_balls_overlapping_chain(chain_id);
         }
     }
 
@@ -292,40 +370,53 @@ impl SimulationWorld {
     /// type ends up being called.
     pub(crate) fn collect_solid_obstacles(&self) -> Vec<Obstacle> {
         let mut obstacles = Vec::new();
-
         for chain in self.wall_chains.chains() {
-            for piece in &chain.pieces {
-                let Some(seg) = self.line_segments.find(piece.line_id) else {
-                    continue;
-                };
-                obstacles.push(Obstacle {
-                    start: seg.start,
-                    end: seg.end,
-                    thickness: seg.thickness,
-                });
-            }
+            self.chain_obstacles(chain, &mut obstacles);
+        }
+        if let Some(g) = self.ghost_wall {
+            obstacles.push(Obstacle {
+                start: g.start,
+                end: g.end,
+                thickness: g.thickness,
+                ghost: true,
+            });
+        }
+        obstacles
+    }
 
-            for (index, joint) in chain.joints.iter().enumerate() {
-                if let Joint::Valve {
-                    valve_id,
-                    t_start,
-                    t_end,
-                } = joint
-                    && let Some(valve) = self.valve_segments.find(*valve_id)
-                    && valve.is_closed
-                {
-                    obstacles.push(Obstacle {
-                        start: chain.point_at(*t_start),
-                        end: chain.point_at(*t_end),
-                        thickness: self.joint_thickness(chain, index),
-                    });
-                }
-                // Open Joint::Valve and Joint::Gap: no obstacle -- nothing
-                // to check, nothing to get wrong.
-            }
+    /// Append `chain`'s solid parts (see `collect_solid_obstacles`).
+    fn chain_obstacles(&self, chain: &WallChain, obstacles: &mut Vec<Obstacle>) {
+        for piece in &chain.pieces {
+            let Some(seg) = self.line_segments.find(piece.line_id) else {
+                continue;
+            };
+            obstacles.push(Obstacle {
+                start: seg.start,
+                end: seg.end,
+                thickness: seg.thickness,
+                ghost: false,
+            });
         }
 
-        obstacles
+        for (index, joint) in chain.joints.iter().enumerate() {
+            if let Joint::Valve {
+                valve_id,
+                t_start,
+                t_end,
+            } = joint
+                && let Some(valve) = self.valve_segments.find(*valve_id)
+                && valve.is_closed
+            {
+                obstacles.push(Obstacle {
+                    start: chain.point_at(*t_start),
+                    end: chain.point_at(*t_end),
+                    thickness: self.joint_thickness(chain, index),
+                    ghost: false,
+                });
+            }
+            // Open Joint::Valve and Joint::Gap: no obstacle -- nothing
+            // to check, nothing to get wrong.
+        }
     }
 
     /// Thickness of the joint `joint_index` of `chain`: the thicker of the
@@ -362,6 +453,16 @@ impl SimulationWorld {
     /// 1. Position-corrected so it no longer overlaps.
     /// 2. Velocity-reflected: `v' = v − 2(v · n̂) n̂` (elastic, |v| preserved).
     ///
+    /// A ball flagged `leaving_wall` (a wall appeared or changed on top of
+    /// it) passes through the walls it overlaps, keeping its path and speed,
+    /// and the flag is cleared once it touches no wall at all. With gravity,
+    /// a ball caught in a horizontal valve as it closes therefore falls
+    /// through it. Every other ball collides as usual, including one whose
+    /// centre got inside a wall in a single step: it is pushed back out.
+    ///
+    /// Hits on the ghost wall (being drawn or dragged) don't count towards
+    /// the returned momentum, so they don't distort the pressure readings.
+    ///
     /// Unlike the old implementation, there is NO per-ball valve lookup here
     /// at all: valve state was already resolved once, when the obstacle list
     /// was built, not per-contact -- which is what kept producing bugs
@@ -374,6 +475,15 @@ impl SimulationWorld {
         let mut total_py = 0.0_f32;
 
         let obstacles = self.collect_solid_obstacles();
+        for ball in &mut self.balls {
+            if ball.leaving_wall
+                && !obstacles
+                    .iter()
+                    .any(|o| o.overlaps(ball.get_position(), ball.radius))
+            {
+                ball.leaving_wall = false;
+            }
+        }
 
         for obstacle in &obstacles {
             if obstacle.length_sq() < 1e-12 {
@@ -386,6 +496,9 @@ impl SimulationWorld {
             let half_thickness = 0.5 * obstacle.thickness * THICKNESS_TO_WORLD;
 
             for ball in self.balls.iter_mut() {
+                if ball.leaving_wall && obstacle.overlaps(ball.get_position(), ball.radius) {
+                    continue; // was here before this wall: let it leave
+                }
                 let closest = obstacle.closest_point(ball.get_position());
                 let to_ball = closest.dist(ball.get_position());
                 let center_dist = to_ball.norm();
@@ -400,9 +513,8 @@ impl SimulationWorld {
                 let normal = if center_dist > 1e-12 {
                     to_ball.scaled(1.0 / center_dist)
                 } else {
-                    // Centre exactly on the centre line (possible with a thick
-                    // wall): use the obstacle's perpendicular, on the side
-                    // opposing the velocity.
+                    // Centre exactly on the centre line: use the obstacle's
+                    // perpendicular, on the side opposing the velocity.
                     let len = obstacle.length_sq().sqrt();
                     let n = Vec2D::new(
                         -(obstacle.end.y - obstacle.start.y) / len,
@@ -432,8 +544,10 @@ impl SimulationWorld {
                 ball.v.y -= 2.0 * v_dot_n * normal.y;
 
                 // Accumulate wall momentum for pressure calculation
-                total_px += 2.0 * ball.mass * v_dot_n * normal.x;
-                total_py += 2.0 * ball.mass * v_dot_n * normal.y;
+                if !obstacle.ghost {
+                    total_px += 2.0 * ball.mass * v_dot_n * normal.x;
+                    total_py += 2.0 * ball.mass * v_dot_n * normal.y;
+                }
             }
         }
 

@@ -16,6 +16,7 @@
 
 use crate::application::MainContent;
 use crate::application::operator_command::delete::DeleteObject;
+use crate::application::operator_command::line::SetGhostWall;
 use crate::application::renderer_snapshot::{OperatorSnapshot, RendererSnapshot};
 use crate::graphics::energy_plot::{EnergyData, SharedEnergyData};
 use crate::graphics::renderer::ViewportTransform;
@@ -163,10 +164,22 @@ impl UnifiedRenderState {
         self.render.active_tool == tool
     }
 
-    pub(super) fn select_operator_tool(&mut self, tool: OperatorTool) {
+    /// Return the active tool to idle, dropping any ghost wall it had sent
+    /// to the physics thread.
+    fn reset_tool_handler(&mut self) {
         if let Some(handler) = self.render.tool_handler.as_mut() {
             handler.reset();
         }
+        if self.render.active_tool == OperatorTool::LineSegment {
+            self.physics
+                .send_command(DomainCommand::Operator(Box::new(SetGhostWall {
+                    ghost: None,
+                })));
+        }
+    }
+
+    pub(super) fn select_operator_tool(&mut self, tool: OperatorTool) {
+        self.reset_tool_handler();
         self.render.active_tool = tool;
         self.render.tool_handler = Self::handler_for_tool(tool);
         self.render.config.draw_cursor = tool == OperatorTool::Ball;
@@ -259,7 +272,11 @@ impl UnifiedRenderState {
                 let preview = handler.preview(&ctx);
                 let snaps = handler.snap_indicators(&ctx);
                 match preview {
-                    ToolPreview::LineSegment { start, end } => (Some((start, end)), None, snaps),
+                    ToolPreview::LineSegment {
+                        start,
+                        end,
+                        thickness,
+                    } => (Some((start, end, thickness)), None, snaps),
                     ToolPreview::ValveSegment {
                         line_id,
                         t_start,
@@ -292,9 +309,7 @@ impl UnifiedRenderState {
         let Some(target) = self.hovered_object() else {
             return;
         };
-        if let Some(handler) = self.render.tool_handler.as_mut() {
-            handler.reset();
-        }
+        self.reset_tool_handler();
         self.physics
             .send_command(DomainCommand::Operator(Box::new(DeleteObject { target })));
         self.render.view_dirty = true;

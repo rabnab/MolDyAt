@@ -5,10 +5,12 @@
 //! helpers, ghost-preview queries, and the endpoint find/drag interaction.
 
 use crate::application::operator_command::line::{
-    AddLineSegment, ChangeLineThickness, MoveLineSegmentEndpoint,
+    AddLineSegment, ChangeLineThickness, MoveLineSegmentEndpoint, SetGhostWall,
 };
 use crate::objects2d::Vec2D;
-use crate::objects2d::line_segment::{THICKNESS_TO_WORLD, snap_position};
+use crate::objects2d::line_segment::{
+    DEFAULT_THICKNESS, GhostWall, THICKNESS_TO_WORLD, snap_position,
+};
 use crate::objects2d::wall_chain::ObjectRef;
 use winit::event::{ElementState, MouseButton};
 
@@ -43,12 +45,16 @@ pub enum LineSegmentDrawState {
 /// Self-contained handler for the line segment operator tool.
 pub struct LineSegmentToolHandler {
     pub state: LineSegmentDrawState,
+    /// Last ghost wall sent to the physics thread, so an unchanged ghost
+    /// (e.g. while the cursor stays snapped) isn't sent again.
+    last_sent_ghost: Option<GhostWall>,
 }
 
 impl LineSegmentToolHandler {
     pub fn new() -> Self {
         Self {
             state: LineSegmentDrawState::Idle,
+            last_sent_ghost: None,
         }
     }
 
@@ -91,6 +97,44 @@ impl LineSegmentToolHandler {
             }
         }
         best
+    }
+
+    /// The wall being drawn or dragged, with the cursor at `cursor`: the new
+    /// wall while drawing, or the whole dragged wall with its moved endpoint.
+    fn ghost_at(&self, cursor: Vec2D, ctx: &ToolContext) -> Option<GhostWall> {
+        match self.state {
+            LineSegmentDrawState::Idle => None,
+            LineSegmentDrawState::Drawing { start } => Some(GhostWall {
+                start,
+                end: Self::snap_world_pos(cursor, ctx),
+                thickness: DEFAULT_THICKNESS,
+            }),
+            LineSegmentDrawState::MovingEndpoint {
+                segment_id,
+                move_start,
+            } => {
+                let wall = ctx.operators.wall_of_piece(segment_id)?;
+                let moved = Self::snap_world_pos(cursor, ctx);
+                let (start, end) = if move_start {
+                    (moved, wall.end)
+                } else {
+                    (wall.start, moved)
+                };
+                let thickness = ctx
+                    .operators
+                    .line_segments
+                    .iter()
+                    .filter(|seg| wall.piece_ids.contains(&seg.id))
+                    .map(|seg| seg.thickness)
+                    .reduce(f32::max)
+                    .unwrap_or(DEFAULT_THICKNESS);
+                Some(GhostWall {
+                    start,
+                    end,
+                    thickness,
+                })
+            }
+        }
     }
 
     /// Squared distance from point `p` to the segment `a`–`b`.
@@ -154,7 +198,7 @@ impl OperatorToolHandler for LineSegmentToolHandler {
                         if start.distance_squared(&end) > 0.01 {
                             ToolResponse::consumed_with(Box::new(AddLineSegment { start, end }))
                         } else {
-                            ToolResponse::consumed_dirty()
+                            ToolResponse::consumed_with(Box::new(SetGhostWall { ghost: None }))
                         }
                     }
                     LineSegmentDrawState::MovingEndpoint {
@@ -171,13 +215,21 @@ impl OperatorToolHandler for LineSegmentToolHandler {
                     LineSegmentDrawState::Idle => ToolResponse::consumed_dirty(),
                 };
                 self.state = LineSegmentDrawState::Idle;
+                // Every release path above clears the physics ghost.
+                self.last_sent_ghost = None;
                 response
             }
         }
     }
 
-    fn handle_cursor_move(&mut self, _world_pos: Vec2D, _ctx: &ToolContext) -> ToolResponse {
-        ToolResponse::consumed_dirty()
+    fn handle_cursor_move(&mut self, world_pos: Vec2D, ctx: &ToolContext) -> ToolResponse {
+        let ghost = self.ghost_at(world_pos, ctx);
+        if ghost.is_some() && ghost != self.last_sent_ghost {
+            self.last_sent_ghost = ghost;
+            ToolResponse::consumed_with(Box::new(SetGhostWall { ghost }))
+        } else {
+            ToolResponse::consumed_dirty()
+        }
     }
 
     fn handle_scroll(
@@ -204,14 +256,13 @@ impl OperatorToolHandler for LineSegmentToolHandler {
     }
 
     fn preview(&self, ctx: &ToolContext) -> ToolPreview {
-        if let LineSegmentDrawState::Drawing { start } = self.state {
-            let snapped_end = Self::snap_world_pos(ctx.cursor_world_pos, ctx);
-            ToolPreview::LineSegment {
-                start: [start.x, start.y],
-                end: [snapped_end.x, snapped_end.y],
-            }
-        } else {
-            ToolPreview::None
+        match self.ghost_at(ctx.cursor_world_pos, ctx) {
+            Some(g) => ToolPreview::LineSegment {
+                start: [g.start.x, g.start.y],
+                end: [g.end.x, g.end.y],
+                thickness: g.thickness,
+            },
+            None => ToolPreview::None,
         }
     }
 
@@ -256,6 +307,7 @@ impl OperatorToolHandler for LineSegmentToolHandler {
 
     fn reset(&mut self) {
         self.state = LineSegmentDrawState::Idle;
+        self.last_sent_ghost = None;
     }
 }
 
@@ -376,7 +428,80 @@ mod tests {
         tool.handle_mouse_button(MouseButton::Left, ElementState::Pressed, pos, &ctx);
         let resp = tool.handle_mouse_button(MouseButton::Left, ElementState::Released, pos, &ctx);
         assert!(resp.consumed);
-        assert!(resp.action.is_none(), "Too-short segment should not commit");
+        let action = format!("{:?}", resp.action);
+        assert!(
+            action.contains("SetGhostWall { ghost: None }"),
+            "Too-short segment should only clear the ghost, got {action}"
+        );
+    }
+
+    #[test]
+    fn dragging_an_endpoint_sends_and_previews_the_moved_wall() {
+        let mut thick = SimLineSegment::new(7, Vec2D::new(3.0, 3.0), Vec2D::new(8.0, 3.0));
+        thick.thickness = 4.0;
+        let (snap, world) = make_ctx_data(vec![thick]);
+        let mut tool = LineSegmentToolHandler::new();
+        let ctx = make_tool_ctx(&snap, &world, Vec2D::zero());
+        tool.handle_mouse_button(
+            MouseButton::Left,
+            ElementState::Pressed,
+            Vec2D::new(3.1, 3.1),
+            &ctx,
+        );
+
+        let cursor = Vec2D::new(3.0, 9.0);
+        let resp = tool.handle_cursor_move(cursor, &ctx);
+        let action = format!("{:?}", resp.action);
+        assert!(action.contains("SetGhostWall"), "got {action}");
+        assert!(action.contains("thickness: 4.0"), "got {action}");
+
+        let ctx = make_tool_ctx(&snap, &world, cursor);
+        match tool.preview(&ctx) {
+            ToolPreview::LineSegment {
+                start,
+                end,
+                thickness,
+            } => {
+                assert_eq!(start, [3.0, 9.0]);
+                assert_eq!(end, [8.0, 3.0]);
+                assert_eq!(thickness, 4.0);
+            }
+            other => panic!("expected a ghost wall, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn an_unchanged_ghost_is_sent_only_once() {
+        let (snap, world) = make_ctx_data(vec![]);
+        let mut tool = LineSegmentToolHandler::new();
+        let ctx = make_tool_ctx(&snap, &world, Vec2D::zero());
+        tool.handle_mouse_button(
+            MouseButton::Left,
+            ElementState::Pressed,
+            Vec2D::new(1.0, 1.0),
+            &ctx,
+        );
+
+        let first = tool.handle_cursor_move(Vec2D::new(5.0, 5.0), &ctx);
+        let same = tool.handle_cursor_move(Vec2D::new(5.0, 5.0), &ctx);
+        let moved = tool.handle_cursor_move(Vec2D::new(6.0, 5.0), &ctx);
+
+        assert!(first.action.is_some());
+        assert!(same.action.is_none());
+        assert!(same.view_dirty);
+        assert!(moved.action.is_some());
+    }
+
+    #[test]
+    fn idle_cursor_moves_send_no_ghost() {
+        let (snap, world) = make_ctx_data(vec![]);
+        let mut tool = LineSegmentToolHandler::new();
+        let ctx = make_tool_ctx(&snap, &world, Vec2D::zero());
+
+        let resp = tool.handle_cursor_move(Vec2D::new(1.0, 1.0), &ctx);
+
+        assert!(resp.action.is_none());
+        assert!(matches!(tool.preview(&ctx), ToolPreview::None));
     }
 
     #[test]

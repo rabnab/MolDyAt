@@ -104,7 +104,7 @@ fn populated_snapshot() -> RendererSnapshot {
 
 fn previews() -> FramePreviews {
     FramePreviews {
-        line_segment: Some(([2.0, 2.0], [8.0, 8.0])),
+        line_segment: Some(([2.0, 2.0], [8.0, 8.0], 1.0)),
         snap_indicators: vec![[5.0, 30.0]],
         selected_sidebar_icon: Some(1),
         hovered: Some(ObjectRef::Wall(0)),
