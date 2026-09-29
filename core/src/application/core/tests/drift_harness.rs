@@ -30,6 +30,10 @@ pub struct DriftSample {
     pub momentum_scale: f32,
     pub max_overlap_depth: f32,
     pub cap_hit_ratio: f32,
+    pub ball_count: usize,
+    /// Pairs within the LJ cutoff that are missing from both neighbour lists
+    /// (a stale Verlet list silently drops their interaction).
+    pub missed_neighbor_pairs: usize,
 }
 
 #[derive(Debug)]
@@ -37,7 +41,12 @@ pub struct DriftRunMetrics {
     pub initial: DriftSample,
     pub final_sample: DriftSample,
     pub samples: Vec<DriftSample>,
+    pub steps: usize,
+    pub dt: f32,
+    /// Steps in which at least one ball rebuilt its neighbour list.
     pub neighbor_rebuild_count: usize,
+    /// Per-ball neighbour-list rebuilds summed over the whole run.
+    pub ball_rebuild_events: usize,
 }
 
 impl DriftRunMetrics {
@@ -56,6 +65,77 @@ impl DriftRunMetrics {
     pub fn relative_momentum_drift(&self) -> f32 {
         let denom = self.initial.momentum_scale.max(1e-10);
         self.momentum_drift_magnitude() / denom
+    }
+
+    /// Largest relative energy deviation from the initial total over all samples.
+    pub fn max_relative_energy_drift(&self) -> f32 {
+        let denom = self.initial.total_energy.abs().max(1e-10);
+        self.samples
+            .iter()
+            .map(|s| (s.total_energy - self.initial.total_energy).abs() / denom)
+            .fold(0.0f32, f32::max)
+    }
+
+    /// Fraction of (ball, step) slots in which a neighbour-list rebuild happened.
+    pub fn ball_rebuild_rate(&self) -> f32 {
+        let slots = self.initial_ball_count() * self.steps;
+        if slots == 0 {
+            return 0.0;
+        }
+        self.ball_rebuild_events as f32 / slots as f32
+    }
+
+    pub fn max_cap_hit_ratio(&self) -> f32 {
+        self.samples
+            .iter()
+            .map(|s| s.cap_hit_ratio)
+            .fold(0.0f32, f32::max)
+    }
+
+    pub fn max_missed_neighbor_pairs(&self) -> usize {
+        self.samples
+            .iter()
+            .map(|s| s.missed_neighbor_pairs)
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// Longest run of consecutive samples whose max overlap exceeds `depth`.
+    pub fn longest_overlap_streak(&self, depth: f32) -> usize {
+        let mut longest = 0usize;
+        let mut current = 0usize;
+        for s in &self.samples {
+            if s.max_overlap_depth > depth {
+                current += 1;
+                longest = longest.max(current);
+            } else {
+                current = 0;
+            }
+        }
+        longest
+    }
+
+    fn initial_ball_count(&self) -> usize {
+        self.initial.ball_count
+    }
+
+    /// One machine-readable summary line per scenario (see `docs/drift-test.md`).
+    pub fn report(&self, scenario: &str, passed: bool) {
+        println!(
+            "DRIFT_SCENARIO name={} steps={} dt={} balls={} max_rel_energy_drift={:.3e} final_rel_energy_drift={:.3e} rel_momentum_drift={:.3e} max_cap_hit_ratio={:.3e} rebuild_steps={} ball_rebuild_rate={:.3e} max_missed_neighbor_pairs={} result={}",
+            scenario,
+            self.steps,
+            self.dt,
+            self.initial.ball_count,
+            self.max_relative_energy_drift(),
+            self.relative_energy_drift(),
+            self.relative_momentum_drift(),
+            self.max_cap_hit_ratio(),
+            self.neighbor_rebuild_count,
+            self.ball_rebuild_rate(),
+            self.max_missed_neighbor_pairs(),
+            if passed { "pass" } else { "fail" }
+        );
     }
 }
 
@@ -106,8 +186,19 @@ pub fn run_drift_harness(
     main_content: &mut MainContent,
     cfg: DriftHarnessConfig,
 ) -> DriftRunMetrics {
+    run_drift_harness_with_observer(main_content, cfg, |_, _| {})
+}
+
+/// Like [`run_drift_harness`], but calls `observe(step, main_content)` after
+/// every simulation step so scenarios can track per-step events (e.g. wall hits).
+pub fn run_drift_harness_with_observer(
+    main_content: &mut MainContent,
+    cfg: DriftHarnessConfig,
+    mut observe: impl FnMut(usize, &MainContent),
+) -> DriftRunMetrics {
     let mut samples = Vec::new();
     let mut neighbor_rebuild_count = 0usize;
+    let mut ball_rebuild_events = 0usize;
     let initial = sample_step(main_content, 0);
     samples.push(initial);
 
@@ -138,7 +229,7 @@ pub fn run_drift_harness(
                 let curr = ball.last_update_hood_pos;
                 if prev.x != curr.x || prev.y != curr.y {
                     any_changed = true;
-                    break;
+                    ball_rebuild_events += 1;
                 }
             }
         }
@@ -153,6 +244,8 @@ pub fn run_drift_harness(
             .map(|b| b.last_update_hood_pos)
             .collect();
 
+        observe(step, main_content);
+
         let should_sample =
             step == cfg.steps || (cfg.sample_every != 0 && step % cfg.sample_every == 0);
         if should_sample {
@@ -165,7 +258,10 @@ pub fn run_drift_harness(
         initial,
         final_sample,
         samples,
+        steps: cfg.steps,
+        dt: cfg.dt,
         neighbor_rebuild_count,
+        ball_rebuild_events,
     }
 }
 
@@ -179,6 +275,8 @@ fn sample_step(main_content: &MainContent, step: usize) -> DriftSample {
     let mut cap_hits = 0usize;
     let mut pair_count = 0usize;
     let max_force = world.physics.constants.max_force;
+    let lj_cutoff = world.physics.constants.lj_cutoff;
+    let mut missed_neighbor_pairs = 0usize;
 
     for ball in &world.balls {
         let speed_sq = ball.v.x * ball.v.x + ball.v.y * ball.v.y;
@@ -198,6 +296,12 @@ fn sample_step(main_content: &MainContent, step: usize) -> DriftSample {
             let edge_dist = center_dist - (world.balls[i].radius + world.balls[j].radius);
             potential += world.physics.potential(edge_dist);
             pair_count += 1;
+            if edge_dist < lj_cutoff
+                && !world.balls[i].hood.is_a_neighbour_idx(j)
+                && !world.balls[j].hood.is_a_neighbour_idx(i)
+            {
+                missed_neighbor_pairs += 1;
+            }
             if edge_dist < 0.0 {
                 max_overlap_depth = max_overlap_depth.max(-edge_dist);
             }
@@ -225,8 +329,14 @@ fn sample_step(main_content: &MainContent, step: usize) -> DriftSample {
         momentum_scale,
         max_overlap_depth,
         cap_hit_ratio,
+        ball_count: world.balls.len(),
+        missed_neighbor_pairs,
     }
 }
 
 #[cfg(test)]
+mod dense_gas;
+#[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod wall_reflection;

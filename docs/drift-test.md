@@ -174,6 +174,29 @@ Use this compact table in the PR description:
 | Scenario | Metric | Old threshold | New threshold | Baseline before | Baseline after | Margin | Reason |
 |---|---|---:|---:|---:|---:|---:|---|
 | two_body_lj_baseline | relative_energy_drift | 3.0e-2 | 4.5e-2 | 1.8e-2 | 2.2e-2 | 2.0x | Integrator update |
+## Implemented Scenarios and Thresholds
+
+All scenarios live in `core/src/application/core/tests/drift_harness/` and run in the drift suite (`#[ignore = "suite:drift"]`). Each prints one `DRIFT_SCENARIO` line.
+
+| Scenario | File | Metric | Threshold | Baseline |
+|---|---|---|---:|---:|
+| dense_gas_many_body (256 balls, 1000 steps) | `dense_gas.rs` | max relative energy drift | 1.5e-3 | 7.2e-4 |
+| | | relative momentum drift | 1.0e-5 | 7.9e-9 |
+| | | per-ball rebuild rate | [5.0e-3, 5.0e-2] | 1.23e-2 |
+| | | in-cutoff pairs missing from neighbour lists | 0 | 0 |
+| | | consecutive samples with overlap > 0.3 | <= 2 | 0 |
+| elastic_world_wall / elastic_line_segment (1 ball, 10000 steps) | `wall_reflection.rs` | relative speed change per reflection | 1.0e-5 | <= 1.1e-6 |
+| | | impulse alignment with surface normal | >= 0.999 | 1.0 |
+| | | post-collision kinetic energy deviation | 1.0e-5 | 2.2e-6 |
+| | | kinetic energy slope per event | 1.0e-6 | ~0 |
+
+Notes:
+
+- The dense-gas grid starts in the world centre and the run asserts the balls never reach the wall region, so wall effects stay isolated in the reflection scenarios.
+- `rel_momentum_drift` in the wall scenarios is expected to be ~2: walls absorb momentum by design.
+- Non-ignored unit tests (`*_checks_catch_injected_regressions`) feed synthetic broken runs to the check functions to prove each assertion can fail.
+- Verified manually on the review branch: raising the Verlet movement threshold 10x fails the dense-gas scenario (energy, cadence and stale-pair checks), and a 0.2% restitution gain on x-wall bounces fails both reflection scenarios.
+
 ## Recommended Rollout
 
 1. Add harness + scenario #1 and #2 first (fastest high-signal checks).
