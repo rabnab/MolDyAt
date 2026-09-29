@@ -274,10 +274,13 @@ fn snapshot_wall_endpoints_skip_valve_boundaries() {
 
     let snap = mc.create_snapshot();
     assert_eq!(snap.operators.line_segments.len(), 2);
-    assert_eq!(snap.operators.wall_endpoints.len(), 1);
-    let (start, end) = snap.operators.wall_endpoints[0];
-    assert_close(start.x, -10.0);
-    assert_close(end.x, 10.0);
+    assert_eq!(snap.operators.walls.len(), 1);
+    let wall = &snap.operators.walls[0];
+    assert_close(wall.start.x, -10.0);
+    assert_close(wall.end.x, 10.0);
+    assert_eq!(wall.piece_ids, vec![0, 1]);
+    let valve_id = snap.operators.valve_spans[0].valve_id;
+    assert_eq!(wall.valve_ids, vec![valve_id]);
 }
 
 #[test]

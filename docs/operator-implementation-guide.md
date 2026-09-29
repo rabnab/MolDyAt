@@ -48,6 +48,11 @@ Rules:
 - Use actions/commands as the boundary
 - Keep active tool switching deterministic
 
+Hover and delete:
+- Every tool implements `OperatorToolHandler::hovered()`, returning the object of its own kind under the cursor (or being dragged) as an `ObjectRef`. `None` while drawing a new object.
+- The renderer draws that object with `HighlightPipeline`; wall endpoint markers are drawn only for the hovered wall.
+- `Delete` sends `DeleteObject { target }` for the hovered object. A new operator type adds an `ObjectRef` variant, a `delete_object` arm and a `highlight_capsule` arm.
+
 ### Sidebar mapping and hit-testing
 
 Files:

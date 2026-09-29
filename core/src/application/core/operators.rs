@@ -23,14 +23,10 @@ impl SimulationWorld {
     }
 
     /// Clear all placed operators (called on simulation reset).
-    ///
-    /// Also drops hover/selection, which refer to operator ids that restart
-    /// from zero after a clear.
     pub(crate) fn clear_all_operators(&mut self) {
         for col in self.operator_collections_mut() {
             col.clear();
         }
-        self.selection = Default::default();
     }
 
     /// Rescale all operator positions when the world region changes size.

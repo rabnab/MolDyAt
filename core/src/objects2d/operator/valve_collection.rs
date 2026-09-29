@@ -1,6 +1,6 @@
 //! Valve operator collection.
 
-use super::{OperatorCollection, OperatorIdCounter};
+use super::{OperatorCollection, OperatorIdCounter, remove_by_id};
 use crate::objects2d::{Rect, ValveSegment};
 
 /// Owns the `Vec<ValveSegment>` and its ID counter.
@@ -35,6 +35,11 @@ impl ValveCollection {
     /// Find a valve by ID (mutable).
     pub fn find_mut(&mut self, id: usize) -> Option<&mut ValveSegment> {
         self.valves.iter_mut().find(|v| v.id == id)
+    }
+
+    /// Remove the valve with `id`. Returns `false` if there was none.
+    pub fn remove(&mut self, id: usize) -> bool {
+        remove_by_id(&mut self.valves, id, |item| item.id)
     }
 
     /// Index of a valve by ID (for indexed access after lookup).

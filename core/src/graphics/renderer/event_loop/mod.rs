@@ -47,6 +47,8 @@ pub struct FramePreviews {
     pub snap_indicators: Vec<[f32; 2]>,
     /// Currently selected sidebar icon index, if any.
     pub selected_sidebar_icon: Option<usize>,
+    /// Object under the cursor of the active tool's kind, drawn highlighted.
+    pub hovered: Option<crate::objects2d::wall_chain::ObjectRef>,
 }
 
 // action_processor::process_action_common is now internal - only used by UnifiedRenderState

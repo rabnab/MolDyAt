@@ -124,6 +124,17 @@ impl OperatorIdCounter {
 /// of operator.  `MainContent` calls these methods during clear/rescale
 /// so new operator types only extend the collection list — no manual
 /// wiring in `operators.rs`.
+/// Remove the item with `id` from `items`; `false` if there was none.
+///
+/// Ids are unique while the collection lives, but `clear()` resets the
+/// counter to zero, so an id held from before a clear may name a different
+/// object afterwards.
+pub(crate) fn remove_by_id<T>(items: &mut Vec<T>, id: usize, id_of: fn(&T) -> usize) -> bool {
+    let before = items.len();
+    items.retain(|item| id_of(item) != id);
+    items.len() != before
+}
+
 pub trait OperatorCollection: Send {
     /// Remove all operators and reset the ID counter.
     fn clear(&mut self);

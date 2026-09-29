@@ -45,6 +45,7 @@ pub fn process_action_common(
             | InputAction::PanEnd
             | InputAction::UpdateCursor { .. }
             | InputAction::SelectOperatorTool(_)
+            | InputAction::DeleteHovered
             | InputAction::ToggleEnergyWindow
             | InputAction::ToggleCutoffRings => {}
             InputAction::AddBall { .. }

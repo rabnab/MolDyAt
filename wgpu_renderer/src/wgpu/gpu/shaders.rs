@@ -23,6 +23,7 @@ shaders! {
     ENDPOINT => "endpoint.wgsl",
     FRAME => "frame.wgsl",
     GRID => "grid.wgsl",
+    HIGHLIGHT => "highlight.wgsl",
     LABEL_CAPSULE => "label_capsule.wgsl",
     LINE => "line.wgsl",
     PLACEMENT_RINGS => "placement_rings.wgsl",

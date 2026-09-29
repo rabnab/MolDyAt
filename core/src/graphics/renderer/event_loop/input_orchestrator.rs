@@ -35,6 +35,10 @@ impl InputOrchestrator {
                 state.select_operator_tool(tool);
                 false
             }
+            InputAction::DeleteHovered => {
+                state.delete_hovered_object();
+                false
+            }
             InputAction::AddBall { position } => {
                 if !state.can_add_ball_at(position) {
                     return false;
@@ -148,6 +152,7 @@ impl InputOrchestrator {
         x: f32,
         y: f32,
     ) -> bool {
+        let hovered_before = state.hovered_object();
         state.update_cursor_world_pos(&[x, y]);
         let world_pos = state.input.cursor_pos();
 
@@ -161,6 +166,10 @@ impl InputOrchestrator {
             if resp.view_dirty {
                 state.mark_view_dirty();
             }
+        }
+
+        if state.hovered_object() != hovered_before {
+            state.mark_view_dirty();
         }
 
         if let Some(action) = state.input.handle_mouse_motion(x, y) {

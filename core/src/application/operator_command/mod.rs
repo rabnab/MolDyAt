@@ -19,9 +19,11 @@
 //! | [`valve`]                 | Valve segments  |
 //! | [`source`]                | Source spheres  |
 //! | [`thermostat`]            | Thermostats     |
+//! | [`delete`]                | Any of the above |
 
 use crate::application::MainContent;
 
+pub mod delete;
 pub mod line;
 pub mod source;
 pub mod thermostat;
