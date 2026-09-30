@@ -62,6 +62,56 @@ pub struct SimulationWorld {
     pub(crate) thermostats: ThermostatCollection,
     /// Wall being drawn or dragged right now; collides like a real wall.
     pub(crate) ghost_wall: Option<crate::objects2d::line_segment::GhostWall>,
+    /// Deliberate physics faults so drift tests can prove they catch real
+    /// regressions end to end. Test builds only.
+    #[cfg(test)]
+    pub(crate) test_faults: TestFaults,
+}
+
+/// Test-only fault injection knobs; the defaults leave physics unchanged.
+#[cfg(test)]
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct TestFaults {
+    /// Multiplies the Verlet movement threshold (> 1 makes lists go stale).
+    pub(crate) neighbor_movement_scale: f32,
+    /// Multiplies the reflected wall velocity (> 1 injects energy).
+    pub(crate) wall_restitution: f32,
+}
+
+#[cfg(test)]
+impl Default for TestFaults {
+    fn default() -> Self {
+        Self {
+            neighbor_movement_scale: 1.0,
+            wall_restitution: 1.0,
+        }
+    }
+}
+
+impl SimulationWorld {
+    #[inline]
+    pub(crate) fn neighbor_movement_fault_scale(&self) -> f32 {
+        #[cfg(test)]
+        {
+            self.test_faults.neighbor_movement_scale
+        }
+        #[cfg(not(test))]
+        {
+            1.0
+        }
+    }
+
+    #[inline]
+    pub(crate) fn wall_restitution_fault(&self) -> f32 {
+        #[cfg(test)]
+        {
+            self.test_faults.wall_restitution
+        }
+        #[cfg(not(test))]
+        {
+            1.0
+        }
+    }
 }
 
 /// Physics-thread owner that pairs a [`SimulationWorld`] with runtime bookkeeping.

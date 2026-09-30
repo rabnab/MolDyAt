@@ -188,14 +188,67 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.11
 
+      - name: Log runner CPU and SIMD path
+        shell: bash
+        run: |
+          # f32 drift baselines depend on the SIMD path. std::simd picks it at
+          # compile time from the target features; the host flags are logged
+          # too, so a runner-image change can be told apart from a physics change.
+          arch=$(uname -m)
+          flags=$(grep -m1 -E '^(flags|Features)' /proc/cpuinfo || true)
+          simd=unknown
+          for f in avx512f avx2 sse4_2 sse2 asimd; do
+            if grep -qw "$f" <<<"$flags"; then simd=$f; break; fi
+          done
+          model=$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | xargs || true)
+          features=$(rustc --print cfg | sed -n 's/^target_feature="\(.*\)"$/\1/p' | paste -sd, -)
+          echo "arch=$arch best_host_simd=$simd cpu=${model:-unknown} compiled_features=$features"
+          {
+            echo "### Drift runner"
+            echo ""
+            echo "- arch: \`$arch\`"
+            echo "- best host SIMD flag: \`$simd\`"
+            echo "- compiled target features (decide the SIMD path): \`$features\`"
+            echo "- CPU: ${model:-unknown}"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Run drift harness tests with scenario summaries
         shell: bash
         run: |
           set -o pipefail
           cargo ci-test-drift | tee drift-harness.log
 
+      - name: Publish drift metrics summary
+        if: always()
+        shell: bash
+        run: |
+          [ -f drift-harness.log ] || exit 0
+          {
+            echo "### Drift scenarios"
+            echo ""
+            echo '```'
+            grep '^DRIFT_SCENARIO' drift-harness.log || echo "no DRIFT_SCENARIO lines"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          # Metrics above 70% of their threshold pass, but are annotated so
+          # shrinking margins are visible before they fail.
+          if grep -q '^DRIFT_WARNING' drift-harness.log; then
+            {
+              echo ""
+              echo "### Near-threshold warnings"
+              echo ""
+              echo '```'
+              grep '^DRIFT_WARNING' drift-harness.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            grep '^DRIFT_WARNING' drift-harness.log | while read -r line; do
+              echo "::warning title=Drift metric near threshold::${line#DRIFT_WARNING }"
+            done
+          fi
+
       - name: Upload drift harness log
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: drift-harness-log
