@@ -22,7 +22,13 @@ lto = false
 #debug = true
 codegen-units = 1
 lto = "fat"
-rustflags = ["-C", "target-cpu=native"]
+# Tune for the build host, but without AMX: on AMX-capable x86_64 hosts
+# (e.g. Sapphire Rapids) `native` enables amx-tile/amx-int8, and dependencies
+# such as scirs2-linalg then compile unstable AMX intrinsics and fail (E0658).
+# Disabling amx-tile also disables the AMX extensions that depend on it. rustc
+# warns once per crate that amx-tile is unstable (and, on non-x86 targets,
+# unknown); the flag is a no-op there and NEON stays enabled on aarch64.
+rustflags = ["-C", "target-cpu=native", "-C", "target-feature=-amx-tile"]
 opt-level = 3
 panic = "abort"
 strip = "symbols"
