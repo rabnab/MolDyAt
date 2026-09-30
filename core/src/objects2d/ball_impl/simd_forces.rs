@@ -12,9 +12,11 @@
 //! at `max_force`. This is implemented as:
 //! - For r >= r_cap: Standard LJ force F_LJ(r)
 //! - For r < r_cap: Capped force = max_force
+//! - For r >= lj_cutoff: no interaction
 //!
 //! The corresponding potential energy uses linear extrapolation U(r) = U(r_cap) - max_force·(r - r_cap)
-//! below r_cap to maintain energy conservation. See `BallPhysics::lenard_jones_potential()` for details.
+//! below r_cap and is shifted to zero at the cutoff, so neighbour-list changes (which only
+//! happen beyond the cutoff) do not change the energy. See `BallPhysics::potential()` for details.
 //!
 //! Note: All SIMD implementations are currently 4-wide. AVX2 uses FMA for improved precision/performance, but does not use 8-wide vectorization yet.
 //! 8-wide AVX2 support is a planned future optimization (see PERFORMANCE_OPTIMIZATION.md line 548).
@@ -55,24 +57,8 @@ pub fn force_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2D]) -> F
     let ball_radius = balls[ball_idx].radius;
     let neighbour_indices = balls[ball_idx].hood.get_neighbour_indices();
 
-    let lj_sig = physics.constants.lj_sig;
-    let lj_eps = physics.constants.lj_eps;
-    let r_cap = physics.get_force_cap_distance();
-
     // Process neighbors in chunks of 4 for SIMD
     let (chunks, unchunked) = neighbour_indices.as_chunks::<4>();
-    // Pre-calculate U(r_cap) for linear extrapolation in force-capped region
-    // This is the "anchor point" where capped and uncapped potentials meet
-
-    let pot_at_cap = {
-        let cap_quot = lj_sig / r_cap;
-        let cap_quot_six = cap_quot * cap_quot * cap_quot * cap_quot * cap_quot * cap_quot;
-        4. * lj_eps * cap_quot_six * (cap_quot_six - 1.)
-    };
-    let pot_at_cap_vec = f32x4::splat(pot_at_cap);
-
-    let max_force_vec = f32x4::splat(physics.constants.max_force);
-    let r_cap_vec = f32x4::splat(r_cap);
 
     for chunk in chunks {
         // SIMD path: process 4 neighbors at once
@@ -104,15 +90,10 @@ pub fn force_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2D]) -> F
         // Calculate edge distances
         let radius_sum = radii_vec + f32x4::splat(ball_radius);
         let edge_dist = center_dist - radius_sum;
-        let edge_dist_cap = edge_dist.simd_max(f32x4::splat(r_cap));
 
-        // === Force Calculation with Capping ===
-        //let r_cap_vec = f32x4::splat(r_cap);
-
-        // Step 1: Calculate standard Lennard-Jones force
-        // F_LJ(r) = 24·ε·(σ/r)^6 · [2·(σ/r)^6 - 1] / r
-        // Use max() to prevent division by zero (1e-10 is safety epsilon)
-        let lj_force = physics.force_simd(edge_dist_cap);
+        // Lennard-Jones force, capped at max_force below r_cap and zero beyond
+        // the cutoff (see BallPhysics::force).
+        let lj_force = physics.force_simd(edge_dist);
 
         // Force direction: force / center_dist
         // Avoid division by zero: if center_dist is 0, use a small epsilon to prevent Inf/NaN
@@ -123,22 +104,9 @@ pub fn force_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2D]) -> F
         let fx = dx_vec * force_to_dist;
         let fy = dy_vec * force_to_dist;
 
-        // === Potential Energy Calculation with Force Capping ===
-        // Standard LJ potential: U(r) = 4·ε·[(σ/r)^12 - (σ/r)^6]
-        // For r < r_cap: Use linear extrapolation to preserve energy conservation
-        // Calculate standard LJ potential (with capping)
-        let pot_quot = f32x4::splat(lj_sig) / edge_dist.simd_max(f32x4::splat(1e-10));
-        let pot_quot_six = pot_quot * pot_quot * pot_quot * pot_quot * pot_quot * pot_quot;
-        let potential_uncapped =
-            f32x4::splat(4. * lj_eps) * pot_quot_six * (pot_quot_six - f32x4::splat(1.));
-        // Linear potential for r < r_cap: U(r) = U(r_cap) - max_force·(r - r_cap)
-        // This ensures F = -dU/dr = +max_force (repulsive, constant) below r_cap
-        let potential_linear = f32x4::simd_max(
-            pot_at_cap_vec - max_force_vec * (edge_dist - r_cap_vec),
-            pot_at_cap_vec,
-        );
-
-        let potential_used = f32x4::simd_min(potential_linear, potential_uncapped);
+        // Shifted LJ potential with linear continuation below r_cap, zero
+        // beyond the cutoff (see BallPhysics::potential).
+        let potential_used = physics.potential_simd(edge_dist);
 
         // Virial: Σ (r_ij · F_ij).
         // Since fx = dx_vec * force_to_dist and fy = dy_vec * force_to_dist,

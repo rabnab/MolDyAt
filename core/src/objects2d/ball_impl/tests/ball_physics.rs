@@ -19,7 +19,8 @@ fn test_lj_equilibrium() {
     let r_eq = 1.122_462_f32; // 2^(1/6)
     let pot = phys.potential(r_eq);
 
-    approx(pot, -1.0, 1e-5);
+    // -ε, shifted so the potential is zero at the cutoff
+    approx(pot, -1.0 - phys.constants.pot_at_cutoff, 1e-5);
     let force = phys.force(r_eq);
 
     approx(force, 0.0, 1e-5);
@@ -591,4 +592,38 @@ fn test_overlapping_balls_force_capped() {
     }
 
     println!("✓ All overlapping ball forces correctly capped at max_force");
+}
+
+#[test]
+fn test_force_and_potential_vanish_at_and_beyond_cutoff() {
+    let phys = BallPhysics::default();
+    let cutoff = phys.get_cutoff_distance();
+    for r in [cutoff, cutoff + 0.1, cutoff + 0.8, 100.0] {
+        assert_eq!(phys.force(r), 0.0, "force at {r}");
+        assert_eq!(phys.potential(r), 0.0, "potential at {r}");
+    }
+    // Continuous at the cutoff: no energy jump when a pair crosses it.
+    let just_inside = phys.potential(cutoff - 1e-3);
+    assert!(just_inside.abs() < 1e-5, "U(r_c-) = {just_inside}");
+    // Still attractive just inside the cutoff.
+    assert!(phys.force(cutoff - 1e-3) < 0.0);
+}
+
+#[test]
+fn test_simd_force_and_potential_match_scalar_across_cutoff() {
+    use std::simd::f32x4;
+    let phys = BallPhysics::default();
+    let cutoff = phys.get_cutoff_distance();
+    let r_cap = phys.get_force_cap_distance();
+    for dists in [
+        [r_cap * 0.5, 1.0, 2.0, cutoff - 1e-3],
+        [cutoff, cutoff + 0.1, cutoff + 0.8, 10.0],
+    ] {
+        let force = phys.force_simd(f32x4::from(dists)).to_array();
+        let pot = phys.potential_simd(f32x4::from(dists)).to_array();
+        for (i, &r) in dists.iter().enumerate() {
+            approx(force[i], phys.force(r), 1e-6);
+            approx(pot[i], phys.potential(r), 1e-6);
+        }
+    }
 }
