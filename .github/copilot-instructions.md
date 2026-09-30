@@ -54,7 +54,7 @@ Toolchain is pinned in `rust-toolchain.toml` (nightly). Use plain `cargo`. Use `
 - Wall contacts: box walls and line segments are resolved in the position update along the wall normal (`ball_impl::wall_contact`), not by projecting or mirroring the whole overshoot, which gains energy on every contact. The velocity update applies the returned `WallContact`s and books the momentum change as wall momentum.
 - Movement threshold: a ball rebuilds its Verlet list when its displacement since its last rebuild exceeds skin/3 (`get_min_movement_for_update_hood`). Rebuilds are per ball and asynchronous, so skin/2 is not enough; the drift suite's stale-list check (`missed_neighbor_pairs`) guards this.
 - Radius awareness: distance and cutoff calculations must account for ball radii, not just centers. Balls with NaN positions are invalid and must be removed.
-- SIMD kernels are multiversioned for CPU targets (SSE2/AVX2/NEON). Avoid changing calling conventions or ABI assumptions in `simd_forces` without updating multiversion attributes.
+- SIMD kernels (`simd_forces`) use portable `std::simd` (`f32x4`) without runtime dispatch or multiversioning: the instruction set is fixed at compile time (target baseline in dev, `target-cpu=native` in the release profile). Compare f32 results and drift baselines only between builds for the same target and profile.
 - Parallel physics: Rayon `par_iter()` with read-only neighbor access. Avoid introducing shared mutable state inside force loops.
 - Viewport/coordinate rules: world-space is the canonical simulation space (see `docs/simulation.md`). Renderer flips Y for pixel-space; use `ViewportTransform` helpers.
 - Avoid `unsafe` unless necessary for performance-critical sections; document why and which invariants hold.

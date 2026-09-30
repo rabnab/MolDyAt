@@ -1,11 +1,13 @@
 //! SIMD-optimized Lennard-Jones force calculations with force capping
 //!
-//! This module provides vectorized implementations of Lennard-Jones force calculations
-//! using CPU SIMD instructions for improved performance. It includes:
-//! - SSE2 (4-wide) for x86/x86_64 processors
-//! - AVX2 (4-wide, with FMA) for modern x86_64 processors (note: not 8-wide)
-//! - NEON (4-wide) for ARM processors (M1/M2 Macs)
-//! - Scalar fallback for unsupported architectures
+//! This module provides vectorized Lennard-Jones force calculations using portable
+//! `std::simd` (`f32x4`, 4 neighbours per chunk, scalar code for the remainder).
+//!
+//! There is no runtime dispatch or multiversioning: the instruction set is fixed at
+//! compile time by the target features. The dev profile uses the target's baseline
+//! (SSE2 on x86_64, NEON on aarch64); the release profile adds `target-cpu=native`
+//! (`[profile.release]` in the workspace `Cargo.toml`), so it uses whatever the build
+//! host supports (e.g. AVX2/FMA). f32 results can differ between the two.
 //!
 //! # Force Capping for Stability
 //! To prevent numerical instabilities when particles get very close, forces are capped
@@ -17,9 +19,6 @@
 //! The corresponding potential energy uses linear extrapolation U(r) = U(r_cap) - max_force·(r - r_cap)
 //! below r_cap and is shifted to zero at the cutoff, so neighbour-list changes (which only
 //! happen beyond the cutoff) do not change the energy. See `BallPhysics::potential()` for details.
-//!
-//! Note: All SIMD implementations are currently 4-wide. AVX2 uses FMA for improved precision/performance, but does not use 8-wide vectorization yet.
-//! 8-wide AVX2 support is a planned future optimization (see PERFORMANCE_OPTIMIZATION.md line 548).
 
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::{Ball2D, BallPhysics, ForceResult};
@@ -27,7 +26,7 @@ use std::simd::prelude::SimdFloat;
 use std::simd::{StdFloat, f32x4};
 
 /// Calculate Lennard-Jones forces for multiple ball pairs using SIMD vectorization.
-/// Processes neighbors in chunks of 4 using CPU SIMD instructions (SSE2/AVX2/NEON).
+/// Processes neighbors in chunks of 4 with `f32x4` (see the module docs for the instruction set).
 /// Applies force capping at r < r_cap with linear potential extrapolation for energy conservation.
 /// Conditionally collects per-neighbor force magnitudes only when visualization is enabled.
 ///
