@@ -179,7 +179,7 @@ Use this compact table in the PR description:
 
 All scenarios live in `core/src/application/core/tests/drift_harness/` and run in the drift suite (`cargo ci-test-drift`). Each prints exactly one `DRIFT_SCENARIO` line, also when it fails.
 
-Baseline provenance: measured with `cargo ci-test-drift` (dev profile, which is optimized) on an x86_64 host, on the PR #205 branch on top of `master` at `4f8b801`, after the Verlet movement threshold changed to skin/3. `simd_forces` uses `std::simd` (`f32x4`), so the SIMD path is fixed at compile time by the target features: the dev profile sets no `target-cpu`, so x86_64 drift builds use SSE2 even on AVX2/AVX-512 hosts (aarch64 uses NEON). Only the release profile uses `target-cpu=native`. f32 results can differ between targets or `RUSTFLAGS`; rerun on the same target when comparing baselines.
+Baseline provenance: measured with `cargo ci-test-drift` (dev profile, which is optimized) on an x86_64 host, on the PR #205 branch on top of `master` at `4f8b801`, after the Verlet movement threshold changed to skin/3. `simd_forces` uses `std::simd` (`f32x4`), so the SIMD path is fixed at compile time by the target features: the dev profile sets no `target-cpu`, so x86_64 drift builds use SSE2 even on AVX2/AVX-512 hosts (aarch64 uses NEON). Only the release profile uses `target-cpu=native` (with AMX disabled, see the workspace `Cargo.toml`). f32 results can differ between targets or `RUSTFLAGS`; rerun on the same target when comparing baselines.
 
 | Scenario | File | Metric | Threshold | Baseline | Margin |
 |---|---|---|---:|---:|---|
