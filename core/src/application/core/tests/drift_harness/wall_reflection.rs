@@ -376,6 +376,23 @@ impl ReflectionRun {
 
 fn check_scenario(scenario: &str, run: &ReflectionRun, mut violations: Vec<String>) {
     run.metrics.report(scenario, violations.is_empty());
+    let max_speed_change = run
+        .events
+        .iter()
+        .map(|e| (len(e.v_after) - len(e.v_before)).abs() / len(e.v_before).max(1e-12))
+        .fold(0.0f32, f32::max);
+    warn_near_threshold(
+        scenario,
+        "max_rel_speed_change",
+        max_speed_change,
+        MAX_REL_SPEED_CHANGE,
+    );
+    warn_near_threshold(
+        scenario,
+        "max_rel_energy_drift",
+        run.metrics.max_relative_energy_drift(),
+        MAX_REL_KINETIC_DEVIATION,
+    );
     println!(
         "{scenario} diagnostics: reflection_events={} expected_events={}",
         run.events.len(),

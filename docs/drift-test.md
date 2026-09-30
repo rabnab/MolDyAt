@@ -179,13 +179,13 @@ Use this compact table in the PR description:
 
 All scenarios live in `core/src/application/core/tests/drift_harness/` and run in the drift suite (`cargo ci-test-drift`). Each prints exactly one `DRIFT_SCENARIO` line, also when it fails.
 
-Baseline provenance: measured with `cargo ci-test-drift` (dev profile, which is optimized) on x86_64 with AVX2 (multiversioned SIMD kernels select the path at runtime), on the PR #205 branch on top of `master` at `4f8b801`. f32 results can differ on other SIMD paths (SSE2/NEON); rerun on the same target when comparing baselines.
+Baseline provenance: measured with `cargo ci-test-drift` (dev profile, which is optimized) on an x86_64 host, on the PR #205 branch on top of `master` at `4f8b801`, after the Verlet movement threshold changed to skin/3. `simd_forces` uses `std::simd` (`f32x4`), so the SIMD path is fixed at compile time by the target features: the dev profile sets no `target-cpu`, so x86_64 drift builds use SSE2 even on AVX2/AVX-512 hosts (aarch64 uses NEON). Only the release profile uses `target-cpu=native`. f32 results can differ between targets or `RUSTFLAGS`; rerun on the same target when comparing baselines.
 
 | Scenario | File | Metric | Threshold | Baseline | Margin |
 |---|---|---|---:|---:|---|
-| dense_gas_many_body (256 balls, 1000 steps, 9 head-on projectile pairs) | `dense_gas.rs` | max relative energy drift | 4.0e-3 | 2.0e-3 | 2x |
-| | | relative momentum drift | 4.0e-7 | 3.8e-8 | ~10x for cross-target f32 summation order |
-| | | per-ball rebuild rate | [5.0e-3, 5.0e-2] | 1.5e-2 | cadence band, not a drift threshold |
+| dense_gas_many_body (256 balls, 1000 steps, 9 head-on projectile pairs) | `dense_gas.rs` | max relative energy drift | 4.0e-3 | 2.05e-3 | ~2x |
+| | | relative momentum drift | 5.0e-8 | 5.2e-9 | ~10x for cross-target f32 summation order |
+| | | per-ball rebuild rate | [5.0e-3, 5.0e-2] | 2.4e-2 | cadence band, not a drift threshold |
 | | | in-cutoff pairs missing from a neighbour list (every step) | 0 | 0 | exact |
 | | | pairs listed by only one ball (every step) | 0 | 0 | exact |
 | | | same pair deeper than 0.5 x radius, consecutive steps | <= 5 | 0 | |
@@ -202,9 +202,18 @@ Notes:
 
 - The dense-gas grid starts in the world centre and the run asserts the balls never reach the wall region, so wall effects stay isolated in the reflection scenarios. The projectile pairs drive a few pairs into the force-cap region so the cap and overlap checks are not vacuous; this is also why the energy envelope is wider than a cool gas (7.2e-4) would need.
 - Neighbour-list and overlap checks run after every step, not only on sample steps, so a stale list that lasts only a few steps before the next rebuild is still caught.
+- Verlet movement threshold: balls rebuild their neighbour lists independently, so a ball may already be 2 thresholds from its last rebuild position when its partner rebuilds, and the partner may move one more. The threshold is therefore skin/3 (not the textbook skin/2 for synchronous rebuilds). With skin/2, the cool dense gas (no projectiles) had an in-cutoff pair missing from both lists at step 186. `test_cool_dense_gas_has_no_stale_neighbor_lists` checks both: skin/3 has no stale pairs, and skin/2 still reproduces the miss (so the test is not vacuous).
 - `rel_momentum_drift` in the wall scenarios is expected to be ~2: walls absorb momentum by design.
 - `test_dense_gas_is_deterministic` compares a hash of the whole trajectory. It proves in-process reproducibility only, not reproducibility across runners or SIMD targets; the thresholds are the CI gate.
 - Injected regressions are re-runnable: `SimulationWorld::test_faults` (test builds only) scales the Verlet movement threshold or the wall restitution. `test_dense_gas_catches_injected_stale_neighbor_lists` and `test_world_wall_catches_injected_restitution_gain` run the real simulation with a fault and expect the checks to fail. The non-ignored `*_checks_catch_injected_regressions` tests feed synthetic broken runs to the check functions.
+
+### CI reporting
+
+The `drift` job always uploads `drift-harness.log` and writes to the job summary:
+
+- the runner arch, CPU model and best host SIMD flag, plus the compiled `target_feature`s, which decide the SIMD path the baselines depend on;
+- every `DRIFT_SCENARIO` line;
+- every `DRIFT_WARNING` line, also emitted as a `::warning` annotation. A scenario prints one when a passing metric exceeds 70% (`DRIFT_WARNING_FRACTION`) of its threshold, so shrinking margins show up before they fail the build.
 
 ## Recommended Rollout
 

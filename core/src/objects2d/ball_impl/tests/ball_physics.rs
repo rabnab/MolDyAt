@@ -90,11 +90,11 @@ fn test_min_movement_threshold_formula() {
     let phys = BallPhysics::default();
     let max_radius = 1.0; // Example max radius
 
-    // Test formula: min_movement = skin_thickness / 2
-    // With skin_thickness = 0.2 * cutoff and default cutoff = 2.0:
-    // Expected: 0.2 * 2.0 / 2.0 = 0.2
+    // Test formula: min_movement = skin_thickness / 3, so that per-ball,
+    // asynchronous rebuilds still keep every in-cutoff pair listed:
+    // cutoff + skin - 3 * threshold >= cutoff.
     let skin_thickness = phys.get_skin_thickness();
-    let expected_threshold = skin_thickness / 2.0;
+    let expected_threshold = skin_thickness / 3.0;
 
     let actual_threshold = phys.get_min_movement_for_update_hood(max_radius);
 

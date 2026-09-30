@@ -111,7 +111,7 @@ impl Verlet {
     /// # Arguments
     /// * `ball` - Ball to check
     /// * `dt` - Time step (for velocity extrapolation)
-    /// * `min_movement_threshold` - Distance threshold (typically skin/2)
+    /// * `min_movement_threshold` - Distance threshold (skin/3, see `get_min_movement_for_update_hood`)
     ///
     /// # Returns
     /// `true` if ball moved beyond threshold since last update

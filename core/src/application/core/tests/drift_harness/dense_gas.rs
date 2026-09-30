@@ -22,7 +22,7 @@ const PROJECTILE_V: f32 = 2.0;
 // Thresholds: see docs/drift-test.md for the calibration process.
 const MAX_REL_ENERGY_DRIFT: f32 = 4.0e-3;
 /// ~10x baseline: headroom for f32 summation-order differences across SIMD targets.
-const MAX_REL_MOMENTUM_DRIFT: f32 = 4.0e-7;
+const MAX_REL_MOMENTUM_DRIFT: f32 = 5.0e-8;
 const MIN_BALL_REBUILD_RATE: f32 = 5.0e-3;
 const MAX_BALL_REBUILD_RATE: f32 = 5.0e-2;
 /// Overlap deeper than this fraction of the ball radius counts as "deep".
@@ -35,7 +35,7 @@ const MIN_WALL_CLEARANCE: f32 = 1.0;
 
 /// Places `SIDE * SIDE` balls on a square grid around the world centre.
 /// Velocities are deterministic and the total momentum is removed.
-fn populate_central_grid(main_content: &mut MainContent, thermal_v: f32) {
+fn populate_central_grid(main_content: &mut MainContent, thermal_v: f32, projectiles: bool) {
     let factory = BallFactory::new();
     let world_rect = main_content.world().world_region();
     let (tl_x, tl_y) = world_rect.get_tl();
@@ -51,7 +51,7 @@ fn populate_central_grid(main_content: &mut MainContent, thermal_v: f32) {
             velocities.push(Vec2D::new(vx, vy));
         }
     }
-    for &i in &PROJECTILE_SLOTS {
+    for &i in PROJECTILE_SLOTS.iter().filter(|_| projectiles) {
         for &j in &PROJECTILE_SLOTS {
             velocities[i * SIDE + j] = Vec2D::new(PROJECTILE_V, 0.0);
             velocities[(i + 1) * SIDE + j] = Vec2D::new(-PROJECTILE_V, 0.0);
@@ -197,10 +197,14 @@ impl DenseGasRun {
 }
 
 fn run_dense_gas(faults: TestFaults) -> DenseGasRun {
+    run_dense_gas_setup(faults, true)
+}
+
+fn run_dense_gas_setup(faults: TestFaults, projectiles: bool) -> DenseGasRun {
     let mut main_content = create_dense_harness_with_seed(404);
     main_content.world_mut().speed_limit_override = Some(f32::INFINITY);
     main_content.world_mut().test_faults = faults;
-    populate_central_grid(&mut main_content, THERMAL_V);
+    populate_central_grid(&mut main_content, THERMAL_V, projectiles);
     let ball_radius = main_content.world().balls[0].radius;
 
     let mut min_clearance = min_wall_clearance(&main_content);
@@ -225,8 +229,27 @@ fn run_dense_gas(faults: TestFaults) -> DenseGasRun {
 fn test_dense_gas_many_body_drift() {
     let run = run_dense_gas(TestFaults::default());
     let violations = run.violations();
-    run.metrics
-        .report("dense_gas_many_body", violations.is_empty());
+    let name = "dense_gas_many_body";
+    run.metrics.report(name, violations.is_empty());
+    let m = &run.metrics;
+    warn_near_threshold(
+        name,
+        "max_rel_energy_drift",
+        m.max_relative_energy_drift(),
+        MAX_REL_ENERGY_DRIFT,
+    );
+    warn_near_threshold(
+        name,
+        "rel_momentum_drift",
+        m.relative_momentum_drift(),
+        MAX_REL_MOMENTUM_DRIFT,
+    );
+    warn_near_threshold(
+        name,
+        "ball_rebuild_rate",
+        m.ball_rebuild_rate(),
+        MAX_BALL_REBUILD_RATE,
+    );
     println!(
         "dense_gas diagnostics: ball_rebuild_events={} min_wall_clearance={:.3}",
         run.metrics.ball_rebuild_events, run.min_clearance
@@ -235,6 +258,35 @@ fn test_dense_gas_many_body_drift() {
         violations.is_empty(),
         "dense-gas scenario failed:\n  {}",
         violations.join("\n  ")
+    );
+}
+
+/// Regression for asynchronous per-ball Verlet rebuilds: with the old skin/2
+/// movement threshold this cool gas (no projectiles) had an in-cutoff pair
+/// missing from both lists at step 186. skin/3 must keep every pair listed.
+#[test]
+#[ignore = "suite:drift"]
+fn test_cool_dense_gas_has_no_stale_neighbor_lists() {
+    let run = run_dense_gas_setup(TestFaults::default(), false);
+    assert_eq!(
+        run.metrics.max_missed_neighbor_pairs(),
+        0,
+        "stale neighbour lists in cool dense gas (first at step {:?})",
+        run.metrics.first_missed_neighbor_step()
+    );
+    assert_eq!(run.metrics.max_asymmetric_neighbor_pairs(), 0);
+
+    // The same setup with the old skin/2 threshold (1.5x skin/3) goes stale.
+    let old = run_dense_gas_setup(
+        TestFaults {
+            neighbor_movement_scale: 1.5,
+            ..TestFaults::default()
+        },
+        false,
+    );
+    assert!(
+        old.metrics.max_missed_neighbor_pairs() > 0,
+        "old skin/2 threshold no longer reproduces the stale pair; regression test is vacuous"
     );
 }
 

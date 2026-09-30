@@ -217,6 +217,21 @@ impl DriftRunMetrics {
     }
 }
 
+/// Fraction of a threshold above which a passing metric is flagged, so shrinking
+/// margins show up in CI before they turn into failures.
+pub const DRIFT_WARNING_FRACTION: f32 = 0.7;
+
+/// Prints a machine-readable `DRIFT_WARNING` line when `value` is above
+/// [`DRIFT_WARNING_FRACTION`] of `threshold` (CI turns these into annotations).
+pub fn warn_near_threshold(scenario: &str, metric: &str, value: f32, threshold: f32) {
+    if threshold > 0.0 && value > DRIFT_WARNING_FRACTION * threshold {
+        println!(
+            "DRIFT_WARNING name={scenario} metric={metric} value={value:.3e} threshold={threshold:.3e} ratio={:.2}",
+            value / threshold
+        );
+    }
+}
+
 pub fn create_dense_harness_with_seed(seed: u64) -> MainContent {
     let (main_content, _) = create_main_content_for_region(500.0, 500.0);
     let world_rect = main_content.world().world_region();

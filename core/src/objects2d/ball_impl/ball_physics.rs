@@ -213,15 +213,21 @@ impl BallPhysics {
     }
 
     /// Returns the minimum movement threshold before a ball's neighbor list needs updating.
-    /// Uses half the skin thickness to ensure no particle crosses the buffer without triggering update.
+    ///
+    /// Balls rebuild their lists independently, not all at once. When ball j
+    /// rebuilds (pair at least cutoff + skin apart), ball i may already be up
+    /// to 2 thresholds away from where it was at its own last rebuild, and j
+    /// may then move one more threshold. Keeping 3 thresholds within the skin
+    /// guarantees no pair gets inside the cutoff without being listed; half
+    /// the skin (the textbook value for synchronous rebuilds) does not.
     ///
     /// # Arguments
     /// * `_max_radius` - Maximum ball radius (currently unused, reserved for dynamic calculations)
     ///
     /// # Returns
-    /// Movement threshold in world units (typically skin_thickness / 2)
+    /// Movement threshold in world units (skin_thickness / 3)
     pub fn get_min_movement_for_update_hood(&self, _max_radius: f32) -> f32 {
-        self.get_skin_thickness() * 0.5
+        self.get_skin_thickness() / 3.0
     }
 
     pub(crate) fn equilibrium_edge_distance(&self) -> f32 {
