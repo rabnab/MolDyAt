@@ -21,8 +21,9 @@ const PROJECTILE_V: f32 = 2.0;
 
 // Thresholds: see docs/drift-test.md for the calibration process.
 const MAX_REL_ENERGY_DRIFT: f32 = 4.0e-3;
-/// ~10x baseline: headroom for f32 summation-order differences across SIMD targets.
-const MAX_REL_MOMENTUM_DRIFT: f32 = 5.0e-8;
+/// ~3x baseline: this is f32 rounding noise, 1.7e-8..7.4e-8 across nearby
+/// initial velocities (see docs/drift-test.md), plus cross-target headroom.
+const MAX_REL_MOMENTUM_DRIFT: f32 = 1.5e-7;
 const MIN_BALL_REBUILD_RATE: f32 = 5.0e-3;
 const MAX_BALL_REBUILD_RATE: f32 = 5.0e-2;
 /// Overlap deeper than this fraction of the ball radius counts as "deep".

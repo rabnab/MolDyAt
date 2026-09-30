@@ -255,3 +255,25 @@ fn test_virial_simd_and_scalar_paths_agree() {
 
     approx(result.virial, expected_virial, 1e-4);
 }
+
+#[test]
+fn test_listed_neighbours_beyond_cutoff_do_not_interact() {
+    let physics = BallPhysics::default();
+    let cutoff = physics.get_cutoff_distance();
+    let radius = 0.5;
+    // Five listed neighbours (one SIMD chunk + one scalar remainder), all
+    // inside the neighbour-list radius but beyond the LJ cutoff.
+    let mut balls = vec![Ball2D::new(0, Vec2D::new(0.0, 0.0), (0, radius))];
+    for k in 1..=5 {
+        let center_dist = 2.0 * radius + cutoff + 0.1 * k as f32;
+        let angle = k as f32;
+        let pos = Vec2D::new(center_dist * angle.cos(), center_dist * angle.sin());
+        balls.push(Ball2D::new(k, pos, (0, radius)));
+        balls[0].hood.add_neighbour(k);
+    }
+
+    let result = force_simd(&physics, 0, &balls);
+    assert_eq!(result.force, Vec2D::new(0.0, 0.0));
+    assert_eq!(result.potential_energy, 0.0);
+    assert_eq!(result.virial, 0.0);
+}

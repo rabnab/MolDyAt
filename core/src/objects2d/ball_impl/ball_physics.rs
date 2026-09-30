@@ -2,8 +2,9 @@ use crate::objects2d::Rect;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::ball_core::BounceInfo;
 use crate::objects2d::ball_impl::{Ball2D, BallError, BallResult, Named};
+use std::simd::Select;
 use std::simd::f32x4;
-use std::simd::prelude::SimdFloat;
+use std::simd::prelude::{SimdFloat, SimdPartialOrd};
 
 //const LJ_SIG: f32 = 5.; // equilibrium distance
 //LJ_SIG in SI units is for Argon 3.4A=3.4E-10m
@@ -22,6 +23,9 @@ pub struct PhysicsConstants {
     pub pot_at_cap: f32,
     /// Cached distance at which LJ force equals max_force
     pub r_cap: f32,
+    /// Cached U_LJ(lj_cutoff): subtracted from every pair potential inside the
+    /// cutoff so the truncated potential goes to zero at `lj_cutoff`.
+    pub pot_at_cutoff: f32,
 }
 
 impl PhysicsConstants {
@@ -34,15 +38,23 @@ impl PhysicsConstants {
             4. * lj_eps * cap_quot_six * (cap_quot_six - 1.)
         };
 
+        let lj_cutoff = 4. * lj_sig;
         PhysicsConstants {
             lj_eps,
             lj_sig,
             gravity: 0.,
             max_force,
-            lj_cutoff: 4. * lj_sig,
+            lj_cutoff,
             pot_at_cap,
             r_cap,
+            pot_at_cutoff: Self::lj_potential(lj_sig, lj_eps, lj_cutoff),
         }
+    }
+
+    /// Plain (uncapped, unshifted) Lennard-Jones potential 4·ε·[(σ/r)^12 - (σ/r)^6].
+    fn lj_potential(lj_sig: f32, lj_eps: f32, r: f32) -> f32 {
+        let quot_six = (lj_sig / r).powi(6);
+        4. * lj_eps * quot_six * (quot_six - 1.)
     }
 
     /// Calculate the distance r_cap at which the Lennard-Jones force equals max_force.
@@ -144,6 +156,7 @@ impl Default for PhysicsConstants {
             4. * LJ_EPS * cap_quot_six * (cap_quot_six - 1.)
         };
 
+        let lj_cutoff = 4. * LJ_SIG; // Standard cutoff for L-J potential 2.5
         PhysicsConstants {
             lj_eps: LJ_EPS,
             lj_sig: LJ_SIG,
@@ -152,9 +165,10 @@ impl Default for PhysicsConstants {
             //gravity: 1.0,
             max_force: MAX_FORCE,
             //softening: 0.01,
-            lj_cutoff: 4. * LJ_SIG, // Standard cutoff for L-J potential 2.5
+            lj_cutoff,
             pot_at_cap,
             r_cap,
+            pot_at_cutoff: Self::lj_potential(LJ_SIG, LJ_EPS, lj_cutoff),
         }
     }
 }
@@ -241,7 +255,12 @@ impl BallPhysics {
         self.equilibrium_edge_distance() * 0.5 + radius
     }
 
+    /// Pair force magnitude (positive = repulsive) at `edge_dist`: capped at
+    /// `max_force` below `r_cap` and zero at and beyond `lj_cutoff`.
     pub(crate) fn force(&self, edge_dist: f32) -> f32 {
+        if edge_dist >= self.constants.lj_cutoff {
+            return 0.;
+        }
         let r_cap = self.get_force_cap_distance();
         let lj_sig = self.constants.lj_sig;
         let lj_eps = self.constants.lj_eps;
@@ -252,13 +271,23 @@ impl BallPhysics {
         24. * lj_eps * quot_six * (2. * quot_six - 1.) / edge_dist_cap
     }
 
-    pub(crate) fn force_simd(&self, edge_dist_cap: f32x4) -> f32x4 {
+    /// SIMD version of [`Self::force`] for four raw edge distances.
+    pub(crate) fn force_simd(&self, edge_dist: f32x4) -> f32x4 {
         let lj_sig = self.constants.lj_sig;
         let lj_eps = self.constants.lj_eps;
+        let edge_dist_cap = edge_dist.simd_max(f32x4::splat(self.get_force_cap_distance()));
         let quot = f32x4::splat(lj_sig) / edge_dist_cap;
         let quot_six = quot * quot * quot * quot * quot * quot; // (σ/r)^6
-        f32x4::splat(24. * lj_eps) * quot_six * (f32x4::splat(2.) * quot_six - f32x4::splat(1.))
-            / edge_dist_cap
+        let force = f32x4::splat(24. * lj_eps)
+            * quot_six
+            * (f32x4::splat(2.) * quot_six - f32x4::splat(1.))
+            / edge_dist_cap;
+        self.inside_cutoff(edge_dist)
+            .select(force, f32x4::splat(0.))
+    }
+
+    fn inside_cutoff(&self, edge_dist: f32x4) -> std::simd::Mask<i32, 4> {
+        edge_dist.simd_lt(f32x4::splat(self.constants.lj_cutoff))
     }
 
     /// Calculate Lennard-Jones potential energy with force capping.
@@ -277,9 +306,18 @@ impl BallPhysics {
     /// 2. Force continuity: F = -dU/dr = +max_force (repulsive) for r < r_cap
     /// 3. Conservative force field (energy is conserved)
     ///
+    /// ### Cutoff
+    /// Pairs interact only below `lj_cutoff`. The potential is shifted by
+    /// U(lj_cutoff) so it reaches zero there: a pair entering or leaving a
+    /// neighbour list (which only happens beyond the cutoff) no longer changes
+    /// the total energy.
+    ///
     /// # Arguments
     /// * `edge_dist` - Edge-to-edge distance between ball surfaces
     pub(crate) fn potential(&self, edge_dist: f32) -> f32 {
+        if edge_dist >= self.constants.lj_cutoff {
+            return 0.;
+        }
         // Potential
         let pot_quot = self.constants.lj_sig / edge_dist.max(1e-10);
         let pot_quot_six = pot_quot * pot_quot * pot_quot * pot_quot * pot_quot * pot_quot;
@@ -289,7 +327,7 @@ impl BallPhysics {
         let potential_linear = (self.constants.pot_at_cap
             - self.constants.max_force * (edge_dist - self.constants.r_cap))
             .max(self.constants.pot_at_cap);
-        potential_linear.min(potential_uncapped)
+        potential_linear.min(potential_uncapped) - self.constants.pot_at_cutoff
     }
 
     pub(crate) fn potential_simd(&self, edge_dist: f32x4) -> f32x4 {
@@ -314,7 +352,10 @@ impl BallPhysics {
             pot_at_cap_vec,
         );
 
-        f32x4::simd_min(potential_linear, potential_uncapped)
+        let potential_shifted = f32x4::simd_min(potential_linear, potential_uncapped)
+            - f32x4::splat(self.constants.pot_at_cutoff);
+        self.inside_cutoff(edge_dist)
+            .select(potential_shifted, f32x4::splat(0.))
     }
 
     /// Get the cached force cap distance

@@ -495,3 +495,86 @@ fn test_cutoff_energy_loss() {
         relative_drift
     );
 }
+
+/// Potential energy of the pairs the dynamics actually sees: every pair in a
+/// neighbour list, counted once, summed in f64 so list reordering does not
+/// show up as rounding noise.
+fn listed_pair_potential(main_content: &MainContent) -> f64 {
+    let world = main_content.world();
+    let mut potential = 0.0f64;
+    for (i, ball) in world.balls.iter().enumerate() {
+        for &j in ball.hood.get_neighbour_indices() {
+            if j > i {
+                let edge_dist = ball.get_edge_distance(&world.balls[j]);
+                potential += world.physics.potential(edge_dist) as f64;
+            }
+        }
+    }
+    potential
+}
+
+/// Pairs join or leave a neighbour list only beyond the LJ cutoff, where the
+/// shifted potential is zero, so a rebuild must never change the energy.
+/// Without the cutoff every list change added or removed U(r) ~ -5e-4 and the
+/// lag between adding (inside) and removing (outside) made that a steady loss.
+#[test]
+fn test_neighbour_list_rebuild_does_not_change_energy() {
+    let (mut main_content, win_def) = create_main_content_for_region(500.0, 500.0);
+    main_content.world_mut().speed_limit_override = Some(f32::INFINITY);
+
+    let world_rect = win_def.world_bounds();
+    let (tl_x, tl_y) = world_rect.get_tl();
+    let (br_x, br_y) = world_rect.get_br();
+    let center = Vec2D::new((tl_x + br_x) * 0.5, (tl_y + br_y) * 0.5);
+    let factory = BallFactory::new();
+    const SIDE: usize = 12;
+    const SPACING: f32 = 2.4;
+    let half = (SIDE as f32 - 1.0) * SPACING * 0.5;
+    for i in 0..SIDE {
+        for j in 0..SIDE {
+            let pos = Vec2D::new(
+                center.x - half + i as f32 * SPACING,
+                center.y - half + j as f32 * SPACING,
+            );
+            let vel = Vec2D::new(
+                (i as f32 * 0.617 + j as f32 * 1.271).sin() * 1.5,
+                (i as f32 * 1.314 + j as f32 * 0.459).cos() * 1.5,
+            );
+            let ball = factory.create_massive_with_velocity(pos, vel);
+            main_content.world_mut().balls.push(ball);
+        }
+    }
+    main_content.world_mut().rebuild_cell_grid();
+    main_content.collect_neighbours_by_cell(DT_GOAL);
+
+    let listed_pairs = |mc: &MainContent| -> usize {
+        mc.world()
+            .balls
+            .iter()
+            .map(|b| b.hood.get_neighbour_indices().len())
+            .sum()
+    };
+
+    let mut list_changes = 0usize;
+    let mut max_jump = 0.0f64;
+    for _ in 0..400 {
+        let pairs_before = listed_pairs(&main_content);
+        let before = listed_pair_potential(&main_content);
+        main_content.collect_neighbours_by_cell(DT_GOAL);
+        let after = listed_pair_potential(&main_content);
+        if listed_pairs(&main_content) != pairs_before {
+            list_changes += 1;
+        }
+        max_jump = max_jump.max((after - before).abs());
+        main_content.simulation_step().unwrap();
+    }
+
+    assert!(
+        list_changes > 10,
+        "scenario must actually change neighbour lists, got {list_changes} rebuilds that did"
+    );
+    assert!(
+        max_jump < 1e-6,
+        "neighbour-list rebuild changed the potential energy by {max_jump:e}"
+    );
+}
