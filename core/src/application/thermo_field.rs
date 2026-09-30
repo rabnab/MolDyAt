@@ -152,16 +152,36 @@ impl PartialEq for ThermoGrid {
 /// Per-cell accumulator for computing local temperature and pressure.
 struct CellStats {
     kinetic: LocalKineticStats,
-    virial: f32,
+    /// Σ_pairs r_ij · F_ij, each pair counted once (half of it per ball).
+    pair_virial: f32,
 }
 
 impl CellStats {
     fn new() -> Self {
         Self {
             kinetic: LocalKineticStats::new(),
-            virial: 0.0,
+            pair_virial: 0.0,
         }
     }
+}
+
+/// Virial pressure of a 2D region (force per unit length).
+///
+/// 2D virial theorem: `P·A = N_kin·T + (1/2)·Σ_pairs r_ij · F_ij`. The `1/2`
+/// is `1/d` for dimension `d = 2` (it would be `1/3` in 3D) and is separate
+/// from the double-counting factor already applied to `pair_virial`.
+///
+/// * `n_balls` - balls in the region; the kinetic term uses `N - 1` because
+///   `temperature` is the centre-of-mass-subtracted temperature (see
+///   `docs/nose-hoover.md`).
+/// * `temperature` - COM-subtracted kinetic temperature (k_B = 1).
+/// * `pair_virial` - `Σ_pairs r_ij · F_ij` with each pair counted once,
+///   positive for repulsion.
+/// * `area` - region area.
+pub fn virial_pressure_2d(n_balls: usize, temperature: f32, pair_virial: f32, area: f32) -> f32 {
+    const INV_DIMENSION: f32 = 0.5;
+    let kinetic_term = (n_balls as f32 - 1.0) * temperature;
+    (kinetic_term + INV_DIMENSION * pair_virial) / area
 }
 
 /// Compute the visualization grid dimensions (rows, cols) aiming for an average
@@ -238,7 +258,7 @@ pub fn compute_cell_thermo(
 
         let cs = &mut stats[idx];
         cs.kinetic.add_ball(ball);
-        cs.virial += fr.virial * 0.5;
+        cs.pair_virial += fr.virial * 0.5;
     }
 
     let cell_area = cell_w * cell_h;
@@ -253,10 +273,7 @@ pub fn compute_cell_thermo(
                 pres_grid.set(r, c, f32::NAN);
                 continue;
             };
-            let n = cs.kinetic.count() as f32;
-            // Temperature removes the 2D COM motion, so the matching kinetic
-            // pressure term is (N - 1) * T rather than N * T.
-            let p = ((n - 1.0) * t + cs.virial) / cell_area;
+            let p = virial_pressure_2d(cs.kinetic.count(), t, cs.pair_virial, cell_area);
             temp_grid.set(r, c, t);
             pres_grid.set(r, c, p);
         }

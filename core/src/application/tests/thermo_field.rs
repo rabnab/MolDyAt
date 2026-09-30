@@ -1,5 +1,6 @@
 use crate::application::thermo_field::{
     LocalKineticStats, ThermoFieldHistory, ThermoGrid, compute_cell_thermo, compute_viz_grid_dims,
+    virial_pressure_2d,
 };
 use crate::objects2d::Rect;
 use crate::objects2d::Vec2D;
@@ -149,10 +150,10 @@ fn test_local_temperature_uses_com_removed_degrees_of_freedom() {
 
 #[test]
 fn test_known_virial_pressure() {
-    // Two resting balls (T=0) with injected virial → P = virial / cell_area.
-    // virial per ball = 10.0 → accumulated as 10.0*0.5 = 5.0 per ball → total = 10.0
+    // Two resting balls (T=0) with injected virial → P = ½ Σ_pairs r·F / cell_area.
+    // virial per ball = 10.0 → accumulated as 10.0*0.5 = 5.0 per ball → pair sum = 10.0
     // Grid 1×1 over 10×10 world → cell_area = 100
-    // P = (2*0 + 10.0) / 100 = 0.1
+    // 2D virial theorem: P = ((2-1)*0 + ½·10.0) / 100 = 0.05
     let world = Rect::new(0.0, 0.0, 10.0, 10.0);
     let balls = vec![
         make_ball(0, Vec2D::new(5.0, 5.0), Vec2D::zero(), 1.0),
@@ -160,7 +161,7 @@ fn test_known_virial_pressure() {
     ];
     let forces = vec![make_force_result(10.0), make_force_result(10.0)];
     let (_, p) = compute_cell_thermo(&balls, &forces, &world, 0, 0);
-    let expected_p = 10.0 / 100.0;
+    let expected_p = 0.5 * 10.0 / 100.0;
     assert!(
         (p.get(0, 0) - expected_p).abs() < 1e-5,
         "P={} expected {expected_p}",
@@ -424,4 +425,21 @@ fn test_history_ring_wraparound() {
         avg_p.get(0, 0),
         expected_p,
     );
+}
+
+#[test]
+fn test_virial_pressure_2d_kinetic_term_uses_com_subtracted_count() {
+    // No interactions: P·A = (N - 1)·T
+    let p = virial_pressure_2d(5, 2.0, 0.0, 10.0);
+    assert!((p - 4.0 * 2.0 / 10.0).abs() < 1e-6, "P={p}");
+}
+
+#[test]
+fn test_virial_pressure_2d_halves_pair_virial() {
+    // At T = 0 only the virial term remains: P·A = ½·Σ_pairs r·F (1/d, d = 2)
+    let repulsive = virial_pressure_2d(2, 0.0, 8.0, 4.0);
+    assert!((repulsive - 1.0).abs() < 1e-6, "P={repulsive}");
+    // Attraction (negative virial) lowers the pressure below the kinetic value.
+    let attractive = virial_pressure_2d(3, 1.0, -2.0, 1.0);
+    assert!((attractive - (2.0 - 1.0)).abs() < 1e-6, "P={attractive}");
 }

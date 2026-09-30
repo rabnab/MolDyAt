@@ -42,6 +42,14 @@ $$
 
 In 2D that COM-subtracted definition implies a matching kinetic pressure term of $(N - 1) T$ for a cell, not $N T$.
 
+The full cell pressure is the 2D virial pressure (`thermo_field::virial_pressure_2d`):
+
+$$
+P = \frac{(N - 1) T + \tfrac{1}{2} \sum_{i<j} \mathbf{r}_{ij} \cdot \mathbf{F}_{ij}}{A}
+$$
+
+The $\tfrac{1}{2}$ is $1/d$ for $d = 2$; each pair enters the sum once.
+
 That formula should be extracted into a small shared helper so the thermo visualization and the thermostat cannot drift apart.
 
 ### 3. Assign each ball to at most one thermostat per step

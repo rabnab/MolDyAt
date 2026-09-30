@@ -190,7 +190,8 @@ pub struct ForceResult {
     /// Here `r_ij` is the displacement from neighbour `j` to ball `i` (`r_i - r_j`),
     /// matching the force direction convention used in this module. The 0.5
     /// double-counting factor is NOT applied here; it must be applied when
-    /// accumulating into per-cell statistics.
+    /// accumulating into per-cell statistics. The 2D virial theorem's own 1/2
+    /// (1/d) is applied in `thermo_field::virial_pressure_2d`.
     pub virial: f32,
 }
 
