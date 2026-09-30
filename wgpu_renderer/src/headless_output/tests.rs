@@ -40,6 +40,8 @@ fn test_run_start_record_contains_config_and_operator_counts() {
         rng_seed: Some(123),
         stdout: true,
         seed_balls: Some(50),
+        dt: None,
+        line_segments: Vec::new(),
     };
 
     let line = run_start_to_jsonl(&config, &snapshot);
@@ -337,6 +339,8 @@ fn test_runs_with_same_seed_and_config_emit_identical_jsonl() {
         rng_seed: Some(12345),
         stdout: false,
         seed_balls: Some(24),
+        dt: None,
+        line_segments: Vec::new(),
     };
     let config_b = HeadlessConfig {
         output: Some(output_path_b.clone()),

@@ -160,6 +160,18 @@ fn run_start_to_jsonl(config: &HeadlessConfig, snapshot: &RendererSnapshot) -> S
             "seeded_constructor": config.rng_seed.is_some(),
             "stdout": config.stdout,
             "has_output_file": config.output.is_some(),
+            "dt": config.dt.map_or(serde_json::Value::Null, f32_value),
+            "line_segments": config
+                .line_segments
+                .iter()
+                .map(|segment| {
+                    json!({
+                        "start": [f32_value(segment.start.0), f32_value(segment.start.1)],
+                        "end": [f32_value(segment.end.0), f32_value(segment.end.1)],
+                        "thickness": f32_value(segment.thickness),
+                    })
+                })
+                .collect::<Vec<_>>(),
         },
         "initial": {
             "step": snapshot.simulation_step,
@@ -167,9 +179,22 @@ fn run_start_to_jsonl(config: &HeadlessConfig, snapshot: &RendererSnapshot) -> S
             "ball_count": snapshot.balls.len(),
             "gravity_force_multiple": snapshot.gravity_force_multiple,
             "operator_counts": operator_counts(&snapshot.operators),
+            "world_rect": world_rect_to_json(&snapshot.cell_grid_bounds),
         },
     })
     .to_string()
+}
+
+/// World bounds, so `--line-segment` coordinates can be chosen from a run.
+fn world_rect_to_json(rect: &rust_thermo_core::objects2d::Rect) -> serde_json::Value {
+    let (left, top) = rect.get_tl();
+    let (right, bottom) = rect.get_br();
+    json!({
+        "left": f32_value(left),
+        "top": f32_value(top),
+        "right": f32_value(right),
+        "bottom": f32_value(bottom),
+    })
 }
 
 fn frame_to_jsonl(snapshot: &RendererSnapshot, initial_total_energy: Option<f32>) -> String {

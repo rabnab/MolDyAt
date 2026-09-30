@@ -230,3 +230,22 @@ fn test_remove_invalid_balls_clears_neighbor_indices() {
         }
     }
 }
+
+#[test]
+fn test_set_time_step_accepts_positive_and_rejects_invalid_values() {
+    let (mut main_content, _) = create_main_content();
+    main_content.set_time_step(0.004).expect("positive dt");
+    assert_eq!(main_content.time_step(), 0.004);
+
+    for dt in [0.0, -0.01, f32::NAN, f32::INFINITY] {
+        assert!(
+            main_content.set_time_step(dt).is_err(),
+            "dt={dt} should be rejected"
+        );
+        assert_eq!(
+            main_content.time_step(),
+            0.004,
+            "dt={dt} changed the time step"
+        );
+    }
+}

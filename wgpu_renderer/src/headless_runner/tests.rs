@@ -1,5 +1,5 @@
 use super::*;
-use crate::headless_cli::{DetailLevel, OutputFormat};
+use crate::headless_cli::{DetailLevel, LineSegmentSpec, OutputFormat};
 use crate::headless_output::HeadlessSnapshotSink;
 use rust_thermo_core::application::renderer_snapshot::RendererSnapshot;
 use std::cell::RefCell;
@@ -90,6 +90,8 @@ fn seeded_headless_output() -> String {
         rng_seed: Some(12345),
         stdout: false,
         seed_balls: Some(24),
+        dt: None,
+        line_segments: Vec::new(),
     };
 
     let mut application =
@@ -190,4 +192,106 @@ fn test_seeded_headless_regression_fixture_matches_checked_in_jsonl() {
         actual_records, expected_records,
         "seeded headless regression output drifted from the checked-in fixture"
     );
+}
+
+fn test_world_rect() -> rust_thermo_core::objects2d::Rect {
+    rust_thermo_core::application::MainContent::bootstrap_world_rect(
+        1280,
+        720,
+        rust_thermo_core::graphics::renderer::margins::Margins::new(110.0, 50.0, 50.0, 50.0),
+    )
+}
+
+#[test]
+fn test_prepare_application_applies_dt_and_line_segments() {
+    let config = HeadlessConfig {
+        steps: 4,
+        rng_seed: Some(12345),
+        seed_balls: Some(24),
+        dt: Some(0.005),
+        line_segments: vec![
+            LineSegmentSpec {
+                start: (-20.0, 0.0),
+                end: (20.0, 0.0),
+                thickness: 4.0,
+            },
+            LineSegmentSpec {
+                start: (0.0, -20.0),
+                end: (0.0, 20.0),
+                thickness: 1.0,
+            },
+        ],
+        ..HeadlessConfig::default()
+    };
+
+    let mut application = prepare_application(&config, test_world_rect()).expect("prepare");
+    assert_eq!(application.time_step(), 0.005);
+
+    let snapshot = application.create_snapshot();
+    let walls = &snapshot.operators.line_segments;
+    assert_eq!(walls.len(), 2);
+    assert_eq!(walls[0].thickness, 4.0);
+    assert_eq!(walls[1].thickness, 1.0);
+
+    // Walls are placed before seeding, so no ball starts inside one.
+    for ball in &snapshot.balls {
+        for wall in walls {
+            let clearance = wall.distance_to_ball(&ball.position, ball.radius);
+            assert!(
+                clearance >= 0.5 * wall.thickness,
+                "ball {} starts inside wall {}",
+                ball.id,
+                wall.id
+            );
+        }
+    }
+
+    for _ in 0..config.steps {
+        application.simulation_step().expect("step");
+    }
+    let time = application.create_snapshot().time;
+    assert!((time - 4.0 * 0.005).abs() < 1e-6, "time {time}");
+}
+
+#[test]
+fn test_run_start_records_effective_dt_segments_and_world_rect() {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock before unix epoch")
+        .as_nanos();
+    let output_path = std::env::temp_dir().join(format!(
+        "headless-run-start-{}-{nanos}.jsonl",
+        std::process::id()
+    ));
+    let config = HeadlessConfig {
+        output: Some(output_path.clone()),
+        stdout: false,
+        rng_seed: Some(1),
+        line_segments: vec![LineSegmentSpec {
+            start: (-10.0, 5.0),
+            end: (10.0, 5.0),
+            thickness: 2.0,
+        }],
+        ..HeadlessConfig::default()
+    };
+    let application = prepare_application(&config, test_world_rect()).expect("prepare");
+    let default_dt = application.time_step();
+    HeadlessRunner::from_config(config, application)
+        .expect("runner")
+        .run()
+        .expect("run");
+    let content = fs::read_to_string(&output_path).expect("read output");
+    let _ = fs::remove_file(&output_path);
+
+    let run_start = &parse_jsonl_records(&content)[0];
+    assert_eq!(run_start["record_kind"], "run_start");
+    assert_eq!(run_start["config"]["dt"].as_f64(), Some(default_dt as f64));
+    let segment = &run_start["config"]["line_segments"][0];
+    assert_eq!(segment["start"], serde_json::json!([-10.0, 5.0]));
+    assert_eq!(segment["end"], serde_json::json!([10.0, 5.0]));
+    assert_eq!(segment["thickness"], 2.0);
+    assert_eq!(run_start["initial"]["operator_counts"]["line_segments"], 1);
+    let world = &run_start["initial"]["world_rect"];
+    assert!(world["left"].as_f64() < world["right"].as_f64());
+    assert!(world["bottom"].as_f64() < world["top"].as_f64());
 }

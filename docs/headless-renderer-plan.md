@@ -171,6 +171,8 @@ Suggested flags:
 - `--stdout`
 - `--no-stdout`
 - `--seed-balls <n>`
+- `--dt <seconds>` (time step override; positive)
+- `--line-segment x1,y1,x2,y2[,thickness]` (repeatable wall in world coordinates; thickness 1-20, default 1; placed before seeding)
 
 Default behavior in headless mode:
 

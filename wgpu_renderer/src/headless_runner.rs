@@ -1,7 +1,7 @@
 use crate::headless_cli::HeadlessConfig;
 use crate::headless_output::{HeadlessSnapshotSink, HeadlessWriter};
 use rust_thermo_core::application::{GameLogic, MainContent};
-use rust_thermo_core::objects2d::Rect;
+use rust_thermo_core::objects2d::{Rect, Vec2D};
 use std::io;
 use std::time::Duration;
 
@@ -77,7 +77,9 @@ impl HeadlessRunner {
         HeadlessRunnerBuilder::new()
     }
 
-    pub fn from_config(config: HeadlessConfig, application: MainContent) -> io::Result<Self> {
+    pub fn from_config(mut config: HeadlessConfig, application: MainContent) -> io::Result<Self> {
+        // Record the effective time step in run_start, also when it is the default.
+        config.dt = Some(application.time_step());
         let sink = HeadlessWriter::builder()
             .stdout(config.stdout)
             .output(config.output.clone())
@@ -121,6 +123,28 @@ pub fn build_application(world_rect: Rect, rng_seed: Option<u64>) -> io::Result<
         MainContent::new(world_rect)
     };
     application.map_err(|error| io::Error::other(format!("{error:?}")))
+}
+
+/// Build the application for a headless run: time step, then walls, then
+/// seeded balls (so seeding never places a ball inside a wall).
+pub fn prepare_application(config: &HeadlessConfig, world_rect: Rect) -> io::Result<MainContent> {
+    let mut application = build_application(world_rect, config.rng_seed)?;
+    if let Some(dt) = config.dt {
+        application
+            .set_time_step(dt)
+            .map_err(|error| io::Error::other(format!("{error:?}")))?;
+    }
+    for segment in &config.line_segments {
+        application.add_line_segment_with_thickness(
+            Vec2D::new(segment.start.0, segment.start.1),
+            Vec2D::new(segment.end.0, segment.end.1),
+            segment.thickness,
+        );
+    }
+    if let Some(seed_balls) = config.seed_balls {
+        application.seed_random_balls(seed_balls as usize);
+    }
+    Ok(application)
 }
 
 #[cfg(test)]
