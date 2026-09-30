@@ -86,6 +86,13 @@ cargo run -p rust_thermo_wgpu -- --headless --steps 1000 --snapshot-every 100 --
 ```
 
 ```bash
+# Custom time step and interior walls (world coordinates, x1,y1,x2,y2[,thickness]).
+# Walls are placed before --seed-balls, so no ball starts inside a wall.
+# run_start records the effective dt, the walls and the world_rect bounds.
+cargo run -p rust_thermo_wgpu -- --headless --steps 20000 --snapshot-every 100 --rng-seed 12345 --seed-balls 800 --dt 0.005 --line-segment -30,-20,-30,20 --line-segment -20,15,20,15,3 --output /tmp/walls.jsonl --no-stdout
+```
+
+```bash
 # Export summary + per-ball state (larger output)
 cargo run -p rust_thermo_wgpu -- --headless --steps 200 --snapshot-every 20 --detail balls --output /tmp/balls.jsonl --no-stdout
 ```

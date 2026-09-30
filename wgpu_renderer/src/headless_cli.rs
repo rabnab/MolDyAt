@@ -2,6 +2,7 @@
 ///
 /// This module handles parsing command-line arguments for headless execution mode
 /// and storing the parsed configuration for use by the headless simulation loop.
+use rust_thermo_core::objects2d::line_segment::{DEFAULT_THICKNESS, MAX_THICKNESS, MIN_THICKNESS};
 use std::env;
 use std::path::PathBuf;
 
@@ -16,6 +17,47 @@ pub struct HeadlessConfig {
     pub rng_seed: Option<u64>,
     pub stdout: bool,
     pub seed_balls: Option<u32>,
+    /// Time step override; `None` keeps the simulation default.
+    pub dt: Option<f32>,
+    /// Walls placed before any balls are seeded, in world coordinates.
+    pub line_segments: Vec<LineSegmentSpec>,
+}
+
+/// One `--line-segment x1,y1,x2,y2[,thickness]` wall. The thickness range and
+/// default come from core (`objects2d::line_segment`), shared with the UI keys.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LineSegmentSpec {
+    pub start: (f32, f32),
+    pub end: (f32, f32),
+    pub thickness: f32,
+}
+
+impl LineSegmentSpec {
+    fn parse(value: &str) -> Result<Self, CliError> {
+        const USAGE: &str = "--line-segment value must be x1,y1,x2,y2[,thickness]";
+        let parts = value
+            .split(',')
+            .map(|part| part.trim().parse::<f32>())
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| CliError::new(USAGE))?;
+        if !(4..=5).contains(&parts.len()) || parts.iter().any(|v| !v.is_finite()) {
+            return Err(CliError::new(USAGE));
+        }
+        let spec = Self {
+            start: (parts[0], parts[1]),
+            end: (parts[2], parts[3]),
+            thickness: parts.get(4).copied().unwrap_or(DEFAULT_THICKNESS),
+        };
+        if spec.start == spec.end {
+            return Err(CliError::new("--line-segment start and end must differ"));
+        }
+        if !(MIN_THICKNESS..=MAX_THICKNESS).contains(&spec.thickness) {
+            return Err(CliError::new(format!(
+                "--line-segment thickness must be between {MIN_THICKNESS} and {MAX_THICKNESS}"
+            )));
+        }
+        Ok(spec)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -52,6 +94,8 @@ impl Default for HeadlessConfig {
             rng_seed: None,
             stdout: true,
             seed_balls: None,
+            dt: None,
+            line_segments: Vec::new(),
         }
     }
 }
@@ -167,6 +211,25 @@ fn parse_headless_args_with_args(args: &[String]) -> Result<Option<HeadlessConfi
                     return Err(CliError::new("--seed-balls value must be greater than 0"));
                 }
                 config.seed_balls = Some(count);
+            }
+            "--dt" => {
+                i += 1;
+                if i >= args.len() {
+                    return Err(CliError::new("--dt requires a value"));
+                }
+                let dt = args[i]
+                    .parse::<f32>()
+                    .ok()
+                    .filter(|dt| dt.is_finite() && *dt > 0.0)
+                    .ok_or_else(|| CliError::new("--dt value must be a positive number"))?;
+                config.dt = Some(dt);
+            }
+            "--line-segment" => {
+                i += 1;
+                if i >= args.len() {
+                    return Err(CliError::new("--line-segment requires a value"));
+                }
+                config.line_segments.push(LineSegmentSpec::parse(&args[i])?);
             }
             other => return Err(CliError::new(format!("Unknown argument: {}", other))),
         }

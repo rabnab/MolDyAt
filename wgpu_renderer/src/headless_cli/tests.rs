@@ -12,6 +12,8 @@ fn test_default_config_values() {
     assert_eq!(config.rng_seed, None);
     assert!(config.stdout);
     assert_eq!(config.seed_balls, None);
+    assert_eq!(config.dt, None);
+    assert!(config.line_segments.is_empty());
 }
 
 #[test]
@@ -373,4 +375,73 @@ fn test_stdout_and_no_stdout_conflict_is_error() {
     ];
     let result = parse_headless_args_with_args(&args);
     assert!(result.is_err());
+}
+
+fn headless_args(extra: &[&str]) -> Vec<String> {
+    ["program", "--headless"]
+        .iter()
+        .chain(extra)
+        .map(|arg| arg.to_string())
+        .collect()
+}
+
+#[test]
+fn test_dt_flag() {
+    let config = parse_headless_args_with_args(&headless_args(&["--dt", "0.005"]))
+        .unwrap()
+        .unwrap();
+    assert_eq!(config.dt, Some(0.005));
+}
+
+#[test]
+fn test_dt_flag_rejects_non_positive_and_invalid_values() {
+    for value in ["0", "-0.01", "abc", "NaN", "inf"] {
+        let result = parse_headless_args_with_args(&headless_args(&["--dt", value]));
+        assert!(result.is_err(), "--dt {value} should be rejected");
+    }
+    assert!(parse_headless_args_with_args(&headless_args(&["--dt"])).is_err());
+}
+
+#[test]
+fn test_line_segment_flag_is_repeatable_with_optional_thickness() {
+    let config = parse_headless_args_with_args(&headless_args(&[
+        "--line-segment",
+        "-20,-10,20,-10",
+        "--line-segment",
+        "0, 5, 0, 25, 3.5",
+    ]))
+    .unwrap()
+    .unwrap();
+    assert_eq!(
+        config.line_segments,
+        vec![
+            LineSegmentSpec {
+                start: (-20.0, -10.0),
+                end: (20.0, -10.0),
+                thickness: 1.0,
+            },
+            LineSegmentSpec {
+                start: (0.0, 5.0),
+                end: (0.0, 25.0),
+                thickness: 3.5,
+            },
+        ]
+    );
+}
+
+#[test]
+fn test_line_segment_flag_rejects_malformed_values() {
+    for value in [
+        "1,2,3",
+        "1,2,3,4,5,6",
+        "1,2,x,4",
+        "1,2,1,2",
+        "0,0,1,1,0.5",
+        "0,0,1,1,21",
+        "0,0,inf,1",
+    ] {
+        let result = parse_headless_args_with_args(&headless_args(&["--line-segment", value]));
+        assert!(result.is_err(), "--line-segment {value} should be rejected");
+    }
+    assert!(parse_headless_args_with_args(&headless_args(&["--line-segment"])).is_err());
 }

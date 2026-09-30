@@ -1,4 +1,5 @@
 use super::*;
+use crate::application::AppResult;
 use crate::application::sim_stats::{HIGH_GRAVITY, NORMAL_GRAVITY};
 use crate::objects2d::Rect;
 use crate::objects2d::ball_impl::BallFactory;
@@ -113,6 +114,18 @@ impl MainContent {
 
     pub(crate) fn halve_time_step(&mut self) {
         self.game_data.halve_time_step();
+    }
+
+    /// Time step used by every following simulation step.
+    pub fn time_step(&self) -> f32 {
+        self.game_data.get_time_step()
+    }
+
+    /// Set the time step exactly (no clamping, unlike the double/halve
+    /// keys). Used by headless runs. A non-finite or non-positive `dt` is
+    /// rejected with an error and the current time step is kept.
+    pub fn set_time_step(&mut self, dt: f32) -> AppResult<()> {
+        self.game_data.set_time_step(dt)
     }
 }
 

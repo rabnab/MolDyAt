@@ -6,7 +6,12 @@
 
 use super::Vec2D;
 
-pub(crate) const DEFAULT_THICKNESS: f32 = 1.0;
+/// Thickness of a newly drawn wall.
+pub const DEFAULT_THICKNESS: f32 = 1.0;
+/// Thickness range of a wall (the thickness keys and headless `--line-segment`
+/// clamp or reject values outside it).
+pub const MIN_THICKNESS: f32 = 1.0;
+pub const MAX_THICKNESS: f32 = 20.0;
 pub const THICKNESS_TO_WORLD: f32 = 1.0;
 
 /// Extra half-width of a valve's rectangle beyond its wall, as a fraction of

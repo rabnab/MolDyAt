@@ -1,5 +1,6 @@
 use crate::application::core::SimulationEngine;
 use crate::application::{AppResult, GameLogic, MainContent};
+use crate::error::AppError;
 use crate::objects2d::ball_impl::{Ball2D, BallFactory};
 use std::time::Instant;
 
@@ -66,6 +67,18 @@ impl GameLogicData {
 
     pub(crate) fn get_time_step(&self) -> f32 {
         self.dt_goal
+    }
+
+    /// Set the time step exactly. Rejects non-finite or non-positive values
+    /// and keeps the current time step.
+    pub(crate) fn set_time_step(&mut self, dt: f32) -> AppResult<()> {
+        if !(dt.is_finite() && dt > 0.0) {
+            return Err(AppError::CustomError(format!(
+                "time step must be finite and positive, got {dt}"
+            )));
+        }
+        self.dt_goal = dt;
+        Ok(())
     }
 }
 

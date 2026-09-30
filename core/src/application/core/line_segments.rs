@@ -1,6 +1,8 @@
 use super::{MainContent, SimulationWorld};
 use crate::objects2d::Vec2D;
-use crate::objects2d::line_segment::{DEFAULT_THICKNESS, GhostWall, THICKNESS_TO_WORLD};
+use crate::objects2d::line_segment::{
+    DEFAULT_THICKNESS, GhostWall, MAX_THICKNESS, MIN_THICKNESS, THICKNESS_TO_WORLD,
+};
 use crate::objects2d::wall_chain::{ChainPiece, Joint, WallChain};
 
 /// A plain capsule obstacle for collision purposes: either a chain piece or
@@ -62,6 +64,14 @@ impl MainContent {
         self.world.add_line_segment(start, end);
     }
 
+    /// Add a wall with the given thickness (clamped to the range the
+    /// thickness keys allow). Used by headless runs to place walls without
+    /// UI interaction.
+    pub fn add_line_segment_with_thickness(&mut self, start: Vec2D, end: Vec2D, thickness: f32) {
+        self.world
+            .add_line_segment_with_thickness(start, end, thickness);
+    }
+
     /// Move one of a WALL's own two endpoints (not any internal, valve-cut
     /// piece boundary -- those aren't user-draggable at all; see
     /// `SimulationWorld::move_line_segment_endpoint`).
@@ -109,7 +119,19 @@ impl SimulationWorld {
     /// (Previously the return value was unused; the chain needs it to link
     /// the piece into a `WallChain`.)
     pub(crate) fn add_line_segment(&mut self, start: Vec2D, end: Vec2D) {
+        self.add_line_segment_with_thickness(start, end, DEFAULT_THICKNESS);
+    }
+
+    pub(crate) fn add_line_segment_with_thickness(
+        &mut self,
+        start: Vec2D,
+        end: Vec2D,
+        thickness: f32,
+    ) {
         let line_id = self.line_segments.add(start, end);
+        if let Some(seg) = self.line_segments.find_mut(line_id) {
+            seg.thickness = f32::clamp(thickness, MIN_THICKNESS, MAX_THICKNESS);
+        }
         let chain_id = self.wall_chains.add(start, end, line_id);
         self.ghost_wall = None;
         self.flag_balls_overlapping_chain(chain_id);
@@ -212,7 +234,11 @@ impl SimulationWorld {
 
     pub(crate) fn change_line_thickness(&mut self, segment_id: usize, steps: i32) {
         if let Some(seg) = self.line_segments.find_mut(segment_id) {
-            seg.thickness = f32::clamp(seg.thickness + steps as f32 * THICKNESS_STEP, 1.0, 20.0);
+            seg.thickness = f32::clamp(
+                seg.thickness + steps as f32 * THICKNESS_STEP,
+                MIN_THICKNESS,
+                MAX_THICKNESS,
+            );
         }
         if let Some(chain_id) = self
             .wall_chains
