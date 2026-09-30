@@ -269,6 +269,10 @@ struct ReflectionRun {
     /// Per-step invariant violations (containment, ball presence).
     step_violations: Vec<String>,
     expected_events: usize,
+    /// Contacts resolved exactly in the position update.
+    wall_contacts: u64,
+    /// Balls pushed out of a line wall by the overlap fallback.
+    overlap_corrections: u64,
 }
 
 /// Runs one ball with the given initial velocity, collects every step in
@@ -341,11 +345,14 @@ fn run_single_ball(
             prev_v = ball.v;
         },
     );
+    let stats = &main_content.world().sim;
     ReflectionRun {
         metrics,
         events,
         step_violations,
         expected_events,
+        wall_contacts: stats.wall_contacts,
+        overlap_corrections: stats.wall_overlap_corrections,
     }
 }
 
@@ -361,6 +368,15 @@ impl ReflectionRun {
             violations.push(format!(
                 "reflection count differs from ray-traced reference: observed={observed} expected={} tolerance={MAX_EVENT_COUNT_ERROR}",
                 self.expected_events
+            ));
+        }
+
+        // Every contact here starts clear of the walls, so all of them must be
+        // resolved exactly; the projecting overlap fallback must not fire.
+        if self.overlap_corrections > 0 {
+            violations.push(format!(
+                "overlap fallback fired: overlap_corrections={} wall_contacts={}",
+                self.overlap_corrections, self.wall_contacts
             ));
         }
 
@@ -394,9 +410,11 @@ fn check_scenario(scenario: &str, run: &ReflectionRun, mut violations: Vec<Strin
         MAX_REL_KINETIC_DEVIATION,
     );
     println!(
-        "{scenario} diagnostics: reflection_events={} expected_events={}",
+        "{scenario} diagnostics: reflection_events={} expected_events={} wall_contacts={} overlap_corrections={}",
         run.events.len(),
-        run.expected_events
+        run.expected_events,
+        run.wall_contacts,
+        run.overlap_corrections
     );
     violations.dedup();
     assert!(

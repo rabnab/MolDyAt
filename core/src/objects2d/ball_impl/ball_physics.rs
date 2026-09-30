@@ -408,11 +408,18 @@ impl BallPhysics {
     /// * `ball` - Ball to update
     /// * `dt` - Time step
     /// * `bound` - Boundary rectangle (reflective walls)
+    /// * `restitution` - Normal restitution of the walls (1.0 = elastic)
     ///
     /// # Returns
     /// Information about wall bounces that occurred
-    pub fn update_positions(&self, ball: &mut Ball2D, dt: f32, bound: &Rect) -> BounceInfo {
-        let bounce_info = ball.execute_update_pos(dt, bound);
+    pub fn update_positions(
+        &self,
+        ball: &mut Ball2D,
+        dt: f32,
+        bound: &Rect,
+        restitution: f32,
+    ) -> BounceInfo {
+        let bounce_info = ball.execute_update_pos(dt, bound, restitution);
 
         if ball.verbose.console {
             println!(

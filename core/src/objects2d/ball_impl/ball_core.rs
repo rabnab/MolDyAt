@@ -1,5 +1,8 @@
 use crate::objects2d::Rect;
 use crate::objects2d::ball_impl::verlet::Verlet;
+use crate::objects2d::ball_impl::wall_contact::{
+    NormalPosition, WallContact, resolve_normal_position,
+};
 use crate::objects2d::ball_impl::{BallId, Named};
 use crate::objects2d::vec_2d::Vec2D;
 use crate::objects2d::verbose_info::VerboseInfo;
@@ -9,22 +12,33 @@ const DEFAULT_TAIL_LENGTH: usize = 1000;
 
 const TAIL_RESOLUTION_DELTA_SQ: f32 = 1. * 1.; // minimum squared distance to add new tail point
 
-/// Information about wall bounces detected during position update.
-/// Bounces are applied as impulses during the velocity update step to preserve Verlet integration.
+/// Wall contacts found during the position update, for the velocity update.
+/// The velocity update applies them one after the other along their normals,
+/// so contacts in the same step must have orthogonal normals: a box corner
+/// gives one `box_x` and one `box_y` contact, and a line wall is only swept
+/// in a step without a box contact (`line_wall` is `None` whenever a box
+/// field is set).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct BounceInfo {
-    /// Momentum that will be transferred to walls (calculated during velocity update)
-    pub wall_px: f32,
-    pub wall_py: f32,
-    /// Whether the ball bounced off left/right wall during position update
-    pub bounced_x: bool,
-    /// Whether the ball bounced off top/bottom wall during position update
-    pub bounced_y: bool,
-    /// Velocity before bounce (needed for wall momentum calculation)
-    pub v_x_before_bounce: f32,
-    pub v_y_before_bounce: f32,
-    /// Fraction of timestep before collision (0.0 to 1.0)
-    pub collision_time_fraction: f32,
+    /// Contact with the left or right box wall.
+    pub box_x: Option<WallContact>,
+    /// Contact with the top or bottom box wall.
+    pub box_y: Option<WallContact>,
+    /// Contact with a line-segment wall (see `SimulationWorld::sweep_wall_contact`).
+    pub line_wall: Option<WallContact>,
+}
+
+impl BounceInfo {
+    /// Whether the ball touched a box wall this step.
+    pub fn touched_box(&self) -> bool {
+        self.box_x.is_some() || self.box_y.is_some()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &WallContact> {
+        [&self.box_x, &self.box_y, &self.line_wall]
+            .into_iter()
+            .flatten()
+    }
 }
 
 pub struct Ball2D {
@@ -224,132 +238,66 @@ impl Ball2D {
         self.pre_update_pos = self.pos;
     }
 
-    fn update_y_and_handle_top_bottom_boundary(
-        &mut self,
-        dy: f32,
-        bound_min_y: f32,
-        bound_max_y: f32,
-    ) -> (f32, bool, f32) {
-        let newy = self.pos.y + dy;
-
-        let mut res_y = newy;
-        let bounced;
-        let mut collision_fraction = 1.0; // No collision by default (full timestep)
-
-        if bound_max_y > newy && newy > bound_min_y {
-            // Inside boundary - no collision
-            bounced = false;
-        } else if newy <= bound_min_y {
-            // Hit bottom boundary - calculate collision time
-            let distance_to_boundary = bound_min_y - self.pos.y;
-            if dy.abs() > 1e-10 {
-                collision_fraction = distance_to_boundary / dy;
-                collision_fraction = collision_fraction.clamp(0.0, 1.0);
+    /// Resolve one box axis: the ball's centre must stay in `[min, max]`.
+    /// Returns the new coordinate and the contact, if the ball reached a wall.
+    fn resolve_box_axis(
+        pos: f32,
+        velocity: f32,
+        accel: f32,
+        (min, max): (f32, f32),
+        dt: f32,
+        restitution: f32,
+    ) -> (f32, Option<(f32, NormalPosition)>) {
+        // Sum the displacement first: adding its terms to a large coordinate
+        // one by one would round away most of the small ½·a·dt² term.
+        let displacement = velocity * dt + 0.5 * accel * dt * dt;
+        let free = pos + displacement;
+        if free <= min {
+            // Normal +axis: distance from the wall is `pos - min`.
+            if let Some(n) = resolve_normal_position(pos - min, velocity, accel, dt, restitution) {
+                return (min + n.distance, Some((1.0, n)));
             }
-            // Reflect position
-            let over_y = bound_min_y - newy;
-            res_y = bound_min_y + over_y;
-            bounced = true;
-        } else {
-            // Hit top boundary - calculate collision time
-            let distance_to_boundary = bound_max_y - self.pos.y;
-            if dy.abs() > 1e-10 {
-                collision_fraction = distance_to_boundary / dy;
-                collision_fraction = collision_fraction.clamp(0.0, 1.0);
+        } else if free >= max {
+            // Normal -axis: distance from the wall is `max - pos`.
+            if let Some(n) = resolve_normal_position(max - pos, -velocity, -accel, dt, restitution)
+            {
+                return (max - n.distance, Some((-1.0, n)));
             }
-            // Reflect position
-            let over_y = newy - bound_max_y;
-            res_y = bound_max_y - over_y;
-            bounced = true;
         }
-        (res_y, bounced, collision_fraction)
+        (free, None)
     }
 
-    fn update_x_and_handle_left_right_boundary(
-        &mut self,
-        dx: f32,
-        bound_min_x: f32,
-        bound_max_x: f32,
-    ) -> (f32, bool, f32) {
-        let new_x = self.pos.x + dx;
-
-        let mut res_x = new_x;
-        let bounced;
-        let mut collision_fraction = 1.0; // No collision by default (full timestep)
-
-        if bound_max_x > new_x && new_x > bound_min_x {
-            // Inside boundary - no collision
-            bounced = false;
-        } else if new_x <= bound_min_x {
-            // Hit left boundary - calculate collision time
-            let distance_to_boundary = bound_min_x - self.pos.x;
-            if dx.abs() > 1e-10 {
-                collision_fraction = distance_to_boundary / dx;
-                collision_fraction = collision_fraction.clamp(0.0, 1.0);
-            }
-            // Reflect position
-            let over_x = bound_min_x - new_x;
-            res_x = bound_min_x + over_x;
-            bounced = true;
-        } else {
-            // Hit right boundary - calculate collision time
-            let distance_to_boundary = bound_max_x - self.pos.x;
-            if dx.abs() > 1e-10 {
-                collision_fraction = distance_to_boundary / dx;
-                collision_fraction = collision_fraction.clamp(0.0, 1.0);
-            }
-            // Reflect position
-            let over_x = new_x - bound_max_x;
-            res_x = bound_max_x - over_x;
-            bounced = true;
-        }
-
-        (res_x, bounced, collision_fraction)
-    }
-
-    /// Update position using velocity-Verlet integration and handle wall bounces.
-    /// Positions are reflected at boundaries; velocity reversal happens during separate velocity update.
-    /// Calculates collision time fraction and stores pre-bounce velocity for momentum transfer.
+    /// Update position using velocity-Verlet integration and resolve contacts
+    /// with the box walls (see `wall_contact`). Velocities are updated later,
+    /// in the velocity half of the step, from the returned contacts.
     ///
     /// # Arguments
     /// * `dt` - Time step
     /// * `bound` - Boundary rectangle (reflective walls)
-    ///
-    /// # Returns
-    /// BounceInfo containing bounce flags, pre-bounce velocity, and collision timing
-    pub(crate) fn execute_update_pos(&mut self, dt: f32, bound: &Rect) -> BounceInfo {
+    /// * `restitution` - Normal restitution of the walls (1.0 = elastic)
+    pub(crate) fn execute_update_pos(
+        &mut self,
+        dt: f32,
+        bound: &Rect,
+        restitution: f32,
+    ) -> BounceInfo {
         let old_pos = self.pos;
-        let dx = self.v.x * dt + 0.5 * self.accel.x * dt * dt;
-        let dy = self.v.y * dt + 0.5 * self.accel.y * dt * dt;
-
         let (x0, y0) = bound.get_tl();
         let (x1, y1) = bound.get_br();
+        let x_range = (
+            f32::min(x0, x1) + self.radius,
+            f32::max(x0, x1) - self.radius,
+        );
+        let y_range = (
+            f32::min(y0, y1) + self.radius,
+            f32::max(y0, y1) - self.radius,
+        );
 
-        let bound_min_x = f32::min(x0, x1) + self.radius;
-        let bound_max_x = f32::max(x0, x1) - self.radius;
-        let bound_min_y = f32::min(y0, y1) + self.radius;
-        let bound_max_y = f32::max(y0, y1) - self.radius;
+        let (x, x_contact) =
+            Self::resolve_box_axis(self.pos.x, self.v.x, self.accel.x, x_range, dt, restitution);
+        let (y, y_contact) =
+            Self::resolve_box_axis(self.pos.y, self.v.y, self.accel.y, y_range, dt, restitution);
 
-        // Store velocity before any bounces for momentum calculation
-        let v_before = self.v;
-
-        let (x, bounced_x, collision_frac_x) =
-            self.update_x_and_handle_left_right_boundary(dx, bound_min_x, bound_max_x);
-        let (y, bounced_y, collision_frac_y) =
-            self.update_y_and_handle_top_bottom_boundary(dy, bound_min_y, bound_max_y);
-
-        // Use the earliest collision time (if both x and y collide, use the earlier one)
-        let collision_time_fraction = if bounced_x && bounced_y {
-            collision_frac_x.min(collision_frac_y)
-        } else if bounced_x {
-            collision_frac_x
-        } else if bounced_y {
-            collision_frac_y
-        } else {
-            1.0
-        };
-
-        // Update position only - velocity will be modified during velocity update step
         self.set_position_and_update_tail(Vec2D::new(x, y));
 
         if self.verbose.console {
@@ -359,14 +307,16 @@ impl Ball2D {
             );
         }
 
+        let contact = |axis: Vec2D, (sign, n): (f32, NormalPosition)| WallContact {
+            normal: axis.scaled(sign),
+            contact_fraction: n.contact_fraction,
+            free_fraction: n.free_fraction,
+            counts_for_momentum: true,
+        };
         BounceInfo {
-            wall_px: 0.0, // Will be calculated during velocity update
-            wall_py: 0.0,
-            bounced_x,
-            bounced_y,
-            v_x_before_bounce: v_before.x,
-            v_y_before_bounce: v_before.y,
-            collision_time_fraction,
+            box_x: x_contact.map(|c| contact(Vec2D::new(1.0, 0.0), c)),
+            box_y: y_contact.map(|c| contact(Vec2D::new(0.0, 1.0), c)),
+            line_wall: None,
         }
     }
 
@@ -463,10 +413,10 @@ mod tests {
         b.set_accel(Vec2D::zero());
         let bound = Rect::new(-2.0, -2.0, 4.0, 4.0); // square from -2..2
         // Move with dt so that we cross right boundary (max x = 2 - radius = 1)
-        let bounce_info = b.execute_update_pos(0.2, &bound); // dx = 2.0
+        let bounce_info = b.execute_update_pos(0.2, &bound, 1.0); // dx = 2.0
         // Expect bounce: position reflected inside, velocity unchanged (bounce handled later)
         assert!(b.pos.x <= 1.0 + 1e-6, "Position should be reflected");
-        assert!(bounce_info.bounced_x, "Should detect x bounce");
+        assert!(bounce_info.box_x.is_some(), "Should detect x bounce");
         assert_eq!(
             b.v.x, 10.0,
             "Velocity should be unchanged during position update"
@@ -475,9 +425,9 @@ mod tests {
         // Now move towards bottom boundary in y
         b.v = Vec2D::new(0.0, -10.0);
         b.pos = Vec2D::new(0.0, 0.0);
-        let bounce_info = b.execute_update_pos(0.2, &bound); // dy = -2.0 -> bounce at y = -1
+        let bounce_info = b.execute_update_pos(0.2, &bound, 1.0); // dy = -2.0 -> bounce at y = -1
         assert!(b.pos.y >= -1.0 - 1e-6, "Position should be reflected");
-        assert!(bounce_info.bounced_y, "Should detect y bounce");
+        assert!(bounce_info.box_y.is_some(), "Should detect y bounce");
         assert_eq!(
             b.v.y, -10.0,
             "Velocity should be unchanged during position update"

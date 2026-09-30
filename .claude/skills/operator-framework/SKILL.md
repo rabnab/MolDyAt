@@ -36,10 +36,11 @@ Use this when implementing or changing operators (line segment, valve, thermosta
 
 ## Collision And Physics Requirements
 - For impenetrable barriers (line segments), maintain this behavior:
-  - Position correction to eliminate overlap
-  - Velocity reflection using surface normal (`v' = v - 2(v·n)n`)
-  - Reflect only when moving toward barrier (velocity gate)
-  - Preserve speed magnitude for elastic reflection
+  - Resolve contacts during the position update (`SimulationWorld::sweep_wall_contact`), like the box walls: contact time on the step's path, reflection along the surface normal via `ball_impl::wall_contact` (exact for constant acceleration, including several bounces or resting within a step). Forces are then computed at the resolved position, and the velocity update applies the contact (`v_n -> -v_n` at the contact time).
+  - Do not project a ball onto the surface or mirror its whole overshoot during a step: both move it against the force and gain energy on every contact.
+  - Keep `resolve_line_segment_collisions` as the overlap fallback (balls that start a step inside a wall): position correction, velocity reflection (`v' = v - 2(v·n)n`) only when moving toward the barrier (velocity gate), speed preserved
+  - `test_ball_*_keeps_energy` in `core/src/application/core/tests/barrier_energy.rs` guards the energy of bouncing and resting contacts
+  - `SimStats::wall_contacts` / `wall_overlap_corrections` count exact contacts and fallback corrections; the drift wall scenarios require 0 corrections and `wall_handover.rs` covers the box-wall/line-wall handover
 - Keep pressure/momentum accounting wired into collision resolution when modifying barrier physics.
 
 ## Sidebar Renderer Coupling Rules

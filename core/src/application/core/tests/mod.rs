@@ -1,4 +1,5 @@
 mod ball_management;
+mod barrier_energy;
 mod bootstrap;
 mod drift_harness;
 mod energy_conservation;
@@ -7,6 +8,7 @@ mod physics_thread;
 mod resize;
 mod simulation;
 mod simulation_engine;
+mod wall_handover;
 mod wall_momentum;
 
 mod ghost_wall;

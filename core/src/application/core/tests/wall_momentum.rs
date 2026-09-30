@@ -28,8 +28,11 @@ fn test_single_ball_wall_bounce_momentum() {
     // Create a ball moving toward the right wall
     // Position it so it will hit the wall in a few steps
     let ball_radius = factory.get_new_ball_radius();
-    let initial_x = 4.0; // Much closer to right wall (which is at 5.0)
-    let initial_y = 0.0;
+    // One unit left of the right wall (the region spans x = 100..200).
+    let (right_x, _) = main_content.world().world_region().get_br();
+    let (_, top_y) = main_content.world().world_region().get_tl();
+    let initial_x = right_x - ball_radius - 1.0;
+    let initial_y = top_y - 50.0;
     // Use a higher velocity now that speed limit is disabled
     let initial_vx = 5.0;
     let initial_vy = 0.0;
