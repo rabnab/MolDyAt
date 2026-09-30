@@ -51,6 +51,19 @@ pub struct SimStats {
     // Wall momentum tracking
     pub wall_momentum_x: f32,
     pub wall_momentum_y: f32,
+
+    /// Wall contacts resolved exactly during the position update (box walls
+    /// and line segments, see `wall_contact`), cumulative.
+    pub wall_contacts: u64,
+    /// Balls the overlap fallback pushed out of a line wall (they started a
+    /// step inside a wall), cumulative. Should stay rare: the fallback
+    /// projects the ball, which does not conserve energy exactly.
+    pub wall_overlap_corrections: u64,
+    /// Ball-wall distance computations in the contact sweep and the overlap
+    /// pass, cumulative: pairs that passed the bounding-box reject. A
+    /// deterministic measure of wall-collision work (no timing), guarded by
+    /// `test_wall_distance_checks_stay_local`.
+    pub wall_distance_checks: u64,
 }
 
 impl SimStats {
@@ -236,6 +249,9 @@ impl Default for SimStats {
             max_neighbours: 0,
             wall_momentum_x: 0.,
             wall_momentum_y: 0.,
+            wall_contacts: 0,
+            wall_overlap_corrections: 0,
+            wall_distance_checks: 0,
         }
     }
 }

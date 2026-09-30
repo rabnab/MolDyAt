@@ -9,6 +9,7 @@ mod ball_factory;
 pub mod ball_physics;
 pub mod simd_forces;
 pub mod verlet;
+pub mod wall_contact;
 
 static mut UPDATE_HOOD_CNT: usize = 0;
 

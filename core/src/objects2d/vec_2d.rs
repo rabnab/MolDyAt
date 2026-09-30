@@ -37,6 +37,11 @@ impl Vec2D {
         self.norm_sq().sqrt()
     }
 
+    /// Dot product.
+    pub fn dot(&self, other: &Vec2D) -> f32 {
+        self.x * other.x + self.y * other.y
+    }
+
     /// Returns the unit vector (normalized).
     /// Returns zero vector if magnitude is zero.
     pub fn normalize(&self) -> Vec2D {
@@ -205,6 +210,14 @@ impl From<(f32, f32)> for Vec2D {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_dot() {
+        let a = Vec2D::new(3.0, -2.0);
+        assert_eq!(a.dot(&Vec2D::new(4.0, 5.0)), 2.0);
+        assert_eq!(a.dot(&Vec2D::new(2.0, 3.0)), 0.0); // perpendicular
+        assert_eq!(a.dot(&a), a.norm_sq());
+    }
 
     #[test]
     fn test_from_array() {

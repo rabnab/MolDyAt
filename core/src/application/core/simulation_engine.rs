@@ -1,9 +1,11 @@
+use super::line_segments::Obstacle;
 use super::{GameLogicData, MainContent, SimulationWorld, StatsAccumulator};
 use crate::application::thermo_field::compute_cell_thermo;
 use crate::application::{AppResult, LogStuff};
 use crate::objects2d::ball_impl::ball_core::BounceInfo;
 use crate::objects2d::ball_impl::simd_forces::force_simd;
 use crate::objects2d::ball_impl::verlet::Verlet;
+use crate::objects2d::ball_impl::wall_contact::normal_velocity_after_contact;
 use crate::objects2d::ball_impl::{BallFactory, ForceResult};
 use crate::objects2d::{Rect, Vec2D};
 use crate::timing_monad::TimingMonad;
@@ -127,7 +129,16 @@ impl SimulationEngine {
             max_id: 0,
         };
 
-        let bounce_infos = Self::update_positions(world, dt, bound_rect);
+        // Walls cannot change within a step: one list for the contact sweep
+        // and the overlap pass.
+        let obstacles = world.collect_solid_obstacles();
+        let (bounce_infos, sweep_checks) =
+            Self::update_positions(world, dt, bound_rect, &obstacles);
+        world.sim.wall_distance_checks += sweep_checks;
+        world.sim.wall_contacts += bounce_infos
+            .iter()
+            .map(|b| b.iter().count() as u64)
+            .sum::<u64>();
         Self::update_old_positions(world);
 
         let force_results = Self::compute_forces(world);
@@ -142,7 +153,7 @@ impl SimulationEngine {
 
         world.cached_force_results = force_results;
 
-        let (seg_px, seg_py) = world.resolve_line_segment_collisions();
+        let (seg_px, seg_py) = world.resolve_wall_overlaps(&obstacles);
         world.apply_thermostats(dt, &mut stats_accumulator);
 
         world.sim.wall_momentum_x += wall_px + seg_px;
@@ -264,13 +275,35 @@ impl SimulationEngine {
         world: &mut SimulationWorld,
         dt: f32,
         bound_rect: &Rect,
-    ) -> Vec<BounceInfo> {
+        obstacles: &[Obstacle],
+    ) -> (Vec<BounceInfo>, u64) {
+        let restitution = world.wall_restitution_fault();
         let physics = &world.physics;
-        world
+        let results: Vec<(BounceInfo, u64)> = world
             .balls
             .par_iter_mut()
-            .map(|ball| physics.update_positions(ball, dt, bound_rect))
-            .collect()
+            .map(|ball| {
+                let start = *ball.get_position();
+                let mut bounce_info = physics.update_positions(ball, dt, bound_rect, restitution);
+                let mut checks = 0;
+                // A ball that reached a box wall is not swept against line
+                // walls this step (the contact normals must stay orthogonal);
+                // if it ends inside one, the overlap pass handles it.
+                if !bounce_info.touched_box() {
+                    bounce_info.line_wall = SimulationWorld::sweep_wall_contact(
+                        obstacles,
+                        ball,
+                        start,
+                        dt,
+                        restitution,
+                        &mut checks,
+                    );
+                }
+                (bounce_info, checks)
+            })
+            .collect();
+        let checks = results.iter().map(|(_, c)| c).sum();
+        (results.into_iter().map(|(b, _)| b).collect(), checks)
     }
 
     fn update_old_positions(world: &mut SimulationWorld) {
@@ -307,35 +340,25 @@ impl SimulationEngine {
 
         let accel = ball.accel_with_speed_limit(&result.force, gravity, speed_limit, dt);
 
-        if bounce_info.bounced_x || bounce_info.bounced_y {
-            let t_collision = bounce_info.collision_time_fraction;
-            let v_at_collision_x = ball.v.x + 0.5 * (ball.accel.x + accel.x) * dt * t_collision;
-            let v_at_collision_y = ball.v.y + 0.5 * (ball.accel.y + accel.y) * dt * t_collision;
-
-            if bounce_info.bounced_x {
-                wall_px = 2.0 * ball.mass * v_at_collision_x;
+        // Velocity-Verlet kick; contacts replace the normal component with
+        // the reflected one (see `wall_contact`), and the walls take the
+        // momentum difference.
+        let kick = (accel + ball.accel).scaled(0.5 * dt);
+        let mut v_new = ball.v + kick;
+        for contact in bounce_info.iter() {
+            let normal = contact.normal;
+            let v_normal = ball.v.dot(&normal);
+            let kick_normal = kick.dot(&normal);
+            let v_normal_new =
+                normal_velocity_after_contact(v_normal, kick_normal, contact, restitution);
+            let dv = v_normal_new - (v_normal + kick_normal);
+            v_new = v_new.add_scaled(&normal, dv);
+            if contact.counts_for_momentum {
+                wall_px -= ball.mass * dv * normal.x;
+                wall_py -= ball.mass * dv * normal.y;
             }
-            if bounce_info.bounced_y {
-                wall_py = 2.0 * ball.mass * v_at_collision_y;
-            }
-
-            let v_after_bounce_x = if bounce_info.bounced_x {
-                -restitution * v_at_collision_x
-            } else {
-                v_at_collision_x
-            };
-            let v_after_bounce_y = if bounce_info.bounced_y {
-                -restitution * v_at_collision_y
-            } else {
-                v_at_collision_y
-            };
-
-            ball.v.x = v_after_bounce_x + 0.5 * (ball.accel.x + accel.x) * dt * (1.0 - t_collision);
-            ball.v.y = v_after_bounce_y + 0.5 * (ball.accel.y + accel.y) * dt * (1.0 - t_collision);
-        } else {
-            ball.v.x += 0.5 * (accel.x + ball.accel.x) * dt;
-            ball.v.y += 0.5 * (accel.y + ball.accel.y) * dt;
         }
+        ball.v = v_new;
 
         ball.accel = accel;
 

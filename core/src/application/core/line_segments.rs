@@ -1,9 +1,12 @@
 use super::{MainContent, SimulationWorld};
 use crate::objects2d::Vec2D;
+use crate::objects2d::ball_impl::Ball2D;
+use crate::objects2d::ball_impl::wall_contact::{WallContact, resolve_normal_position};
 use crate::objects2d::line_segment::{
     DEFAULT_THICKNESS, GhostWall, MAX_THICKNESS, MIN_THICKNESS, THICKNESS_TO_WORLD,
 };
 use crate::objects2d::wall_chain::{ChainPiece, Joint, WallChain};
+use rayon::prelude::*;
 
 /// A plain capsule obstacle for collision purposes: either a chain piece or
 /// a closed valve's span, flattened out so the hot per-ball loop never has
@@ -18,40 +21,178 @@ pub(crate) struct Obstacle {
     /// The wall being drawn or dragged: collides, but its hits don't count
     /// towards the wall momentum (pressure) totals.
     ghost: bool,
+    // Derived once per step, so the per-ball tests stay cheap.
+    /// `end - start`
+    direction: Vec2D,
+    /// `1 / |end - start|²`, or 0 for a degenerate (point) obstacle.
+    inv_length_sq: f32,
+    /// Half the wall thickness in world units.
+    half_thickness: f32,
+    /// Bounding box of the centre line: (min, max).
+    bounds: (Vec2D, Vec2D),
 }
 
 impl Obstacle {
-    /// True if a ball of `radius` at `pos` touches the obstacle.
-    fn overlaps(&self, pos: &Vec2D, radius: f32) -> bool {
-        let half_thickness = 0.5 * self.thickness * THICKNESS_TO_WORLD;
-        self.closest_point(pos).dist(pos).norm() < radius + half_thickness + COLLISION_EPSILON
+    fn new(start: Vec2D, end: Vec2D, thickness: f32, ghost: bool) -> Self {
+        let direction = start.dist(&end);
+        let length_sq = direction.norm_sq();
+        Self {
+            start,
+            end,
+            thickness,
+            ghost,
+            direction,
+            inv_length_sq: if length_sq > 1e-12 {
+                1.0 / length_sq
+            } else {
+                0.0
+            },
+            half_thickness: 0.5 * thickness * THICKNESS_TO_WORLD,
+            bounds: (
+                Vec2D::new(start.x.min(end.x), start.y.min(end.y)),
+                Vec2D::new(start.x.max(end.x), start.y.max(end.y)),
+            ),
+        }
     }
 
-    fn length_sq(&self) -> f32 {
-        let dx = self.end.x - self.start.x;
-        let dy = self.end.y - self.start.y;
-        dx * dx + dy * dy
+    #[inline]
+    fn is_degenerate(&self) -> bool {
+        self.inv_length_sq == 0.0
+    }
+
+    /// Centre distance at which a ball of `radius` touches the obstacle.
+    #[inline]
+    fn reach(&self, radius: f32) -> f32 {
+        radius + self.half_thickness + COLLISION_EPSILON
+    }
+
+    /// Cheap reject: false if `pos` is farther than `reach` from the centre
+    /// line's bounding box (so it cannot touch the obstacle).
+    #[inline]
+    fn near_bounds(&self, pos: &Vec2D, reach: f32) -> bool {
+        let (min, max) = &self.bounds;
+        pos.x > min.x - reach
+            && pos.x < max.x + reach
+            && pos.y > min.y - reach
+            && pos.y < max.y + reach
+    }
+
+    /// Whether a ball centre at `pos` is within `reach` of the centre line.
+    fn within(&self, pos: &Vec2D, reach: f32) -> bool {
+        self.within_counted(pos, reach, &mut 0)
+    }
+
+    /// `within`, adding 1 to `checks` for every distance actually computed
+    /// (i.e. `pos` passed the bounding-box reject). See
+    /// `SimStats::wall_distance_checks`.
+    #[inline]
+    fn within_counted(&self, pos: &Vec2D, reach: f32, checks: &mut u64) -> bool {
+        if !self.near_bounds(pos, reach) {
+            return false;
+        }
+        *checks += 1;
+        self.distance_sq(pos) < reach * reach
+    }
+
+    /// True if a ball of `radius` at `pos` touches the obstacle.
+    fn overlaps(&self, pos: &Vec2D, radius: f32) -> bool {
+        self.within(pos, self.reach(radius))
+    }
+
+    /// Where along the straight path `start -> end` (as a fraction) a ball of
+    /// `radius` first touches the obstacle, if it starts clear of it and ends
+    /// overlapping it. Almost every ball ends the step clear of almost every
+    /// obstacle, so that is tested first, and without a square root.
+    #[inline]
+    fn first_touch(
+        &self,
+        start: &Vec2D,
+        end: &Vec2D,
+        radius: f32,
+        checks: &mut u64,
+    ) -> Option<f32> {
+        let reach = self.reach(radius);
+        if self.is_degenerate()
+            || !self.within_counted(end, reach, checks)
+            || self.within_counted(start, reach, checks)
+        {
+            return None;
+        }
+        let reach_sq = reach * reach;
+        let path = start.dist(end);
+        let (mut clear, mut inside) = (0.0f32, 1.0f32);
+        for _ in 0..TOUCH_BISECTION_STEPS {
+            let mid = 0.5 * (clear + inside);
+            if self.distance_sq(&start.add_scaled(&path, mid)) >= reach_sq {
+                clear = mid;
+            } else {
+                inside = mid;
+            }
+        }
+        Some(clear)
+    }
+
+    /// Unit normal of the surface at `touch` (a point on it), pointing away
+    /// from the obstacle; `from` decides the side if `touch` is on the centre
+    /// line.
+    fn outward_normal(&self, touch: &Vec2D, from: &Vec2D) -> Vec2D {
+        let out = self.closest_point(touch).dist(touch);
+        let len = out.norm();
+        if len > 1e-12 {
+            return out.scaled(1.0 / len);
+        }
+        let n = Vec2D::new(-self.direction.y, self.direction.x).scaled(self.inv_length_sq.sqrt());
+        if n.dot(&self.start.dist(from)) < 0.0 {
+            n.scaled(-1.0)
+        } else {
+            n
+        }
+    }
+
+    /// Squared distance from `pos` to the centre line.
+    fn distance_sq(&self, pos: &Vec2D) -> f32 {
+        self.closest_point(pos).dist(pos).norm_sq()
     }
 
     /// Closest point on the (finite) obstacle to `pos`. Clamps to the
     /// endpoints, giving the capsule its rounded ends -- same as
     /// `SimLineSegment::closest_point`.
     fn closest_point(&self, pos: &Vec2D) -> Vec2D {
-        let dx = self.end.x - self.start.x;
-        let dy = self.end.y - self.start.y;
-        let len_sq = dx * dx + dy * dy;
-        let t = if len_sq > 1e-12 {
-            (((pos.x - self.start.x) * dx + (pos.y - self.start.y) * dy) / len_sq).clamp(0.0, 1.0)
-        } else {
-            0.0
-        };
-        Vec2D::new(self.start.x + dx * t, self.start.y + dy * t)
+        let rel = self.start.dist(pos);
+        let t = (rel.dot(&self.direction) * self.inv_length_sq).clamp(0.0, 1.0);
+        self.start.add_scaled(&self.direction, t)
+    }
+}
+
+/// Result of the overlap pass (one ball, or summed over balls).
+#[derive(Default)]
+struct OverlapPass {
+    /// Momentum given to non-ghost walls.
+    px: f32,
+    py: f32,
+    /// Balls pushed out of a wall.
+    corrections: u64,
+    /// Distance checks (see `SimStats::wall_distance_checks`).
+    checks: u64,
+}
+
+impl OverlapPass {
+    fn merge(a: Self, b: Self) -> Self {
+        Self {
+            px: a.px + b.px,
+            py: a.py + b.py,
+            corrections: a.corrections + b.corrections,
+            checks: a.checks + b.checks,
+        }
     }
 }
 
 /// Collision tolerance: balls closer than `radius + half_thickness + EPSILON`
 /// to a wall's centre line are considered colliding.
 const COLLISION_EPSILON: f32 = 0.01;
+/// Bisection steps for the contact point along a step's path (2^-24 of a
+/// step: below f32 resolution of the path fraction).
+const TOUCH_BISECTION_STEPS: usize = 24;
 /// Velocity gate: only reflect if ball is moving toward the segment.
 const VELOCITY_GATE_EPSILON: f32 = -1e-6;
 
@@ -142,12 +283,7 @@ impl SimulationWorld {
     pub(crate) fn set_ghost_wall(&mut self, ghost: Option<GhostWall>) {
         self.ghost_wall = ghost;
         if let Some(g) = ghost {
-            self.flag_balls_overlapping(&Obstacle {
-                start: g.start,
-                end: g.end,
-                thickness: g.thickness,
-                ghost: true,
-            });
+            self.flag_balls_overlapping(&Obstacle::new(g.start, g.end, g.thickness, true));
         }
     }
 
@@ -184,12 +320,7 @@ impl SimulationWorld {
         ) else {
             return;
         };
-        self.flag_balls_overlapping(&Obstacle {
-            start,
-            end,
-            thickness,
-            ghost: false,
-        });
+        self.flag_balls_overlapping(&Obstacle::new(start, end, thickness, false));
     }
 
     /// Move one of a chain's own two endpoints. `segment_id` is a PIECE id;
@@ -400,12 +531,7 @@ impl SimulationWorld {
             self.chain_obstacles(chain, &mut obstacles);
         }
         if let Some(g) = self.ghost_wall {
-            obstacles.push(Obstacle {
-                start: g.start,
-                end: g.end,
-                thickness: g.thickness,
-                ghost: true,
-            });
+            obstacles.push(Obstacle::new(g.start, g.end, g.thickness, true));
         }
         obstacles
     }
@@ -416,12 +542,7 @@ impl SimulationWorld {
             let Some(seg) = self.line_segments.find(piece.line_id) else {
                 continue;
             };
-            obstacles.push(Obstacle {
-                start: seg.start,
-                end: seg.end,
-                thickness: seg.thickness,
-                ghost: false,
-            });
+            obstacles.push(Obstacle::new(seg.start, seg.end, seg.thickness, false));
         }
 
         for (index, joint) in chain.joints.iter().enumerate() {
@@ -433,12 +554,12 @@ impl SimulationWorld {
                 && let Some(valve) = self.valve_segments.find(*valve_id)
                 && valve.is_closed
             {
-                obstacles.push(Obstacle {
-                    start: chain.point_at(*t_start),
-                    end: chain.point_at(*t_end),
-                    thickness: self.joint_thickness(chain, index),
-                    ghost: false,
-                });
+                obstacles.push(Obstacle::new(
+                    chain.point_at(*t_start),
+                    chain.point_at(*t_end),
+                    self.joint_thickness(chain, index),
+                    false,
+                ));
             }
             // Open Joint::Valve and Joint::Gap: no obstacle -- nothing
             // to check, nothing to get wrong.
@@ -468,8 +589,70 @@ impl SimulationWorld {
         Some(self.joint_thickness(chain, index))
     }
 
+    /// Resolve a ball's contact with the walls during its position update,
+    /// the same way box walls are resolved (see `wall_contact`): the contact
+    /// time and point come from the step's path, the ball is reflected there
+    /// along the surface normal, and the velocity half of the step uses the
+    /// returned contact. Forces are then computed at the resolved position.
+    ///
+    /// `start` is the ball's position before this step's drift; the ball's
+    /// current position is the free (unreflected) end of the drift. A ball
+    /// flagged `leaving_wall`, or one that starts the step inside a wall, is
+    /// left to `resolve_line_segment_collisions`. Distance checks are added to
+    /// `checks` (see `SimStats::wall_distance_checks`).
+    pub(crate) fn sweep_wall_contact(
+        obstacles: &[Obstacle],
+        ball: &mut Ball2D,
+        start: Vec2D,
+        dt: f32,
+        restitution: f32,
+        checks: &mut u64,
+    ) -> Option<WallContact> {
+        if ball.leaving_wall {
+            return None;
+        }
+        let end = *ball.get_position();
+        let mut local_checks = 0;
+        let mut first: Option<(f32, &Obstacle)> = None;
+        for obstacle in obstacles {
+            if let Some(t) = obstacle.first_touch(&start, &end, ball.radius, &mut local_checks)
+                && first.is_none_or(|(best, _)| t < best)
+            {
+                first = Some((t, obstacle));
+            }
+        }
+        *checks += local_checks;
+        let (touch_fraction, obstacle) = first?;
+
+        // Flat wall through the touching point, normal to the surface there.
+        let touch = start.add_scaled(&start.dist(&end), touch_fraction);
+        let normal = obstacle.outward_normal(&touch, &start);
+        let resolved = resolve_normal_position(
+            touch.dist(&start).dot(&normal),
+            ball.v.dot(&normal),
+            ball.accel.dot(&normal),
+            dt,
+            restitution,
+        )?;
+        let free_distance = touch.dist(&end).dot(&normal);
+        ball.set_position_and_update_tail(
+            end.add_scaled(&normal, resolved.distance - free_distance),
+        );
+
+        Some(WallContact {
+            normal,
+            contact_fraction: resolved.contact_fraction,
+            free_fraction: resolved.free_fraction,
+            counts_for_momentum: !obstacle.ghost,
+        })
+    }
+
     /// Resolve ball-wall collisions for all balls, against every currently
     /// solid obstacle (see `collect_solid_obstacles`).
+    ///
+    /// Contacts during a step are resolved by `sweep_wall_contact`; this pass
+    /// only catches what that cannot: balls that started a step inside a wall
+    /// (a wall moved onto them, or a second wall at a joint or box corner).
     ///
     /// Each obstacle is a capsule: its centre line inflated by half its
     /// thickness (`thickness * THICKNESS_TO_WORLD / 2`), with rounded ends.
@@ -497,87 +680,111 @@ impl SimulationWorld {
     ///
     /// Returns accumulated wall momentum `(px, py)` for pressure tracking.
     pub(crate) fn resolve_line_segment_collisions(&mut self) -> (f32, f32) {
-        let mut total_px = 0.0_f32;
-        let mut total_py = 0.0_f32;
-
         let obstacles = self.collect_solid_obstacles();
-        for ball in &mut self.balls {
-            if ball.leaving_wall
-                && !obstacles
-                    .iter()
-                    .any(|o| o.overlaps(ball.get_position(), ball.radius))
-            {
+        self.resolve_wall_overlaps(&obstacles)
+    }
+
+    /// `resolve_line_segment_collisions` with an obstacle list the caller
+    /// already built this step (the simulation step shares one list with
+    /// `sweep_wall_contact`). Each ball only depends on its own state and the
+    /// obstacles, so balls are handled in parallel.
+    pub(crate) fn resolve_wall_overlaps(&mut self, obstacles: &[Obstacle]) -> (f32, f32) {
+        if obstacles.is_empty() {
+            for ball in &mut self.balls {
                 ball.leaving_wall = false;
             }
+            return (0.0, 0.0);
+        }
+        let pass = self
+            .balls
+            .par_iter_mut()
+            .map(|ball| Self::resolve_ball_overlaps(obstacles, ball))
+            .reduce(OverlapPass::default, OverlapPass::merge);
+        self.sim.wall_overlap_corrections += pass.corrections;
+        self.sim.wall_distance_checks += pass.checks;
+        (pass.px, pass.py)
+    }
+
+    /// Overlap pass for one ball against every obstacle, in list order.
+    fn resolve_ball_overlaps(obstacles: &[Obstacle], ball: &mut Ball2D) -> OverlapPass {
+        let mut total_px = 0.0_f32;
+        let mut total_py = 0.0_f32;
+        let mut corrections = 0;
+        let mut checks = 0;
+
+        if ball.leaving_wall
+            && !obstacles
+                .iter()
+                .any(|o| o.within_counted(ball.get_position(), o.reach(ball.radius), &mut checks))
+        {
+            ball.leaving_wall = false;
         }
 
-        for obstacle in &obstacles {
-            if obstacle.length_sq() < 1e-12 {
+        for obstacle in obstacles {
+            if obstacle.is_degenerate() {
                 continue; // degenerate piece/valve span
             }
 
             // The obstacle is a capsule: the centre line inflated by half its
             // thickness. closest_point() clamps to the endpoints, so the ends
             // are rounded, matching what wall.wgsl draws.
-            let half_thickness = 0.5 * obstacle.thickness * THICKNESS_TO_WORLD;
+            // Ball touches the wall surface when its centre is closer to the
+            // centre line than this.
+            let reach = obstacle.reach(ball.radius);
+            if !obstacle.within_counted(ball.get_position(), reach, &mut checks) {
+                continue; // no collision (cheap reject, no square root)
+            }
+            if ball.leaving_wall {
+                continue; // was here before this wall: let it leave
+            }
+            let closest = obstacle.closest_point(ball.get_position());
+            let to_ball = closest.dist(ball.get_position());
+            let center_dist = to_ball.norm();
 
-            for ball in self.balls.iter_mut() {
-                if ball.leaving_wall && obstacle.overlaps(ball.get_position(), ball.radius) {
-                    continue; // was here before this wall: let it leave
-                }
-                let closest = obstacle.closest_point(ball.get_position());
-                let to_ball = closest.dist(ball.get_position());
-                let center_dist = to_ball.norm();
-
-                // Ball touches the wall surface when its centre is closer to
-                // the centre line than this.
-                let reach = ball.radius + half_thickness + COLLISION_EPSILON;
-                if center_dist >= reach {
-                    continue; // no collision
-                }
-
-                let normal = if center_dist > 1e-12 {
-                    to_ball.scaled(1.0 / center_dist)
+            let normal = if center_dist > 1e-12 {
+                to_ball.scaled(1.0 / center_dist)
+            } else {
+                // Centre exactly on the centre line: use the obstacle's
+                // perpendicular, on the side opposing the velocity.
+                let n = Vec2D::new(-obstacle.direction.y, obstacle.direction.x)
+                    .scaled(obstacle.inv_length_sq.sqrt());
+                if n.x * ball.v.x + n.y * ball.v.y > 0.0 {
+                    Vec2D::new(-n.x, -n.y)
                 } else {
-                    // Centre exactly on the centre line: use the obstacle's
-                    // perpendicular, on the side opposing the velocity.
-                    let len = obstacle.length_sq().sqrt();
-                    let n = Vec2D::new(
-                        -(obstacle.end.y - obstacle.start.y) / len,
-                        (obstacle.end.x - obstacle.start.x) / len,
-                    );
-                    if n.x * ball.v.x + n.y * ball.v.y > 0.0 {
-                        Vec2D::new(-n.x, -n.y)
-                    } else {
-                        n
-                    }
-                };
-
-                // Velocity gate: only reflect if moving toward the obstacle.
-                let v_dot_n = ball.v.x * normal.x + ball.v.y * normal.y;
-                if v_dot_n > VELOCITY_GATE_EPSILON {
-                    continue; // moving away or parallel
+                    n
                 }
+            };
 
-                // Position correction: push ball out so its surface touches
-                // the obstacle's surface.
-                let overlap = reach - center_dist;
-                let corrected_pos = ball.get_position().add_scaled(&normal, overlap);
-                ball.set_position_and_update_tail(corrected_pos);
+            // Velocity gate: only reflect if moving toward the obstacle.
+            let v_dot_n = ball.v.x * normal.x + ball.v.y * normal.y;
+            if v_dot_n > VELOCITY_GATE_EPSILON {
+                continue; // moving away or parallel
+            }
 
-                // Elastic reflection: v' = v − 2(v·n̂)n̂
-                ball.v.x -= 2.0 * v_dot_n * normal.x;
-                ball.v.y -= 2.0 * v_dot_n * normal.y;
+            // Position correction: push ball out so its surface touches
+            // the obstacle's surface.
+            let overlap = reach - center_dist;
+            let corrected_pos = ball.get_position().add_scaled(&normal, overlap);
+            ball.set_position_and_update_tail(corrected_pos);
+            corrections += 1;
 
-                // Accumulate wall momentum for pressure calculation
-                if !obstacle.ghost {
-                    total_px += 2.0 * ball.mass * v_dot_n * normal.x;
-                    total_py += 2.0 * ball.mass * v_dot_n * normal.y;
-                }
+            // Elastic reflection: v' = v − 2(v·n̂)n̂
+            ball.v.x -= 2.0 * v_dot_n * normal.x;
+            ball.v.y -= 2.0 * v_dot_n * normal.y;
+
+            // Accumulate wall momentum for pressure calculation
+            if !obstacle.ghost {
+                total_px += 2.0 * ball.mass * v_dot_n * normal.x;
+                total_py += 2.0 * ball.mass * v_dot_n * normal.y;
             }
         }
 
-        (total_px, total_py)
+        OverlapPass {
+            px: total_px,
+            py: total_py,
+            corrections,
+            checks,
+        }
     }
 
     /// True if a ball of `radius` at `pos` would overlap any of `obstacles`
@@ -586,13 +793,8 @@ impl SimulationWorld {
     /// collision can never disagree about what counts as a wall). Callers
     /// placing many balls build the list once and reuse it.
     pub(crate) fn overlaps_any_wall(obstacles: &[Obstacle], pos: &Vec2D, radius: f32) -> bool {
-        obstacles.iter().any(|obstacle| {
-            if obstacle.length_sq() < 1e-12 {
-                return false;
-            }
-            let half = 0.5 * obstacle.thickness * THICKNESS_TO_WORLD;
-            let center_dist = obstacle.closest_point(pos).dist(pos).norm();
-            center_dist < radius + half + COLLISION_EPSILON
-        })
+        obstacles
+            .iter()
+            .any(|obstacle| !obstacle.is_degenerate() && obstacle.overlaps(pos, radius))
     }
 }

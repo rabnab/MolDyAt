@@ -1,6 +1,7 @@
 mod ball_physics;
 mod simd_forces;
 mod verlet;
+mod wall_contact;
 
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::ball_factory::BallFactory;
