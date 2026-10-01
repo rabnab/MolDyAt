@@ -102,6 +102,8 @@ impl SimulationEngine {
 
         if world.balls.len() == world.cached_force_results.len() {
             let world_rect = world.world_rect;
+            // The T/P overlay uses the physics cell grid's shape (see
+            // docs/simulation.md, Thermodynamic Grid Space).
             let (phys_rows, phys_cols) = world.cell_grid.get_grid_size();
             let grid_rows = phys_rows.max(1);
             let grid_cols = phys_cols.max(1);

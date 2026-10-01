@@ -71,6 +71,7 @@ Derived temperature and pressure fields are stored in row-major grid space.
 - `ThermoGrid` stores `(rows, cols)` plus flat row-major data.
 - Grid cell `(0, 0)` corresponds to the top-left cell of the world rectangle.
 - Grid indexing is computed from the minimum world-space `x` and `y` corner, so both positive-height and negative-height `Rect` values map consistently.
+- The thermo grid has the same `(rows, cols)` as the physics `CellGrid`. Physics cells are at least cutoff + skin + 2 x max radius wide (9.6 with the default constants), and the cell count is rounded down so no cell is narrower, which the 3x3 neighbour search needs. The default 112 x 62 world therefore has 11 x 6 cells (12 x 7 while the count was rounded up). Changing the cell size also changes the overlay resolution, and `ThermoFieldHistory` restarts its rolling average whenever the grid shape changes.
 
 This grid space is for visualization and analysis only. It does not replace world-space coordinates for simulation objects.
 
