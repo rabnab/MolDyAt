@@ -423,3 +423,51 @@ fn test_hood_dirty_independent_per_ball() {
     assert!(!v1.hood_dirty);
     assert!(!v2.hood_dirty);
 }
+
+#[test]
+fn test_add_neighbour_keeps_list_sorted() {
+    let mut v = Verlet::new();
+    for idx in [7, 2, 9, 2, 0, 5] {
+        v.add_neighbour(idx);
+    }
+    assert_eq!(v.neighbours, vec![0, 2, 5, 7, 9]);
+    assert!(v.remove(5));
+    assert_eq!(v.neighbours, vec![0, 2, 7, 9]);
+}
+
+#[test]
+fn test_update_hood_keeps_lists_sorted_and_symmetric() {
+    use crate::objects2d::ball_impl::BallPhysics;
+
+    let cutoff_and_skin = BallPhysics::default().get_cutoff_and_skin();
+    let far = Vec2D::new(cutoff_and_skin + 10.0, 0.0);
+    // Ball 4, the farthest, is still within range of ball 0.
+    let spacing = (cutoff_and_skin + 2.0) / 5.0;
+    let mut balls: Vec<Ball2D> = (0..5)
+        .map(|i| make_ball(i, Vec2D::new(i as f32 * spacing, 0.0)))
+        .collect();
+    for ball in &mut balls {
+        ball.last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
+    }
+
+    // Candidates arrive in cell order, not index order.
+    Verlet::update_hood(0, 0.01, &[4, 2, 0, 1, 3], cutoff_and_skin, 0.1, &mut balls);
+    assert_eq!(balls[0].hood.neighbours, vec![1, 2, 3, 4]);
+    for partner in &balls[1..] {
+        assert_eq!(
+            partner.hood.neighbours,
+            vec![0],
+            "ball {}",
+            partner.get_id()
+        );
+        assert!(partner.hood.hood_dirty);
+    }
+
+    // Ball 3 leaves: ball 0 drops it and ball 3 drops ball 0.
+    balls[3].set_position_and_update_tail(far);
+    balls[0].last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
+    Verlet::update_hood(0, 0.01, &[1, 0, 2, 4], cutoff_and_skin, 0.1, &mut balls);
+    assert_eq!(balls[0].hood.neighbours, vec![1, 2, 4]);
+    assert!(balls[3].hood.neighbours.is_empty());
+    assert_eq!(balls[4].hood.neighbours, vec![0]);
+}

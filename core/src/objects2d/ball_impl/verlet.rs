@@ -56,7 +56,7 @@ impl Verlet {
             .collect()
     }
 
-    /// Add a neighbor to this ball's Verlet list.
+    /// Add a neighbor to this ball's Verlet list, keeping it sorted by index.
     ///
     /// # Arguments
     /// * `neighbour_idx` - Index of ball to add as neighbor
@@ -64,11 +64,13 @@ impl Verlet {
     /// # Returns
     /// `true` if ball was already a neighbor, `false` if newly added
     pub fn add_neighbour(&mut self, neighbour_idx: usize) -> bool {
-        let was_neighbour = self.neighbours.contains(&neighbour_idx);
-        if !was_neighbour {
-            self.neighbours.push(neighbour_idx);
+        match self.neighbours.binary_search(&neighbour_idx) {
+            Ok(_) => true,
+            Err(pos) => {
+                self.neighbours.insert(pos, neighbour_idx);
+                false
+            }
         }
-        was_neighbour
     }
 
     pub fn clear_neighbours(&mut self) {
@@ -84,7 +86,7 @@ impl Verlet {
     /// # Returns
     /// `true` if ball is a neighbor
     pub fn is_a_neighbour_idx(&self, idx: usize) -> bool {
-        self.neighbours.contains(&idx)
+        self.neighbours.binary_search(&idx).is_ok()
     }
 
     /// Remove a neighbor from this Verlet list.
@@ -95,11 +97,13 @@ impl Verlet {
     /// # Returns
     /// `true` if ball was removed, `false` if not in list
     pub fn remove(&mut self, remove_idx: usize) -> bool {
-        if self.is_a_neighbour_idx(remove_idx) {
-            self.neighbours.retain(|&idx| idx != remove_idx);
-            return true;
+        match self.neighbours.binary_search(&remove_idx) {
+            Ok(pos) => {
+                self.neighbours.remove(pos);
+                true
+            }
+            Err(_) => false,
         }
-        false
     }
     /// Check if ball has moved enough to require neighbor list update.
     /// Uses skin thickness threshold to prevent missing interactions.
@@ -140,7 +144,7 @@ impl Verlet {
     pub fn update_hood(
         ball_idx: usize,
         dt: f32,
-        neighbours: &[usize],
+        candidates: &[usize],
         cutoff_and_skin: f32,
         min_movement_threshold: f32,
         balls: &mut [Ball2D],
@@ -184,85 +188,62 @@ impl Verlet {
             ball.reset_update_counter();
         };
 
-        // Collect all candidate neighbours from the cell neighbors parameter
-        let mut candidates_from_cells = Vec::new();
-        for &neighbour_idx in neighbours {
-            // Skip self
-            if neighbour_idx == ball_idx {
-                continue;
+        // The new list holds the candidates from the 3x3 cells within range.
+        // Each ball sits in exactly one cell, so the candidates have no
+        // duplicates, and the cell size guarantees that every ball in range is
+        // among them (see `CellGrid::new`).
+        let mut new_hood: Vec<(usize, f32)> = candidates
+            .iter()
+            .filter(|&&neighbour_idx| neighbour_idx != ball_idx)
+            .map(|&neighbour_idx| {
+                let dist = BallPhysics::distance_of_edges(&balls[ball_idx], &balls[neighbour_idx]);
+                (neighbour_idx, dist)
+            })
+            .filter(|&(_, dist)| dist < dist_limit)
+            .collect();
+        new_hood.sort_unstable_by_key(|&(neighbour_idx, _)| neighbour_idx);
+
+        // Both lists are sorted, so one merge walk finds the added and removed
+        // pairs; only those touch the partner's list (which holds this ball
+        // exactly when this ball holds the partner).
+        let old_hood = std::mem::take(&mut balls[ball_idx].hood.neighbours);
+        let mut old_iter = old_hood.iter().copied().peekable();
+        for &(neighbour_idx, dist) in &new_hood {
+            while let Some(removed_idx) = old_iter.next_if(|&old_idx| old_idx < neighbour_idx) {
+                Self::unlink_partner(balls, removed_idx, ball_idx);
             }
-            candidates_from_cells.push(neighbour_idx);
+            if old_iter.next_if_eq(&neighbour_idx).is_some() {
+                continue; // kept
+            }
+            logging::log_neighbour_add(
+                &balls[ball_idx],
+                &balls[neighbour_idx],
+                dist * dist,
+                dist_limit * dist_limit,
+            );
+            let partner_hood = &mut balls[neighbour_idx].hood;
+            partner_hood.add_neighbour(ball_idx);
+            partner_hood.hood_dirty = true;
+        }
+        for removed_idx in old_iter {
+            Self::unlink_partner(balls, removed_idx, ball_idx);
         }
 
-        // Get the current neighbour list - these need to be checked too
-        let old_neighbours = &balls[ball_idx].hood.neighbours;
-
-        // Merge candidates: existing neighbours + new candidates from cells using HashSet for deduplication
-        let mut all_candidates = old_neighbours.clone();
-        all_candidates.extend(&candidates_from_cells);
-        all_candidates.sort_unstable();
-        all_candidates.dedup();
-
-        // Now check distance for all candidates and update accordingly
-        for &neighbour_idx in &all_candidates {
-            // Explicitly skip self-reference to avoid issues
-            if ball_idx == neighbour_idx {
-                continue;
-            }
-
-            // Calculate distance using split_at to avoid unnecessary mutability
-            let dist = if ball_idx < neighbour_idx {
-                let (left, right) = balls.split_at(neighbour_idx);
-                BallPhysics::distance_of_edges(&left[ball_idx], &right[0])
-            } else {
-                let (left, right) = balls.split_at(ball_idx);
-                BallPhysics::distance_of_edges(&right[0], &left[neighbour_idx])
-            };
-
-            if dist < dist_limit {
-                // Should be a neighbour
-                let was_already_neighbour = balls[ball_idx].hood.add_neighbour(neighbour_idx);
-
-                if !was_already_neighbour {
-                    // Log using split_at to get immutable refs
-                    if ball_idx < neighbour_idx {
-                        let (left, right) = balls.split_at(neighbour_idx);
-                        logging::log_neighbour_add(
-                            &left[ball_idx],
-                            &right[0],
-                            dist * dist,
-                            dist_limit * dist_limit,
-                        );
-                    } else {
-                        let (left, right) = balls.split_at(ball_idx);
-                        logging::log_neighbour_add(
-                            &right[0],
-                            &left[neighbour_idx],
-                            dist * dist,
-                            dist_limit * dist_limit,
-                        );
-                    }
-
-                    // Update the inverse relationship: add ball_idx to the neighbour's list
-                    balls[neighbour_idx].hood.add_neighbour(ball_idx);
-                    // Mark the neighbour's hood as dirty too
-                    balls[neighbour_idx].hood.hood_dirty = true;
-                }
-            } else {
-                // Should NOT be a neighbour - remove if present
-                let was_removed = balls[ball_idx].hood.remove(neighbour_idx);
-                if was_removed {
-                    // Also remove the inverse relationship
-                    balls[neighbour_idx].hood.remove(ball_idx);
-                    // Mark the neighbour's hood as dirty too
-                    balls[neighbour_idx].hood.hood_dirty = true;
-                }
-            }
-        }
+        let mut neighbours = old_hood;
+        neighbours.clear();
+        neighbours.extend(new_hood.iter().map(|&(neighbour_idx, _)| neighbour_idx));
+        balls[ball_idx].hood.neighbours = neighbours;
 
         balls[ball_idx].hood.updates_since_refresh = 0;
         // Mark the hood as dirty since neighbors were updated
         balls[ball_idx].hood.hood_dirty = true;
+    }
+
+    /// Remove `ball_idx` from the list of its former neighbour `partner_idx`.
+    fn unlink_partner(balls: &mut [Ball2D], partner_idx: usize, ball_idx: usize) {
+        let partner_hood = &mut balls[partner_idx].hood;
+        partner_hood.remove(ball_idx);
+        partner_hood.hood_dirty = true;
     }
 
     /// Compute neighbor statistics from a list of indices and ball positions.
