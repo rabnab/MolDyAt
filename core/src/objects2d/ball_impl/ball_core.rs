@@ -8,7 +8,8 @@ use crate::objects2d::vec_2d::Vec2D;
 use crate::objects2d::verbose_info::VerboseInfo;
 use std::collections::VecDeque;
 
-const DEFAULT_TAIL_LENGTH: usize = 1000;
+/// Maximum number of tail points kept per verbose ball.
+const TAIL_LENGTH: usize = 1000;
 
 const TAIL_RESOLUTION_DELTA_SQ: f32 = 1. * 1.; // minimum squared distance to add new tail point
 
@@ -54,8 +55,9 @@ pub struct Ball2D {
     pub pre_update_pos: Vec2D,
     pub accel: Vec2D,
     pub last_update_hood_pos: Vec2D,
-    pub tail: VecDeque<Vec2D>,
-    pub tail_length: usize,
+    /// Position history, kept only while the ball is verbose (allocated lazily;
+    /// `None` otherwise).
+    tail: Option<VecDeque<Vec2D>>,
     pub show_update_count: usize,
     /// The cell this ball currently occupies (row, col). None if not assigned to any cell.
     pub current_cell: Option<(usize, usize)>,
@@ -80,8 +82,7 @@ impl Default for Ball2D {
             pre_update_pos: Vec2D::zero(),
             accel: Vec2D::zero(),
             last_update_hood_pos: Vec2D::new(f32::INFINITY, f32::INFINITY),
-            tail_length: DEFAULT_TAIL_LENGTH,
-            tail: VecDeque::with_capacity(DEFAULT_TAIL_LENGTH),
+            tail: None,
             show_update_count: 0,
             current_cell: None,
             leaving_wall: false,
@@ -91,14 +92,14 @@ impl Default for Ball2D {
 
 impl Ball2D {
     /// Create a new ball with specified ID, position, and radius.
-    /// Initializes tail with first position and sets pre_update_pos and last_update_hood_pos.
+    /// Sets pre_update_pos and last_update_hood_pos to the initial position.
     ///
     /// # Arguments
     /// * `id` - Unique ball identifier
     /// * `pos` - Initial position
     /// * `radius` - Tuple of (size_index, radius_value)
     pub fn new(id: BallId, pos: Vec2D, radius: (usize, f32)) -> Ball2D {
-        let mut ball = Ball2D {
+        Ball2D {
             id,
             pos,
             radius: radius.1,
@@ -106,9 +107,7 @@ impl Ball2D {
             pre_update_pos: pos,
             last_update_hood_pos: pos,
             ..Ball2D::default()
-        };
-        ball.set_position_and_update_tail(pos);
-        ball
+        }
     }
 
     pub fn get_id(&self) -> BallId {
@@ -125,10 +124,7 @@ impl Ball2D {
     }
 
     pub fn get_tail_positions(&self) -> Option<&VecDeque<Vec2D>> {
-        if self.tail.is_empty() {
-            return None;
-        }
-        Some(&self.tail)
+        self.tail.as_ref().filter(|tail| !tail.is_empty())
     }
 
     pub fn get_velocity(&self) -> &Vec2D {
@@ -169,7 +165,9 @@ impl Ball2D {
     /// invoking this method will drop the existing tail points.
     pub fn reset_update_counter(&mut self) {
         self.show_update_count = 200;
-        self.tail.clear();
+        if let Some(tail) = self.tail.as_mut() {
+            tail.clear();
+        }
     }
 
     pub fn decrement_update_counter(&mut self) {
@@ -320,24 +318,28 @@ impl Ball2D {
         }
     }
 
-    /// Set ball position and add to tail trail if movement exceeds threshold.
+    /// Set ball position and, for verbose balls only, add to the tail trail
+    /// if movement exceeds the threshold.
     /// Only adds to tail if distance from last tail point exceeds TAIL_RESOLUTION_DELTA_SQ.
     /// Maintains tail length by removing oldest points when limit is exceeded.
+    /// A ball that is no longer verbose drops its tail.
     ///
     /// # Arguments
     /// * `new_pos` - New position to set
     pub fn set_position_and_update_tail(&mut self, new_pos: Vec2D) {
-        let end_pos = self.tail.back();
-        if let Some(last_pos) = end_pos {
-            let dist = last_pos.dist(&new_pos);
-            if dist.norm_sq() > TAIL_RESOLUTION_DELTA_SQ {
-                self.tail.push_back(new_pos);
+        if self.verbose.any() {
+            let tail = self.tail.get_or_insert_with(Default::default);
+            let far_enough = tail
+                .back()
+                .is_none_or(|last| last.dist(&new_pos).norm_sq() > TAIL_RESOLUTION_DELTA_SQ);
+            if far_enough {
+                tail.push_back(new_pos);
+                if tail.len() > TAIL_LENGTH {
+                    tail.pop_front();
+                }
             }
         } else {
-            self.tail.push_back(new_pos);
-        }
-        if self.tail.len() > self.tail_length {
-            self.tail.pop_front();
+            self.tail = None;
         }
         self.pos = new_pos;
     }
@@ -460,5 +462,21 @@ mod tests {
 
         assert_eq!(b1, b2);
         assert_ne!(b1, b3);
+    }
+
+    #[test]
+    fn test_tail_only_kept_for_verbose_balls() {
+        let mut b = Ball2D::new(1, Vec2D::zero(), (0, 1.0));
+        b.set_position_and_update_tail(Vec2D::new(5.0, 0.0));
+        assert!(b.get_tail_positions().is_none());
+
+        b.verbose.toggle_console();
+        b.set_position_and_update_tail(Vec2D::new(10.0, 0.0));
+        b.set_position_and_update_tail(Vec2D::new(15.0, 0.0));
+        assert_eq!(b.get_tail_positions().map(|t| t.len()), Some(2));
+
+        b.verbose.clear_all();
+        b.set_position_and_update_tail(Vec2D::new(20.0, 0.0));
+        assert!(b.get_tail_positions().is_none());
     }
 }

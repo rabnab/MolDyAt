@@ -34,9 +34,9 @@ impl VerboseInfo {
         self.speed = !self.speed;
     }
 
-    // pub(crate) fn any(&self) -> bool {
-    //     self.console || self.speed || self.main_neighbour || self.other_neighbour
-    // }
+    pub(crate) fn any(&self) -> bool {
+        self.console || self.lines()
+    }
 
     pub(crate) fn is_main(&self) -> bool {
         self.main_neighbour
@@ -57,9 +57,11 @@ mod tests {
     fn test_verbose_toggles_and_lines() {
         let mut v = VerboseInfo::default();
         assert!(!v.lines());
+        assert!(!v.any());
         assert!(!v.is_main());
         v.toggle_console();
         assert!(v.console);
+        assert!(v.any());
         v.toggle_main_neighbour();
         assert!(v.is_main());
         assert!(v.lines());
