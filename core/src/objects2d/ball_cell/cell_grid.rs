@@ -53,11 +53,12 @@ impl CellGrid {
 
         // Cell size must be large enough to contain the interaction radius (cutoff + skin)
         // plus the diameter of the largest ball (2 * max_radius) to ensure that
-        // checking 3x3 neighbors covers all potential interactions.
+        // checking 3x3 neighbors covers all potential interactions. Rounding the
+        // cell count down keeps every cell at least this large.
         let cell_size = cutoff_and_skin + 2.0 * max_radius;
 
-        let grid_width = (sim_width.abs() / cell_size).ceil() as usize;
-        let grid_height = (sim_height.abs() / cell_size).ceil() as usize;
+        let grid_width = ((sim_width.abs() / cell_size).floor() as usize).max(1);
+        let grid_height = ((sim_height.abs() / cell_size).floor() as usize).max(1);
 
         let cell_size_x = sim_width.abs() / grid_width as f32;
         let cell_size_y = sim_height.abs() / grid_height as f32;
