@@ -40,13 +40,10 @@ impl MainContent {
                     Vec::new()
                 };
 
-            // Only clone tail positions if they'll be used
-            let tail = if ball.get_tail_positions().is_some() {
-                ball.get_tail_positions()
-                    .map_or(Vec::new(), |tail| tail.iter().cloned().collect())
-            } else {
-                Vec::new()
-            };
+            // Only verbose balls keep a tail
+            let tail = ball
+                .get_tail_positions()
+                .map_or_else(Vec::new, |tail| tail.iter().copied().collect());
 
             balls.push(BallRenderData {
                 id: ball.get_id(),
