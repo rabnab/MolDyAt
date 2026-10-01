@@ -429,16 +429,16 @@ fn velocity_at(angle: f32) -> Vec2D {
     Vec2D::new(SPEED * angle.cos(), SPEED * angle.sin())
 }
 
-const WALL_START: (f32, f32) = (550.0, 450.0);
 const WALL_ANGLE: f32 = 0.37;
 
 fn run_world_wall(faults: TestFaults) -> (ReflectionRun, Vec<Surface>) {
     let main_content = create_dense_harness_with_seed(505);
     let surfaces = world_wall_surfaces(&main_content);
+    let start = world_center(&main_content);
     let run = run_single_ball(
         main_content,
         &surfaces,
-        Vec2D::new(WALL_START.0, WALL_START.1),
+        start,
         velocity_at(WALL_ANGLE),
         faults,
     );
@@ -459,8 +459,9 @@ fn test_elastic_line_segment_barrier_reflections() {
     let mut main_content = create_dense_harness_with_seed(606);
     // Tilted barrier spanning the full world width, so the ball stays on one
     // side and only ever meets the segment face or the world walls.
-    let seg_start = Vec2D::new(500.0, 430.0);
-    let seg_end = Vec2D::new(600.0, 470.0);
+    let center = world_center(&main_content);
+    let seg_start = center + Vec2D::new(-50.0, -20.0);
+    let seg_end = center + Vec2D::new(50.0, 20.0);
     main_content.add_line_segment(seg_start, seg_end);
     let half_thickness =
         0.5 * main_content.world().line_segments.segments()[0].thickness * THICKNESS_TO_WORLD;
@@ -471,7 +472,7 @@ fn test_elastic_line_segment_barrier_reflections() {
     let run = run_single_ball(
         main_content,
         &surfaces,
-        Vec2D::new(530.0, 480.0),
+        center + Vec2D::new(-20.0, 30.0),
         velocity_at(-1.1),
         TestFaults::default(),
     );

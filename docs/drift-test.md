@@ -183,18 +183,20 @@ Cutoff change: the LJ interaction is now truncated at `lj_cutoff` and shifted to
 
 Sorted neighbour lists: Verlet lists are now kept sorted by ball index and rebuilt from the 3x3 cells only, and the cell grid rounds its cell count down so every cell is at least cutoff + skin + 2 x max radius wide (it rounded up before, so cells could be slightly smaller). The force kernel sums neighbours in list order, so the f32 sums changed order. dense_gas re-measured: max relative energy drift 1.914e-3 -> 1.914e-3, final 1.259e-3 -> 1.185e-3, relative momentum drift 5.06e-8 -> 7.79e-8 (inside the 1.5e-7 threshold and below the 70% warning line), rebuild rate 2.41e-2 -> 2.41e-2, no missed or asymmetric pairs. The wall-reflection scenarios are unchanged. Thresholds are unchanged.
 
+Drift world moved to the origin (from x, y ~ 500..600, see the timestep note below). Re-measured, thresholds unchanged: dense_gas max relative energy drift 1.914e-3 -> 2.049e-3, final 1.185e-3 -> 1.404e-3, relative momentum drift 7.79e-8 -> 5.59e-8, rebuild rate 2.41e-2 -> 2.43e-2, wall clearance 20.24 -> 20.07; elastic_line_segment energy drift 1.5e-6 -> 5.5e-7, elastic_world_wall 0 -> 0. Positions that tests used to hardcode in the old world (two-body and force-cap pair centres, the wall-test start and the line-segment barrier) are now offsets from `world_center`.
+
 Baseline provenance: measured with `cargo ci-test-drift` (dev profile, which is optimized) on an x86_64 host, on the PR #205 branch on top of `master` at `4f8b801`, after the Verlet movement threshold changed to skin/3. `simd_forces` uses `std::simd` (`f32x4`), so the SIMD path is fixed at compile time by the target features: the dev profile sets no `target-cpu`, so x86_64 drift builds use SSE2 even on AVX2/AVX-512 hosts (aarch64 uses NEON). Only the release profile uses `target-cpu=native` (with AMX disabled, see the workspace `Cargo.toml`). f32 results can differ between targets or `RUSTFLAGS`; rerun on the same target when comparing baselines.
 
 | Scenario | File | Metric | Threshold | Baseline | Margin |
 |---|---|---|---:|---:|---|
-| dense_gas_many_body (256 balls, 1000 steps, 9 head-on projectile pairs) | `dense_gas.rs` | max relative energy drift | 4.0e-3 | 1.91e-3 | ~2x |
-| | | relative momentum drift | 1.5e-7 | 7.8e-8 | ~2x; f32 rounding noise, see below |
+| dense_gas_many_body (256 balls, 1000 steps, 9 head-on projectile pairs) | `dense_gas.rs` | max relative energy drift | 4.0e-3 | 2.05e-3 | ~2x |
+| | | relative momentum drift | 1.5e-7 | 5.6e-8 | ~2.7x; f32 rounding noise, see below |
 | | | per-ball rebuild rate | [5.0e-3, 5.0e-2] | 2.4e-2 | cadence band, not a drift threshold |
 | | | in-cutoff pairs missing from a neighbour list (every step) | 0 | 0 | exact |
 | | | pairs listed by only one ball (every step) | 0 | 0 | exact |
 | | | same pair deeper than 0.5 x radius, consecutive steps | <= 5 | 0 | |
 | | | force-cap region reached (validity) | >= 1 hit | 39 | |
-| | | balls lost / wall clearance (validity) | none / >= 1.0 | none / 20.1 | |
+| | | balls lost / wall clearance (validity) | none / >= 1.0 | none / 20.07 | |
 | elastic_world_wall / elastic_line_segment (1 ball, 10000 steps) | `wall_reflection.rs` | relative speed change per reflection | 1.0e-5 | <= 1.1e-6 | |
 | | | impulse alignment with surface normal | >= 0.999 | 1.0 | |
 | | | kinetic energy deviation (every step and per event) | 1.0e-5 | 2.2e-6 | ~4.5x |
@@ -207,6 +209,7 @@ Notes:
 - The dense-gas grid starts in the world centre and the run asserts the balls never reach the wall region, so wall effects stay isolated in the reflection scenarios. The projectile pairs drive a few pairs into the force-cap region so the cap and overlap checks are not vacuous; this is also why the energy envelope is wider than a cool gas (7.2e-4) would need.
 - Neighbour-list and overlap checks run after every step, not only on sample steps, so a stale list that lasts only a few steps before the next rebuild is still caught.
 - Verlet movement threshold: balls rebuild their neighbour lists independently, so a ball may already be 2 thresholds from its last rebuild position when its partner rebuilds, and the partner may move one more. The threshold is therefore skin/3 (not the textbook skin/2 for synchronous rebuilds). With skin/2, the cool dense gas (no projectiles) had an in-cutoff pair missing from both lists at step 186. `test_cool_dense_gas_has_no_stale_neighbor_lists` checks both: skin/3 has no stale pairs, and skin/2 still reproduces the miss (so the test is not vacuous).
+- Timestep convergence and the drift world's position: the drift world (`create_dense_harness_with_seed`) is 100 x 100 centred on the origin. It used to sit at x, y ~ 500..600, where an f32 resolves ~3e-5, while a step moves a ball ~1e-2 and the 1/2 a dt^2 term is ~5e-5. That rounding does not shrink with dt, and smaller steps make more of it, so the many-body energy envelope shrank only about linearly with dt there (dense gas max drift 1.91e-3, 1.56e-3, 0.67e-3 at dt, dt/2, dt/4). At the origin it shrinks about as dt^2 (2.05e-3, 0.82e-3, 0.13e-3). The force jump at the cutoff (|F(lj_cutoff)| ~ 1.5e-3; the potential is shifted to zero there, the force is not) is not a significant source: a force-shifted potential changed the results at 500 only within noise, and at the origin it lowers the cool gas at dt/4 from 0.64e-4 to 0.27e-4. The app's default world is also centred on the origin; large worlds (e.g. `--world-scale 8`, coordinates up to ~450) lose position precision the same way.
 - `rel_momentum_drift` in the wall scenarios is expected to be ~2: walls absorb momentum by design.
 - `test_dense_gas_is_deterministic` compares a hash of the whole trajectory. It proves in-process reproducibility only, not reproducibility across runners or SIMD targets; the thresholds are the CI gate.
 - Injected regressions are re-runnable: `SimulationWorld::test_faults` (test builds only) scales the Verlet movement threshold or the wall restitution. `test_dense_gas_catches_injected_stale_neighbor_lists` and `test_world_wall_catches_injected_restitution_gain` run the real simulation with a fault and expect the checks to fail. The non-ignored `*_checks_catch_injected_regressions` tests feed synthetic broken runs to the check functions.

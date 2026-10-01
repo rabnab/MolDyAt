@@ -33,7 +33,7 @@ fn test_two_body_lj_baseline_drift() {
     let r_eq = 2.0_f32.powf(1.0 / 6.0);
     let edge_dist = r_eq * 1.05;
     let center_sep = 2.0 * factory.get_new_ball_radius() + edge_dist;
-    let center = Vec2D::new(550.0, 450.0);
+    let center = world_center(&main_content);
     let x_off = center_sep * 0.5;
 
     let b1 = factory
@@ -94,7 +94,7 @@ fn test_force_cap_transition_drift() {
     let r_cap = main_content.world().physics.get_force_cap_distance();
     let edge_dist = r_cap * 0.95;
     let center_sep = 2.0 * factory.get_new_ball_radius() + edge_dist;
-    let center = Vec2D::new(550.0, 450.0);
+    let center = world_center(&main_content);
     let x_off = center_sep * 0.5;
 
     let b1 = factory
@@ -167,7 +167,7 @@ fn test_two_body_drift_converges_with_smaller_timestep() {
         let r_eq = 2.0_f32.powf(1.0 / 6.0);
         let edge_dist = r_eq * 1.05;
         let center_sep = 2.0 * factory.get_new_ball_radius() + edge_dist;
-        let center = Vec2D::new(550.0, 450.0);
+        let center = world_center(&main_content);
         let x_off = center_sep * 0.5;
 
         let b1 = factory.create_massive_with_velocity(
