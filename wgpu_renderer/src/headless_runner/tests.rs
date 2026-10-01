@@ -91,6 +91,7 @@ fn seeded_headless_output() -> String {
         stdout: false,
         seed_balls: Some(24),
         dt: None,
+        world_scale: None,
         line_segments: Vec::new(),
     };
 
@@ -294,4 +295,16 @@ fn test_run_start_records_effective_dt_segments_and_world_rect() {
     let world = &run_start["initial"]["world_rect"];
     assert!(world["left"].as_f64() < world["right"].as_f64());
     assert!(world["bottom"].as_f64() < world["top"].as_f64());
+}
+
+#[test]
+fn test_scale_world_rect_keeps_centre() {
+    let rect = Rect::new(-56.0, -31.0, 112.0, 62.0);
+    let scaled = scale_world_rect(rect, 5.0);
+    assert_eq!((scaled.w, scaled.h), (560.0, 310.0));
+    assert_eq!(
+        (scaled.x + scaled.w / 2.0, scaled.y + scaled.h / 2.0),
+        (0.0, 0.0)
+    );
+    assert_eq!(scale_world_rect(rect, 1.0), rect);
 }

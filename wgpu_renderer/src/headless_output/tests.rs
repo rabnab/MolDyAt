@@ -41,6 +41,7 @@ fn test_run_start_record_contains_config_and_operator_counts() {
         stdout: true,
         seed_balls: Some(50),
         dt: None,
+        world_scale: None,
         line_segments: Vec::new(),
     };
 
@@ -340,6 +341,7 @@ fn test_runs_with_same_seed_and_config_emit_identical_jsonl() {
         stdout: false,
         seed_balls: Some(24),
         dt: None,
+        world_scale: None,
         line_segments: Vec::new(),
     };
     let config_b = HeadlessConfig {

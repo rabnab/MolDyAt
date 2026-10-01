@@ -116,6 +116,17 @@ impl HeadlessRunner {
     }
 }
 
+/// The world `rect` with width and height multiplied by `scale`, around its centre.
+pub fn scale_world_rect(rect: Rect, scale: f32) -> Rect {
+    let (w, h) = (rect.w * scale, rect.h * scale);
+    Rect::new(
+        rect.x + (rect.w - w) / 2.0,
+        rect.y + (rect.h - h) / 2.0,
+        w,
+        h,
+    )
+}
+
 pub fn build_application(world_rect: Rect, rng_seed: Option<u64>) -> io::Result<MainContent> {
     let application = if let Some(seed) = rng_seed {
         MainContent::new_with_seed(world_rect, seed)

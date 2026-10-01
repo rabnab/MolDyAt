@@ -19,6 +19,9 @@ pub struct HeadlessConfig {
     pub seed_balls: Option<u32>,
     /// Time step override; `None` keeps the simulation default.
     pub dt: Option<f32>,
+    /// Factor applied to the default world's width and height (around its
+    /// centre); `None` keeps the default world.
+    pub world_scale: Option<f32>,
     /// Walls placed before any balls are seeded, in world coordinates.
     pub line_segments: Vec<LineSegmentSpec>,
 }
@@ -95,6 +98,7 @@ impl Default for HeadlessConfig {
             stdout: true,
             seed_balls: None,
             dt: None,
+            world_scale: None,
             line_segments: Vec::new(),
         }
     }
@@ -223,6 +227,20 @@ fn parse_headless_args_with_args(args: &[String]) -> Result<Option<HeadlessConfi
                     .filter(|dt| dt.is_finite() && *dt > 0.0)
                     .ok_or_else(|| CliError::new("--dt value must be a positive number"))?;
                 config.dt = Some(dt);
+            }
+            "--world-scale" => {
+                i += 1;
+                if i >= args.len() {
+                    return Err(CliError::new("--world-scale requires a value"));
+                }
+                let scale = args[i]
+                    .parse::<f32>()
+                    .ok()
+                    .filter(|scale| scale.is_finite() && *scale > 0.0)
+                    .ok_or_else(|| {
+                        CliError::new("--world-scale value must be a positive number")
+                    })?;
+                config.world_scale = Some(scale);
             }
             "--line-segment" => {
                 i += 1;

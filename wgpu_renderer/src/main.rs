@@ -71,6 +71,10 @@ fn run_headless_renderer(config: headless_cli::HeadlessConfig) -> std::io::Resul
         DEFAULT_WINDOW_HEIGHT as u32,
         MARGINS,
     );
+    let world_rect = match config.world_scale {
+        Some(scale) => headless_runner::scale_world_rect(world_rect, scale),
+        None => world_rect,
+    };
     let application = headless_runner::prepare_application(&config, world_rect)?;
     headless_runner::HeadlessRunner::from_config(config, application)?.run()?;
     Ok(())
