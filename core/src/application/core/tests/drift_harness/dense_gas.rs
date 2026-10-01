@@ -33,6 +33,9 @@ const MAX_DEEP_OVERLAP_STREAK: usize = 5;
 /// Scenario validity: the run must reach the force-cap region at least this often.
 const MIN_CAP_HITS: usize = 1;
 const MIN_WALL_CLEARANCE: f32 = 1.0;
+/// Max energy drift at dt/4 over that at dt: 1/16 for dt^2 convergence,
+/// baseline 0.064, ~2x margin.
+const DENSE_GAS_MAX_DT_QUARTER_RATIO: f32 = 0.125;
 
 /// Places `SIDE * SIDE` balls on a square grid around the world centre.
 /// Velocities are deterministic and the total momentum is removed.
@@ -202,6 +205,17 @@ fn run_dense_gas(faults: TestFaults) -> DenseGasRun {
 }
 
 fn run_dense_gas_setup(faults: TestFaults, projectiles: bool) -> DenseGasRun {
+    run_dense_gas_timed(faults, projectiles, DT_GOAL, STEPS, 25)
+}
+
+/// The dense gas over `steps` steps of `dt`, sampled every `sample_every` steps.
+fn run_dense_gas_timed(
+    faults: TestFaults,
+    projectiles: bool,
+    dt: f32,
+    steps: usize,
+    sample_every: usize,
+) -> DenseGasRun {
     let mut main_content = create_dense_harness_with_seed(404);
     main_content.world_mut().speed_limit_override = Some(f32::INFINITY);
     main_content.world_mut().test_faults = faults;
@@ -212,9 +226,9 @@ fn run_dense_gas_setup(faults: TestFaults, projectiles: bool) -> DenseGasRun {
     let metrics = run_drift_harness_with_observer(
         &mut main_content,
         DriftHarnessConfig {
-            steps: STEPS,
-            sample_every: 25,
-            dt: DT_GOAL,
+            steps,
+            sample_every,
+            dt,
         },
         |_, mc| min_clearance = min_clearance.min(min_wall_clearance(mc)),
     );
@@ -288,6 +302,44 @@ fn test_cool_dense_gas_has_no_stale_neighbor_lists() {
     assert!(
         old.metrics.max_missed_neighbor_pairs() > 0,
         "old skin/2 threshold no longer reproduces the stale pair; regression test is vacuous"
+    );
+}
+
+/// Quartering dt over the same physical time must shrink the energy envelope
+/// about as dt^2 (velocity Verlet), so many-body drift is integrator error and
+/// not a list or cap artifact (the two-body convergence check cannot see
+/// those). This needs the drift world at the origin: far from it, f32 position
+/// rounding dominates and the envelope shrinks only about linearly (see
+/// docs/drift-test.md). dt/4 rather than dt/2 for a larger, clearer ratio.
+#[test]
+#[ignore = "suite:drift"]
+fn test_dense_gas_drift_converges_with_smaller_timestep() {
+    let coarse = run_dense_gas_timed(TestFaults::default(), true, DT_GOAL, STEPS, 25);
+    let fine = run_dense_gas_timed(TestFaults::default(), true, DT_GOAL * 0.25, 4 * STEPS, 100);
+    let coarse_drift = coarse.metrics.max_relative_energy_drift();
+    let fine_drift = fine.metrics.max_relative_energy_drift();
+    let ratio = fine_drift / coarse_drift.max(1e-12);
+    println!(
+        "DRIFT_CONVERGENCE name=dense_gas_dt_quartering coarse_dt={DT_GOAL} coarse_max_rel_energy_drift={coarse_drift:.3e} fine_max_rel_energy_drift={fine_drift:.3e} ratio={ratio:.3} threshold={DENSE_GAS_MAX_DT_QUARTER_RATIO}"
+    );
+    warn_near_threshold(
+        "dense_gas_dt_quartering",
+        "drift_ratio",
+        ratio,
+        DENSE_GAS_MAX_DT_QUARTER_RATIO,
+    );
+    let fine_list_problems: Vec<_> = fine
+        .violations()
+        .into_iter()
+        .filter(|v| v.contains("neighbour lists"))
+        .collect();
+    assert!(
+        fine_list_problems.is_empty(),
+        "fine run: {fine_list_problems:?}"
+    );
+    assert!(
+        ratio <= DENSE_GAS_MAX_DT_QUARTER_RATIO,
+        "dense gas does not converge with dt: coarse={coarse_drift:.3e} fine={fine_drift:.3e} ratio={ratio:.3} > {DENSE_GAS_MAX_DT_QUARTER_RATIO}"
     );
 }
 
