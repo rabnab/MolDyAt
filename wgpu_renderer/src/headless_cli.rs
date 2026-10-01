@@ -17,6 +17,8 @@ pub struct HeadlessConfig {
     pub rng_seed: Option<u64>,
     pub stdout: bool,
     pub seed_balls: Option<u32>,
+    /// Seeded balls get speeds uniform in `0..=seed_speed`; `None` seeds them at rest.
+    pub seed_speed: Option<f32>,
     /// Time step override; `None` keeps the simulation default.
     pub dt: Option<f32>,
     /// Factor applied to the default world's width and height (around its
@@ -97,6 +99,7 @@ impl Default for HeadlessConfig {
             rng_seed: None,
             stdout: true,
             seed_balls: None,
+            seed_speed: None,
             dt: None,
             world_scale: None,
             line_segments: Vec::new(),
@@ -215,6 +218,20 @@ fn parse_headless_args_with_args(args: &[String]) -> Result<Option<HeadlessConfi
                     return Err(CliError::new("--seed-balls value must be greater than 0"));
                 }
                 config.seed_balls = Some(count);
+            }
+            "--seed-speed" => {
+                i += 1;
+                if i >= args.len() {
+                    return Err(CliError::new("--seed-speed requires a value"));
+                }
+                let speed = args[i]
+                    .parse::<f32>()
+                    .ok()
+                    .filter(|speed| speed.is_finite() && *speed >= 0.0)
+                    .ok_or_else(|| {
+                        CliError::new("--seed-speed value must be a non-negative number")
+                    })?;
+                config.seed_speed = Some(speed);
             }
             "--dt" => {
                 i += 1;

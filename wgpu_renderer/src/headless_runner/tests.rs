@@ -92,6 +92,7 @@ fn seeded_headless_output() -> String {
         seed_balls: Some(24),
         dt: None,
         world_scale: None,
+        seed_speed: None,
         line_segments: Vec::new(),
     };
 
@@ -307,4 +308,29 @@ fn test_scale_world_rect_keeps_centre() {
         (0.0, 0.0)
     );
     assert_eq!(scale_world_rect(rect, 1.0), rect);
+}
+
+#[test]
+fn test_prepare_application_seeds_moving_balls() {
+    let config = |seed_speed| HeadlessConfig {
+        rng_seed: Some(7),
+        seed_balls: Some(20),
+        seed_speed,
+        ..HeadlessConfig::default()
+    };
+    let speeds = |seed_speed| {
+        let app = prepare_application(&config(seed_speed), test_world_rect()).unwrap();
+        let snapshot = app.create_snapshot();
+        snapshot
+            .balls
+            .iter()
+            .map(|b| b.velocity.norm())
+            .collect::<Vec<f32>>()
+    };
+    let at_rest = speeds(None);
+    assert!(!at_rest.is_empty());
+    assert!(at_rest.iter().all(|&v| v == 0.0));
+    let moving = speeds(Some(4.0));
+    assert!(moving.iter().any(|&v| v > 0.0));
+    assert!(moving.iter().all(|&v| v <= 4.0 + 1e-4));
 }

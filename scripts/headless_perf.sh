@@ -10,13 +10,17 @@
 #   Default: target/release/rust_thermo_wgpu (build with cargo build --release).
 # Environment: SCALE (world scale, default 5 -> ~17k balls), STEPS (default 300),
 #   RUNS (default 3, the fastest run is reported), SEED (default 1),
-#   BALLS (balls to seed, default 30000; more only makes seeding slower).
+#   BALLS (balls to seed, default 30000; more only makes seeding slower),
+#   SPEED (seeded balls get speeds uniform in 0..SPEED, default 0 = at rest).
+#
+# Hot, sparse gas (many neighbour-list rebuilds): SCALE=8 BALLS=12000 SPEED=6
 set -euo pipefail
 
 SCALE=${SCALE:-5}
 STEPS=${STEPS:-300}
 RUNS=${RUNS:-3}
 SEED=${SEED:-1}
+SPEED=${SPEED:-0}
 BALLS=${BALLS:-30000} # seeding stops at its attempt limit (4x), so ~17k balls fit at SCALE=5
 
 [ "$#" -gt 0 ] || set -- target/release/rust_thermo_wgpu
@@ -26,7 +30,7 @@ run_seconds() {
     local bin=$1 steps=$2 start end
     start=$(date +%s.%N)
     "$bin" --headless --steps "$steps" --rng-seed "$SEED" --seed-balls "$BALLS" \
-        --world-scale "$SCALE" --stdout >/dev/null 2>&1
+        --world-scale "$SCALE" --seed-speed "$SPEED" --stdout >/dev/null 2>&1
     end=$(date +%s.%N)
     echo "$end - $start" | bc -l
 }
@@ -42,7 +46,7 @@ fastest() {
 
 for bin in "$@"; do
     balls=$("$bin" --headless --steps 1 --rng-seed "$SEED" --seed-balls "$BALLS" \
-        --world-scale "$SCALE" --stdout 2>/dev/null | grep -o 'balls=[0-9]*' | head -1)
+        --world-scale "$SCALE" --seed-speed "$SPEED" --stdout 2>/dev/null | grep -o 'balls=[0-9]*' | head -1)
     setup=$(fastest "$bin" 1)
     total=$(fastest "$bin" "$STEPS")
     printf '%s: %s, %s steps, %.1f ms/step (setup %.1f s)\n' "$bin" "$balls" "$STEPS" \

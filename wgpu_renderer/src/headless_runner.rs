@@ -153,7 +153,8 @@ pub fn prepare_application(config: &HeadlessConfig, world_rect: Rect) -> io::Res
         );
     }
     if let Some(seed_balls) = config.seed_balls {
-        application.seed_random_balls(seed_balls as usize);
+        application
+            .seed_random_balls_with_speed(seed_balls as usize, config.seed_speed.unwrap_or(0.0));
     }
     Ok(application)
 }
