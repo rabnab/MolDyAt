@@ -232,10 +232,19 @@ pub fn warn_near_threshold(scenario: &str, metric: &str, value: f32, threshold: 
     }
 }
 
+/// The drift world: 100 x 100 centred on the origin. Far from the origin f32
+/// positions get coarse (~3e-5 at 500), and that rounding, not the
+/// integrator, then dominates the energy error (see docs/drift-test.md).
 pub fn create_dense_harness_with_seed(seed: u64) -> MainContent {
-    let (main_content, _) = create_main_content_for_region(500.0, 500.0);
+    let (main_content, _) = create_main_content_for_region(-50.0, 50.0);
     let world_rect = main_content.world().world_region();
     MainContent::new_with_seed(world_rect, seed).expect("Could not create deterministic world")
+}
+
+/// Centre of the world region.
+pub fn world_center(main_content: &MainContent) -> Vec2D {
+    let world = main_content.world().world_region();
+    Vec2D::new(world.x + 0.5 * world.w, world.y + 0.5 * world.h)
 }
 
 pub fn populate_grid_balls(main_content: &mut MainContent, num_balls: usize, thermal_v: f32) {
