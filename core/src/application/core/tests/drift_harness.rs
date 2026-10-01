@@ -513,6 +513,8 @@ fn sample_step(main_content: &MainContent, step: usize) -> DriftSample {
 #[cfg(test)]
 mod dense_gas;
 #[cfg(test)]
+mod neighbor_lists;
+#[cfg(test)]
 mod tests;
 #[cfg(test)]
 mod wall_reflection;

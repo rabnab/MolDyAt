@@ -188,8 +188,8 @@ fn dense_gas_violations(
     violations
 }
 
-struct DenseGasRun {
-    metrics: DriftRunMetrics,
+pub(super) struct DenseGasRun {
+    pub(super) metrics: DriftRunMetrics,
     min_clearance: f32,
     ball_radius: f32,
 }
@@ -200,7 +200,7 @@ impl DenseGasRun {
     }
 }
 
-fn run_dense_gas(faults: TestFaults) -> DenseGasRun {
+pub(super) fn run_dense_gas(faults: TestFaults) -> DenseGasRun {
     run_dense_gas_setup(faults, true)
 }
 
