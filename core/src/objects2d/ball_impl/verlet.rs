@@ -2,8 +2,20 @@ use crate::logging;
 use crate::objects2d::ball_impl::ball_core::Ball2D;
 use crate::objects2d::ball_impl::{BallPhysics, Named, UPDATE_HOOD_CNT};
 use crate::objects2d::vec_2d::Vec2D;
+use std::sync::atomic::Ordering;
 
 const UPDATE_FREQ: usize = 100000; //basically deactivate update by frequency
+
+/// A ball's rebuilt neighbour list (sorted by index) and the partners added
+/// or removed against its previous list. Produced by `Verlet::rebuild`,
+/// installed by `Verlet::apply_rebuild`.
+pub(crate) struct HoodRebuild {
+    ball_idx: usize,
+    neighbours: Vec<usize>,
+    /// New partners.
+    added: Vec<usize>,
+    removed: Vec<usize>,
+}
 
 pub(crate) struct Verlet {
     pub(crate) neighbours: Vec<usize>,
@@ -141,6 +153,10 @@ impl Verlet {
         Self::has_ball_moved_enough(ball, dt, min_movement_threshold)
     }
 
+    /// Rebuild one ball's neighbour list if it moved far enough, and update
+    /// its partners' lists. The simulation runs the same steps in parallel
+    /// (`SimulationEngine::update_neighbor_hoods_for_occupied_cells`); this
+    /// serial form is kept for single-ball callers and tests.
     pub fn update_hood(
         ball_idx: usize,
         dt: f32,
@@ -149,94 +165,122 @@ impl Verlet {
         min_movement_threshold: f32,
         balls: &mut [Ball2D],
     ) {
-        let dist_limit_by_v = 0.;
-
-        // The search radius (Verlet radius) is cutoff + skin
-        // Note: Since physics uses edge-to-edge distance, we don't need to add ball radii here
-        // if 'cutoff' is the edge-distance cutoff.
-        let effective_cutoff = cutoff_and_skin;
-        let dist_limit_by_closest = effective_cutoff;
-        let dist_limit = f32::max(dist_limit_by_closest, dist_limit_by_v);
-
-        let this_ball_needs_update = {
-            let ball = &balls[ball_idx];
-            if ball.verbose.console {
-                logging::log_update_hood_start(ball, cutoff_and_skin);
-            }
-            ball.hood
-                .needs_update_hood(ball, dt, min_movement_threshold)
-        };
-
-        {
-            let ball = &mut balls[ball_idx];
-            ball.hood.updates_since_refresh += 1;
-            ball.decrement_update_counter();
+        if balls[ball_idx].verbose.console {
+            logging::log_update_hood_start(&balls[ball_idx], cutoff_and_skin);
         }
-
-        if !this_ball_needs_update {
+        if !Self::begin_update(&mut balls[ball_idx], dt, min_movement_threshold) {
             return;
         }
+        let rebuild = Self::rebuild(ball_idx, candidates, cutoff_and_skin, balls);
+        Self::apply_rebuild(rebuild, cutoff_and_skin, balls);
+    }
 
-        unsafe {
-            UPDATE_HOOD_CNT += 1;
+    /// Per-step bookkeeping for one ball. Returns whether its list must be
+    /// rebuilt; if so, records the rebuild position. Touches only `ball`, so
+    /// it can run for all balls in parallel; callers log verbose balls.
+    pub(crate) fn begin_update(ball: &mut Ball2D, dt: f32, min_movement_threshold: f32) -> bool {
+        let needs_update = ball
+            .hood
+            .needs_update_hood(ball, dt, min_movement_threshold);
+        ball.hood.updates_since_refresh += 1;
+        ball.decrement_update_counter();
+        if !needs_update {
+            return false;
         }
 
-        // Get ball position and ID for distance calculations
-        {
-            let ball = &mut balls[ball_idx];
-            ball.last_update_hood_pos = *ball.get_position();
-            ball.reset_update_counter();
-        };
+        UPDATE_HOOD_CNT.fetch_add(1, Ordering::Relaxed);
+        ball.last_update_hood_pos = *ball.get_position();
+        ball.reset_update_counter();
+        true
+    }
 
+    /// Build the new neighbour list of `ball_idx` and its changes against the
+    /// current one. Reads `balls` only, so rebuilds of different balls can run
+    /// in parallel.
+    ///
+    /// # Arguments
+    /// * `candidates` - Balls in the 3x3 cells around the ball's cell
+    /// * `cutoff_and_skin` - Verlet radius, compared with the edge-to-edge distance
+    pub(crate) fn rebuild(
+        ball_idx: usize,
+        candidates: &[usize],
+        cutoff_and_skin: f32,
+        balls: &[Ball2D],
+    ) -> HoodRebuild {
         // The new list holds the candidates from the 3x3 cells within range.
         // Each ball sits in exactly one cell, so the candidates have no
         // duplicates, and the cell size guarantees that every ball in range is
         // among them (see `CellGrid::new`).
-        let mut new_hood: Vec<(usize, f32)> = candidates
+        let ball = &balls[ball_idx];
+        let mut neighbours: Vec<usize> = candidates
             .iter()
-            .filter(|&&neighbour_idx| neighbour_idx != ball_idx)
-            .map(|&neighbour_idx| {
-                let dist = BallPhysics::distance_of_edges(&balls[ball_idx], &balls[neighbour_idx]);
-                (neighbour_idx, dist)
+            .copied()
+            .filter(|&neighbour_idx| {
+                neighbour_idx != ball_idx
+                    && BallPhysics::distance_of_edges(ball, &balls[neighbour_idx]) < cutoff_and_skin
             })
-            .filter(|&(_, dist)| dist < dist_limit)
             .collect();
-        new_hood.sort_unstable_by_key(|&(neighbour_idx, _)| neighbour_idx);
+        neighbours.sort_unstable();
 
         // Both lists are sorted, so one merge walk finds the added and removed
-        // pairs; only those touch the partner's list (which holds this ball
-        // exactly when this ball holds the partner).
-        let old_hood = std::mem::take(&mut balls[ball_idx].hood.neighbours);
-        let mut old_iter = old_hood.iter().copied().peekable();
-        for &(neighbour_idx, dist) in &new_hood {
+        // partners.
+        let mut added = Vec::new();
+        let mut removed = Vec::new();
+        let mut old_iter = ball.hood.neighbours.iter().copied().peekable();
+        for &neighbour_idx in &neighbours {
             while let Some(removed_idx) = old_iter.next_if(|&old_idx| old_idx < neighbour_idx) {
-                Self::unlink_partner(balls, removed_idx, ball_idx);
+                removed.push(removed_idx);
             }
-            if old_iter.next_if_eq(&neighbour_idx).is_some() {
-                continue; // kept
+            if old_iter.next_if_eq(&neighbour_idx).is_none() {
+                added.push(neighbour_idx);
             }
-            logging::log_neighbour_add(
-                &balls[ball_idx],
-                &balls[neighbour_idx],
-                dist * dist,
-                dist_limit * dist_limit,
-            );
+        }
+        removed.extend(old_iter);
+
+        HoodRebuild {
+            ball_idx,
+            neighbours,
+            added,
+            removed,
+        }
+    }
+
+    /// Install a rebuilt list and update the partners that were added or
+    /// removed. Partner updates are idempotent (a partner holds this ball
+    /// exactly when this ball holds the partner, and both sides compute the
+    /// same distance), so applying the rebuilds of one pass in any order gives
+    /// the same lists.
+    pub(crate) fn apply_rebuild(rebuild: HoodRebuild, cutoff_and_skin: f32, balls: &mut [Ball2D]) {
+        let HoodRebuild {
+            ball_idx,
+            neighbours,
+            added,
+            removed,
+        } = rebuild;
+        for removed_idx in removed {
+            Self::unlink_partner(balls, removed_idx, ball_idx);
+        }
+        for neighbour_idx in added {
+            let (ball, partner) = (&balls[ball_idx], &balls[neighbour_idx]);
+            if ball.verbose.console || partner.verbose.console {
+                let dist = BallPhysics::distance_of_edges(ball, partner);
+                logging::log_neighbour_add(
+                    ball,
+                    partner,
+                    dist * dist,
+                    cutoff_and_skin * cutoff_and_skin,
+                );
+            }
             let partner_hood = &mut balls[neighbour_idx].hood;
             partner_hood.add_neighbour(ball_idx);
             partner_hood.hood_dirty = true;
         }
-        for removed_idx in old_iter {
-            Self::unlink_partner(balls, removed_idx, ball_idx);
-        }
 
-        let mut neighbours = old_hood;
-        neighbours.clear();
-        neighbours.extend(new_hood.iter().map(|&(neighbour_idx, _)| neighbour_idx));
-        balls[ball_idx].hood.neighbours = neighbours;
-
-        balls[ball_idx].hood.updates_since_refresh = 0;
+        let hood = &mut balls[ball_idx].hood;
+        hood.neighbours = neighbours;
+        hood.updates_since_refresh = 0;
         // Mark the hood as dirty since neighbors were updated
-        balls[ball_idx].hood.hood_dirty = true;
+        hood.hood_dirty = true;
     }
 
     /// Remove `ball_idx` from the list of its former neighbour `partner_idx`.
