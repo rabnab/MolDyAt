@@ -50,6 +50,7 @@ impl MainContent {
                 show_ball_stats: true,
                 was_paused_for_resize: false,
                 speed_limit_override: None,
+                kernel_points: Vec::new(),
                 cached_force_results: Vec::new(),
                 thermo_history: ThermoFieldHistory::new(),
                 line_segments: Default::default(),

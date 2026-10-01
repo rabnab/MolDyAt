@@ -258,7 +258,7 @@ fn test_energy_conservation_two_balls_integration() {
     // and verify total energy (kinetic + potential) remains constant within numerical error
 
     use crate::objects2d::ball_impl::ball_factory::BallFactory;
-    use crate::objects2d::ball_impl::simd_forces::force_simd;
+    use crate::objects2d::ball_impl::simd_forces::{force_simd, kernel_points};
 
     let phys = BallPhysics::default();
     let factory = BallFactory::new();
@@ -304,8 +304,8 @@ fn test_energy_conservation_two_balls_integration() {
     // Run simulation
     for step in 0..NUM_STEPS {
         // Compute forces using SIMD implementation
-        let force1 = force_simd(&phys, 0, &balls);
-        let force2 = force_simd(&phys, 1, &balls);
+        let force1 = force_simd(&phys, 0, &balls, &kernel_points(&balls));
+        let force2 = force_simd(&phys, 1, &balls, &kernel_points(&balls));
 
         // Update velocities (velocity Verlet integration - part 1)
         let accel1 = Vec2D::new(
@@ -339,8 +339,8 @@ fn test_energy_conservation_two_balls_integration() {
         balls[1].pre_update_pos = new_pos2;
 
         // Recompute forces at new positions
-        let force1_new = force_simd(&phys, 0, &balls);
-        let force2_new = force_simd(&phys, 1, &balls);
+        let force1_new = force_simd(&phys, 0, &balls, &kernel_points(&balls));
+        let force2_new = force_simd(&phys, 1, &balls, &kernel_points(&balls));
 
         // Complete velocity update with new accelerations (velocity Verlet - part 2)
         let accel1_new = Vec2D::new(

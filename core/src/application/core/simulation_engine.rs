@@ -3,7 +3,7 @@ use super::{GameLogicData, MainContent, SimulationWorld, StatsAccumulator};
 use crate::application::thermo_field::compute_cell_thermo;
 use crate::application::{AppResult, LogStuff};
 use crate::objects2d::ball_impl::ball_core::BounceInfo;
-use crate::objects2d::ball_impl::simd_forces::force_simd;
+use crate::objects2d::ball_impl::simd_forces::{KernelPoint, force_simd};
 use crate::objects2d::ball_impl::verlet::Verlet;
 use crate::objects2d::ball_impl::wall_contact::normal_velocity_after_contact;
 use crate::objects2d::ball_impl::{BallFactory, ForceResult};
@@ -306,19 +306,29 @@ impl SimulationEngine {
         (results.into_iter().map(|(b, _)| b).collect(), checks)
     }
 
+    /// Store each ball's position before the force pass and copy what the
+    /// force kernel reads into `kernel_points`.
     fn update_old_positions(world: &mut SimulationWorld) {
+        world
+            .kernel_points
+            .resize(world.balls.len(), KernelPoint::default());
         world
             .balls
             .par_iter_mut()
-            .for_each(|ball| ball.update_old_pos());
+            .zip(world.kernel_points.par_iter_mut())
+            .for_each(|(ball, point)| {
+                ball.update_old_pos();
+                *point = KernelPoint::from(&*ball);
+            });
     }
 
     fn compute_forces(world: &SimulationWorld) -> Vec<ForceResult> {
         let physics = &world.physics;
         let balls = &world.balls;
+        let points = &world.kernel_points;
         (0..balls.len())
             .into_par_iter()
-            .map(|i| force_simd(physics, i, balls))
+            .map(|i| force_simd(physics, i, balls, points))
             .collect()
     }
 
