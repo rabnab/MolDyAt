@@ -29,6 +29,7 @@ impl MainContent {
     /// Like [`Self::seed_random_balls`], with speeds drawn uniformly from
     /// `0..=max_speed` in random directions. `max_speed` 0 seeds balls at rest
     /// and draws no extra random numbers, so it matches `seed_random_balls`.
+    /// The centre-of-mass velocity is not removed.
     pub fn seed_random_balls_with_speed(&mut self, count: usize, max_speed: f32) {
         self.add_random_candidates_with_speed(count, max_speed);
     }

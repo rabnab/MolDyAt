@@ -32,7 +32,9 @@ pub struct SimulationWorld {
     pub(crate) sim: SimStats,
     pub(crate) balls: Vec<Ball2D>,
     /// Per-ball position and radius for the force kernel, refilled every step
-    /// (same indices as `balls`).
+    /// (same indices as `balls`). Scratch data: valid only inside `update_sim`,
+    /// from `update_old_positions` to `compute_forces`. Balls are removed and
+    /// added between steps, so read `balls` everywhere else.
     pub(crate) kernel_points: Vec<KernelPoint>,
     pub(crate) cell_grid: CellGrid,
     pub(crate) real_data: bool,

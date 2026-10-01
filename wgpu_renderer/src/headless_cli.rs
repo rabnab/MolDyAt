@@ -18,6 +18,8 @@ pub struct HeadlessConfig {
     pub stdout: bool,
     pub seed_balls: Option<u32>,
     /// Seeded balls get speeds uniform in `0..=seed_speed`; `None` seeds them at rest.
+    /// Meant for performance runs: the net momentum is not removed, so the gas
+    /// drifts as a whole.
     pub seed_speed: Option<f32>,
     /// Time step override; `None` keeps the simulation default.
     pub dt: Option<f32>,

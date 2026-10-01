@@ -171,6 +171,8 @@ Suggested flags:
 - `--stdout`
 - `--no-stdout`
 - `--seed-balls <n>`
+- `--seed-speed <max>` (seeded balls get speeds uniform in `0..=max` in random directions; default 0 = at rest, which draws no extra random numbers; net momentum is not removed)
+- `--world-scale <factor>` (multiplies the default world's width and height around its centre; positive; for large-world performance runs)
 - `--dt <seconds>` (time step override; positive)
 - `--line-segment x1,y1,x2,y2[,thickness]` (repeatable wall in world coordinates; thickness 1-20, default 1; placed before seeding)
 

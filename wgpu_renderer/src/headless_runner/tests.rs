@@ -269,6 +269,8 @@ fn test_run_start_records_effective_dt_segments_and_world_rect() {
         output: Some(output_path.clone()),
         stdout: false,
         rng_seed: Some(1),
+        seed_speed: Some(2.5),
+        world_scale: Some(1.5),
         line_segments: vec![LineSegmentSpec {
             start: (-10.0, 5.0),
             end: (10.0, 5.0),
@@ -288,6 +290,8 @@ fn test_run_start_records_effective_dt_segments_and_world_rect() {
     let run_start = &parse_jsonl_records(&content)[0];
     assert_eq!(run_start["record_kind"], "run_start");
     assert_eq!(run_start["config"]["dt"].as_f64(), Some(default_dt as f64));
+    assert_eq!(run_start["config"]["seed_speed"].as_f64(), Some(2.5));
+    assert_eq!(run_start["config"]["world_scale"].as_f64(), Some(1.5));
     let segment = &run_start["config"]["line_segments"][0];
     assert_eq!(segment["start"], serde_json::json!([-10.0, 5.0]));
     assert_eq!(segment["end"], serde_json::json!([10.0, 5.0]));
