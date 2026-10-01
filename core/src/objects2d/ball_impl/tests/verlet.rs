@@ -471,3 +471,71 @@ fn test_update_hood_keeps_lists_sorted_and_symmetric() {
     assert!(balls[3].hood.neighbours.is_empty());
     assert_eq!(balls[4].hood.neighbours, vec![0]);
 }
+
+/// Balls on a jittered grid; `shift` moves every other ball so a second pass
+/// adds and removes pairs.
+fn jittered_balls(shift: f32) -> Vec<Ball2D> {
+    let mut seed: u32 = 12345;
+    let mut next = || {
+        seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+        (seed >> 8) as f32 / (1u32 << 24) as f32
+    };
+    (0..48)
+        .map(|i| {
+            let x = (i % 8) as f32 * 2.5 + next() + if i % 2 == 0 { shift } else { 0.0 };
+            let y = (i / 8) as f32 * 2.5 + next();
+            let mut ball = make_ball(i, Vec2D::new(x, y));
+            ball.last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
+            ball
+        })
+        .collect()
+}
+
+fn reposition(balls: &mut [Ball2D], from: &[Ball2D]) {
+    for (ball, target) in balls.iter_mut().zip(from) {
+        ball.set_position_and_update_tail(*target.get_position());
+        ball.last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
+    }
+}
+
+#[test]
+fn test_parallel_style_rebuild_matches_serial_update_hood() {
+    // The engine builds all lists first (reading only) and applies them
+    // afterwards. That must give the same lists as rebuilding ball after
+    // ball, in any order.
+    use crate::objects2d::ball_impl::BallPhysics;
+
+    let cutoff_and_skin = BallPhysics::default().get_cutoff_and_skin();
+    let all: Vec<usize> = (0..48).collect();
+    let mut serial = jittered_balls(0.0);
+    let mut batched = jittered_balls(0.0);
+
+    for shift in [0.0, 3.0, -1.5] {
+        let target = jittered_balls(shift);
+        reposition(&mut serial, &target);
+        reposition(&mut batched, &target);
+
+        for idx in all.iter().rev() {
+            Verlet::update_hood(*idx, 0.01, &all, cutoff_and_skin, 0.1, &mut serial);
+        }
+
+        let rebuild_now: Vec<usize> = all
+            .iter()
+            .copied()
+            .filter(|&idx| Verlet::begin_update(&mut batched[idx], 0.01, 0.1))
+            .collect();
+        let rebuilds: Vec<_> = rebuild_now
+            .iter()
+            .map(|&idx| Verlet::rebuild(idx, &all, cutoff_and_skin, &batched))
+            .collect();
+        for rebuild in rebuilds {
+            Verlet::apply_rebuild(rebuild, cutoff_and_skin, &mut batched);
+        }
+
+        for (s, b) in serial.iter().zip(&batched) {
+            assert_eq!(s.hood.neighbours, b.hood.neighbours, "ball {}", s.get_id());
+            assert!(s.hood.neighbours.is_sorted());
+        }
+    }
+    assert!(serial.iter().any(|b| !b.hood.neighbours.is_empty()));
+}

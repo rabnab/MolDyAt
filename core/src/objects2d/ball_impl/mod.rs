@@ -3,6 +3,8 @@ pub use self::ball_physics::*;
 // Re-export core components for external use
 pub use crate::objects2d::ball_impl::ball_core::Ball2D;
 
+use std::sync::atomic::{AtomicUsize, Ordering};
+
 // Module declarations
 pub mod ball_core;
 mod ball_factory;
@@ -11,11 +13,12 @@ pub mod simd_forces;
 pub mod verlet;
 pub mod wall_contact;
 
-static mut UPDATE_HOOD_CNT: usize = 0;
+/// Neighbour-list rebuilds so far; rebuild checks run in parallel.
+static UPDATE_HOOD_CNT: AtomicUsize = AtomicUsize::new(0);
 
 /// get the count of how often update_hood was actually collecting the neighbors
 pub fn get_update_hood_call_cnt() -> usize {
-    unsafe { UPDATE_HOOD_CNT }
+    UPDATE_HOOD_CNT.load(Ordering::Relaxed)
 }
 
 // Type definitions and constants that are common across ball modules
