@@ -23,7 +23,15 @@ impl MainContent {
     /// Placement obeys world bounds and collision constraints; actual inserted
     /// count may be lower in dense configurations.
     pub fn seed_random_balls(&mut self, count: usize) {
-        self.add_random_candidates(count);
+        self.seed_random_balls_with_speed(count, 0.0);
+    }
+
+    /// Like [`Self::seed_random_balls`], with speeds drawn uniformly from
+    /// `0..=max_speed` in random directions. `max_speed` 0 seeds balls at rest
+    /// and draws no extra random numbers, so it matches `seed_random_balls`.
+    /// The centre-of-mass velocity is not removed.
+    pub fn seed_random_balls_with_speed(&mut self, count: usize, max_speed: f32) {
+        self.add_random_candidates_with_speed(count, max_speed);
     }
     /// Remove all balls from simulation and reset ID counter.
     /// Clears both balls vector and all cells in the grid.
@@ -46,6 +54,10 @@ impl MainContent {
     /// # Arguments
     /// * `count` - Target number of balls to add
     pub(crate) fn add_random_candidates(&mut self, count: usize) {
+        self.add_random_candidates_with_speed(count, 0.0);
+    }
+
+    fn add_random_candidates_with_speed(&mut self, count: usize, max_speed: f32) {
         let time_step = self.game_data.get_time_step();
         let cur_radius = self.game_data.get_ball_factory().get_new_ball_radius();
 
@@ -61,7 +73,7 @@ impl MainContent {
             let nu_ball = self
                 .game_data
                 .get_ball_factory()
-                .create_random((min_pos, max_pos), (0.0, 0.0));
+                .create_random((min_pos, max_pos), (0.0, max_speed));
             let margin = self.world.physics.equilibrium_edge_distance();
             if self
                 .world

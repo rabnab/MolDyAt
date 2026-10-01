@@ -1,7 +1,7 @@
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::Ball2D;
 use crate::objects2d::ball_impl::ball_physics::BallPhysics;
-use crate::objects2d::ball_impl::simd_forces::force_simd;
+use crate::objects2d::ball_impl::simd_forces::{KernelPoint, force_simd, kernel_points};
 
 fn approx(a: f32, b: f32, eps: f32) {
     assert!(
@@ -24,7 +24,7 @@ fn test_simd_energy_conservation() {
     ball_a.hood.add_neighbour(1);
     let balls = vec![ball_a, ball_b];
 
-    let result = force_simd(&physics, 0, &balls);
+    let result = force_simd(&physics, 0, &balls, &kernel_points(&balls));
 
     // Force should be finite
     assert!(result.force.x.is_finite());
@@ -53,7 +53,7 @@ fn test_simd_vs_scalar_negative_edge_dist() {
     let balls = vec![ball_a, ball_b];
 
     // Calculate with SIMD version
-    let simd_result = force_simd(&physics, 0, &balls);
+    let simd_result = force_simd(&physics, 0, &balls, &kernel_points(&balls));
 
     // When balls overlap (edge_dist < 0), both should set min_dist to 0.0
     assert_eq!(
@@ -95,7 +95,7 @@ fn test_simd_potential_energy_correctness() {
         let edge_dist = center_dist - 2.0; // Both radii = 1.0
 
         // Get SIMD result
-        let simd_result = force_simd(&physics, 0, &balls);
+        let simd_result = force_simd(&physics, 0, &balls, &kernel_points(&balls));
 
         // Calculate expected potential using scalar method
         let expected_potential = physics.potential(edge_dist);
@@ -117,7 +117,7 @@ fn test_simd_potential_energy_correctness() {
 
     let balls = vec![ball_a, ball_b, ball_c, ball_d];
 
-    let simd_result = force_simd(&physics, 0, &balls);
+    let simd_result = force_simd(&physics, 0, &balls, &kernel_points(&balls));
 
     // Calculate expected total potential manually
     let edge_dist_ab = 2.5 - 2.0; // 0.5
@@ -141,7 +141,7 @@ fn test_simd_potential_energy_correctness() {
     ball_a.hood.add_neighbour(1);
     let balls = vec![ball_a, ball_b];
 
-    let simd_result = force_simd(&physics, 0, &balls);
+    let simd_result = force_simd(&physics, 0, &balls, &kernel_points(&balls));
 
     // Expected linear potential: U(r) = U(r_cap) - max_force·(r - r_cap)
     let pot_at_cap = physics.constants.pot_at_cap;
@@ -158,7 +158,7 @@ fn test_virial_no_neighbours() {
     let physics = BallPhysics::default();
     let ball_a = Ball2D::new(0, Vec2D::new(0.0, 0.0), (0, 1.0));
     let balls = vec![ball_a];
-    let result = force_simd(&physics, 0, &balls);
+    let result = force_simd(&physics, 0, &balls, &kernel_points(&balls));
     assert_eq!(result.virial, 0.0, "Virial must be 0 with no neighbours");
 }
 
@@ -173,7 +173,7 @@ fn test_virial_single_neighbour_known_geometry() {
     ball_a.hood.add_neighbour(1);
     let balls = vec![ball_a, ball_b];
 
-    let result = force_simd(&physics, 0, &balls);
+    let result = force_simd(&physics, 0, &balls, &kernel_points(&balls));
 
     // virial = Σ (r_ij · F_ij) = center_dist * lj_force (see derivation in issue #112)
     let center_dist: f32 = 2.5;
@@ -199,7 +199,7 @@ fn test_virial_force_capped_regime() {
     ball_a.hood.add_neighbour(1);
     let balls = vec![ball_a, ball_b];
 
-    let result = force_simd(&physics, 0, &balls);
+    let result = force_simd(&physics, 0, &balls, &kernel_points(&balls));
 
     // In the capped regime force is evaluated at edge_dist = r_cap (clamped),
     // giving lj_force = physics.force(r_cap) ≈ max_force.
@@ -237,7 +237,7 @@ fn test_virial_simd_and_scalar_paths_agree() {
         balls.push(b);
     }
 
-    let result = force_simd(&physics, 0, &balls);
+    let result = force_simd(&physics, 0, &balls, &kernel_points(&balls));
 
     // Compute expected virial by scalar method for each pair
     let ball_pos = Vec2D::new(0.0, 0.0);
@@ -272,8 +272,22 @@ fn test_listed_neighbours_beyond_cutoff_do_not_interact() {
         balls[0].hood.add_neighbour(k);
     }
 
-    let result = force_simd(&physics, 0, &balls);
+    let result = force_simd(&physics, 0, &balls, &kernel_points(&balls));
     assert_eq!(result.force, Vec2D::new(0.0, 0.0));
     assert_eq!(result.potential_energy, 0.0);
     assert_eq!(result.virial, 0.0);
+}
+
+#[test]
+fn test_kernel_point_is_one_aligned_16_byte_record() {
+    assert_eq!(std::mem::size_of::<KernelPoint>(), 16);
+    assert_eq!(std::mem::align_of::<KernelPoint>(), 16);
+}
+
+#[test]
+fn test_kernel_point_reads_pre_update_pos_and_radius() {
+    let mut ball = Ball2D::new(0, Vec2D::new(1.0, 2.0), (0, 3.0));
+    ball.pre_update_pos = Vec2D::new(4.0, 5.0);
+    let point = KernelPoint::from(&ball);
+    assert_eq!((point.x, point.y, point.radius), (4.0, 5.0, 3.0));
 }

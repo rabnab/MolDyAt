@@ -93,6 +93,13 @@ cargo run -p rust_thermo_wgpu -- --headless --steps 20000 --snapshot-every 100 -
 ```
 
 ```bash
+# Large, hot world for performance runs: --world-scale multiplies the default
+# world's width and height, --seed-speed gives seeded balls speeds in 0..max.
+# run_start records both. scripts/headless_perf.sh times such runs per step.
+cargo run --release -p rust_thermo_wgpu -- --headless --steps 300 --rng-seed 1 --seed-balls 12000 --world-scale 8 --seed-speed 6 --stdout
+```
+
+```bash
 # Export summary + per-ball state (larger output)
 cargo run -p rust_thermo_wgpu -- --headless --steps 200 --snapshot-every 20 --detail balls --output /tmp/balls.jsonl --no-stdout
 ```

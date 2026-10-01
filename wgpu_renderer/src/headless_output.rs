@@ -157,6 +157,8 @@ fn run_start_to_jsonl(config: &HeadlessConfig, snapshot: &RendererSnapshot) -> S
             "detail_level": detail_level_name(config.detail),
             "rng_seed": config.rng_seed,
             "seed_balls": config.seed_balls,
+            "seed_speed": config.seed_speed.map_or(serde_json::Value::Null, f32_value),
+            "world_scale": config.world_scale.map_or(serde_json::Value::Null, f32_value),
             "seeded_constructor": config.rng_seed.is_some(),
             "stdout": config.stdout,
             "has_output_file": config.output.is_some(),

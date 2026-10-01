@@ -91,6 +91,8 @@ fn seeded_headless_output() -> String {
         stdout: false,
         seed_balls: Some(24),
         dt: None,
+        world_scale: None,
+        seed_speed: None,
         line_segments: Vec::new(),
     };
 
@@ -267,6 +269,8 @@ fn test_run_start_records_effective_dt_segments_and_world_rect() {
         output: Some(output_path.clone()),
         stdout: false,
         rng_seed: Some(1),
+        seed_speed: Some(2.5),
+        world_scale: Some(1.5),
         line_segments: vec![LineSegmentSpec {
             start: (-10.0, 5.0),
             end: (10.0, 5.0),
@@ -286,6 +290,8 @@ fn test_run_start_records_effective_dt_segments_and_world_rect() {
     let run_start = &parse_jsonl_records(&content)[0];
     assert_eq!(run_start["record_kind"], "run_start");
     assert_eq!(run_start["config"]["dt"].as_f64(), Some(default_dt as f64));
+    assert_eq!(run_start["config"]["seed_speed"].as_f64(), Some(2.5));
+    assert_eq!(run_start["config"]["world_scale"].as_f64(), Some(1.5));
     let segment = &run_start["config"]["line_segments"][0];
     assert_eq!(segment["start"], serde_json::json!([-10.0, 5.0]));
     assert_eq!(segment["end"], serde_json::json!([10.0, 5.0]));
@@ -294,4 +300,41 @@ fn test_run_start_records_effective_dt_segments_and_world_rect() {
     let world = &run_start["initial"]["world_rect"];
     assert!(world["left"].as_f64() < world["right"].as_f64());
     assert!(world["bottom"].as_f64() < world["top"].as_f64());
+}
+
+#[test]
+fn test_scale_world_rect_keeps_centre() {
+    let rect = Rect::new(-56.0, -31.0, 112.0, 62.0);
+    let scaled = scale_world_rect(rect, 5.0);
+    assert_eq!((scaled.w, scaled.h), (560.0, 310.0));
+    assert_eq!(
+        (scaled.x + scaled.w / 2.0, scaled.y + scaled.h / 2.0),
+        (0.0, 0.0)
+    );
+    assert_eq!(scale_world_rect(rect, 1.0), rect);
+}
+
+#[test]
+fn test_prepare_application_seeds_moving_balls() {
+    let config = |seed_speed| HeadlessConfig {
+        rng_seed: Some(7),
+        seed_balls: Some(20),
+        seed_speed,
+        ..HeadlessConfig::default()
+    };
+    let speeds = |seed_speed| {
+        let app = prepare_application(&config(seed_speed), test_world_rect()).unwrap();
+        let snapshot = app.create_snapshot();
+        snapshot
+            .balls
+            .iter()
+            .map(|b| b.velocity.norm())
+            .collect::<Vec<f32>>()
+    };
+    let at_rest = speeds(None);
+    assert!(!at_rest.is_empty());
+    assert!(at_rest.iter().all(|&v| v == 0.0));
+    let moving = speeds(Some(4.0));
+    assert!(moving.iter().any(|&v| v > 0.0));
+    assert!(moving.iter().all(|&v| v <= 4.0 + 1e-4));
 }

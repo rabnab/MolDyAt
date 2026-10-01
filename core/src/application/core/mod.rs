@@ -5,6 +5,7 @@ use crate::application::renderer_snapshot::RendererSnapshot;
 use crate::application::sim_stats::SimStats;
 use crate::application::thermo_field::ThermoFieldHistory;
 use crate::objects2d::ball_cell::cell_grid::CellGrid;
+use crate::objects2d::ball_impl::simd_forces::KernelPoint;
 use crate::objects2d::ball_impl::{Ball2D, BallPhysics, ForceResult};
 use crate::objects2d::wall_chain::WallChainCollection;
 use crate::objects2d::{
@@ -30,6 +31,11 @@ pub struct SimulationWorld {
 
     pub(crate) sim: SimStats,
     pub(crate) balls: Vec<Ball2D>,
+    /// Per-ball position and radius for the force kernel, refilled every step
+    /// (same indices as `balls`). Scratch data: valid only inside `update_sim`,
+    /// from `update_old_positions` to `compute_forces`. Balls are removed and
+    /// added between steps, so read `balls` everywhere else.
+    pub(crate) kernel_points: Vec<KernelPoint>,
     pub(crate) cell_grid: CellGrid,
     pub(crate) real_data: bool,
     pub(crate) step_by_step: bool,

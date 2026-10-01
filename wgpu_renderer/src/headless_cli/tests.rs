@@ -14,6 +14,8 @@ fn test_default_config_values() {
     assert_eq!(config.seed_balls, None);
     assert_eq!(config.dt, None);
     assert!(config.line_segments.is_empty());
+    assert_eq!(config.world_scale, None);
+    assert_eq!(config.seed_speed, None);
 }
 
 #[test]
@@ -444,4 +446,29 @@ fn test_line_segment_flag_rejects_malformed_values() {
         assert!(result.is_err(), "--line-segment {value} should be rejected");
     }
     assert!(parse_headless_args_with_args(&headless_args(&["--line-segment"])).is_err());
+}
+
+#[test]
+fn test_world_scale_flag() {
+    let parse = |value: &str| {
+        let args = ["program", "--headless", "--world-scale", value].map(String::from);
+        parse_headless_args_with_args(&args)
+    };
+    assert_eq!(parse("5").unwrap().unwrap().world_scale, Some(5.0));
+    for bad in ["0", "-2", "nan", "inf", "x"] {
+        assert!(parse(bad).is_err(), "{bad} must be rejected");
+    }
+}
+
+#[test]
+fn test_seed_speed_flag() {
+    let parse = |value: &str| {
+        let args = ["program", "--headless", "--seed-speed", value].map(String::from);
+        parse_headless_args_with_args(&args)
+    };
+    assert_eq!(parse("3.5").unwrap().unwrap().seed_speed, Some(3.5));
+    assert_eq!(parse("0").unwrap().unwrap().seed_speed, Some(0.0));
+    for bad in ["-1", "nan", "inf", "x"] {
+        assert!(parse(bad).is_err(), "{bad} must be rejected");
+    }
 }

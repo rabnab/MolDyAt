@@ -25,6 +25,48 @@ use crate::objects2d::ball_impl::{Ball2D, BallPhysics, ForceResult};
 use std::simd::prelude::SimdFloat;
 use std::simd::{StdFloat, f32x4};
 
+/// The 12 bytes of a ball the force kernel reads for every neighbour: position
+/// (`pre_update_pos`) and radius.
+///
+/// Neighbour lookups are random accesses, so one packed 16-byte record (4 per
+/// cache line) costs one cache line per neighbour, where a full `Ball2D` or
+/// three separate x/y/radius arrays would cost one or three. Rebuilt every
+/// step by `KernelPoint::from`, so it never holds indices that could go stale.
+#[derive(Debug, Clone, Copy, Default)]
+#[repr(C, align(16))]
+pub struct KernelPoint {
+    pub x: f32,
+    pub y: f32,
+    pub radius: f32,
+    _pad: f32,
+}
+
+impl From<&Ball2D> for KernelPoint {
+    #[inline]
+    fn from(ball: &Ball2D) -> Self {
+        Self {
+            x: ball.pre_update_pos.x,
+            y: ball.pre_update_pos.y,
+            radius: ball.radius,
+            _pad: 0.0,
+        }
+    }
+}
+
+impl KernelPoint {
+    /// Vector from this point to `to` (same as `Vec2D::dist`: `to - self`).
+    #[inline]
+    fn dist(&self, to: &Vec2D) -> Vec2D {
+        Vec2D::new(to.x - self.x, to.y - self.y)
+    }
+}
+
+/// `KernelPoint`s for all balls, as the simulation step builds them.
+#[cfg(test)]
+pub(crate) fn kernel_points(balls: &[Ball2D]) -> Vec<KernelPoint> {
+    balls.iter().map(KernelPoint::from).collect()
+}
+
 /// Calculate Lennard-Jones forces for multiple ball pairs using SIMD vectorization.
 /// Processes neighbors in chunks of 4 with `f32x4` (see the module docs for the instruction set).
 /// Applies force capping at r < r_cap with linear potential extrapolation for energy conservation.
@@ -34,10 +76,16 @@ use std::simd::{StdFloat, f32x4};
 /// * `physics` - Physics engine with LJ parameters and force cap settings
 /// * `ball_idx` - Index of ball to calculate forces for
 /// * `balls` - Slice of all balls (read-only access)
+/// * `points` - `KernelPoint` of every ball (same indices as `balls`), taken after `update_old_pos`
 ///
 /// # Returns
 /// ForceResult containing total force vector, potential energy, minimum distance, and optional neighbor forces
-pub fn force_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2D]) -> ForceResult {
+pub fn force_simd(
+    physics: &BallPhysics,
+    ball_idx: usize,
+    balls: &[Ball2D],
+    points: &[KernelPoint],
+) -> ForceResult {
     let mut force = Vec2D::new(0., 0.);
     let mut min_dist = f32::NAN;
     let mut total_pot = 0.;
@@ -67,8 +115,8 @@ pub fn force_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2D]) -> F
 
         // Gather data for 4 neighbors
         for (i, &neighbour_idx) in chunk.iter().enumerate() {
-            if let Some(neighbour) = balls.get(neighbour_idx) {
-                let dist_vec = neighbour.pre_update_pos.dist(ball_pos);
+            if let Some(neighbour) = points.get(neighbour_idx) {
+                let dist_vec = neighbour.dist(ball_pos);
                 dx[i] = dist_vec.x;
                 dy[i] = dist_vec.y;
                 radii[i] = neighbour.radius;
@@ -133,8 +181,8 @@ pub fn force_simd(physics: &BallPhysics, ball_idx: usize, balls: &[Ball2D]) -> F
 
     // Process remaining neighbors with scalar code
     for &neighbour_idx in unchunked {
-        if let Some(b) = balls.get(neighbour_idx) {
-            let dist_vec = b.pre_update_pos.dist(ball_pos);
+        if let Some(b) = points.get(neighbour_idx) {
+            let dist_vec = b.dist(ball_pos);
             let center_dist = dist_vec.norm();
             let radius_sum = b.radius + ball_radius;
             let edge_dist = center_dist - radius_sum;
