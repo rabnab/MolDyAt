@@ -197,6 +197,7 @@ Baseline provenance: measured with `cargo ci-test-drift` (dev profile, which is 
 | | | same pair deeper than 0.5 x radius, consecutive steps | <= 5 | 0 | |
 | | | force-cap region reached (validity) | >= 1 hit | 39 | |
 | | | balls lost / wall clearance (validity) | none / >= 1.0 | none / 20.07 | |
+| dense_gas_dt_quartering (dense gas at dt and dt/4, same physical time) | `dense_gas.rs` | max energy drift at dt/4 over that at dt | <= 0.125 | 0.064 | ~2x (dt^2 gives 0.0625) |
 | elastic_world_wall / elastic_line_segment (1 ball, 10000 steps) | `wall_reflection.rs` | relative speed change per reflection | 1.0e-5 | <= 1.1e-6 | |
 | | | impulse alignment with surface normal | >= 0.999 | 1.0 | |
 | | | kinetic energy deviation (every step and per event) | 1.0e-5 | 2.2e-6 | ~4.5x |
