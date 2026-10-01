@@ -2,6 +2,7 @@ use super::line_segments::Obstacle;
 use super::{GameLogicData, MainContent, SimulationWorld, StatsAccumulator};
 use crate::application::thermo_field::compute_cell_thermo;
 use crate::application::{AppResult, LogStuff};
+use crate::logging::log_update_hood_start;
 use crate::objects2d::ball_impl::ball_core::BounceInfo;
 use crate::objects2d::ball_impl::simd_forces::{KernelPoint, force_simd};
 use crate::objects2d::ball_impl::verlet::Verlet;
@@ -28,10 +29,9 @@ impl SimulationEngine {
             .step_count
             .is_multiple_of(game_data.neighbour_update_interval())
         {
-            let mut neighbor_buf: Vec<usize> = Vec::with_capacity(30);
             let mut timer = TimingMonad::new();
             timer.time("update neighbours", || {
-                Self::update_neighbor_hoods_for_occupied_cells(world, dt, &mut neighbor_buf)
+                Self::update_neighbor_hoods_for_occupied_cells(world, dt)
             });
             timer.time("update statistics", || {
                 Self::update_neighbor_statistics(world)
@@ -190,49 +190,87 @@ impl SimulationEngine {
         world.remove_invalid_balls();
     }
 
-    fn update_neighbor_hoods_for_occupied_cells(
-        world: &mut SimulationWorld,
-        dt: f32,
-        neighbor_buf: &mut Vec<usize>,
-    ) {
+    /// Rebuild the neighbour lists of the balls that moved far enough.
+    ///
+    /// 1. Parallel: per-ball counters, and which balls must rebuild.
+    /// 2. Parallel: each such ball builds its new list from its 3x3 cells,
+    ///    reading only, and diffs it against its current list.
+    /// 3. Serial, in ball order: install the lists and add or remove the
+    ///    changed partners. The result does not depend on that order (see
+    ///    `Verlet::apply_rebuild`), so it equals a serial rebuild.
+    fn update_neighbor_hoods_for_occupied_cells(world: &mut SimulationWorld, dt: f32) {
         let cutoff_and_skin =
             world.physics.get_cutoff_distance() + world.physics.get_skin_thickness();
         let max_radius = BallFactory::get_max_radius();
         let min_movement = world.physics.get_min_movement_for_update_hood(max_radius)
             * world.neighbor_movement_fault_scale();
         let cell_grid = &world.cell_grid;
-        let balls = &mut world.balls;
         let (grid_rows, grid_cols) = cell_grid.get_grid_size();
 
+        // Which cell each ball is in (flat index, `NO_CELL` if none), read from
+        // the grid itself: only balls in a cell take part, as in the per-cell
+        // loop this replaces.
+        const NO_CELL: u32 = u32::MAX;
+        let mut cell_of = vec![NO_CELL; world.balls.len()];
         for row in 0..grid_rows {
             for col in 0..grid_cols {
-                let cell_ball_indices = if let Some(cell) = cell_grid.get_cell(row, col) {
-                    cell.get_ball_indices()
-                } else {
-                    continue;
-                };
-
-                neighbor_buf.clear();
-                cell_grid.collect_ball_indices_into(row, col, neighbor_buf);
-
-                for &ball_idx in cell_ball_indices {
-                    // Rebuilds only search the 3x3 cells around the ball's
-                    // cell, so that cell must match its position.
-                    debug_assert_eq!(
-                        cell_grid.get_cell_indices(balls[ball_idx].get_position()),
-                        Some((row, col)),
-                        "ball {ball_idx} is in cell ({row}, {col}) of the grid but not by position"
-                    );
-                    Verlet::update_hood(
-                        ball_idx,
-                        dt,
-                        neighbor_buf,
-                        cutoff_and_skin,
-                        min_movement,
-                        balls,
-                    );
+                if let Some(cell) = cell_grid.get_cell(row, col) {
+                    let flat = (row * grid_cols + col) as u32;
+                    for &ball_idx in cell.get_ball_indices() {
+                        cell_of[ball_idx] = flat;
+                    }
                 }
             }
+        }
+
+        // (ball, row, col, rebuild, verbose) for balls that rebuild or log.
+        let checked: Vec<(usize, usize, usize, bool, bool)> = world
+            .balls
+            .par_iter_mut()
+            .zip(cell_of.par_iter())
+            .enumerate()
+            .filter_map(|(ball_idx, (ball, &flat))| {
+                if flat == NO_CELL {
+                    return None;
+                }
+                let (row, col) = (flat as usize / grid_cols, flat as usize % grid_cols);
+                // Rebuilds only search the 3x3 cells around the ball's cell,
+                // so that cell must match its position.
+                debug_assert_eq!(
+                    cell_grid.get_cell_indices(ball.get_position()),
+                    Some((row, col)),
+                    "ball {ball_idx} is in cell ({row}, {col}) of the grid but not by position"
+                );
+                let verbose = ball.verbose.console;
+                let rebuild = Verlet::begin_update(ball, dt, min_movement);
+                (rebuild || verbose).then_some((ball_idx, row, col, rebuild, verbose))
+            })
+            .collect();
+
+        // Verbose balls are logged here, in ball order, not in the parallel pass.
+        for &(ball_idx, _, _, _, verbose) in &checked {
+            if verbose {
+                log_update_hood_start(&world.balls[ball_idx], cutoff_and_skin);
+            }
+        }
+        let to_rebuild: Vec<(usize, usize, usize)> = checked
+            .into_iter()
+            .filter(|&(_, _, _, rebuild, _)| rebuild)
+            .map(|(ball_idx, row, col, _, _)| (ball_idx, row, col))
+            .collect();
+
+        let balls = &world.balls;
+        let rebuilds: Vec<_> = to_rebuild
+            .par_iter()
+            .map_init(Vec::new, |candidates, &(ball_idx, row, col)| {
+                candidates.clear();
+                cell_grid.collect_ball_indices_into(row, col, candidates);
+                Verlet::rebuild(ball_idx, candidates, cutoff_and_skin, balls)
+            })
+            .collect();
+
+        for rebuild in rebuilds {
+            Verlet::apply_rebuild(rebuild, cutoff_and_skin, &mut world.balls);
         }
     }
 
