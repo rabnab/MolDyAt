@@ -8,15 +8,16 @@
 # Usage: scripts/headless_perf.sh [BINARY...]
 #   Compare builds by passing several binaries, e.g. a baseline and a new one.
 #   Default: target/release/rust_thermo_wgpu (build with cargo build --release).
-# Environment: SCALE (world scale, default 5 -> ~19k balls), STEPS (default 300),
-#   RUNS (default 3, the fastest run is reported), SEED (default 1).
+# Environment: SCALE (world scale, default 5 -> ~17k balls), STEPS (default 300),
+#   RUNS (default 3, the fastest run is reported), SEED (default 1),
+#   BALLS (balls to seed, default 30000; more only makes seeding slower).
 set -euo pipefail
 
 SCALE=${SCALE:-5}
 STEPS=${STEPS:-300}
 RUNS=${RUNS:-3}
 SEED=${SEED:-1}
-BALLS=${BALLS:-1000000} # far more than fit: the world fills up to its density limit
+BALLS=${BALLS:-30000} # seeding stops at its attempt limit (4x), so ~17k balls fit at SCALE=5
 
 [ "$#" -gt 0 ] || set -- target/release/rust_thermo_wgpu
 
