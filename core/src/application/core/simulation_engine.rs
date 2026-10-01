@@ -216,6 +216,13 @@ impl SimulationEngine {
                 cell_grid.collect_ball_indices_into(row, col, neighbor_buf);
 
                 for &ball_idx in cell_ball_indices {
+                    // Rebuilds only search the 3x3 cells around the ball's
+                    // cell, so that cell must match its position.
+                    debug_assert_eq!(
+                        cell_grid.get_cell_indices(balls[ball_idx].get_position()),
+                        Some((row, col)),
+                        "ball {ball_idx} is in cell ({row}, {col}) of the grid but not by position"
+                    );
                     Verlet::update_hood(
                         ball_idx,
                         dt,
