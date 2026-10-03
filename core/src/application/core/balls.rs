@@ -1,12 +1,8 @@
 use super::line_segments::Obstacle;
 use super::*;
-use crate::{
-    application::{AppError, AppResult, GameLogic},
-    objects2d::ball_impl::Named,
-};
+use crate::application::{AppError, AppResult, GameLogic};
 use rand::rng;
 use rand_distr::{Distribution, Normal};
-use std::cmp::Ordering;
 
 impl MainContent {
     /// Add ball to simulation without collision checks.
@@ -95,6 +91,9 @@ impl MainContent {
 
     #[cfg(debug_assertions)]
     pub(crate) fn output_ten_closest_balls(&self) {
+        use crate::objects2d::ball_impl::Named;
+        use std::cmp::Ordering;
+
         // Collect all neighbor pairs with their distances
         let mut pairs: Vec<(usize, usize, f32)> = Vec::new();
 
