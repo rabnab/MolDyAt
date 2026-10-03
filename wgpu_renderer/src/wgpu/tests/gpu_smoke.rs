@@ -130,6 +130,7 @@ fn render_frame(
         show_ball_outline,
         window_size: SIZE,
         margin: MARGINS,
+        inset: MARGINS,
         thermo_display,
         operator_previews: previews(),
     };

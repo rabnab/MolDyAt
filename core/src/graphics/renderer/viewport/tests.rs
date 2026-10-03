@@ -165,9 +165,9 @@ fn test_roundtrip_px_to_world_to_px() {
 
 #[test]
 fn test_world_to_px_with_margins() {
-    // World: 100x70, Window: 1000x700, Margins: 100x50
-    // Viewport region: 800x600 (starts at 100, 50)
-    let world = Rect::new(-50.0, 35.0, 100.0, -70.0);
+    // World: 100x75, Window: 1000x700, Margins: 100x50
+    // Viewport region: 800x600 (starts at 100, 50), same shape as the world
+    let world = Rect::new(-50.0, 37.5, 100.0, -75.0);
     let transform = ViewportTransform::new(world, (1000.0, 700.0), Margins::symmetric(100.0, 50.0));
 
     // World origin should map to viewport center, which is at (100+400, 50+300) = (500, 350)
@@ -176,14 +176,42 @@ fn test_world_to_px_with_margins() {
     assert!(approx_eq(px[1], 350.0, 1e-3));
 
     // Top-left world corner should map to top-left of viewport region (100, 50)
-    let px = transform.world_to_px(&Vec2D::new(-50.0, 35.0));
+    let px = transform.world_to_px(&Vec2D::new(-50.0, 37.5));
     assert!(approx_eq(px[0], 100.0, 1e-3));
     assert!(approx_eq(px[1], 50.0, 1e-3));
 
     // Bottom-right world corner should map to bottom-right of viewport region (900, 650)
-    let px = transform.world_to_px(&Vec2D::new(50.0, -35.0));
+    let px = transform.world_to_px(&Vec2D::new(50.0, -37.5));
     assert!(approx_eq(px[0], 900.0, 1e-3));
     assert!(approx_eq(px[1], 650.0, 1e-3));
+    assert_eq!(transform.inset_margins(), Margins::symmetric(100.0, 50.0));
+}
+
+#[test]
+fn test_world_of_another_shape_is_letterboxed_not_stretched() {
+    // World 100x70 (wider than the 800x600 drawing area): bars above and
+    // below, 8 px per world unit on both axes.
+    let world = Rect::new(-50.0, 35.0, 100.0, -70.0);
+    let transform = ViewportTransform::new(world, (1000.0, 700.0), Margins::symmetric(100.0, 50.0));
+
+    let vp = transform.viewport_px();
+    assert!(approx_eq(vp.x, 100.0, 1e-3) && approx_eq(vp.w, 800.0, 1e-3));
+    assert!(approx_eq(vp.y, 70.0, 1e-3) && approx_eq(vp.h, 560.0, 1e-3));
+    assert_eq!(transform.inset_margins(), Margins::symmetric(100.0, 70.0));
+
+    let top_left = transform.world_to_px(&Vec2D::new(-50.0, 35.0));
+    let bottom_right = transform.world_to_px(&Vec2D::new(50.0, -35.0));
+    assert!(approx_eq(top_left[0], 100.0, 1e-3) && approx_eq(top_left[1], 70.0, 1e-3));
+    assert!(approx_eq(bottom_right[0], 900.0, 1e-3) && approx_eq(bottom_right[1], 630.0, 1e-3));
+    let center = transform.world_to_px(&Vec2D::zero());
+    assert!(approx_eq(center[0], 500.0, 1e-3) && approx_eq(center[1], 350.0, 1e-3));
+
+    // A taller world gets bars left and right instead.
+    let mut transform = transform;
+    transform.set_world_bounds(Rect::new(-30.0, 30.0, 60.0, -60.0));
+    let vp = transform.viewport_px();
+    assert!(approx_eq(vp.x, 200.0, 1e-3) && approx_eq(vp.w, 600.0, 1e-3));
+    assert!(approx_eq(vp.y, 50.0, 1e-3) && approx_eq(vp.h, 600.0, 1e-3));
 }
 
 #[test]
@@ -433,36 +461,54 @@ fn test_pan_constraints_at_zoom_2() {
     assert!(approx_eq(transform.pan_offset().y, -2.0, 1e-6));
 }
 
+/// A world derived from its window: 0.1 world units per pixel (`LEN_TO_PX`).
+fn window_derived_transform() -> ViewportTransform {
+    let margins = Margins::symmetric(0.0, 0.0);
+    let world = ViewportTransform::compute_world_bounds_from_window_size(1000, 700, margins);
+    ViewportTransform::new(world, (1000.0, 700.0), margins)
+}
+
 #[test]
 fn test_apply_pan_delta() {
-    // Test the static method used by event loops to convert pixel deltas to world pans
+    let transform = window_derived_transform();
     let start_offset = Vec2D::new(0.0, 0.0);
-    let zoom = 1.0;
 
     // Move 100 pixels right and 50 pixels down
     // LEN_TO_PX = 0.1, so 100 pixels = 10 world units
     // Pan direction is inverted, so moving right in pixels moves viewport left in world
-    let pixel_delta = Vec2D::new(100.0, 50.0);
-    let new_pan = ViewportTransform::apply_pan_delta(pixel_delta, start_offset, zoom);
+    let new_pan = transform.apply_pan_delta(Vec2D::new(100.0, 50.0), start_offset);
 
-    // world_dx = 100 * 0.1 / 1.0 = 10, inverted = -10
-    // world_dy = 50 * 0.1 / 1.0 = 5, inverted with Y flip = +5
-    assert!(approx_eq(new_pan.x, -10.0, 1e-6));
-    assert!(approx_eq(new_pan.y, 5.0, 1e-6));
+    assert!(approx_eq(new_pan.x, -10.0, 1e-5));
+    assert!(approx_eq(new_pan.y, 5.0, 1e-5));
 }
 
 #[test]
 fn test_apply_pan_delta_with_zoom() {
     // At zoom 2.0, pixel movements should result in half the world movement
+    let mut transform = window_derived_transform();
+    transform.zoom_at_point(&Vec2D::zero(), 2.0);
     let start_offset = Vec2D::new(5.0, 3.0);
-    let zoom = 2.0;
 
-    let pixel_delta = Vec2D::new(100.0, 50.0);
-    let new_pan = ViewportTransform::apply_pan_delta(pixel_delta, start_offset, zoom);
+    let new_pan = transform.apply_pan_delta(Vec2D::new(100.0, 50.0), start_offset);
 
     // world_dx = 100 * 0.1 / 2.0 = 5, inverted = -5
     // world_dy = 50 * 0.1 / 2.0 = 2.5, Y flip = +2.5
-    // Add to start offset: 5 + (-5) = 0, 3 + 2.5 = 5.5
-    assert!(approx_eq(new_pan.x, 0.0, 1e-6));
-    assert!(approx_eq(new_pan.y, 5.5, 1e-6));
+    assert!(approx_eq(new_pan.x, 0.0, 1e-5));
+    assert!(approx_eq(new_pan.y, 5.5, 1e-5));
+}
+
+#[test]
+fn test_pan_follows_the_cursor_on_a_letterboxed_world() {
+    // A 34x40 world (saved in a 500x500 window) in a 1000x2000 window with
+    // the default margins: drawn at 840/34 px per unit, not 10.
+    let margins = Margins::new(110.0, 50.0, 50.0, 50.0);
+    let world = Rect::new(-17.0, 20.0, 34.0, -40.0);
+    let transform = ViewportTransform::new(world, (1000.0, 2000.0), margins);
+    assert!(approx_eq(transform.world_per_px(), 34.0 / 840.0, 1e-6));
+
+    // Dragging by 84 px moves the content by exactly 84 px on screen.
+    let new_pan = transform.apply_pan_delta(Vec2D::new(84.0, 0.0), Vec2D::zero());
+    let a = transform.world_to_px(&Vec2D::zero());
+    let b = transform.world_to_px(&Vec2D::new(-new_pan.x, 0.0));
+    assert!(approx_eq(b[0] - a[0], 84.0, 1e-3));
 }

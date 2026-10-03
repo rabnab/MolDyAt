@@ -207,7 +207,8 @@ impl RenderPipeline for ThermostatLabelPipeline {
             return Ok(());
         }
 
-        let (glyph_ndc_w, glyph_ndc_h) = inset_glyph_ndc_size(ctx.window_size, ctx.margin);
+        let (glyph_ndc_w, glyph_ndc_h) =
+            inset_glyph_ndc_size(ctx.window_size, ctx.margin, ctx.inset);
         let local_temps = self.smoothed_local_temps(thermostats);
         let (verts, capsules) = Self::build_geometry(
             thermostats,

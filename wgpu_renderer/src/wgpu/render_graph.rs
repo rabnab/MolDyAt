@@ -51,7 +51,11 @@ pub struct PrepareContext<'a> {
     pub current_ball_radius: f32,
     pub show_ball_outline: bool,
     pub window_size: (u32, u32),
+    /// Configured margins (sidebar and other UI in the margins).
     pub margin: Margins,
+    /// Margins around the simulation drawing area: `margin` plus any
+    /// letterbox bars (see `ViewportTransform::inset_margins`).
+    pub inset: Margins,
     pub thermo_display: ThermoDisplayMode,
     /// All operator preview geometry for the current frame.
     pub operator_previews: FramePreviews,
@@ -168,13 +172,13 @@ impl RenderGraph {
 
     /// Render all enabled pipelines, switching viewports as needed.
     ///
-    /// The `window_size` and `margin` are used to compute the inset
-    /// viewport rectangle.
+    /// The `window_size` and `inset` margins give the inset viewport
+    /// rectangle (the simulation drawing area, letterboxed).
     pub fn render_all<'rp>(
         &'rp self,
         render_pass: &mut wgpu::RenderPass<'rp>,
         window_size: (u32, u32),
-        margin: Margins,
+        inset: Margins,
     ) {
         let (w, h) = (window_size.0 as f32, window_size.1 as f32);
         let mut current_mode: Option<ViewportMode> = None;
@@ -193,9 +197,9 @@ impl RenderGraph {
                         render_pass.set_viewport(0.0, 0.0, w, h, 0.0, 1.0);
                     }
                     ViewportMode::Inset => {
-                        let vp_w = (w - margin.horizontal()).max(1.0);
-                        let vp_h = (h - margin.vertical()).max(1.0);
-                        render_pass.set_viewport(margin.left, margin.top, vp_w, vp_h, 0.0, 1.0);
+                        let vp_w = (w - inset.horizontal()).max(1.0);
+                        let vp_h = (h - inset.vertical()).max(1.0);
+                        render_pass.set_viewport(inset.left, inset.top, vp_w, vp_h, 0.0, 1.0);
                     }
                 }
                 current_mode = Some(mode);

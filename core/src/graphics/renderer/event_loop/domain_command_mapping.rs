@@ -1,5 +1,6 @@
 use super::InputAction;
 use crate::application::DomainCommand;
+use crate::application::persistence::LoadSource;
 
 impl TryFrom<InputAction> for DomainCommand {
     type Error = InputAction;
@@ -24,6 +25,8 @@ impl TryFrom<InputAction> for DomainCommand {
             InputAction::ToggleTimingDisplay => Ok(DomainCommand::ToggleTimingDisplay),
             InputAction::ToggleBallStats => Ok(DomainCommand::ToggleBallStats),
             InputAction::StartVerbosityInput => Ok(DomainCommand::StartVerbosityInput),
+            InputAction::SaveWorld => Ok(DomainCommand::SaveWorld),
+            InputAction::LoadWorld => Ok(DomainCommand::LoadWorld(LoadSource::Latest)),
             InputAction::OperatorAction(command) => Ok(DomainCommand::Operator(command)),
             other => Err(other),
         }

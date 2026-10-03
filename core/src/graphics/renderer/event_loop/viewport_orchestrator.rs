@@ -1,8 +1,13 @@
-use super::unified_render_state::UnifiedRenderState;
+use super::unified_render_state::{PendingWindowRequest, UnifiedRenderState};
 use crate::application::DomainCommand;
 use crate::graphics::renderer::ViewportTransform;
 use crate::graphics::renderer::margins::Margins;
 use crate::objects2d::{Rect, Vec2D};
+use std::time::Duration;
+
+/// How long after asking for a window size a resize of another size still
+/// counts as the OS's answer (clamped to the screen) rather than the user's.
+const WINDOW_ANSWER_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// Coordinates viewport changes and resize-related physics synchronization.
 pub(super) struct ViewportOrchestrator;
@@ -24,6 +29,29 @@ impl ViewportOrchestrator {
         new_height: f32,
         margin_px: Margins,
     ) {
+        let viewport = &state.render.viewport;
+        if viewport.window_size_px() == (new_width, new_height) && viewport.margins() == margin_px {
+            // Nothing changed (e.g. the OS repeats the size we already have):
+            // rescaling the world would only add rounding drift.
+            return;
+        }
+        if let Some(request) = state.render.pending_window_request.take()
+            && Self::is_answer_to(&request, new_width, new_height)
+        {
+            // The OS's answer to the window size asked for after a load: the
+            // loaded world stays as saved and is fitted into whatever size
+            // was granted (letterboxed), instead of being squeezed into a
+            // rectangle derived from that size. Any other resize (the user's,
+            // or after the answer is overdue) ends the wait and refits the
+            // world as usual.
+            state.render.viewport.set_margins(margin_px);
+            state
+                .render
+                .viewport
+                .on_window_resize((new_width, new_height));
+            state.render.view_dirty = true;
+            return;
+        }
         state.render.viewport.set_margins(margin_px);
         let world_rect = ViewportTransform::compute_world_bounds_from_window_size(
             new_width as u32,
@@ -31,6 +59,17 @@ impl ViewportOrchestrator {
             margin_px,
         );
         Self::handle_resize_with_world_rect(state, new_width, new_height, world_rect);
+    }
+
+    /// Whether a resize to `width` x `height` is the OS's answer to
+    /// `request`: the requested size (within rounding), or any size soon
+    /// after asking (the OS clamped it to the screen or the window manager's
+    /// layout). A request is not answered after that, so it can't decide a
+    /// later, unrelated resize.
+    fn is_answer_to(request: &PendingWindowRequest, width: f32, height: f32) -> bool {
+        let (req_w, req_h) = (request.size.0 as f32, request.size.1 as f32);
+        let matches = (width - req_w).abs() <= 1.0 && (height - req_h).abs() <= 1.0;
+        matches || request.at.elapsed() <= WINDOW_ANSWER_TIMEOUT
     }
 
     pub(super) fn handle_resize_with_world_rect(
@@ -60,8 +99,7 @@ impl ViewportOrchestrator {
 
     pub(super) fn apply_pan_from_input(state: &mut UnifiedRenderState, delta: Vec2D) {
         let start_offset = state.input.pan_start_offset();
-        let zoom = state.render.viewport.zoom();
-        let new_pan = ViewportTransform::apply_pan_delta(delta, start_offset, zoom);
+        let new_pan = state.render.viewport.apply_pan_delta(delta, start_offset);
         state.render.viewport.pan(new_pan);
         state.render.view_dirty = true;
     }
@@ -84,7 +122,7 @@ mod tests {
     use crate::graphics::renderer::event_loop::metrics::MetricsCollector;
     use crate::graphics::renderer::event_loop::physics_coordinator::PhysicsCoordinator;
     use crate::graphics::renderer::event_loop::unified_render_state::{
-        RenderStateData, UnifiedRenderState,
+        PendingWindowRequest, RenderStateData, UnifiedRenderState,
     };
     use crate::graphics::renderer::margins::Margins;
     use crate::graphics::renderer::state_layers::RendererConfig;
@@ -114,6 +152,8 @@ mod tests {
                 tool_handler: None,
                 default_operator_snapshot: OperatorSnapshot::default(),
                 resize_pending: false,
+                requested_window_size: None,
+                pending_window_request: None,
             },
         }
     }
@@ -177,6 +217,101 @@ mod tests {
             commands.iter().any(|c| c.starts_with("Resize {")),
             "expected a Resize command to be forwarded to physics; got: {commands:?}"
         );
+    }
+
+    #[test]
+    fn handle_resize_with_unchanged_size_leaves_physics_alone() {
+        let (mut state, log) = build_test_state_recording();
+        let (w, h) = state.render.viewport.window_size_px();
+        let margins = state.render.viewport.margins();
+
+        ViewportOrchestrator::handle_resize(&mut state, w, h, margins);
+
+        let commands = log.lock().expect("command log lock should succeed");
+        assert!(commands.is_empty(), "no Resize expected; got: {commands:?}");
+    }
+
+    #[test]
+    fn os_answer_after_a_load_fits_the_view_but_keeps_the_world() {
+        let (mut state, log) = build_test_state_recording();
+        let loaded = Rect::new(-50.0, 50.0, 100.0, -100.0);
+        state.render.viewport.set_world_bounds(loaded);
+        state.render.pending_window_request = Some(PendingWindowRequest {
+            size: (1100, 1100),
+            at: std::time::Instant::now(),
+        });
+
+        // The OS grants another size than asked for, right away.
+        ViewportOrchestrator::handle_resize(
+            &mut state,
+            900.0,
+            700.0,
+            Margins::symmetric(50.0, 50.0),
+        );
+        assert!(
+            log.lock().unwrap().is_empty(),
+            "the loaded world is not rescaled"
+        );
+        assert_eq!(state.render.viewport.window_size_px(), (900.0, 700.0));
+        assert_eq!(state.render.viewport.world_bounds(), loaded);
+        assert!(state.render.pending_window_request.is_none());
+        assert!(state.render.view_dirty);
+
+        // A later (user) resize refits the world to the window as before.
+        ViewportOrchestrator::handle_resize(
+            &mut state,
+            1000.0,
+            700.0,
+            Margins::symmetric(50.0, 50.0),
+        );
+        assert!(
+            log.lock()
+                .unwrap()
+                .iter()
+                .any(|c| c.starts_with("Resize {"))
+        );
+    }
+
+    #[test]
+    fn an_overdue_window_request_does_not_decide_a_later_resize() {
+        let (mut state, log) = build_test_state_recording();
+        // Asked long ago; the window manager ignored it (maximised window).
+        state.render.pending_window_request = Some(PendingWindowRequest {
+            size: (1100, 1100),
+            at: std::time::Instant::now() - std::time::Duration::from_secs(30),
+        });
+
+        ViewportOrchestrator::handle_resize(
+            &mut state,
+            900.0,
+            700.0,
+            Margins::symmetric(50.0, 50.0),
+        );
+        assert!(
+            log.lock()
+                .unwrap()
+                .iter()
+                .any(|c| c.starts_with("Resize {")),
+            "the user's resize refits the world"
+        );
+        assert!(state.render.pending_window_request.is_none());
+    }
+
+    #[test]
+    fn a_late_answer_of_the_requested_size_still_keeps_the_world() {
+        let (mut state, log) = build_test_state_recording();
+        state.render.pending_window_request = Some(PendingWindowRequest {
+            size: (1100, 1100),
+            at: std::time::Instant::now() - std::time::Duration::from_secs(30),
+        });
+
+        ViewportOrchestrator::handle_resize(
+            &mut state,
+            1100.0,
+            1100.0,
+            Margins::symmetric(50.0, 50.0),
+        );
+        assert!(log.lock().unwrap().is_empty());
     }
 
     #[test]

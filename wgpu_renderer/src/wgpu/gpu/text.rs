@@ -27,9 +27,14 @@ const TEXT_ATTRS: [wgpu::VertexAttribute; 2] =
     wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2];
 
 /// Glyph size in NDC for the inset simulation viewport, at the current UI scale.
-pub(crate) fn inset_glyph_ndc_size(window_size: (u32, u32), margin: Margins) -> (f32, f32) {
-    let inset_w = (window_size.0 as f32 - margin.horizontal()).max(1.0);
-    let inset_h = (window_size.1 as f32 - margin.vertical()).max(1.0);
+/// `margin` sets the UI scale, `inset` the drawing area (letterboxed).
+pub(crate) fn inset_glyph_ndc_size(
+    window_size: (u32, u32),
+    margin: Margins,
+    inset: Margins,
+) -> (f32, f32) {
+    let inset_w = (window_size.0 as f32 - inset.horizontal()).max(1.0);
+    let inset_h = (window_size.1 as f32 - inset.vertical()).max(1.0);
     let ui_scale = sidebar_ui_scale(margin.left);
     (
         GLYPH_W as f32 * ui_scale * 2.0 / inset_w,

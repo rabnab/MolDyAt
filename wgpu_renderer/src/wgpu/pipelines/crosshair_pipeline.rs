@@ -97,10 +97,11 @@ fn crosshair_bars(cursor: [f32; 2]) -> [RectInstance; 8] {
 /// followed by the inset-NDC → window-NDC remap.
 fn full_window_view_proj(ctx: &PrepareContext) -> [[f32; 4]; 4] {
     let (fw, fh) = (ctx.window_size.0 as f32, ctx.window_size.1 as f32);
-    let sx = (fw - ctx.margin.horizontal()).max(1.0) / fw;
-    let sy = (fh - ctx.margin.vertical()).max(1.0) / fh;
-    let ox = (ctx.margin.left - ctx.margin.right) / fw;
-    let oy = (ctx.margin.bottom - ctx.margin.top) / fh;
+    let inset = ctx.inset;
+    let sx = (fw - inset.horizontal()).max(1.0) / fw;
+    let sy = (fh - inset.vertical()).max(1.0) / fh;
+    let ox = (inset.left - inset.right) / fw;
+    let oy = (inset.bottom - inset.top) / fh;
     let remap = [
         [sx, 0.0, 0.0, 0.0],
         [0.0, sy, 0.0, 0.0],

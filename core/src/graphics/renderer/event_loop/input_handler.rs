@@ -37,6 +37,10 @@ pub enum InputAction {
     StopAllBalls,
     ClearBalls,
 
+    // Save / load the whole world (Ctrl+S / Ctrl+O)
+    SaveWorld,
+    LoadWorld,
+
     // Simulation control
     TogglePause,
     ToggleGravity,
@@ -108,6 +112,11 @@ pub struct InputHandler {
 
     // Debounce tracking for +/- keys (prevents rapid-fire commands)
     last_plus_minus_time: Option<Instant>,
+
+    // Keys that started a Ctrl chord (Ctrl+S / Ctrl+O). Their release is
+    // consumed even if Ctrl was let go first, so it never falls through to
+    // the plain-key action (S = stepwise).
+    chord_keys: HashSet<KeyCode>,
 }
 
 impl InputHandler {
@@ -121,6 +130,7 @@ impl InputHandler {
             pan_start_pos_px: [0.0, 0.0],
             pan_start_offset: Vec2D::zero(),
             last_plus_minus_time: None,
+            chord_keys: HashSet::new(),
         }
     }
 
@@ -131,6 +141,15 @@ impl InputHandler {
 
     pub fn register_key_released(&mut self, key: KeyCode) {
         self.pressed_keys.remove(&key);
+    }
+
+    /// Forget every held key. Called when the window loses focus: keys
+    /// released while another window has focus never send a release here,
+    /// and a Ctrl that stayed "held" would turn plain S / O into save / load.
+    pub fn release_all_keys(&mut self) {
+        self.pressed_keys.clear();
+        self.pressed_alt_keys.clear();
+        self.chord_keys.clear();
     }
 
     pub fn register_alt_key_pressed(&mut self, key: KeyCode) {
@@ -152,6 +171,11 @@ impl InputHandler {
     pub fn is_alt_modifier_pressed(&self) -> bool {
         self.pressed_keys.contains(&KeyCode::AltLeft)
             || self.pressed_keys.contains(&KeyCode::AltRight)
+    }
+
+    pub fn is_ctrl_modifier_pressed(&self) -> bool {
+        self.pressed_keys.contains(&KeyCode::ControlLeft)
+            || self.pressed_keys.contains(&KeyCode::ControlRight)
     }
 
     // Debounce tracking for +/- keys with cooldown period
@@ -210,6 +234,20 @@ impl InputHandler {
     pub fn handle_key_down(&mut self, key: KeyCode, is_repeat: bool) -> Option<InputAction> {
         self.register_key_pressed(key);
 
+        // Ctrl+S / Ctrl+O act on key press, so the chord is decided while Ctrl
+        // is certainly held; auto-repeat must not save or load again.
+        if self.is_ctrl_modifier_pressed() {
+            let action = match key {
+                KeyCode::KeyS => Some(InputAction::SaveWorld),
+                KeyCode::KeyO => Some(InputAction::LoadWorld),
+                _ => None,
+            };
+            if action.is_some() {
+                self.chord_keys.insert(key);
+                return if is_repeat { None } else { action };
+            }
+        }
+
         match key {
             KeyCode::Space => Some(InputAction::TogglePause),
             KeyCode::ControlLeft | KeyCode::ControlRight => None,
@@ -228,6 +266,11 @@ impl InputHandler {
     /// Process keyboard release and return action if any
     pub fn handle_key_up(&mut self, key: KeyCode) -> Option<InputAction> {
         self.register_key_released(key);
+
+        // The release of a key that started a chord is part of that chord.
+        if self.chord_keys.remove(&key) {
+            return None;
+        }
 
         match key {
             KeyCode::Tab => Some(InputAction::ToggleEnergyWindow),

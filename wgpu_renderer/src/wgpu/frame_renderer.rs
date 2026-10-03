@@ -1,7 +1,9 @@
 use super::wgpu_context::WgpuContext;
 use super::wgpu_pipelines::{WgpuPipelines, compute_view_proj};
+use crate::wgpu::margins_for_scale_factor;
 use rust_thermo_core::graphics::renderer::event_loop::UnifiedRenderState;
 use rust_thermo_core::objects2d::ball_impl::BallFactory;
+use winit::dpi::PhysicalSize;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId};
 
@@ -20,6 +22,26 @@ impl FrameRenderer {
         state.begin_frame();
         window.request_redraw();
         state.energy_manager_mut().request_redraw();
+    }
+
+    /// Ask the OS for the window size the render state wants (a loaded world
+    /// of another shape). When the OS answers at once, no `Resized` event may
+    /// follow, so the answer goes through the same resize handling here; the
+    /// window may also end up another size than asked (maximised, tiled), in
+    /// which case the normal resize path fits the world to it.
+    pub(super) fn apply_window_size_request(
+        state: &mut UnifiedRenderState,
+        window: &Window,
+        ctx: &mut WgpuContext,
+    ) {
+        let Some((width, height)) = state.take_requested_window_size() else {
+            return;
+        };
+        if let Some(size) = window.request_inner_size(PhysicalSize::new(width, height)) {
+            ctx.resize(size.width, size.height);
+            let margins = margins_for_scale_factor(window.scale_factor());
+            state.apply_window_size_answer(size.width as f32, size.height as f32, margins);
+        }
     }
 
     /// Handles the `RedrawRequested` event for the main window, performing rendering if needed.
@@ -68,6 +90,7 @@ impl FrameRenderer {
                 show_ball_outline,
                 state.config().thermo_display,
                 state.viewport().margins(),
+                state.viewport().inset_margins(),
                 operator_previews,
             ) {
                 eprintln!("Pipeline prepare error: {:?}", error);
@@ -78,7 +101,8 @@ impl FrameRenderer {
                 state.metrics_mut().record_draw_call(0);
             }
 
-            if let Err(error) = Self::render_frame(ctx, pipelines, state.viewport().margins()) {
+            if let Err(error) = Self::render_frame(ctx, pipelines, state.viewport().inset_margins())
+            {
                 log::error!("Render error: {:?}", error);
                 match Self::surface_error_action(&error) {
                     SurfaceErrorAction::Exit => event_loop.exit(),
@@ -112,7 +136,7 @@ impl FrameRenderer {
     fn render_frame(
         ctx: &WgpuContext,
         pipelines: &WgpuPipelines,
-        margin: rust_thermo_core::graphics::renderer::Margins,
+        inset: rust_thermo_core::graphics::renderer::Margins,
     ) -> Result<(), wgpu::SurfaceError> {
         let output = ctx.surface.get_current_texture()?;
         let view = output
@@ -148,7 +172,7 @@ impl FrameRenderer {
                 multiview_mask: None,
             });
 
-            pipelines.render_all(&mut render_pass, ctx, margin);
+            pipelines.render_all(&mut render_pass, ctx, inset);
         }
 
         ctx.queue.submit(std::iter::once(encoder.finish()));

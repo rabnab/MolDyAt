@@ -66,6 +66,8 @@ pub fn process_action_common(
             | InputAction::ToggleTimingDisplay
             | InputAction::ToggleBallStats
             | InputAction::StartVerbosityInput
+            | InputAction::SaveWorld
+            | InputAction::LoadWorld
             | InputAction::OperatorAction(_) => {
                 unreachable!("domain actions must map to DomainCommand")
             }

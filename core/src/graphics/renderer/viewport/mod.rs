@@ -42,6 +42,9 @@ impl ViewportTransform {
     /// Pixel-to-world-length conversion factor.
     /// 0.1 world units per pixel (1 pixel = 0.1 world units, or 10 pixels = 1 world unit)
     pub const LEN_TO_PX: f32 = 0.1;
+    /// Relative aspect-ratio difference between world and drawing area below
+    /// which the world fills the drawing area (no letterbox bars).
+    pub const LETTERBOX_TOLERANCE: f32 = 0.005;
 
     /// Minimum zoom level (cannot zoom out beyond full simulation box)
     pub const MIN_ZOOM: f32 = 1.0;
@@ -255,14 +258,27 @@ impl ViewportTransform {
     ///
     /// # Returns
     /// New pan offset to apply
-    pub fn apply_pan_delta(pixel_delta: Vec2D, pan_start_offset: Vec2D, zoom: f32) -> Vec2D {
-        // Convert pixel delta to world delta
-        let world_dx = (pixel_delta.x * Self::LEN_TO_PX) / zoom;
-        let world_dy = (pixel_delta.y * Self::LEN_TO_PX) / zoom;
+    pub fn apply_pan_delta(&self, pixel_delta: Vec2D, pan_start_offset: Vec2D) -> Vec2D {
+        // Convert pixel delta to world delta with the scale actually drawn
+        // (a letterboxed loaded world is not at `LEN_TO_PX`).
+        let world_per_px = self.world_per_px() / self.zoom;
+        let world_dx = pixel_delta.x * world_per_px;
+        let world_dy = pixel_delta.y * world_per_px;
 
         // Invert delta because panning moves viewport in opposite direction
         let pan_delta = Vec2D::new(-world_dx, world_dy);
         pan_start_offset + pan_delta
+    }
+
+    /// World units per pixel at zoom 1: the same on both axes, since the
+    /// world is letterboxed rather than stretched. `LEN_TO_PX` for a world
+    /// derived from the window size.
+    pub fn world_per_px(&self) -> f32 {
+        if self.viewport_px.w > 0.0 {
+            self.world_bounds.w.abs() / self.viewport_px.w
+        } else {
+            Self::LEN_TO_PX
+        }
     }
 
     /// Called when window is resized.
@@ -282,6 +298,7 @@ impl ViewportTransform {
     /// Update world bounds (called when simulation box changes)
     pub fn set_world_bounds(&mut self, world_bounds: Rect) {
         self.world_bounds = world_bounds;
+        self.recalculate_viewport_px();
         self.constrain_pan();
         self.dirty.set(true);
     }
@@ -293,14 +310,49 @@ impl ViewportTransform {
         }
     }
 
-    /// Recalculate viewport rectangle in pixels
+    /// Recalculate viewport rectangle in pixels: the drawing area (window
+    /// minus margins), narrowed to the world's aspect ratio and centred in
+    /// it, so the world is never stretched. A world of the drawing area's
+    /// shape (every world derived from the window size) fills it exactly;
+    /// only a loaded world of another shape gets bars at two sides.
     fn recalculate_viewport_px(&mut self) {
-        self.viewport_px = Rect::new(
-            self.margin_px.left,
-            self.margin_px.top,
+        let (area_w, area_h) = (
             self.window_size_px.0 - self.margin_px.horizontal(),
             self.window_size_px.1 - self.margin_px.vertical(),
         );
+        let world_w = self.world_bounds.w.abs();
+        let world_h = self.world_bounds.h.abs();
+        let (mut w, mut h) = (area_w, area_h);
+        if area_w > 0.0 && area_h > 0.0 && world_w > 1e-6 && world_h > 1e-6 {
+            let world_aspect = world_w / world_h;
+            let area_aspect = area_w / area_h;
+            if (world_aspect / area_aspect - 1.0).abs() >= Self::LETTERBOX_TOLERANCE {
+                if area_aspect > world_aspect {
+                    w = area_h * world_aspect;
+                } else {
+                    h = area_w / world_aspect;
+                }
+            }
+        }
+        self.viewport_px = Rect::new(
+            self.margin_px.left + (area_w - w) / 2.0,
+            self.margin_px.top + (area_h - h) / 2.0,
+            w,
+            h,
+        );
+    }
+
+    /// Margins around [`Self::viewport_px`]: the configured margins plus any
+    /// letterbox bars. Everything drawn into the simulation area uses these;
+    /// UI placed in the margins (sidebar) keeps [`Self::margins`].
+    pub fn inset_margins(&self) -> Margins {
+        let vp = self.viewport_px;
+        Margins::new(
+            vp.x,
+            vp.y,
+            (self.window_size_px.0 - vp.x - vp.w).max(0.0),
+            (self.window_size_px.1 - vp.y - vp.h).max(0.0),
+        )
     }
 
     /// Regenerate cached transformation matrices
@@ -346,9 +398,9 @@ impl ViewportTransform {
         let scale_y = -viewport_height * self.zoom / world_height;
         let scale_matrix = Mat3::scale(scale_x, scale_y);
 
-        // Step 3: Translate to viewport center (which is at margin + viewport/2)
-        let viewport_center_x = self.margin_px.left + viewport_width / 2.0;
-        let viewport_center_y = self.margin_px.top + viewport_height / 2.0;
+        // Step 3: Translate to viewport center (letterboxed viewport rect)
+        let viewport_center_x = self.viewport_px.x + viewport_width / 2.0;
+        let viewport_center_y = self.viewport_px.y + viewport_height / 2.0;
         let translate_matrix = Mat3::translation(viewport_center_x, viewport_center_y);
 
         // Combine: first pan, then scale, then translate

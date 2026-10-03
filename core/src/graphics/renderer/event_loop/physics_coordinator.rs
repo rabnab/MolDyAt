@@ -1,5 +1,5 @@
 use crate::application::renderer_snapshot::RendererSnapshot;
-use crate::application::{DomainCommand, MainContent, PhysicsThread};
+use crate::application::{DomainCommand, MainContent, PhysicsEvent, PhysicsThread};
 use arc_swap::ArcSwapOption;
 use std::sync::Arc;
 
@@ -10,6 +10,8 @@ pub struct PhysicsCoordinator {
 
     // Step tracking
     last_displayed_step: u64,
+    /// `world_generation` of the last displayed snapshot.
+    displayed_generation: u64,
     steps_per_frame: f32,
 
     // Performance metrics
@@ -40,6 +42,7 @@ impl PhysicsCoordinator {
             physics_thread: Some(physics_thread),
             snapshot_slot: Some(snapshot_slot),
             last_displayed_step: 0,
+            displayed_generation: 0,
             steps_per_frame: 0.0,
             render_fps: 0,
             last_reported_render_fps: 0.0,
@@ -63,6 +66,11 @@ impl PhysicsCoordinator {
         }
     }
 
+    /// The next one-shot result (save/load) reported by the physics thread.
+    pub fn try_recv_event(&self) -> Option<PhysicsEvent> {
+        self.physics_thread.as_ref()?.try_recv_event()
+    }
+
     /// Get latest snapshot if available
     /// Returns None if no snapshot slot or no snapshot published yet
     pub fn get_latest_snapshot(&self) -> Option<Arc<RendererSnapshot>> {
@@ -71,10 +79,12 @@ impl PhysicsCoordinator {
         guard.as_ref().map(Arc::clone)
     }
 
-    /// Check if a new simulation step is available
+    /// Check if a new simulation step is available: a later step, or any
+    /// step of a new world (after a load, whose step count starts again).
     pub fn is_new_step_available(&self) -> bool {
         if let Some(snapshot) = self.get_latest_snapshot() {
-            snapshot.simulation_step > self.last_displayed_step
+            snapshot.world_generation != self.displayed_generation
+                || snapshot.simulation_step > self.last_displayed_step
         } else {
             false
         }
@@ -85,8 +95,14 @@ impl PhysicsCoordinator {
         self.last_displayed_step
     }
 
-    /// Mark a step as displayed and update metrics
-    pub fn mark_step_displayed(&mut self, step: u64) {
+    /// Mark a step of world `generation` as displayed and update metrics.
+    pub fn mark_step_displayed(&mut self, step: u64, generation: u64) {
+        if generation != self.displayed_generation {
+            // A new world: track its steps from here.
+            self.displayed_generation = generation;
+            self.last_displayed_step = step;
+            return;
+        }
         let steps_this_frame = step.saturating_sub(self.last_displayed_step);
 
         if steps_this_frame > 0 {
@@ -143,6 +159,7 @@ impl PhysicsCoordinator {
             physics_thread: None,
             snapshot_slot: None,
             last_displayed_step: 0,
+            displayed_generation: 0,
             steps_per_frame: 0.0,
             render_fps: 0,
             last_reported_render_fps: 0.0,
@@ -162,6 +179,7 @@ impl PhysicsCoordinator {
             physics_thread: None,
             snapshot_slot: None,
             last_displayed_step: 0,
+            displayed_generation: 0,
             steps_per_frame: 0.0,
             render_fps: 0,
             last_reported_render_fps: 0.0,
@@ -178,6 +196,7 @@ impl PhysicsCoordinator {
             physics_thread: None,
             snapshot_slot: Some(Arc::new(ArcSwapOption::new(Some(Arc::new(snapshot))))),
             last_displayed_step: 0,
+            displayed_generation: 0,
             steps_per_frame: 0.0,
             render_fps: 0,
             last_reported_render_fps: 0.0,
@@ -209,6 +228,7 @@ mod tests {
             physics_thread: None,
             snapshot_slot: None,
             last_displayed_step: 0,
+            displayed_generation: 0,
             steps_per_frame: 0.0,
             render_fps: 0,
             last_reported_render_fps: 0.0,
@@ -217,13 +237,32 @@ mod tests {
         };
 
         // First step initializes
-        coord.mark_step_displayed(10);
+        coord.mark_step_displayed(10, 0);
         assert_eq!(coord.steps_per_frame, 10.0);
 
         // Subsequent steps use EMA
-        coord.mark_step_displayed(20);
+        coord.mark_step_displayed(20, 0);
         // 10 * 0.9 + 10 * 0.1 = 10.0
         assert!((coord.steps_per_frame - 10.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_new_world_keeps_rendering_after_load() {
+        let mut snapshot = RendererSnapshot::new();
+        snapshot.simulation_step = 3;
+        snapshot.world_generation = 1;
+        let mut coord = PhysicsCoordinator::with_snapshot(snapshot);
+        // The old world had run much further before the load.
+        coord.last_displayed_step = 5000;
+
+        assert!(coord.is_new_step_available(), "a new world must render");
+        coord.mark_step_displayed(3, 1);
+        assert_eq!(coord.last_displayed_step(), 3);
+        assert!(!coord.is_new_step_available(), "same step is not new");
+
+        // Counting up in the new world works as before.
+        coord.mark_step_displayed(13, 1);
+        assert_eq!(coord.last_displayed_step(), 13);
     }
 
     #[test]
@@ -232,6 +271,7 @@ mod tests {
             physics_thread: None,
             snapshot_slot: None,
             last_displayed_step: 0,
+            displayed_generation: 0,
             steps_per_frame: 0.0,
             render_fps: 60,
             last_reported_render_fps: 0.0,

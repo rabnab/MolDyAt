@@ -129,6 +129,7 @@ impl WgpuPipelines {
         show_ball_outline: bool,
         thermo_display: ThermoDisplayMode,
         margin: Margins,
+        inset: Margins,
         operator_previews: FramePreviews,
     ) -> AppResult {
         let window_size = ctx.size();
@@ -143,6 +144,7 @@ impl WgpuPipelines {
             show_ball_outline,
             window_size,
             margin,
+            inset,
             thermo_display,
             operator_previews,
         };
@@ -163,9 +165,9 @@ impl WgpuPipelines {
         &'rp self,
         render_pass: &mut wgpu::RenderPass<'rp>,
         ctx: &WgpuContext,
-        margin: Margins,
+        inset: Margins,
     ) {
-        self.render(render_pass, ctx.size(), margin);
+        self.render(render_pass, ctx.size(), inset);
     }
 
     /// Render all enabled pipelines for a target of `window_size` pixels.
@@ -173,9 +175,9 @@ impl WgpuPipelines {
         &'rp self,
         render_pass: &mut wgpu::RenderPass<'rp>,
         window_size: (u32, u32),
-        margin: Margins,
+        inset: Margins,
     ) {
-        self.graph.render_all(render_pass, window_size, margin);
+        self.graph.render_all(render_pass, window_size, inset);
     }
 
     /// Cycle ring display mode on the ball pipeline (applied on the next frame).
