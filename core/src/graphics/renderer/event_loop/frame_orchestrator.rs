@@ -33,9 +33,11 @@ impl FrameOrchestrator {
         state.render.view_dirty = false;
         state.render.metrics.end_frame();
         if let Some(snapshot) = &state.render.last_snapshot {
-            state
-                .physics
-                .mark_step_displayed(snapshot.simulation_step, snapshot.world_generation);
+            state.physics.mark_step_displayed(
+                snapshot.simulation_step,
+                snapshot.world_generation,
+                snapshot.cell_grid_bounds,
+            );
         }
     }
 
