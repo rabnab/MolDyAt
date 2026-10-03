@@ -1,6 +1,7 @@
 pub(crate) const FPS_GOAL: u32 = 60;
 
 use crate::application::game_logic::GameLogicData;
+use crate::application::persistence::SaveStore;
 use crate::application::renderer_snapshot::RendererSnapshot;
 use crate::application::sim_stats::SimStats;
 use crate::application::thermo_field::ThermoFieldHistory;
@@ -151,6 +152,10 @@ pub(crate) struct PhysicsRuntimeState {
     snapshot_slot: Arc<ArcSwapOption<RendererSnapshot>>,
     /// Actual physics FPS for display (updated and read only by physics thread)
     physics_fps: f32,
+    /// Where Ctrl+S / Ctrl+O save and load; `None` disables both.
+    save_store: Option<SaveStore>,
+    /// Bumped whenever the world is replaced (see `RendererSnapshot`).
+    world_generation: u64,
 }
 
 pub struct StatsAccumulator {

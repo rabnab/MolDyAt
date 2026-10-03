@@ -1,4 +1,5 @@
 use crate::application::operator_command::OperatorCommand;
+use crate::application::persistence::LoadSource;
 use crate::objects2d::ball_impl::Ball2D;
 use crate::objects2d::{Rect, Vec2D};
 
@@ -31,7 +32,13 @@ pub enum DomainCommand {
     ToggleTimingDisplay,
     ToggleBallStats,
     StartVerbosityInput,
-    Resize { world_rect: Rect },
+    Resize {
+        world_rect: Rect,
+    },
     ResumeAfterResize,
+    /// Write the world to a new save (reported as a `PhysicsEvent`).
+    SaveWorld,
+    /// Replace the world with a save (reported as a `PhysicsEvent`).
+    LoadWorld(LoadSource),
     Operator(Box<dyn OperatorCommand>),
 }

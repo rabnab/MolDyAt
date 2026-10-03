@@ -1,14 +1,47 @@
 use super::runtime::CommandHandler;
 use crate::application::DomainCommand;
 use crate::application::MainContent;
+use crate::application::PhysicsEvent;
+use crate::application::persistence::LoadSource;
+use std::sync::mpsc::Sender;
 
 pub(crate) struct DomainCommandHandler<'a> {
     main_content: &'a mut MainContent,
+    events: &'a Sender<PhysicsEvent>,
 }
 
 impl<'a> DomainCommandHandler<'a> {
-    pub(crate) fn new(main_content: &'a mut MainContent) -> Self {
-        Self { main_content }
+    pub(crate) fn new(main_content: &'a mut MainContent, events: &'a Sender<PhysicsEvent>) -> Self {
+        Self {
+            main_content,
+            events,
+        }
+    }
+
+    fn save_world(&self) -> PhysicsEvent {
+        let Some(store) = self.main_content.runtime().save_store() else {
+            return PhysicsEvent::SaveFailed("no save directory configured".into());
+        };
+        match self.main_content.save_world(store) {
+            Ok(path) => PhysicsEvent::WorldSaved(path),
+            Err(e) => PhysicsEvent::SaveFailed(format!("{e:?}")),
+        }
+    }
+
+    fn load_world(&mut self, source: &LoadSource) -> PhysicsEvent {
+        let Some(store) = self.main_content.runtime().save_store().cloned() else {
+            return PhysicsEvent::LoadFailed("no save directory configured".into());
+        };
+        // Interactive loads start paused, so the loaded state can be looked at.
+        match self.main_content.load_world(&store, source, true) {
+            Ok(loaded) => PhysicsEvent::WorldLoaded(loaded),
+            Err(e) => PhysicsEvent::LoadFailed(format!("{e:?}")),
+        }
+    }
+
+    fn report(&self, event: PhysicsEvent) {
+        // The renderer may already be gone (shutdown); nothing to report to then.
+        let _ = self.events.send(event);
     }
 }
 
@@ -87,6 +120,14 @@ impl CommandHandler<DomainCommand> for DomainCommandHandler<'_> {
             }
             DomainCommand::ResumeAfterResize => {
                 self.main_content.unpause_after_resize();
+            }
+            DomainCommand::SaveWorld => {
+                let event = self.save_world();
+                self.report(event);
+            }
+            DomainCommand::LoadWorld(source) => {
+                let event = self.load_world(&source);
+                self.report(event);
             }
             DomainCommand::Operator(cmd) => {
                 cmd.execute(self.main_content);

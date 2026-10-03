@@ -266,6 +266,10 @@ pub struct RendererSnapshot {
     /// Simulation step counter (for display)
     pub simulation_step: u64,
 
+    /// Which world this snapshot shows: changes whenever the world is
+    /// replaced (a load), whose step count then starts again.
+    pub world_generation: u64,
+
     /// Kinetic energy of the system
     pub kinetic_energy: f32,
 
@@ -328,6 +332,7 @@ impl RendererSnapshot {
         Self {
             balls: Vec::new(),
             simulation_step: 0,
+            world_generation: 0,
             kinetic_energy: 0.0,
             potential_energy: 0.0,
             time: 0.0,
@@ -362,6 +367,7 @@ impl RendererSnapshot {
         Self {
             balls: Vec::with_capacity(capacity),
             simulation_step: 0,
+            world_generation: 0,
             kinetic_energy: 0.0,
             potential_energy: 0.0,
             time: 0.0,

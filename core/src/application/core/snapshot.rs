@@ -64,6 +64,7 @@ impl MainContent {
         RendererSnapshot {
             balls,
             simulation_step: self.world.step_count as u64,
+            world_generation: self.runtime.world_generation(),
             kinetic_energy: self.world.sim.get_kinetic_energy(),
             potential_energy: self.world.sim.get_potential_energy(),
             time: self.world.sim.get_time(),
