@@ -58,6 +58,16 @@ impl ValveCollection {
     }
 }
 
+/// A restored collection: ids are kept, new ids continue after the largest.
+impl From<Vec<ValveSegment>> for ValveCollection {
+    fn from(valves: Vec<ValveSegment>) -> Self {
+        Self {
+            next_id: OperatorIdCounter::after(valves.iter().map(|item| item.id)),
+            valves,
+        }
+    }
+}
+
 impl OperatorCollection for ValveCollection {
     fn clear(&mut self) {
         self.valves.clear();

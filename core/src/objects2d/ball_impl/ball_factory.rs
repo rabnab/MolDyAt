@@ -1,3 +1,4 @@
+use crate::objects2d::ball_impl::BallId;
 use crate::objects2d::ball_impl::ball_core::Ball2D;
 use crate::objects2d::vec_2d::Vec2D;
 use std::cell::RefCell;
@@ -216,6 +217,25 @@ impl BallFactory {
     /// Resets the ID counter - useful for testing or when creating new simulation
     pub fn reset_id_counter(&self) {
         *self.next_id.borrow_mut() = FIRST_BALL_ID;
+    }
+
+    /// A ball with a given id (e.g. from a save): radius and mass follow from
+    /// `size_idx`. Does not touch the id counter; see [`Self::continue_after`].
+    pub(crate) fn restore(id: BallId, size_idx: usize, pos: Vec2D, velocity: Vec2D) -> Ball2D {
+        let mut ball = Ball2D::new(id, pos, (size_idx, Self::radius_for_size_idx(size_idx)));
+        ball.mass = Self::mass_for_size_idx(size_idx);
+        ball.v = velocity;
+        ball
+    }
+
+    /// Continue numbering after every id in `ids` (the balls of a loaded world).
+    pub(crate) fn continue_after(&self, ids: impl IntoIterator<Item = BallId>) {
+        let next = ids
+            .into_iter()
+            .map(|id| id + 1)
+            .max()
+            .unwrap_or(FIRST_BALL_ID);
+        *self.next_id.borrow_mut() = next.max(FIRST_BALL_ID);
     }
 
     /// Get the next available ID without incrementing the counter
