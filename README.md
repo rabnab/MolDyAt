@@ -205,10 +205,36 @@ cargo clippy --workspace -- -D warnings
 | `T` | Cycle thermo overlay (Off → Grid → Temperature → Pressure → Off) |
 | `B` | Toggle ball stats overlay |
 | `P` | Cycle plot content |
+| `Ctrl` + `S` | Save the world (balls, walls, valves, thermostats, sources) to a new file in the save directory |
+| `Ctrl` + `O` | Load the newest save from the save directory; the loaded world starts paused in the default view |
 | `H` | Print help to log |
 | `0` | Reset viewport (zoom + pan) |
 | Scroll wheel | Zoom in / out |
 | Middle-click drag | Pan viewport |
+
+## Saving and loading a world
+
+`Ctrl+S` writes `world_YYYYMMDD_HHMMSS.json` (UTC, never overwrites an earlier
+save) to the save directory, `saves/` unless `--save-dir <dir>` says
+otherwise. `Ctrl+O` loads the newest file there. To start from a specific
+file, pass `--load <path>`; it works with the window and with `--headless`
+(where the loaded world runs immediately and any further headless options such
+as `--dt` or `--seed-balls` are applied on top).
+
+```bash
+cargo run -p rust_thermo_wgpu -- --load saves/world_20260101_120000.json
+cargo run -p rust_thermo_wgpu -- --save-dir ~/lj-worlds
+```
+
+The file is versioned JSON (`"version": 1`) holding the world rectangle, time
+step, gravity, every ball (`id`, `size_idx`, `pos`, `v`, `pre_update_pos`,
+`accel`) and all operators. The view (window size, zoom, pan), the energy plot
+and simulation statistics are not saved; a loaded world is shown in the
+default view. The window is asked to take the world's shape; if the OS gives
+it another size (screen too small, maximised or tiled window), the world is
+letterboxed, never stretched or rescaled. A later window resize refits the
+world to the window as usual. A file that fails validation is rejected and the running world
+is left untouched. Results are logged.
 
 ## Project Structure
 

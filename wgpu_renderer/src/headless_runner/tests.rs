@@ -226,7 +226,9 @@ fn test_prepare_application_applies_dt_and_line_segments() {
         ..HeadlessConfig::default()
     };
 
-    let mut application = prepare_application(&config, test_world_rect()).expect("prepare");
+    let mut application =
+        prepare_application(&config, test_world_rect(), &SaveStore::new("saves"), None)
+            .expect("prepare");
     assert_eq!(application.time_step(), 0.005);
 
     let snapshot = application.create_snapshot();
@@ -278,7 +280,9 @@ fn test_run_start_records_effective_dt_segments_and_world_rect() {
         }],
         ..HeadlessConfig::default()
     };
-    let application = prepare_application(&config, test_world_rect()).expect("prepare");
+    let application =
+        prepare_application(&config, test_world_rect(), &SaveStore::new("saves"), None)
+            .expect("prepare");
     let default_dt = application.time_step();
     HeadlessRunner::from_config(config, application)
         .expect("runner")
@@ -323,7 +327,13 @@ fn test_prepare_application_seeds_moving_balls() {
         ..HeadlessConfig::default()
     };
     let speeds = |seed_speed| {
-        let app = prepare_application(&config(seed_speed), test_world_rect()).unwrap();
+        let app = prepare_application(
+            &config(seed_speed),
+            test_world_rect(),
+            &SaveStore::new("saves"),
+            None,
+        )
+        .unwrap();
         let snapshot = app.create_snapshot();
         snapshot
             .balls
