@@ -3,12 +3,25 @@ use super::wgpu_pipelines::{WgpuPipelines, compute_view_proj};
 use crate::wgpu::margins_for_scale_factor;
 use rust_thermo_core::graphics::renderer::event_loop::UnifiedRenderState;
 use rust_thermo_core::objects2d::ball_impl::BallFactory;
+use std::time::{Duration, Instant};
 use winit::dpi::PhysicalSize;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId};
 
+/// Log target for the timings of frames that apply a window resize. Enable
+/// with `RUST_LOG=info,resize_timing=debug` (issue #217).
+const RESIZE_TIMING: &str = "resize_timing";
+
 /// Coordinates redraw handling and frame submission for the WGPU backend.
 pub(super) struct FrameRenderer;
+
+/// Where a frame's time went, from acquiring the surface texture on.
+struct FrameTimings {
+    /// Waiting for a surface texture (blocks on vsync with a full queue).
+    acquire: Duration,
+    /// Recording, submitting and presenting the frame.
+    submit_present: Duration,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum SurfaceErrorAction {
@@ -69,9 +82,12 @@ impl FrameRenderer {
         }
 
         state.begin_render();
-        ctx.apply_pending_resize();
+        let configure_start = Instant::now();
+        let resize = ctx.apply_pending_resize();
+        let configure = configure_start.elapsed();
 
         if let Some(snapshot) = state.last_snapshot() {
+            let prepare_start = Instant::now();
             let pan = state.viewport().pan_offset();
             let zoom = state.viewport().zoom();
             let view_proj = compute_view_proj(&snapshot.grid_spec, pan.x, pan.y, zoom);
@@ -102,19 +118,38 @@ impl FrameRenderer {
                 state.metrics_mut().record_draw_call(0);
             }
 
-            if let Err(error) = Self::render_frame(ctx, pipelines, state.viewport().inset_margins())
-            {
-                log::error!("Render error: {:?}", error);
-                match Self::surface_error_action(&error) {
-                    SurfaceErrorAction::Exit => event_loop.exit(),
-                    SurfaceErrorAction::Reconfigure => {
-                        let size = window.inner_size();
-                        ctx.resize(size.width.max(1), size.height.max(1));
-                        ctx.apply_pending_resize();
-                        window.request_redraw();
+            let prepare = prepare_start.elapsed();
+
+            match Self::render_frame(ctx, pipelines, state.viewport().inset_margins()) {
+                Ok(timings) => {
+                    if let Some(resize) = resize {
+                        log::debug!(
+                            target: RESIZE_TIMING,
+                            "{}x{}: {} resize event(s), first {:.1?} ago at present | configure {:.1?}, prepare {:.1?}, acquire {:.1?}, submit+present {:.1?}",
+                            resize.size.0,
+                            resize.size.1,
+                            resize.requests,
+                            resize.since.elapsed(),
+                            configure,
+                            prepare,
+                            timings.acquire,
+                            timings.submit_present,
+                        );
                     }
-                    SurfaceErrorAction::RetryLater => {
-                        window.request_redraw();
+                }
+                Err(error) => {
+                    log::error!("Render error: {:?}", error);
+                    match Self::surface_error_action(&error) {
+                        SurfaceErrorAction::Exit => event_loop.exit(),
+                        SurfaceErrorAction::Reconfigure => {
+                            let size = window.inner_size();
+                            ctx.resize(size.width.max(1), size.height.max(1));
+                            ctx.apply_pending_resize();
+                            window.request_redraw();
+                        }
+                        SurfaceErrorAction::RetryLater => {
+                            window.request_redraw();
+                        }
                     }
                 }
             }
@@ -139,8 +174,11 @@ impl FrameRenderer {
         ctx: &WgpuContext,
         pipelines: &WgpuPipelines,
         inset: rust_thermo_core::graphics::renderer::Margins,
-    ) -> Result<(), wgpu::SurfaceError> {
+    ) -> Result<FrameTimings, wgpu::SurfaceError> {
+        let acquire_start = Instant::now();
         let output = ctx.surface.get_current_texture()?;
+        let acquire = acquire_start.elapsed();
+        let submit_start = Instant::now();
         let view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
@@ -180,6 +218,9 @@ impl FrameRenderer {
         ctx.queue.submit(std::iter::once(encoder.finish()));
         output.present();
 
-        Ok(())
+        Ok(FrameTimings {
+            acquire,
+            submit_present: submit_start.elapsed(),
+        })
     }
 }
