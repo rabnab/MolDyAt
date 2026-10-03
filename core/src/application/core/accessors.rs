@@ -149,7 +149,28 @@ impl SimulationWorld {
     }
 }
 
+impl MainContent {
+    /// Directory for Ctrl+S / Ctrl+O saves (set once at startup).
+    pub fn with_save_store(mut self, store: SaveStore) -> Self {
+        self.runtime.save_store = Some(store);
+        self
+    }
+}
+
 impl PhysicsRuntimeState {
+    pub(crate) fn save_store(&self) -> Option<&SaveStore> {
+        self.save_store.as_ref()
+    }
+
+    pub(crate) fn world_generation(&self) -> u64 {
+        self.world_generation
+    }
+
+    /// Mark that the world was replaced.
+    pub(crate) fn next_world_generation(&mut self) {
+        self.world_generation = self.world_generation.wrapping_add(1);
+    }
+
     pub(crate) fn wait_time(&self) -> u64 {
         self.wait_time
     }

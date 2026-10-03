@@ -9,9 +9,10 @@
 
 use crate::application::DomainCommand;
 use crate::application::MainContent;
+use crate::application::PhysicsEvent;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{self, Sender};
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread::{self, JoinHandle};
 
 mod command_handler;
@@ -58,6 +59,7 @@ pub struct PhysicsThread {
     thread_handle: Option<JoinHandle<()>>,
     shutdown_signal: ShutdownSignal,
     command_sender: Sender<DomainCommand>,
+    event_receiver: Receiver<PhysicsEvent>,
 }
 
 impl PhysicsThread {
@@ -75,8 +77,9 @@ impl PhysicsThread {
         let shutdown_signal = ShutdownSignal::new();
         let thread_signal = shutdown_signal.clone();
 
-        // Create command channel
+        // Commands in, one-shot results (save/load) out.
         let (command_sender, command_receiver) = mpsc::channel();
+        let (event_sender, event_receiver) = mpsc::channel();
 
         let wakeup: Arc<dyn Fn() + Send + Sync> = Arc::from(wakeup_callback);
         let thread_wakeup = Arc::clone(&wakeup);
@@ -86,6 +89,7 @@ impl PhysicsThread {
             runtime.run(
                 &mut main_content,
                 &command_receiver,
+                &event_sender,
                 &thread_signal,
                 &thread_wakeup,
             );
@@ -95,7 +99,13 @@ impl PhysicsThread {
             thread_handle: Some(thread_handle),
             shutdown_signal,
             command_sender,
+            event_receiver,
         }
+    }
+
+    /// The next result reported by the physics thread, if any.
+    pub fn try_recv_event(&self) -> Option<PhysicsEvent> {
+        self.event_receiver.try_recv().ok()
     }
 
     /// Send a command to the physics thread

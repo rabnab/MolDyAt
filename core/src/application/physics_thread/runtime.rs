@@ -2,9 +2,10 @@ use super::ShutdownSignal;
 use super::command_handler::DomainCommandHandler;
 use crate::application::DomainCommand;
 use crate::application::MainContent;
+use crate::application::PhysicsEvent;
 use crate::application::core::SimulationEngine;
 use std::sync::Arc;
-use std::sync::mpsc::Receiver;
+use std::sync::mpsc::{Receiver, Sender};
 use std::time::{Duration, Instant};
 
 pub(crate) trait CommandHandler<C> {
@@ -33,6 +34,7 @@ impl PhysicsRuntime {
         &self,
         simulation: &mut MainContent,
         receiver: &Receiver<DomainCommand>,
+        events: &Sender<PhysicsEvent>,
         shutdown_signal: &ShutdownSignal,
         wakeup: &Arc<dyn Fn() + Send + Sync>,
     ) {
@@ -50,7 +52,7 @@ impl PhysicsRuntime {
 
         while !shutdown_signal.should_shutdown() {
             {
-                let mut handler = DomainCommandHandler::new(simulation);
+                let mut handler = DomainCommandHandler::new(simulation, events);
                 self.drain_commands(receiver, &mut handler);
             }
 
