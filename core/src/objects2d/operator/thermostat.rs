@@ -22,13 +22,13 @@ pub const THERMOSTAT_TARGET_TEMP_STEP: f32 = 5.0 / 122.0;
 /// Scroll-wheel increment for radius changes.
 pub const THERMOSTAT_RADIUS_STEP: f32 = 0.5;
 /// Minimum allowed thermostat radius.
-const MIN_THERMOSTAT_RADIUS: f32 = 0.5;
+pub const MIN_THERMOSTAT_RADIUS: f32 = 0.5;
 /// Maximum allowed thermostat radius.
-const MAX_THERMOSTAT_RADIUS: f32 = 50.0;
+pub const MAX_THERMOSTAT_RADIUS: f32 = 50.0;
 /// Minimum allowed target temperature.
-const MIN_TARGET_TEMPERATURE: f32 = 0.0;
+pub const MIN_TARGET_TEMPERATURE: f32 = 0.0;
 /// Maximum allowed target temperature.
-const MAX_TARGET_TEMPERATURE: f32 = 10.0;
+pub const MAX_TARGET_TEMPERATURE: f32 = 10.0;
 
 /// A finite spherical region that applies Nosé-Hoover velocity control.
 #[derive(Debug, Clone)]
@@ -131,6 +131,16 @@ impl ThermostatCollection {
     /// Remove the thermostat with `id`. Returns `false` if there was none.
     pub fn remove(&mut self, id: usize) -> bool {
         remove_by_id(&mut self.thermostats, id, |item| item.id)
+    }
+}
+
+/// A restored collection: ids are kept, new ids continue after the largest.
+impl From<Vec<SimThermostat>> for ThermostatCollection {
+    fn from(thermostats: Vec<SimThermostat>) -> Self {
+        Self {
+            next_id: OperatorIdCounter::after(thermostats.iter().map(|item| item.id)),
+            thermostats,
+        }
     }
 }
 

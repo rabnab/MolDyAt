@@ -37,15 +37,15 @@ const DEFAULT_EMISSION_SPEED: f32 = 0.05;
 /// Default emission period for new source spheres (in simulation steps).
 const DEFAULT_EMIT_PERIOD: usize = 3000;
 /// Minimum emission period in simulation steps.
-const MIN_EMIT_PERIOD: usize = 5;
+pub const MIN_EMIT_PERIOD: usize = 5;
 /// Maximum emission period in simulation steps.
-const MAX_EMIT_PERIOD: usize = 30000;
+pub const MAX_EMIT_PERIOD: usize = 30000;
 /// Step size for emission speed adjustments via scroll wheel.
 pub const EMISSION_SPEED_STEP: f32 = 0.05;
 /// Minimum emission speed magnitude.
-const MIN_EMISSION_SPEED: f32 = 0.0;
+pub const MIN_EMISSION_SPEED: f32 = 0.0;
 /// Maximum emission speed magnitude.
-const MAX_EMISSION_SPEED: f32 = 5.0;
+pub const MAX_EMISSION_SPEED: f32 = 5.0;
 
 impl SimSourceSphere {
     /// Create a new source sphere starting in the `Off` (dormant) state.
@@ -156,6 +156,16 @@ impl SourceSphereCollection {
     /// Remove the source sphere with `id`. Returns `false` if there was none.
     pub fn remove(&mut self, id: usize) -> bool {
         remove_by_id(&mut self.spheres, id, |item| item.id)
+    }
+}
+
+/// A restored collection: ids are kept, new ids continue after the largest.
+impl From<Vec<SimSourceSphere>> for SourceSphereCollection {
+    fn from(spheres: Vec<SimSourceSphere>) -> Self {
+        Self {
+            next_id: OperatorIdCounter::after(spheres.iter().map(|item| item.id)),
+            spheres,
+        }
     }
 }
 

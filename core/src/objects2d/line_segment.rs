@@ -37,7 +37,7 @@ pub struct GhostWall {
 }
 
 /// A line segment barrier in simulation space.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SimLineSegment {
     /// Unique identifier (monotonically increasing, reset on clear).
     pub id: usize,
@@ -54,7 +54,7 @@ pub struct SimLineSegment {
 /// Valve geometry (where it sits on a wall) lives in `Joint::Valve` of the
 /// owning `WallChain`, and its thickness follows the pieces around it (see
 /// `SimulationWorld::joint_thickness`); this type only carries per-valve state.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ValveSegment {
     /// Unique identifier (monotonically increasing, reset on clear).
     pub id: usize,

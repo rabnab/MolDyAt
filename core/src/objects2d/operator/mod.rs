@@ -19,10 +19,12 @@ mod valve_collection;
 
 pub use line_segment_collection::LineSegmentCollection;
 pub use source_sphere::{
-    EMISSION_SPEED_STEP, SOURCE_SPHERE_RADIUS, SimSourceSphere, SourceSphereCollection,
+    EMISSION_SPEED_STEP, MAX_EMISSION_SPEED, MAX_EMIT_PERIOD, MIN_EMISSION_SPEED, MIN_EMIT_PERIOD,
+    SOURCE_SPHERE_RADIUS, SimSourceSphere, SourceSphereCollection,
 };
 pub use thermostat::{
-    DEFAULT_THERMOSTAT_CHAIN_LENGTH, DEFAULT_THERMOSTAT_RADIUS, SimThermostat,
+    DEFAULT_THERMOSTAT_CHAIN_LENGTH, DEFAULT_THERMOSTAT_RADIUS, MAX_TARGET_TEMPERATURE,
+    MAX_THERMOSTAT_RADIUS, MIN_TARGET_TEMPERATURE, MIN_THERMOSTAT_RADIUS, SimThermostat,
     THERMOSTAT_CHAIN_MAX, THERMOSTAT_CHAIN_MIN, THERMOSTAT_RADIUS_STEP,
     THERMOSTAT_TARGET_TEMP_STEP, ThermostatCollection,
 };
@@ -101,6 +103,13 @@ pub struct OperatorIdCounter {
 impl OperatorIdCounter {
     pub fn new() -> Self {
         Self { next: 0 }
+    }
+
+    /// Counter whose next id lies after every id in `ids` (for restored collections).
+    pub fn after(ids: impl IntoIterator<Item = usize>) -> Self {
+        Self {
+            next: ids.into_iter().map(|id| id + 1).max().unwrap_or(0),
+        }
     }
 
     /// Allocate the next ID and advance the counter.

@@ -48,6 +48,16 @@ impl LineSegmentCollection {
     }
 }
 
+/// A restored collection: ids are kept, new ids continue after the largest.
+impl From<Vec<SimLineSegment>> for LineSegmentCollection {
+    fn from(segments: Vec<SimLineSegment>) -> Self {
+        Self {
+            next_id: OperatorIdCounter::after(segments.iter().map(|item| item.id)),
+            segments,
+        }
+    }
+}
+
 impl OperatorCollection for LineSegmentCollection {
     fn clear(&mut self) {
         self.segments.clear();

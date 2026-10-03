@@ -15,7 +15,9 @@
 //! instead of looking up valve openness per contact (which is where the
 //! earlier bugs kept coming from).
 
-use crate::objects2d::operator::{OperatorCollection, is_degenerate, remap_point};
+use crate::objects2d::operator::{
+    OperatorCollection, OperatorIdCounter, is_degenerate, remap_point,
+};
 use crate::objects2d::{Rect, Vec2D};
 
 /// One solid piece of a chain. `line_id` is the id of the actual
@@ -26,7 +28,7 @@ use crate::objects2d::{Rect, Vec2D};
 /// actual world-space start/end whenever the chain's own endpoints move
 /// (`WallChain::retarget`), so every piece and joint stretches
 /// proportionally together.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ChainPiece {
     pub line_id: usize,
     pub t_start: f32,
@@ -34,7 +36,8 @@ pub struct ChainPiece {
 }
 
 /// What sits between two adjacent pieces of a chain.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Joint {
     /// A togglable valve. `valve_id` refers to a `ValveSegment` elsewhere
     /// (holding just `is_closed` -- no geometry or thickness of its own,
@@ -67,7 +70,7 @@ impl Joint {
 
 /// A user-drawn wall, possibly split into pieces by valves. See the module
 /// doc comment above for the overall design.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct WallChain {
     pub id: usize,
     /// The chain's own two endpoints. These are the ONLY draggable points;
@@ -129,7 +132,7 @@ impl WallChain {
 #[derive(Debug, Clone, Default)]
 pub struct WallChainCollection {
     chains: Vec<WallChain>,
-    next_id: usize,
+    next_id: OperatorIdCounter,
 }
 
 impl WallChainCollection {
@@ -139,8 +142,7 @@ impl WallChainCollection {
 
     /// Register a brand-new, unsplit chain for a freshly-created wall piece.
     pub fn add(&mut self, start: Vec2D, end: Vec2D, line_id: usize) -> usize {
-        let id = self.next_id;
-        self.next_id += 1;
+        let id = self.next_id.next_id();
         self.chains.push(WallChain::new(id, start, end, line_id));
         id
     }
@@ -215,10 +217,20 @@ impl WallChainCollection {
     }
 }
 
+/// A restored collection: ids are kept, new ids continue after the largest.
+impl From<Vec<WallChain>> for WallChainCollection {
+    fn from(chains: Vec<WallChain>) -> Self {
+        Self {
+            next_id: OperatorIdCounter::after(chains.iter().map(|item| item.id)),
+            chains,
+        }
+    }
+}
+
 impl OperatorCollection for WallChainCollection {
     fn clear(&mut self) {
         self.chains.clear();
-        self.next_id = 0;
+        self.next_id.reset();
     }
 
     /// Only the chains' own endpoints are remapped: pieces are
