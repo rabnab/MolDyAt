@@ -1,4 +1,7 @@
-use super::super::wgpu_context::{PendingSurfaceSize, parse_frame_latency, parse_present_mode};
+use super::super::wgpu_context::{
+    PendingSurfaceSize, choose_present_mode, default_present_mode, parse_frame_latency,
+    parse_present_mode,
+};
 use std::time::Instant;
 use wgpu::PresentMode;
 
@@ -90,6 +93,54 @@ fn present_modes_parse_by_name() {
         Some(PresentMode::FifoRelaxed)
     );
     assert_eq!(parse_present_mode("vsync"), None);
+}
+
+const ALL_MODES: &[PresentMode] = &[
+    PresentMode::Mailbox,
+    PresentMode::Fifo,
+    PresentMode::Immediate,
+];
+const FIFO_ONLY: &[PresentMode] = &[PresentMode::Fifo];
+
+#[test]
+fn mailbox_is_the_default_where_supported() {
+    assert_eq!(default_present_mode(ALL_MODES), PresentMode::Mailbox);
+    assert_eq!(choose_present_mode(None, ALL_MODES), PresentMode::Mailbox);
+}
+
+#[test]
+fn without_mailbox_the_default_is_auto_vsync() {
+    assert_eq!(default_present_mode(FIFO_ONLY), PresentMode::AutoVsync);
+    assert_eq!(choose_present_mode(None, FIFO_ONLY), PresentMode::AutoVsync);
+}
+
+#[test]
+fn a_supported_requested_mode_wins_over_the_default() {
+    assert_eq!(
+        choose_present_mode(Some("fifo"), ALL_MODES),
+        PresentMode::Fifo
+    );
+    assert_eq!(
+        choose_present_mode(Some("immediate"), ALL_MODES),
+        PresentMode::Immediate
+    );
+    // Auto modes resolve themselves on any surface.
+    assert_eq!(
+        choose_present_mode(Some("auto_vsync"), ALL_MODES),
+        PresentMode::AutoVsync
+    );
+}
+
+#[test]
+fn an_unusable_requested_mode_falls_back_to_the_default() {
+    assert_eq!(
+        choose_present_mode(Some("immediate"), FIFO_ONLY),
+        PresentMode::AutoVsync
+    );
+    assert_eq!(
+        choose_present_mode(Some("vsync"), ALL_MODES),
+        PresentMode::Mailbox
+    );
 }
 
 #[test]

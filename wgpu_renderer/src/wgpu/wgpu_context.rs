@@ -11,9 +11,10 @@ use wgpu::{
 use winit::window::Window;
 
 /// Overrides the present mode: `fifo`, `fifo_relaxed`, `mailbox`,
-/// `immediate`, `auto_vsync` (default) or `auto_no_vsync`. With
-/// `WGPU_BACKEND` (e.g. `vulkan`, `dx12`) and [`FRAME_LATENCY_VAR`] it lets
-/// presentation be compared without a rebuild (see issue #217).
+/// `immediate`, `auto_vsync` or `auto_no_vsync` (default: see
+/// [`default_present_mode`]). With `WGPU_BACKEND` (e.g. `vulkan`, `dx12`)
+/// and [`FRAME_LATENCY_VAR`] it lets presentation be compared without a
+/// rebuild (see issue #217).
 const PRESENT_MODE_VAR: &str = "THERMO_PRESENT_MODE";
 
 /// Overrides `desired_maximum_frame_latency` (1 to 3, default 2).
@@ -43,25 +44,51 @@ pub(super) fn parse_frame_latency(value: &str) -> Option<u32> {
         .filter(|latency| (1..=3).contains(latency))
 }
 
-fn present_mode_from_env(supported: &[PresentMode]) -> PresentMode {
-    let Ok(name) = std::env::var(PRESENT_MODE_VAR) else {
-        return PresentMode::AutoVsync;
+/// Mailbox where the surface supports it, else AutoVsync (Fifo).
+///
+/// With Fifo, every resize step waits on presentation, and on Vulkan under
+/// Wayland dragging the window border feels sluggish; Mailbox (like
+/// Immediate) follows the cursor, without Immediate's tearing (issue #217).
+/// Frames are still paced by physics snapshots and input, not by present.
+pub(super) fn default_present_mode(supported: &[PresentMode]) -> PresentMode {
+    if supported.contains(&PresentMode::Mailbox) {
+        PresentMode::Mailbox
+    } else {
+        PresentMode::AutoVsync
+    }
+}
+
+/// The present mode for `requested` (the value of [`PRESENT_MODE_VAR`], if
+/// set) on a surface supporting `supported`. A mode the surface can't use,
+/// or an unknown name, falls back to the default with a warning.
+pub(super) fn choose_present_mode(
+    requested: Option<&str>,
+    supported: &[PresentMode],
+) -> PresentMode {
+    let default = default_present_mode(supported);
+    let Some(name) = requested else {
+        return default;
     };
-    match parse_present_mode(&name) {
+    match parse_present_mode(name) {
         // The auto modes fall back to a supported mode by themselves.
         Some(mode @ (PresentMode::AutoVsync | PresentMode::AutoNoVsync)) => mode,
         Some(mode) if supported.contains(&mode) => mode,
         Some(mode) => {
             log::warn!(
-                "{PRESENT_MODE_VAR}={name}: {mode:?} is not supported here ({supported:?}), using AutoVsync"
+                "{PRESENT_MODE_VAR}={name}: {mode:?} is not supported here ({supported:?}), using {default:?}"
             );
-            PresentMode::AutoVsync
+            default
         }
         None => {
-            log::warn!("{PRESENT_MODE_VAR}={name} is not a present mode, using AutoVsync");
-            PresentMode::AutoVsync
+            log::warn!("{PRESENT_MODE_VAR}={name} is not a present mode, using {default:?}");
+            default
         }
     }
+}
+
+fn present_mode_from_env(supported: &[PresentMode]) -> PresentMode {
+    let requested = std::env::var(PRESENT_MODE_VAR).ok();
+    choose_present_mode(requested.as_deref(), supported)
 }
 
 fn frame_latency_from_env() -> u32 {
