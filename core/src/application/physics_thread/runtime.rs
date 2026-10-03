@@ -10,6 +10,10 @@ use std::time::{Duration, Instant};
 
 pub(crate) trait CommandHandler<C> {
     fn handle_command(&mut self, command: C);
+
+    /// Called once the queue is drained, to finish work held back while
+    /// handling commands.
+    fn flush(&mut self) {}
 }
 
 pub(crate) struct PhysicsRuntime {
@@ -28,6 +32,7 @@ impl PhysicsRuntime {
         while let Ok(command) = receiver.try_recv() {
             handler.handle_command(command);
         }
+        handler.flush();
     }
 
     pub(crate) fn run(
@@ -51,10 +56,11 @@ impl PhysicsRuntime {
         let mut snapshot_count = 0u64;
 
         while !shutdown_signal.should_shutdown() {
-            {
+            let world_resized = {
                 let mut handler = DomainCommandHandler::new(simulation, events);
                 self.drain_commands(receiver, &mut handler);
-            }
+                handler.resizes_applied() > 0
+            };
 
             let wait_time_ms = simulation.runtime().wait_time();
             if wait_time_ms > 0 {
@@ -71,7 +77,10 @@ impl PhysicsRuntime {
             }
 
             let now = Instant::now();
-            if now.duration_since(last_snapshot_time) >= self.snapshot_interval {
+            // The renderer already draws the new window size, around the old
+            // world until it gets a snapshot of the resized one: don't make it
+            // wait for the next interval.
+            if world_resized || now.duration_since(last_snapshot_time) >= self.snapshot_interval {
                 let snapshot_start = Instant::now();
                 let snapshot = simulation.create_snapshot();
                 simulation.runtime().publish_snapshot(snapshot);

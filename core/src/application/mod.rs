@@ -23,7 +23,9 @@ pub use physics_event::PhysicsEvent;
 pub(crate) use physics_thread::PhysicsThread;
 
 #[cfg(test)]
-pub(crate) use physics_thread::{CommandHandler, PhysicsRuntime, ShutdownSignal};
+pub(crate) use physics_thread::{
+    CommandHandler, DomainCommandHandler, PhysicsRuntime, ShutdownSignal,
+};
 
 // Re-export error types so existing `crate::application::AppResult` paths still work
 pub use crate::error::AppError;

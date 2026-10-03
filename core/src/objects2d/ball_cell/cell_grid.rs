@@ -217,35 +217,6 @@ impl CellGrid {
             out.extend_from_slice(cell.get_ball_indices());
         });
     }
-
-    /// Resize grid to new world rectangle and reassign all balls to new cells.
-    /// Drains balls from old grid and adds them to new grid based on current positions.
-    ///
-    /// # Arguments
-    /// * `old_grid` - Existing grid to migrate balls from (will be emptied)
-    /// * `new_world` - New world boundary rectangle
-    /// * `cutoff_and_skin` - Interaction cutoff distance plus skin thickness
-    /// * `max_radius` - Maximum ball radius in simulation
-    /// * `balls` - Mutable slice of all balls (needed for position lookup)
-    pub(crate) fn resize(
-        old_grid: &mut CellGrid,
-        new_world: Rect,
-        cutoff_and_skin: f32,
-        max_radius: f32,
-        balls: &mut [Ball2D],
-    ) -> AppResult<Self> {
-        let mut new_grid = CellGrid::new(new_world, cutoff_and_skin, max_radius)?;
-
-        for row in &mut old_grid.cells {
-            for cell in row {
-                for ball_idx in cell.drain_balls() {
-                    new_grid.add_ball(ball_idx, balls);
-                }
-            }
-        }
-
-        Ok(new_grid)
-    }
 }
 
 impl Debug for CellGrid {

@@ -135,6 +135,8 @@ impl EventRouter {
                 ctx.resize(size.width, size.height);
                 let margins = margins_for_scale_factor(main_window.scale_factor());
                 state.handle_resize(size.width as f32, size.height as f32, margins);
+                // Show the new size now, not with the next physics snapshot.
+                main_window.request_redraw();
             }
             WindowEvent::ScaleFactorChanged { .. } => {
                 // A follow-up `Resized` event updates the surface dimensions.

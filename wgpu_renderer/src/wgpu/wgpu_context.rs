@@ -16,6 +16,31 @@ const PREFERRED_BACKENDS: wgpu::Backends = wgpu::Backends::VULKAN;
 #[cfg(not(any(target_os = "windows", target_os = "linux")))]
 const PREFERRED_BACKENDS: wgpu::Backends = wgpu::Backends::PRIMARY;
 
+/// The newest surface size asked for that the surface was not configured for
+/// yet.
+///
+/// Dragging a window border delivers many `Resized` events per frame, and
+/// configuring the surface recreates the swapchain (waiting for the GPU). So
+/// sizes are only recorded as they arrive and the surface is configured once,
+/// for the newest one, before the next frame is drawn.
+#[derive(Debug, Default)]
+pub(super) struct PendingSurfaceSize(Option<(u32, u32)>);
+
+impl PendingSurfaceSize {
+    /// Records `width` x `height` as the size wanted, replacing an earlier
+    /// one. An empty size (a minimised window) is ignored.
+    pub(super) fn request(&mut self, width: u32, height: u32) {
+        if width > 0 && height > 0 {
+            self.0 = Some((width, height));
+        }
+    }
+
+    /// The size to configure the surface for, once.
+    pub(super) fn take(&mut self) -> Option<(u32, u32)> {
+        self.0.take()
+    }
+}
+
 /// Core WGPU rendering context containing GPU resources.
 ///
 /// This struct owns the fundamental WGPU objects needed for rendering:
@@ -33,6 +58,7 @@ pub struct WgpuContext {
     pub surface: Surface<'static>,
     pub config: SurfaceConfiguration,
     pub format: TextureFormat,
+    pending_size: PendingSurfaceSize,
 }
 
 impl WgpuContext {
@@ -132,25 +158,35 @@ impl WgpuContext {
             surface,
             config,
             format,
+            pending_size: PendingSurfaceSize::default(),
         }
     }
 
-    /// Resize the rendering surface.
+    /// Ask for the rendering surface to be resized.
     ///
-    /// Call this when the window is resized to update the surface dimensions.
+    /// Call this when the window is resized. The surface is not configured
+    /// here: that happens in [`Self::apply_pending_resize`], once for the
+    /// newest size however many calls came before it.
     ///
     /// # Arguments
-    /// * `width` - New width in pixels (must be > 0)
-    /// * `height` - New height in pixels (must be > 0)
+    /// * `width` - New width in pixels (ignored if 0)
+    /// * `height` - New height in pixels (ignored if 0)
     pub fn resize(&mut self, width: u32, height: u32) {
-        if width > 0 && height > 0 {
+        self.pending_size.request(width, height);
+    }
+
+    /// Configure the surface for the size last asked for with
+    /// [`Self::resize`], if any. Call before acquiring a frame. This also
+    /// reconfigures a lost or outdated surface at an unchanged size.
+    pub fn apply_pending_resize(&mut self) {
+        if let Some((width, height)) = self.pending_size.take() {
             self.config.width = width;
             self.config.height = height;
             self.surface.configure(&self.device, &self.config);
         }
     }
 
-    /// Get the current surface dimensions.
+    /// Get the dimensions the surface is configured for.
     pub fn size(&self) -> (u32, u32) {
         (self.config.width, self.config.height)
     }

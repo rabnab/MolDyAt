@@ -1,17 +1,21 @@
 use crate::application::DomainCommand;
 use crate::application::GameLogic;
 use crate::application::MainContent;
-use crate::application::{CommandHandler, PhysicsRuntime, PhysicsThread, ShutdownSignal};
-use crate::objects2d::Rect;
+use crate::application::{
+    CommandHandler, DomainCommandHandler, PhysicsRuntime, PhysicsThread, ShutdownSignal,
+};
+use crate::objects2d::{Rect, Vec2D};
 
 struct RecordingHandler<T> {
     commands: Vec<T>,
+    flushes: usize,
 }
 
 impl<T> RecordingHandler<T> {
     fn new() -> Self {
         Self {
             commands: Vec::new(),
+            flushes: 0,
         }
     }
 }
@@ -19,6 +23,31 @@ impl<T> RecordingHandler<T> {
 impl<T> CommandHandler<T> for RecordingHandler<T> {
     fn handle_command(&mut self, command: T) {
         self.commands.push(command);
+    }
+
+    fn flush(&mut self) {
+        self.flushes += 1;
+    }
+}
+
+/// Drains `commands` into `main_content` as the physics thread would and
+/// returns how many resizes were applied.
+fn drain_into(main_content: &mut MainContent, commands: Vec<DomainCommand>) -> u32 {
+    let runtime = PhysicsRuntime::default();
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let (events, _event_receiver) = std::sync::mpsc::channel();
+    for command in commands {
+        sender.send(command).expect("send should succeed");
+    }
+
+    let mut handler = DomainCommandHandler::new(main_content, &events);
+    runtime.drain_commands(&receiver, &mut handler);
+    handler.resizes_applied()
+}
+
+fn resize_to(width: f32, height: f32) -> DomainCommand {
+    DomainCommand::Resize {
+        world_rect: Rect::new(0.0, 0.0, width, -height),
     }
 }
 
@@ -244,6 +273,138 @@ fn test_runtime_drains_all_available_commands() {
     runtime.drain_commands(&receiver, &mut handler);
 
     assert_eq!(handler.commands, vec![1, 2, 3]);
+}
+
+#[test]
+fn test_runtime_flushes_the_handler_once_after_draining() {
+    let runtime = PhysicsRuntime::default();
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let mut handler = RecordingHandler::new();
+
+    sender.send(1usize).expect("send should succeed");
+    sender.send(2usize).expect("send should succeed");
+
+    runtime.drain_commands(&receiver, &mut handler);
+
+    assert_eq!(handler.flushes, 1);
+    assert_eq!(handler.commands, vec![1, 2]);
+}
+
+#[test]
+fn test_consecutive_resizes_apply_only_the_last() {
+    let mut main_content =
+        MainContent::new(Rect::new(0.0, 0.0, 100.0, -100.0)).expect("Failed to create MainContent");
+
+    let applied = drain_into(
+        &mut main_content,
+        vec![
+            resize_to(150.0, 120.0),
+            resize_to(200.0, 180.0),
+            resize_to(300.0, 250.0),
+        ],
+    );
+
+    assert_eq!(applied, 1);
+    assert_eq!(
+        main_content.world().world_region(),
+        Rect::new(0.0, 0.0, 300.0, -250.0)
+    );
+}
+
+#[test]
+fn test_no_resize_is_applied_without_a_resize_command() {
+    let mut main_content =
+        MainContent::new(Rect::new(0.0, 0.0, 100.0, -100.0)).expect("Failed to create MainContent");
+
+    let applied = drain_into(&mut main_content, vec![DomainCommand::ToggleGravity]);
+
+    assert_eq!(applied, 0);
+}
+
+#[test]
+fn test_resize_keeps_its_place_among_other_commands() {
+    let mut main_content =
+        MainContent::new(Rect::new(0.0, 0.0, 100.0, -100.0)).expect("Failed to create MainContent");
+
+    // Only inside the world of the first resize: the ball is added only if
+    // that resize is applied before `AddBall`, not after it or at the end.
+    let in_resized_world_only = Vec2D::new(250.0, -250.0);
+    let applied = drain_into(
+        &mut main_content,
+        vec![
+            resize_to(300.0, 300.0),
+            DomainCommand::AddBall(in_resized_world_only),
+            resize_to(320.0, 320.0),
+        ],
+    );
+
+    assert_eq!(applied, 2);
+    assert_eq!(main_content.world().balls.len(), 1);
+    assert_eq!(
+        main_content.world().world_region(),
+        Rect::new(0.0, 0.0, 320.0, -320.0)
+    );
+}
+
+#[test]
+fn test_runtime_publishes_a_snapshot_right_after_a_resize() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::time::{Duration, Instant};
+
+    let mut main_content =
+        MainContent::new(Rect::new(0.0, 0.0, 100.0, -100.0)).expect("Failed to create MainContent");
+    let snapshot_slot = main_content.get_snapshot_slot();
+    let resized = Rect::new(0.0, 0.0, 300.0, -200.0);
+
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let (events, _event_receiver) = std::sync::mpsc::channel();
+    let signal = ShutdownSignal::new();
+    let wakeups = Arc::new(AtomicUsize::new(0));
+    let wakeup: Arc<dyn Fn() + Send + Sync> = {
+        let wakeups = Arc::clone(&wakeups);
+        Arc::new(move || {
+            wakeups.fetch_add(1, Ordering::SeqCst);
+        })
+    };
+
+    // No regular snapshot comes within this interval: only a resize can
+    // publish one.
+    let runtime = PhysicsRuntime::new(Duration::from_secs(3600));
+    let thread_signal = signal.clone();
+    let handle = std::thread::spawn(move || {
+        runtime.run(
+            &mut main_content,
+            &receiver,
+            &events,
+            &thread_signal,
+            &wakeup,
+        );
+    });
+
+    sender
+        .send(DomainCommand::Resize {
+            world_rect: resized,
+        })
+        .expect("send should succeed");
+
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let snapshot = loop {
+        if let Some(snapshot) = snapshot_slot.load_full() {
+            break snapshot;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Timed out waiting for the snapshot after the resize"
+        );
+        std::thread::sleep(Duration::from_millis(5));
+    };
+
+    signal.signal_shutdown();
+    handle.join().expect("physics loop should not panic");
+
+    assert_eq!(snapshot.cell_grid_bounds, resized);
+    assert!(wakeups.load(Ordering::SeqCst) >= 1);
 }
 
 #[test]

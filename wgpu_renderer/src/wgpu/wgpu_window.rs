@@ -101,7 +101,9 @@ impl WgpuApp {
 
 impl ApplicationHandler<UserEvent> for WgpuApp {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        // Polling causes about_to_wait to be called, which is where we pull the latest snapshot and request redraws.
+        // Sleep until an event arrives. The physics thread wakes the loop with
+        // `UserEvent::NewSnapshot`, which is where we pull the latest snapshot
+        // and request redraws.
         event_loop.set_control_flow(ControlFlow::Wait);
         self.init_if_needed(event_loop);
     }

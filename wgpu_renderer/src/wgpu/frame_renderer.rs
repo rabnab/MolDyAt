@@ -69,6 +69,7 @@ impl FrameRenderer {
         }
 
         state.begin_render();
+        ctx.apply_pending_resize();
 
         if let Some(snapshot) = state.last_snapshot() {
             let pan = state.viewport().pan_offset();
@@ -109,6 +110,7 @@ impl FrameRenderer {
                     SurfaceErrorAction::Reconfigure => {
                         let size = window.inner_size();
                         ctx.resize(size.width.max(1), size.height.max(1));
+                        ctx.apply_pending_resize();
                         window.request_redraw();
                     }
                     SurfaceErrorAction::RetryLater => {
