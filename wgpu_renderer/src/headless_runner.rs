@@ -1,8 +1,10 @@
 use crate::headless_cli::HeadlessConfig;
 use crate::headless_output::{HeadlessSnapshotSink, HeadlessWriter};
+use rust_thermo_core::application::persistence::{LoadSource, SaveStore};
 use rust_thermo_core::application::{GameLogic, MainContent};
 use rust_thermo_core::objects2d::{Rect, Vec2D};
 use std::io;
+use std::path::PathBuf;
 use std::time::Duration;
 
 pub struct HeadlessRunner {
@@ -138,8 +140,20 @@ pub fn build_application(world_rect: Rect, rng_seed: Option<u64>) -> io::Result<
 
 /// Build the application for a headless run: time step, then walls, then
 /// seeded balls (so seeding never places a ball inside a wall).
-pub fn prepare_application(config: &HeadlessConfig, world_rect: Rect) -> io::Result<MainContent> {
+pub fn prepare_application(
+    config: &HeadlessConfig,
+    world_rect: Rect,
+    store: &SaveStore,
+    load: Option<PathBuf>,
+) -> io::Result<MainContent> {
     let mut application = build_application(world_rect, config.rng_seed)?;
+    if let Some(path) = load {
+        // Same entry point as Ctrl+O, but running: a headless run has no
+        // one to look at a paused world.
+        application
+            .load_world(store, &LoadSource::Path(path), false)
+            .map_err(|error| io::Error::other(format!("{error:?}")))?;
+    }
     if let Some(dt) = config.dt {
         application
             .set_time_step(dt)

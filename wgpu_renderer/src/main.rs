@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+mod cli;
 mod headless_cli;
 mod headless_output;
 mod headless_runner;
@@ -7,6 +8,7 @@ mod wgpu;
 
 use crate::wgpu::{DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH, MARGINS};
 use rust_thermo_core::application::MainContent;
+use rust_thermo_core::application::persistence::{LoadSource, SaveStore};
 
 /// Initialize Rayon thread pool for parallel physics computations.
 ///
@@ -46,7 +48,7 @@ fn print_diagnostics() {
     init_rayon();
 }
 
-fn run_wgpu_renderer() {
+fn run_wgpu_renderer(common: cli::CommonArgs) {
     use wgpu::WgpuWindow;
 
     log::info!("Renderer: wgpu");
@@ -57,13 +59,28 @@ fn run_wgpu_renderer() {
         MARGINS,
     );
 
-    let application = MainContent::new(world_rect).expect("Failed to create MainContent");
+    let store = SaveStore::new(&common.save_dir);
+    let mut application = MainContent::new(world_rect).expect("Failed to create MainContent");
+    if let Some(path) = common.load {
+        // Same entry point as Ctrl+O; the window then shows the loaded world.
+        match application.load_world(&store, &LoadSource::Path(path.clone()), true) {
+            Ok(loaded) => log::info!("Loaded world from {} (paused)", loaded.path.display()),
+            Err(e) => {
+                eprintln!("cannot load {}: {e:?}", path.display());
+                std::process::exit(1);
+            }
+        }
+    }
+    let application = application.with_save_store(store);
 
     let window = WgpuWindow::new();
     window.create_window(application);
 }
 
-fn run_headless_renderer(config: headless_cli::HeadlessConfig) -> std::io::Result<()> {
+fn run_headless_renderer(
+    config: headless_cli::HeadlessConfig,
+    common: cli::CommonArgs,
+) -> std::io::Result<()> {
     log::info!("Renderer: headless");
 
     let world_rect = MainContent::bootstrap_world_rect(
@@ -75,24 +92,31 @@ fn run_headless_renderer(config: headless_cli::HeadlessConfig) -> std::io::Resul
         Some(scale) => headless_runner::scale_world_rect(world_rect, scale),
         None => world_rect,
     };
-    let application = headless_runner::prepare_application(&config, world_rect)?;
+    let store = SaveStore::new(&common.save_dir);
+    let application =
+        headless_runner::prepare_application(&config, world_rect, &store, common.load)?;
     headless_runner::HeadlessRunner::from_config(config, application)?.run()?;
     Ok(())
 }
 
 fn main() {
-    match headless_cli::parse_headless_args() {
+    let args: Vec<String> = std::env::args().collect();
+    let (common, args) = cli::split_common_args(&args).unwrap_or_else(|e| {
+        eprintln!("{e}");
+        std::process::exit(1);
+    });
+    match headless_cli::parse_headless_args(&args) {
         Ok(Some(config)) => {
             print_diagnostics();
             log::info!("Running in headless mode");
-            if let Err(error) = run_headless_renderer(config) {
+            if let Err(error) = run_headless_renderer(config, common) {
                 eprintln!("headless renderer failed: {error}");
                 std::process::exit(1);
             }
         }
         Ok(None) => {
             print_diagnostics();
-            run_wgpu_renderer();
+            run_wgpu_renderer(common);
         }
         Err(e) => {
             eprintln!("{}", e);

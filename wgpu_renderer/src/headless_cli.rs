@@ -3,7 +3,6 @@
 /// This module handles parsing command-line arguments for headless execution mode
 /// and storing the parsed configuration for use by the headless simulation loop.
 use rust_thermo_core::objects2d::line_segment::{DEFAULT_THICKNESS, MAX_THICKNESS, MIN_THICKNESS};
-use std::env;
 use std::path::PathBuf;
 
 /// Parsed headless CLI arguments and their default values.
@@ -130,9 +129,10 @@ impl CliError {
     }
 }
 
-pub fn parse_headless_args() -> Result<Option<HeadlessConfig>, CliError> {
-    let args: Vec<String> = env::args().collect();
-    parse_headless_args_with_args(&args)
+/// Parse the headless options from `args` (program name first), after the
+/// shared options were taken out by `cli::split_common_args`.
+pub fn parse_headless_args(args: &[String]) -> Result<Option<HeadlessConfig>, CliError> {
+    parse_headless_args_with_args(args)
 }
 
 fn parse_headless_args_with_args(args: &[String]) -> Result<Option<HeadlessConfig>, CliError> {
