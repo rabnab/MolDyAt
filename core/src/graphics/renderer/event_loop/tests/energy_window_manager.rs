@@ -86,6 +86,30 @@ fn update_from_snapshot_ignores_duplicate_step() {
     );
 }
 
+#[test]
+fn update_from_snapshot_starts_a_new_history_for_a_new_world() {
+    let shared: SharedEnergyData = Arc::new(Mutex::new(EnergyData::new()));
+    let mut manager = EnergyWindowManager::new(shared.clone());
+    let metrics = FrameMetrics::default();
+    for step in [10, 20, 30] {
+        manager.update_from_snapshot(&make_snapshot(step, 1.0, 2.0), 60.0, 1.0, &metrics);
+    }
+    // A loaded world counts from 0 again, or even sits at the same step.
+    let mut loaded = make_snapshot(30, 7.0, 8.0);
+    loaded.world_generation = 1;
+    manager.update_from_snapshot(&loaded, 60.0, 1.0, &metrics);
+    let mut next = make_snapshot(32, 9.0, 9.5);
+    next.world_generation = 1;
+    manager.update_from_snapshot(&next, 60.0, 1.0, &metrics);
+
+    let data = shared.lock().unwrap();
+    assert_eq!(
+        data.v_kin.iter().copied().collect::<Vec<_>>(),
+        vec![7.0, 9.0]
+    );
+    assert_eq!(data.v_pot.len(), 2);
+}
+
 // ── handle_redraw ────────────────────────────────────────────────────────────
 
 #[test]

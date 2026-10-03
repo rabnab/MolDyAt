@@ -24,6 +24,7 @@ pub struct EnergyWindowManager {
     energy_data: SharedEnergyData,
     /// Last processed simulation step (to avoid duplicate updates)
     last_processed_step: u64,
+    last_processed_generation: u64,
     /// Instant of the most recent energy window render completion.
     last_redraw_instant: Option<Instant>,
     /// `true` while a `request_redraw()` has been sent but the corresponding
@@ -53,6 +54,7 @@ impl EnergyWindowManager {
             window: None,
             energy_data,
             last_processed_step: 0,
+            last_processed_generation: 0,
             last_redraw_instant: None,
             redraw_pending: false,
         }
@@ -231,14 +233,20 @@ impl EnergyWindowManager {
         steps_per_frame: f32,
         frame_metrics: &FrameMetrics,
     ) {
-        // Only update if this is a new simulation step
-        if snapshot.simulation_step <= self.last_processed_step {
+        // Only update for a new simulation step. A new world (load) starts
+        // its own history, whatever its step count.
+        let new_world = snapshot.world_generation != self.last_processed_generation;
+        if !new_world && snapshot.simulation_step <= self.last_processed_step {
             return;
         }
-
+        self.last_processed_generation = snapshot.world_generation;
         self.last_processed_step = snapshot.simulation_step;
 
         if let Ok(mut data) = self.energy_data.lock() {
+            if new_world {
+                data.v_kin.clear();
+                data.v_pot.clear();
+            }
             data.push_sample(
                 snapshot.kinetic_energy,
                 snapshot.potential_energy,

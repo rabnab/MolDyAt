@@ -126,7 +126,8 @@ impl RenderPipeline for SourceLabelPipeline {
             return Ok(());
         }
 
-        let (glyph_ndc_w, glyph_ndc_h) = inset_glyph_ndc_size(ctx.window_size, ctx.margin);
+        let (glyph_ndc_w, glyph_ndc_h) =
+            inset_glyph_ndc_size(ctx.window_size, ctx.margin, ctx.inset);
         let (verts, capsules) =
             Self::build_geometry(spheres, ctx.view_proj, glyph_ndc_w, glyph_ndc_h);
 

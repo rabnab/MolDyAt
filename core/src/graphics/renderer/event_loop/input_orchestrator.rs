@@ -284,6 +284,8 @@ mod tests {
                 tool_handler: None,
                 default_operator_snapshot: OperatorSnapshot::default(),
                 resize_pending: false,
+                requested_window_size: None,
+                pending_window_request: None,
             },
         }
     }

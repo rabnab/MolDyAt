@@ -41,6 +41,9 @@ impl LogStuff for MainContent {
         const HELP_OPTION_ALT_INCREASE_WAIT: &str = "Alt + + / = - Increase wait time.";
         const HELP_OPTION_ALT_DECREASE_WAIT: &str = "Alt + - / _ - Decrease wait time.";
         const HELP_OPTION_SHIFT: &str = "Shift - Enable random ball speed.";
+        const HELP_OPTION_CTRL_S: &str = "Ctrl + S - Save the world to a new file in the save directory (--save-dir, default ./saves).";
+        const HELP_OPTION_CTRL_O: &str =
+            "Ctrl + O - Load the newest save from the save directory (paused, default view).";
 
         log::info!(
             "{header}\n\
@@ -67,7 +70,9 @@ impl LogStuff for MainContent {
              {opt_minus}\n\
              {opt_alt_plus}\n\
              {opt_alt_minus}\n\
-             {opt_shift}",
+             {opt_shift}\n\
+             {opt_ctrl_s}\n\
+             {opt_ctrl_o}",
             header = HELP_KEYS_INFO,
             opt_f1 = HELP_OPTION_F1,
             opt_f2 = HELP_OPTION_F2,
@@ -93,6 +98,8 @@ impl LogStuff for MainContent {
             opt_alt_plus = HELP_OPTION_ALT_INCREASE_WAIT,
             opt_alt_minus = HELP_OPTION_ALT_DECREASE_WAIT,
             opt_shift = HELP_OPTION_SHIFT,
+            opt_ctrl_s = HELP_OPTION_CTRL_S,
+            opt_ctrl_o = HELP_OPTION_CTRL_O,
         );
     }
 

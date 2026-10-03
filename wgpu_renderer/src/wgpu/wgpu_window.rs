@@ -112,6 +112,9 @@ impl ApplicationHandler<UserEvent> for WgpuApp {
                 // Pull latest snapshot and request redraws for both windows
                 if let (Some(state), Some(window)) = (self.state.as_mut(), self.window.as_ref()) {
                     FrameRenderer::handle_new_snapshot(state, window.as_ref());
+                    if let Some(ctx) = self.ctx.as_mut() {
+                        FrameRenderer::apply_window_size_request(state, window.as_ref(), ctx);
+                    }
                 }
             }
         }

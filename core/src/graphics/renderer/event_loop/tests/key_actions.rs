@@ -142,3 +142,65 @@ fn test_lcontrol_up_no_action() {
     let action = handler.handle_key_up(KeyCode::ControlLeft);
     assert!(action.is_none());
 }
+
+#[test]
+fn test_ctrl_s_saves_on_key_press_and_release_is_consumed() {
+    let mut handler = InputHandler::new();
+    handler.handle_key_down(KeyCode::ControlLeft, false);
+    let action = handler.handle_key_down(KeyCode::KeyS, false);
+    assert!(matches!(action, Some(InputAction::SaveWorld)));
+    assert!(handler.handle_key_up(KeyCode::KeyS).is_none());
+}
+
+#[test]
+fn test_releasing_ctrl_before_s_does_not_toggle_stepwise() {
+    let mut handler = InputHandler::new();
+    handler.handle_key_down(KeyCode::ControlLeft, false);
+    assert!(matches!(
+        handler.handle_key_down(KeyCode::KeyS, false),
+        Some(InputAction::SaveWorld)
+    ));
+    handler.handle_key_up(KeyCode::ControlLeft);
+    assert!(handler.handle_key_up(KeyCode::KeyS).is_none());
+
+    // A later plain S press still toggles stepwise mode.
+    handler.handle_key_down(KeyCode::KeyS, false);
+    let action = handler.handle_key_up(KeyCode::KeyS);
+    assert!(matches!(action, Some(InputAction::ToggleStepwise)));
+}
+
+#[test]
+fn test_ctrl_chord_does_not_repeat() {
+    let mut handler = InputHandler::new();
+    handler.handle_key_down(KeyCode::ControlLeft, false);
+    assert!(handler.handle_key_down(KeyCode::KeyS, false).is_some());
+    assert!(handler.handle_key_down(KeyCode::KeyS, true).is_none());
+}
+
+#[test]
+fn test_ctrl_o_loads_world() {
+    let mut handler = InputHandler::new();
+    handler.handle_key_down(KeyCode::ControlRight, false);
+    let action = handler.handle_key_down(KeyCode::KeyO, false);
+    assert!(matches!(action, Some(InputAction::LoadWorld)));
+    assert!(handler.handle_key_up(KeyCode::KeyO).is_none());
+}
+
+#[test]
+fn test_o_without_ctrl_does_nothing() {
+    let mut handler = InputHandler::new();
+    assert!(handler.handle_key_down(KeyCode::KeyO, false).is_none());
+    assert!(handler.handle_key_up(KeyCode::KeyO).is_none());
+}
+
+#[test]
+fn test_focus_loss_forgets_a_held_ctrl() {
+    let mut handler = InputHandler::new();
+    handler.handle_key_down(KeyCode::ControlLeft, false);
+    // Ctrl is released while another window has focus: no release arrives.
+    handler.release_all_keys();
+    handler.handle_key_down(KeyCode::KeyS, false);
+    let action = handler.handle_key_up(KeyCode::KeyS);
+    assert!(matches!(action, Some(InputAction::ToggleStepwise)));
+    assert!(handler.handle_key_down(KeyCode::KeyO, false).is_none());
+}

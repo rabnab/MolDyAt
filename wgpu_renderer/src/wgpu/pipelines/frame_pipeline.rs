@@ -70,7 +70,7 @@ impl RenderPipeline for FramePipeline {
 
     fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
         let (w, h) = ctx.window_size;
-        let verts = frame_vertices(w as f32, h as f32, ctx.margin);
+        let verts = frame_vertices(w as f32, h as f32, ctx.inset);
         self.gpu.flush(ctx.device, ctx.queue, &verts);
         Ok(())
     }

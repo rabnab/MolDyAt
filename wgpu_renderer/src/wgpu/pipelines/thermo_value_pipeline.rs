@@ -97,7 +97,8 @@ impl RenderPipeline for ThermoValueOverlayPipeline {
             return Ok(());
         };
 
-        let (glyph_ndc_w, glyph_ndc_h) = inset_glyph_ndc_size(ctx.window_size, ctx.margin);
+        let (glyph_ndc_w, glyph_ndc_h) =
+            inset_glyph_ndc_size(ctx.window_size, ctx.margin, ctx.inset);
         let verts = Self::build_vertices(grid, spec, ctx.view_proj, glyph_ndc_w, glyph_ndc_h);
         self.text.upload(ctx.device, ctx.queue, &verts);
         Ok(())

@@ -139,6 +139,10 @@ impl EventRouter {
             WindowEvent::ScaleFactorChanged { .. } => {
                 // A follow-up `Resized` event updates the surface dimensions.
             }
+            WindowEvent::Focused(false) => {
+                // Key releases while unfocused never arrive.
+                state.input.release_all_keys();
+            }
             WindowEvent::MouseInput { .. }
             | WindowEvent::CursorMoved { .. }
             | WindowEvent::MouseWheel { .. } => {

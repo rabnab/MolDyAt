@@ -4,9 +4,13 @@ use super::unified_render_state::UnifiedRenderState;
 pub(super) struct FrameOrchestrator;
 
 impl FrameOrchestrator {
-    /// Pull the latest physics snapshot into render state and update
+    /// Apply results reported by the physics thread (save/load), then pull
+    /// the latest physics snapshot into render state and update
     /// snapshot-derived views such as the energy plot.
     pub(super) fn begin_frame(state: &mut UnifiedRenderState) {
+        while let Some(event) = state.physics.try_recv_event() {
+            state.handle_physics_event(event);
+        }
         if let Some(snapshot) = state.physics.get_latest_snapshot() {
             state.render.last_snapshot = Some(snapshot);
             Self::update_energy_from_snapshot(state);
@@ -29,7 +33,9 @@ impl FrameOrchestrator {
         state.render.view_dirty = false;
         state.render.metrics.end_frame();
         if let Some(snapshot) = &state.render.last_snapshot {
-            state.physics.mark_step_displayed(snapshot.simulation_step);
+            state
+                .physics
+                .mark_step_displayed(snapshot.simulation_step, snapshot.world_generation);
         }
     }
 
@@ -88,12 +94,86 @@ mod tests {
                 tool_handler: None,
                 default_operator_snapshot: OperatorSnapshot::default(),
                 resize_pending: false,
+                requested_window_size: None,
+                pending_window_request: None,
             },
         }
     }
 
     fn build_test_state() -> UnifiedRenderState {
         build_test_state_with_physics(PhysicsCoordinator::new_disconnected())
+    }
+
+    #[test]
+    fn world_loaded_switches_to_the_default_view_of_the_loaded_world() {
+        use crate::application::PhysicsEvent;
+        use crate::application::persistence::LoadedWorld;
+
+        let mut state = build_test_state();
+        state.render.viewport.zoom_at_point(&Vec2D::zero(), 2.0);
+        let loaded_rect = Rect::new(-50.0, 30.0, 100.0, -60.0);
+
+        state.handle_physics_event(PhysicsEvent::LoadFailed("bad file".into()));
+        assert_ne!(state.render.viewport.world_bounds(), loaded_rect);
+        assert!(
+            !state.render.view_dirty,
+            "a failed load leaves the view alone"
+        );
+
+        state.handle_physics_event(PhysicsEvent::WorldLoaded(LoadedWorld {
+            path: "saves/world.json".into(),
+            world_rect: loaded_rect,
+        }));
+        assert_eq!(state.render.viewport.world_bounds(), loaded_rect);
+        assert_eq!(state.render.viewport.zoom(), ViewportTransform::MIN_ZOOM);
+        assert!(state.render.view_dirty);
+    }
+
+    fn load(state: &mut UnifiedRenderState, world_rect: Rect) {
+        use crate::application::PhysicsEvent;
+        use crate::application::persistence::LoadedWorld;
+        state.handle_physics_event(PhysicsEvent::WorldLoaded(LoadedWorld {
+            path: "saves/world.json".into(),
+            world_rect,
+        }));
+    }
+
+    #[test]
+    fn loaded_world_of_another_shape_requests_a_matching_window() {
+        // Window 1280x720 with 50 px margins: drawing area 1180x620.
+        let mut state = build_test_state();
+        load(&mut state, Rect::new(-50.0, 50.0, 100.0, -100.0));
+        // 1:1 size for a 100x100 world (LEN_TO_PX = 0.1) plus the margins.
+        assert_eq!(state.take_requested_window_size(), Some((1100, 1100)));
+        assert_eq!(state.take_requested_window_size(), None, "asked once");
+        let pending = state
+            .render
+            .pending_window_request
+            .expect("the OS's answer is awaited");
+        assert_eq!(pending.size, (1100, 1100));
+    }
+
+    #[test]
+    fn an_immediate_os_answer_of_the_current_size_ends_the_wait() {
+        let mut state = build_test_state();
+        load(&mut state, Rect::new(-50.0, 50.0, 100.0, -100.0));
+        assert!(state.take_requested_window_size().is_some());
+        // The OS keeps the window as it is (maximised): same size back.
+        let (w, h) = state.render.viewport.window_size_px();
+        let margins = state.render.viewport.margins();
+        state.apply_window_size_answer(w, h, margins);
+        assert!(
+            state.render.pending_window_request.is_none(),
+            "the next user resize must refit the world again"
+        );
+    }
+
+    #[test]
+    fn loaded_world_of_the_window_shape_keeps_the_window() {
+        let mut state = build_test_state();
+        load(&mut state, Rect::new(-59.0, 31.0, 118.0, -62.0));
+        assert_eq!(state.take_requested_window_size(), None);
+        assert!(state.render.pending_window_request.is_none());
     }
 
     #[test]
