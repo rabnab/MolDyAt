@@ -111,13 +111,16 @@ impl RendererConfig {
         self.render_drawing = !self.render_drawing;
     }
 
-    /// Scene layers to build and draw: all of them, or without the heavy
-    /// ones while rendering is off.
+    /// Scene layers to build and draw: without the heavy ones while
+    /// rendering is off, and without `THERMO` while the overlay shows no
+    /// temperature or pressure field.
     pub fn scene_layers(&self) -> SceneLayers {
-        if self.render_drawing {
-            SceneLayers::ALL
-        } else {
+        if !self.render_drawing {
             SceneLayers::ALL.difference(SceneLayers::HEAVY)
+        } else if !self.thermo_display.is_thermo_active() {
+            SceneLayers::ALL.difference(SceneLayers::THERMO)
+        } else {
+            SceneLayers::ALL
         }
     }
 
@@ -385,5 +388,23 @@ mod tests {
         assert!(!ThermoDisplayMode::Grid.is_thermo_active());
         assert!(ThermoDisplayMode::Temperature.is_thermo_active());
         assert!(ThermoDisplayMode::Pressure.is_thermo_active());
+    }
+
+    #[test]
+    fn scene_layers_follow_rendering_and_the_thermo_overlay() {
+        let mut cfg = RendererConfig::default();
+        let without_thermo = SceneLayers::ALL.difference(SceneLayers::THERMO);
+        // T off and Grid show no field.
+        assert_eq!(cfg.scene_layers(), without_thermo);
+        cfg.cycle_thermo_display();
+        assert_eq!(cfg.scene_layers(), without_thermo);
+        // Temperature and Pressure do.
+        cfg.cycle_thermo_display();
+        assert_eq!(cfg.scene_layers(), SceneLayers::ALL);
+        cfg.cycle_thermo_display();
+        assert_eq!(cfg.scene_layers(), SceneLayers::ALL);
+        // F2 off: only the base layer, whatever T shows.
+        cfg.toggle_rendering();
+        assert_eq!(cfg.scene_layers(), SceneLayers::BASE);
     }
 }

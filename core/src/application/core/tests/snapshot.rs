@@ -273,7 +273,7 @@ fn snapshot_without_heavy_layers_skips_ball_render_data_and_thermo_grids() {
 
     // Rendering off (F2): only what operators, labels and stats need.
     let light_layers = SceneLayers::ALL.difference(SceneLayers::HEAVY);
-    main_content.runtime_mut().set_snapshot_layers(light_layers);
+    main_content.set_snapshot_layers(light_layers);
     let light = main_content.create_snapshot();
     assert_eq!(light.layers, light_layers);
     assert!(light.balls.is_empty());
@@ -283,10 +283,30 @@ fn snapshot_without_heavy_layers_skips_ball_render_data_and_thermo_grids() {
     assert_eq!(light.status_text, full.status_text);
 
     // Rendering on again: the next snapshot is the full scene.
-    main_content
-        .runtime_mut()
-        .set_snapshot_layers(SceneLayers::ALL);
+    main_content.set_snapshot_layers(SceneLayers::ALL);
     let again = main_content.create_snapshot();
     assert_eq!(again.layers, SceneLayers::ALL);
     assert_eq!(again.balls.len(), 5);
+}
+
+#[test]
+fn dropping_the_thermo_layer_stops_and_clears_the_thermo_fields() {
+    use crate::application::GameLogic;
+    use crate::application::core::SimulationEngine;
+    use crate::application::scene_layers::SceneLayers;
+
+    let mut main_content = create_test_main_content_with_balls(20);
+    main_content.world_mut().sim.set_pause(false);
+    main_content.simulation_step().unwrap();
+    assert!(main_content.create_snapshot().thermo_grid_spec.is_some());
+
+    // Heatmap hidden (T off or F2 off): the history is dropped, and the
+    // physics thread records no more fields (see `record_thermo_fields`).
+    main_content.set_snapshot_layers(SceneLayers::ALL.difference(SceneLayers::THERMO));
+    assert!(main_content.world().thermo_history.average().is_none());
+
+    // Shown again: the next recorded step starts a fresh history.
+    main_content.set_snapshot_layers(SceneLayers::ALL);
+    SimulationEngine::record_thermo_fields(main_content.world_mut());
+    assert!(main_content.create_snapshot().thermo_grid_spec.is_some());
 }

@@ -312,8 +312,9 @@ mod tests {
                 assert_eq!(FrameOrchestrator::should_render(&state), draws, "{case}");
 
                 FrameOrchestrator::begin_frame(&mut state);
+                // T is off by default: no thermo fields even with F2 on.
                 let expected = if render_drawing {
-                    SceneLayers::ALL
+                    SceneLayers::ALL.difference(SceneLayers::THERMO)
                 } else {
                     SceneLayers::BASE
                 };
@@ -341,6 +342,10 @@ mod tests {
         state.physics.publish_for_test(RendererSnapshot::new());
         assert!(FrameOrchestrator::should_render(&state));
         FrameOrchestrator::begin_frame(&mut state);
-        assert_eq!(FrameOrchestrator::frame_layers(&state), SceneLayers::ALL);
+        assert_eq!(
+            FrameOrchestrator::frame_layers(&state),
+            state.render.config.scene_layers()
+        );
+        assert!(FrameOrchestrator::frame_layers(&state).contains(SceneLayers::BALLS));
     }
 }

@@ -43,6 +43,8 @@ pub fn process_action_common(
             }
             InputAction::CycleThermoDisplay => {
                 config.cycle_thermo_display();
+                // The thermo fields are recorded only while shown.
+                physics.send_command(DomainCommand::SetSnapshotLayers(config.scene_layers()));
                 affects_view = true;
             }
             // Actions handled elsewhere (not in action_processor)

@@ -132,6 +132,10 @@ impl UnifiedRenderState {
                 pending_window_request: None,
             },
         };
+        // The physics thread builds only the layers the config draws.
+        state.physics.send_command(DomainCommand::SetSnapshotLayers(
+            state.render.config.scene_layers(),
+        ));
         // A world loaded with `--load` may not have the window's shape.
         state.fit_window_to_world();
         state
@@ -665,9 +669,34 @@ mod tests {
 
         // The physics thread builds only the layers that are drawn.
         let sent = log.lock().unwrap().clone();
-        let expected = [SceneLayers::BASE, SceneLayers::ALL]
-            .map(|layers| format!("{:?}", DomainCommand::SetSnapshotLayers(layers)));
+        // Back on with the thermo overlay off: everything but the thermo fields.
+        let expected = [
+            SceneLayers::BASE,
+            SceneLayers::ALL.difference(SceneLayers::THERMO),
+        ]
+        .map(|layers| format!("{:?}", DomainCommand::SetSnapshotLayers(layers)));
         assert_eq!(sent, expected);
+    }
+
+    #[test]
+    fn cycling_the_thermo_overlay_requests_thermo_fields_only_while_shown() {
+        let mut config = RendererConfig::default();
+        let (physics, log) = PhysicsCoordinator::new_recording();
+
+        // Off -> Grid -> Temperature -> Pressure -> Off
+        for _ in 0..4 {
+            process_action_common(InputAction::CycleThermoDisplay, &physics, &mut config);
+        }
+
+        let without_thermo = SceneLayers::ALL.difference(SceneLayers::THERMO);
+        let expected = [
+            without_thermo,
+            SceneLayers::ALL,
+            SceneLayers::ALL,
+            without_thermo,
+        ]
+        .map(|layers| format!("{:?}", DomainCommand::SetSnapshotLayers(layers)));
+        assert_eq!(log.lock().unwrap().clone(), expected);
     }
 
     #[test]

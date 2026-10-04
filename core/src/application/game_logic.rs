@@ -96,9 +96,11 @@ impl GameLogic for MainContent {
         SimulationEngine::collect_neighbours_by_cell(world, game_data, dt);
     }
 
+    /// One step with all derived data (headless runs and tests): the thermo
+    /// fields are recorded for every step that ran.
     fn simulation_step(&mut self) -> AppResult<()> {
-        let (world, game_data) = self.world_and_game_data();
-        SimulationEngine::simulation_step(world, game_data)
+        let dt = self.time_step();
+        self.simulation_step_with_dt(dt)
     }
 
     // Helper to encapsulate the simulation update + cell grid updates + cleanup.
@@ -115,6 +117,11 @@ impl GameLogic for MainContent {
 impl MainContent {
     pub(crate) fn simulation_step_with_dt(&mut self, dt: f32) -> AppResult<()> {
         let (world, game_data) = self.world_and_game_data();
-        SimulationEngine::simulation_step_with_dt(world, game_data, dt)
+        let stepped = !world.sim.is_paused();
+        SimulationEngine::simulation_step_with_dt(world, game_data, dt)?;
+        if stepped {
+            SimulationEngine::record_thermo_fields(world);
+        }
+        Ok(())
     }
 }

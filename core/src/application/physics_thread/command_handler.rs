@@ -166,7 +166,7 @@ impl CommandHandler<DomainCommand> for DomainCommandHandler<'_> {
                 self.report(event);
             }
             DomainCommand::SetSnapshotLayers(layers) => {
-                self.main_content.runtime_mut().set_snapshot_layers(layers);
+                self.main_content.set_snapshot_layers(layers);
             }
             DomainCommand::Operator(cmd) => {
                 cmd.execute(self.main_content);

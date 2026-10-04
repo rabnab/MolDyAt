@@ -100,25 +100,29 @@ impl SimulationEngine {
             timer.log();
         }
 
-        if world.balls.len() == world.cached_force_results.len() {
-            let world_rect = world.world_rect;
-            // The T/P overlay uses the physics cell grid's shape (see
-            // docs/simulation.md, Thermodynamic Grid Space).
-            let (phys_rows, phys_cols) = world.cell_grid.get_grid_size();
-            let grid_rows = phys_rows.max(1);
-            let grid_cols = phys_cols.max(1);
-            let (t_grid, p_grid) = compute_cell_thermo(
-                &world.balls,
-                &world.cached_force_results,
-                &world_rect,
-                grid_rows,
-                grid_cols,
-            );
-            world.thermo_history.push(t_grid, p_grid);
-        }
-
         world.step_count += 1;
         Ok(())
+    }
+
+    /// Add the per-cell temperature and pressure of the last step to the
+    /// thermo history. Only the heatmap overlay (and headless output) uses
+    /// them, so the physics thread calls this only while they are shown
+    /// (the `THERMO` layer).
+    pub(crate) fn record_thermo_fields(world: &mut SimulationWorld) {
+        if world.balls.len() != world.cached_force_results.len() {
+            return;
+        }
+        // The T/P overlay uses the physics cell grid's shape (see
+        // docs/simulation.md, Thermodynamic Grid Space).
+        let (phys_rows, phys_cols) = world.cell_grid.get_grid_size();
+        let (t_grid, p_grid) = compute_cell_thermo(
+            &world.balls,
+            &world.cached_force_results,
+            &world.world_rect,
+            phys_rows.max(1),
+            phys_cols.max(1),
+        );
+        world.thermo_history.push(t_grid, p_grid);
     }
 
     pub(crate) fn update_sim(world: &mut SimulationWorld, dt: f32, bound_rect: &Rect) {

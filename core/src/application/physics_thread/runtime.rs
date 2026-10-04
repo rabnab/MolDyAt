@@ -4,6 +4,7 @@ use crate::application::DomainCommand;
 use crate::application::MainContent;
 use crate::application::PhysicsEvent;
 use crate::application::core::SimulationEngine;
+use crate::application::scene_layers::SceneLayers;
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::{Duration, Instant};
@@ -80,6 +81,14 @@ impl PhysicsRuntime {
             if !was_paused {
                 physics_step_count += 1;
                 changed = true;
+                // The heatmap's fields, only while the heatmap is shown.
+                if simulation
+                    .runtime()
+                    .snapshot_layers()
+                    .contains(SceneLayers::THERMO)
+                {
+                    SimulationEngine::record_thermo_fields(simulation.world_mut());
+                }
             }
 
             let now = Instant::now();

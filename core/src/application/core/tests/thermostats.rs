@@ -490,8 +490,7 @@ fn rendering_off_measures_no_thermostat_readings() {
 
     // F2 off: labels are not drawn, so nothing is measured; the snapshot
     // keeps the thermostat's stored value.
-    mc.runtime_mut()
-        .set_snapshot_layers(SceneLayers::ALL.difference(SceneLayers::HEAVY));
+    mc.set_snapshot_layers(SceneLayers::ALL.difference(SceneLayers::HEAVY));
     let stored = mc.world().thermostats.thermostats()[0].current_local_temp;
     assert_eq!(snapshot_reading(&mc).to_bits(), stored.to_bits());
 }

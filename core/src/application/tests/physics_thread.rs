@@ -439,9 +439,10 @@ fn test_snapshots_follow_changes_for_paused_and_running_by_layers() {
 
     const SETTLE: Duration = Duration::from_millis(150);
     let light = SceneLayers::ALL.difference(SceneLayers::HEAVY);
+    let no_heatmap = SceneLayers::ALL.difference(SceneLayers::THERMO);
 
     for paused in [false, true] {
-        for layers in [SceneLayers::ALL, light] {
+        for layers in [SceneLayers::ALL, no_heatmap, light] {
             let case = format!("paused={paused} layers={layers:?}");
             let mut main_content = MainContent::new(Rect::new(0.0, 0.0, 100.0, -100.0))
                 .expect("Failed to create MainContent");
@@ -505,8 +506,11 @@ fn test_snapshots_follow_changes_for_paused_and_running_by_layers() {
                 usize::from(layers.contains(SceneLayers::BALLS)),
                 "{case}"
             );
+            // Thermo fields are recorded only while the heatmap is shown.
             if !layers.contains(SceneLayers::THERMO) {
                 assert!(after.thermo_grid_spec.is_none(), "{case}");
+            } else if !paused {
+                assert!(after.thermo_grid_spec.is_some(), "{case}");
             }
 
             // An edit is published also while paused, at the same step.
