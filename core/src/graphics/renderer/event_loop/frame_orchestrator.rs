@@ -40,7 +40,15 @@ impl FrameOrchestrator {
     pub(super) fn frame_detail(state: &UnifiedRenderState) -> FrameDetail {
         if !(state.physics.is_new_step_available() || state.render.view_dirty) {
             FrameDetail::Skip
-        } else if state.render.config.render_drawing {
+        } else if state.render.config.render_drawing
+            && state
+                .render
+                .last_snapshot
+                .as_ref()
+                .is_none_or(|snapshot| snapshot.full_scene)
+        {
+            // After F2 on, the first snapshots may still be light (no balls):
+            // draw those light until the full one arrives.
             FrameDetail::Full
         } else {
             FrameDetail::Light
@@ -57,7 +65,7 @@ impl FrameOrchestrator {
         state.render.view_dirty = false;
         state.render.metrics.end_frame();
         if let Some(snapshot) = &state.render.last_snapshot {
-            state.physics.mark_snapshot_displayed(snapshot.created_at);
+            state.physics.mark_snapshot_displayed(snapshot.revision);
             state.physics.mark_step_displayed(
                 snapshot.simulation_step,
                 snapshot.world_generation,
@@ -284,7 +292,7 @@ mod tests {
         // operator data.
         let mut next = RendererSnapshot::new();
         next.simulation_step = 5;
-        next.created_at = std::time::Instant::now() + std::time::Duration::from_millis(5);
+        next.revision = 1;
         state.physics.store_snapshot_for_test(next);
         assert_eq!(FrameOrchestrator::frame_detail(&state), FrameDetail::Full);
 
@@ -293,21 +301,109 @@ mod tests {
         assert_eq!(FrameOrchestrator::frame_detail(&state), FrameDetail::Skip);
     }
 
-    #[test]
-    fn pause_and_rendering_toggle_are_independent() {
-        // Pause is not an input of the frame decision: a view change draws in
-        // all four combinations, only the detail follows F2.
-        for render_drawing in [true, false] {
-            let mut state = build_test_state();
-            state.render.config.render_drawing = render_drawing;
-            state.render.view_dirty = true;
-            let expected = if render_drawing {
-                FrameDetail::Full
-            } else {
-                FrameDetail::Light
-            };
-            assert_eq!(FrameOrchestrator::frame_detail(&state), expected);
+    /// What changed since the last drawn frame.
+    #[derive(Clone, Copy, Debug)]
+    enum Change {
+        /// Nothing: a paused world republishing the same revision.
+        Nothing,
+        /// The simulation advanced (running only).
+        Step,
+        /// A paused edit: same step, new revision.
+        PausedEdit,
+        /// Mouse, zoom, pan, resize: `view_dirty`.
+        View,
+    }
+
+    /// A state that drew snapshot (`step`, revision 0) already.
+    fn drawn_state(render_drawing: bool, step: u64) -> UnifiedRenderState {
+        let mut snapshot = RendererSnapshot::new();
+        snapshot.simulation_step = step;
+        let mut state = build_test_state_with_physics(PhysicsCoordinator::with_snapshot(snapshot));
+        state.render.config.render_drawing = render_drawing;
+        FrameOrchestrator::begin_frame(&mut state);
+        FrameOrchestrator::end_frame(&mut state);
+        state
+    }
+
+    fn apply(state: &mut UnifiedRenderState, change: Change) {
+        let mut next = RendererSnapshot::new();
+        next.simulation_step = 5;
+        next.full_scene = state
+            .render
+            .last_snapshot
+            .as_ref()
+            .is_none_or(|s| s.full_scene);
+        match change {
+            Change::Nothing => return,
+            Change::Step => {
+                next.simulation_step = 6;
+                next.revision = 1;
+            }
+            Change::PausedEdit => next.revision = 1,
+            Change::View => {
+                state.render.view_dirty = true;
+                return;
+            }
         }
+        state.physics.store_snapshot_for_test(next);
+    }
+
+    /// Paused/running x F2 on/off x what changed. Pause freezes physics only:
+    /// the frame follows the changes, and F2 only picks the detail.
+    #[test]
+    fn frame_matrix_paused_running_by_rendering_on_off() {
+        use Change::*;
+        let cases = [
+            // (paused, change, draws)
+            (false, Nothing, false),
+            (false, Step, true),
+            (false, View, true),
+            (true, Nothing, false), // a paused, unchanged world stays idle
+            (true, PausedEdit, true),
+            (true, View, true),
+        ];
+        for render_drawing in [true, false] {
+            for (paused, change, draws) in cases {
+                let mut state = drawn_state(render_drawing, 5);
+                apply(&mut state, change);
+
+                let expected = match (draws, render_drawing) {
+                    (false, _) => FrameDetail::Skip,
+                    (true, true) => FrameDetail::Full,
+                    (true, false) => FrameDetail::Light,
+                };
+                assert_eq!(
+                    FrameOrchestrator::frame_detail(&state),
+                    expected,
+                    "paused={paused} F2={render_drawing} change={change:?}"
+                );
+
+                // Drawn once, then idle again.
+                FrameOrchestrator::begin_frame(&mut state);
+                FrameOrchestrator::end_frame(&mut state);
+                assert_eq!(
+                    FrameOrchestrator::frame_detail(&state),
+                    FrameDetail::Skip,
+                    "paused={paused} F2={render_drawing} change={change:?}: redraws forever"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn light_snapshot_is_drawn_light_until_the_full_scene_arrives() {
+        // F2 was just switched on, the physics thread still sends light snapshots.
+        let mut light = RendererSnapshot::new();
+        light.full_scene = false;
+        let mut state = build_test_state_with_physics(PhysicsCoordinator::with_snapshot(light));
+        FrameOrchestrator::begin_frame(&mut state);
+        assert_eq!(FrameOrchestrator::frame_detail(&state), FrameDetail::Light);
+
+        let mut full = RendererSnapshot::new();
+        full.revision = 1;
+        state.physics.store_snapshot_for_test(full);
+        FrameOrchestrator::begin_frame(&mut state);
+        assert_eq!(FrameOrchestrator::frame_detail(&state), FrameDetail::Full);
     }
 
     #[test]

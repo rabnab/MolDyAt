@@ -29,6 +29,9 @@ pub fn process_action_common(
             }
             InputAction::ToggleRendering => {
                 config.toggle_rendering();
+                // The physics thread builds light snapshots while rendering is
+                // off (no ball render data, no thermo grids).
+                physics.send_command(DomainCommand::SetFullSnapshots(config.render_drawing));
                 // Redraw now: the full scene after switching on, the light
                 // path after switching off.
                 affects_view = true;

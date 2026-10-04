@@ -17,6 +17,7 @@ use crate::wgpu::gpu::batch::{BatchDesc, GpuBatch, SceneUniforms};
 use crate::wgpu::gpu::geometry::world_extent;
 use crate::wgpu::gpu::shaders;
 use crate::wgpu::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
+use rust_thermo_core::graphics::renderer::event_loop::FrameDetail;
 
 /// Line segments per full circle for the source-sphere arcs.
 const ARC_SEGMENTS: usize = 32;
@@ -141,7 +142,11 @@ impl RenderPipeline for LinePipeline {
         self.gpu
             .set_uniforms(ctx.queue, SceneUniforms::new(ctx.view_proj, [0.0; 4]));
 
-        collect_neighbor_lines(&ctx.snapshot.balls, &mut self.batch);
+        // Neighbour lines of verbose balls scan every ball and float over the
+        // balls: part of the full scene only.
+        if ctx.detail == FrameDetail::Full {
+            collect_neighbor_lines(&ctx.snapshot.balls, &mut self.batch);
+        }
         for sphere in &ctx.snapshot.operators.source_spheres {
             push_source_arcs(&mut self.batch, sphere);
         }

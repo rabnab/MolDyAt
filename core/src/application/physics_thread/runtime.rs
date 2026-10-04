@@ -56,10 +56,13 @@ impl PhysicsRuntime {
         let mut snapshot_count = 0u64;
 
         while !shutdown_signal.should_shutdown() {
-            let world_resized = {
+            let (world_resized, commands_handled) = {
                 let mut handler = DomainCommandHandler::new(simulation, events);
                 self.drain_commands(receiver, &mut handler);
-                handler.resizes_applied() > 0
+                (
+                    handler.resizes_applied() > 0,
+                    handler.commands_handled() > 0,
+                )
             };
 
             let wait_time_ms = simulation.runtime().wait_time();
@@ -72,8 +75,14 @@ impl PhysicsRuntime {
                 let (world, game_data) = simulation.world_and_game_data();
                 let _ = SimulationEngine::simulation_step(world, game_data);
             }
+            // Anything visible changed: a step ran, or a command (edit, load,
+            // toggle) was handled. A paused world without either keeps its
+            // revision, so the renderer stays idle.
             if !was_paused {
                 physics_step_count += 1;
+            }
+            if !was_paused || commands_handled {
+                simulation.runtime_mut().bump_render_revision();
             }
 
             let now = Instant::now();
@@ -82,7 +91,9 @@ impl PhysicsRuntime {
             // wait for the next interval.
             if world_resized || now.duration_since(last_snapshot_time) >= self.snapshot_interval {
                 let snapshot_start = Instant::now();
-                simulation.refresh_thermostat_readings();
+                if simulation.refresh_thermostat_readings() {
+                    simulation.runtime_mut().bump_render_revision();
+                }
                 let snapshot = simulation.create_snapshot();
                 simulation.runtime().publish_snapshot(snapshot);
                 wakeup();

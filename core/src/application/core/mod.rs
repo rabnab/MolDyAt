@@ -156,6 +156,10 @@ pub(crate) struct PhysicsRuntimeState {
     save_store: Option<SaveStore>,
     /// Bumped whenever the world is replaced (see `RendererSnapshot`).
     world_generation: u64,
+    /// Bumped whenever something visible changed (see `RendererSnapshot`).
+    render_revision: u64,
+    /// Build light snapshots: the renderer has rendering switched off (F2).
+    light_snapshots: bool,
 }
 
 pub struct StatsAccumulator {

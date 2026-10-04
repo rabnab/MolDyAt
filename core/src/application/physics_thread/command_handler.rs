@@ -14,6 +14,7 @@ pub(crate) struct DomainCommandHandler<'a> {
     /// and only its last one is applied.
     pending_resize: Option<Rect>,
     resizes_applied: u32,
+    commands_handled: u32,
 }
 
 impl<'a> DomainCommandHandler<'a> {
@@ -23,6 +24,7 @@ impl<'a> DomainCommandHandler<'a> {
             events,
             pending_resize: None,
             resizes_applied: 0,
+            commands_handled: 0,
         }
     }
 
@@ -30,6 +32,13 @@ impl<'a> DomainCommandHandler<'a> {
     /// commands counts once).
     pub(crate) fn resizes_applied(&self) -> u32 {
         self.resizes_applied
+    }
+
+    /// How many commands this handler has handled. Every command can change
+    /// what is visible (edits, loads, toggles), so each one bumps the render
+    /// revision.
+    pub(crate) fn commands_handled(&self) -> u32 {
+        self.commands_handled
     }
 
     /// Applies the held-back `Resize`, if any. It runs before every other
@@ -71,6 +80,7 @@ impl<'a> DomainCommandHandler<'a> {
 
 impl CommandHandler<DomainCommand> for DomainCommandHandler<'_> {
     fn handle_command(&mut self, command: DomainCommand) {
+        self.commands_handled += 1;
         if !matches!(command, DomainCommand::Resize { .. }) {
             self.apply_pending_resize();
         }
@@ -144,6 +154,9 @@ impl CommandHandler<DomainCommand> for DomainCommandHandler<'_> {
             }
             DomainCommand::Resize { world_rect } => {
                 self.pending_resize = Some(world_rect);
+            }
+            DomainCommand::SetFullSnapshots(full) => {
+                self.main_content.runtime_mut().set_light_snapshots(!full);
             }
             DomainCommand::ResumeAfterResize => {
                 self.main_content.unpause_after_resize();

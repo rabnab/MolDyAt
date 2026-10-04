@@ -15,9 +15,9 @@ pub struct PhysicsCoordinator {
     displayed_generation: u64,
     /// World bounds of the last displayed snapshot.
     displayed_world_bounds: Option<Rect>,
-    /// Creation time of the last displayed snapshot; tells snapshots of the
-    /// same step apart (a paused simulation publishes one per interval).
-    displayed_snapshot_at: Option<std::time::Instant>,
+    /// `revision` of the last displayed snapshot; tells snapshots of the same
+    /// step apart (a paused simulation keeps publishing).
+    displayed_revision: Option<u64>,
     steps_per_frame: f32,
 
     // Performance metrics
@@ -48,7 +48,7 @@ impl PhysicsCoordinator {
             physics_thread: Some(physics_thread),
             snapshot_slot: Some(snapshot_slot),
             last_displayed_step: 0,
-            displayed_snapshot_at: None,
+            displayed_revision: None,
             displayed_generation: 0,
             displayed_world_bounds: None,
             steps_per_frame: 0.0,
@@ -89,15 +89,16 @@ impl PhysicsCoordinator {
 
     /// Check if there is anything new to draw: a later step, any step of a
     /// new world (after a load, whose step count starts again), or a snapshot
-    /// that was not drawn yet at the same step. The latter covers a paused
-    /// simulation, whose step does not advance while operators, thermostat
-    /// readings and the resized world still change.
+    /// snapshot revision that was not drawn yet. The latter covers a paused
+    /// simulation, whose step does not advance while edits, thermostat
+    /// readings and the resized world still change. A paused world that
+    /// changes nothing keeps its revision, so the renderer stays idle.
     pub fn is_new_step_available(&self) -> bool {
         if let Some(snapshot) = self.get_latest_snapshot() {
             snapshot.world_generation != self.displayed_generation
                 || snapshot.simulation_step > self.last_displayed_step
                 || self.displayed_world_bounds != Some(snapshot.cell_grid_bounds)
-                || self.displayed_snapshot_at != Some(snapshot.created_at)
+                || self.displayed_revision != Some(snapshot.revision)
         } else {
             false
         }
@@ -131,9 +132,9 @@ impl PhysicsCoordinator {
         }
     }
 
-    /// Remember which snapshot was drawn, see `is_new_step_available`.
-    pub fn mark_snapshot_displayed(&mut self, created_at: std::time::Instant) {
-        self.displayed_snapshot_at = Some(created_at);
+    /// Remember which snapshot revision was drawn, see `is_new_step_available`.
+    pub fn mark_snapshot_displayed(&mut self, revision: u64) {
+        self.displayed_revision = Some(revision);
     }
 
     /// Increment render frame counter
@@ -179,7 +180,7 @@ impl PhysicsCoordinator {
             physics_thread: None,
             snapshot_slot: None,
             last_displayed_step: 0,
-            displayed_snapshot_at: None,
+            displayed_revision: None,
             displayed_generation: 0,
             displayed_world_bounds: None,
             steps_per_frame: 0.0,
@@ -201,7 +202,7 @@ impl PhysicsCoordinator {
             physics_thread: None,
             snapshot_slot: None,
             last_displayed_step: 0,
-            displayed_snapshot_at: None,
+            displayed_revision: None,
             displayed_generation: 0,
             displayed_world_bounds: None,
             steps_per_frame: 0.0,
@@ -229,7 +230,7 @@ impl PhysicsCoordinator {
             physics_thread: None,
             snapshot_slot: Some(Arc::new(ArcSwapOption::new(Some(Arc::new(snapshot))))),
             last_displayed_step: 0,
-            displayed_snapshot_at: None,
+            displayed_revision: None,
             displayed_generation: 0,
             displayed_world_bounds: None,
             steps_per_frame: 0.0,
@@ -263,7 +264,7 @@ mod tests {
             physics_thread: None,
             snapshot_slot: None,
             last_displayed_step: 0,
-            displayed_snapshot_at: None,
+            displayed_revision: None,
             displayed_generation: 0,
             displayed_world_bounds: None,
             steps_per_frame: 0.0,
@@ -291,14 +292,14 @@ mod tests {
         snapshot.simulation_step = 3;
         snapshot.world_generation = 1;
         let bounds = snapshot.cell_grid_bounds;
-        let created_at = snapshot.created_at;
+        let revision = snapshot.revision;
         let mut coord = PhysicsCoordinator::with_snapshot(snapshot);
         // The old world had run much further before the load.
         coord.last_displayed_step = 5000;
 
         assert!(coord.is_new_step_available(), "a new world must render");
         coord.mark_step_displayed(3, 1, bounds);
-        coord.mark_snapshot_displayed(created_at);
+        coord.mark_snapshot_displayed(revision);
         assert_eq!(coord.last_displayed_step(), 3);
         assert!(!coord.is_new_step_available(), "same step is not new");
 
@@ -319,10 +320,10 @@ mod tests {
         let old = Rect::new(0.0, 0.0, 100.0, -100.0);
         let resized = Rect::new(0.0, 0.0, 150.0, -100.0);
         let first = snapshot_at(7, old);
-        let first_at = first.created_at;
+        let first_revision = first.revision;
         let mut coord = PhysicsCoordinator::with_snapshot(first);
         coord.mark_step_displayed(7, 0, old);
-        coord.mark_snapshot_displayed(first_at);
+        coord.mark_snapshot_displayed(first_revision);
         assert!(!coord.is_new_step_available());
 
         // Paused (also while the window is resized): same step and world,
@@ -336,7 +337,7 @@ mod tests {
         assert!(coord.is_new_step_available(), "a resized world must render");
 
         coord.mark_step_displayed(7, 0, resized);
-        coord.mark_snapshot_displayed(coord.get_latest_snapshot().unwrap().created_at);
+        coord.mark_snapshot_displayed(coord.get_latest_snapshot().unwrap().revision);
         assert!(!coord.is_new_step_available(), "drawn once is enough");
     }
 
@@ -346,7 +347,7 @@ mod tests {
             physics_thread: None,
             snapshot_slot: None,
             last_displayed_step: 0,
-            displayed_snapshot_at: None,
+            displayed_revision: None,
             displayed_generation: 0,
             displayed_world_bounds: None,
             steps_per_frame: 0.0,

@@ -42,6 +42,8 @@ impl MainContent {
                 physics_fps: 0.0,
                 save_store: None,
                 world_generation: 0,
+                render_revision: 0,
+                light_snapshots: false,
             },
         })
     }

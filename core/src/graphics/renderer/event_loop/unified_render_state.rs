@@ -660,6 +660,21 @@ mod tests {
     }
 
     #[test]
+    fn toggle_rendering_tells_the_physics_thread_which_snapshots_to_build() {
+        let mut config = RendererConfig::default();
+        let (physics, log) = PhysicsCoordinator::new_recording();
+
+        process_action_common(InputAction::ToggleRendering, &physics, &mut config);
+        process_action_common(InputAction::ToggleRendering, &physics, &mut config);
+
+        let sent = log.lock().unwrap().clone();
+        assert_eq!(
+            sent,
+            vec!["SetFullSnapshots(false)", "SetFullSnapshots(true)"]
+        );
+    }
+
+    #[test]
     fn renderer_specific_actions_do_not_affect_view() {
         let mut config = RendererConfig::default();
         let physics = make_disconnected_coordinator();

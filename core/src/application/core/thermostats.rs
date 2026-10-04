@@ -147,10 +147,12 @@ impl MainContent {
         self.world.add_thermostat(position);
     }
 
-    /// Refresh the readings of inactive thermostats (called before each
-    /// snapshot, also while the simulation is paused).
-    pub(crate) fn refresh_thermostat_readings(&mut self) {
-        self.world.measure_inactive_thermostats();
+    /// Refresh the thermostat readings before a snapshot: the inactive ones
+    /// always, the active ones too while paused (no step updates them then).
+    /// Returns whether any reading changed.
+    pub(crate) fn refresh_thermostat_readings(&mut self) -> bool {
+        let paused = self.world.sim.is_paused();
+        self.world.measure_thermostats(paused)
     }
 
     /// Toggle the on/off state of an existing thermostat.
@@ -218,14 +220,16 @@ impl SimulationWorld {
         }
     }
 
-    /// Measure the local temperature of every inactive thermostat, so its
-    /// label stays live. Active thermostats measure during their update.
-    pub(crate) fn measure_inactive_thermostats(&mut self) {
+    /// Measure the local temperature (balls within the radius) of the
+    /// inactive thermostats, and of the active ones too when `include_active`:
+    /// an active thermostat measures during its update in the step, which
+    /// does not run while paused. Returns whether any reading changed.
+    pub(crate) fn measure_thermostats(&mut self, include_active: bool) -> bool {
         let readings: Vec<(usize, f32)> = self
             .thermostats
             .thermostats()
             .iter()
-            .filter(|thermostat| !thermostat.is_active())
+            .filter(|thermostat| include_active || !thermostat.is_active())
             .map(|thermostat| {
                 let radius_sq = thermostat.radius * thermostat.radius;
                 let mut kinetic = LocalKineticStats::new();
@@ -238,11 +242,15 @@ impl SimulationWorld {
             })
             .collect();
 
+        let mut changed = false;
         for (id, temperature) in readings {
             if let Some(thermostat) = self.thermostats.find_mut(id) {
+                // Bit comparison: NaN (no reading) equals NaN.
+                changed |= thermostat.current_local_temp.to_bits() != temperature.to_bits();
                 thermostat.current_local_temp = temperature;
             }
         }
+        changed
     }
 
     pub(crate) fn apply_thermostats(&mut self, dt: f32, stats_accumulator: &mut StatsAccumulator) {

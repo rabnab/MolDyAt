@@ -13,11 +13,18 @@ impl MainContent {
     /// Conditionally clones expensive data (neighbors, tail) only when needed for visualization.
     /// Uses cached force magnitudes from last physics step for neighbor line rendering.
     pub fn create_snapshot(&self) -> RendererSnapshot {
-        let ball_count = self.world.balls.len();
+        // Light snapshot (rendering off): ball colours, tails and thermo grids
+        // exist only for drawing, so they are not built.
+        let full_scene = !self.runtime.light_snapshots();
+        let ball_count = if full_scene {
+            self.world.balls.len()
+        } else {
+            0
+        };
         let mut balls = Vec::with_capacity(ball_count);
 
         // Create BallRenderData for each ball
-        for (ball_idx, ball) in self.world.balls.iter().enumerate() {
+        for (ball_idx, ball) in self.world.balls.iter().enumerate().take(ball_count) {
             // Determine color: special colors (verbose/braking) override size class color
             let color = get_special_ball_color(
                 ball.verbose.console || ball.verbose.lines(),
@@ -65,6 +72,8 @@ impl MainContent {
             balls,
             simulation_step: self.world.step_count as u64,
             world_generation: self.runtime.world_generation(),
+            revision: self.runtime.render_revision(),
+            full_scene,
             kinetic_energy: self.world.sim.get_kinetic_energy(),
             potential_energy: self.world.sim.get_potential_energy(),
             time: self.world.sim.get_time(),
@@ -111,7 +120,7 @@ impl MainContent {
                 source_spheres: self.world.source_spheres.spheres().to_vec(),
                 thermostats: self.world.thermostats.thermostats().to_vec(),
             },
-            ..{
+            ..if full_scene {
                 let (cell_temperature, cell_pressure, thermo_grid_spec) =
                     self.build_thermo_snapshot_fields();
                 RendererSnapshot {
@@ -120,6 +129,8 @@ impl MainContent {
                     thermo_grid_spec,
                     ..RendererSnapshot::new()
                 }
+            } else {
+                RendererSnapshot::new()
             }
         }
     }

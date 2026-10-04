@@ -452,3 +452,35 @@ fn inactive_thermostat_reading_stays_live_without_a_step() {
     // The inactive thermostat never regulates: velocities are untouched.
     assert_eq!(mc.world().balls[0].v, Vec2D::new(3.0, 0.0));
 }
+
+#[test]
+fn active_thermostat_reading_is_measured_while_paused_only() {
+    let mut mc = make_content();
+    mc.add_thermostat(Vec2D::new(0.0, 0.0));
+    let thermostat_id = mc.world().thermostats.thermostats()[0].id;
+    mc.toggle_thermostat(thermostat_id);
+    add_ball(&mut mc, Vec2D::new(-0.5, 0.0), Vec2D::new(1.0, 0.0));
+    add_ball(&mut mc, Vec2D::new(0.5, 0.0), Vec2D::new(-1.0, 0.0));
+    let reading = |mc: &MainContent| {
+        mc.world()
+            .thermostats
+            .find(thermostat_id)
+            .unwrap()
+            .current_local_temp
+    };
+
+    // Running: the step measures active thermostats, not the snapshot path.
+    assert!(!mc.refresh_thermostat_readings());
+    assert_eq!(reading(&mc), 0.0);
+
+    // Paused: no step runs, so the reading follows edits (a moved ball).
+    mc.world_mut().sim.set_pause(true);
+    assert!(mc.refresh_thermostat_readings());
+    let first = reading(&mc);
+    assert!(first.is_finite() && first > 0.0);
+    assert!(!mc.refresh_thermostat_readings(), "nothing changed");
+
+    mc.world_mut().balls[0].v = Vec2D::new(4.0, 0.0);
+    assert!(mc.refresh_thermostat_readings());
+    assert!(reading(&mc) > first);
+}

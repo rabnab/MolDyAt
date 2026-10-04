@@ -261,3 +261,33 @@ fn test_thermo_spec_dimensions_match_world() {
         "grid height {grid_h} should match world height {world_h}"
     );
 }
+
+#[test]
+fn light_snapshot_skips_ball_render_data_and_thermo_grids() {
+    let mut main_content = create_test_main_content_with_balls(5);
+    let full = main_content.create_snapshot();
+    assert!(full.full_scene);
+    assert_eq!(full.balls.len(), 5);
+
+    // Rendering off (F2): only what operators, labels and stats need.
+    main_content.runtime_mut().set_light_snapshots(true);
+    let light = main_content.create_snapshot();
+    assert!(!light.full_scene);
+    assert!(light.balls.is_empty());
+    assert_eq!(light.kinetic_energy, full.kinetic_energy);
+    assert_eq!(light.simulation_step, full.simulation_step);
+
+    // Rendering on again: the next snapshot is the full scene.
+    main_content.runtime_mut().set_light_snapshots(false);
+    let again = main_content.create_snapshot();
+    assert!(again.full_scene);
+    assert_eq!(again.balls.len(), 5);
+}
+
+#[test]
+fn snapshot_carries_the_render_revision() {
+    let mut main_content = create_test_main_content_with_balls(1);
+    let before = main_content.create_snapshot().revision;
+    main_content.runtime_mut().bump_render_revision();
+    assert_ne!(main_content.create_snapshot().revision, before);
+}

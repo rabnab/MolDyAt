@@ -36,6 +36,9 @@ pub enum DomainCommand {
         world_rect: Rect,
     },
     ResumeAfterResize,
+    /// Whether snapshots carry the full scene (`true`) or only what
+    /// operators, labels and stats need (`false`, rendering switched off).
+    SetFullSnapshots(bool),
     /// Write the world to a new save (reported as a `PhysicsEvent`).
     SaveWorld,
     /// Replace the world with a save (reported as a `PhysicsEvent`).

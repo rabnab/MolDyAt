@@ -425,3 +425,55 @@ fn test_physics_thread_shutdown_and_join_is_graceful() {
         "physics thread shutdown should complete promptly"
     );
 }
+
+#[test]
+fn test_paused_world_keeps_its_render_revision_until_a_command() {
+    use std::time::{Duration, Instant};
+
+    let world_rect = Rect::new(0.0, 0.0, 100.0, 100.0);
+    let main_content = MainContent::new(world_rect).expect("Failed to create MainContent");
+    let snapshot_slot = main_content.get_snapshot_slot();
+    let physics_thread = PhysicsThread::spawn(main_content, Box::new(|| {}));
+    let revision = || snapshot_slot.load().as_ref().map(|s| s.revision);
+    let created_at = || snapshot_slot.load().as_ref().map(|s| s.created_at);
+
+    physics_thread
+        .send_command(DomainCommand::Pause)
+        .expect("send pause");
+    std::thread::sleep(Duration::from_millis(150));
+
+    // Paused and untouched: snapshots keep coming, the revision does not move.
+    let paused_revision = revision();
+    let paused_at = created_at();
+    std::thread::sleep(Duration::from_millis(150));
+    assert_ne!(created_at(), paused_at, "snapshots are still published");
+    assert_eq!(revision(), paused_revision, "an idle paused world is idle");
+
+    // An edit while paused is a new revision.
+    physics_thread
+        .send_command(DomainCommand::AddBall(Vec2D::new(10.0, 10.0)))
+        .expect("send add ball");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while revision() == paused_revision {
+        assert!(Instant::now() < deadline, "edit never reached a snapshot");
+        std::thread::sleep(Duration::from_millis(5));
+    }
+
+    // F2 off: light snapshots, and full again after F2 on.
+    physics_thread
+        .send_command(DomainCommand::SetFullSnapshots(false))
+        .expect("send light");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while snapshot_slot.load().as_ref().is_none_or(|s| s.full_scene) {
+        assert!(Instant::now() < deadline, "no light snapshot");
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    physics_thread
+        .send_command(DomainCommand::SetFullSnapshots(true))
+        .expect("send full");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while snapshot_slot.load().as_ref().is_none_or(|s| !s.full_scene) {
+        assert!(Instant::now() < deadline, "no full snapshot");
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}

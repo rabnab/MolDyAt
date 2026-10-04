@@ -233,27 +233,31 @@ impl EnergyWindowManager {
         steps_per_frame: f32,
         frame_metrics: &FrameMetrics,
     ) {
-        // Only update for a new simulation step. A new world (load) starts
-        // its own history, whatever its step count.
+        // The plot history grows only for a new simulation step, so a paused
+        // world adds no duplicate points. A new world (load) starts its own
+        // history, whatever its step count.
         let new_world = snapshot.world_generation != self.last_processed_generation;
-        if !new_world && snapshot.simulation_step <= self.last_processed_step {
-            return;
-        }
+        let new_step = new_world || snapshot.simulation_step > self.last_processed_step;
         self.last_processed_generation = snapshot.world_generation;
-        self.last_processed_step = snapshot.simulation_step;
+        if new_step {
+            self.last_processed_step = snapshot.simulation_step;
+        }
 
         if let Ok(mut data) = self.energy_data.lock() {
             if new_world {
                 data.v_kin.clear();
                 data.v_pot.clear();
             }
-            data.push_sample(
-                snapshot.kinetic_energy,
-                snapshot.potential_energy,
-                snapshot.time,
-            );
+            if new_step {
+                data.push_sample(
+                    snapshot.kinetic_energy,
+                    snapshot.potential_energy,
+                    snapshot.time,
+                );
+            }
 
-            // Update status text with FPS and per-frame metrics
+            // The stats text follows every snapshot (also while paused: ball
+            // counts and toggles change then), with the FPS and per-frame metrics.
             if let Some(ref status) = snapshot.status_text {
                 let fps_line = format_metrics_line(
                     render_fps,
