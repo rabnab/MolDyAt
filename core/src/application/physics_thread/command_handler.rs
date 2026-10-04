@@ -3,11 +3,17 @@ use crate::application::DomainCommand;
 use crate::application::MainContent;
 use crate::application::PhysicsEvent;
 use crate::application::persistence::LoadSource;
+use crate::objects2d::Rect;
 use std::sync::mpsc::Sender;
 
 pub(crate) struct DomainCommandHandler<'a> {
     main_content: &'a mut MainContent,
     events: &'a Sender<PhysicsEvent>,
+    /// The latest `Resize` not applied yet. Applying one costs O(balls) and a
+    /// window drag queues one per mouse step, so a run of them is held back
+    /// and only its last one is applied.
+    pending_resize: Option<Rect>,
+    resizes_applied: u32,
 }
 
 impl<'a> DomainCommandHandler<'a> {
@@ -15,6 +21,24 @@ impl<'a> DomainCommandHandler<'a> {
         Self {
             main_content,
             events,
+            pending_resize: None,
+            resizes_applied: 0,
+        }
+    }
+
+    /// How many resizes this handler has applied (a run of queued `Resize`
+    /// commands counts once).
+    pub(crate) fn resizes_applied(&self) -> u32 {
+        self.resizes_applied
+    }
+
+    /// Applies the held-back `Resize`, if any. It runs before every other
+    /// command, so each command still sees the world as the commands before
+    /// it left it.
+    fn apply_pending_resize(&mut self) {
+        if let Some(world_rect) = self.pending_resize.take() {
+            self.main_content.resize(world_rect);
+            self.resizes_applied += 1;
         }
     }
 
@@ -47,6 +71,9 @@ impl<'a> DomainCommandHandler<'a> {
 
 impl CommandHandler<DomainCommand> for DomainCommandHandler<'_> {
     fn handle_command(&mut self, command: DomainCommand) {
+        if !matches!(command, DomainCommand::Resize { .. }) {
+            self.apply_pending_resize();
+        }
         match command {
             DomainCommand::Pause => {
                 if !self.main_content.world().sim.is_paused() {
@@ -116,7 +143,7 @@ impl CommandHandler<DomainCommand> for DomainCommandHandler<'_> {
                 self.main_content.start_handling_verbosity_input();
             }
             DomainCommand::Resize { world_rect } => {
-                self.main_content.resize(world_rect);
+                self.pending_resize = Some(world_rect);
             }
             DomainCommand::ResumeAfterResize => {
                 self.main_content.unpause_after_resize();
@@ -133,5 +160,9 @@ impl CommandHandler<DomainCommand> for DomainCommandHandler<'_> {
                 cmd.execute(self.main_content);
             }
         }
+    }
+
+    fn flush(&mut self) {
+        self.apply_pending_resize();
     }
 }

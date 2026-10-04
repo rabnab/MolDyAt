@@ -167,6 +167,70 @@ fn test_resize_cell_count_changes_with_world_size() {
 }
 
 #[test]
+fn test_unpause_after_resize_resumes_a_simulation_the_resize_paused() {
+    let (mut main_content, _win_def) = create_main_content();
+    if main_content.world().sim.is_paused() {
+        main_content.toggle_pause();
+    }
+
+    main_content.resize(Rect::new(0., 0., 300.0, -200.0));
+    assert!(main_content.world().sim.is_paused());
+
+    main_content.unpause_after_resize();
+    assert!(!main_content.world().sim.is_paused());
+    assert!(!main_content.world().was_paused_for_resize);
+}
+
+#[test]
+fn test_unpause_after_resize_leaves_every_ball_in_its_cell() {
+    let (mut main_content, _win_def) = create_main_content();
+    for i in 0..20 {
+        let pos = Vec2D::new(-5.0 + (i % 5) as f32 * 18.0, 5.0 - (i / 5) as f32 * 18.0);
+        main_content.add_candidate_to_vec(Ball2D::new(i, pos, (0, 1.0)));
+    }
+
+    main_content.resize(Rect::new(0., 0., 300.0, -200.0));
+    main_content.unpause_after_resize();
+
+    let world = main_content.world();
+    let (rows, cols) = world.cell_grid.get_grid_size();
+    let in_cells: usize = (0..rows)
+        .flat_map(|row| (0..cols).map(move |col| (row, col)))
+        .map(|(row, col)| {
+            world
+                .cell_grid
+                .get_cell(row, col)
+                .unwrap()
+                .get_ball_indices()
+                .len()
+        })
+        .sum();
+    assert_eq!(
+        in_cells,
+        world.balls.len(),
+        "each ball is in exactly one cell"
+    );
+
+    for (idx, ball) in world.balls.iter().enumerate() {
+        let cell = world
+            .cell_grid
+            .get_cell_indices(ball.get_position())
+            .expect("ball is inside the grid");
+        assert_eq!(ball.current_cell, Some(cell));
+        let (row, col) = cell;
+        assert!(
+            world
+                .cell_grid
+                .get_cell(row, col)
+                .unwrap()
+                .get_ball_indices()
+                .contains(&idx),
+            "ball {idx} is not in the cell its position maps to"
+        );
+    }
+}
+
+#[test]
 fn test_resize_remaps_ball_positions_fractionally() {
     let (mut main_content, _win_def) = create_main_content();
 

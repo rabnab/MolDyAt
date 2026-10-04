@@ -5,3 +5,4 @@ mod highlight_pipeline;
 mod sidebar_pipeline;
 mod text_pipeline;
 mod thermostat_label_pipeline;
+mod wgpu_context;

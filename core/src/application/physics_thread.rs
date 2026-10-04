@@ -19,6 +19,8 @@ mod command_handler;
 mod runtime;
 
 #[cfg(test)]
+pub(crate) use command_handler::DomainCommandHandler;
+#[cfg(test)]
 pub(crate) use runtime::{CommandHandler, PhysicsRuntime};
 
 /// Shutdown signal shared between threads

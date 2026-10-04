@@ -52,9 +52,10 @@ impl AppLifecycle {
 
         let proxy = Arc::new(proxy);
         let wakeup_fn = move || {
-            proxy
-                .send_event(UserEvent::NewSnapshot)
-                .expect("Failed to send NewSnapshot event");
+            // Once the window is closed the event loop is gone, but the
+            // physics thread may still publish a snapshot before it is told
+            // to stop. Nobody is left to draw it, so the failure is ignored.
+            let _ = proxy.send_event(UserEvent::NewSnapshot);
         };
 
         let state = UnifiedRenderState::new(

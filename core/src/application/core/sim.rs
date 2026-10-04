@@ -1,8 +1,6 @@
 use super::{MainContent, SimulationEngine};
 use crate::application::VerletIntegration;
 use crate::objects2d::Rect;
-use crate::objects2d::ball_cell::cell_grid::CellGrid;
-use crate::objects2d::ball_impl::BallFactory;
 
 impl MainContent {
     pub(crate) fn increase_wait_time(&mut self) {
@@ -20,7 +18,9 @@ impl MainContent {
     }
 
     /// Unpause after resize, triggered when the mouse button is released.
-    /// Unpauses simulation and reconstructs cell grid to match new world boundaries.
+    /// The cell grid already matches the new world boundaries (`resize`
+    /// rebuilds it and nothing moves a ball while paused), so this only
+    /// resumes the simulation.
     pub(crate) fn unpause_after_resize(&mut self) {
         if !self.world.was_paused_for_resize {
             return;
@@ -29,19 +29,6 @@ impl MainContent {
         if self.world.sim.is_paused() {
             self.world.sim.toggle_pause();
         }
-
-        let max_radius = BallFactory::get_max_radius();
-        let nu_rect = self.world.world_region();
-        let cutoff_and_skin = self.world.physics.get_cutoff_and_skin();
-        let nu_grid = CellGrid::resize(
-            &mut self.world.cell_grid,
-            nu_rect,
-            cutoff_and_skin,
-            max_radius,
-            &mut self.world.balls,
-        )
-        .expect("Failed to resize CellGrid");
-        self.world.cell_grid = nu_grid;
         self.world.was_paused_for_resize = false;
     }
 }
