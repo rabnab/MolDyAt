@@ -22,12 +22,14 @@ use crate::wgpu::pipelines::thermostat_label_pipeline::ThermostatLabelPipeline;
 use crate::wgpu::pipelines::thermostat_pipeline::ThermostatPipeline;
 use crate::wgpu::pipelines::valve_pipeline::ValvePipeline;
 use crate::wgpu::pipelines::wall_pipeline::WallPipeline;
-use crate::wgpu::render_graph::{PipelineHandle, PrepareContext, RenderGraph, RenderPipeline};
+use crate::wgpu::render_graph::{
+    GraphStats, PipelineHandle, PrepareContext, RenderGraph, RenderPipeline,
+};
 use crate::wgpu::wgpu_context::WgpuContext;
 use rust_thermo_core::application::AppResult;
 use rust_thermo_core::application::renderer_snapshot::{CellGridSpec, RendererSnapshot};
 use rust_thermo_core::graphics::renderer::Margins;
-use rust_thermo_core::graphics::renderer::event_loop::FramePreviews;
+use rust_thermo_core::graphics::renderer::event_loop::{FrameDetail, FramePreviews};
 use rust_thermo_core::graphics::renderer::state_layers::ThermoDisplayMode;
 
 /// Named handles for direct pipeline access.
@@ -131,6 +133,7 @@ impl WgpuPipelines {
         margin: Margins,
         inset: Margins,
         operator_previews: FramePreviews,
+        detail: FrameDetail,
     ) -> AppResult {
         let window_size = ctx.size();
 
@@ -147,6 +150,7 @@ impl WgpuPipelines {
             inset,
             thermo_display,
             operator_previews,
+            detail,
         };
 
         self.prepare(&prepare_ctx)
@@ -166,8 +170,9 @@ impl WgpuPipelines {
         render_pass: &mut wgpu::RenderPass<'rp>,
         ctx: &WgpuContext,
         inset: Margins,
+        detail: FrameDetail,
     ) {
-        self.render(render_pass, ctx.size(), inset);
+        self.render(render_pass, ctx.size(), inset, detail);
     }
 
     /// Render all enabled pipelines for a target of `window_size` pixels.
@@ -176,8 +181,10 @@ impl WgpuPipelines {
         render_pass: &mut wgpu::RenderPass<'rp>,
         window_size: (u32, u32),
         inset: Margins,
+        detail: FrameDetail,
     ) {
-        self.graph.render_all(render_pass, window_size, inset);
+        self.graph
+            .render_all(render_pass, window_size, inset, detail);
     }
 
     /// Cycle ring display mode on the ball pipeline (applied on the next frame).
@@ -188,6 +195,11 @@ impl WgpuPipelines {
         {
             ball.cycle_ring_display_mode();
         }
+    }
+
+    /// Work the graph did so far (heavy vs light), see [`GraphStats`].
+    pub fn stats(&self) -> GraphStats {
+        self.graph.stats()
     }
 
     /// Enable or disable a pipeline by handle.

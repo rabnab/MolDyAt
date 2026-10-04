@@ -82,6 +82,7 @@ impl PhysicsRuntime {
             // wait for the next interval.
             if world_resized || now.duration_since(last_snapshot_time) >= self.snapshot_interval {
                 let snapshot_start = Instant::now();
+                simulation.refresh_thermostat_readings();
                 let snapshot = simulation.create_snapshot();
                 simulation.runtime().publish_snapshot(snapshot);
                 wakeup();

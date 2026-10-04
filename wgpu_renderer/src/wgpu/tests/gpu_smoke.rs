@@ -10,7 +10,7 @@ use rust_thermo_core::application::renderer_snapshot::{
     BallRenderData, CellGridSpec, RendererSnapshot, ThermoGridSpec, ValveSpan, WallSnapshot,
 };
 use rust_thermo_core::application::thermo_field::ThermoGrid;
-use rust_thermo_core::graphics::renderer::event_loop::FramePreviews;
+use rust_thermo_core::graphics::renderer::event_loop::{FrameDetail, FramePreviews};
 use rust_thermo_core::graphics::renderer::state_layers::ThermoDisplayMode;
 use rust_thermo_core::objects2d::wall_chain::ObjectRef;
 use rust_thermo_core::objects2d::{
@@ -119,6 +119,7 @@ fn render_frame(
     snapshot: &RendererSnapshot,
     thermo_display: ThermoDisplayMode,
     show_ball_outline: bool,
+    detail: FrameDetail,
 ) {
     let ctx = PrepareContext {
         device,
@@ -133,6 +134,7 @@ fn render_frame(
         inset: MARGINS,
         thermo_display,
         operator_previews: previews(),
+        detail,
     };
     pipelines.prepare(&ctx).expect("prepare");
 
@@ -169,7 +171,7 @@ fn render_frame(
             timestamp_writes: None,
             multiview_mask: None,
         });
-        pipelines.render(&mut pass, SIZE, MARGINS);
+        pipelines.render(&mut pass, SIZE, MARGINS, detail);
     }
     queue.submit(std::iter::once(encoder.finish()));
 }
@@ -199,7 +201,15 @@ fn all_pipelines_build_and_render_without_validation_errors() {
         (ThermoDisplayMode::Temperature, false),
     ];
     for (mode, outline) in modes {
-        render_frame(&device, &queue, &mut pipelines, &snapshot, mode, outline);
+        render_frame(
+            &device,
+            &queue,
+            &mut pipelines,
+            &snapshot,
+            mode,
+            outline,
+            FrameDetail::Full,
+        );
     }
     pipelines.cycle_ring_display_mode();
     render_frame(
@@ -209,7 +219,36 @@ fn all_pipelines_build_and_render_without_validation_errors() {
         &snapshot,
         ThermoDisplayMode::Off,
         false,
+        FrameDetail::Full,
     );
+
+    // Rendering off (F2): a light frame does no heavy work, a full frame
+    // right after restores it.
+    let before = pipelines.stats();
+    render_frame(
+        &device,
+        &queue,
+        &mut pipelines,
+        &snapshot,
+        ThermoDisplayMode::Temperature,
+        true,
+        FrameDetail::Light,
+    );
+    let light = pipelines.stats();
+    assert_eq!(light.heavy_prepared, before.heavy_prepared);
+    assert_eq!(light.heavy_drawn, before.heavy_drawn);
+    assert!(light.light_prepared > before.light_prepared);
+    render_frame(
+        &device,
+        &queue,
+        &mut pipelines,
+        &snapshot,
+        ThermoDisplayMode::Temperature,
+        true,
+        FrameDetail::Full,
+    );
+    assert!(pipelines.stats().heavy_prepared > light.heavy_prepared);
+    assert!(pipelines.stats().heavy_drawn > light.heavy_drawn);
     device
         .poll(wgpu::PollType::wait_indefinitely())
         .expect("poll");

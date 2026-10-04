@@ -250,6 +250,10 @@ impl RenderPipeline for ThermoHeatmapPipeline {
         Ok(())
     }
 
+    fn is_heavy(&self) -> bool {
+        true
+    }
+
     fn render<'rp>(&'rp self, render_pass: &mut wgpu::RenderPass<'rp>) {
         self.gpu.draw(render_pass);
     }

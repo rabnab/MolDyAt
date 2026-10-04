@@ -29,6 +29,9 @@ pub fn process_action_common(
             }
             InputAction::ToggleRendering => {
                 config.toggle_rendering();
+                // Redraw now: the full scene after switching on, the light
+                // path after switching off.
+                affects_view = true;
             }
             InputAction::PrintHelp => {
                 MainContent::print_help_message();

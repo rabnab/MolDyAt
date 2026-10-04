@@ -28,7 +28,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use super::energy_window_manager::EnergyWindowManager;
-use super::frame_orchestrator::FrameOrchestrator;
+use super::frame_orchestrator::{FrameDetail, FrameOrchestrator};
 use super::input_handler::{InputAction, InputHandler, OperatorTool};
 use super::input_orchestrator::InputOrchestrator;
 use super::line_segment_tool::LineSegmentToolHandler;
@@ -264,6 +264,13 @@ impl UnifiedRenderState {
     /// Whether the renderer should draw a frame right now.
     pub fn should_render(&self) -> bool {
         FrameOrchestrator::should_render(self)
+    }
+
+    /// What the renderer draws this frame: [`FrameDetail::Full`] scene,
+    /// [`FrameDetail::Light`] (rendering off, F2: operators, preview and
+    /// labels only) or [`FrameDetail::Skip`].
+    pub fn frame_detail(&self) -> FrameDetail {
+        FrameOrchestrator::frame_detail(self)
     }
 
     /// Call after a frame has been drawn.
@@ -644,7 +651,8 @@ mod tests {
         let mut config = RendererConfig::default();
         let physics = make_disconnected_coordinator();
         let affects = process_action_common(InputAction::ToggleRendering, &physics, &mut config);
-        assert!(!affects);
+        // Switching back on must redraw the full scene at once.
+        assert!(affects);
         assert!(!config.render_drawing);
         // Toggle back.
         process_action_common(InputAction::ToggleRendering, &physics, &mut config);

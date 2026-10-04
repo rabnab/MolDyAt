@@ -409,3 +409,46 @@ fn snapshot_includes_thermostats() {
     );
     assert_eq!(snapshot.operators.thermostats[0].state, OperatorState::On);
 }
+
+#[test]
+fn inactive_thermostat_reading_stays_live_without_a_step() {
+    let mut mc = make_content();
+    mc.add_thermostat(Vec2D::new(0.0, 0.0));
+    let thermostat_id = mc.world().thermostats.thermostats()[0].id;
+    assert!(
+        !mc.world()
+            .thermostats
+            .find(thermostat_id)
+            .unwrap()
+            .is_active()
+    );
+
+    add_ball(&mut mc, Vec2D::new(-0.5, 0.0), Vec2D::new(1.0, 0.0));
+    add_ball(&mut mc, Vec2D::new(0.5, 0.0), Vec2D::new(-1.0, 0.0));
+    // A ball outside the radius does not count.
+    add_ball(&mut mc, Vec2D::new(15.0, 0.0), Vec2D::new(9.0, 9.0));
+
+    mc.refresh_thermostat_readings();
+    let first = mc
+        .world()
+        .thermostats
+        .find(thermostat_id)
+        .unwrap()
+        .current_local_temp;
+    assert!(first.is_finite() && first > 0.0);
+
+    // Faster balls (e.g. while paused after an edit): the reading follows.
+    mc.world_mut().balls[0].v = Vec2D::new(3.0, 0.0);
+    mc.world_mut().balls[1].v = Vec2D::new(-3.0, 0.0);
+    mc.refresh_thermostat_readings();
+    let second = mc
+        .world()
+        .thermostats
+        .find(thermostat_id)
+        .unwrap()
+        .current_local_temp;
+    assert!(second > first);
+
+    // The inactive thermostat never regulates: velocities are untouched.
+    assert_eq!(mc.world().balls[0].v, Vec2D::new(3.0, 0.0));
+}

@@ -1,7 +1,7 @@
 use super::wgpu_context::WgpuContext;
 use super::wgpu_pipelines::{WgpuPipelines, compute_view_proj};
 use crate::wgpu::margins_for_scale_factor;
-use rust_thermo_core::graphics::renderer::event_loop::UnifiedRenderState;
+use rust_thermo_core::graphics::renderer::event_loop::{FrameDetail, UnifiedRenderState};
 use rust_thermo_core::objects2d::ball_impl::BallFactory;
 use std::time::{Duration, Instant};
 use winit::dpi::PhysicalSize;
@@ -77,7 +77,8 @@ impl FrameRenderer {
             state.should_render()
         );
 
-        if !state.should_render() {
+        let detail = state.frame_detail();
+        if detail == FrameDetail::Skip {
             return true;
         }
 
@@ -109,18 +110,22 @@ impl FrameRenderer {
                 state.viewport().margins(),
                 state.viewport().inset_margins(),
                 operator_previews,
+                detail,
             ) {
                 eprintln!("Pipeline prepare error: {:?}", error);
             }
 
-            state.metrics_mut().record_balls_rendered(ball_count);
-            for _ in 0..6 {
-                state.metrics_mut().record_draw_call(0);
+            // A light frame draws no balls and no heavy overlay passes.
+            if detail == FrameDetail::Full {
+                state.metrics_mut().record_balls_rendered(ball_count);
+                for _ in 0..6 {
+                    state.metrics_mut().record_draw_call(0);
+                }
             }
 
             let prepare = prepare_start.elapsed();
 
-            match Self::render_frame(ctx, pipelines, state.viewport().inset_margins()) {
+            match Self::render_frame(ctx, pipelines, state.viewport().inset_margins(), detail) {
                 Ok(timings) => {
                     if let Some(resize) = resize {
                         log::debug!(
@@ -174,6 +179,7 @@ impl FrameRenderer {
         ctx: &WgpuContext,
         pipelines: &WgpuPipelines,
         inset: rust_thermo_core::graphics::renderer::Margins,
+        detail: FrameDetail,
     ) -> Result<FrameTimings, wgpu::SurfaceError> {
         let acquire_start = Instant::now();
         let output = ctx.surface.get_current_texture()?;
@@ -212,7 +218,7 @@ impl FrameRenderer {
                 multiview_mask: None,
             });
 
-            pipelines.render_all(&mut render_pass, ctx, inset);
+            pipelines.render_all(&mut render_pass, ctx, inset, detail);
         }
 
         ctx.queue.submit(std::iter::once(encoder.finish()));

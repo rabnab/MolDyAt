@@ -16,9 +16,13 @@ use crate::wgpu::gpu::text::{
 };
 use crate::wgpu::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
 
-const ATLAS_CHARS: [char; 15] = [
-    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '-', ':', 'L', 'T',
+const ATLAS_CHARS: [char; 17] = [
+    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '-', ':', 'L', 'T', 'O', 'F',
 ];
+
+/// Added to the local temperature label of a deactivated thermostat: the
+/// value is still measured live, but nothing regulates it.
+const INACTIVE_SUFFIX: &str = " OFF";
 
 /// Time constant of the moving average applied to the local temperature label
 /// (seconds). Larger = calmer but slower to follow real changes.
@@ -122,6 +126,15 @@ impl ThermostatLabelPipeline {
         }
     }
 
+    /// The local temperature label; a deactivated thermostat is marked.
+    pub(crate) fn build_local_label(thermostat: &SimThermostat, local_temp: f32) -> String {
+        let mut label = Self::build_label_text('L', local_temp);
+        if !thermostat.is_active() {
+            label.push_str(INACTIVE_SUFFIX);
+        }
+        label
+    }
+
     /// Text vertices plus one capsule per label, from the same layout pass so
     /// the capsule always matches the text exactly.
     fn build_geometry(
@@ -135,7 +148,7 @@ impl ThermostatLabelPipeline {
         let mut capsules = Vec::new();
 
         for (thermostat, &local_temp) in thermostats.iter().zip(local_temps) {
-            let local_label = Self::build_label_text('L', local_temp);
+            let local_label = Self::build_local_label(thermostat, local_temp);
             let target_label = Self::build_label_text('T', thermostat.target_temperature);
 
             let (top_x, top_y) = apply_view_proj(

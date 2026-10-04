@@ -1,5 +1,19 @@
 use super::unified_render_state::UnifiedRenderState;
 
+/// How much a frame draws. Pausing the simulation does not change this:
+/// pause freezes physics only, and the render loop keeps running.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FrameDetail {
+    /// Nothing changed: draw nothing.
+    Skip,
+    /// Rendering is switched off (F2): only what operators, the mouse/tool
+    /// preview, the sidebar and the labels need. No ball instance building or
+    /// upload, no ball draw pass, no render-only visualisation data.
+    Light,
+    /// The full scene.
+    Full,
+}
+
 /// Coordinates per-frame snapshot handoff and renderer bookkeeping.
 pub(super) struct FrameOrchestrator;
 
@@ -22,10 +36,20 @@ impl FrameOrchestrator {
         state.render.metrics.begin_render();
     }
 
-    /// Determine whether the backend should draw a frame.
+    /// Decide what the backend draws this frame.
+    pub(super) fn frame_detail(state: &UnifiedRenderState) -> FrameDetail {
+        if !(state.physics.is_new_step_available() || state.render.view_dirty) {
+            FrameDetail::Skip
+        } else if state.render.config.render_drawing {
+            FrameDetail::Full
+        } else {
+            FrameDetail::Light
+        }
+    }
+
+    /// Determine whether the backend should draw a frame (full or light).
     pub(super) fn should_render(state: &UnifiedRenderState) -> bool {
-        state.render.config.render_drawing
-            && (state.physics.is_new_step_available() || state.render.view_dirty)
+        Self::frame_detail(state) != FrameDetail::Skip
     }
 
     /// Finalize frame bookkeeping after drawing completes.
@@ -33,6 +57,7 @@ impl FrameOrchestrator {
         state.render.view_dirty = false;
         state.render.metrics.end_frame();
         if let Some(snapshot) = &state.render.last_snapshot {
+            state.physics.mark_snapshot_displayed(snapshot.created_at);
             state.physics.mark_step_displayed(
                 snapshot.simulation_step,
                 snapshot.world_generation,
@@ -56,7 +81,7 @@ impl FrameOrchestrator {
 
 #[cfg(test)]
 mod tests {
-    use super::FrameOrchestrator;
+    use super::{FrameDetail, FrameOrchestrator};
     use crate::application::renderer_snapshot::OperatorSnapshot;
     use crate::application::renderer_snapshot::RendererSnapshot;
     use crate::graphics::energy_plot::{EnergyData, SharedEnergyData};
@@ -233,7 +258,56 @@ mod tests {
         state.render.view_dirty = true;
         state.render.config.render_drawing = false;
 
-        assert!(!FrameOrchestrator::should_render(&state));
+        assert_eq!(FrameOrchestrator::frame_detail(&state), FrameDetail::Light);
+        assert!(FrameOrchestrator::should_render(&state));
+    }
+
+    #[test]
+    fn nothing_new_skips_the_frame_whatever_the_toggle() {
+        for render_drawing in [true, false] {
+            let mut state = build_test_state();
+            state.render.config.render_drawing = render_drawing;
+            assert_eq!(FrameOrchestrator::frame_detail(&state), FrameDetail::Skip);
+        }
+    }
+
+    #[test]
+    fn a_new_snapshot_of_the_same_step_is_drawn_once_when_paused() {
+        let mut snapshot = RendererSnapshot::new();
+        snapshot.simulation_step = 5;
+        let mut state = build_test_state_with_physics(PhysicsCoordinator::with_snapshot(snapshot));
+        FrameOrchestrator::begin_frame(&mut state);
+        FrameOrchestrator::end_frame(&mut state);
+        assert_eq!(FrameOrchestrator::frame_detail(&state), FrameDetail::Skip);
+
+        // The paused simulation publishes the same step again, with new
+        // operator data.
+        let mut next = RendererSnapshot::new();
+        next.simulation_step = 5;
+        next.created_at = std::time::Instant::now() + std::time::Duration::from_millis(5);
+        state.physics.store_snapshot_for_test(next);
+        assert_eq!(FrameOrchestrator::frame_detail(&state), FrameDetail::Full);
+
+        FrameOrchestrator::begin_frame(&mut state);
+        FrameOrchestrator::end_frame(&mut state);
+        assert_eq!(FrameOrchestrator::frame_detail(&state), FrameDetail::Skip);
+    }
+
+    #[test]
+    fn pause_and_rendering_toggle_are_independent() {
+        // Pause is not an input of the frame decision: a view change draws in
+        // all four combinations, only the detail follows F2.
+        for render_drawing in [true, false] {
+            let mut state = build_test_state();
+            state.render.config.render_drawing = render_drawing;
+            state.render.view_dirty = true;
+            let expected = if render_drawing {
+                FrameDetail::Full
+            } else {
+                FrameDetail::Light
+            };
+            assert_eq!(FrameOrchestrator::frame_detail(&state), expected);
+        }
     }
 
     #[test]

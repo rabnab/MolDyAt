@@ -147,6 +147,12 @@ impl MainContent {
         self.world.add_thermostat(position);
     }
 
+    /// Refresh the readings of inactive thermostats (called before each
+    /// snapshot, also while the simulation is paused).
+    pub(crate) fn refresh_thermostat_readings(&mut self) {
+        self.world.measure_inactive_thermostats();
+    }
+
     /// Toggle the on/off state of an existing thermostat.
     pub(crate) fn toggle_thermostat(&mut self, thermostat_id: usize) {
         self.world.toggle_thermostat(thermostat_id);
@@ -209,6 +215,33 @@ impl SimulationWorld {
     pub(crate) fn adjust_thermostat_radius(&mut self, thermostat_id: usize, delta_steps: f32) {
         if let Some(thermostat) = self.thermostats.find_mut(thermostat_id) {
             thermostat.adjust_radius(delta_steps * THERMOSTAT_RADIUS_STEP);
+        }
+    }
+
+    /// Measure the local temperature of every inactive thermostat, so its
+    /// label stays live. Active thermostats measure during their update.
+    pub(crate) fn measure_inactive_thermostats(&mut self) {
+        let readings: Vec<(usize, f32)> = self
+            .thermostats
+            .thermostats()
+            .iter()
+            .filter(|thermostat| !thermostat.is_active())
+            .map(|thermostat| {
+                let radius_sq = thermostat.radius * thermostat.radius;
+                let mut kinetic = LocalKineticStats::new();
+                for ball in &self.balls {
+                    if ball.get_position().distance_squared(&thermostat.position) <= radius_sq {
+                        kinetic.add_ball(ball);
+                    }
+                }
+                (thermostat.id, kinetic.temperature().unwrap_or(f32::NAN))
+            })
+            .collect();
+
+        for (id, temperature) in readings {
+            if let Some(thermostat) = self.thermostats.find_mut(id) {
+                thermostat.current_local_temp = temperature;
+            }
         }
     }
 

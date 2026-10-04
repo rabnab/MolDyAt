@@ -19,10 +19,11 @@
 
 use rust_thermo_core::application::AppResult;
 use rust_thermo_core::application::renderer_snapshot::RendererSnapshot;
-use rust_thermo_core::graphics::renderer::event_loop::FramePreviews;
+use rust_thermo_core::graphics::renderer::event_loop::{FrameDetail, FramePreviews};
 use rust_thermo_core::graphics::renderer::margins::Margins;
 use rust_thermo_core::graphics::renderer::state_layers::ThermoDisplayMode;
 use std::any::Any;
+use std::cell::Cell;
 use std::collections::HashSet;
 
 // ── Viewport mode ──────────────────────────────────────────────────
@@ -59,6 +60,9 @@ pub struct PrepareContext<'a> {
     pub thermo_display: ThermoDisplayMode,
     /// All operator preview geometry for the current frame.
     pub operator_previews: FramePreviews,
+    /// Full scene or light path (rendering off, F2). Heavy pipelines are
+    /// neither prepared nor drawn in a light frame.
+    pub detail: FrameDetail,
 }
 
 // ── Pipeline trait ─────────────────────────────────────────────────
@@ -84,6 +88,13 @@ pub trait RenderPipeline: Any {
 
     /// Record render commands into an active render pass.
     fn render<'rp>(&'rp self, render_pass: &mut wgpu::RenderPass<'rp>);
+
+    /// Whether this pipeline only exists for the full scene (balls, heatmaps
+    /// and other visualisation data). Heavy pipelines are skipped when
+    /// rendering is switched off; operators, previews and labels are not.
+    fn is_heavy(&self) -> bool {
+        false
+    }
 }
 
 // ── Pipeline handle ────────────────────────────────────────────────
@@ -104,6 +115,20 @@ pub struct RenderGraph {
     pipelines: Vec<Box<dyn RenderPipeline>>,
     execution_order: Vec<PipelineHandle>,
     enabled: HashSet<PipelineHandle>,
+    stats: GraphStats,
+    heavy_drawn: Cell<u64>,
+}
+
+/// Running counts of the work the graph did, to check that a light frame
+/// skips the heavy work.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct GraphStats {
+    /// Heavy pipelines prepared (instance building, buffer uploads).
+    pub heavy_prepared: u64,
+    /// Heavy pipelines drawn.
+    pub heavy_drawn: u64,
+    /// Light pipelines prepared.
+    pub light_prepared: u64,
 }
 
 impl RenderGraph {
@@ -113,6 +138,8 @@ impl RenderGraph {
             pipelines: Vec::new(),
             execution_order: Vec::new(),
             enabled: HashSet::new(),
+            stats: GraphStats::default(),
+            heavy_drawn: Cell::new(0),
         }
     }
 
@@ -162,12 +189,45 @@ impl RenderGraph {
 
     /// Prepare all enabled pipelines (upload uniforms / buffers).
     pub fn prepare_all(&mut self, ctx: &PrepareContext) -> AppResult {
+        self.prepare_with(ctx.detail, |pipeline| pipeline.prepare(ctx))
+    }
+
+    /// Run `prepare` over the pipelines `detail` asks for.
+    pub(crate) fn prepare_with(
+        &mut self,
+        detail: FrameDetail,
+        mut prepare: impl FnMut(&mut dyn RenderPipeline) -> AppResult,
+    ) -> AppResult {
         for &handle in &self.execution_order {
-            if self.enabled.contains(&handle) {
-                self.pipelines[handle.0].prepare(ctx)?;
+            let pipeline = &mut self.pipelines[handle.0];
+            if !self.enabled.contains(&handle) || !Self::runs_in(pipeline.is_heavy(), detail) {
+                continue;
             }
+            if pipeline.is_heavy() {
+                self.stats.heavy_prepared += 1;
+            } else {
+                self.stats.light_prepared += 1;
+            }
+            prepare(pipeline.as_mut())?;
         }
         Ok(())
+    }
+
+    /// Whether a pipeline of the given weight takes part in a `detail` frame.
+    fn runs_in(heavy: bool, detail: FrameDetail) -> bool {
+        match detail {
+            FrameDetail::Skip => false,
+            FrameDetail::Light => !heavy,
+            FrameDetail::Full => true,
+        }
+    }
+
+    /// Work done so far, see [`GraphStats`].
+    pub fn stats(&self) -> GraphStats {
+        GraphStats {
+            heavy_drawn: self.heavy_drawn.get(),
+            ..self.stats
+        }
     }
 
     /// Render all enabled pipelines, switching viewports as needed.
@@ -179,15 +239,19 @@ impl RenderGraph {
         render_pass: &mut wgpu::RenderPass<'rp>,
         window_size: (u32, u32),
         inset: Margins,
+        detail: FrameDetail,
     ) {
         let (w, h) = (window_size.0 as f32, window_size.1 as f32);
         let mut current_mode: Option<ViewportMode> = None;
 
         for &handle in &self.execution_order {
-            if !self.enabled.contains(&handle) {
+            let pipeline = &self.pipelines[handle.0];
+            if !self.enabled.contains(&handle) || !Self::runs_in(pipeline.is_heavy(), detail) {
                 continue;
             }
-            let pipeline = &self.pipelines[handle.0];
+            if pipeline.is_heavy() {
+                self.heavy_drawn.set(self.heavy_drawn.get() + 1);
+            }
             let mode = pipeline.viewport_mode();
 
             // Switch viewport only when the mode changes.
@@ -350,6 +414,75 @@ mod tests {
 
         assert!(graph.get_pipeline_mut::<OtherPipeline>(h0).is_none());
         assert!(graph.get_pipeline_mut::<MockPipeline>(h0).is_some());
+    }
+
+    /// Mock whose weight can be chosen.
+    struct WeightedPipeline(bool);
+
+    impl RenderPipeline for WeightedPipeline {
+        fn name(&self) -> &'static str {
+            "weighted"
+        }
+        fn viewport_mode(&self) -> ViewportMode {
+            ViewportMode::Inset
+        }
+        fn prepare(&mut self, _ctx: &PrepareContext) -> AppResult {
+            Ok(())
+        }
+        fn render<'rp>(&'rp self, _render_pass: &mut wgpu::RenderPass<'rp>) {}
+        fn is_heavy(&self) -> bool {
+            self.0
+        }
+    }
+
+    fn weighted_graph() -> RenderGraph {
+        let mut graph = RenderGraph::new();
+        graph.add_pipeline(Box::new(WeightedPipeline(true))); // balls
+        graph.add_pipeline(Box::new(WeightedPipeline(false))); // operators
+        graph.add_pipeline(Box::new(WeightedPipeline(false))); // labels
+        graph
+    }
+
+    #[test]
+    fn light_frame_prepares_no_heavy_pipeline() {
+        let mut graph = weighted_graph();
+        graph.prepare_with(FrameDetail::Light, |_| Ok(())).unwrap();
+
+        assert_eq!(
+            graph.stats(),
+            GraphStats {
+                heavy_prepared: 0,
+                heavy_drawn: 0,
+                light_prepared: 2
+            }
+        );
+    }
+
+    #[test]
+    fn full_frame_prepares_every_pipeline() {
+        let mut graph = weighted_graph();
+        graph.prepare_with(FrameDetail::Full, |_| Ok(())).unwrap();
+
+        assert_eq!(graph.stats().heavy_prepared, 1);
+        assert_eq!(graph.stats().light_prepared, 2);
+    }
+
+    #[test]
+    fn rendering_off_then_on_prepares_the_heavy_work_again() {
+        let mut graph = weighted_graph();
+        graph.prepare_with(FrameDetail::Light, |_| Ok(())).unwrap();
+        assert_eq!(graph.stats().heavy_prepared, 0);
+
+        // F2 back on: the next frame is a full one.
+        graph.prepare_with(FrameDetail::Full, |_| Ok(())).unwrap();
+        assert_eq!(graph.stats().heavy_prepared, 1);
+    }
+
+    #[test]
+    fn skip_frame_does_nothing() {
+        let mut graph = weighted_graph();
+        graph.prepare_with(FrameDetail::Skip, |_| Ok(())).unwrap();
+        assert_eq!(graph.stats(), GraphStats::default());
     }
 
     #[test]

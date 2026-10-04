@@ -105,6 +105,47 @@ fn test_simulation_step_does_not_advance_when_paused() {
     );
 }
 
+/// Pause freezes physics only: many step calls (and snapshots, which the
+/// physics thread keeps publishing) leave positions, velocities and energy
+/// exactly as they were.
+#[test]
+fn test_paused_physics_state_is_unchanged_by_steps_and_snapshots() {
+    let (mut main_content, _) = create_main_content();
+    main_content
+        .add_candidate_at_pos(Vec2D::new(0.0, 0.0))
+        .expect("failed to add first ball");
+    main_content
+        .add_candidate_at_pos(Vec2D::new(1.5, 0.0))
+        .expect("failed to add second ball");
+    main_content.world_mut().balls[0].v = Vec2D::new(1.0, 0.5);
+    main_content.world_mut().balls[1].v = Vec2D::new(-0.5, 0.25);
+    main_content.world_mut().sim.set_pause(true);
+
+    let state = |mc: &crate::application::MainContent| {
+        let world = mc.world();
+        (
+            world
+                .balls
+                .iter()
+                .map(|b| (*b.get_position(), b.v))
+                .collect::<Vec<_>>(),
+            world.sim.get_kinetic_energy(),
+            world.sim.get_potential_energy(),
+            world.sim.get_time(),
+        )
+    };
+    let before = state(&main_content);
+
+    for _ in 0..20 {
+        let (world, game_data) = main_content.world_and_game_data();
+        SimulationEngine::simulation_step(world, game_data).expect("paused step");
+        main_content.refresh_thermostat_readings();
+        let _ = main_content.create_snapshot();
+    }
+
+    assert_eq!(state(&main_content), before);
+}
+
 /// Confirm that repeated simulation steps advance time proportionally
 /// and that energy statistics are updated each step without stale leftovers.
 #[test]
