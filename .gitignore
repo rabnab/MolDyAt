@@ -376,3 +376,4 @@ FodyWeavers.xsd
 Cargo.lock
 flamegraph.svg
 .claude/settings.local.json
+/saves/
