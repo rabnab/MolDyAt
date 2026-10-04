@@ -111,14 +111,14 @@ guardrails. Water (I9–I10) follows. See §5 for the model choice behind it.
 |---|---|---|---|---|
 | I1 | Extract `PairPotential` from `BallPhysics` | Trait/enum with `force(r)`, `potential(r)`, `force_simd(f32x4)`, `potential_simd`, `cutoff()`; capping (`r_cap`, linear extrapolation) and cutoff shift implemented **once**, generic over the potential. LJ becomes `LennardJones { sigma, epsilon }`. Bit-identical drift baselines (same target/profile). | M | G2 |
 | I2 | Static dispatch for the SIMD kernel | `force_simd` generic over the potential (enum match outside the neighbour loop, monomorphised inner loop). Perf within ±2 % of G1. | M | I1 |
-| I3 | Species replace size classes | `Species { name, mass, sigma, epsilon, core_radius, colour }` replaces `size_idx` everywhere (balls, factory, snapshot, renderer colours, persistence). The current edge-distance form is kept as a Kihara core: `U_ij(r) = U_LJ(r − (a_i + a_j))`, `core_radius = 0` gives standard LJ. The five size classes become a `legacy` species preset; old saves migrate to it and the preset reproduces current baselines bit-identically. `KernelPoint` carries the species index in its padding slot. | L | I1, I2 |
+| I3 | Species replace size classes; LJ on centre distance | `Species { name, mass, sigma, epsilon, display_radius, colour }` replaces `size_idx` everywhere (balls, factory, snapshot, renderer colours, persistence). Interaction is standard Lennard-Jones on the **centre distance** with `σ_ij`; `display_radius` is adjustable and used **only for rendering**. Every physics use of `Ball2D::radius` (~20 files: force kernel, wall sweep/contact, line-wall overlap, cell size, cutoff, thermostat/source overlap checks, placement collision) switches to species data: interaction range from `σ_ij`, wall contact distance from a derived collision radius (assumption: `σ_i / 2`). `KernelPoint` carries the species index instead of the radius. **Intentional behaviour change:** recapture drift baselines per `docs/drift-test.md`; update the "Radius awareness" rule in `.github/copilot-instructions.md`. Old saves migrate size classes to species with `σ` chosen so the old equilibrium centre distance is kept (approximate). | L | I1, I2 |
 | I4 | Interaction table and mixing rules | `InteractionTable` (N×N `Potential`) built with Lorentz–Berthelot (`σ_ij = (σ_i+σ_j)/2`, `ε_ij = √(ε_i ε_j)`), per-pair overrides from config. Per-pair cutoff, `r_cap` and `U(cutoff)` cached; neighbour-list radius = max pair cutoff + skin. Tests: binary-mixture drift scenario (energy), scalar ↔ SIMD parity with mixed species in one chunk. | M | I3 |
-| I5 | Unit system | Reduced units stay internal. `UnitSystem` (reference σ in Å, ε/k_B in K, mass in amu) converts literature parameters into species and converts display values (T in K, time in ps). | M | I3, M6 |
+| I5 | Unit system with N₂ as reference | Reduced units stay internal with N₂ as the unit: `σ_N₂ = 1`, `ε_N₂ = 1`, `m_N₂ = 1` (28.01 amu). With σ ≈ 3.7 Å and ε/k_B ≈ 95 K the time unit is τ = σ·√(m/ε) ≈ 2.2 ps and the temperature unit 95 K (final values from one cited source, recorded in `docs/simulation.md`). `UnitSystem` converts literature parameters of other species and display values (T in K, time in ps, length in Å). Current default balls (σ = 1, ε = 1) become N₂ directly. | M | I3, M6 |
 | I6 | Species library | Species defined in the config file (M6): N₂, Ar, Ne, CH₄, O₂ (single-site LJ) plus the `legacy` preset. | S | I4, I5 |
 | I7 | Mixed-species UI and metrics | Species picker (sidebar or keys via C2), colour per species, source spheres emit a chosen species, per-species count / temperature as metric series (V3). | M | I3, C2 |
 | I8 | `ExternalField` abstraction | Gravity becomes `UniformField`; enables traps or other fields; applied in the kick with potential-energy accounting. | M | I1 |
 | I9 | Orientational degrees of freedom | Optional per-species orientation θ, angular velocity ω, moment of inertia; rotational velocity-Verlet step; rotational kinetic energy in stats, temperature and the Nosé–Hoover thermostat. Prerequisite for water. Deterministic (no new reductions). | L | I3 |
-| I10 | 2D water: Mercedes-Benz model | LJ core + three hydrogen-bond arms (Gaussian in distance and arm alignment), parameters from Silverstein, Haymet & Dill (1998). Torques from the same potential. Tests: energy conservation, force/torque vs finite differences, smoke test for the density maximum. Water–N₂ via the LJ part only (mixing rules). | L | I9, I4 |
+| I10 | 2D water: Mercedes-Benz model (pending decision) | LJ core + three hydrogen-bond arms (Gaussian in distance and arm alignment), parameters from Silverstein, Haymet & Dill (1998). Torques from the same potential. Tests: energy conservation, force/torque vs finite differences, smoke test for the density maximum. Water–N₂ via the LJ part only (mixing rules). | L | I9, I4 |
 | I11 | Multi-site molecules (only if needed later) | Rigid two-site N₂ or atomistic water (SPC/E, TIP4P) need molecules, constraints (SHAKE/RATTLE) and electrostatics (damped shifted force). Not needed for mixed species or MB water. | L | I9 |
 
 ### Epic C – Input commands
@@ -209,13 +209,14 @@ hydrogen bonding, so none of water's characteristic behaviour appears.
 Decisions (2026-10-04):
 
 1. Split into four crates (M7–M9).
-2. Particle types (species) replace size classes; size classes survive only as a migration preset (I3).
+2. Particle types (species) replace size classes; old saves migrate (I3).
 3. Plots move to a separate wgpu window (V4).
 4. Seeded runs must stay reproducible, including across thread counts (G2, P2; P9 dropped).
 5. Mixed-species simulation has priority (Phase 2); N₂ and water models per §5.
+6. N₂ defines the reduced units (I5).
+7. Interaction is Lennard-Jones on the centre distance; the radius is adjustable but visual only (I3).
 
 ## 7. Open questions
 
-1. Water model: Mercedes-Benz (recommended), or is atomistic water (I11) required?
-2. Unit reference for reduced units (I5): N₂, argon, or water's LJ core?
-3. Should the Kihara core radius stay user-visible, or should real species use plain LJ (`core_radius = 0`) only?
+1. Water model: Mercedes-Benz (recommended) or atomistic water (I11)? Pending: owner is reading up on the MB model.
+2. Wall contact distance for species: `σ_i / 2` (assumed) or `2^(1/6)·σ_i / 2`, or a smooth LJ wall potential instead of hard reflection?
