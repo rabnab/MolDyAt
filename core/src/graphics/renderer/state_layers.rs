@@ -11,6 +11,8 @@
 //! This module intentionally contains no ggez or wgpu types so that
 //! unit tests can exercise state logic without a GPU context.
 
+use crate::application::scene_layers::SceneLayers;
+
 // ── ThermoDisplayMode ────────────────────────────────────────────────
 
 /// Which thermodynamic field overlay to display.
@@ -64,7 +66,8 @@ pub struct RendererConfig {
     /// Whether the cursor-ball (placement preview) is drawn.
     pub draw_cursor: bool,
 
-    /// Whether rendering is enabled (toggled by F2).
+    /// Whether rendering is enabled (toggled by F2). Off draws only the base
+    /// layer (operators, previews, labels), see [`Self::scene_layers`].
     pub render_drawing: bool,
 
     /// Which thermodynamic field overlay to display (cycled by `T`).
@@ -106,6 +109,16 @@ impl RendererConfig {
     /// Toggle rendering on/off (F2).
     pub fn toggle_rendering(&mut self) {
         self.render_drawing = !self.render_drawing;
+    }
+
+    /// Scene layers to build and draw: all of them, or without the heavy
+    /// ones while rendering is off.
+    pub fn scene_layers(&self) -> SceneLayers {
+        if self.render_drawing {
+            SceneLayers::ALL
+        } else {
+            SceneLayers::ALL.difference(SceneLayers::HEAVY)
+        }
     }
 
     /// Cycle the thermodynamic field overlay (T key).

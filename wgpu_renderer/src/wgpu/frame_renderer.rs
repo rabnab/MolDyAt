@@ -1,7 +1,8 @@
 use super::wgpu_context::WgpuContext;
 use super::wgpu_pipelines::{WgpuPipelines, compute_view_proj};
 use crate::wgpu::margins_for_scale_factor;
-use rust_thermo_core::graphics::renderer::event_loop::{FrameDetail, UnifiedRenderState};
+use rust_thermo_core::application::scene_layers::SceneLayers;
+use rust_thermo_core::graphics::renderer::event_loop::UnifiedRenderState;
 use rust_thermo_core::objects2d::ball_impl::BallFactory;
 use std::time::{Duration, Instant};
 use winit::dpi::PhysicalSize;
@@ -77,8 +78,7 @@ impl FrameRenderer {
             state.should_render()
         );
 
-        let detail = state.frame_detail();
-        if detail == FrameDetail::Skip {
+        if !state.should_render() {
             return true;
         }
 
@@ -97,7 +97,14 @@ impl FrameRenderer {
                 == rust_thermo_core::graphics::renderer::event_loop::OperatorTool::Ball;
             let cursor_world_pos = state.cursor_world_pos();
             let cursor_wp = (cursor_world_pos.x, cursor_world_pos.y);
-            let ball_count = snapshot.balls.len() as u32;
+            // Rendering off (F2) draws only the base layer: no ball or thermo
+            // work below (see `SceneLayers`).
+            let layers = state.frame_layers();
+            let ball_count = if layers.contains(SceneLayers::BALLS) {
+                snapshot.balls.len() as u32
+            } else {
+                0
+            };
             let operator_previews = state.operator_previews();
             if let Err(error) = pipelines.prepare_from_snapshot(
                 ctx,
@@ -110,22 +117,19 @@ impl FrameRenderer {
                 state.viewport().margins(),
                 state.viewport().inset_margins(),
                 operator_previews,
-                detail,
+                layers,
             ) {
                 eprintln!("Pipeline prepare error: {:?}", error);
             }
 
-            // A light frame draws no balls and no heavy overlay passes.
-            if detail == FrameDetail::Full {
-                state.metrics_mut().record_balls_rendered(ball_count);
-                for _ in 0..6 {
-                    state.metrics_mut().record_draw_call(0);
-                }
+            state.metrics_mut().record_balls_rendered(ball_count);
+            for _ in 0..6 {
+                state.metrics_mut().record_draw_call(0);
             }
 
             let prepare = prepare_start.elapsed();
 
-            match Self::render_frame(ctx, pipelines, state.viewport().inset_margins(), detail) {
+            match Self::render_frame(ctx, pipelines, state.viewport().inset_margins(), layers) {
                 Ok(timings) => {
                     if let Some(resize) = resize {
                         log::debug!(
@@ -179,7 +183,7 @@ impl FrameRenderer {
         ctx: &WgpuContext,
         pipelines: &WgpuPipelines,
         inset: rust_thermo_core::graphics::renderer::Margins,
-        detail: FrameDetail,
+        layers: SceneLayers,
     ) -> Result<FrameTimings, wgpu::SurfaceError> {
         let acquire_start = Instant::now();
         let output = ctx.surface.get_current_texture()?;
@@ -218,7 +222,7 @@ impl FrameRenderer {
                 multiview_mask: None,
             });
 
-            pipelines.render_all(&mut render_pass, ctx, inset, detail);
+            pipelines.render_all(&mut render_pass, ctx, inset, layers);
         }
 
         ctx.queue.submit(std::iter::once(encoder.finish()));

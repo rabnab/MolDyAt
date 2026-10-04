@@ -16,14 +16,18 @@
 //!   ├─ prepare_all(ctx)   →  calls prepare() on each enabled pipeline
 //!   └─ render_all(pass, …) →  sets viewport → calls render() on each enabled pipeline
 //! ```
+//!
+//! Each pipeline belongs to one [`SceneLayers`] layer. A frame prepares and
+//! draws only the pipelines of its layers, so with rendering off (F2) the
+//! ball and thermo pipelines do no work at all.
 
 use rust_thermo_core::application::AppResult;
 use rust_thermo_core::application::renderer_snapshot::RendererSnapshot;
-use rust_thermo_core::graphics::renderer::event_loop::{FrameDetail, FramePreviews};
+use rust_thermo_core::application::scene_layers::SceneLayers;
+use rust_thermo_core::graphics::renderer::event_loop::FramePreviews;
 use rust_thermo_core::graphics::renderer::margins::Margins;
 use rust_thermo_core::graphics::renderer::state_layers::ThermoDisplayMode;
 use std::any::Any;
-use std::cell::Cell;
 use std::collections::HashSet;
 
 // ── Viewport mode ──────────────────────────────────────────────────
@@ -60,9 +64,9 @@ pub struct PrepareContext<'a> {
     pub thermo_display: ThermoDisplayMode,
     /// All operator preview geometry for the current frame.
     pub operator_previews: FramePreviews,
-    /// Full scene or light path (rendering off, F2). Heavy pipelines are
-    /// neither prepared nor drawn in a light frame.
-    pub detail: FrameDetail,
+    /// Layers drawn this frame. Pipelines outside them are skipped; a
+    /// pipeline that mixes layers checks it for its own parts.
+    pub layers: SceneLayers,
 }
 
 // ── Pipeline trait ─────────────────────────────────────────────────
@@ -83,18 +87,16 @@ pub trait RenderPipeline: Any {
     /// Which viewport region this pipeline renders into.
     fn viewport_mode(&self) -> ViewportMode;
 
+    /// Scene layer this pipeline draws; skipped in frames without it.
+    fn layer(&self) -> SceneLayers {
+        SceneLayers::BASE
+    }
+
     /// Update uniforms / upload buffers from snapshot data.
     fn prepare(&mut self, ctx: &PrepareContext) -> AppResult;
 
     /// Record render commands into an active render pass.
     fn render<'rp>(&'rp self, render_pass: &mut wgpu::RenderPass<'rp>);
-
-    /// Whether this pipeline only exists for the full scene (balls, heatmaps
-    /// and other visualisation data). Heavy pipelines are skipped when
-    /// rendering is switched off; operators, previews and labels are not.
-    fn is_heavy(&self) -> bool {
-        false
-    }
 }
 
 // ── Pipeline handle ────────────────────────────────────────────────
@@ -115,20 +117,6 @@ pub struct RenderGraph {
     pipelines: Vec<Box<dyn RenderPipeline>>,
     execution_order: Vec<PipelineHandle>,
     enabled: HashSet<PipelineHandle>,
-    stats: GraphStats,
-    heavy_drawn: Cell<u64>,
-}
-
-/// Running counts of the work the graph did, to check that a light frame
-/// skips the heavy work.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct GraphStats {
-    /// Heavy pipelines prepared (instance building, buffer uploads).
-    pub heavy_prepared: u64,
-    /// Heavy pipelines drawn.
-    pub heavy_drawn: u64,
-    /// Light pipelines prepared.
-    pub light_prepared: u64,
 }
 
 impl RenderGraph {
@@ -138,8 +126,6 @@ impl RenderGraph {
             pipelines: Vec::new(),
             execution_order: Vec::new(),
             enabled: HashSet::new(),
-            stats: GraphStats::default(),
-            heavy_drawn: Cell::new(0),
         }
     }
 
@@ -187,50 +173,26 @@ impl RenderGraph {
         self.execution_order = order.into_iter().filter(|h| h.0 < len).collect();
     }
 
-    /// Prepare all enabled pipelines (upload uniforms / buffers).
-    pub fn prepare_all(&mut self, ctx: &PrepareContext) -> AppResult {
-        self.prepare_with(ctx.detail, |pipeline| pipeline.prepare(ctx))
+    /// Whether `handle` runs in a frame drawing `layers`: enabled, and its
+    /// layer is one of them.
+    pub fn runs(&self, handle: PipelineHandle, layers: SceneLayers) -> bool {
+        self.is_enabled(handle) && layers.contains(self.pipelines[handle.0].layer())
     }
 
-    /// Run `prepare` over the pipelines `detail` asks for.
-    pub(crate) fn prepare_with(
-        &mut self,
-        detail: FrameDetail,
-        mut prepare: impl FnMut(&mut dyn RenderPipeline) -> AppResult,
-    ) -> AppResult {
-        for &handle in &self.execution_order {
-            let pipeline = &mut self.pipelines[handle.0];
-            if !self.enabled.contains(&handle) || !Self::runs_in(pipeline.is_heavy(), detail) {
-                continue;
+    /// Prepare the pipelines that run in a frame drawing `ctx.layers`
+    /// (upload uniforms / buffers).
+    pub fn prepare_all(&mut self, ctx: &PrepareContext) -> AppResult {
+        for idx in 0..self.execution_order.len() {
+            let handle = self.execution_order[idx];
+            if self.runs(handle, ctx.layers) {
+                self.pipelines[handle.0].prepare(ctx)?;
             }
-            if pipeline.is_heavy() {
-                self.stats.heavy_prepared += 1;
-            } else {
-                self.stats.light_prepared += 1;
-            }
-            prepare(pipeline.as_mut())?;
         }
         Ok(())
     }
 
-    /// Whether a pipeline of the given weight takes part in a `detail` frame.
-    fn runs_in(heavy: bool, detail: FrameDetail) -> bool {
-        match detail {
-            FrameDetail::Skip => false,
-            FrameDetail::Light => !heavy,
-            FrameDetail::Full => true,
-        }
-    }
-
-    /// Work done so far, see [`GraphStats`].
-    pub fn stats(&self) -> GraphStats {
-        GraphStats {
-            heavy_drawn: self.heavy_drawn.get(),
-            ..self.stats
-        }
-    }
-
-    /// Render all enabled pipelines, switching viewports as needed.
+    /// Render the pipelines that run in a frame drawing `layers` (the same
+    /// as the prepared ones), switching viewports as needed.
     ///
     /// The `window_size` and `inset` margins give the inset viewport
     /// rectangle (the simulation drawing area, letterboxed).
@@ -239,19 +201,16 @@ impl RenderGraph {
         render_pass: &mut wgpu::RenderPass<'rp>,
         window_size: (u32, u32),
         inset: Margins,
-        detail: FrameDetail,
+        layers: SceneLayers,
     ) {
         let (w, h) = (window_size.0 as f32, window_size.1 as f32);
         let mut current_mode: Option<ViewportMode> = None;
 
         for &handle in &self.execution_order {
-            let pipeline = &self.pipelines[handle.0];
-            if !self.enabled.contains(&handle) || !Self::runs_in(pipeline.is_heavy(), detail) {
+            if !self.runs(handle, layers) {
                 continue;
             }
-            if pipeline.is_heavy() {
-                self.heavy_drawn.set(self.heavy_drawn.get() + 1);
-            }
+            let pipeline = &self.pipelines[handle.0];
             let mode = pipeline.viewport_mode();
 
             // Switch viewport only when the mode changes.
@@ -320,11 +279,24 @@ mod tests {
     struct MockPipeline {
         label: &'static str,
         mode: ViewportMode,
+        layer: SceneLayers,
     }
 
     impl MockPipeline {
         fn new(label: &'static str, mode: ViewportMode) -> Self {
-            Self { label, mode }
+            Self {
+                label,
+                mode,
+                layer: SceneLayers::BASE,
+            }
+        }
+
+        fn in_layer(label: &'static str, layer: SceneLayers) -> Self {
+            Self {
+                label,
+                mode: ViewportMode::Inset,
+                layer,
+            }
         }
     }
 
@@ -334,6 +306,9 @@ mod tests {
         }
         fn viewport_mode(&self) -> ViewportMode {
             self.mode
+        }
+        fn layer(&self) -> SceneLayers {
+            self.layer
         }
         fn prepare(&mut self, _ctx: &PrepareContext) -> AppResult {
             Ok(())
@@ -416,73 +391,36 @@ mod tests {
         assert!(graph.get_pipeline_mut::<MockPipeline>(h0).is_some());
     }
 
-    /// Mock whose weight can be chosen.
-    struct WeightedPipeline(bool);
-
-    impl RenderPipeline for WeightedPipeline {
-        fn name(&self) -> &'static str {
-            "weighted"
-        }
-        fn viewport_mode(&self) -> ViewportMode {
-            ViewportMode::Inset
-        }
-        fn prepare(&mut self, _ctx: &PrepareContext) -> AppResult {
-            Ok(())
-        }
-        fn render<'rp>(&'rp self, _render_pass: &mut wgpu::RenderPass<'rp>) {}
-        fn is_heavy(&self) -> bool {
-            self.0
-        }
-    }
-
-    fn weighted_graph() -> RenderGraph {
+    #[test]
+    fn a_frame_runs_only_the_pipelines_of_its_layers() {
         let mut graph = RenderGraph::new();
-        graph.add_pipeline(Box::new(WeightedPipeline(true))); // balls
-        graph.add_pipeline(Box::new(WeightedPipeline(false))); // operators
-        graph.add_pipeline(Box::new(WeightedPipeline(false))); // labels
-        graph
-    }
+        let operators = graph.add_pipeline(Box::new(MockPipeline::in_layer(
+            "operators",
+            SceneLayers::BASE,
+        )));
+        let balls = graph.add_pipeline(Box::new(MockPipeline::in_layer(
+            "balls",
+            SceneLayers::BALLS,
+        )));
+        let heatmap = graph.add_pipeline(Box::new(MockPipeline::in_layer(
+            "heatmap",
+            SceneLayers::THERMO,
+        )));
 
-    #[test]
-    fn light_frame_prepares_no_heavy_pipeline() {
-        let mut graph = weighted_graph();
-        graph.prepare_with(FrameDetail::Light, |_| Ok(())).unwrap();
+        // Rendering on: everything.
+        for handle in [operators, balls, heatmap] {
+            assert!(graph.runs(handle, SceneLayers::ALL));
+        }
 
-        assert_eq!(
-            graph.stats(),
-            GraphStats {
-                heavy_prepared: 0,
-                heavy_drawn: 0,
-                light_prepared: 2
-            }
-        );
-    }
+        // Rendering off (F2): no ball or thermo work, operators still run.
+        let light = SceneLayers::ALL.difference(SceneLayers::HEAVY);
+        assert!(graph.runs(operators, light));
+        assert!(!graph.runs(balls, light));
+        assert!(!graph.runs(heatmap, light));
 
-    #[test]
-    fn full_frame_prepares_every_pipeline() {
-        let mut graph = weighted_graph();
-        graph.prepare_with(FrameDetail::Full, |_| Ok(())).unwrap();
-
-        assert_eq!(graph.stats().heavy_prepared, 1);
-        assert_eq!(graph.stats().light_prepared, 2);
-    }
-
-    #[test]
-    fn rendering_off_then_on_prepares_the_heavy_work_again() {
-        let mut graph = weighted_graph();
-        graph.prepare_with(FrameDetail::Light, |_| Ok(())).unwrap();
-        assert_eq!(graph.stats().heavy_prepared, 0);
-
-        // F2 back on: the next frame is a full one.
-        graph.prepare_with(FrameDetail::Full, |_| Ok(())).unwrap();
-        assert_eq!(graph.stats().heavy_prepared, 1);
-    }
-
-    #[test]
-    fn skip_frame_does_nothing() {
-        let mut graph = weighted_graph();
-        graph.prepare_with(FrameDetail::Skip, |_| Ok(())).unwrap();
-        assert_eq!(graph.stats(), GraphStats::default());
+        // A disabled pipeline never runs.
+        graph.set_enabled(operators, false);
+        assert!(!graph.runs(operators, SceneLayers::ALL));
     }
 
     #[test]

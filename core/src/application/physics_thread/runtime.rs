@@ -54,15 +54,17 @@ impl PhysicsRuntime {
         let mut last_perf_report = Instant::now();
         let mut snapshot_time_total = Duration::ZERO;
         let mut snapshot_count = 0u64;
+        // Whether the world changed since the last published snapshot. A
+        // snapshot is published only then, so a paused, untouched world
+        // publishes nothing and the renderer stays idle.
+        let mut changed = true;
 
         while !shutdown_signal.should_shutdown() {
-            let (world_resized, commands_handled) = {
+            let world_resized = {
                 let mut handler = DomainCommandHandler::new(simulation, events);
                 self.drain_commands(receiver, &mut handler);
-                (
-                    handler.resizes_applied() > 0,
-                    handler.commands_handled() > 0,
-                )
+                changed |= handler.commands_handled() > 0;
+                handler.resizes_applied() > 0
             };
 
             let wait_time_ms = simulation.runtime().wait_time();
@@ -75,25 +77,20 @@ impl PhysicsRuntime {
                 let (world, game_data) = simulation.world_and_game_data();
                 let _ = SimulationEngine::simulation_step(world, game_data);
             }
-            // Anything visible changed: a step ran, or a command (edit, load,
-            // toggle) was handled. A paused world without either keeps its
-            // revision, so the renderer stays idle.
             if !was_paused {
                 physics_step_count += 1;
-            }
-            if !was_paused || commands_handled {
-                simulation.runtime_mut().bump_render_revision();
+                changed = true;
             }
 
             let now = Instant::now();
             // The renderer already draws the new window size, around the old
             // world until it gets a snapshot of the resized one: don't make it
             // wait for the next interval.
-            if world_resized || now.duration_since(last_snapshot_time) >= self.snapshot_interval {
+            if changed
+                && (world_resized
+                    || now.duration_since(last_snapshot_time) >= self.snapshot_interval)
+            {
                 let snapshot_start = Instant::now();
-                if simulation.refresh_thermostat_readings() {
-                    simulation.runtime_mut().bump_render_revision();
-                }
                 let snapshot = simulation.create_snapshot();
                 simulation.runtime().publish_snapshot(snapshot);
                 wakeup();
@@ -101,12 +98,16 @@ impl PhysicsRuntime {
                 snapshot_time_total += snapshot_start.elapsed();
                 snapshot_count += 1;
                 last_snapshot_time = now;
+                changed = false;
             }
 
             if now.duration_since(last_perf_report).as_secs() >= 1 {
                 let elapsed = now.duration_since(last_perf_report).as_secs_f32();
                 let physics_fps = physics_step_count as f32 / elapsed;
 
+                // The rate is shown in the stats text: publish when it moves
+                // (it drops to zero once after a pause).
+                changed |= physics_fps != simulation.runtime().physics_fps();
                 simulation.runtime_mut().set_physics_fps(physics_fps);
 
                 if snapshot_count > 0 {

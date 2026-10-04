@@ -24,6 +24,7 @@ use crate::objects2d::line_segment::valve_half_width;
 use crate::objects2d::{SimLineSegment, SimSourceSphere, SimThermostat, Vec2D};
 use std::time::Instant;
 
+use crate::application::scene_layers::SceneLayers;
 use crate::application::thermo_field::ThermoGrid;
 
 /// A valve resolved to world space (derived from its wall chain).
@@ -270,14 +271,9 @@ pub struct RendererSnapshot {
     /// replaced (a load), whose step count then starts again.
     pub world_generation: u64,
 
-    /// Changes whenever something visible changed: a step, any command (edit,
-    /// load, resize, ...) or a thermostat reading. A paused simulation keeps
-    /// publishing snapshots; the renderer redraws only for a new revision.
-    pub revision: u64,
-
-    /// `false` for a light snapshot (rendering off, F2): no ball render data
-    /// and no thermo grids, only what operators, labels and stats need.
-    pub full_scene: bool,
+    /// Scene layers this snapshot holds. Without `BALLS` it carries no ball
+    /// render data, without `THERMO` no thermo grids (rendering off, F2).
+    pub layers: SceneLayers,
 
     /// Kinetic energy of the system
     pub kinetic_energy: f32,
@@ -342,8 +338,7 @@ impl RendererSnapshot {
             balls: Vec::new(),
             simulation_step: 0,
             world_generation: 0,
-            revision: 0,
-            full_scene: true,
+            layers: SceneLayers::ALL,
             kinetic_energy: 0.0,
             potential_energy: 0.0,
             time: 0.0,
@@ -379,8 +374,7 @@ impl RendererSnapshot {
             balls: Vec::with_capacity(capacity),
             simulation_step: 0,
             world_generation: 0,
-            revision: 0,
-            full_scene: true,
+            layers: SceneLayers::ALL,
             kinetic_energy: 0.0,
             potential_energy: 0.0,
             time: 0.0,

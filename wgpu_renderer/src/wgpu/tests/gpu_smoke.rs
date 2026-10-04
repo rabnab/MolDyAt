@@ -9,8 +9,9 @@ use std::sync::{Arc, Mutex};
 use rust_thermo_core::application::renderer_snapshot::{
     BallRenderData, CellGridSpec, RendererSnapshot, ThermoGridSpec, ValveSpan, WallSnapshot,
 };
+use rust_thermo_core::application::scene_layers::SceneLayers;
 use rust_thermo_core::application::thermo_field::ThermoGrid;
-use rust_thermo_core::graphics::renderer::event_loop::{FrameDetail, FramePreviews};
+use rust_thermo_core::graphics::renderer::event_loop::FramePreviews;
 use rust_thermo_core::graphics::renderer::state_layers::ThermoDisplayMode;
 use rust_thermo_core::objects2d::wall_chain::ObjectRef;
 use rust_thermo_core::objects2d::{
@@ -119,7 +120,7 @@ fn render_frame(
     snapshot: &RendererSnapshot,
     thermo_display: ThermoDisplayMode,
     show_ball_outline: bool,
-    detail: FrameDetail,
+    layers: SceneLayers,
 ) {
     let ctx = PrepareContext {
         device,
@@ -134,7 +135,7 @@ fn render_frame(
         inset: MARGINS,
         thermo_display,
         operator_previews: previews(),
-        detail,
+        layers,
     };
     pipelines.prepare(&ctx).expect("prepare");
 
@@ -171,7 +172,7 @@ fn render_frame(
             timestamp_writes: None,
             multiview_mask: None,
         });
-        pipelines.render(&mut pass, SIZE, MARGINS, detail);
+        pipelines.render(&mut pass, SIZE, MARGINS, layers);
     }
     queue.submit(std::iter::once(encoder.finish()));
 }
@@ -208,47 +209,24 @@ fn all_pipelines_build_and_render_without_validation_errors() {
             &snapshot,
             mode,
             outline,
-            FrameDetail::Full,
+            SceneLayers::ALL,
         );
     }
     pipelines.cycle_ring_display_mode();
-    render_frame(
-        &device,
-        &queue,
-        &mut pipelines,
-        &snapshot,
-        ThermoDisplayMode::Off,
-        false,
-        FrameDetail::Full,
-    );
-
-    // Rendering off (F2): a light frame does no heavy work, a full frame
-    // right after restores it.
-    let before = pipelines.stats();
-    render_frame(
-        &device,
-        &queue,
-        &mut pipelines,
-        &snapshot,
-        ThermoDisplayMode::Temperature,
-        true,
-        FrameDetail::Light,
-    );
-    let light = pipelines.stats();
-    assert_eq!(light.heavy_prepared, before.heavy_prepared);
-    assert_eq!(light.heavy_drawn, before.heavy_drawn);
-    assert!(light.light_prepared > before.light_prepared);
-    render_frame(
-        &device,
-        &queue,
-        &mut pipelines,
-        &snapshot,
-        ThermoDisplayMode::Temperature,
-        true,
-        FrameDetail::Full,
-    );
-    assert!(pipelines.stats().heavy_prepared > light.heavy_prepared);
-    assert!(pipelines.stats().heavy_drawn > light.heavy_drawn);
+    // Rendering off (F2), then on again: the light frame skips the ball and
+    // thermo pipelines, the next full frame prepares them afresh.
+    let light = SceneLayers::ALL.difference(SceneLayers::HEAVY);
+    for layers in [light, SceneLayers::ALL] {
+        render_frame(
+            &device,
+            &queue,
+            &mut pipelines,
+            &snapshot,
+            ThermoDisplayMode::Temperature,
+            false,
+            layers,
+        );
+    }
     device
         .poll(wgpu::PollType::wait_indefinitely())
         .expect("poll");

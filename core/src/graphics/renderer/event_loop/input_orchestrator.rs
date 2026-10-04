@@ -152,24 +152,18 @@ impl InputOrchestrator {
         x: f32,
         y: f32,
     ) -> bool {
-        let hovered_before = state.hovered_object();
         state.update_cursor_world_pos(&[x, y]);
+        // The crosshair, the placement preview, the hover highlight and the
+        // cursor coordinates all follow the cursor.
+        state.mark_view_dirty();
         let world_pos = state.input.cursor_pos();
 
         if let Some(resp) =
             state.with_tool_handler(|handler, ctx| handler.handle_cursor_move(world_pos, &ctx))
             && resp.consumed
+            && let Some(cmd) = resp.action
         {
-            if let Some(cmd) = resp.action {
-                Self::process_action(state, InputAction::OperatorAction(cmd), None, None);
-            }
-            if resp.view_dirty {
-                state.mark_view_dirty();
-            }
-        }
-
-        if state.hovered_object() != hovered_before {
-            state.mark_view_dirty();
+            Self::process_action(state, InputAction::OperatorAction(cmd), None, None);
         }
 
         if let Some(action) = state.input.handle_mouse_motion(x, y) {
@@ -389,6 +383,14 @@ mod tests {
         assert!(affects_view);
         assert!(state.render.view_dirty);
         assert!(state.input.is_panning());
+    }
+
+    #[test]
+    fn cursor_move_redraws_without_a_tool_or_new_snapshot() {
+        // Paused: no snapshot arrives, the crosshair must still follow.
+        let mut state = build_test_state();
+        InputOrchestrator::handle_cursor_moved_event(&mut state, 150.0, 260.0);
+        assert!(state.render.view_dirty);
     }
 
     #[test]

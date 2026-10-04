@@ -17,6 +17,7 @@
 use bytemuck::{Pod, Zeroable};
 use rust_thermo_core::application::AppResult;
 use rust_thermo_core::application::renderer_snapshot::ThermoGridSpec;
+use rust_thermo_core::application::scene_layers::SceneLayers;
 use rust_thermo_core::application::thermo_field::ThermoGrid;
 use rust_thermo_core::graphics::renderer::interpolation::fill_nans;
 use rust_thermo_core::graphics::renderer::state_layers::ThermoDisplayMode;
@@ -226,6 +227,10 @@ impl RenderPipeline for ThermoHeatmapPipeline {
         ViewportMode::Inset
     }
 
+    fn layer(&self) -> SceneLayers {
+        SceneLayers::THERMO
+    }
+
     fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
         let mode = ctx.thermo_display;
         let (grid, range) = match mode {
@@ -248,10 +253,6 @@ impl RenderPipeline for ThermoHeatmapPipeline {
             self.gpu.clear();
         }
         Ok(())
-    }
-
-    fn is_heavy(&self) -> bool {
-        true
     }
 
     fn render<'rp>(&'rp self, render_pass: &mut wgpu::RenderPass<'rp>) {

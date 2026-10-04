@@ -149,7 +149,7 @@ impl EventRouter {
             | WindowEvent::CursorMoved { .. }
             | WindowEvent::MouseWheel { .. } => {
                 let dirty = state.handle_mouse_event(&event);
-                state.merge_view_dirty(dirty);
+                Self::view_changed(state, main_window, dirty);
             }
             WindowEvent::KeyboardInput { event, .. } => {
                 let PhysicalKey::Code(key) = event.physical_key else {
@@ -164,10 +164,20 @@ impl EventRouter {
                 if let Some(action) = action {
                     let dirty =
                         execute_input_action(action, state, pipelines, window_target, main_window);
-                    state.merge_view_dirty(dirty);
+                    Self::view_changed(state, main_window, dirty);
                 }
             }
             _ => {}
+        }
+    }
+
+    /// Record a view change from input and draw it now. Snapshots arrive
+    /// only when the world changes, so a paused world would otherwise not
+    /// show the cursor, previews, zoom or pan until the next edit.
+    fn view_changed(state: &mut UnifiedRenderState, main_window: &Window, dirty: bool) {
+        state.merge_view_dirty(dirty);
+        if state.is_view_dirty() {
+            main_window.request_redraw();
         }
     }
 }

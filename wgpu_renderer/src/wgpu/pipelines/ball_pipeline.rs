@@ -7,6 +7,7 @@
 use bytemuck::{Pod, Zeroable};
 use rust_thermo_core::application::AppResult;
 use rust_thermo_core::application::renderer_snapshot::BallRenderData;
+use rust_thermo_core::application::scene_layers::SceneLayers;
 
 use crate::wgpu::gpu::batch::{BatchDesc, GpuBatch, SceneUniforms};
 use crate::wgpu::gpu::shaders;
@@ -86,6 +87,10 @@ impl RenderPipeline for BallPipeline {
         ViewportMode::Inset
     }
 
+    fn layer(&self) -> SceneLayers {
+        SceneLayers::BALLS
+    }
+
     fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
         let params = [
             ctx.snapshot.equilibrium_edge_distance,
@@ -101,10 +106,6 @@ impl RenderPipeline for BallPipeline {
             .extend(ctx.snapshot.balls.iter().map(GpuBallData::from_render_data));
         self.gpu.flush(ctx.device, ctx.queue, &self.instances);
         Ok(())
-    }
-
-    fn is_heavy(&self) -> bool {
-        true
     }
 
     fn render<'rp>(&'rp self, render_pass: &mut wgpu::RenderPass<'rp>) {

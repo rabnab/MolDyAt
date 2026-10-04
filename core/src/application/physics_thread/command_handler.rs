@@ -34,9 +34,8 @@ impl<'a> DomainCommandHandler<'a> {
         self.resizes_applied
     }
 
-    /// How many commands this handler has handled. Every command can change
-    /// what is visible (edits, loads, toggles), so each one bumps the render
-    /// revision.
+    /// How many commands this handler has handled. Any command may change
+    /// what a snapshot shows (an edit, a load, a toggle).
     pub(crate) fn commands_handled(&self) -> u32 {
         self.commands_handled
     }
@@ -155,9 +154,6 @@ impl CommandHandler<DomainCommand> for DomainCommandHandler<'_> {
             DomainCommand::Resize { world_rect } => {
                 self.pending_resize = Some(world_rect);
             }
-            DomainCommand::SetFullSnapshots(full) => {
-                self.main_content.runtime_mut().set_light_snapshots(!full);
-            }
             DomainCommand::ResumeAfterResize => {
                 self.main_content.unpause_after_resize();
             }
@@ -168,6 +164,9 @@ impl CommandHandler<DomainCommand> for DomainCommandHandler<'_> {
             DomainCommand::LoadWorld(source) => {
                 let event = self.load_world(&source);
                 self.report(event);
+            }
+            DomainCommand::SetSnapshotLayers(layers) => {
+                self.main_content.runtime_mut().set_snapshot_layers(layers);
             }
             DomainCommand::Operator(cmd) => {
                 cmd.execute(self.main_content);

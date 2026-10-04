@@ -171,21 +171,12 @@ impl PhysicsRuntimeState {
         self.world_generation = self.world_generation.wrapping_add(1);
     }
 
-    pub(crate) fn render_revision(&self) -> u64 {
-        self.render_revision
+    pub(crate) fn snapshot_layers(&self) -> SceneLayers {
+        self.snapshot_layers
     }
 
-    /// Mark that something visible changed, so the renderer redraws.
-    pub(crate) fn bump_render_revision(&mut self) {
-        self.render_revision = self.render_revision.wrapping_add(1);
-    }
-
-    pub(crate) fn light_snapshots(&self) -> bool {
-        self.light_snapshots
-    }
-
-    pub(crate) fn set_light_snapshots(&mut self, light: bool) {
-        self.light_snapshots = light;
+    pub(crate) fn set_snapshot_layers(&mut self, layers: SceneLayers) {
+        self.snapshot_layers = layers;
     }
 
     pub(crate) fn wait_time(&self) -> u64 {

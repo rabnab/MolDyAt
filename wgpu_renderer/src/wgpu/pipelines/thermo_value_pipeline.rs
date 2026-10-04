@@ -6,6 +6,7 @@
 
 use rust_thermo_core::application::AppResult;
 use rust_thermo_core::application::renderer_snapshot::ThermoGridSpec;
+use rust_thermo_core::application::scene_layers::SceneLayers;
 use rust_thermo_core::application::thermo_field::ThermoGrid;
 use rust_thermo_core::graphics::renderer::state_layers::ThermoDisplayMode;
 
@@ -83,6 +84,10 @@ impl RenderPipeline for ThermoValueOverlayPipeline {
         ViewportMode::Inset
     }
 
+    fn layer(&self) -> SceneLayers {
+        SceneLayers::THERMO
+    }
+
     fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
         let grid = match ctx.thermo_display {
             ThermoDisplayMode::Temperature => &ctx.snapshot.cell_temperature,
@@ -102,10 +107,6 @@ impl RenderPipeline for ThermoValueOverlayPipeline {
         let verts = Self::build_vertices(grid, spec, ctx.view_proj, glyph_ndc_w, glyph_ndc_h);
         self.text.upload(ctx.device, ctx.queue, &verts);
         Ok(())
-    }
-
-    fn is_heavy(&self) -> bool {
-        true
     }
 
     fn render<'rp>(&'rp self, render_pass: &mut wgpu::RenderPass<'rp>) {

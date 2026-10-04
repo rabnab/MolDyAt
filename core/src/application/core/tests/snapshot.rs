@@ -263,31 +263,30 @@ fn test_thermo_spec_dimensions_match_world() {
 }
 
 #[test]
-fn light_snapshot_skips_ball_render_data_and_thermo_grids() {
+fn snapshot_without_heavy_layers_skips_ball_render_data_and_thermo_grids() {
+    use crate::application::scene_layers::SceneLayers;
+
     let mut main_content = create_test_main_content_with_balls(5);
     let full = main_content.create_snapshot();
-    assert!(full.full_scene);
+    assert_eq!(full.layers, SceneLayers::ALL);
     assert_eq!(full.balls.len(), 5);
 
     // Rendering off (F2): only what operators, labels and stats need.
-    main_content.runtime_mut().set_light_snapshots(true);
+    let light_layers = SceneLayers::ALL.difference(SceneLayers::HEAVY);
+    main_content.runtime_mut().set_snapshot_layers(light_layers);
     let light = main_content.create_snapshot();
-    assert!(!light.full_scene);
+    assert_eq!(light.layers, light_layers);
     assert!(light.balls.is_empty());
+    assert!(light.thermo_grid_spec.is_none());
+    assert_eq!(light.cell_temperature.shape(), (0, 0));
     assert_eq!(light.kinetic_energy, full.kinetic_energy);
-    assert_eq!(light.simulation_step, full.simulation_step);
+    assert_eq!(light.status_text, full.status_text);
 
     // Rendering on again: the next snapshot is the full scene.
-    main_content.runtime_mut().set_light_snapshots(false);
+    main_content
+        .runtime_mut()
+        .set_snapshot_layers(SceneLayers::ALL);
     let again = main_content.create_snapshot();
-    assert!(again.full_scene);
+    assert_eq!(again.layers, SceneLayers::ALL);
     assert_eq!(again.balls.len(), 5);
-}
-
-#[test]
-fn snapshot_carries_the_render_revision() {
-    let mut main_content = create_test_main_content_with_balls(1);
-    let before = main_content.create_snapshot().revision;
-    main_content.runtime_mut().bump_render_revision();
-    assert_ne!(main_content.create_snapshot().revision, before);
 }

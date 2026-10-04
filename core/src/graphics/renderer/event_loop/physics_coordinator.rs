@@ -1,6 +1,5 @@
 use crate::application::renderer_snapshot::RendererSnapshot;
 use crate::application::{DomainCommand, MainContent, PhysicsEvent, PhysicsThread};
-use crate::objects2d::Rect;
 use arc_swap::ArcSwapOption;
 use std::sync::Arc;
 
@@ -13,11 +12,9 @@ pub struct PhysicsCoordinator {
     last_displayed_step: u64,
     /// `world_generation` of the last displayed snapshot.
     displayed_generation: u64,
-    /// World bounds of the last displayed snapshot.
-    displayed_world_bounds: Option<Rect>,
-    /// `revision` of the last displayed snapshot; tells snapshots of the same
-    /// step apart (a paused simulation keeps publishing).
-    displayed_revision: Option<u64>,
+    /// The last displayed snapshot. The physics thread publishes a snapshot
+    /// only when the world changed, so any other one is new.
+    displayed_snapshot: Option<Arc<RendererSnapshot>>,
     steps_per_frame: f32,
 
     // Performance metrics
@@ -48,9 +45,8 @@ impl PhysicsCoordinator {
             physics_thread: Some(physics_thread),
             snapshot_slot: Some(snapshot_slot),
             last_displayed_step: 0,
-            displayed_revision: None,
             displayed_generation: 0,
-            displayed_world_bounds: None,
+            displayed_snapshot: None,
             steps_per_frame: 0.0,
             render_fps: 0,
             last_reported_render_fps: 0.0,
@@ -87,20 +83,14 @@ impl PhysicsCoordinator {
         guard.as_ref().map(Arc::clone)
     }
 
-    /// Check if there is anything new to draw: a later step, any step of a
-    /// new world (after a load, whose step count starts again), or a snapshot
-    /// snapshot revision that was not drawn yet. The latter covers a paused
-    /// simulation, whose step does not advance while edits, thermostat
-    /// readings and the resized world still change. A paused world that
-    /// changes nothing keeps its revision, so the renderer stays idle.
-    pub fn is_new_step_available(&self) -> bool {
-        if let Some(snapshot) = self.get_latest_snapshot() {
-            snapshot.world_generation != self.displayed_generation
-                || snapshot.simulation_step > self.last_displayed_step
-                || self.displayed_world_bounds != Some(snapshot.cell_grid_bounds)
-                || self.displayed_revision != Some(snapshot.revision)
-        } else {
-            false
+    /// Whether a snapshot was published that was not displayed yet. The
+    /// physics thread publishes only when the world changed (a step, an edit,
+    /// a load, a resize), so a paused, untouched world has none.
+    pub fn is_new_snapshot_available(&self) -> bool {
+        match (self.get_latest_snapshot(), &self.displayed_snapshot) {
+            (Some(latest), Some(displayed)) => !Arc::ptr_eq(&latest, displayed),
+            (Some(_), None) => true,
+            (None, _) => false,
         }
     }
 
@@ -109,10 +99,14 @@ impl PhysicsCoordinator {
         self.last_displayed_step
     }
 
-    /// Mark a step of world `generation`, with bounds `world_bounds`, as
-    /// displayed and update metrics.
-    pub fn mark_step_displayed(&mut self, step: u64, generation: u64, world_bounds: Rect) {
-        self.displayed_world_bounds = Some(world_bounds);
+    /// Mark `snapshot` as displayed and update the step metrics.
+    pub fn mark_snapshot_displayed(&mut self, snapshot: &Arc<RendererSnapshot>) {
+        self.track_steps(snapshot.simulation_step, snapshot.world_generation);
+        self.displayed_snapshot = Some(Arc::clone(snapshot));
+    }
+
+    /// Steps-per-frame metric for a displayed step of world `generation`.
+    fn track_steps(&mut self, step: u64, generation: u64) {
         if generation != self.displayed_generation {
             // A new world: track its steps from here.
             self.displayed_generation = generation;
@@ -130,11 +124,6 @@ impl PhysicsCoordinator {
             }
             self.last_displayed_step = step;
         }
-    }
-
-    /// Remember which snapshot revision was drawn, see `is_new_step_available`.
-    pub fn mark_snapshot_displayed(&mut self, revision: u64) {
-        self.displayed_revision = Some(revision);
     }
 
     /// Increment render frame counter
@@ -180,9 +169,8 @@ impl PhysicsCoordinator {
             physics_thread: None,
             snapshot_slot: None,
             last_displayed_step: 0,
-            displayed_revision: None,
             displayed_generation: 0,
-            displayed_world_bounds: None,
+            displayed_snapshot: None,
             steps_per_frame: 0.0,
             render_fps: 0,
             last_reported_render_fps: 0.0,
@@ -202,9 +190,8 @@ impl PhysicsCoordinator {
             physics_thread: None,
             snapshot_slot: None,
             last_displayed_step: 0,
-            displayed_revision: None,
             displayed_generation: 0,
-            displayed_world_bounds: None,
+            displayed_snapshot: None,
             steps_per_frame: 0.0,
             render_fps: 0,
             last_reported_render_fps: 0.0,
@@ -214,9 +201,10 @@ impl PhysicsCoordinator {
         (coordinator, log)
     }
 
-    /// Publish `snapshot` as the latest one (tests only).
+    /// Publish `snapshot` as if the physics thread had (needs a coordinator
+    /// made by [`Self::with_snapshot`]).
     #[cfg(test)]
-    pub fn store_snapshot_for_test(&self, snapshot: RendererSnapshot) {
+    pub fn publish_for_test(&self, snapshot: RendererSnapshot) {
         self.snapshot_slot
             .as_ref()
             .expect("test coordinator has a snapshot slot")
@@ -230,9 +218,8 @@ impl PhysicsCoordinator {
             physics_thread: None,
             snapshot_slot: Some(Arc::new(ArcSwapOption::new(Some(Arc::new(snapshot))))),
             last_displayed_step: 0,
-            displayed_revision: None,
             displayed_generation: 0,
-            displayed_world_bounds: None,
+            displayed_snapshot: None,
             steps_per_frame: 0.0,
             render_fps: 0,
             last_reported_render_fps: 0.0,
@@ -264,9 +251,8 @@ mod tests {
             physics_thread: None,
             snapshot_slot: None,
             last_displayed_step: 0,
-            displayed_revision: None,
             displayed_generation: 0,
-            displayed_world_bounds: None,
+            displayed_snapshot: None,
             steps_per_frame: 0.0,
             render_fps: 0,
             last_reported_render_fps: 0.0,
@@ -274,71 +260,46 @@ mod tests {
             recorded_commands: None,
         };
 
-        let bounds = Rect::new(0.0, 0.0, 100.0, -100.0);
-
         // First step initializes
-        coord.mark_step_displayed(10, 0, bounds);
+        coord.track_steps(10, 0);
         assert_eq!(coord.steps_per_frame, 10.0);
 
         // Subsequent steps use EMA
-        coord.mark_step_displayed(20, 0, bounds);
+        coord.track_steps(20, 0);
         // 10 * 0.9 + 10 * 0.1 = 10.0
         assert!((coord.steps_per_frame - 10.0).abs() < 0.01);
     }
 
     #[test]
-    fn test_new_world_keeps_rendering_after_load() {
+    fn test_each_published_snapshot_is_new_once() {
+        let mut coord = PhysicsCoordinator::with_snapshot(RendererSnapshot::new());
+        assert!(coord.is_new_snapshot_available());
+        let shown = coord.get_latest_snapshot().expect("snapshot");
+        coord.mark_snapshot_displayed(&shown);
+        assert!(!coord.is_new_snapshot_available(), "drawn once is enough");
+
+        // Paused: same step, but the physics thread published an edit (or a
+        // resized world). It is new, whatever its step.
+        coord.publish_for_test(RendererSnapshot::new());
+        assert!(coord.is_new_snapshot_available());
+    }
+
+    #[test]
+    fn test_new_world_restarts_step_tracking() {
         let mut snapshot = RendererSnapshot::new();
         snapshot.simulation_step = 3;
         snapshot.world_generation = 1;
-        let bounds = snapshot.cell_grid_bounds;
-        let revision = snapshot.revision;
         let mut coord = PhysicsCoordinator::with_snapshot(snapshot);
         // The old world had run much further before the load.
         coord.last_displayed_step = 5000;
 
-        assert!(coord.is_new_step_available(), "a new world must render");
-        coord.mark_step_displayed(3, 1, bounds);
-        coord.mark_snapshot_displayed(revision);
+        let shown = coord.get_latest_snapshot().expect("snapshot");
+        coord.mark_snapshot_displayed(&shown);
         assert_eq!(coord.last_displayed_step(), 3);
-        assert!(!coord.is_new_step_available(), "same step is not new");
 
         // Counting up in the new world works as before.
-        coord.mark_step_displayed(13, 1, bounds);
+        coord.track_steps(13, 1);
         assert_eq!(coord.last_displayed_step(), 13);
-    }
-
-    fn snapshot_at(step: u64, world_bounds: Rect) -> RendererSnapshot {
-        let mut snapshot = RendererSnapshot::new();
-        snapshot.simulation_step = step;
-        snapshot.cell_grid_bounds = world_bounds;
-        snapshot
-    }
-
-    #[test]
-    fn test_resized_world_renders_at_the_same_step() {
-        let old = Rect::new(0.0, 0.0, 100.0, -100.0);
-        let resized = Rect::new(0.0, 0.0, 150.0, -100.0);
-        let first = snapshot_at(7, old);
-        let first_revision = first.revision;
-        let mut coord = PhysicsCoordinator::with_snapshot(first);
-        coord.mark_step_displayed(7, 0, old);
-        coord.mark_snapshot_displayed(first_revision);
-        assert!(!coord.is_new_step_available());
-
-        // Paused (also while the window is resized): same step and world,
-        // but the snapshot shows the resized world. A redraw before it
-        // arrived may already have used up `view_dirty`.
-        coord
-            .snapshot_slot
-            .as_ref()
-            .expect("test coordinator has a snapshot slot")
-            .store(Some(Arc::new(snapshot_at(7, resized))));
-        assert!(coord.is_new_step_available(), "a resized world must render");
-
-        coord.mark_step_displayed(7, 0, resized);
-        coord.mark_snapshot_displayed(coord.get_latest_snapshot().unwrap().revision);
-        assert!(!coord.is_new_step_available(), "drawn once is enough");
     }
 
     #[test]
@@ -347,9 +308,8 @@ mod tests {
             physics_thread: None,
             snapshot_slot: None,
             last_displayed_step: 0,
-            displayed_revision: None,
             displayed_generation: 0,
-            displayed_world_bounds: None,
+            displayed_snapshot: None,
             steps_per_frame: 0.0,
             render_fps: 60,
             last_reported_render_fps: 0.0,

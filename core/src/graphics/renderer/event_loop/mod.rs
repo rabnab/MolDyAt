@@ -23,7 +23,6 @@ mod viewport_orchestrator;
 // remain exported so backend code can name the type.
 #[allow(unused_imports)]
 pub use energy_window_manager::EnergyWindowManager;
-pub use frame_orchestrator::FrameDetail;
 pub use input_handler::{InputAction, InputHandler, KeyCode, OperatorTool};
 pub use metrics::{FrameMetrics, MetricsCollector};
 pub use operator_tool_handler::{OperatorToolHandler, ToolContext, ToolPreview, ToolResponse};

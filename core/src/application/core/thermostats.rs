@@ -147,14 +147,6 @@ impl MainContent {
         self.world.add_thermostat(position);
     }
 
-    /// Refresh the thermostat readings before a snapshot: the inactive ones
-    /// always, the active ones too while paused (no step updates them then).
-    /// Returns whether any reading changed.
-    pub(crate) fn refresh_thermostat_readings(&mut self) -> bool {
-        let paused = self.world.sim.is_paused();
-        self.world.measure_thermostats(paused)
-    }
-
     /// Toggle the on/off state of an existing thermostat.
     pub(crate) fn toggle_thermostat(&mut self, thermostat_id: usize) {
         self.world.toggle_thermostat(thermostat_id);
@@ -220,37 +212,40 @@ impl SimulationWorld {
         }
     }
 
-    /// Measure the local temperature (balls within the radius) of the
-    /// inactive thermostats, and of the active ones too when `include_active`:
-    /// an active thermostat measures during its update in the step, which
-    /// does not run while paused. Returns whether any reading changed.
-    pub(crate) fn measure_thermostats(&mut self, include_active: bool) -> bool {
-        let readings: Vec<(usize, f32)> = self
-            .thermostats
-            .thermostats()
+    /// Local temperature of every thermostat (in collection order), measured
+    /// read-only for display. An active thermostat counts the balls it owns
+    /// in the step (nearest active thermostat within its radius); an inactive
+    /// one counts every ball within its radius. `NaN` when too few balls.
+    pub(crate) fn thermostat_readings(&self) -> Vec<f32> {
+        let thermostats = self.thermostats.thermostats();
+        let mut kinetic: Vec<LocalKineticStats> = thermostats
             .iter()
-            .filter(|thermostat| include_active || !thermostat.is_active())
-            .map(|thermostat| {
-                let radius_sq = thermostat.radius * thermostat.radius;
-                let mut kinetic = LocalKineticStats::new();
-                for ball in &self.balls {
-                    if ball.get_position().distance_squared(&thermostat.position) <= radius_sq {
-                        kinetic.add_ball(ball);
-                    }
-                }
-                (thermostat.id, kinetic.temperature().unwrap_or(f32::NAN))
-            })
+            .map(|_| LocalKineticStats::new())
             .collect();
 
-        let mut changed = false;
-        for (id, temperature) in readings {
-            if let Some(thermostat) = self.thermostats.find_mut(id) {
-                // Bit comparison: NaN (no reading) equals NaN.
-                changed |= thermostat.current_local_temp.to_bits() != temperature.to_bits();
-                thermostat.current_local_temp = temperature;
+        for ball in &self.balls {
+            let position = *ball.get_position();
+            let mut owner: Option<(usize, f32)> = None;
+            for (idx, thermostat) in thermostats.iter().enumerate() {
+                let distance_sq = position.distance_squared(&thermostat.position);
+                if distance_sq > thermostat.radius * thermostat.radius {
+                    continue;
+                }
+                if !thermostat.is_active() {
+                    kinetic[idx].add_ball(ball);
+                } else if owner.is_none_or(|(_, best)| distance_sq < best) {
+                    owner = Some((idx, distance_sq));
+                }
+            }
+            if let Some((idx, _)) = owner {
+                kinetic[idx].add_ball(ball);
             }
         }
-        changed
+
+        kinetic
+            .iter()
+            .map(|stats| stats.temperature().unwrap_or(f32::NAN))
+            .collect()
     }
 
     pub(crate) fn apply_thermostats(&mut self, dt: f32, stats_accumulator: &mut StatsAccumulator) {

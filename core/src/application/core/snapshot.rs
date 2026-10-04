@@ -4,8 +4,10 @@ use crate::application::renderer_snapshot::{
     BallRenderData, OperatorSnapshot, RendererSnapshot, ThermoGridSpec, WallSnapshot,
     get_special_ball_color, size_class_to_rgba,
 };
+use crate::application::scene_layers::SceneLayers;
 use crate::application::sim_stats::NORMAL_GRAVITY;
 use crate::application::thermo_field::ThermoGrid;
+use crate::objects2d::SimThermostat;
 use std::sync::Arc;
 
 impl MainContent {
@@ -13,67 +15,18 @@ impl MainContent {
     /// Conditionally clones expensive data (neighbors, tail) only when needed for visualization.
     /// Uses cached force magnitudes from last physics step for neighbor line rendering.
     pub fn create_snapshot(&self) -> RendererSnapshot {
-        // Light snapshot (rendering off): ball colours, tails and thermo grids
-        // exist only for drawing, so they are not built.
-        let full_scene = !self.runtime.light_snapshots();
-        let ball_count = if full_scene {
-            self.world.balls.len()
+        let layers = self.runtime.snapshot_layers();
+        let balls = if layers.contains(SceneLayers::BALLS) {
+            self.build_ball_render_data()
         } else {
-            0
+            Vec::new()
         };
-        let mut balls = Vec::with_capacity(ball_count);
-
-        // Create BallRenderData for each ball
-        for (ball_idx, ball) in self.world.balls.iter().enumerate().take(ball_count) {
-            // Determine color: special colors (verbose/braking) override size class color
-            let color = get_special_ball_color(
-                ball.verbose.console || ball.verbose.lines(),
-                ball.is_braking(),
-            )
-            .unwrap_or_else(|| size_class_to_rgba(ball.get_size_idx()));
-
-            let show_neighbor_lines = ball.verbose.lines();
-            let show_main_neighbors_only = ball.verbose.is_main();
-
-            // Only clone expensive data if it will actually be used
-            let neighbors: Vec<(usize, f32)> =
-                if show_neighbor_lines && ball_idx < self.world.cached_force_results.len() {
-                    // Use cached force magnitudes from last physics step only if needed
-                    self.world.cached_force_results[ball_idx]
-                        .neighbor_forces
-                        .clone()
-                } else {
-                    // Skip cloning if neighbor lines won't be drawn
-                    Vec::new()
-                };
-
-            // Only verbose balls keep a tail
-            let tail = ball
-                .get_tail_positions()
-                .map_or_else(Vec::new, |tail| tail.iter().copied().collect());
-
-            balls.push(BallRenderData {
-                id: ball.get_id(),
-                size_idx: ball.get_size_idx(),
-                position: *ball.get_position(),
-                velocity: *ball.get_velocity(),
-                mass: ball.get_mass(),
-                color,
-                radius: ball.get_radius(),
-                show_neighbor_lines,
-                show_main_neighbors_only,
-                neighbors,
-                update_counter: ball.get_update_counter(),
-                tail,
-            });
-        }
 
         RendererSnapshot {
             balls,
             simulation_step: self.world.step_count as u64,
             world_generation: self.runtime.world_generation(),
-            revision: self.runtime.render_revision(),
-            full_scene,
+            layers,
             kinetic_energy: self.world.sim.get_kinetic_energy(),
             potential_energy: self.world.sim.get_potential_energy(),
             time: self.world.sim.get_time(),
@@ -118,9 +71,9 @@ impl MainContent {
                     .collect(),
                 valve_spans: self.world.valve_spans(),
                 source_spheres: self.world.source_spheres.spheres().to_vec(),
-                thermostats: self.world.thermostats.thermostats().to_vec(),
+                thermostats: self.thermostat_snapshot(),
             },
-            ..if full_scene {
+            ..if layers.contains(SceneLayers::THERMO) {
                 let (cell_temperature, cell_pressure, thermo_grid_spec) =
                     self.build_thermo_snapshot_fields();
                 RendererSnapshot {
@@ -133,6 +86,71 @@ impl MainContent {
                 RendererSnapshot::new()
             }
         }
+    }
+
+    /// Per-ball render data (colours, tails, neighbour lines): the `BALLS`
+    /// layer, which exists only for drawing.
+    fn build_ball_render_data(&self) -> Vec<BallRenderData> {
+        let ball_count = self.world.balls.len();
+        let mut balls = Vec::with_capacity(ball_count);
+
+        // Create BallRenderData for each ball
+        for (ball_idx, ball) in self.world.balls.iter().enumerate() {
+            // Determine color: special colors (verbose/braking) override size class color
+            let color = get_special_ball_color(
+                ball.verbose.console || ball.verbose.lines(),
+                ball.is_braking(),
+            )
+            .unwrap_or_else(|| size_class_to_rgba(ball.get_size_idx()));
+
+            let show_neighbor_lines = ball.verbose.lines();
+            let show_main_neighbors_only = ball.verbose.is_main();
+
+            // Only clone expensive data if it will actually be used
+            let neighbors: Vec<(usize, f32)> =
+                if show_neighbor_lines && ball_idx < self.world.cached_force_results.len() {
+                    // Use cached force magnitudes from last physics step only if needed
+                    self.world.cached_force_results[ball_idx]
+                        .neighbor_forces
+                        .clone()
+                } else {
+                    // Skip cloning if neighbor lines won't be drawn
+                    Vec::new()
+                };
+
+            // Only verbose balls keep a tail
+            let tail = ball
+                .get_tail_positions()
+                .map_or_else(Vec::new, |tail| tail.iter().copied().collect());
+
+            balls.push(BallRenderData {
+                id: ball.get_id(),
+                size_idx: ball.get_size_idx(),
+                position: *ball.get_position(),
+                velocity: *ball.get_velocity(),
+                mass: ball.get_mass(),
+                color,
+                radius: ball.get_radius(),
+                show_neighbor_lines,
+                show_main_neighbors_only,
+                neighbors,
+                update_counter: ball.get_update_counter(),
+                tail,
+            });
+        }
+        balls
+    }
+
+    /// The thermostats with a fresh reading each, for their labels. The
+    /// reading is display data: it is measured here, read-only, for active
+    /// and inactive thermostats alike, so a paused world or a deactivated
+    /// thermostat still shows live values.
+    fn thermostat_snapshot(&self) -> Vec<SimThermostat> {
+        let mut thermostats = self.world.thermostats.thermostats().to_vec();
+        for (thermostat, reading) in thermostats.iter_mut().zip(self.world.thermostat_readings()) {
+            thermostat.current_local_temp = reading;
+        }
+        thermostats
     }
 
     /// Build the thermo-related fields for the snapshot from the rolling-window history.

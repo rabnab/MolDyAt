@@ -17,6 +17,7 @@
 use crate::application::operator_command::delete::DeleteObject;
 use crate::application::operator_command::line::SetGhostWall;
 use crate::application::renderer_snapshot::{OperatorSnapshot, RendererSnapshot};
+use crate::application::scene_layers::SceneLayers;
 use crate::application::{MainContent, PhysicsEvent};
 use crate::graphics::energy_plot::{EnergyData, SharedEnergyData};
 use crate::graphics::renderer::ViewportTransform;
@@ -28,7 +29,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use super::energy_window_manager::EnergyWindowManager;
-use super::frame_orchestrator::{FrameDetail, FrameOrchestrator};
+use super::frame_orchestrator::FrameOrchestrator;
 use super::input_handler::{InputAction, InputHandler, OperatorTool};
 use super::input_orchestrator::InputOrchestrator;
 use super::line_segment_tool::LineSegmentToolHandler;
@@ -176,6 +177,11 @@ impl UnifiedRenderState {
         self.render.view_dirty |= dirty;
     }
 
+    /// Whether the view changed since the last drawn frame.
+    pub fn is_view_dirty(&self) -> bool {
+        self.render.view_dirty
+    }
+
     pub(super) fn mark_view_dirty(&mut self) {
         self.render.view_dirty = true;
     }
@@ -266,18 +272,17 @@ impl UnifiedRenderState {
         FrameOrchestrator::should_render(self)
     }
 
-    /// What the renderer draws this frame: [`FrameDetail::Full`] scene,
-    /// [`FrameDetail::Light`] (rendering off, F2: operators, preview and
-    /// labels only) or [`FrameDetail::Skip`].
-    pub fn frame_detail(&self) -> FrameDetail {
-        FrameOrchestrator::frame_detail(self)
+    /// Scene layers to draw this frame: the ones the config asks for that
+    /// the current snapshot holds.
+    pub fn frame_layers(&self) -> SceneLayers {
+        FrameOrchestrator::frame_layers(self)
     }
 
     /// Call after a frame has been drawn.
     ///
     /// Finalises per-frame metrics, clears the `view_dirty` flag, and
-    /// marks the current simulation step as displayed so `should_render`
-    /// won't re-trigger for the same data.
+    /// marks the current snapshot as displayed so `should_render` won't
+    /// re-trigger for the same data.
     pub fn end_frame(&mut self) {
         FrameOrchestrator::end_frame(self);
     }
@@ -647,31 +652,22 @@ mod tests {
     }
 
     #[test]
-    fn toggle_rendering_flips_flag() {
+    fn toggle_rendering_flips_flag_and_tells_the_physics_thread() {
         let mut config = RendererConfig::default();
-        let physics = make_disconnected_coordinator();
+        let (physics, log) = PhysicsCoordinator::new_recording();
+        // Redraws at once with the new layers.
         let affects = process_action_common(InputAction::ToggleRendering, &physics, &mut config);
-        // Switching back on must redraw the full scene at once.
         assert!(affects);
         assert!(!config.render_drawing);
         // Toggle back.
         process_action_common(InputAction::ToggleRendering, &physics, &mut config);
         assert!(config.render_drawing);
-    }
 
-    #[test]
-    fn toggle_rendering_tells_the_physics_thread_which_snapshots_to_build() {
-        let mut config = RendererConfig::default();
-        let (physics, log) = PhysicsCoordinator::new_recording();
-
-        process_action_common(InputAction::ToggleRendering, &physics, &mut config);
-        process_action_common(InputAction::ToggleRendering, &physics, &mut config);
-
+        // The physics thread builds only the layers that are drawn.
         let sent = log.lock().unwrap().clone();
-        assert_eq!(
-            sent,
-            vec!["SetFullSnapshots(false)", "SetFullSnapshots(true)"]
-        );
+        let expected = [SceneLayers::BASE, SceneLayers::ALL]
+            .map(|layers| format!("{:?}", DomainCommand::SetSnapshotLayers(layers)));
+        assert_eq!(sent, expected);
     }
 
     #[test]

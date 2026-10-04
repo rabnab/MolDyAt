@@ -1,5 +1,6 @@
 use crate::application::operator_command::OperatorCommand;
 use crate::application::persistence::LoadSource;
+use crate::application::scene_layers::SceneLayers;
 use crate::objects2d::ball_impl::Ball2D;
 use crate::objects2d::{Rect, Vec2D};
 
@@ -36,12 +37,11 @@ pub enum DomainCommand {
         world_rect: Rect,
     },
     ResumeAfterResize,
-    /// Whether snapshots carry the full scene (`true`) or only what
-    /// operators, labels and stats need (`false`, rendering switched off).
-    SetFullSnapshots(bool),
     /// Write the world to a new save (reported as a `PhysicsEvent`).
     SaveWorld,
     /// Replace the world with a save (reported as a `PhysicsEvent`).
     LoadWorld(LoadSource),
+    /// Build snapshots with only these layers (F2 drops the heavy ones).
+    SetSnapshotLayers(SceneLayers),
     Operator(Box<dyn OperatorCommand>),
 }

@@ -29,11 +29,10 @@ pub fn process_action_common(
             }
             InputAction::ToggleRendering => {
                 config.toggle_rendering();
-                // The physics thread builds light snapshots while rendering is
-                // off (no ball render data, no thermo grids).
-                physics.send_command(DomainCommand::SetFullSnapshots(config.render_drawing));
-                // Redraw now: the full scene after switching on, the light
-                // path after switching off.
+                // The physics thread builds only the layers that are drawn.
+                physics.send_command(DomainCommand::SetSnapshotLayers(config.scene_layers()));
+                // Redraw now with the new layers (back on: from the next full
+                // snapshot; until it arrives, the light one is drawn light).
                 affects_view = true;
             }
             InputAction::PrintHelp => {
