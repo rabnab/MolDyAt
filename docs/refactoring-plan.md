@@ -1,6 +1,6 @@
 # Refactoring Plan: Maintainability, Extensibility, Performance
 
-Status: proposal (2026-10). Successor to the runtime refactor in
+Status: accepted direction, decisions recorded 2026-10-04 (see §6). Successor to the runtime refactor in
 [refactor_architecture.md](refactor_architecture.md) (#137, landed). The current
 structure is described in [architecture.md](architecture.md).
 
@@ -84,7 +84,7 @@ Size: **S** ≤ 1 day, **M** 2–4 days, **L** ≥ 1 week. "Deps" are hard prere
 | ID | Title | Scope / acceptance | Size | Deps |
 |---|---|---|---|---|
 | G1 | Performance baseline and benchmark scenarios | Extend `scripts/headless_perf.sh` to fixed seeded scenarios (dilute gas 10k, dense gas 50k, walls + valves, large world 200k). Record ms/step split by phase (neighbours, positions, forces, apply, thermo, snapshot) as JSON. Commit baseline numbers in `docs/perf-baseline.md` (with CPU, profile). | M | – |
-| G2 | Golden-output guard for refactors | Make the seeded headless regression fixture and drift suite the required gate for every refactor PR (document in CONTRIBUTING). Add a fixture for a scene with operators (walls, valve, thermostat, source). | S | – |
+| G2 | Golden-output guard for refactors | Make the seeded headless regression fixture and drift suite the required gate for every refactor PR (document in CONTRIBUTING). Add a fixture for a scene with operators (walls, valve, thermostat, source). Add a reproducibility test: same seed with 1 and N Rayon threads gives bit-identical state. | S | – |
 | G3 | Remove crate-wide `#![allow(dead_code)]` | Delete dead code or add local, justified allows. Clippy clean. | M | – |
 
 ### Epic M – Maintainability
@@ -99,20 +99,27 @@ Size: **S** ≤ 1 day, **M** 2–4 days, **L** ≥ 1 week. "Deps" are hard prere
 | M6 | Central `SimConfig` | Collect `DT_GOAL`, `FPS_GOAL`, LJ defaults, skin, speed limit factor, snapshot interval into one serde struct; CLI and save files read/override it. | M | M1 |
 | M7 | Crate split: `thermo_physics` | Move `objects2d`, `application/core` (world, engine), persistence into a crate without winit/softbuffer/scirs2. Keep `rust_thermo_core` as a re-export shim for one release. | L | M1, M2 |
 | M8 | Crate split: `thermo_runtime` + headless | Physics thread, `DomainCommand`, snapshot, headless runner/output move out of the GPU crate. `cargo test -p thermo_physics` builds without a windowing stack. | L | M7 |
-| M9 | Crate split: `thermo_ui` | `graphics/renderer/event_loop`, viewport, sidebar model, interpolation. Energy window moves to the backend (see V3). | M | M8 |
+| M9 | Crate split: `thermo_ui` | `graphics/renderer/event_loop`, viewport, sidebar model, interpolation. Energy window leaves the UI crate and becomes a wgpu window in `thermo_wgpu` (V4); `softbuffer` is dropped. | M | M8 |
 | M10 | Docs refresh | Update `architecture.md`, move `refactor_architecture.md` / `headless-renderer-plan.md` / `operator-handling-review.md` to `docs/history/`, update the `operator-framework` skill. | S | after each epic |
 
-### Epic I – Interaction types
+### Epic I – Interaction types and mixed species
+
+Priority: mixed-species simulation is needed soon, so I1–I7 come right after the
+guardrails. Water (I9–I10) follows. See §5 for the model choice behind it.
 
 | ID | Title | Scope / acceptance | Size | Deps |
 |---|---|---|---|---|
 | I1 | Extract `PairPotential` from `BallPhysics` | Trait/enum with `force(r)`, `potential(r)`, `force_simd(f32x4)`, `potential_simd`, `cutoff()`; capping (`r_cap`, linear extrapolation) and cutoff shift implemented **once**, generic over the potential. LJ becomes `LennardJones { sigma, epsilon }`. Bit-identical drift baselines (same target/profile). | M | G2 |
 | I2 | Static dispatch for the SIMD kernel | `force_simd` generic over the potential (enum match outside the neighbour loop, monomorphised inner loop). Perf within ±2 % of G1. | M | I1 |
-| I3 | Species and interaction table | `Species { id, radius, mass, colour }` replaces `size_idx`; `InteractionTable[species_a][species_b] -> Potential` with Lorentz–Berthelot mixing as default. `KernelPoint` gains a species byte (padding slot is free). Persistence: format version bump + migration from size classes. | L | I1, I2 |
-| I4 | Additional potentials | Pick from: WCA (purely repulsive), Morse, soft-sphere, Yukawa/screened Coulomb. Each with energy-conservation test (dense gas drift scenario) and scalar ↔ SIMD parity test. | M each | I3 |
-| I5 | `ExternalField` abstraction | Gravity becomes `UniformField`; enables e.g. centrifugal or harmonic trap fields; applied in the kick with energy accounting (`potential` reported to stats). | M | I1 |
-| I6 | Bonded interactions (optional) | Harmonic/FENE bonds between ball pairs (molecules). Bonds store **ball ids**, not indices, resolved per step (index contract). Separate force pass. | L | I3 |
-| I7 | UI to choose species/potential | Command + sidebar/keys to select active species for placement; interaction table editable via config file first (M6), UI later. | M | I3, C2 |
+| I3 | Species replace size classes | `Species { name, mass, sigma, epsilon, core_radius, colour }` replaces `size_idx` everywhere (balls, factory, snapshot, renderer colours, persistence). The current edge-distance form is kept as a Kihara core: `U_ij(r) = U_LJ(r − (a_i + a_j))`, `core_radius = 0` gives standard LJ. The five size classes become a `legacy` species preset; old saves migrate to it and the preset reproduces current baselines bit-identically. `KernelPoint` carries the species index in its padding slot. | L | I1, I2 |
+| I4 | Interaction table and mixing rules | `InteractionTable` (N×N `Potential`) built with Lorentz–Berthelot (`σ_ij = (σ_i+σ_j)/2`, `ε_ij = √(ε_i ε_j)`), per-pair overrides from config. Per-pair cutoff, `r_cap` and `U(cutoff)` cached; neighbour-list radius = max pair cutoff + skin. Tests: binary-mixture drift scenario (energy), scalar ↔ SIMD parity with mixed species in one chunk. | M | I3 |
+| I5 | Unit system | Reduced units stay internal. `UnitSystem` (reference σ in Å, ε/k_B in K, mass in amu) converts literature parameters into species and converts display values (T in K, time in ps). | M | I3, M6 |
+| I6 | Species library | Species defined in the config file (M6): N₂, Ar, Ne, CH₄, O₂ (single-site LJ) plus the `legacy` preset. | S | I4, I5 |
+| I7 | Mixed-species UI and metrics | Species picker (sidebar or keys via C2), colour per species, source spheres emit a chosen species, per-species count / temperature as metric series (V3). | M | I3, C2 |
+| I8 | `ExternalField` abstraction | Gravity becomes `UniformField`; enables traps or other fields; applied in the kick with potential-energy accounting. | M | I1 |
+| I9 | Orientational degrees of freedom | Optional per-species orientation θ, angular velocity ω, moment of inertia; rotational velocity-Verlet step; rotational kinetic energy in stats, temperature and the Nosé–Hoover thermostat. Prerequisite for water. Deterministic (no new reductions). | L | I3 |
+| I10 | 2D water: Mercedes-Benz model | LJ core + three hydrogen-bond arms (Gaussian in distance and arm alignment), parameters from Silverstein, Haymet & Dill (1998). Torques from the same potential. Tests: energy conservation, force/torque vs finite differences, smoke test for the density maximum. Water–N₂ via the LJ part only (mixing rules). | L | I9, I4 |
+| I11 | Multi-site molecules (only if needed later) | Rigid two-site N₂ or atomistic water (SPC/E, TIP4P) need molecules, constraints (SHAKE/RATTLE) and electrostatics (damped shifted force). Not needed for mixed species or MB water. | L | I9 |
 
 ### Epic C – Input commands
 
@@ -130,8 +137,8 @@ Size: **S** ≤ 1 day, **M** 2–4 days, **L** ≥ 1 week. "Deps" are hard prere
 |---|---|---|---|---|
 | V1 | Layer registry | Replace hard-coded registration + `PipelineHandles` in `WgpuPipelines::new` with `LayerDescriptor { id, draw_order, viewport, default_visible, toggle_command }`. Pipelines look up their own state; layer toggles become commands (C2). Addresses #216 (cursor/operator layers always prepared). | M | C2 |
 | V2 | Split `PrepareContext` / snapshot into sections | `RendererSnapshot` → `{ frame: FrameInfo, balls: BallBuffer, operators: OperatorSnapshot, fields: FieldSnapshot, debug: Option<DebugSnapshot> }`; pipelines read only their section. New visual = new section or derived data, no new top-level fields. | M | V1 |
-| V3 | Metrics/time-series store | `MetricsRegistry` in runtime: named series (E_kin, E_pot, E_tot, T, P, wall momentum, neighbour count, step time, …) in ring buffers, sampled at snapshot cadence. `EnergyData` becomes one consumer. Headless JSONL output reads the same store. | M | M8 |
-| V4 | In-window plot panel (wgpu) | Generic line-plot pipeline (axes, ticks, legend, autoscale) rendering any selected series from V3, docked or as overlay; replaces the softbuffer character renderer. Keep the separate window as an option. | L | V2, V3 |
+| V3 | Metrics/time-series store | `MetricsRegistry` in runtime: named series (E_kin, E_pot, E_tot, T, P, wall momentum, neighbour count, step time, per-species values, …) in ring buffers, sampled at snapshot cadence. `EnergyData` becomes one consumer. Headless JSONL output reads the same store. | M | M8 |
+| V4 | Plot window (wgpu) | Separate OS window rendered with wgpu (shared device, own surface) replacing the softbuffer character plot: generic line-plot pipeline (axes, ticks, legend, autoscale), any selected series from V3, several plots per window. Window placement keeps the current split-screen layout. | L | V2, V3, M9 |
 | V5 | Field visualisations | Generalise thermo heatmap to any scalar per-cell field (T, P, density, velocity magnitude) and add a vector field (velocity arrows). Field selection cycles through registry. | M | V2 |
 | V6 | Distribution graphs | Speed histogram vs. Maxwell–Boltzmann, radial distribution function g(r) — computed off the hot path at snapshot cadence. | M | V3, V4 |
 | V7 | Data export | CSV/JSONL export of selected series and a snapshot dump from the UI (command) and headless. | S | V3 |
@@ -143,14 +150,14 @@ Each item reports before/after numbers from G1 and must keep drift + energy test
 | ID | Title | Scope / acceptance | Size | Deps |
 |---|---|---|---|---|
 | P1 | Remove per-step allocations | Reuse scratch buffers for `old_positions`, `force_results`, `bounce_infos`, `obstacles`, rebuild candidate lists. | S | G1 |
-| P2 | Parallel force application + stats | `apply_forces_and_collect_stats` via `par_iter_mut` with a `StatsAccumulator` reduce (deterministic order-independent sums or fixed-chunk reduction to keep seeded runs reproducible). | M | G1 |
+| P2 | Parallel force application + stats | `apply_forces_and_collect_stats` via `par_iter_mut`; stats reduced over **fixed-size chunks** combined in chunk order, so sums do not depend on thread count or scheduling (reproducibility test from G2 must pass). | M | G1, G2 |
 | P3 | Thermo field at snapshot cadence | Bin T/P only when a snapshot or metric is due (or accumulate cheap per-cell sums in the apply pass). | S | G1 |
 | P4 | Flat cell grid (CSR) | `CellGrid` as counting-sort arrays (`cell_start`, `ball_idx`) rebuilt per step in parallel instead of `Vec<Vec<Cell>>` with per-cell `Vec`s. | M | P1 |
 | P5 | Spatial reordering of balls | Periodically sort `balls` by cell (Morton/row order) for cache locality; follow the index contract (clear lists, rebuild grid). | M | P4 |
 | P6 | Hot/cold split of `Ball2D` | Hot SoA arrays (pos, v, accel, radius, mass, species) vs cold per-ball data (verbose, tail, counters). Large mechanical change — do after M7 to limit churn. | L | M7, P4 |
 | P7 | Snapshot reuse | Double-buffered snapshot with reused allocations; debug data (neighbour lines, tails) only for verbose balls in a separate small vec; status text built in UI from numbers. | M | V2 |
 | P8 | Precision in large worlds (#213) | Cell-relative coordinates or f64 positions with f32 kernel offsets; evaluate after P6. | L | P6 |
-| P9 | Half neighbour lists (experiment) | Newton's third law to halve pair work; needs per-thread force buffers + reduction. Keep only if G1 shows > 20 % gain at equal determinism. | M | P2, P6 |
+| P9 | ~~Half neighbour lists~~ | Dropped: the force reduction it needs makes results depend on thread scheduling, and reproducibility is required. | – | – |
 | P10 | GPU-side ball buffer | Upload only positions/colours per frame to a persistent instance buffer; instanced draw already exists — verify no per-frame reallocation. | S | V2 |
 
 ---
@@ -159,19 +166,39 @@ Each item reports before/after numbers from G1 and must keep drift + energy test
 
 ```text
 Phase 1 (guardrails + quick wins):  G1, G2, G3, M1, M3, M4, C1, P1, P3
-Phase 2 (extension seams):          I1, I2, C2, C4, M2, M5, P2
-Phase 3 (crate split):              M6, M7, M8, M9, V3
-Phase 4 (features on new seams):    I3, I5, V1, V2, C3, C5, P4, P7, V5
-Phase 5 (bigger features/perf):     I4, V4, V6, V7, P5, P6, P10, I6, I7, P8, P9
+Phase 2 (mixed species):            I1, I2, I3, I4, M6, I5, I6, C2, I7
+Phase 3 (crate split):              M2, M5, M7, M8, M9, C4, P2
+Phase 4 (graphs + seams):           V3, V1, V2, V4, C3, C5, I8, P4, P7, V5
+Phase 5 (water + perf):             I9, I10, V6, V7, P5, P6, P10, P8, I11 (if needed)
 ```
 
-Interaction work (I1/I2) is deliberately before the crate split: it touches the
-hot kernel and is easiest to verify against unchanged baselines. The crate split
-then moves already-clean code.
+Mixed species (Phase 2) lands before the crate split because it is needed soon and
+touches the hot kernel; it is easiest to verify against unchanged baselines. The
+crate split then moves already-clean code. I7 needs the command registry (C2),
+so C2 moves into Phase 2.
 
 ---
 
-## 5. Assumptions
+## 5. Interaction models for N₂ and water
+
+Assumption: the simulation stays 2D, so literature parameters (fitted in 3D)
+give qualitatively right, not quantitatively exact, behaviour.
+
+| Substance | Recommended model | Why | Needs |
+|---|---|---|---|
+| N₂ | Single-site LJ, σ ≈ 3.7 Å, ε/k_B ≈ 95 K (published fits range ≈ 70–100 K depending on the fitted property) | Small, nearly spherical, weak quadrupole; single-site LJ reproduces gas behaviour well. Same machinery as the current balls. | I3–I6 |
+| N₂ (detailed) | Two-site LJ + quadrupole partial charges (e.g. TraPPE) | Only for liquid-structure or orientation effects. | I11 |
+| Water (2D) | **Mercedes-Benz (MB) model**: LJ disk + three H-bond arms | Designed for 2D; reproduces density anomaly, H-bond network and hydrophobic effect. Single particle, short-range, no charges, cutoff-friendly → fits cell grid, Verlet lists and SIMD design. | I9, I10 |
+| Water (alternative) | mW (Stillinger–Weber three-body) | Single-site, no orientation, but its 109.47° angle term is tuned for 3D tetrahedra; would need re-tuning in 2D. | three-body kernel |
+| Water (atomistic) | SPC/E, TIP4P/2005 | Charges, rigid geometry and long-range electrostatics; expensive and mostly 3D-specific. | I11 |
+| Water–N₂ | LJ part via Lorentz–Berthelot; H-bond arms act only water–water | N₂ is a hydrophobic solute — the classic MB-model use case. | I4, I10 |
+
+Pure LJ for water is **not** recommended: it gives a simple liquid without
+hydrogen bonding, so none of water's characteristic behaviour appears.
+
+---
+
+## 6. Assumptions and decisions
 
 - The project stays 2D and CPU-physics (no GPU compute for forces).
 - Determinism of seeded runs on the same target/profile must be preserved; any
@@ -179,10 +206,16 @@ then moves already-clean code.
 - Persistence files may get a format version bump with migration; old saves keep loading.
 - wgpu stays the only renderer backend.
 
-## 6. Open decisions
+Decisions (2026-10-04):
 
-1. **Crate split (M7–M9)**: worth the churn, or keep one `core` crate with stricter modules and feature flags?
-2. **Species model (I3)**: replace size classes completely, or keep size classes as a species preset?
-3. **Plots (V4)**: in the main window (docked panel) or keep a separate window rendered with wgpu?
-4. **Half neighbour lists (P9)**: accept a reduction step and its determinism cost, or keep full lists?
-5. **Which extra potentials (I4)** matter first?
+1. Split into four crates (M7–M9).
+2. Particle types (species) replace size classes; size classes survive only as a migration preset (I3).
+3. Plots move to a separate wgpu window (V4).
+4. Seeded runs must stay reproducible, including across thread counts (G2, P2; P9 dropped).
+5. Mixed-species simulation has priority (Phase 2); N₂ and water models per §5.
+
+## 7. Open questions
+
+1. Water model: Mercedes-Benz (recommended), or is atomistic water (I11) required?
+2. Unit reference for reduced units (I5): N₂, argon, or water's LJ core?
+3. Should the Kihara core radius stay user-visible, or should real species use plain LJ (`core_radius = 0`) only?
