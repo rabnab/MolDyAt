@@ -11,19 +11,22 @@
 pub struct SceneLayers(u8);
 
 impl SceneLayers {
-    /// Operators, tool previews, labels, sidebar and text. Always drawn.
+    /// Operators, tool previews, sidebar and text. Always drawn.
     pub const BASE: Self = Self(1 << 0);
     /// Balls: per-ball render data (colours, tails, neighbour lines) and
     /// their sprites.
     pub const BALLS: Self = Self(1 << 1);
     /// Thermo field grids and their heatmap and value overlays.
     pub const THERMO: Self = Self(1 << 2);
+    /// Live operator readouts: thermostat temperature readings and their
+    /// labels.
+    pub const READOUTS: Self = Self(1 << 3);
 
     /// The full scene.
-    pub const ALL: Self = Self(Self::BASE.0 | Self::BALLS.0 | Self::THERMO.0);
+    pub const ALL: Self = Self(Self::BASE.0 | Self::HEAVY.0);
     /// What F2 (rendering off) switches off: work that only exists for
     /// drawing the full scene.
-    pub const HEAVY: Self = Self(Self::BALLS.0 | Self::THERMO.0);
+    pub const HEAVY: Self = Self(Self::BALLS.0 | Self::THERMO.0 | Self::READOUTS.0);
 
     /// Whether every layer of `other` is in `self`.
     pub const fn contains(self, other: Self) -> bool {
@@ -60,6 +63,7 @@ mod tests {
         assert!(light.contains(SceneLayers::BASE));
         assert!(!light.contains(SceneLayers::BALLS));
         assert!(!light.contains(SceneLayers::THERMO));
+        assert!(!light.contains(SceneLayers::READOUTS));
     }
 
     #[test]

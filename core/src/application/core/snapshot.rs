@@ -71,7 +71,11 @@ impl MainContent {
                     .collect(),
                 valve_spans: self.world.valve_spans(),
                 source_spheres: self.world.source_spheres.spheres().to_vec(),
-                thermostats: self.thermostat_snapshot(),
+                thermostats: if layers.contains(SceneLayers::READOUTS) {
+                    self.thermostat_snapshot()
+                } else {
+                    self.world.thermostats.thermostats().to_vec()
+                },
             },
             ..if layers.contains(SceneLayers::THERMO) {
                 let (cell_temperature, cell_pressure, thermo_grid_spec) =
@@ -141,10 +145,10 @@ impl MainContent {
         balls
     }
 
-    /// The thermostats with a fresh reading each, for their labels. The
-    /// reading is display data: it is measured here, read-only, for active
-    /// and inactive thermostats alike, so a paused world or a deactivated
-    /// thermostat still shows live values.
+    /// The thermostats with a fresh reading each, for their labels (the
+    /// `READOUTS` layer). The reading is display data: it is measured here,
+    /// read-only, for active and inactive thermostats alike, so a paused
+    /// world or a deactivated thermostat still shows live values.
     fn thermostat_snapshot(&self) -> Vec<SimThermostat> {
         let mut thermostats = self.world.thermostats.thermostats().to_vec();
         for (thermostat, reading) in thermostats.iter_mut().zip(self.world.thermostat_readings()) {

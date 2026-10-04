@@ -272,7 +272,8 @@ pub struct RendererSnapshot {
     pub world_generation: u64,
 
     /// Scene layers this snapshot holds. Without `BALLS` it carries no ball
-    /// render data, without `THERMO` no thermo grids (rendering off, F2).
+    /// render data, without `THERMO` no thermo grids, without `READOUTS` no
+    /// fresh thermostat readings (rendering off, F2).
     pub layers: SceneLayers,
 
     /// Kinetic energy of the system

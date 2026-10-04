@@ -6,6 +6,7 @@
 //! walls (see `gpu/label_background.rs`).
 
 use rust_thermo_core::application::AppResult;
+use rust_thermo_core::application::scene_layers::SceneLayers;
 use rust_thermo_core::objects2d::SimThermostat;
 use std::time::Instant;
 
@@ -209,6 +210,10 @@ impl RenderPipeline for ThermostatLabelPipeline {
 
     fn viewport_mode(&self) -> ViewportMode {
         ViewportMode::Inset
+    }
+
+    fn layer(&self) -> SceneLayers {
+        SceneLayers::READOUTS
     }
 
     fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {

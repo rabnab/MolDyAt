@@ -477,3 +477,21 @@ fn snapshot_reading_of_active_thermostats_uses_step_ownership() {
     assert_eq!(readings.len(), 2);
     assert!(readings[1] > readings[0], "the right pair is hotter");
 }
+
+#[test]
+fn rendering_off_measures_no_thermostat_readings() {
+    use crate::application::scene_layers::SceneLayers;
+
+    let mut mc = make_content();
+    mc.add_thermostat(Vec2D::new(0.0, 0.0));
+    add_ball(&mut mc, Vec2D::new(-0.5, 0.0), Vec2D::new(1.0, 0.0));
+    add_ball(&mut mc, Vec2D::new(0.5, 0.0), Vec2D::new(-1.0, 0.0));
+    assert!(snapshot_reading(&mc) > 0.0);
+
+    // F2 off: labels are not drawn, so nothing is measured; the snapshot
+    // keeps the thermostat's stored value.
+    mc.runtime_mut()
+        .set_snapshot_layers(SceneLayers::ALL.difference(SceneLayers::HEAVY));
+    let stored = mc.world().thermostats.thermostats()[0].current_local_temp;
+    assert_eq!(snapshot_reading(&mc).to_bits(), stored.to_bits());
+}
