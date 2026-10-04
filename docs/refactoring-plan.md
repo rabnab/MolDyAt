@@ -172,6 +172,13 @@ Phase 4 (graphs + seams):           V3, V1, V2, V4, C3, C5, I8, P4, P7, V5
 Phase 5 (water + perf):             I9, I10, V6, V7, P5, P6, P10, P8, I11 (if needed)
 ```
 
+GitHub issues:
+
+| Phase | Parent | Items |
+|---|---|---|
+| 1 | #219 | G1 #221, G2 #222, G3 #223, M1 #224, M3 #225, M4 #226, C1 #227, P1 #228, P3 #229 |
+| 2 | #220 | I1 #230, M6 #231, C2 #232, I2 #233, I3 #234, I4 #235, I5 #236, I6 #237, I7 #238 |
+
 Mixed species (Phase 2) lands before the crate split because it is needed soon and
 touches the hot kernel; it is easiest to verify against unchanged baselines. The
 crate split then moves already-clean code. I7 needs the command registry (C2),
