@@ -34,5 +34,9 @@ panic = "abort"
 strip = "symbols"
 
 [profile.dist]
+# Published release binaries (.github/workflows/release.yml). Portable
+# baseline x86-64-v2 (SSE4.2, ~2009+ CPUs). Do not use `native` here: the
+# binary would only run on CPUs like the CI runner's. The SIMD path is fixed
+# at compile time, so drift baselines from `release` do not apply to `dist`.
 inherits = "release"
 rustflags = ["-C", "target-cpu=x86-64-v2"]

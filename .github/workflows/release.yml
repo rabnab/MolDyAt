@@ -54,7 +54,7 @@ jobs:
           key: dist-${{ matrix.target }}
 
       - name: Build
-        run: cargo build -p ${{ env.BIN }} --profile dist --target ${{ matrix.target }}
+        run: cargo build --locked -p ${{ env.BIN }} --profile dist --target ${{ matrix.target }}
 
       - name: Package
         shell: bash
@@ -103,7 +103,10 @@ jobs:
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"
           else
-            gh release create "$TAG" dist/* \
+            # Tags with a SemVer suffix (v1.4.0-rc.1) become pre-releases.
+            prerelease=()
+            if [[ "$TAG" == *-* ]]; then prerelease=(--prerelease); fi
+            gh release create "$TAG" dist/* "${prerelease[@]}" \
               --repo "$GITHUB_REPOSITORY" \
               --title "$TAG" \
               --generate-notes \
