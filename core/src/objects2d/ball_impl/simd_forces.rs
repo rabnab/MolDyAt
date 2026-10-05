@@ -13,11 +13,11 @@
 //! To prevent numerical instabilities when particles get very close, forces are capped
 //! at `max_force`. This is implemented as:
 //! - For r >= r_cap: Standard LJ force F_LJ(r)
-//! - For r < r_cap: Capped force = max_force
+//! - For r < r_cap: max_force + core_stiffness·(r_cap - r), rising with the overlap
 //! - For r >= lj_cutoff: no interaction
 //!
-//! The corresponding potential energy uses linear extrapolation U(r) = U(r_cap) - max_force·(r - r_cap)
-//! below r_cap and is shifted to zero at the cutoff, so neighbour-list changes (which only
+//! The corresponding potential energy uses the quadratic continuation
+//! U(r) = U(r_cap) - max_force·(r - r_cap) + ½·core_stiffness·(r - r_cap)² below r_cap and is shifted to zero at the cutoff, so neighbour-list changes (which only
 //! happen beyond the cutoff) do not change the energy. See `BallPhysics::potential()` for details.
 
 use crate::objects2d::Vec2D;
@@ -69,7 +69,7 @@ pub(crate) fn kernel_points(balls: &[Ball2D]) -> Vec<KernelPoint> {
 
 /// Calculate Lennard-Jones forces for multiple ball pairs using SIMD vectorization.
 /// Processes neighbors in chunks of 4 with `f32x4` (see the module docs for the instruction set).
-/// Applies force capping at r < r_cap with linear potential extrapolation for energy conservation.
+/// Below r_cap the force rises linearly from max_force, with the matching quadratic potential.
 /// Conditionally collects per-neighbor force magnitudes only when visualization is enabled.
 ///
 /// # Arguments
@@ -138,8 +138,8 @@ pub fn force_simd(
         let radius_sum = radii_vec + f32x4::splat(ball_radius);
         let edge_dist = center_dist - radius_sum;
 
-        // Lennard-Jones force, capped at max_force below r_cap and zero beyond
-        // the cutoff (see BallPhysics::force).
+        // Lennard-Jones force, sloped from max_force below r_cap and zero
+        // beyond the cutoff (see BallPhysics::force).
         let lj_force = physics.force_simd(edge_dist);
 
         // Force direction: force / center_dist
@@ -151,7 +151,7 @@ pub fn force_simd(
         let fx = dx_vec * force_to_dist;
         let fy = dy_vec * force_to_dist;
 
-        // Shifted LJ potential with linear continuation below r_cap, zero
+        // Shifted LJ potential with quadratic continuation below r_cap, zero
         // beyond the cutoff (see BallPhysics::potential).
         let potential_used = physics.potential_simd(edge_dist);
 

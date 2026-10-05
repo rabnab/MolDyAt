@@ -11,6 +11,10 @@ use std::simd::prelude::{SimdFloat, SimdPartialOrd};
 pub(crate) const LJ_SIG: f32 = 1.; // equilibrium distance
 const LJ_EPS: f32 = 1.; // attractive strength
 const MAX_FORCE: f32 = 100.0; // max repulsive force to cap at
+/// Slope of the repulsion below `r_cap`: the force grows by this much per unit
+/// of extra compression, so deeper overlaps push harder than shallow ones.
+/// Stability: smallest reduced mass 0.5 gives ω·dt ≈ 0.2 at dt = 0.01.
+const CORE_STIFFNESS: f32 = 200.0;
 const SQRT6_OF_TWO: f32 = 1.122_462; // == 2^(1/6)
 
 #[derive(Clone)]
@@ -20,6 +24,8 @@ pub struct PhysicsConstants {
     pub lj_cutoff: f32,
     pub gravity: f32,
     pub max_force: f32,
+    /// Force slope below `r_cap` (see [`BallPhysics::force`]).
+    pub core_stiffness: f32,
     pub pot_at_cap: f32,
     /// Cached distance at which LJ force equals max_force
     pub r_cap: f32,
@@ -44,6 +50,7 @@ impl PhysicsConstants {
             lj_sig,
             gravity: 0.,
             max_force,
+            core_stiffness: CORE_STIFFNESS,
             lj_cutoff,
             pot_at_cap,
             r_cap,
@@ -66,9 +73,11 @@ impl PhysicsConstants {
     ///   F_LJ(r) = 24·ε·(σ/r)^6 · [2·(σ/r)^6 - 1] / r
     ///
     /// # Energy Conservation Strategy
-    /// For r < r_cap, we cap the force at max_force and use a linear potential:
-    ///   U(r) = U(r_cap) - max_force·(r - r_cap)
-    /// This ensures F = -dU/dr = +max_force (repulsive), energy continuity at r_cap, and conservative forces.
+    /// For r < r_cap, the force continues from max_force with a constant slope k
+    /// (`core_stiffness`), with the matching quadratic potential:
+    ///   U(r) = U(r_cap) - max_force·(r - r_cap) + ½·k·(r - r_cap)²
+    /// This ensures F = -dU/dr = max_force + k·(r_cap - r) (repulsive), energy
+    /// continuity at r_cap, and conservative forces.
     ///
     /// # Algorithm
     /// 1. Try Newton's method for fast convergence (typically 5-10 iterations)
@@ -164,6 +173,7 @@ impl Default for PhysicsConstants {
             gravity: 0.0,
             //gravity: 1.0,
             max_force: MAX_FORCE,
+            core_stiffness: CORE_STIFFNESS,
             //softening: 0.01,
             lj_cutoff,
             pot_at_cap,
@@ -256,8 +266,14 @@ impl BallPhysics {
         self.equilibrium_edge_distance() * 0.5 + radius
     }
 
-    /// Pair force magnitude (positive = repulsive) at `edge_dist`: capped at
-    /// `max_force` below `r_cap` and zero at and beyond `lj_cutoff`.
+    /// Pair force magnitude (positive = repulsive) at `edge_dist`: Lennard-Jones
+    /// down to `r_cap`, below it `max_force + core_stiffness·(r_cap - edge_dist)`,
+    /// and zero at and beyond `lj_cutoff`.
+    ///
+    /// The slope below `r_cap` matters in crowded regions: with a flat cap every
+    /// close contact pushes equally hard however deep it is, so a deeply
+    /// overlapping pair squeezed by its neighbours feels no net force to
+    /// separate (issue #240).
     pub(crate) fn force(&self, edge_dist: f32) -> f32 {
         if edge_dist >= self.constants.lj_cutoff {
             return 0.;
@@ -269,7 +285,8 @@ impl BallPhysics {
 
         let quot = lj_sig / edge_dist_cap;
         let quot_six = quot * quot * quot * quot * quot * quot; // (σ/r)^6
-        24. * lj_eps * quot_six * (2. * quot_six - 1.) / edge_dist_cap
+        let lj_force = 24. * lj_eps * quot_six * (2. * quot_six - 1.) / edge_dist_cap;
+        lj_force + self.constants.core_stiffness * (r_cap - edge_dist).max(0.)
     }
 
     /// SIMD version of [`Self::force`] for four raw edge distances.
@@ -279,10 +296,12 @@ impl BallPhysics {
         let edge_dist_cap = edge_dist.simd_max(f32x4::splat(self.get_force_cap_distance()));
         let quot = f32x4::splat(lj_sig) / edge_dist_cap;
         let quot_six = quot * quot * quot * quot * quot * quot; // (σ/r)^6
-        let force = f32x4::splat(24. * lj_eps)
+        let lj_force = f32x4::splat(24. * lj_eps)
             * quot_six
             * (f32x4::splat(2.) * quot_six - f32x4::splat(1.))
             / edge_dist_cap;
+        let compression = (edge_dist_cap - edge_dist).simd_max(f32x4::splat(0.));
+        let force = lj_force + f32x4::splat(self.constants.core_stiffness) * compression;
         self.inside_cutoff(edge_dist)
             .select(force, f32x4::splat(0.))
     }
@@ -299,12 +318,13 @@ impl BallPhysics {
     /// At equilibrium (r = 2^(1/6)·σ), U = -ε (minimum potential energy).
     ///
     /// ### Force Capping for Energy Conservation
-    /// When r < r_cap (where force would exceed max_force), we use a linear potential:
-    ///   U(r) = U(r_cap) - max_force·(r - r_cap)
+    /// When r < r_cap (where force would exceed max_force), we use a quadratic potential:
+    ///   U(r) = U(r_cap) - max_force·(r - r_cap) + ½·k·(r - r_cap)²
+    /// with k = `core_stiffness`.
     ///
-    /// This linear extrapolation ensures:
+    /// This extrapolation ensures:
     /// 1. Energy continuity at r = r_cap: U(r_cap⁻) = U(r_cap⁺)
-    /// 2. Force continuity: F = -dU/dr = +max_force (repulsive) for r < r_cap
+    /// 2. Force continuity: F = -dU/dr = max_force + k·(r_cap - r) (repulsive) for r < r_cap
     /// 3. Conservative force field (energy is conserved)
     ///
     /// ### Cutoff
@@ -319,41 +339,46 @@ impl BallPhysics {
         if edge_dist >= self.constants.lj_cutoff {
             return 0.;
         }
-        // Potential
-        let pot_quot = self.constants.lj_sig / edge_dist.max(1e-10);
-        let pot_quot_six = pot_quot * pot_quot * pot_quot * pot_quot * pot_quot * pot_quot;
-        let potential_uncapped = 4. * self.constants.lj_eps * pot_quot_six * (pot_quot_six - 1.);
-        // Linear potential for r < r_cap: U(r) = U(r_cap) - max_force·(r - r_cap)
-        // This ensures F = -dU/dr = +max_force (repulsive, constant) below r_cap
-        let potential_linear = (self.constants.pot_at_cap
-            - self.constants.max_force * (edge_dist - self.constants.r_cap))
-            .max(self.constants.pot_at_cap);
-        potential_linear.min(potential_uncapped) - self.constants.pot_at_cutoff
+        let r_cap = self.constants.r_cap;
+        let potential = if edge_dist < r_cap {
+            // U(r) = U(r_cap) - max_force·(r - r_cap) + ½·k·(r - r_cap)²,
+            // so F = -dU/dr = max_force + k·(r_cap - r) below r_cap
+            let compression = r_cap - edge_dist;
+            self.constants.pot_at_cap
+                + compression
+                    * (self.constants.max_force + 0.5 * self.constants.core_stiffness * compression)
+        } else {
+            let pot_quot = self.constants.lj_sig / edge_dist;
+            let pot_quot_six = pot_quot * pot_quot * pot_quot * pot_quot * pot_quot * pot_quot;
+            4. * self.constants.lj_eps * pot_quot_six * (pot_quot_six - 1.)
+        };
+        potential - self.constants.pot_at_cutoff
     }
 
     pub(crate) fn potential_simd(&self, edge_dist: f32x4) -> f32x4 {
         // === Potential Energy Calculation with Force Capping ===
         // Standard LJ potential: U(r) = 4·ε·[(σ/r)^12 - (σ/r)^6]
-        // For r < r_cap: Use linear extrapolation to preserve energy conservation
-        // Calculate standard LJ potential (with capping)
+        // For r < r_cap: quadratic continuation matching the sloped core force
         let r_cap_vec = f32x4::splat(self.get_force_cap_distance());
         let lj_sig = self.constants.lj_sig;
         let lj_eps = self.constants.lj_eps;
         let max_force_vec = f32x4::splat(self.constants.max_force);
+        let half_stiffness_vec = f32x4::splat(0.5 * self.constants.core_stiffness);
         let pot_at_cap_vec = f32x4::splat(self.constants.pot_at_cap);
 
-        let pot_quot = f32x4::splat(lj_sig) / edge_dist.simd_max(f32x4::splat(1e-10));
+        let in_core = edge_dist.simd_lt(r_cap_vec);
+        // LJ evaluated at max(r, r_cap) only, so it stays finite in the core
+        let pot_quot = f32x4::splat(lj_sig) / edge_dist.simd_max(r_cap_vec);
         let pot_quot_six = pot_quot * pot_quot * pot_quot * pot_quot * pot_quot * pot_quot;
-        let potential_uncapped =
+        let potential_lj =
             f32x4::splat(4. * lj_eps) * pot_quot_six * (pot_quot_six - f32x4::splat(1.));
-        // Linear potential for r < r_cap: U(r) = U(r_cap) - max_force·(r - r_cap)
-        // This ensures F = -dU/dr = +max_force (repulsive, constant) below r_cap
-        let potential_linear = f32x4::simd_max(
-            pot_at_cap_vec - max_force_vec * (edge_dist - r_cap_vec),
-            pot_at_cap_vec,
-        );
+        // Below r_cap: U(r) = U(r_cap) - max_force·(r - r_cap) + ½·k·(r - r_cap)²,
+        // so F = -dU/dr = max_force + k·(r_cap - r)
+        let compression = r_cap_vec - edge_dist;
+        let potential_core =
+            pot_at_cap_vec + compression * (max_force_vec + half_stiffness_vec * compression);
 
-        let potential_shifted = f32x4::simd_min(potential_linear, potential_uncapped)
+        let potential_shifted = in_core.select(potential_core, potential_lj)
             - f32x4::splat(self.constants.pot_at_cutoff);
         self.inside_cutoff(edge_dist)
             .select(potential_shifted, f32x4::splat(0.))
