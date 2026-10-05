@@ -177,3 +177,12 @@ fn test_paused_physics_state_is_unchanged_by_steps_and_snapshots() {
 
     assert_eq!(state(&main_content), before);
 }
+
+#[test]
+fn test_default_speed_limit_is_positive_for_flipped_world_rect() {
+    // World rects have a negative height (y up); the limit must still be 20%
+    // of the shorter side, not a negative number.
+    let rect = crate::objects2d::Rect::new(0., 0., 50., -36.6);
+    let limit = SimulationEngine::default_speed_limit(&rect);
+    assert!((limit - 36.6 * 0.2).abs() < 1e-5, "limit {limit}");
+}

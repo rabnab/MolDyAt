@@ -208,11 +208,12 @@ impl Ball2D {
         let gravi_vec = Vec2D::new(0., -gravity);
         let mut accel: Vec2D = (total_force).scaled(1. / self.mass) + gravi_vec;
 
+        debug_assert!(speed_limit >= 0., "negative speed limit {speed_limit}");
         let speed_sq = self.v.norm_sq();
 
         if speed_sq > speed_limit.powi(2) {
             let speed = f32::sqrt(speed_sq);
-            let over_speed = f32::min(speed, speed - speed_limit);
+            let over_speed = speed - speed_limit;
             let speed_reduction = 0.25 * f32::sqrt(2.) * over_speed;
 
             // Apply braking acceleration opposite to velocity
@@ -402,6 +403,11 @@ mod tests {
         // acceleration should have negative dot with velocity to reduce speed
         let dot = acc2.x * b.v.x + acc2.y * b.v.y;
         assert!(dot < 0.0, "accel should oppose velocity, dot={}", dot);
+
+        // Case 3: braking scales with the excess over the limit, not the whole speed
+        let acc3 = b.accel_with_speed_limit(&Vec2D::new(0.0, 0.0), 0., 4.0, dt);
+        let expected = -0.25 * f32::sqrt(2.) * (5.0 - 4.0) / dt;
+        assert!((acc3.norm() + expected).abs() < 1e-4, "braking {acc3:?}");
     }
 
     #[test]
