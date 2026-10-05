@@ -5,7 +5,7 @@ members = ["core", "wgpu_renderer"]
 resolver = "2"
 
 [workspace.package]
-version = "0.1.1"
+version = "1.3.0"
 edition = "2024"
 
 [workspace.lints.rust]
@@ -32,3 +32,7 @@ rustflags = ["-C", "target-cpu=native", "-C", "target-feature=-amx-tile"]
 opt-level = 3
 panic = "abort"
 strip = "symbols"
+
+[profile.dist]
+inherits = "release"
+rustflags = ["-C", "target-cpu=x86-64-v2"]
