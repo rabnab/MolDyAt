@@ -106,45 +106,33 @@ fn test_min_movement_threshold_formula() {
 fn test_force_cap_at_max_force() {
     let phys = BallPhysics::default();
     let max_force = phys.constants.max_force;
+    let stiffness = phys.constants.core_stiffness;
     let r_cap = phys.get_force_cap_distance();
 
     // At r_cap, force should be approximately max_force
     let force_at_cap = phys.force(r_cap);
     approx(force_at_cap, max_force, 1e-2);
 
-    // Below r_cap, force should be capped at max_force
-    let r_below_cap = r_cap * 0.5;
-    let force_below = phys.force(r_below_cap);
-    approx(force_below, max_force, 1e-2);
-
-    // Well below r_cap, force should still be capped
-    let r_very_small = r_cap * 0.1;
-    let force_very_small = phys.force(r_very_small);
-    approx(force_very_small, max_force, 1e-2);
+    // Below r_cap, the force rises linearly from max_force
+    for r in [r_cap * 0.5, r_cap * 0.1] {
+        approx(phys.force(r), max_force + stiffness * (r_cap - r), 1e-2);
+    }
 }
 
 #[test]
-fn test_potential_linear_below_cap() {
+fn test_potential_quadratic_below_cap() {
     let phys = BallPhysics::default();
     let max_force = phys.constants.max_force;
+    let stiffness = phys.constants.core_stiffness;
     let r_cap = phys.get_force_cap_distance();
 
-    // Get potential at r_cap
     let pot_at_cap = phys.potential(r_cap);
 
-    // Check potential at a distance below r_cap
-    let r_below = r_cap * 0.8;
-    let pot_below = phys.potential(r_below);
-
-    // Expected potential: U(r) = U(r_cap) - max_force * (r - r_cap)
-    let expected_pot = pot_at_cap - max_force * (r_below - r_cap);
-    approx(pot_below, expected_pot, 1e-4);
-
-    // Check another point
-    let r_below2 = r_cap * 0.5;
-    let pot_below2 = phys.potential(r_below2);
-    let expected_pot2 = pot_at_cap - max_force * (r_below2 - r_cap);
-    approx(pot_below2, expected_pot2, 1e-4);
+    // Expected potential: U(r) = U(r_cap) - max_force·(r - r_cap) + ½·k·(r - r_cap)²
+    for r in [r_cap * 0.8, r_cap * 0.5, -0.6] {
+        let expected = pot_at_cap - max_force * (r - r_cap) + 0.5 * stiffness * (r - r_cap).powi(2);
+        approx(phys.potential(r), expected, 1e-4);
+    }
 }
 
 #[test]
@@ -166,34 +154,16 @@ fn test_force_not_capped_above_threshold() {
 
 #[test]
 fn test_energy_conservation_with_force_cap() {
-    // Test that energy is conserved when force capping is active
+    // Below r_cap the force must be -dU/dr of the potential, or capped
+    // contacts gain or lose energy.
     let phys = BallPhysics::default();
     let r_cap = phys.get_force_cap_distance();
-    let max_force = phys.constants.max_force;
+    let h = 1e-3;
 
-    // Test linear potential below r_cap
-    let pot_at_cap = phys.potential(r_cap);
-    let r_below1 = r_cap * 0.9;
-    let r_below2 = r_cap * 0.7;
-
-    let pot_below1 = phys.potential(r_below1);
-    let pot_below2 = phys.potential(r_below2);
-
-    // Check linearity: slope should be -max_force
-    // U(r) = U(r_cap) - max_force * (r - r_cap)
-    let expected_pot1 = pot_at_cap - max_force * (r_below1 - r_cap);
-    let expected_pot2 = pot_at_cap - max_force * (r_below2 - r_cap);
-
-    approx(pot_below1, expected_pot1, 1e-4);
-    approx(pot_below2, expected_pot2, 1e-4);
-
-    // Verify the slope between two points in the linear region
-    let delta_r = r_below1 - r_below2;
-    let delta_u = pot_below1 - pot_below2;
-    let slope = delta_u / delta_r;
-
-    // Slope should equal -max_force (since F = -dU/dr and F is constant at +max_force)
-    approx(slope, -max_force, 0.1);
+    for r in [r_cap * 0.9, r_cap * 0.5, 0.0, -0.4, -1.2] {
+        let slope = (phys.potential(r + h) - phys.potential(r - h)) / (2. * h);
+        approx(phys.force(r), -slope, 1e-2);
+    }
 }
 
 #[test]
@@ -564,34 +534,32 @@ fn test_potential_continuity_at_rcap() {
 
 #[test]
 fn test_overlapping_balls_force_capped() {
-    // Test that overlapping balls (negative edge distance) have force properly capped
-    // This addresses the issue where edge_dist = -0.40344 was producing force = 1840
+    // Overlapping balls (negative edge distance) must not see the steep LJ
+    // wall (edge_dist = -0.40344 once produced force = 1840), but the force
+    // must keep rising with the overlap so crowded neighbours cannot pin a
+    // deeply overlapping pair (issue #240).
     let phys = BallPhysics::default();
     let max_force = phys.constants.max_force;
+    let stiffness = phys.constants.core_stiffness;
+    let r_cap = phys.get_force_cap_distance();
 
-    println!("\n=== Testing Force Capping for Overlapping Balls ===");
-
-    // Test with the specific case from the user's log: edge_dist = -0.40344
     let edge_dist = -0.40344;
-    let force = phys.force(edge_dist);
-    println!(
-        "Edge dist: {:.5}, Force: {:.4}, Max force: {:.1}",
-        edge_dist, force, max_force
+    approx(
+        phys.force(edge_dist),
+        max_force + stiffness * (r_cap - edge_dist),
+        1e-2,
     );
 
-    // Force should be capped at max_force, not some huge value like 1840
-    approx(force, max_force, 1e-2);
-
-    // Test several negative distances to ensure consistent capping
-    println!("\nTesting various negative edge distances:");
-    for mult in [0.1, 0.5, 1.0, 2.0, 10.0] {
-        let dist = -mult;
+    let mut previous = phys.force(r_cap);
+    for dist in [-0.1, -0.5, -1.0, -2.0] {
         let f = phys.force(dist);
-        println!("  edge_dist = {:.2}: force = {:.1}", dist, f);
-        approx(force, max_force, 1e-2);
+        assert!(f.is_finite(), "force at {dist} is {f}");
+        assert!(
+            f > previous,
+            "force must grow with overlap: {f} <= {previous} at {dist}"
+        );
+        previous = f;
     }
-
-    println!("✓ All overlapping ball forces correctly capped at max_force");
 }
 
 #[test]

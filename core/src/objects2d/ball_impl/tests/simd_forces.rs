@@ -2,6 +2,7 @@ use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::Ball2D;
 use crate::objects2d::ball_impl::ball_physics::BallPhysics;
 use crate::objects2d::ball_impl::simd_forces::{KernelPoint, force_simd, kernel_points};
+use std::simd::f32x4;
 
 fn approx(a: f32, b: f32, eps: f32) {
     assert!(
@@ -130,8 +131,8 @@ fn test_simd_potential_energy_correctness() {
 
     approx(simd_result.potential_energy, expected_total, 1e-4);
 
-    // Test Case 3: Verify force-capped region uses linear potential
-    // When edge_dist < r_cap, potential should follow linear extrapolation
+    // Test Case 3: Verify force-capped region uses the quadratic potential
+    // When edge_dist < r_cap, potential follows the quadratic continuation
     let r_cap = physics.get_force_cap_distance();
     let edge_dist_capped = r_cap * 0.5; // Well below r_cap
 
@@ -143,12 +144,16 @@ fn test_simd_potential_energy_correctness() {
 
     let simd_result = force_simd(&physics, 0, &balls, &kernel_points(&balls));
 
-    // Expected linear potential: U(r) = U(r_cap) - max_force·(r - r_cap)
+    // Expected: U(r) = U(r_cap) - max_force·(r - r_cap) + ½·k·(r - r_cap)², shifted at the cutoff
     let pot_at_cap = physics.constants.pot_at_cap;
     let max_force = physics.constants.max_force;
-    let expected_linear_pot = pot_at_cap - max_force * (edge_dist_capped - r_cap);
+    let stiffness = physics.constants.core_stiffness;
+    let compression = r_cap - edge_dist_capped;
+    let expected_core_pot =
+        pot_at_cap + max_force * compression + 0.5 * stiffness * compression * compression
+            - physics.constants.pot_at_cutoff;
 
-    approx(simd_result.potential_energy, expected_linear_pot, 1e-4);
+    approx(simd_result.potential_energy, expected_core_pot, 1e-4);
 }
 
 // ── Virial tests (issue #112) ────────────────────────────────────
@@ -201,16 +206,15 @@ fn test_virial_force_capped_regime() {
 
     let result = force_simd(&physics, 0, &balls, &kernel_points(&balls));
 
-    // In the capped regime force is evaluated at edge_dist = r_cap (clamped),
-    // giving lj_force = physics.force(r_cap) ≈ max_force.
-    // virial = center_dist * lj_force_at_cap
-    let lj_force_at_cap = physics.force(r_cap);
-    let expected_virial = center_dist * lj_force_at_cap;
+    // In the capped regime the force rises linearly from its value at r_cap
+    // (≈ max_force): F(r_cap) + k·(r_cap - r). virial = center_dist * core_force
+    let force_at_cap = physics.force(r_cap);
+    approx(force_at_cap, max_force, 1e-3);
+    let core_force = force_at_cap + physics.constants.core_stiffness * (r_cap - edge_dist_capped);
+    approx(physics.force(edge_dist_capped), core_force, 1e-5);
+    let expected_virial = center_dist * core_force;
 
     approx(result.virial, expected_virial, 1e-4);
-
-    // Sanity: the force used should be close to max_force
-    approx(lj_force_at_cap, max_force, 1e-3);
 }
 
 #[test]
@@ -290,4 +294,19 @@ fn test_kernel_point_reads_pre_update_pos_and_radius() {
     ball.pre_update_pos = Vec2D::new(4.0, 5.0);
     let point = KernelPoint::from(&ball);
     assert_eq!((point.x, point.y, point.radius), (4.0, 5.0, 3.0));
+}
+
+#[test]
+fn test_simd_and_scalar_agree_in_the_core() {
+    // The sloped core below r_cap (issue #240) must match between the f32x4
+    // kernels and the scalar functions, including overlaps.
+    let physics = BallPhysics::default();
+    let r_cap = physics.get_force_cap_distance();
+    let dists = [r_cap * 0.5, 0.0, -0.4, -1.18];
+    let force = physics.force_simd(f32x4::from(dists)).to_array();
+    let potential = physics.potential_simd(f32x4::from(dists)).to_array();
+    for (i, &d) in dists.iter().enumerate() {
+        approx(force[i], physics.force(d), 1e-5);
+        approx(potential[i], physics.potential(d), 1e-5);
+    }
 }

@@ -4,6 +4,7 @@ mod bootstrap;
 mod drift_harness;
 mod energy_conservation;
 mod gravity;
+mod overlap_resolution;
 mod physics_thread;
 mod pressure;
 mod resize;
