@@ -3,6 +3,7 @@ pub(crate) const FPS_GOAL: u32 = 60;
 use crate::application::game_logic::GameLogicData;
 use crate::application::persistence::SaveStore;
 use crate::application::renderer_snapshot::RendererSnapshot;
+use crate::application::scene_layers::SceneLayers;
 use crate::application::sim_stats::SimStats;
 use crate::application::thermo_field::ThermoFieldHistory;
 use crate::objects2d::ball_cell::cell_grid::CellGrid;
@@ -156,6 +157,8 @@ pub(crate) struct PhysicsRuntimeState {
     save_store: Option<SaveStore>,
     /// Bumped whenever the world is replaced (see `RendererSnapshot`).
     world_generation: u64,
+    /// Layers the renderer wants in its snapshots (see `SceneLayers`).
+    snapshot_layers: SceneLayers,
 }
 
 pub struct StatsAccumulator {

@@ -425,3 +425,108 @@ fn test_physics_thread_shutdown_and_join_is_graceful() {
         "physics thread shutdown should complete promptly"
     );
 }
+
+/// Pause × rendering (F2) as seen by the physics thread. A running world
+/// publishes a snapshot per interval; a paused one publishes nothing until a
+/// command changes it, so the renderer stays idle. The layers pick what a
+/// snapshot holds, never whether physics runs.
+#[test]
+fn test_snapshots_follow_changes_for_paused_and_running_by_layers() {
+    use crate::application::renderer_snapshot::RendererSnapshot;
+    use crate::application::scene_layers::SceneLayers;
+    use std::sync::Arc;
+    use std::time::{Duration, Instant};
+
+    const SETTLE: Duration = Duration::from_millis(150);
+    let light = SceneLayers::ALL.difference(SceneLayers::HEAVY);
+    let no_heatmap = SceneLayers::ALL.difference(SceneLayers::THERMO);
+
+    for paused in [false, true] {
+        for layers in [SceneLayers::ALL, no_heatmap, light] {
+            let case = format!("paused={paused} layers={layers:?}");
+            let mut main_content = MainContent::new(Rect::new(0.0, 0.0, 100.0, -100.0))
+                .expect("Failed to create MainContent");
+            main_content
+                .add_candidate_at_pos(Vec2D::new(30.0, -30.0))
+                .expect("add ball");
+            let slot = main_content.get_snapshot_slot();
+            let physics_thread = PhysicsThread::spawn(main_content, Box::new(|| {}));
+            let latest = || slot.load_full();
+            let wait_for = |what: &str, done: &dyn Fn(&RendererSnapshot) -> bool| {
+                let deadline = Instant::now() + Duration::from_secs(5);
+                loop {
+                    if let Some(snapshot) = latest().filter(|s| done(s)) {
+                        return snapshot;
+                    }
+                    assert!(Instant::now() < deadline, "{case}: no snapshot {what}");
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+            };
+
+            let pause = if paused {
+                DomainCommand::Pause
+            } else {
+                DomainCommand::Resume
+            };
+            physics_thread
+                .send_command(DomainCommand::SetSnapshotLayers(layers))
+                .expect("send layers");
+            physics_thread.send_command(pause).expect("send pause");
+            wait_for("with the requested layers", &|s| s.layers == layers);
+            std::thread::sleep(SETTLE);
+
+            // Paused, the once-per-second step rate report may publish one
+            // more snapshot (the rate drops to zero): sample until a window
+            // without it.
+            let mut samples = 0;
+            let (before, after) = loop {
+                let before = latest().expect("snapshot");
+                std::thread::sleep(SETTLE);
+                let after = latest().expect("snapshot");
+                samples += 1;
+                if !paused || after.physics_fps == before.physics_fps || samples == 4 {
+                    break (before, after);
+                }
+            };
+            if paused {
+                assert!(
+                    Arc::ptr_eq(&before, &after),
+                    "{case}: an untouched paused world publishes nothing"
+                );
+            } else {
+                assert!(
+                    after.simulation_step > before.simulation_step,
+                    "{case}: a running world steps and publishes"
+                );
+            }
+
+            // The layers decide what a snapshot holds.
+            assert_eq!(
+                after.balls.len(),
+                usize::from(layers.contains(SceneLayers::BALLS)),
+                "{case}"
+            );
+            // Thermo fields are recorded only while the heatmap is shown.
+            if !layers.contains(SceneLayers::THERMO) {
+                assert!(after.thermo_grid_spec.is_none(), "{case}");
+            } else if !paused {
+                assert!(after.thermo_grid_spec.is_some(), "{case}");
+            }
+
+            // An edit is published also while paused, at the same step.
+            physics_thread
+                .send_command(DomainCommand::NextBallSize)
+                .expect("send edit");
+            let edited = wait_for("after the edit", &|s| {
+                s.cursor_ball_size_idx != after.cursor_ball_size_idx
+            });
+            if paused {
+                assert_eq!(edited.simulation_step, after.simulation_step, "{case}");
+            }
+
+            physics_thread
+                .shutdown_and_join()
+                .expect("Failed to shutdown physics thread");
+        }
+    }
+}

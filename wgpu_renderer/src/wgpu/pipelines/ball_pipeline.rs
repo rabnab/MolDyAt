@@ -7,6 +7,7 @@
 use bytemuck::{Pod, Zeroable};
 use rust_thermo_core::application::AppResult;
 use rust_thermo_core::application::renderer_snapshot::BallRenderData;
+use rust_thermo_core::application::scene_layers::SceneLayers;
 
 use crate::wgpu::gpu::batch::{BatchDesc, GpuBatch, SceneUniforms};
 use crate::wgpu::gpu::shaders;
@@ -84,6 +85,10 @@ impl RenderPipeline for BallPipeline {
 
     fn viewport_mode(&self) -> ViewportMode {
         ViewportMode::Inset
+    }
+
+    fn layer(&self) -> SceneLayers {
+        SceneLayers::BALLS
     }
 
     fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {

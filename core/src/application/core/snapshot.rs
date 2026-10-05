@@ -4,8 +4,10 @@ use crate::application::renderer_snapshot::{
     BallRenderData, OperatorSnapshot, RendererSnapshot, ThermoGridSpec, WallSnapshot,
     get_special_ball_color, size_class_to_rgba,
 };
+use crate::application::scene_layers::SceneLayers;
 use crate::application::sim_stats::NORMAL_GRAVITY;
 use crate::application::thermo_field::ThermoGrid;
+use crate::objects2d::SimThermostat;
 use std::sync::Arc;
 
 impl MainContent {
@@ -13,6 +15,86 @@ impl MainContent {
     /// Conditionally clones expensive data (neighbors, tail) only when needed for visualization.
     /// Uses cached force magnitudes from last physics step for neighbor line rendering.
     pub fn create_snapshot(&self) -> RendererSnapshot {
+        let layers = self.runtime.snapshot_layers();
+        let balls = if layers.contains(SceneLayers::BALLS) {
+            self.build_ball_render_data()
+        } else {
+            Vec::new()
+        };
+
+        RendererSnapshot {
+            balls,
+            simulation_step: self.world.step_count as u64,
+            world_generation: self.runtime.world_generation(),
+            layers,
+            kinetic_energy: self.world.sim.get_kinetic_energy(),
+            potential_energy: self.world.sim.get_potential_energy(),
+            time: self.world.sim.get_time(),
+            status_text: self.status_text(0, self.game_data.get_time_step()), // FPS not available during snapshot creation
+            cell_grid_bounds: self.world.cell_grid.world_rect(),
+            cursor_ball_size_idx: self.game_data.get_ball_factory().get_new_ball_size_idx(),
+            gravity_force_multiple: current_gravity_force_multiple(
+                self.world.physics.constants.gravity,
+            ),
+            created_at: std::time::Instant::now(),
+            // Create lightweight grid spec instead of cloning the full CellGrid
+            // This avoids cloning the cell vector while providing all info needed for rendering
+            grid_spec: {
+                let (rows, cols) = self.world.cell_grid.get_grid_size();
+                let (cell_width, cell_height) = self.world.cell_grid.get_cell_size();
+                let world_rect = self.world.cell_grid.world_rect();
+                crate::application::renderer_snapshot::CellGridSpec {
+                    rows,
+                    cols,
+                    cell_width,
+                    cell_height,
+                    origin_x: world_rect.x,
+                    origin_y: world_rect.y,
+                }
+            },
+            physics_fps: self.runtime.physics_fps(),
+            equilibrium_edge_distance: self.world.physics.equilibrium_edge_distance(),
+            cutoff_distance: self.world.physics.get_cutoff_distance(),
+            operators: OperatorSnapshot {
+                line_segments: self.world.line_segments.segments().to_vec(),
+                walls: self
+                    .world
+                    .wall_chains
+                    .chains()
+                    .map(|c| WallSnapshot {
+                        chain_id: c.id,
+                        start: c.start,
+                        end: c.end,
+                        piece_ids: c.pieces.iter().map(|p| p.line_id).collect(),
+                        valve_ids: c.valve_ids().collect(),
+                    })
+                    .collect(),
+                valve_spans: self.world.valve_spans(),
+                source_spheres: self.world.source_spheres.spheres().to_vec(),
+                thermostats: if layers.contains(SceneLayers::READOUTS) {
+                    self.thermostat_snapshot()
+                } else {
+                    self.world.thermostats.thermostats().to_vec()
+                },
+            },
+            ..if layers.contains(SceneLayers::THERMO) {
+                let (cell_temperature, cell_pressure, thermo_grid_spec) =
+                    self.build_thermo_snapshot_fields();
+                RendererSnapshot {
+                    cell_temperature,
+                    cell_pressure,
+                    thermo_grid_spec,
+                    ..RendererSnapshot::new()
+                }
+            } else {
+                RendererSnapshot::new()
+            }
+        }
+    }
+
+    /// Per-ball render data (colours, tails, neighbour lines): the `BALLS`
+    /// layer, which exists only for drawing.
+    fn build_ball_render_data(&self) -> Vec<BallRenderData> {
         let ball_count = self.world.balls.len();
         let mut balls = Vec::with_capacity(ball_count);
 
@@ -60,68 +142,19 @@ impl MainContent {
                 tail,
             });
         }
+        balls
+    }
 
-        RendererSnapshot {
-            balls,
-            simulation_step: self.world.step_count as u64,
-            world_generation: self.runtime.world_generation(),
-            kinetic_energy: self.world.sim.get_kinetic_energy(),
-            potential_energy: self.world.sim.get_potential_energy(),
-            time: self.world.sim.get_time(),
-            status_text: self.status_text(0, self.game_data.get_time_step()), // FPS not available during snapshot creation
-            cell_grid_bounds: self.world.cell_grid.world_rect(),
-            cursor_ball_size_idx: self.game_data.get_ball_factory().get_new_ball_size_idx(),
-            gravity_force_multiple: current_gravity_force_multiple(
-                self.world.physics.constants.gravity,
-            ),
-            created_at: std::time::Instant::now(),
-            // Create lightweight grid spec instead of cloning the full CellGrid
-            // This avoids cloning the cell vector while providing all info needed for rendering
-            grid_spec: {
-                let (rows, cols) = self.world.cell_grid.get_grid_size();
-                let (cell_width, cell_height) = self.world.cell_grid.get_cell_size();
-                let world_rect = self.world.cell_grid.world_rect();
-                crate::application::renderer_snapshot::CellGridSpec {
-                    rows,
-                    cols,
-                    cell_width,
-                    cell_height,
-                    origin_x: world_rect.x,
-                    origin_y: world_rect.y,
-                }
-            },
-            physics_fps: self.runtime.physics_fps(),
-            equilibrium_edge_distance: self.world.physics.equilibrium_edge_distance(),
-            cutoff_distance: self.world.physics.get_cutoff_distance(),
-            operators: OperatorSnapshot {
-                line_segments: self.world.line_segments.segments().to_vec(),
-                walls: self
-                    .world
-                    .wall_chains
-                    .chains()
-                    .map(|c| WallSnapshot {
-                        chain_id: c.id,
-                        start: c.start,
-                        end: c.end,
-                        piece_ids: c.pieces.iter().map(|p| p.line_id).collect(),
-                        valve_ids: c.valve_ids().collect(),
-                    })
-                    .collect(),
-                valve_spans: self.world.valve_spans(),
-                source_spheres: self.world.source_spheres.spheres().to_vec(),
-                thermostats: self.world.thermostats.thermostats().to_vec(),
-            },
-            ..{
-                let (cell_temperature, cell_pressure, thermo_grid_spec) =
-                    self.build_thermo_snapshot_fields();
-                RendererSnapshot {
-                    cell_temperature,
-                    cell_pressure,
-                    thermo_grid_spec,
-                    ..RendererSnapshot::new()
-                }
-            }
+    /// The thermostats with a fresh reading each, for their labels (the
+    /// `READOUTS` layer). The reading is display data: it is measured here,
+    /// read-only, for active and inactive thermostats alike, so a paused
+    /// world or a deactivated thermostat still shows live values.
+    fn thermostat_snapshot(&self) -> Vec<SimThermostat> {
+        let mut thermostats = self.world.thermostats.thermostats().to_vec();
+        for (thermostat, reading) in thermostats.iter_mut().zip(self.world.thermostat_readings()) {
+            thermostat.current_local_temp = reading;
         }
+        thermostats
     }
 
     /// Build the thermo-related fields for the snapshot from the rolling-window history.

@@ -7,6 +7,7 @@ pub mod persistence;
 mod physics_event;
 mod physics_thread;
 pub mod renderer_snapshot;
+pub mod scene_layers;
 mod sim_stats;
 pub mod thermo_field;
 

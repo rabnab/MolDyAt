@@ -26,6 +26,7 @@ use crate::wgpu::render_graph::{PipelineHandle, PrepareContext, RenderGraph, Ren
 use crate::wgpu::wgpu_context::WgpuContext;
 use rust_thermo_core::application::AppResult;
 use rust_thermo_core::application::renderer_snapshot::{CellGridSpec, RendererSnapshot};
+use rust_thermo_core::application::scene_layers::SceneLayers;
 use rust_thermo_core::graphics::renderer::Margins;
 use rust_thermo_core::graphics::renderer::event_loop::FramePreviews;
 use rust_thermo_core::graphics::renderer::state_layers::ThermoDisplayMode;
@@ -131,6 +132,7 @@ impl WgpuPipelines {
         margin: Margins,
         inset: Margins,
         operator_previews: FramePreviews,
+        layers: SceneLayers,
     ) -> AppResult {
         let window_size = ctx.size();
 
@@ -147,6 +149,7 @@ impl WgpuPipelines {
             inset,
             thermo_display,
             operator_previews,
+            layers,
         };
 
         self.prepare(&prepare_ctx)
@@ -166,8 +169,9 @@ impl WgpuPipelines {
         render_pass: &mut wgpu::RenderPass<'rp>,
         ctx: &WgpuContext,
         inset: Margins,
+        layers: SceneLayers,
     ) {
-        self.render(render_pass, ctx.size(), inset);
+        self.render(render_pass, ctx.size(), inset, layers);
     }
 
     /// Render all enabled pipelines for a target of `window_size` pixels.
@@ -176,8 +180,10 @@ impl WgpuPipelines {
         render_pass: &mut wgpu::RenderPass<'rp>,
         window_size: (u32, u32),
         inset: Margins,
+        layers: SceneLayers,
     ) {
-        self.graph.render_all(render_pass, window_size, inset);
+        self.graph
+            .render_all(render_pass, window_size, inset, layers);
     }
 
     /// Cycle ring display mode on the ball pipeline (applied on the next frame).

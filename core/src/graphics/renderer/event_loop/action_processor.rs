@@ -29,6 +29,11 @@ pub fn process_action_common(
             }
             InputAction::ToggleRendering => {
                 config.toggle_rendering();
+                // The physics thread builds only the layers that are drawn.
+                physics.send_command(DomainCommand::SetSnapshotLayers(config.scene_layers()));
+                // Redraw now with the new layers (back on: from the next full
+                // snapshot; until it arrives, the light one is drawn light).
+                affects_view = true;
             }
             InputAction::PrintHelp => {
                 MainContent::print_help_message();
@@ -38,6 +43,8 @@ pub fn process_action_common(
             }
             InputAction::CycleThermoDisplay => {
                 config.cycle_thermo_display();
+                // The thermo fields are recorded only while shown.
+                physics.send_command(DomainCommand::SetSnapshotLayers(config.scene_layers()));
                 affects_view = true;
             }
             // Actions handled elsewhere (not in action_processor)

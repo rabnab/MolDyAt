@@ -16,9 +16,14 @@
 //!   ├─ prepare_all(ctx)   →  calls prepare() on each enabled pipeline
 //!   └─ render_all(pass, …) →  sets viewport → calls render() on each enabled pipeline
 //! ```
+//!
+//! Each pipeline belongs to one [`SceneLayers`] layer. A frame prepares and
+//! draws only the pipelines of its layers, so with rendering off (F2) the
+//! ball and thermo pipelines do no work at all.
 
 use rust_thermo_core::application::AppResult;
 use rust_thermo_core::application::renderer_snapshot::RendererSnapshot;
+use rust_thermo_core::application::scene_layers::SceneLayers;
 use rust_thermo_core::graphics::renderer::event_loop::FramePreviews;
 use rust_thermo_core::graphics::renderer::margins::Margins;
 use rust_thermo_core::graphics::renderer::state_layers::ThermoDisplayMode;
@@ -59,6 +64,9 @@ pub struct PrepareContext<'a> {
     pub thermo_display: ThermoDisplayMode,
     /// All operator preview geometry for the current frame.
     pub operator_previews: FramePreviews,
+    /// Layers drawn this frame. Pipelines outside them are skipped; a
+    /// pipeline that mixes layers checks it for its own parts.
+    pub layers: SceneLayers,
 }
 
 // ── Pipeline trait ─────────────────────────────────────────────────
@@ -78,6 +86,11 @@ pub trait RenderPipeline: Any {
 
     /// Which viewport region this pipeline renders into.
     fn viewport_mode(&self) -> ViewportMode;
+
+    /// Scene layer this pipeline draws; skipped in frames without it.
+    fn layer(&self) -> SceneLayers {
+        SceneLayers::BASE
+    }
 
     /// Update uniforms / upload buffers from snapshot data.
     fn prepare(&mut self, ctx: &PrepareContext) -> AppResult;
@@ -160,17 +173,26 @@ impl RenderGraph {
         self.execution_order = order.into_iter().filter(|h| h.0 < len).collect();
     }
 
-    /// Prepare all enabled pipelines (upload uniforms / buffers).
+    /// Whether `handle` runs in a frame drawing `layers`: enabled, and its
+    /// layer is one of them.
+    pub fn runs(&self, handle: PipelineHandle, layers: SceneLayers) -> bool {
+        self.is_enabled(handle) && layers.contains(self.pipelines[handle.0].layer())
+    }
+
+    /// Prepare the pipelines that run in a frame drawing `ctx.layers`
+    /// (upload uniforms / buffers).
     pub fn prepare_all(&mut self, ctx: &PrepareContext) -> AppResult {
-        for &handle in &self.execution_order {
-            if self.enabled.contains(&handle) {
+        for idx in 0..self.execution_order.len() {
+            let handle = self.execution_order[idx];
+            if self.runs(handle, ctx.layers) {
                 self.pipelines[handle.0].prepare(ctx)?;
             }
         }
         Ok(())
     }
 
-    /// Render all enabled pipelines, switching viewports as needed.
+    /// Render the pipelines that run in a frame drawing `layers` (the same
+    /// as the prepared ones), switching viewports as needed.
     ///
     /// The `window_size` and `inset` margins give the inset viewport
     /// rectangle (the simulation drawing area, letterboxed).
@@ -179,12 +201,13 @@ impl RenderGraph {
         render_pass: &mut wgpu::RenderPass<'rp>,
         window_size: (u32, u32),
         inset: Margins,
+        layers: SceneLayers,
     ) {
         let (w, h) = (window_size.0 as f32, window_size.1 as f32);
         let mut current_mode: Option<ViewportMode> = None;
 
         for &handle in &self.execution_order {
-            if !self.enabled.contains(&handle) {
+            if !self.runs(handle, layers) {
                 continue;
             }
             let pipeline = &self.pipelines[handle.0];
@@ -256,11 +279,24 @@ mod tests {
     struct MockPipeline {
         label: &'static str,
         mode: ViewportMode,
+        layer: SceneLayers,
     }
 
     impl MockPipeline {
         fn new(label: &'static str, mode: ViewportMode) -> Self {
-            Self { label, mode }
+            Self {
+                label,
+                mode,
+                layer: SceneLayers::BASE,
+            }
+        }
+
+        fn in_layer(label: &'static str, layer: SceneLayers) -> Self {
+            Self {
+                label,
+                mode: ViewportMode::Inset,
+                layer,
+            }
         }
     }
 
@@ -270,6 +306,9 @@ mod tests {
         }
         fn viewport_mode(&self) -> ViewportMode {
             self.mode
+        }
+        fn layer(&self) -> SceneLayers {
+            self.layer
         }
         fn prepare(&mut self, _ctx: &PrepareContext) -> AppResult {
             Ok(())
@@ -350,6 +389,38 @@ mod tests {
 
         assert!(graph.get_pipeline_mut::<OtherPipeline>(h0).is_none());
         assert!(graph.get_pipeline_mut::<MockPipeline>(h0).is_some());
+    }
+
+    #[test]
+    fn a_frame_runs_only_the_pipelines_of_its_layers() {
+        let mut graph = RenderGraph::new();
+        let operators = graph.add_pipeline(Box::new(MockPipeline::in_layer(
+            "operators",
+            SceneLayers::BASE,
+        )));
+        let balls = graph.add_pipeline(Box::new(MockPipeline::in_layer(
+            "balls",
+            SceneLayers::BALLS,
+        )));
+        let heatmap = graph.add_pipeline(Box::new(MockPipeline::in_layer(
+            "heatmap",
+            SceneLayers::THERMO,
+        )));
+
+        // Rendering on: everything.
+        for handle in [operators, balls, heatmap] {
+            assert!(graph.runs(handle, SceneLayers::ALL));
+        }
+
+        // Rendering off (F2): no ball or thermo work, operators still run.
+        let light = SceneLayers::ALL.difference(SceneLayers::HEAVY);
+        assert!(graph.runs(operators, light));
+        assert!(!graph.runs(balls, light));
+        assert!(!graph.runs(heatmap, light));
+
+        // A disabled pipeline never runs.
+        graph.set_enabled(operators, false);
+        assert!(!graph.runs(operators, SceneLayers::ALL));
     }
 
     #[test]

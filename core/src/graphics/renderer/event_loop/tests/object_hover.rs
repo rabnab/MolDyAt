@@ -236,7 +236,7 @@ fn delete_hovered_does_nothing_when_nothing_is_highlighted() {
 }
 
 #[test]
-fn cursor_moving_onto_or_off_an_object_redraws() {
+fn cursor_moving_onto_within_or_off_an_object_redraws() {
     let mut state = build_state(
         PhysicsCoordinator::new_disconnected(),
         OperatorSnapshot::default(),
@@ -259,13 +259,16 @@ fn cursor_moving_onto_or_off_an_object_redraws() {
         "moving onto the sphere should redraw"
     );
 
+    // The crosshair follows the cursor, also while paused when no snapshot
+    // would trigger a redraw.
     state.render.view_dirty = false;
     InputOrchestrator::handle_cursor_moved_event(&mut state, px[0] + 1.0, px[1]);
     assert!(
-        !state.render.view_dirty,
-        "moving within the sphere needs no redraw"
+        state.render.view_dirty,
+        "moving within the sphere moves the crosshair"
     );
 
+    state.render.view_dirty = false;
     InputOrchestrator::handle_cursor_moved_event(&mut state, 900.0, 600.0);
     assert!(
         state.render.view_dirty,

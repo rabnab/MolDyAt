@@ -10,6 +10,16 @@ impl MainContent {
         &self.world
     }
 
+    /// Build snapshots with only `layers`. Without `THERMO` the thermo fields
+    /// are no longer recorded; their history is dropped, so a heatmap shown
+    /// again later never mixes in fields from before.
+    pub(crate) fn set_snapshot_layers(&mut self, layers: SceneLayers) {
+        if !layers.contains(SceneLayers::THERMO) {
+            self.world.thermo_history.clear();
+        }
+        self.runtime.set_snapshot_layers(layers);
+    }
+
     pub(crate) fn world_mut(&mut self) -> &mut SimulationWorld {
         &mut self.world
     }
@@ -169,6 +179,14 @@ impl PhysicsRuntimeState {
     /// Mark that the world was replaced.
     pub(crate) fn next_world_generation(&mut self) {
         self.world_generation = self.world_generation.wrapping_add(1);
+    }
+
+    pub(crate) fn snapshot_layers(&self) -> SceneLayers {
+        self.snapshot_layers
+    }
+
+    fn set_snapshot_layers(&mut self, layers: SceneLayers) {
+        self.snapshot_layers = layers;
     }
 
     pub(crate) fn wait_time(&self) -> u64 {

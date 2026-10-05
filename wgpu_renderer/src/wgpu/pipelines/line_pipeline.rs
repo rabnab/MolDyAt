@@ -6,6 +6,7 @@
 
 use bytemuck::{Pod, Zeroable};
 use rust_thermo_core::application::AppResult;
+use rust_thermo_core::application::scene_layers::SceneLayers;
 use rust_thermo_core::graphics::renderer::batch_renderer::{
     BatchRenderer, LineSegment, collect_neighbor_lines,
 };
@@ -141,7 +142,11 @@ impl RenderPipeline for LinePipeline {
         self.gpu
             .set_uniforms(ctx.queue, SceneUniforms::new(ctx.view_proj, [0.0; 4]));
 
-        collect_neighbor_lines(&ctx.snapshot.balls, &mut self.batch);
+        // Neighbour lines belong to the balls; operator arcs and snap
+        // crosses are drawn in every frame.
+        if ctx.layers.contains(SceneLayers::BALLS) {
+            collect_neighbor_lines(&ctx.snapshot.balls, &mut self.batch);
+        }
         for sphere in &ctx.snapshot.operators.source_spheres {
             push_source_arcs(&mut self.batch, sphere);
         }

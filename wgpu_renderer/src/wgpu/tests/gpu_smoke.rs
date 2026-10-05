@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex};
 use rust_thermo_core::application::renderer_snapshot::{
     BallRenderData, CellGridSpec, RendererSnapshot, ThermoGridSpec, ValveSpan, WallSnapshot,
 };
+use rust_thermo_core::application::scene_layers::SceneLayers;
 use rust_thermo_core::application::thermo_field::ThermoGrid;
 use rust_thermo_core::graphics::renderer::event_loop::FramePreviews;
 use rust_thermo_core::graphics::renderer::state_layers::ThermoDisplayMode;
@@ -119,6 +120,7 @@ fn render_frame(
     snapshot: &RendererSnapshot,
     thermo_display: ThermoDisplayMode,
     show_ball_outline: bool,
+    layers: SceneLayers,
 ) {
     let ctx = PrepareContext {
         device,
@@ -133,6 +135,7 @@ fn render_frame(
         inset: MARGINS,
         thermo_display,
         operator_previews: previews(),
+        layers,
     };
     pipelines.prepare(&ctx).expect("prepare");
 
@@ -169,7 +172,7 @@ fn render_frame(
             timestamp_writes: None,
             multiview_mask: None,
         });
-        pipelines.render(&mut pass, SIZE, MARGINS);
+        pipelines.render(&mut pass, SIZE, MARGINS, layers);
     }
     queue.submit(std::iter::once(encoder.finish()));
 }
@@ -199,17 +202,31 @@ fn all_pipelines_build_and_render_without_validation_errors() {
         (ThermoDisplayMode::Temperature, false),
     ];
     for (mode, outline) in modes {
-        render_frame(&device, &queue, &mut pipelines, &snapshot, mode, outline);
+        render_frame(
+            &device,
+            &queue,
+            &mut pipelines,
+            &snapshot,
+            mode,
+            outline,
+            SceneLayers::ALL,
+        );
     }
     pipelines.cycle_ring_display_mode();
-    render_frame(
-        &device,
-        &queue,
-        &mut pipelines,
-        &snapshot,
-        ThermoDisplayMode::Off,
-        false,
-    );
+    // Rendering off (F2), then on again: the light frame skips the ball and
+    // thermo pipelines, the next full frame prepares them afresh.
+    let light = SceneLayers::ALL.difference(SceneLayers::HEAVY);
+    for layers in [light, SceneLayers::ALL] {
+        render_frame(
+            &device,
+            &queue,
+            &mut pipelines,
+            &snapshot,
+            ThermoDisplayMode::Temperature,
+            false,
+            layers,
+        );
+    }
     device
         .poll(wgpu::PollType::wait_indefinitely())
         .expect("poll");

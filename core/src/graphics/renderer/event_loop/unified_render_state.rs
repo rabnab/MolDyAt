@@ -17,6 +17,7 @@
 use crate::application::operator_command::delete::DeleteObject;
 use crate::application::operator_command::line::SetGhostWall;
 use crate::application::renderer_snapshot::{OperatorSnapshot, RendererSnapshot};
+use crate::application::scene_layers::SceneLayers;
 use crate::application::{MainContent, PhysicsEvent};
 use crate::graphics::energy_plot::{EnergyData, SharedEnergyData};
 use crate::graphics::renderer::ViewportTransform;
@@ -131,6 +132,10 @@ impl UnifiedRenderState {
                 pending_window_request: None,
             },
         };
+        // The physics thread builds only the layers the config draws.
+        state.physics.send_command(DomainCommand::SetSnapshotLayers(
+            state.render.config.scene_layers(),
+        ));
         // A world loaded with `--load` may not have the window's shape.
         state.fit_window_to_world();
         state
@@ -174,6 +179,11 @@ impl UnifiedRenderState {
 
     pub fn merge_view_dirty(&mut self, dirty: bool) {
         self.render.view_dirty |= dirty;
+    }
+
+    /// Whether the view changed since the last drawn frame.
+    pub fn is_view_dirty(&self) -> bool {
+        self.render.view_dirty
     }
 
     pub(super) fn mark_view_dirty(&mut self) {
@@ -266,11 +276,17 @@ impl UnifiedRenderState {
         FrameOrchestrator::should_render(self)
     }
 
+    /// Scene layers to draw this frame: the ones the config asks for that
+    /// the current snapshot holds.
+    pub fn frame_layers(&self) -> SceneLayers {
+        FrameOrchestrator::frame_layers(self)
+    }
+
     /// Call after a frame has been drawn.
     ///
     /// Finalises per-frame metrics, clears the `view_dirty` flag, and
-    /// marks the current simulation step as displayed so `should_render`
-    /// won't re-trigger for the same data.
+    /// marks the current snapshot as displayed so `should_render` won't
+    /// re-trigger for the same data.
     pub fn end_frame(&mut self) {
         FrameOrchestrator::end_frame(self);
     }
@@ -640,15 +656,47 @@ mod tests {
     }
 
     #[test]
-    fn toggle_rendering_flips_flag() {
+    fn toggle_rendering_flips_flag_and_tells_the_physics_thread() {
         let mut config = RendererConfig::default();
-        let physics = make_disconnected_coordinator();
+        let (physics, log) = PhysicsCoordinator::new_recording();
+        // Redraws at once with the new layers.
         let affects = process_action_common(InputAction::ToggleRendering, &physics, &mut config);
-        assert!(!affects);
+        assert!(affects);
         assert!(!config.render_drawing);
         // Toggle back.
         process_action_common(InputAction::ToggleRendering, &physics, &mut config);
         assert!(config.render_drawing);
+
+        // The physics thread builds only the layers that are drawn.
+        let sent = log.lock().unwrap().clone();
+        // Back on with the thermo overlay off: everything but the thermo fields.
+        let expected = [
+            SceneLayers::BASE,
+            SceneLayers::ALL.difference(SceneLayers::THERMO),
+        ]
+        .map(|layers| format!("{:?}", DomainCommand::SetSnapshotLayers(layers)));
+        assert_eq!(sent, expected);
+    }
+
+    #[test]
+    fn cycling_the_thermo_overlay_requests_thermo_fields_only_while_shown() {
+        let mut config = RendererConfig::default();
+        let (physics, log) = PhysicsCoordinator::new_recording();
+
+        // Off -> Grid -> Temperature -> Pressure -> Off
+        for _ in 0..4 {
+            process_action_common(InputAction::CycleThermoDisplay, &physics, &mut config);
+        }
+
+        let without_thermo = SceneLayers::ALL.difference(SceneLayers::THERMO);
+        let expected = [
+            without_thermo,
+            SceneLayers::ALL,
+            SceneLayers::ALL,
+            without_thermo,
+        ]
+        .map(|layers| format!("{:?}", DomainCommand::SetSnapshotLayers(layers)));
+        assert_eq!(log.lock().unwrap().clone(), expected);
     }
 
     #[test]

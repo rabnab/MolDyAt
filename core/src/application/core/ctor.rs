@@ -1,5 +1,6 @@
 use super::{BallPhysics, CellGrid, MainContent, SimStats, SimulationWorld};
 use crate::application::game_logic::GameLogicData;
+use crate::application::scene_layers::SceneLayers;
 use crate::application::thermo_field::ThermoFieldHistory;
 use crate::application::{AppResult, GameLogic};
 use crate::graphics::renderer::{Margins, ViewportTransform};
@@ -42,6 +43,7 @@ impl MainContent {
                 physics_fps: 0.0,
                 save_store: None,
                 world_generation: 0,
+                snapshot_layers: SceneLayers::ALL,
             },
         })
     }

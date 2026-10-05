@@ -212,6 +212,42 @@ impl SimulationWorld {
         }
     }
 
+    /// Local temperature of every thermostat (in collection order), measured
+    /// read-only for display. An active thermostat counts the balls it owns
+    /// in the step (nearest active thermostat within its radius); an inactive
+    /// one counts every ball within its radius. `NaN` when too few balls.
+    pub(crate) fn thermostat_readings(&self) -> Vec<f32> {
+        let thermostats = self.thermostats.thermostats();
+        let mut kinetic: Vec<LocalKineticStats> = thermostats
+            .iter()
+            .map(|_| LocalKineticStats::new())
+            .collect();
+
+        for ball in &self.balls {
+            let position = *ball.get_position();
+            let mut owner: Option<(usize, f32)> = None;
+            for (idx, thermostat) in thermostats.iter().enumerate() {
+                let distance_sq = position.distance_squared(&thermostat.position);
+                if distance_sq > thermostat.radius * thermostat.radius {
+                    continue;
+                }
+                if !thermostat.is_active() {
+                    kinetic[idx].add_ball(ball);
+                } else if owner.is_none_or(|(_, best)| distance_sq < best) {
+                    owner = Some((idx, distance_sq));
+                }
+            }
+            if let Some((idx, _)) = owner {
+                kinetic[idx].add_ball(ball);
+            }
+        }
+
+        kinetic
+            .iter()
+            .map(|stats| stats.temperature().unwrap_or(f32::NAN))
+            .collect()
+    }
+
     pub(crate) fn apply_thermostats(&mut self, dt: f32, stats_accumulator: &mut StatsAccumulator) {
         let active_ids: Vec<usize> = self
             .thermostats

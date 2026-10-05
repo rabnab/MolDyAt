@@ -1,6 +1,7 @@
 use super::wgpu_context::WgpuContext;
 use super::wgpu_pipelines::{WgpuPipelines, compute_view_proj};
 use crate::wgpu::margins_for_scale_factor;
+use rust_thermo_core::application::scene_layers::SceneLayers;
 use rust_thermo_core::graphics::renderer::event_loop::UnifiedRenderState;
 use rust_thermo_core::objects2d::ball_impl::BallFactory;
 use std::time::{Duration, Instant};
@@ -96,7 +97,14 @@ impl FrameRenderer {
                 == rust_thermo_core::graphics::renderer::event_loop::OperatorTool::Ball;
             let cursor_world_pos = state.cursor_world_pos();
             let cursor_wp = (cursor_world_pos.x, cursor_world_pos.y);
-            let ball_count = snapshot.balls.len() as u32;
+            // Rendering off (F2) draws only the base layer: no ball or thermo
+            // work below (see `SceneLayers`).
+            let layers = state.frame_layers();
+            let ball_count = if layers.contains(SceneLayers::BALLS) {
+                snapshot.balls.len() as u32
+            } else {
+                0
+            };
             let operator_previews = state.operator_previews();
             if let Err(error) = pipelines.prepare_from_snapshot(
                 ctx,
@@ -109,6 +117,7 @@ impl FrameRenderer {
                 state.viewport().margins(),
                 state.viewport().inset_margins(),
                 operator_previews,
+                layers,
             ) {
                 eprintln!("Pipeline prepare error: {:?}", error);
             }
@@ -120,7 +129,7 @@ impl FrameRenderer {
 
             let prepare = prepare_start.elapsed();
 
-            match Self::render_frame(ctx, pipelines, state.viewport().inset_margins()) {
+            match Self::render_frame(ctx, pipelines, state.viewport().inset_margins(), layers) {
                 Ok(timings) => {
                     if let Some(resize) = resize {
                         log::debug!(
@@ -174,6 +183,7 @@ impl FrameRenderer {
         ctx: &WgpuContext,
         pipelines: &WgpuPipelines,
         inset: rust_thermo_core::graphics::renderer::Margins,
+        layers: SceneLayers,
     ) -> Result<FrameTimings, wgpu::SurfaceError> {
         let acquire_start = Instant::now();
         let output = ctx.surface.get_current_texture()?;
@@ -212,7 +222,7 @@ impl FrameRenderer {
                 multiview_mask: None,
             });
 
-            pipelines.render_all(&mut render_pass, ctx, inset);
+            pipelines.render_all(&mut render_pass, ctx, inset, layers);
         }
 
         ctx.queue.submit(std::iter::once(encoder.finish()));
