@@ -2,6 +2,7 @@
 
 A molecular dynamics simulation of a Lennard-Jones gas in a finite box, written in Rust.
 
+[![Release](https://img.shields.io/github/v/release/rabnab/molecularLenardJones)](https://github.com/rabnab/molecularLenardJones/releases/latest)
 ![Rust](https://img.shields.io/badge/Rust-nightly-orange)
 
 > **Note:** Earlier versions used [ggez](https://github.com/ggez/ggez) as the rendering backend.
@@ -13,7 +14,7 @@ A molecular dynamics simulation of a Lennard-Jones gas in a finite box, written 
 * **wgpu** — GPU-accelerated renderer with custom WGSL shaders
 * **winit** — cross-platform window and event loop
 * **Rayon** — parallel physics calculations
-* **SIMD** — vectorized force computation (SSE2 / AVX2 / NEON)
+* **SIMD** — portable `std::simd` force kernels (instruction set fixed at compile time)
 
 ## Features
 
@@ -25,13 +26,26 @@ A molecular dynamics simulation of a Lennard-Jones gas in a finite box, written 
 * **5 ball size classes** with radius-aware interactions
 * **Physics thread** — simulation runs independently from the render loop
 
+### Operators
+
+Placeable tools from the sidebar:
+
+* **Line segments** — interior walls with momentum bookkeeping
+* **Valves** — openable barriers between regions
+* **Thermostats** — control the temperature inside a circular region
+* **Source spheres** — emit new balls, can be opened and closed
+
+### Persistence
+
+* **Save / load** complete worlds (balls and all operators) as versioned JSON — see [Saving and loading a world](#saving-and-loading-a-world)
+
 ### Performance Optimizations
 
 * **Parallelization**: Multi-threaded physics via Rayon (always enabled)
-* **SIMD Vectorization**: 2-4× speedup on force calculations (always enabled)
-  - SSE2 (4-wide) for x86/x86_64
-  - AVX2 (4-wide with FMA) for modern x86_64 CPUs
-  - NEON (4-wide) for ARM/Apple Silicon
+* **SIMD Vectorization**: 2-4× speedup on force calculations via portable `std::simd` (`f32x4`)
+  - The instruction set is chosen at **compile time**, not at runtime
+  - Release binaries target a portable baseline (`x86-64-v2`, SSE4.2)
+  - For maximum speed on your own CPU, build from source with `--release` (uses `target-cpu=native`)
 * **Spatial Partitioning**: Cell grid with Verlet neighbor lists
 
 ### Renderer
@@ -45,11 +59,49 @@ A molecular dynamics simulation of a Lennard-Jones gas in a finite box, written 
 
 ## Getting Started
 
-### Prerequisites
+### Download (prebuilt binaries)
+
+Prebuilt binaries for Windows and Linux (x86_64) are attached to each
+[release](https://github.com/rabnab/molecularLenardJones/releases/latest).
+
+**Windows (PowerShell):**
+
+```powershell
+$tag = "v1.3.0"
+$name = "rust_thermo_wgpu-$tag-x86_64-pc-windows-msvc"
+Invoke-WebRequest "https://github.com/rabnab/molecularLenardJones/releases/download/$tag/$name.zip" -OutFile "$name.zip"
+Expand-Archive "$name.zip" -DestinationPath .
+& ".\$name\rust_thermo_wgpu.exe"
+```
+
+**Linux:**
+
+```bash
+tag=v1.3.0
+name=rust_thermo_wgpu-$tag-x86_64-unknown-linux-gnu
+curl -LO "https://github.com/rabnab/molecularLenardJones/releases/download/$tag/$name.tar.gz"
+tar xzf "$name.tar.gz"
+./"$name"/rust_thermo_wgpu
+```
+
+Verify a download against its `.sha256` file (`sha256sum -c` on Linux,
+`Get-FileHash` in PowerShell).
+
+**System requirements**
+
+* x86_64 CPU with SSE4.2 (x86-64-v2, roughly 2009 or newer)
+* GPU with **DirectX 12** (Windows) or **Vulkan** (Linux) support, current drivers
+* Override the graphics backend with `WGPU_BACKEND` (e.g. `WGPU_BACKEND=gl`) if
+  window creation fails
+* Headless mode (`--headless`) needs no GPU
+
+### Building from source
+
+#### Prerequisites
 
 * [Rust nightly toolchain](https://rustup.rs/) — selected automatically via `rust-toolchain.toml`
 
-### Building & Running
+#### Building & Running
 
 ```bash
 cargo build -p rust_thermo_wgpu
@@ -236,6 +288,15 @@ letterboxed, never stretched or rescaled. A later window resize refits the
 world to the window as usual. A file that fails validation is rejected and the running world
 is left untouched. Results are logged.
 
+## Releases & Versioning
+
+Versions follow [Semantic Versioning](https://semver.org/). Releases are
+created by pushing a `vMAJOR.MINOR.PATCH` tag; the `Release` workflow
+(`.github/workflows/release.yml`) builds the binaries and publishes the
+release with generated notes. See the
+[release list](https://github.com/rabnab/molecularLenardJones/releases)
+for changes per version.
+
 ## Project Structure
 
 ```
@@ -243,28 +304,34 @@ Cargo.toml                     # Workspace root (members: core, wgpu_renderer)
 core/
 └── src/
     ├── application/           # Simulation controller, physics thread, stats
-    │   └── core/              # Ball management, simulation stepping
-    │       └── tests/         # Topic-based test files (ball_management, energy, …)
+    │   ├── core/              # Ball management, simulation stepping, operators
+    │   │   └── tests/         # Topic-based test files (ball_management, energy, …)
+    │   ├── operator_command/  # Valve, thermostat, source commands
+    │   ├── persistence/       # Versioned JSON save / load
+    │   └── physics_thread/    # Physics thread internals
     ├── graphics/
+    │   ├── energy_plot/       # Energy plot window
     │   └── renderer/          # Renderer trait, viewport, batch renderer
-    │       ├── event_loop/    # InputHandler, PhysicsCoordinator, Metrics,
-    │       │                  #   UnifiedRenderState, EnergyWindowManager
-    │       │   └── tests/     # Topic-based test files (key_actions, mouse, …)
+    │       ├── event_loop/    # InputHandler, PhysicsCoordinator, Metrics, …
     │       └── viewport/      # ViewportTransform, coordinate mapping
-    │           └── tests.rs   # Viewport transform tests
-    ├── objects2d/             # Ball physics, SIMD forces, Verlet lists, cell grid
-    ├── logging/               # env_logger initialisation
-    └── timing_monad.rs        # Performance measurement helpers
+    ├── objects2d/             # Ball physics, SIMD forces, Verlet lists, cell grid,
+    │                          #   line segments, wall chains, operators
+    └── logging/               # env_logger initialisation
 wgpu_renderer/
 └── src/
     ├── main.rs                # Entry point, Rayon init, window creation
+    ├── cli/                   # Command-line parsing
+    ├── headless_cli/          # Headless option parsing
+    ├── headless_runner/       # Headless simulation driver + regression fixtures
+    ├── headless_output/       # JSONL record writer
     └── wgpu/
-        ├── wgpu_context.rs    # Device / queue / surface setup
+        ├── wgpu_context.rs    # Device / queue / surface setup, backend choice
         ├── wgpu_window.rs     # winit event loop, frame submission
         ├── render_graph.rs    # RenderGraph orchestrator
         ├── wgpu_pipelines.rs  # Pipeline registry with named handles
-        ├── wgpu_input.rs      # WGPU-specific input action execution
-        ├── *_pipeline.rs      # ball, grid, line, frame, text, crosshair
+        ├── pipelines/         # ball, grid, line, wall, valve, thermostat, sidebar, …
+        ├── gpu/               # Textures, embedded icons
+        ├── icons/             # Sidebar tool icons (PNG, embedded at compile time)
         └── shaders/           # WGSL shader sources
 ```
 
@@ -274,6 +341,9 @@ wgpu_renderer/
 * [Runtime Architecture](docs/architecture.md)
 * [Simulation Coordinate Systems](docs/simulation.md)
 * [Headless Renderer Plan and Contract](docs/headless-renderer-plan.md)
+* [Drift Test Process](docs/drift-test.md)
+* [Operator Implementation Guide](docs/operator-implementation-guide.md)
+* [Nosé-Hoover Thermostat Plan](docs/nose-hoover.md)
 * [Copilot Instructions](.github/copilot-instructions.md)
 
 ## Contributing
@@ -283,6 +353,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development workflow, code quality st
 ## Future Plans
 
 * Hierarchical particles for simulating thousands of particles/atoms
-* Interactive obstacles (placeable and moveable by mouse)
-* Dockable graph window (energy plots, temperature)
 * Dockable log window
