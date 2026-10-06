@@ -12,8 +12,8 @@ const _U_KG: f32 = 1.66E-27;
 const _MASS_SCALE_KG: f32 = 39.948 * _U_KG; //6.6E-26kg mass of Ar
 const ENERGY_SCALE_J: f32 = 122. * KBOLTZMANN_J_P_K; //energy scale for Ar at 122K
 const LEN_SCALE_M: f32 = 3.405E-10; // σ for Argon (standard LJ parameter)
-const TIME_SCALE: f32 = 2.156E-12; // sqrt(MASS_SCALE * LEN_SCALE^2 / ENERGY_SCALE)
-const TIME_SCALE_NS: f32 = 2.156E-3; // TIME_SCALE * 1E9
+const TIME_SCALE: f32 = 2.137E-12; // LEN_SCALE_M * sqrt(MASS_SCALE_KG / ENERGY_SCALE_J)
+const TIME_SCALE_NS: f32 = TIME_SCALE * 1E9;
 const KBOLTZMANN_J_P_K: f32 = 1.380649E-23;
 const TEMP_SCALE: f32 = 122.; //=ENERGY_SCALE_J / KBOLTZMANN_J_P_K; //exact 122K
 pub(super) const NORMAL_GRAVITY_MPS2: f32 = 9.81;
@@ -426,5 +426,24 @@ mod tests {
             error < 1e-3,
             "momentum not conserved: p_ball={p_ball:.6}, p_wall={p_wall:.6}, initial={initial:.6}, error={error:.2e}"
         );
+    }
+
+    #[test]
+    fn test_time_scale_matches_argon_units() {
+        let expected = LEN_SCALE_M * (_MASS_SCALE_KG / ENERGY_SCALE_J).sqrt();
+        assert!(
+            (TIME_SCALE / expected - 1.0).abs() < 1e-3,
+            "TIME_SCALE {TIME_SCALE:e} vs derived {expected:e}"
+        );
+        assert!((TIME_SCALE_NS / (TIME_SCALE * 1e9) - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_gravity_in_reduced_units() {
+        // a* = g tau^2 / sigma ~ 1.3e-13 for 9.81 m/s^2 in argon units
+        let expected = NORMAL_GRAVITY_MPS2 * TIME_SCALE * TIME_SCALE / LEN_SCALE_M;
+        assert_eq!(NORMAL_GRAVITY, expected);
+        assert!((NORMAL_GRAVITY / 1.3157e-13 - 1.0).abs() < 1e-3);
+        assert!((HIGH_GRAVITY / NORMAL_GRAVITY - 5.0).abs() < 1e-5);
     }
 }

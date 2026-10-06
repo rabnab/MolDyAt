@@ -16,7 +16,7 @@ Conversion (X* = reduced value):
   E [J]   = E* eps
   T [K]   = T* eps/kB
   M [kg]  = M* m
-  t [s]   = t* tau,  tau = sigma sqrt(m/eps) = 2.137E-12 s (2.156E-12 s in the code)
+  t [s]   = t* tau,  tau = sigma sqrt(m/eps) = 2.137E-12 s
   v [m/s] = v* sigma/tau
   a [m/s^2] = a* sigma/tau^2   (gravity: a* = g tau^2/sigma)
 
