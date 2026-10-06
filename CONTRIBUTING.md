@@ -28,6 +28,7 @@ For architectural placement and migration-boundary guidance, also review:
 
 - **[Runtime Architecture](docs/architecture.md)** - Target ownership boundaries, command flow, and current migration shims
 - **[Simulation Coordinate Systems](docs/simulation.md)** - World, viewport, and grid-space conventions
+- **[Reduced Units and Scales](docs/units.md)** - LJ reduced units, SI conversion, and parameters of other species
 
 ### Canonical command and policy references
 
