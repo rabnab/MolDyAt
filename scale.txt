@@ -28,6 +28,26 @@ Equation of motion in reduced units has no free constants:
   Derivation: F = -dU/dx = (eps/sigma) F*  and  m a = m (sigma/tau^2) m* a*
   with tau^2 = m sigma^2/eps  ==>  F* = m* a*.
 
-Other species: pick sigma, eps, m from literature, then
-  tau = sigma sqrt(m/eps), T-unit = eps/kB
-(example: N2 with sigma = 3.7 A, eps/kB = 95 K, m = 28.01 u gives tau = 2.2 ps).
+Other species, expressed in the argon units above (sigma* = sigma/3.405 A,
+eps* = (eps/kB)/122 K, m* = m/39.948 u). Single-site LJ approximations;
+values are typical literature numbers, rounded. Check them against a cited
+source before relying on them. The code currently has sigma* = eps* = m* = 1
+for every ball (species are planned, see docs/refactoring-plan.md I3/I5).
+
+  species  sigma [A]  eps/kB [K]  m [u]    sigma*  eps*   m*     tau [ps]
+  Ar       3.405      122         39.948   1.000   1.000  1.000  2.14
+  N2       3.70       95          28.014   1.087   0.779  0.701  2.20
+  H2       2.915      38.0        2.016    0.856   0.311  0.050  0.74
+  H2O (*)  3.166      78.2        18.015   0.930   0.641  0.451  1.67
+  Au (**)  2.629      2662        196.967  0.772   21.82  4.931  0.78
+
+  tau column = sigma sqrt(m/eps) of that species. In argon units the same
+  timescale ratio is sigma* sqrt(m*/eps*) (N2 1.03, H2 0.35, H2O 0.78, Au 0.37),
+  so light/stiff species need a smaller dt in argon units.
+
+  (*) O-site of SPC/E water, whole-molecule mass. LJ alone is NOT water:
+      it needs charges (hydrogen bonds) and rigid-molecule geometry.
+  (**) Heinz et al. 12-6 fit (eps = 5.29 kcal/mol, r_m = 2.951 A,
+       sigma = r_m / 2^(1/6)). Metals are many-body (EAM-like); LJ only
+       gives a rough cohesive/lattice model.
+  H2: quantum effects matter below ~100 K; classical LJ is approximate.
