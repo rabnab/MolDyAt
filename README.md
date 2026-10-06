@@ -253,7 +253,7 @@ cargo clippy --workspace -- -D warnings
 | `Alt` + `-` | Increase wait time between steps |
 | `R` | Randomize ball speeds |
 | `S` | Toggle stepwise mode |
-| `D` | Toggle real-data display |
+| `D` | Toggle real-data display (SI units, see [docs/units.md](docs/units.md)) |
 | `T` | Cycle thermo overlay (Off → Grid → Temperature → Pressure → Off) |
 | `B` | Toggle ball stats overlay |
 | `P` | Cycle plot content |
@@ -340,6 +340,7 @@ wgpu_renderer/
 * [Contributing Guide](CONTRIBUTING.md)
 * [Runtime Architecture](docs/architecture.md)
 * [Simulation Coordinate Systems](docs/simulation.md)
+* [Reduced Units and Scales](docs/units.md)
 * [Headless Renderer Plan and Contract](docs/headless-renderer-plan.md)
 * [Drift Test Process](docs/drift-test.md)
 * [Operator Implementation Guide](docs/operator-implementation-guide.md)

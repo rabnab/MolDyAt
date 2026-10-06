@@ -208,5 +208,5 @@ impl MainContent {
 }
 
 fn current_gravity_force_multiple(gravity: f32) -> u8 {
-    (gravity / NORMAL_GRAVITY) as u8
+    (gravity / NORMAL_GRAVITY).round() as u8
 }
