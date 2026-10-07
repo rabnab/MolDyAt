@@ -68,7 +68,7 @@ All values are ms per measured step. Snapshot costs are spread over all steps.
 
 ## Baseline
 
-Captured from commit `60c70fd` (the binary reports it; see
+Captured from commit `e4d48a8` (the binary reports it; see
 [`perf-baseline.json`](perf-baseline.json), schema `headless-perf.v2`), on
 2026-10-07:
 
@@ -81,19 +81,18 @@ Median ms/step:
 
 | Scenario | Balls | total | neighbours | positions | forces | apply | cells | thermo | snapshot | other |
 |---|---|---|---|---|---|---|---|---|---|---|
-| dilute | 10 000 | 3.52 | 1.29 | 0.78 | 0.41 | 0.32 | 0.28 | 0.35 | 0.04 | 0.05 |
-| dense | 50 000 | 19.18 | 3.08 | 3.23 | 6.65 | 2.57 | 1.64 | 1.45 | 0.23 | 0.27 |
-| walls_valves | 20 000 | 8.03 | 2.37 | 1.52 | 1.83 | 1.11 | 0.52 | 0.45 | 0.08 | 0.09 |
-| large | 200 000 | 107.88 | 24.34 | 14.66 | 30.26 | 12.38 | 11.15 | 12.43 | 1.29 | 1.88 |
+| dilute | 10 000 | 3.21 | 1.19 | 0.71 | 0.37 | 0.30 | 0.26 | 0.32 | 0.04 | 0.04 |
+| dense | 50 000 | 19.95 | 3.13 | 3.23 | 6.92 | 2.74 | 1.91 | 1.64 | 0.26 | 0.28 |
+| walls_valves | 20 000 | 8.75 | 2.55 | 1.61 | 2.07 | 1.17 | 0.56 | 0.47 | 0.10 | 0.10 |
+| box_walls | 6 000 | 2.84 | 1.32 | 0.47 | 0.51 | 0.19 | 0.19 | 0.11 | 0.03 | 0.02 |
+| large | 200 000 | 113.87 | 25.25 | 15.22 | 32.24 | 12.69 | 11.65 | 13.29 | 1.36 | 2.00 |
 
 `output` is about 0.003 ms in every scenario.
 
-`box_walls` was added after this capture and has no row yet: it replaces the
-former `test_wall_momentum_performance_impact`, which timed 1000 balls but
-asserted nothing. Recapture the baseline on the machine above to add it. For
-scale only, one run on a different host (Intel Xeon @ 2.10 GHz, 4 vCPUs, 2
-threads, `release`) measured total 2.63 ms/step (neighbours 1.28, positions
-0.43, forces 0.40, apply 0.27); do not compare it with the table.
+`box_walls` replaces the former `test_wall_momentum_performance_impact`,
+which timed 1000 balls but asserted nothing. The short scenarios (`dilute`,
+`box_walls`, about 1 s per run) had a `spread_pct` of about 30 % in this
+capture; see Variance.
 
 Do not compare absolute numbers across machines, build profiles (`release`
 uses `target-cpu=native`, `dist` uses x86-64-v2) or thread counts. Recapture
@@ -101,21 +100,26 @@ the baseline on the machine you compare on.
 
 ### Variance
 
-Runs 1 and 2 are two full invocations of the script, one after the other,
-with the code from `8d7215f`; the timed code paths are the same as in
-`60c70fd`. Run 3 is the baseline above, a day later:
+All four captures ran on the machine above with code whose timed paths are
+the same as in `e4d48a8`, from earlier versions of this branch before its
+history was consolidated. Runs 1 and 2 are two full invocations one after
+the other (2026-10-06); run 3 is from the morning of 2026-10-07; run 4 is
+the baseline above, the evening of 2026-10-07 (`box_walls` exists only in
+run 4):
 
-| Scenario | total, run 1 | total, run 2 | total, run 3 | Run 1 vs 2 | spread_pct within a run |
-|---|---|---|---|---|---|
-| dilute | 3.92 | 3.70 | 3.52 | 5.7 % | 8–16 % |
-| dense | 21.49 | 21.17 | 19.18 | 1.5 % | 6–12 % |
-| walls_valves | 10.23 | 9.35 | 8.03 | 8.6 % | 4–20 % |
-| large | 117.36 | 115.54 | 107.88 | 1.5 % | 4–9 % |
+| Scenario | total, run 1 | total, run 2 | total, run 3 | total, run 4 | Run 1 vs 2 | spread_pct within a run |
+|---|---|---|---|---|---|---|
+| dilute | 3.92 | 3.70 | 3.52 | 3.21 | 5.7 % | 8–31 % |
+| dense | 21.49 | 21.17 | 19.18 | 19.95 | 1.5 % | 6–15 % |
+| walls_valves | 10.23 | 9.35 | 8.03 | 8.75 | 8.6 % | 4–20 % |
+| box_walls | – | – | – | 2.84 | – | 32 % |
+| large | 117.36 | 115.54 | 107.88 | 113.87 | 1.5 % | 4–9 % |
 
 Back to back, the 5 % target holds for `dense` and `large`. It does not hold
-for `dilute` (each run is only about 1 s) or for `walls_valves` in run 1,
-which saw interference from the shared host. Across days, the whole host
-shifts by 7–14 % (run 3). On this kind of machine, treat differences below
+for the short scenarios (`dilute`, `box_walls`: each run is only about 1 s)
+or for `walls_valves` in run 1, which saw interference from the shared host.
+Across runs on different days and times, the whole host shifts by up to
+about 10 %. On this kind of machine, treat differences below
 about 10 % as noise, and never compare runs from different days. Expect less variance on an idle
 desktop with a fixed CPU frequency. To reduce it:
 
@@ -129,7 +133,8 @@ desktop with a fixed CPU frequency. To reduce it:
 
 Binaries built before #221 lack `--timings`, `--load` and `--save-setup`, so
 this script cannot measure them. For a rough reference, master before #221
-(`62c7e7c`) and this branch (`89039e9`) were timed with the old outside
+(`62c7e7c`) and this branch (as of 2026-10-06, before its history was
+consolidated) were timed with the old outside
 method. That method times two whole runs, 1 step and 300 steps, and takes
 the difference. Both runs include seeding, which is O(n²) and takes about
 20 s at 50k balls against about 9 s of stepping. Seeding noise therefore
@@ -138,7 +143,7 @@ warmup, so the at-rest relaxation of `dense` is included.
 
 Same machine as above, `release`, median (min–max) ms/step:
 
-| Scenario (old method) | Rounds | `62c7e7c` (pre-#221) | `89039e9` (this branch) |
+| Scenario (old method) | Rounds | `62c7e7c` (pre-#221) | this branch |
 |---|---|---|---|
 | dilute: 10k, scale 16, speed 6 | 5 | 4.97 (4.34–5.07) | 4.71 (4.41–5.25) |
 | dense: 50k, scale 10, at rest | 5 | 28.79 (26.89–29.87) | 30.77 (28.39–33.07) |
@@ -151,7 +156,7 @@ How to read this:
 - **Dense direction.** `dense` is 5–7 % slower on the branch in both binary
   orders. That direction is consistent, but this method cannot confirm or
   rule it out.
-- **Scope.** `62c7e7c..89039e9` changes more than the timers: valve and line
+- **Scope.** The branch changes more than the timers: valve and line
   segment API, accessors and the constructor.
 - **Threads.** Both binaries ran with 2 threads only because this host has 4
   cores. `62c7e7c` ignores `RAYON_NUM_THREADS` and always uses cores − 2.
@@ -162,12 +167,13 @@ The cost of the timers themselves is measured directly in the next section.
 
 ### Cost of the phase timers
 
-The same commit was built twice, once as it is and once with the phase
+One commit of this branch (before its history was consolidated; the timed
+code paths are the same as in `e4d48a8`) was built twice, once as it is and once with the phase
 timers in `simulation_engine.rs` compiled out (`Instant` replaced by a no-op
 stub, not committed). Both binaries ran in one invocation with alternating
 rounds, `RUNS=5`, same machine. Total median (min–max) ms/step:
 
-| Scenario | Timers on (`60c70fd`) | Timers off | Difference |
+| Scenario | Timers on | Timers off | Difference |
 |---|---|---|---|
 | dilute | 3.57 (3.35–3.82) | 3.67 (2.89–3.83) | −2.5 % |
 | dense | 19.80 (19.65–21.27) | 19.96 (19.06–20.58) | −0.8 % |
