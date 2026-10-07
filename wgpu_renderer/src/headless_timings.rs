@@ -48,6 +48,7 @@ pub fn timings_to_json(
     let covered = phases.total() + clock.snapshot + clock.output;
     json!({
         "schema_version": "headless-timings.v1",
+        "commit": env!("GIT_COMMIT"),
         "balls": snapshot.balls.len(),
         "wall_pieces": snapshot.operators.line_segments.len(),
         "valves": snapshot.operators.valve_spans.len(),
