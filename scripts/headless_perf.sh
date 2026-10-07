@@ -17,7 +17,7 @@
 #   Compare builds by passing several binaries, e.g. a baseline and a new one.
 #   Default: target/release/rust_thermo_wgpu (build with cargo build --release).
 # Environment:
-#   SCENARIOS       scenarios to run (default "dilute dense walls_valves large")
+#   SCENARIOS       scenarios to run (default "dilute dense walls_valves box_walls large")
 #   STEPS           steps per run, warmup included (default 300)
 #   WARMUP          steps before timing starts (default 50)
 #   RUNS            rounds; the median is reported (default 5)
@@ -31,7 +31,7 @@
 # Needs bash 4+, coreutils, awk and cksum.
 set -euo pipefail
 
-SCENARIOS=${SCENARIOS:-dilute dense walls_valves large}
+SCENARIOS=${SCENARIOS:-dilute dense walls_valves box_walls large}
 STEPS=${STEPS:-300}
 WARMUP=${WARMUP:-50}
 RUNS=${RUNS:-5}
@@ -60,6 +60,9 @@ scenario_args() {
             --line-segment -140,0,140,0,2 --valve 2,0.3,0.7,open \
             --line-segment -400,-200,-200,-50,2
         ;;
+    # Hot gas in a small box: many world-wall contacts per step (wall
+    # contact resolution and wall momentum bookkeeping in `positions`).
+    box_walls) echo --seed-balls 6000 --world-scale 4 --seed-speed 8 ;;
     # Ball data far beyond cache: memory-bound.
     large) echo --seed-balls 200000 --world-scale 28 --seed-speed 2 ;;
     *)

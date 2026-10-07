@@ -25,6 +25,7 @@ and `--world-scale` multiplies both sides.
 | `dilute` | 10 000 | 16 | 6 | hot sparse gas, many neighbour-list rebuilds |
 | `dense` | 50 000 | 10 | 0 (at rest) | many neighbours per ball, force kernel |
 | `walls_valves` | 20 000 | 8 | 4 | 4 walls (thickness 2), 1 closed and 2 open valves; wall sweep and overlap passes |
+| `box_walls` | 6 000 | 4 | 8 | hot gas in a small box: about 3x the world-wall contacts per step of `dilute`; wall contacts and wall momentum bookkeeping (in `positions`) |
 | `large` | 200 000 | 28 | 2 | ball data far beyond the cache, memory-bound |
 
 How a run works:
@@ -86,6 +87,13 @@ Median ms/step:
 | large | 200 000 | 107.88 | 24.34 | 14.66 | 30.26 | 12.38 | 11.15 | 12.43 | 1.29 | 1.88 |
 
 `output` is about 0.003 ms in every scenario.
+
+`box_walls` was added after this capture and has no row yet: it replaces the
+former `test_wall_momentum_performance_impact`, which timed 1000 balls but
+asserted nothing. Recapture the baseline on the machine above to add it. For
+scale only, one run on a different host (Intel Xeon @ 2.10 GHz, 4 vCPUs, 2
+threads, `release`) measured total 2.63 ms/step (neighbours 1.28, positions
+0.43, forces 0.40, apply 0.27); do not compare it with the table.
 
 Do not compare absolute numbers across machines, build profiles (`release`
 uses `target-cpu=native`, `dist` uses x86-64-v2) or thread counts. Recapture
