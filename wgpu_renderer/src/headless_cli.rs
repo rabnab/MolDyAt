@@ -30,6 +30,10 @@ pub struct HeadlessConfig {
     pub line_segments: Vec<LineSegmentSpec>,
     /// Valves cut into those walls, at most one per wall.
     pub valves: Vec<ValveSpec>,
+    /// Write the per-phase step timings as JSON to this file (#221).
+    pub timings: Option<PathBuf>,
+    /// Steps run before the timings start; they are not counted.
+    pub timing_warmup: u32,
 }
 
 /// One `--valve wall,t_start,t_end[,open|closed]` valve: `wall` is the index
@@ -156,6 +160,8 @@ impl Default for HeadlessConfig {
             world_scale: None,
             line_segments: Vec::new(),
             valves: Vec::new(),
+            timings: None,
+            timing_warmup: 0,
         }
     }
 }
@@ -327,6 +333,22 @@ fn parse_headless_args_with_args(args: &[String]) -> Result<Option<HeadlessConfi
                 }
                 config.valves.push(ValveSpec::parse(&args[i])?);
             }
+            "--timings" => {
+                i += 1;
+                if i >= args.len() {
+                    return Err(CliError::new("--timings requires a value"));
+                }
+                config.timings = Some(PathBuf::from(&args[i]));
+            }
+            "--timing-warmup" => {
+                i += 1;
+                if i >= args.len() {
+                    return Err(CliError::new("--timing-warmup requires a value"));
+                }
+                config.timing_warmup = args[i].parse::<u32>().map_err(|_| {
+                    CliError::new("--timing-warmup value must be a non-negative integer")
+                })?;
+            }
             other => return Err(CliError::new(format!("Unknown argument: {}", other))),
         }
         i += 1;
@@ -358,6 +380,10 @@ fn parse_headless_args_with_args(args: &[String]) -> Result<Option<HeadlessConfi
                 valve.wall
             )));
         }
+    }
+
+    if config.timing_warmup > 0 && config.timing_warmup >= config.steps {
+        return Err(CliError::new("--timing-warmup must be less than --steps"));
     }
 
     if !config.stdout && config.output.is_none() {
