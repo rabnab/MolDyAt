@@ -57,3 +57,82 @@ fn version_string_starts_with_the_package_version() {
     assert!(VERSION.starts_with(&prefix), "{VERSION}");
     assert!(VERSION.ends_with(')'), "{VERSION}");
 }
+
+#[test]
+fn help_flag_is_recognised_in_any_position() {
+    assert!(wants_help(&args(&["program", "--help"])));
+    assert!(wants_help(&args(&["program", "--headless", "-h"])));
+    assert!(!wants_help(&args(&["program", "--headless"])));
+    assert!(!wants_help(&args(&["--help"])));
+}
+
+#[test]
+fn window_mode_rejects_leftover_arguments() {
+    assert!(reject_window_args(&args(&["program"])).is_ok());
+    let error = reject_window_args(&args(&["program", "--steps", "5"])).unwrap_err();
+    assert!(error.message.contains("--steps"), "{}", error.message);
+    assert!(error.message.contains("--headless"), "{}", error.message);
+}
+
+#[test]
+fn usage_lists_every_option_group() {
+    let text = usage_text();
+    assert!(
+        text.starts_with(&format!("{PROGRAM} {VERSION}\n")),
+        "{text}"
+    );
+    for option in GENERAL_OPTIONS
+        .iter()
+        .chain(COMMON_OPTIONS)
+        .chain(HEADLESS_OPTIONS)
+    {
+        for name in option.names {
+            assert!(text.contains(name), "{name} missing from usage:\n{text}");
+        }
+    }
+    // A long option column moves its help to the next line, indented.
+    assert!(
+        text.contains("  --valve <wall,t0,t1[,open|closed]>\n"),
+        "{text}"
+    );
+}
+
+/// Every flag a parser matches on (`"--flag" =>` arms) must have a help entry.
+#[test]
+fn every_parsed_flag_is_documented() {
+    let sources = [
+        include_str!("../cli.rs"),
+        include_str!("../headless_cli.rs"),
+    ];
+    let documented: Vec<&str> = GENERAL_OPTIONS
+        .iter()
+        .chain(COMMON_OPTIONS)
+        .chain(HEADLESS_OPTIONS)
+        .flat_map(|option| option.names.iter().copied())
+        .collect();
+    let mut parsed = 0;
+    for source in sources {
+        for line in source.lines() {
+            let line = line.trim_start();
+            let Some(rest) = line.strip_prefix("\"--") else {
+                continue;
+            };
+            let Some((flag, tail)) = rest.split_once('"') else {
+                continue;
+            };
+            if !tail.trim_start().starts_with("=>") {
+                continue;
+            }
+            let flag = format!("--{flag}");
+            parsed += 1;
+            assert!(
+                documented.contains(&flag.as_str()),
+                "{flag} is parsed but has no OptionHelp entry"
+            );
+        }
+    }
+    assert!(
+        parsed >= 20,
+        "found only {parsed} parsed flags; did the parser layout change?"
+    );
+}

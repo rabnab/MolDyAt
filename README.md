@@ -160,6 +160,11 @@ cargo run --release -p rust_thermo_wgpu -- --headless --steps 300 --rng-seed 1 -
 ```
 
 ```bash
+# All options. An invalid command line prints the error and this usage (exit 2).
+cargo run -p rust_thermo_wgpu -- --help
+```
+
+```bash
 # Version and the git commit of the build, e.g. "rust_thermo_wgpu 1.3.0 (60c70fd)";
 # -dirty means the build had uncommitted changes. Also shown in the window title.
 cargo run -p rust_thermo_wgpu -- --version
