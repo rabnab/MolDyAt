@@ -560,6 +560,15 @@ fn test_timings_flags() {
 }
 
 #[test]
+fn test_save_setup_flag() {
+    assert!(!HeadlessConfig::default().save_setup);
+    let config = parse_headless_args_with_args(&headless_args(&["--save-setup"]))
+        .unwrap()
+        .unwrap();
+    assert!(config.save_setup);
+}
+
+#[test]
 fn test_valve_flag_accepts_a_valve_spanning_the_whole_wall() {
     let args = headless_args(&["--line-segment", "-20,0,20,0", "--valve", "0,0,1"]);
     let config = parse_headless_args_with_args(&args).unwrap().unwrap();

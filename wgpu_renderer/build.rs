@@ -1,5 +1,5 @@
 //! Bakes the git commit into the binary (`GIT_COMMIT`), so perf reports name
-//! the code they measured (`--timings`).
+//! the code they measured (`--timings`, `scripts/headless_perf.sh`).
 //!
 //! `<short hash>`, with `-dirty` if tracked files differ from HEAD, or
 //! `unknown` without git. Reruns when the compiled sources change (so the

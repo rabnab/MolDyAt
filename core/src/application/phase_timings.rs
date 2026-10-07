@@ -2,8 +2,8 @@
 //!
 //! Always on: a step takes milliseconds and the timers cost a few
 //! `Instant::now()` calls per phase, so there is no feature gate. Headless
-//! runs with `--timings` read and reset them; nothing in the simulation
-//! depends on them.
+//! perf runs (`--timings`, `scripts/headless_perf.sh`) read and reset them;
+//! nothing in the simulation depends on them.
 
 use std::time::Duration;
 
