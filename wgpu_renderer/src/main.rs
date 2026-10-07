@@ -48,6 +48,7 @@ fn init_rayon() {
 /// Print startup diagnostics about parallelization and SIMD features.
 fn print_diagnostics() {
     rust_thermo_core::logging::init();
+    log::info!("rust_thermo_wgpu {}", cli::VERSION);
     log::info!(
         "Parallel: enabled | SIMD: enabled | CPU cores: {}",
         num_cpus::get()
@@ -114,6 +115,10 @@ fn run_headless_renderer(
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if cli::wants_version(&args) {
+        println!("rust_thermo_wgpu {}", cli::VERSION);
+        return;
+    }
     let (common, args) = cli::split_common_args(&args).unwrap_or_else(|e| {
         eprintln!("{e}");
         std::process::exit(1);

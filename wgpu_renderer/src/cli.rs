@@ -4,6 +4,19 @@
 use crate::headless_cli::CliError;
 use std::path::PathBuf;
 
+/// Package version and the git commit the binary was built from (see
+/// `build.rs`), e.g. `1.3.0 (60c70fd)` or `1.3.0 (60c70fd-dirty)`. Shown by
+/// `--version`, in the window title and in the startup log.
+pub const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (", env!("GIT_COMMIT"), ")");
+
+/// Whether `args` (program name first) ask for the version (`--version` or
+/// `-V`); checked before any other parsing, in both modes.
+pub fn wants_version(args: &[String]) -> bool {
+    args.iter()
+        .skip(1)
+        .any(|arg| arg == "--version" || arg == "-V")
+}
+
 /// Where saves live unless `--save-dir` says otherwise (relative to the
 /// working directory).
 pub const DEFAULT_SAVE_DIR: &str = "saves";

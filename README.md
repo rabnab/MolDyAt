@@ -160,6 +160,12 @@ cargo run --release -p rust_thermo_wgpu -- --headless --steps 300 --rng-seed 1 -
 ```
 
 ```bash
+# Version and the git commit of the build, e.g. "rust_thermo_wgpu 1.3.0 (60c70fd)";
+# -dirty means the build had uncommitted changes. Also shown in the window title.
+cargo run -p rust_thermo_wgpu -- --version
+```
+
+```bash
 # Performance baseline: fixed seeded scenarios, one JSON report with ms/step
 # per phase. See docs/perf-baseline.md for scenarios and comparing branches.
 cargo build --release -p rust_thermo_wgpu && scripts/headless_perf.sh > perf.json
