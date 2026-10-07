@@ -265,7 +265,7 @@ Fixture strategy uses a checked-in golden JSONL file:
 
 - fixture path: `wgpu_renderer/src/headless_runner/fixtures/seeded_headless_regression.jsonl`
 - test gate: `seeded_headless_regression_fixture_matches_checked_in_jsonl`
-- CI job: `headless regression (wgpu fixture)` in `.github/workflows/ci.yml`
+- CI: the `Run seeded headless regression fixture` step of the `test` job in `.github/workflows/ci.yml`
 
 Failure behavior:
 

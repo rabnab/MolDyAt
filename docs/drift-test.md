@@ -126,13 +126,15 @@ This makes CI failures diagnosable without rendering.
 
 ## CI Integration
 
-Drift scenarios are part of CI through a dedicated workflow step that executes:
+Drift scenarios are part of CI through a step of the `test` job (after the unit tests, reusing their build) that executes:
 
 ```bash
 cargo ci-test-drift   # = cargo test -p rust_thermo_core -- --ignored --nocapture
 ```
 
-All scenarios are `#[ignore = "suite:drift"]`, so a plain `cargo test` (without `--ignored`) skips them and prints no `DRIFT_SCENARIO` lines. The alias runs them with `--nocapture` so each scenario emits one machine-readable `DRIFT_SCENARIO ...` summary line directly in CI logs.
+All scenarios are `#[ignore = "suite:drift"]`, so a plain `cargo test` (without `--ignored`) skips them and prints no `DRIFT_SCENARIO` lines. The alias runs them with `--nocapture` so each scenario emits one machine-readable `DRIFT_SCENARIO ...` summary line (convergence tests a `DRIFT_CONVERGENCE` line) directly in CI logs.
+
+The alias runs every ignored test of `rust_thermo_core`, so it also runs the two `#[ignore = "suite:physics (slow)"]` tests (`test_overlap_fallback_stays_rare_in_a_gas_with_walls`, `test_virial_pressure_2d_matches_wall_pressure`). They are not drift scenarios and print no summary line.
 
 Canonical command policy reference:
 - `.github/copilot-instructions.md#cargo-command-policy-source-of-truth`
@@ -177,7 +179,7 @@ Use this compact table in the PR description:
 
 ## Implemented Scenarios and Thresholds
 
-All scenarios live in `core/src/application/core/tests/drift_harness/` and run in the drift suite (`cargo ci-test-drift`). Each prints exactly one `DRIFT_SCENARIO` line, also when it fails.
+All scenarios live in `core/src/application/core/tests/drift_harness/` and run in the drift suite (`cargo ci-test-drift`). Each prints exactly one `DRIFT_SCENARIO` line (convergence tests a `DRIFT_CONVERGENCE` line), also when it fails.
 
 Cutoff change: the LJ interaction is now truncated at `lj_cutoff` and shifted to zero there (previously every listed pair interacted up to the list radius, so each neighbour-list change added or removed energy; see `BallPhysics::potential`). dense_gas baselines were re-measured after that change: max relative energy drift 2.05e-3 -> 1.91e-3, relative momentum drift 5.2e-9 -> 5.1e-8. The momentum value is f32 rounding noise, not an asymmetry (no pair is inside the cutoff for one ball and outside for the other): repeating the scenario with thermal speeds 1.00..1.35 gives 1.7e-8..7.4e-8 with the cutoff and 9.0e-8..3.0e-7 without it, so the old 5.2e-9 baseline was a lucky realisation and its 5.0e-8 threshold sat inside the noise band. The threshold is now 1.5e-7.
 
@@ -186,6 +188,8 @@ Sorted neighbour lists: Verlet lists are now kept sorted by ball index and rebui
 Drift world moved to the origin (from x, y ~ 500..600, see the timestep note below). Re-measured, thresholds unchanged: dense_gas max relative energy drift 1.914e-3 -> 2.049e-3, final 1.185e-3 -> 1.404e-3, relative momentum drift 7.79e-8 -> 5.59e-8, rebuild rate 2.41e-2 -> 2.43e-2, wall clearance 20.24 -> 20.07; elastic_line_segment energy drift 1.5e-6 -> 5.5e-7, elastic_world_wall 0 -> 0. Positions that tests used to hardcode in the old world (two-body and force-cap pair centres, the wall-test start and the line-segment barrier) are now offsets from `world_center`.
 
 Sloped core (#240): below `r_cap` the pair force now rises as `max_force + core_stiffness·(r_cap - r)` (k = 200) instead of staying flat at `max_force`, with the matching quadratic potential. With a flat cap, crowded neighbours pinned deeply overlapping pairs (no force gradient pushes them apart). Results above `r_cap` are bit-identical; only pairs inside the core change. Re-measured, thresholds unchanged: dense_gas max relative energy drift 2.049e-3 -> 2.000e-3, final 1.404e-3 -> 1.347e-3, relative momentum drift 5.59e-8 -> 8.06e-8, cap hits 39 -> 40; hot_sparse_gas max relative energy drift 4.75e-3 -> 6.53e-3 (82% of its threshold, so CI prints a warning) and max overlap depth 0.57 -> 0.097; balls_removed_and_added max overlap depth 0.58 -> 0.043. The hot-gas value is realisation noise, not a systematic increase: over five initial speeds (`HOT_V` 5.0, 5.5, 6.0, 6.5, 7.0) the max drift averages 3.85e-3 with the flat cap (range 1.7e-3..5.3e-3), 2.99e-3 with k = 100 and 3.65e-3 with k = 200 (range 1.9e-3..6.5e-3), and HOT_V = 6.0 is the worst of the five at k = 200. mixed_sizes_cell_borders (no energy threshold) moved 8.2e-3 -> 1.5e-2.
+
+Re-measurement on `master` at `6349f72` (after #240, #242 and #244): every value in the table below is unchanged except dense_gas_dt_quartering, whose ratio is now 0.095 (coarse 2.000e-3, fine 1.893e-4). The table showed 0.064, measured before #240; the change comes from #240 (0.064 at `b599515^`, 0.095 at `b599515`). Only pairs inside `r_cap` changed there, which the dense gas's projectile pairs reach (40 cap hits); the fine run's max drift rose 1.32e-4 -> 1.89e-4 while the coarse run's fell 2.05e-3 -> 2.00e-3. It passes (threshold 0.125), and CI prints a `DRIFT_WARNING` at 76%. The threshold is unchanged. The two-body, force-cap and two-body dt-halving tests now print summary lines too; their values were measured in the same run and added to the table.
 
 Baseline provenance: measured with `cargo ci-test-drift` (dev profile, which is optimized) on an x86_64 host, on the PR #205 branch on top of `master` at `4f8b801`, after the Verlet movement threshold changed to skin/3. `simd_forces` uses `std::simd` (`f32x4`), so the SIMD path is fixed at compile time by the target features: the dev profile sets no `target-cpu`, so x86_64 drift builds use SSE2 even on AVX2/AVX-512 hosts (aarch64 uses NEON). Only the release profile uses `target-cpu=native` (with AMX disabled, see the workspace `Cargo.toml`). f32 results can differ between targets or `RUSTFLAGS`; rerun on the same target when comparing baselines.
 
@@ -199,7 +203,13 @@ Baseline provenance: measured with `cargo ci-test-drift` (dev profile, which is 
 | | | same pair deeper than 0.5 x radius, consecutive steps | <= 5 | 0 | |
 | | | force-cap region reached (validity) | >= 1 hit | 40 | |
 | | | balls lost / wall clearance (validity) | none / >= 1.0 | none / 20.07 | |
-| dense_gas_dt_quartering (dense gas at dt and dt/4, same physical time) | `dense_gas.rs` | max energy drift at dt/4 over that at dt | <= 0.125 | 0.064 | ~2x (dt^2 gives 0.0625) |
+| dense_gas_dt_quartering (dense gas at dt and dt/4, same physical time) | `dense_gas.rs` | max energy drift at dt/4 over that at dt | <= 0.125 | 0.095 | ~1.3x (dt^2 gives 0.0625); 76% of the threshold, CI warns, see the re-measurement note |
+| two_body_lj_baseline (2 balls near equilibrium distance, 2000 steps) | `tests.rs` | relative energy drift (final) | 3.0e-2 | 4.46e-3 (max 4.59e-3) | ~6.7x |
+| | | relative momentum drift | 3.0e-3 | 0 | |
+| force_cap_transition (2 balls driven into the force cap, cap lowered to 10, 300 steps) | `tests.rs` | relative energy drift (final) | 7.0e-1 | 5.27e-1 | ~1.3x; the cap region is not energy-conserving at this dt, the test checks continuity, not conservation |
+| | | relative momentum drift | 3.0e-3 | 0 | |
+| | | force-cap region reached (max cap-hit ratio) | >= 1.0e-2 | 1.0 | |
+| two_body_dt_halving (two-body scenario at dt and dt/2, same physical time) | `tests.rs` | relative energy drift at dt/2 vs at dt | <= 2 x coarse | 2.98e-3 vs 5.99e-3 (ratio 0.50) | weak check: it only rejects drift that grows when dt shrinks; the two-body drift converges ~linearly in dt, not as dt^2 |
 | hot_sparse_gas (400 balls over the whole world, speeds up to ~8, 1000 steps) | `neighbor_lists.rs` | max relative energy drift | 8.0e-3 | 6.53e-3 | ~1.2x; realisation noise, see the sloped-core note |
 | | | per-ball rebuild rate | [1.0e-1, 4.0e-1] | 2.2e-1 | cadence band, ~10x the dense gas |
 | | | in-cutoff pairs missing / listed by one ball (every step) | 0 / 0 | 0 / 0 | exact |
@@ -228,10 +238,10 @@ Notes:
 
 ### CI reporting
 
-The `drift` job always uploads `drift-harness.log` and writes to the job summary:
+The drift steps of the `test` job always upload `drift-harness.log` and write to the job summary:
 
 - the runner arch, CPU model and best host SIMD flag, plus the compiled `target_feature`s, which decide the SIMD path the baselines depend on;
-- every `DRIFT_SCENARIO` line;
+- every `DRIFT_SCENARIO` and `DRIFT_CONVERGENCE` line (matched anywhere in a log line: tests run in parallel, so a line can start after another test's output);
 - every `DRIFT_WARNING` line, also emitted as a `::warning` annotation. A scenario prints one when a passing metric exceeds 70% (`DRIFT_WARNING_FRACTION`) of its threshold, so shrinking margins show up before they fail the build.
 
 ## Recommended Rollout

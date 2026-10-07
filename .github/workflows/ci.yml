@@ -34,9 +34,7 @@ jobs:
           components: rustfmt
           toolchain: ${{ env.RUST_NIGHTLY }}
 
-      - name: Cache cargo registry and build artifacts
-        uses: Swatinem/rust-cache@v2
-
+      # cargo fmt does not build anything, so no cache.
       - name: Check formatting
         run: cargo fmt -- --check
 
@@ -85,10 +83,14 @@ jobs:
       #  with:
       #    sarif_file: clippy-results.sarif
 
+  # One job builds the test binaries once (nextest and cargo test share them),
+  # then runs the unit tests, the seeded headless regression and the drift
+  # suite. The ignored suites run even if an earlier step failed, so a
+  # unit-test failure still shows the drift and regression results.
   test:
-    name: tests (workspace)
+    name: tests (workspace, headless regression, drift)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       contents: read
       checks: write
@@ -131,29 +133,8 @@ jobs:
           path: target/nextest/ci/junit.xml
           reporter: java-junit
 
-  headless-regression:
-    name: headless regression (wgpu fixture)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Install Rust nightly
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          toolchain: ${{ env.RUST_NIGHTLY }}
-
-      - name: Cache cargo registry and build artifacts
-        uses: Swatinem/rust-cache@v2
-
-      - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.11
-
       - name: Run seeded headless regression fixture
+        if: ${{ !cancelled() }}
         shell: bash
         run: |
           set -o pipefail
@@ -165,28 +146,6 @@ jobs:
         with:
           name: headless-regression-log
           path: headless-regression.log
-
-  drift:
-    name: drift harness (core)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Install Rust nightly
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          toolchain: ${{ env.RUST_NIGHTLY }}
-
-      - name: Cache cargo registry and build artifacts
-        uses: Swatinem/rust-cache@v2
-
-      - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.11
 
       - name: Log runner CPU and SIMD path
         shell: bash
@@ -214,6 +173,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run drift harness tests with scenario summaries
+        if: ${{ !cancelled() }}
         shell: bash
         run: |
           set -o pipefail
@@ -224,27 +184,31 @@ jobs:
         shell: bash
         run: |
           [ -f drift-harness.log ] || exit 0
+          # Tests run in parallel, so a line can start after another test's
+          # output on the same line: match anywhere, keep from the tag on.
+          results=$(grep -oE 'DRIFT_(SCENARIO|CONVERGENCE) .*' drift-harness.log || true)
+          warnings=$(grep -oE 'DRIFT_WARNING .*' drift-harness.log || true)
           {
             echo "### Drift scenarios"
             echo ""
             echo '```'
-            grep '^DRIFT_SCENARIO' drift-harness.log || echo "no DRIFT_SCENARIO lines"
+            echo "${results:-no DRIFT_SCENARIO lines}"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           # Metrics above 70% of their threshold pass, but are annotated so
           # shrinking margins are visible before they fail.
-          if grep -q '^DRIFT_WARNING' drift-harness.log; then
+          if [ -n "$warnings" ]; then
             {
               echo ""
               echo "### Near-threshold warnings"
               echo ""
               echo '```'
-              grep '^DRIFT_WARNING' drift-harness.log
+              echo "$warnings"
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
-            grep '^DRIFT_WARNING' drift-harness.log | while read -r line; do
+            while read -r line; do
               echo "::warning title=Drift metric near threshold::${line#DRIFT_WARNING }"
-            done
+            done <<<"$warnings"
           fi
 
       - name: Upload drift harness log

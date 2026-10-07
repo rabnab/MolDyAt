@@ -63,6 +63,11 @@ fn test_two_body_lj_baseline_drift() {
 
     const MAX_REL_ENERGY_DRIFT: f32 = 3.0e-2;
     const MAX_REL_MOMENTUM_DRIFT: f32 = 3.0e-3;
+    metrics.report(
+        "two_body_lj_baseline",
+        metrics.relative_energy_drift() <= MAX_REL_ENERGY_DRIFT
+            && metrics.relative_momentum_drift() <= MAX_REL_MOMENTUM_DRIFT,
+    );
     assert!(
         metrics.relative_energy_drift() <= MAX_REL_ENERGY_DRIFT,
         "two-body LJ energy drift too high: drift={}, threshold={}, initial_total={}, final_total={}",
@@ -130,6 +135,12 @@ fn test_force_cap_transition_drift() {
         .iter()
         .map(|s| s.cap_hit_ratio)
         .fold(0.0f32, f32::max);
+    metrics.report(
+        "force_cap_transition",
+        metrics.relative_energy_drift() <= MAX_REL_ENERGY_DRIFT
+            && metrics.relative_momentum_drift() <= MAX_REL_MOMENTUM_DRIFT
+            && max_cap_hit_ratio >= MIN_CAP_HIT_RATIO,
+    );
 
     assert!(
         metrics.relative_energy_drift() <= MAX_REL_ENERGY_DRIFT,
@@ -221,6 +232,9 @@ fn test_two_body_drift_converges_with_smaller_timestep() {
     let coarse_momentum_drift = coarse_metrics.relative_momentum_drift();
     let fine_momentum_drift = fine_metrics.relative_momentum_drift();
     const CONVERGENCE_MARGIN: f32 = 2.0;
+    println!(
+        "DRIFT_CONVERGENCE name=two_body_dt_halving coarse_dt={dt_coarse} coarse_rel_energy_drift={coarse_energy_drift:.3e} fine_rel_energy_drift={fine_energy_drift:.3e} coarse_rel_momentum_drift={coarse_momentum_drift:.3e} fine_rel_momentum_drift={fine_momentum_drift:.3e} margin={CONVERGENCE_MARGIN}"
+    );
 
     assert!(
         fine_energy_drift <= coarse_energy_drift * CONVERGENCE_MARGIN,
