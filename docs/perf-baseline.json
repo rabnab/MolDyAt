@@ -4,7 +4,7 @@
   "machine": {"cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz", "cores": 4, "os": "Linux 6.18.44-fc-v77"},
   "settings": {"steps": 300, "warmup": 50, "runs": 5, "snapshot_every": 10, "seed": 1},
   "results": [
-    {"scenario": "dilute", "binary": "target/release/rust_thermo_wgpu", "commit": "60c70fd", "profile": "release", "balls": 10000, "wall_pieces": 0, "valves": 0, "threads": 2, "steps": 250, "runs": 5,
+    {"scenario": "dilute", "binary": "target/release/rust_thermo_wgpu", "commit": "15c0ef4", "profile": "release", "balls": 10000, "wall_pieces": 0, "valves": 0, "threads": 2, "steps": 250, "runs": 5,
      "ms_per_step": {
        "total": {"median": 3.5194, "min": 3.2797, "max": 3.7718, "spread_pct": 14.0},
        "neighbours": {"median": 1.2911, "min": 1.1974, "max": 1.3827, "spread_pct": 14.3},
@@ -17,7 +17,7 @@
        "output": {"median": 0.0022, "min": 0.0022, "max": 0.0048, "spread_pct": 120.6},
        "other": {"median": 0.0461, "min": 0.0440, "max": 0.0490, "spread_pct": 10.8}
      }},
-    {"scenario": "dense", "binary": "target/release/rust_thermo_wgpu", "commit": "60c70fd", "profile": "release", "balls": 50000, "wall_pieces": 0, "valves": 0, "threads": 2, "steps": 250, "runs": 5,
+    {"scenario": "dense", "binary": "target/release/rust_thermo_wgpu", "commit": "15c0ef4", "profile": "release", "balls": 50000, "wall_pieces": 0, "valves": 0, "threads": 2, "steps": 250, "runs": 5,
      "ms_per_step": {
        "total": {"median": 19.1758, "min": 18.5129, "max": 19.5591, "spread_pct": 5.5},
        "neighbours": {"median": 3.0812, "min": 2.8958, "max": 3.3255, "spread_pct": 13.9},
@@ -30,7 +30,7 @@
        "output": {"median": 0.0027, "min": 0.0026, "max": 0.0030, "spread_pct": 15.9},
        "other": {"median": 0.2694, "min": 0.2574, "max": 0.2924, "spread_pct": 13.0}
      }},
-    {"scenario": "walls_valves", "binary": "target/release/rust_thermo_wgpu", "commit": "60c70fd", "profile": "release", "balls": 20000, "wall_pieces": 7, "valves": 3, "threads": 2, "steps": 250, "runs": 5,
+    {"scenario": "walls_valves", "binary": "target/release/rust_thermo_wgpu", "commit": "15c0ef4", "profile": "release", "balls": 20000, "wall_pieces": 7, "valves": 3, "threads": 2, "steps": 250, "runs": 5,
      "ms_per_step": {
        "total": {"median": 8.0340, "min": 7.6002, "max": 8.8805, "spread_pct": 15.9},
        "neighbours": {"median": 2.3705, "min": 2.2244, "max": 2.6592, "spread_pct": 18.3},
@@ -43,7 +43,7 @@
        "output": {"median": 0.0024, "min": 0.0023, "max": 0.0029, "spread_pct": 25.4},
        "other": {"median": 0.0939, "min": 0.0901, "max": 0.0997, "spread_pct": 10.2}
      }},
-    {"scenario": "large", "binary": "target/release/rust_thermo_wgpu", "commit": "60c70fd", "profile": "release", "balls": 200000, "wall_pieces": 0, "valves": 0, "threads": 2, "steps": 250, "runs": 5,
+    {"scenario": "large", "binary": "target/release/rust_thermo_wgpu", "commit": "15c0ef4", "profile": "release", "balls": 200000, "wall_pieces": 0, "valves": 0, "threads": 2, "steps": 250, "runs": 5,
      "ms_per_step": {
        "total": {"median": 107.8820, "min": 106.6380, "max": 110.5979, "spread_pct": 3.7},
        "neighbours": {"median": 24.3434, "min": 24.0817, "max": 24.6091, "spread_pct": 2.2},

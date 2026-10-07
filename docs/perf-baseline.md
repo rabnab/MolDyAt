@@ -67,7 +67,7 @@ All values are ms per measured step. Snapshot costs are spread over all steps.
 
 ## Baseline
 
-Captured from commit `60c70fd` (the binary reports it; see
+Captured from commit `15c0ef4` (the binary reports it; see
 [`perf-baseline.json`](perf-baseline.json), schema `headless-perf.v2`), on
 2026-10-07:
 
@@ -95,7 +95,7 @@ the baseline on the machine you compare on.
 
 Runs 1 and 2 are two full invocations of the script, one after the other,
 with the code from `8d7215f`; the timed code paths are the same as in
-`60c70fd`. Run 3 is the baseline above, a day later:
+`15c0ef4`. Run 3 is the baseline above, a day later:
 
 | Scenario | total, run 1 | total, run 2 | total, run 3 | Run 1 vs 2 | spread_pct within a run |
 |---|---|---|---|---|---|
@@ -159,7 +159,7 @@ timers in `simulation_engine.rs` compiled out (`Instant` replaced by a no-op
 stub, not committed). Both binaries ran in one invocation with alternating
 rounds, `RUNS=5`, same machine. Total median (min–max) ms/step:
 
-| Scenario | Timers on (`60c70fd`) | Timers off | Difference |
+| Scenario | Timers on (`15c0ef4`) | Timers off | Difference |
 |---|---|---|---|
 | dilute | 3.57 (3.35–3.82) | 3.67 (2.89–3.83) | −2.5 % |
 | dense | 19.80 (19.65–21.27) | 19.96 (19.06–20.58) | −0.8 % |
