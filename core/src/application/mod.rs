@@ -4,6 +4,7 @@ mod game_logic;
 mod log_util;
 pub mod operator_command;
 pub mod persistence;
+pub mod phase_timings;
 mod physics_event;
 mod physics_thread;
 pub mod renderer_snapshot;

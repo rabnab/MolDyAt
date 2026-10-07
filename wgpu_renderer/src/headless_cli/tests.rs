@@ -540,6 +540,26 @@ fn test_valve_flag_rejects_malformed_values() {
 }
 
 #[test]
+fn test_timings_flags() {
+    let config = parse_headless_args_with_args(&headless_args(&[
+        "--steps",
+        "50",
+        "--timings",
+        "/tmp/t.json",
+        "--timing-warmup",
+        "10",
+    ]))
+    .unwrap()
+    .unwrap();
+    assert_eq!(config.timings, Some(PathBuf::from("/tmp/t.json")));
+    assert_eq!(config.timing_warmup, 10);
+
+    let warmup_too_long = headless_args(&["--steps", "10", "--timing-warmup", "10"]);
+    assert!(parse_headless_args_with_args(&warmup_too_long).is_err());
+    assert!(parse_headless_args_with_args(&headless_args(&["--timings"])).is_err());
+}
+
+#[test]
 fn test_valve_flag_accepts_a_valve_spanning_the_whole_wall() {
     let args = headless_args(&["--line-segment", "-20,0,20,0", "--valve", "0,0,1"]);
     let config = parse_headless_args_with_args(&args).unwrap().unwrap();

@@ -11,6 +11,7 @@ use crate::objects2d::ball_impl::{BallFactory, ForceResult};
 use crate::objects2d::{Rect, Vec2D};
 use crate::timing_monad::TimingMonad;
 use rayon::prelude::*;
+use std::time::Instant;
 
 /// Stepping/update behavior over the persistent simulation state.
 ///
@@ -29,6 +30,7 @@ impl SimulationEngine {
             .step_count
             .is_multiple_of(game_data.neighbour_update_interval())
         {
+            let start = Instant::now();
             let mut timer = TimingMonad::new();
             timer.time("update neighbours", || {
                 Self::update_neighbor_hoods_for_occupied_cells(world, dt)
@@ -39,6 +41,7 @@ impl SimulationEngine {
             if world.show_timings {
                 timer.log();
             }
+            world.phase_timings.neighbours += start.elapsed();
         }
     }
 
@@ -84,6 +87,7 @@ impl SimulationEngine {
         #[cfg(not(feature = "measure-time"))]
         Self::update_sim_and_move_balls(world, game_data, dt, &bound_rect);
 
+        let thermo_start = Instant::now();
         #[cfg(feature = "measure-time")]
         timer.time("calculate_temperature", || {
             let (sim, balls) = (&mut world.sim, &world.balls);
@@ -94,6 +98,7 @@ impl SimulationEngine {
             let (sim, balls) = (&mut world.sim, &world.balls);
             sim.calculate_temperature_from_balls(balls);
         }
+        world.phase_timings.thermo += thermo_start.elapsed();
 
         #[cfg(feature = "measure-time")]
         if world.show_timings {
@@ -101,6 +106,7 @@ impl SimulationEngine {
         }
 
         world.step_count += 1;
+        world.phase_timings.steps += 1;
         Ok(())
     }
 
@@ -112,6 +118,7 @@ impl SimulationEngine {
         if world.balls.len() != world.cached_force_results.len() {
             return;
         }
+        let start = Instant::now();
         // The T/P overlay uses the physics cell grid's shape (see
         // docs/simulation.md, Thermodynamic Grid Space).
         let (phys_rows, phys_cols) = world.cell_grid.get_grid_size();
@@ -123,6 +130,7 @@ impl SimulationEngine {
             phys_cols.max(1),
         );
         world.thermo_history.push(t_grid, p_grid);
+        world.phase_timings.thermo += start.elapsed();
     }
 
     pub(crate) fn update_sim(world: &mut SimulationWorld, dt: f32, bound_rect: &Rect) {
@@ -135,6 +143,7 @@ impl SimulationEngine {
             max_id: 0,
         };
 
+        let start = Instant::now();
         // Walls cannot change within a step: one list for the contact sweep
         // and the overlap pass.
         let obstacles = world.collect_solid_obstacles();
@@ -146,8 +155,12 @@ impl SimulationEngine {
             .map(|b| b.iter().count() as u64)
             .sum::<u64>();
         Self::update_old_positions(world);
+        let positions_done = Instant::now();
+        world.phase_timings.positions += positions_done - start;
 
         let force_results = Self::compute_forces(world);
+        let forces_done = Instant::now();
+        world.phase_timings.forces += forces_done - positions_done;
         let (wall_px, wall_py) = Self::apply_forces_and_collect_stats(
             world,
             &force_results,
@@ -169,6 +182,7 @@ impl SimulationEngine {
             .v_com
             .scaled(1. / stats_accumulator.sum_mass);
         world.sim.update(dt, stats_accumulator);
+        world.phase_timings.apply += forces_done.elapsed();
     }
 
     fn update_sim_and_move_balls(
@@ -184,6 +198,7 @@ impl SimulationEngine {
             .collect();
 
         Self::update_sim(world, dt, bound_rect);
+        let start = Instant::now();
         world.emit_from_source_spheres(game_data.get_ball_factory());
 
         for (i, old_pos) in old_positions.iter().enumerate() {
@@ -192,6 +207,7 @@ impl SimulationEngine {
         }
 
         world.remove_invalid_balls();
+        world.phase_timings.cells += start.elapsed();
     }
 
     /// Rebuild the neighbour lists of the balls that moved far enough.

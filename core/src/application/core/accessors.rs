@@ -1,5 +1,6 @@
 use super::*;
 use crate::application::AppResult;
+use crate::application::phase_timings::PhaseTimings;
 use crate::application::sim_stats::{HIGH_GRAVITY, NORMAL_GRAVITY};
 use crate::objects2d::Rect;
 use crate::objects2d::ball_impl::BallFactory;
@@ -8,6 +9,15 @@ use crate::objects2d::operator::{is_degenerate, remap_point};
 impl MainContent {
     pub fn world(&self) -> &SimulationWorld {
         &self.world
+    }
+
+    /// Time spent per step phase since the last [`Self::reset_phase_timings`].
+    pub fn phase_timings(&self) -> &PhaseTimings {
+        &self.world.phase_timings
+    }
+
+    pub fn reset_phase_timings(&mut self) {
+        self.world.phase_timings.reset();
     }
 
     /// Build snapshots with only `layers`. Without `THERMO` the thermo fields
