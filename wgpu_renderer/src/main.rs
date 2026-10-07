@@ -113,16 +113,27 @@ fn run_headless_renderer(
     Ok(())
 }
 
+/// Exit status for an invalid command line (as in sysexits' EX_USAGE family).
+const EXIT_USAGE: i32 = 2;
+
+/// Report an invalid command line with the usage, and exit.
+fn usage_error(error: &headless_cli::CliError) -> ! {
+    eprintln!("{error}\n");
+    eprint!("{}", cli::usage_text());
+    std::process::exit(EXIT_USAGE);
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    if cli::wants_version(&args) {
-        println!("rust_thermo_wgpu {}", cli::VERSION);
+    if cli::wants_help(&args) {
+        print!("{}", cli::usage_text());
         return;
     }
-    let (common, args) = cli::split_common_args(&args).unwrap_or_else(|e| {
-        eprintln!("{e}");
-        std::process::exit(1);
-    });
+    if cli::wants_version(&args) {
+        println!("{} {}", cli::PROGRAM, cli::VERSION);
+        return;
+    }
+    let (common, args) = cli::split_common_args(&args).unwrap_or_else(|e| usage_error(&e));
     match headless_cli::parse_headless_args(&args) {
         Ok(Some(config)) => {
             print_diagnostics();
@@ -133,12 +144,10 @@ fn main() {
             }
         }
         Ok(None) => {
+            cli::reject_window_args(&args).unwrap_or_else(|e| usage_error(&e));
             print_diagnostics();
             run_wgpu_renderer(common);
         }
-        Err(e) => {
-            eprintln!("{}", e);
-            std::process::exit(1);
-        }
+        Err(e) => usage_error(&e),
     }
 }
