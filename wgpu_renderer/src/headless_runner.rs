@@ -1,11 +1,12 @@
 use crate::headless_cli::HeadlessConfig;
 use crate::headless_output::{HeadlessSnapshotSink, HeadlessWriter};
+use crate::headless_timings::{RunClock, write_timings};
 use rust_thermo_core::application::persistence::{LoadSource, SaveStore};
 use rust_thermo_core::application::{GameLogic, MainContent};
 use rust_thermo_core::objects2d::{Rect, Vec2D};
 use std::io;
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 pub struct HeadlessRunner {
     application: MainContent,
@@ -13,6 +14,8 @@ pub struct HeadlessRunner {
     steps: u32,
     snapshot_every: u32,
     dt: f32,
+    timings: Option<PathBuf>,
+    timing_warmup: u32,
 }
 
 pub struct HeadlessRunnerBuilder {
@@ -21,6 +24,8 @@ pub struct HeadlessRunnerBuilder {
     steps: u32,
     snapshot_every: u32,
     dt: f32,
+    timings: Option<PathBuf>,
+    timing_warmup: u32,
 }
 
 pub struct HeadlessRunReport {
@@ -35,6 +40,8 @@ impl HeadlessRunnerBuilder {
             steps: 1,
             snapshot_every: 0,
             dt: Duration::from_millis(1).as_secs_f32(),
+            timings: None,
+            timing_warmup: 0,
         }
     }
 
@@ -63,6 +70,13 @@ impl HeadlessRunnerBuilder {
         self
     }
 
+    /// Write per-phase step timings to `path`, from step `warmup` on.
+    pub fn timings(mut self, path: Option<PathBuf>, warmup: u32) -> Self {
+        self.timings = path;
+        self.timing_warmup = warmup;
+        self
+    }
+
     pub fn build(self) -> HeadlessRunner {
         HeadlessRunner {
             application: self.application.expect("application is required"),
@@ -70,6 +84,8 @@ impl HeadlessRunnerBuilder {
             steps: self.steps,
             snapshot_every: self.snapshot_every,
             dt: self.dt,
+            timings: self.timings,
+            timing_warmup: self.timing_warmup,
         }
     }
 }
@@ -91,6 +107,7 @@ impl HeadlessRunner {
             .sink(Box::new(sink.build()?))
             .steps(config.steps)
             .snapshot_every(config.snapshot_every)
+            .timings(config.timings.clone(), config.timing_warmup)
             .build())
     }
 
@@ -100,20 +117,51 @@ impl HeadlessRunner {
         self.sink.write_run_start(&latest_snapshot)?;
         self.sink.write_frame(&latest_snapshot)?;
         snapshots_emitted += 1;
+        let mut clock = RunClock::start(0);
         for step in 0..self.steps {
+            if step == self.timing_warmup {
+                self.application.reset_phase_timings();
+                clock = RunClock::start(step);
+            }
             self.application
                 .simulation_step()
                 .map_err(|error| io::Error::other(format!("{error:?}")))?;
+            clock.steps += 1;
+            // Fail at the first paused step, not after the whole run (see
+            // `write_timings`). Headless runs never pause today; defensive.
+            if self.timings.is_some()
+                && step >= self.timing_warmup
+                && self.application.phase_timings().steps != clock.steps
+            {
+                return Err(io::Error::other(format!(
+                    "--timings: step {step} did not run (simulation paused)"
+                )));
+            }
             if step + 1 == self.steps
                 || (self.snapshot_every != 0 && (step + 1) % self.snapshot_every == 0)
             {
+                let snapshot_start = Instant::now();
                 latest_snapshot = self.application.create_snapshot();
+                let snapshot_done = Instant::now();
                 self.sink.write_frame(&latest_snapshot)?;
+                clock.snapshot += snapshot_done - snapshot_start;
+                clock.output += snapshot_done.elapsed();
+                clock.snapshots += 1;
                 snapshots_emitted += 1;
             }
         }
+        let wall = clock.started.elapsed();
         self.sink
             .write_run_end(&latest_snapshot, snapshots_emitted)?;
+        if let Some(path) = &self.timings {
+            write_timings(
+                path,
+                &clock,
+                wall,
+                self.application.phase_timings(),
+                &latest_snapshot,
+            )?;
+        }
         Ok(HeadlessRunReport { snapshots_emitted })
     }
 }

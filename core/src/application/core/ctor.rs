@@ -74,6 +74,7 @@ impl SimulationWorld {
             kernel_points: Vec::new(),
             cached_force_results: Vec::new(),
             thermo_history: ThermoFieldHistory::new(),
+            phase_timings: Default::default(),
             line_segments: Default::default(),
             valve_segments: Default::default(),
             source_spheres: Default::default(),

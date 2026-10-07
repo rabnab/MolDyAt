@@ -2,6 +2,7 @@ pub(crate) const FPS_GOAL: u32 = 60;
 
 use crate::application::game_logic::GameLogicData;
 use crate::application::persistence::SaveStore;
+use crate::application::phase_timings::PhaseTimings;
 use crate::application::renderer_snapshot::RendererSnapshot;
 use crate::application::scene_layers::SceneLayers;
 use crate::application::sim_stats::SimStats;
@@ -52,6 +53,8 @@ pub struct SimulationWorld {
     pub(crate) cached_force_results: Vec<ForceResult>,
     /// Rolling-window averager for per-cell T/P fields
     pub(crate) thermo_history: ThermoFieldHistory,
+    /// Time per step phase, for headless perf runs (#221).
+    pub(crate) phase_timings: PhaseTimings,
     /// Line segment barriers placed by the operator panel
     pub(crate) line_segments: LineSegmentCollection,
     /// Valve regions placed on top of line segments.

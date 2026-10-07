@@ -4,6 +4,7 @@ mod cli;
 mod headless_cli;
 mod headless_output;
 mod headless_runner;
+mod headless_timings;
 mod wgpu;
 
 use crate::wgpu::{DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH, MARGINS};

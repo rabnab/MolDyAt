@@ -95,6 +95,8 @@ fn seeded_headless_output() -> String {
         seed_speed: None,
         line_segments: Vec::new(),
         valves: Vec::new(),
+        timings: None,
+        timing_warmup: 0,
     };
 
     let mut application =
@@ -398,4 +400,126 @@ fn test_prepare_application_places_valves_on_their_walls() {
             assert!((span.p0.x + 4.0).abs() < 1e-4 && (span.p1.x - 4.0).abs() < 1e-4);
         }
     }
+}
+
+#[test]
+fn test_run_writes_timings_for_steps_after_warmup() {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock before unix epoch")
+        .as_nanos();
+    let timings_path = std::env::temp_dir().join(format!(
+        "headless-timings-{}-{nanos}.json",
+        std::process::id()
+    ));
+    let config = HeadlessConfig {
+        steps: 12,
+        snapshot_every: 4,
+        rng_seed: Some(3),
+        seed_balls: Some(40),
+        timings: Some(timings_path.clone()),
+        timing_warmup: 2,
+        ..HeadlessConfig::default()
+    };
+    let application =
+        prepare_application(&config, test_world_rect(), &SaveStore::new("saves"), None)
+            .expect("prepare");
+    HeadlessRunner::builder()
+        .application(application)
+        .sink(Box::new(RecordingSink(Rc::new(RefCell::new(Vec::new())))))
+        .steps(config.steps)
+        .snapshot_every(config.snapshot_every)
+        .timings(config.timings.clone(), config.timing_warmup)
+        .build()
+        .run()
+        .expect("run");
+    let content = fs::read_to_string(&timings_path).expect("read timings");
+    let _ = fs::remove_file(&timings_path);
+
+    let value: serde_json::Value = serde_json::from_str(&content).expect("valid json");
+    assert_eq!(value["schema_version"], "headless-timings.v1");
+    assert_eq!(value["warmup_steps"], 2);
+    assert_eq!(value["steps"], 10);
+    // Snapshots after steps 4, 8 and 12; all after the warmup.
+    assert_eq!(value["snapshots"], 3);
+    assert_eq!(value["balls"], 40);
+    let per_step = &value["ms_per_step"];
+    let total = per_step["total"].as_f64().expect("total");
+    let mut sum = 0.0;
+    for phase in [
+        "neighbours",
+        "positions",
+        "forces",
+        "apply",
+        "cells",
+        "thermo",
+        "snapshot",
+        "output",
+        "other",
+    ] {
+        let ms = per_step[phase].as_f64().expect(phase);
+        assert!(ms >= 0.0, "{phase} {ms}");
+        sum += ms;
+    }
+    assert!(total > 0.0);
+    assert!(
+        (sum - total).abs() <= 1e-6 * total.max(1.0) + 1e-9,
+        "{sum} vs {total}"
+    );
+}
+
+#[test]
+fn test_write_timings_rejects_runs_with_paused_steps() {
+    use rust_thermo_core::application::phase_timings::PhaseTimings;
+
+    let application = build_application(test_world_rect(), Some(1)).expect("build");
+    let snapshot = application.create_snapshot();
+    let mut clock = RunClock::start(0);
+    clock.steps = 5;
+    let phases = PhaseTimings {
+        steps: 1,
+        ..PhaseTimings::default()
+    };
+    let path = std::env::temp_dir().join(format!(
+        "headless-timings-paused-{}.json",
+        std::process::id()
+    ));
+    let result = write_timings(&path, &clock, Duration::from_millis(5), &phases, &snapshot);
+    assert!(
+        result.is_err(),
+        "a run with paused steps must not be reported"
+    );
+    assert!(!path.exists());
+}
+
+#[test]
+fn test_run_with_timings_fails_at_the_first_paused_step() {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock before unix epoch")
+        .as_nanos();
+    let dir = std::env::temp_dir().join(format!("headless-paused-{}-{nanos}", std::process::id()));
+    let store = SaveStore::new(&dir);
+    let mut seeded = build_application(test_world_rect(), Some(5)).expect("build");
+    seeded.seed_random_balls(20);
+    let saved = seeded.save_world(&store).expect("save");
+    let mut paused = build_application(test_world_rect(), Some(5)).expect("build");
+    paused
+        .load_world(&store, &LoadSource::Path(saved), true)
+        .expect("load paused");
+
+    let timings_path = dir.join("timings.json");
+    let result = HeadlessRunner::builder()
+        .application(paused)
+        .sink(Box::new(RecordingSink(Rc::new(RefCell::new(Vec::new())))))
+        .steps(50)
+        .timings(Some(timings_path.clone()), 0)
+        .build()
+        .run();
+    let written = timings_path.exists();
+    let _ = fs::remove_dir_all(&dir);
+
+    let error = result.err().expect("a paused run must fail");
+    assert!(error.to_string().contains("step 0"), "{error}");
+    assert!(!written);
 }
