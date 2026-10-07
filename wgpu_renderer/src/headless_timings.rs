@@ -1,7 +1,7 @@
 //! Per-phase step timings of a headless run (`--timings`, #221).
 //!
-//! One JSON object per run. All times are milliseconds per measured step; the
-//! warmup steps are not counted.
+//! One JSON object per run, read by `scripts/headless_perf.sh`. All times are
+//! milliseconds per measured step; the warmup steps are not counted.
 use rust_thermo_core::application::phase_timings::PhaseTimings;
 use rust_thermo_core::application::renderer_snapshot::RendererSnapshot;
 use serde_json::json;

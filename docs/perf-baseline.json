@@ -1,0 +1,60 @@
+{
+  "schema_version": "headless-perf.v2",
+  "date": "2026-10-07T04:26:57Z",
+  "machine": {"cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz", "cores": 4, "os": "Linux 6.18.44-fc-v77"},
+  "settings": {"steps": 300, "warmup": 50, "runs": 5, "snapshot_every": 10, "seed": 1},
+  "results": [
+    {"scenario": "dilute", "binary": "target/release/rust_thermo_wgpu", "commit": "60c70fd", "profile": "release", "balls": 10000, "wall_pieces": 0, "valves": 0, "threads": 2, "steps": 250, "runs": 5,
+     "ms_per_step": {
+       "total": {"median": 3.5194, "min": 3.2797, "max": 3.7718, "spread_pct": 14.0},
+       "neighbours": {"median": 1.2911, "min": 1.1974, "max": 1.3827, "spread_pct": 14.3},
+       "positions": {"median": 0.7751, "min": 0.7261, "max": 0.8379, "spread_pct": 14.4},
+       "forces": {"median": 0.4121, "min": 0.3659, "max": 0.4454, "spread_pct": 19.3},
+       "apply": {"median": 0.3244, "min": 0.3033, "max": 0.3879, "spread_pct": 26.1},
+       "cells": {"median": 0.2775, "min": 0.2613, "max": 0.2924, "spread_pct": 11.2},
+       "thermo": {"median": 0.3474, "min": 0.3268, "max": 0.3590, "spread_pct": 9.3},
+       "snapshot": {"median": 0.0448, "min": 0.0418, "max": 0.0470, "spread_pct": 11.7},
+       "output": {"median": 0.0022, "min": 0.0022, "max": 0.0048, "spread_pct": 120.6},
+       "other": {"median": 0.0461, "min": 0.0440, "max": 0.0490, "spread_pct": 10.8}
+     }},
+    {"scenario": "dense", "binary": "target/release/rust_thermo_wgpu", "commit": "60c70fd", "profile": "release", "balls": 50000, "wall_pieces": 0, "valves": 0, "threads": 2, "steps": 250, "runs": 5,
+     "ms_per_step": {
+       "total": {"median": 19.1758, "min": 18.5129, "max": 19.5591, "spread_pct": 5.5},
+       "neighbours": {"median": 3.0812, "min": 2.8958, "max": 3.3255, "spread_pct": 13.9},
+       "positions": {"median": 3.2323, "min": 3.0586, "max": 3.2823, "spread_pct": 6.9},
+       "forces": {"median": 6.6478, "min": 6.2697, "max": 6.9053, "spread_pct": 9.6},
+       "apply": {"median": 2.5696, "min": 2.4219, "max": 2.7363, "spread_pct": 12.2},
+       "cells": {"median": 1.6366, "min": 1.6121, "max": 1.7298, "spread_pct": 7.2},
+       "thermo": {"median": 1.4471, "min": 1.4049, "max": 1.4946, "spread_pct": 6.2},
+       "snapshot": {"median": 0.2288, "min": 0.2249, "max": 0.2373, "spread_pct": 5.4},
+       "output": {"median": 0.0027, "min": 0.0026, "max": 0.0030, "spread_pct": 15.9},
+       "other": {"median": 0.2694, "min": 0.2574, "max": 0.2924, "spread_pct": 13.0}
+     }},
+    {"scenario": "walls_valves", "binary": "target/release/rust_thermo_wgpu", "commit": "60c70fd", "profile": "release", "balls": 20000, "wall_pieces": 7, "valves": 3, "threads": 2, "steps": 250, "runs": 5,
+     "ms_per_step": {
+       "total": {"median": 8.0340, "min": 7.6002, "max": 8.8805, "spread_pct": 15.9},
+       "neighbours": {"median": 2.3705, "min": 2.2244, "max": 2.6592, "spread_pct": 18.3},
+       "positions": {"median": 1.5217, "min": 1.4771, "max": 1.6376, "spread_pct": 10.5},
+       "forces": {"median": 1.8296, "min": 1.7794, "max": 2.0955, "spread_pct": 17.3},
+       "apply": {"median": 1.1101, "min": 0.9995, "max": 1.2502, "spread_pct": 22.6},
+       "cells": {"median": 0.5245, "min": 0.4970, "max": 0.5771, "spread_pct": 15.3},
+       "thermo": {"median": 0.4547, "min": 0.4269, "max": 0.4784, "spread_pct": 11.3},
+       "snapshot": {"median": 0.0805, "min": 0.0738, "max": 0.0838, "spread_pct": 12.4},
+       "output": {"median": 0.0024, "min": 0.0023, "max": 0.0029, "spread_pct": 25.4},
+       "other": {"median": 0.0939, "min": 0.0901, "max": 0.0997, "spread_pct": 10.2}
+     }},
+    {"scenario": "large", "binary": "target/release/rust_thermo_wgpu", "commit": "60c70fd", "profile": "release", "balls": 200000, "wall_pieces": 0, "valves": 0, "threads": 2, "steps": 250, "runs": 5,
+     "ms_per_step": {
+       "total": {"median": 107.8820, "min": 106.6380, "max": 110.5979, "spread_pct": 3.7},
+       "neighbours": {"median": 24.3434, "min": 24.0817, "max": 24.6091, "spread_pct": 2.2},
+       "positions": {"median": 14.6562, "min": 14.4960, "max": 14.7762, "spread_pct": 1.9},
+       "forces": {"median": 30.2637, "min": 29.1798, "max": 30.8133, "spread_pct": 5.4},
+       "apply": {"median": 12.3826, "min": 12.2205, "max": 12.6293, "spread_pct": 3.3},
+       "cells": {"median": 11.1458, "min": 10.9492, "max": 11.5341, "spread_pct": 5.2},
+       "thermo": {"median": 12.4280, "min": 12.3468, "max": 13.0099, "spread_pct": 5.3},
+       "snapshot": {"median": 1.2859, "min": 1.2758, "max": 1.3613, "spread_pct": 6.6},
+       "output": {"median": 0.0032, "min": 0.0030, "max": 0.0033, "spread_pct": 7.2},
+       "other": {"median": 1.8798, "min": 1.8277, "max": 1.9856, "spread_pct": 8.4}
+     }}
+  ]
+}

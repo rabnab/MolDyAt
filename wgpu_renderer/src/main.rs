@@ -24,11 +24,17 @@ use rust_thermo_core::application::persistence::{LoadSource, SaveStore};
 /// - OS/background processes
 ///
 /// This prevents CPU saturation and maintains UI responsiveness.
+/// `RAYON_NUM_THREADS` (a positive integer) overrides the count, e.g. to pin
+/// it for perf runs (`scripts/headless_perf.sh`).
 fn init_rayon() {
     use rayon::ThreadPoolBuilder;
 
     const RESERVED_THREADS: usize = 2; // Reserve for main thread + OS
-    let num_cpus = num_cpus::get().saturating_sub(RESERVED_THREADS).max(1);
+    let num_cpus = std::env::var("RAYON_NUM_THREADS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|&threads| threads > 0)
+        .unwrap_or_else(|| num_cpus::get().saturating_sub(RESERVED_THREADS).max(1));
 
     ThreadPoolBuilder::new()
         .num_threads(num_cpus)
@@ -96,6 +102,12 @@ fn run_headless_renderer(
     let store = SaveStore::new(&common.save_dir);
     let application =
         headless_runner::prepare_application(&config, world_rect, &store, common.load)?;
+    if config.save_setup {
+        let path = application
+            .save_world(&store)
+            .map_err(|error| std::io::Error::other(format!("{error:?}")))?;
+        eprintln!("saved world: {}", path.display());
+    }
     headless_runner::HeadlessRunner::from_config(config, application)?.run()?;
     Ok(())
 }
