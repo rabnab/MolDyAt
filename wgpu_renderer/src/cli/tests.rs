@@ -36,3 +36,24 @@ fn shared_options_need_a_value() {
     assert!(split_common_args(&args(&["program", "--save-dir"])).is_err());
     assert!(split_common_args(&args(&["program", "--load", "--headless"])).is_err());
 }
+
+#[test]
+fn version_flag_is_recognised_in_any_position() {
+    assert!(wants_version(&args(&["program", "--version"])));
+    assert!(wants_version(&args(&["program", "-V"])));
+    assert!(wants_version(&args(&[
+        "program",
+        "--headless",
+        "--version"
+    ])));
+    assert!(!wants_version(&args(&["program", "--headless"])));
+    // The program name itself is never taken as the flag.
+    assert!(!wants_version(&args(&["--version"])));
+}
+
+#[test]
+fn version_string_starts_with_the_package_version() {
+    let prefix = format!("{} (", env!("CARGO_PKG_VERSION"));
+    assert!(VERSION.starts_with(&prefix), "{VERSION}");
+    assert!(VERSION.ends_with(')'), "{VERSION}");
+}

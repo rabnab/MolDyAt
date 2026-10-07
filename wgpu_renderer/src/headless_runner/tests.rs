@@ -439,6 +439,7 @@ fn test_run_writes_timings_for_steps_after_warmup() {
 
     let value: serde_json::Value = serde_json::from_str(&content).expect("valid json");
     assert_eq!(value["schema_version"], "headless-timings.v1");
+    assert_eq!(value["version"], env!("CARGO_PKG_VERSION"));
     assert_eq!(value["warmup_steps"], 2);
     assert_eq!(value["steps"], 10);
     // Snapshots after steps 4, 8 and 12; all after the warmup.

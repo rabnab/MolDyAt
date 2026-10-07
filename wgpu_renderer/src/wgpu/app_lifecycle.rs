@@ -27,7 +27,10 @@ impl AppLifecycle {
         proxy: EventLoopProxy<UserEvent>,
     ) -> InitializedApp {
         let window_attrs = Window::default_attributes()
-            .with_title("Molecular Dynamics Simulation (WGPU)")
+            .with_title(format!(
+                "Molecular Dynamics Simulation (WGPU) – v{}",
+                crate::cli::VERSION
+            ))
             .with_inner_size(LogicalSize::new(
                 DEFAULT_WINDOW_WIDTH,
                 DEFAULT_WINDOW_HEIGHT,
