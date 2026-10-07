@@ -18,7 +18,7 @@ use crate::application::game_logic::GameLogicData;
 use crate::objects2d::Rect;
 use crate::objects2d::ball_impl::Ball2D;
 use crate::timing_monad::TimingMonad;
-pub use core::MainContent;
+pub use core::{MainContent, valve_span_problem};
 pub use domain_command::DomainCommand;
 pub use physics_event::PhysicsEvent;
 pub(crate) use physics_thread::PhysicsThread;

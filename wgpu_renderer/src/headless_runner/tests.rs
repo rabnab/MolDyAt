@@ -1,5 +1,5 @@
 use super::*;
-use crate::headless_cli::{DetailLevel, LineSegmentSpec, OutputFormat};
+use crate::headless_cli::{DetailLevel, LineSegmentSpec, OutputFormat, ValveSpec};
 use crate::headless_output::HeadlessSnapshotSink;
 use rust_thermo_core::application::renderer_snapshot::RendererSnapshot;
 use std::cell::RefCell;
@@ -94,6 +94,7 @@ fn seeded_headless_output() -> String {
         world_scale: None,
         seed_speed: None,
         line_segments: Vec::new(),
+        valves: Vec::new(),
     };
 
     let mut application =
@@ -347,4 +348,54 @@ fn test_prepare_application_seeds_moving_balls() {
     let moving = speeds(Some(4.0));
     assert!(moving.iter().any(|&v| v > 0.0));
     assert!(moving.iter().all(|&v| v <= 4.0 + 1e-4));
+}
+
+#[test]
+fn test_prepare_application_places_valves_on_their_walls() {
+    let config = HeadlessConfig {
+        line_segments: vec![
+            LineSegmentSpec {
+                start: (-20.0, 0.0),
+                end: (20.0, 0.0),
+                thickness: 2.0,
+            },
+            LineSegmentSpec {
+                start: (0.0, -20.0),
+                end: (0.0, 20.0),
+                thickness: 2.0,
+            },
+        ],
+        valves: vec![
+            ValveSpec {
+                wall: 1,
+                t_start: 0.25,
+                t_end: 0.75,
+                is_closed: true,
+            },
+            ValveSpec {
+                wall: 0,
+                t_start: 0.4,
+                t_end: 0.6,
+                is_closed: false,
+            },
+        ],
+        ..HeadlessConfig::default()
+    };
+    let application =
+        prepare_application(&config, test_world_rect(), &SaveStore::new("saves"), None)
+            .expect("prepare");
+    let operators = application.create_snapshot().operators;
+    assert_eq!(operators.walls.len(), 2);
+    assert_eq!(operators.valve_spans.len(), 2);
+    for span in &operators.valve_spans {
+        let wall = operators.wall_of_valve(span.valve_id).expect("valve wall");
+        if span.is_closed {
+            // Wall 1 is vertical: the valve spans y in -10..10.
+            assert_eq!(wall.start, Vec2D::new(0.0, -20.0));
+            assert!((span.p0.y + 10.0).abs() < 1e-4 && (span.p1.y - 10.0).abs() < 1e-4);
+        } else {
+            assert_eq!(wall.start, Vec2D::new(-20.0, 0.0));
+            assert!((span.p0.x + 4.0).abs() < 1e-4 && (span.p1.x - 4.0).abs() < 1e-4);
+        }
+    }
 }

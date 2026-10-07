@@ -207,10 +207,15 @@ impl MainContent {
 
     /// Add a wall with the given thickness (clamped to the range the
     /// thickness keys allow). Used by headless runs to place walls without
-    /// UI interaction.
-    pub fn add_line_segment_with_thickness(&mut self, start: Vec2D, end: Vec2D, thickness: f32) {
+    /// UI interaction. Returns the id of the wall's (single) piece.
+    pub fn add_line_segment_with_thickness(
+        &mut self,
+        start: Vec2D,
+        end: Vec2D,
+        thickness: f32,
+    ) -> usize {
         self.world
-            .add_line_segment_with_thickness(start, end, thickness);
+            .add_line_segment_with_thickness(start, end, thickness)
     }
 
     /// Move one of a WALL's own two endpoints (not any internal, valve-cut
@@ -268,7 +273,7 @@ impl SimulationWorld {
         start: Vec2D,
         end: Vec2D,
         thickness: f32,
-    ) {
+    ) -> usize {
         let line_id = self.line_segments.add(start, end);
         if let Some(seg) = self.line_segments.find_mut(line_id) {
             seg.thickness = f32::clamp(thickness, MIN_THICKNESS, MAX_THICKNESS);
@@ -276,6 +281,7 @@ impl SimulationWorld {
         let chain_id = self.wall_chains.add(start, end, line_id);
         self.ghost_wall = None;
         self.flag_balls_overlapping_chain(chain_id);
+        line_id
     }
 
     /// Set (or clear) the wall being drawn or dragged. It collides like a
@@ -436,21 +442,7 @@ impl SimulationWorld {
         } else {
             (local_t_end, local_t_start)
         };
-        if local_t_end - local_t_start < 1e-4 {
-            return None; // degenerate valve width
-        }
-        // A valve flush against only ONE of the piece's own edges would split
-        // it into one normal piece plus one permanent zero-length piece
-        // (start == end) that nothing ever merges or prunes -- see
-        // add_valve_on_piece's doc comment. The UI's `snap_t` snaps a dragged
-        // endpoint to exactly 0.0/1.0 near a piece boundary, so this is
-        // reachable from an ordinary drag, not just malformed input. Reject
-        // it; a valve flush against BOTH edges (the whole piece becomes the
-        // valve) is unaffected -- no non-degenerate piece is lost there, so
-        // there's nothing to strand.
-        let start_flush = local_t_start < 1e-4;
-        let end_flush = local_t_end > 1.0 - 1e-4;
-        if start_flush != end_flush {
+        if super::valves::valve_span_problem(local_t_start, local_t_end).is_some() {
             return None;
         }
 
