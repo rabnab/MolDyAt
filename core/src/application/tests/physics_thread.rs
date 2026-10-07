@@ -1,6 +1,7 @@
 use crate::application::DomainCommand;
 use crate::application::GameLogic;
 use crate::application::MainContent;
+use crate::application::tests::{sync_commands, wait_for_snapshot};
 use crate::application::{
     CommandHandler, DomainCommandHandler, PhysicsRuntime, PhysicsThread, ShutdownSignal,
 };
@@ -138,81 +139,40 @@ fn test_physics_thread_can_publish_snapshots() {
 
 #[test]
 fn test_command_channel_toggle_pause() {
-    use std::time::{Duration, Instant};
-
-    // Create MainContent
     let world_rect = Rect::new(0.0, 0.0, 100.0, 100.0);
     let main_content = MainContent::new(world_rect).expect("Failed to create MainContent");
-
-    // Get snapshot slot before moving
     let snapshot_slot = main_content.get_snapshot_slot();
-
-    // Spawn physics thread
     let physics_thread = PhysicsThread::spawn(main_content, Box::new(|| {}));
 
-    // Wait for the physics thread to publish at least one snapshot
-    let deadline = Instant::now() + Duration::from_secs(5);
-    while snapshot_slot.load().is_none() {
-        assert!(
-            Instant::now() < deadline,
-            "Timed out waiting for first snapshot"
-        );
-        std::thread::sleep(Duration::from_millis(5));
-    }
+    // Running: the step count advances.
+    let first = wait_for_snapshot(&snapshot_slot, "a first snapshot", |_| true);
+    wait_for_snapshot(&snapshot_slot, "a running step", |s| {
+        s.simulation_step > first.simulation_step
+    });
 
-    // Send pause command
+    // Paused once the Pause command is applied (sync_commands returns the
+    // first snapshot published after it).
     physics_thread
         .send_command(DomainCommand::Pause)
         .expect("Failed to send pause command");
+    let paused = sync_commands(&physics_thread, &snapshot_slot);
 
-    // Wait long enough for the command to be processed
-    std::thread::sleep(Duration::from_millis(100));
-
-    // Get step count after pause has been processed
-    let initial_step = snapshot_slot
-        .load()
-        .as_ref()
-        .map(|s| s.simulation_step)
-        .unwrap_or(0);
-
-    // Wait and verify simulation is paused (step count shouldn't change)
-    std::thread::sleep(Duration::from_millis(200));
-    let paused_step = snapshot_slot
-        .load()
-        .as_ref()
-        .map(|s| s.simulation_step)
-        .unwrap_or(0);
-
+    // A second round trip through the physics loop. A running loop steps
+    // in every iteration before it publishes, so an unchanged step proves
+    // the pause, without a timing window.
+    let still_paused = sync_commands(&physics_thread, &snapshot_slot);
     assert_eq!(
-        initial_step, paused_step,
+        still_paused.simulation_step, paused.simulation_step,
         "Simulation should be paused (step count unchanged)"
     );
 
-    // Send resume command
     physics_thread
         .send_command(DomainCommand::Resume)
         .expect("Failed to send resume command");
+    wait_for_snapshot(&snapshot_slot, "the simulation to resume", |s| {
+        s.simulation_step > paused.simulation_step
+    });
 
-    // Wait for simulation to advance (spin-wait with timeout)
-    let deadline = Instant::now() + Duration::from_secs(5);
-    loop {
-        let current_step = snapshot_slot
-            .load()
-            .as_ref()
-            .map(|s| s.simulation_step)
-            .unwrap_or(0);
-        if current_step > paused_step {
-            break;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "Timed out waiting for simulation to resume (stuck at step {})",
-            current_step
-        );
-        std::thread::sleep(Duration::from_millis(5));
-    }
-
-    // Shutdown
     physics_thread
         .shutdown_and_join()
         .expect("Failed to shutdown physics thread");
@@ -220,41 +180,30 @@ fn test_command_channel_toggle_pause() {
 
 #[test]
 fn test_command_channel_speed_control() {
-    use std::time::Duration;
-
-    // Create MainContent
     let world_rect = Rect::new(0.0, 0.0, 1000.0, 1000.0);
     let main_content = MainContent::new(world_rect).expect("Failed to create MainContent");
-
-    // Get snapshot slot before moving
+    let initial_dt = main_content.time_step();
     let snapshot_slot = main_content.get_snapshot_slot();
-
-    // Spawn physics thread
     let physics_thread = PhysicsThread::spawn(main_content, Box::new(|| {}));
 
-    // Wait for thread to start
-    std::thread::sleep(Duration::from_millis(10));
-
-    // Send commands to increase speed multiple times
     for _ in 0..3 {
         physics_thread
             .send_command(DomainCommand::DoubleTimeStep)
             .expect("Failed to send increase speed command");
     }
+    let applied = sync_commands(&physics_thread, &snapshot_slot);
 
-    // Wait for commands to be processed
-    std::thread::sleep(Duration::from_millis(50));
-
-    // Verify command was processed (speedup should be > 1)
-    // We can't directly check speedup, but we can verify the command channel works
-    // by checking that simulation is still running
-    let snapshot = snapshot_slot.load();
+    // Simulated time per step is the time step: three doublings make it 8x.
+    let later = wait_for_snapshot(&snapshot_slot, "later steps", |s| {
+        s.simulation_step >= applied.simulation_step + 10
+    });
+    let dt = (later.time - applied.time) / (later.simulation_step - applied.simulation_step) as f32;
+    let expected = (initial_dt * 8.0).min(0.16);
     assert!(
-        snapshot.is_some(),
-        "Snapshot should exist after speed commands"
+        (dt - expected).abs() <= expected * 1e-3,
+        "time step after three doublings: {dt}, expected {expected}"
     );
 
-    // Shutdown
     physics_thread
         .shutdown_and_join()
         .expect("Failed to shutdown physics thread");
