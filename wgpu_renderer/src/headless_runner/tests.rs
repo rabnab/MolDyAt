@@ -97,6 +97,7 @@ fn seeded_headless_output() -> String {
         valves: Vec::new(),
         timings: None,
         timing_warmup: 0,
+        save_setup: false,
     };
 
     let mut application =

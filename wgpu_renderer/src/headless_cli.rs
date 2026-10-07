@@ -34,6 +34,10 @@ pub struct HeadlessConfig {
     pub timings: Option<PathBuf>,
     /// Steps run before the timings start; they are not counted.
     pub timing_warmup: u32,
+    /// Save the world to the save directory once it is set up (walls,
+    /// valves, seeded balls), before the first step. Perf runs seed a large
+    /// world once and `--load` it for every run.
+    pub save_setup: bool,
 }
 
 /// One `--valve wall,t_start,t_end[,open|closed]` valve: `wall` is the index
@@ -162,6 +166,7 @@ impl Default for HeadlessConfig {
             valves: Vec::new(),
             timings: None,
             timing_warmup: 0,
+            save_setup: false,
         }
     }
 }
@@ -264,6 +269,7 @@ fn parse_headless_args_with_args(args: &[String]) -> Result<Option<HeadlessConfi
                     CliError::new("--rng-seed value must be a non-negative integer")
                 })?);
             }
+            "--save-setup" => config.save_setup = true,
             "--stdout" => config.stdout = true,
             "--no-stdout" => config.stdout = false,
             "--seed-balls" => {

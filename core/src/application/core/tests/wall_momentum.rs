@@ -2,7 +2,6 @@ use super::{DT_GOAL, create_main_content_for_region};
 use crate::application::VerletIntegration;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::BallFactory;
-use std::time::Instant;
 
 #[test]
 fn test_single_ball_wall_bounce_momentum() {
@@ -160,47 +159,4 @@ fn test_single_ball_wall_bounce_momentum() {
     }
 
     assert!(bounced, "Ball did not bounce within {} steps", max_steps);
-}
-
-#[test]
-fn test_wall_momentum_performance_impact() {
-    // Create a 1000-ball simulation
-    let (mut main_content, _) = create_main_content_for_region(500.0, 500.0);
-    let factory = BallFactory::new();
-
-    // Add 1000 balls
-    for i in 0..1000 {
-        let x = -20.0 + (i % 32) as f32 * 1.5;
-        let y = -20.0 + (i / 32) as f32 * 1.5;
-        let pos = Vec2D::new(x, y);
-        let vel = Vec2D::new((i as f32 * 0.1).sin(), (i as f32 * 0.1).cos());
-        let ball = factory.create_massive_with_velocity(pos, vel);
-        main_content.world_mut().balls.push(ball);
-    }
-
-    // Add balls to cell grid
-    main_content.world_mut().rebuild_cell_grid();
-
-    let bound_rect = main_content.world().world_region();
-
-    // Warm up
-    for _ in 0..10 {
-        main_content.update_sim(DT_GOAL, &bound_rect);
-    }
-
-    // Time 100 steps
-    let start = Instant::now();
-    for _ in 0..100 {
-        main_content.update_sim(DT_GOAL, &bound_rect);
-    }
-    let elapsed = start.elapsed();
-
-    println!("\n=== Performance Test ===");
-    println!("100 steps with 1000 balls: {:?}", elapsed);
-    println!("Per step: {:?}", elapsed / 100);
-    println!(
-        "Wall momentum accumulated: ({:.2}, {:.2})",
-        main_content.world().sim.wall_momentum_x,
-        main_content.world().sim.wall_momentum_y
-    );
 }

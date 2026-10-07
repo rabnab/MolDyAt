@@ -147,7 +147,7 @@ cargo run -p rust_thermo_wgpu -- --headless --steps 20000 --snapshot-every 100 -
 ```bash
 # Large, hot world for performance runs: --world-scale multiplies the default
 # world's width and height, --seed-speed gives seeded balls speeds in 0..max.
-# run_start records both. scripts/headless_perf.sh times such runs per step.
+# run_start records both.
 cargo run --release -p rust_thermo_wgpu -- --headless --steps 300 --rng-seed 1 --seed-balls 12000 --world-scale 8 --seed-speed 6 --stdout
 ```
 
@@ -155,7 +155,14 @@ cargo run --release -p rust_thermo_wgpu -- --headless --steps 300 --rng-seed 1 -
 # Valves: --valve wall,t_start,t_end[,open|closed] cuts a valve into the
 # --line-segment with that 0-based index (fractions along it, one per wall).
 # --timings writes ms/step per phase as JSON, after --timing-warmup steps.
+# --save-setup saves the prepared world to --save-dir before the first step.
 cargo run --release -p rust_thermo_wgpu -- --headless --steps 300 --rng-seed 1 --seed-balls 2000 --line-segment 0,-30,0,30,2 --valve 0,0.4,0.6,closed --timings /tmp/timings.json --timing-warmup 50 --no-stdout --output /tmp/valves.jsonl
+```
+
+```bash
+# Performance baseline: fixed seeded scenarios, one JSON report with ms/step
+# per phase. See docs/perf-baseline.md for scenarios and comparing branches.
+cargo build --release -p rust_thermo_wgpu && scripts/headless_perf.sh > perf.json
 ```
 
 ```bash

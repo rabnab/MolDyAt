@@ -42,6 +42,7 @@ Toolchain is pinned in `rust-toolchain.toml` (nightly). Use plain `cargo`. Use `
 - Minimal headless run: `cargo run -p rust_thermo_wgpu -- --headless`
 - Deterministic seeded run (reproducible): `cargo run -p rust_thermo_wgpu -- --headless --steps 1000 --rng-seed 12345 --no-stdout`
 - CI format check: `cargo fmt -- --check`
+- Performance baseline (per-phase ms/step JSON, compare binaries): `scripts/headless_perf.sh [BASE_BIN NEW_BIN]`; see `docs/perf-baseline.md`
 
 ---
 
