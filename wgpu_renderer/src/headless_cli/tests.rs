@@ -472,3 +472,77 @@ fn test_seed_speed_flag() {
         assert!(parse(bad).is_err(), "{bad} must be rejected");
     }
 }
+
+#[test]
+fn test_valve_flag_refers_to_a_line_segment() {
+    let config = parse_headless_args_with_args(&headless_args(&[
+        "--line-segment",
+        "-20,0,20,0",
+        "--line-segment",
+        "0,5,0,25",
+        "--valve",
+        "1,0.25,0.75,closed",
+        "--valve",
+        "0, 0.4, 0.6",
+    ]))
+    .unwrap()
+    .unwrap();
+    assert_eq!(
+        config.valves,
+        vec![
+            ValveSpec {
+                wall: 1,
+                t_start: 0.25,
+                t_end: 0.75,
+                is_closed: true,
+            },
+            ValveSpec {
+                wall: 0,
+                t_start: 0.4,
+                t_end: 0.6,
+                is_closed: false,
+            },
+        ]
+    );
+}
+
+#[test]
+fn test_valve_flag_rejects_malformed_values() {
+    for value in [
+        "0,0.2",
+        "0,0.2,0.4,open,x",
+        "x,0.2,0.4",
+        "0,0.4,0.2",
+        "0,-0.1,0.4",
+        "0,0.2,1.5",
+        "0,0.2,0.4,ajar",
+        "1,0.2,0.4",
+        // Placement would reject these: flush with only one wall end, too narrow.
+        "0,0,0.5",
+        "0,0.5,1",
+        "0,0.2,0.20005",
+    ] {
+        let args = headless_args(&["--line-segment", "-20,0,20,0", "--valve", value]);
+        assert!(
+            parse_headless_args_with_args(&args).is_err(),
+            "--valve {value} should be rejected"
+        );
+    }
+    let twice = headless_args(&[
+        "--line-segment",
+        "-20,0,20,0",
+        "--valve",
+        "0,0.1,0.2",
+        "--valve",
+        "0,0.6,0.7",
+    ]);
+    assert!(parse_headless_args_with_args(&twice).is_err());
+}
+
+#[test]
+fn test_valve_flag_accepts_a_valve_spanning_the_whole_wall() {
+    let args = headless_args(&["--line-segment", "-20,0,20,0", "--valve", "0,0,1"]);
+    let config = parse_headless_args_with_args(&args).unwrap().unwrap();
+    assert_eq!(config.valves[0].t_start, 0.0);
+    assert_eq!(config.valves[0].t_end, 1.0);
+}

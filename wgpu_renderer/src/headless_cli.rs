@@ -2,6 +2,7 @@
 ///
 /// This module handles parsing command-line arguments for headless execution mode
 /// and storing the parsed configuration for use by the headless simulation loop.
+use rust_thermo_core::application::valve_span_problem;
 use rust_thermo_core::objects2d::line_segment::{DEFAULT_THICKNESS, MAX_THICKNESS, MIN_THICKNESS};
 use std::path::PathBuf;
 
@@ -27,6 +28,56 @@ pub struct HeadlessConfig {
     pub world_scale: Option<f32>,
     /// Walls placed before any balls are seeded, in world coordinates.
     pub line_segments: Vec<LineSegmentSpec>,
+    /// Valves cut into those walls, at most one per wall.
+    pub valves: Vec<ValveSpec>,
+}
+
+/// One `--valve wall,t_start,t_end[,open|closed]` valve: `wall` is the index
+/// of a `--line-segment` (0-based, in order given), `t_start`/`t_end` are
+/// fractions along it. Valves default to open.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ValveSpec {
+    pub wall: usize,
+    pub t_start: f32,
+    pub t_end: f32,
+    pub is_closed: bool,
+}
+
+impl ValveSpec {
+    fn parse(value: &str) -> Result<Self, CliError> {
+        const USAGE: &str = "--valve value must be wall,t_start,t_end[,open|closed]";
+        let parts: Vec<&str> = value.split(',').map(str::trim).collect();
+        if !(3..=4).contains(&parts.len()) {
+            return Err(CliError::new(USAGE));
+        }
+        let wall = parts[0]
+            .parse::<usize>()
+            .map_err(|_| CliError::new(USAGE))?;
+        let fraction = |part: &str| {
+            part.parse::<f32>()
+                .ok()
+                .filter(|t| (0.0..=1.0).contains(t))
+                .ok_or_else(|| CliError::new("--valve t_start and t_end must be in 0..1"))
+        };
+        let (t_start, t_end) = (fraction(parts[1])?, fraction(parts[2])?);
+        if t_start >= t_end {
+            return Err(CliError::new("--valve t_start must be less than t_end"));
+        }
+        if let Some(problem) = valve_span_problem(t_start, t_end) {
+            return Err(CliError::new(format!("--valve: {problem}")));
+        }
+        let is_closed = match parts.get(3).copied() {
+            None | Some("open") => false,
+            Some("closed") => true,
+            Some(_) => return Err(CliError::new(USAGE)),
+        };
+        Ok(Self {
+            wall,
+            t_start,
+            t_end,
+            is_closed,
+        })
+    }
 }
 
 /// One `--line-segment x1,y1,x2,y2[,thickness]` wall. The thickness range and
@@ -104,6 +155,7 @@ impl Default for HeadlessConfig {
             dt: None,
             world_scale: None,
             line_segments: Vec::new(),
+            valves: Vec::new(),
         }
     }
 }
@@ -268,6 +320,13 @@ fn parse_headless_args_with_args(args: &[String]) -> Result<Option<HeadlessConfi
                 }
                 config.line_segments.push(LineSegmentSpec::parse(&args[i])?);
             }
+            "--valve" => {
+                i += 1;
+                if i >= args.len() {
+                    return Err(CliError::new("--valve requires a value"));
+                }
+                config.valves.push(ValveSpec::parse(&args[i])?);
+            }
             other => return Err(CliError::new(format!("Unknown argument: {}", other))),
         }
         i += 1;
@@ -281,6 +340,24 @@ fn parse_headless_args_with_args(args: &[String]) -> Result<Option<HeadlessConfi
             .any(|pair| pair[0] == "--no-stdout" && pair[1] == "--stdout")
     {
         return Err(CliError::new("--stdout and --no-stdout cannot be combined"));
+    }
+
+    for (index, valve) in config.valves.iter().enumerate() {
+        if valve.wall >= config.line_segments.len() {
+            return Err(CliError::new(format!(
+                "--valve wall {} does not exist ({} --line-segment given)",
+                valve.wall,
+                config.line_segments.len()
+            )));
+        }
+        // A valve splits its wall into pieces; a second one would need to
+        // find the piece it falls on. Not needed for the perf scenarios.
+        if config.valves[..index].iter().any(|v| v.wall == valve.wall) {
+            return Err(CliError::new(format!(
+                "--valve: wall {} has more than one valve",
+                valve.wall
+            )));
+        }
     }
 
     if !config.stdout && config.output.is_none() {

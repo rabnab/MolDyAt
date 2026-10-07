@@ -159,12 +159,26 @@ pub fn prepare_application(
             .set_time_step(dt)
             .map_err(|error| io::Error::other(format!("{error:?}")))?;
     }
-    for segment in &config.line_segments {
-        application.add_line_segment_with_thickness(
-            Vec2D::new(segment.start.0, segment.start.1),
-            Vec2D::new(segment.end.0, segment.end.1),
-            segment.thickness,
-        );
+    let line_ids: Vec<usize> = config
+        .line_segments
+        .iter()
+        .map(|segment| {
+            application.add_line_segment_with_thickness(
+                Vec2D::new(segment.start.0, segment.start.1),
+                Vec2D::new(segment.end.0, segment.end.1),
+                segment.thickness,
+            )
+        })
+        .collect();
+    for valve in &config.valves {
+        line_ids
+            .get(valve.wall)
+            .and_then(|&line_id| {
+                application.add_valve_segment(line_id, valve.t_start, valve.t_end, valve.is_closed)
+            })
+            .ok_or_else(|| {
+                io::Error::other(format!("cannot place --valve on wall {}", valve.wall))
+            })?;
     }
     if let Some(seed_balls) = config.seed_balls {
         application

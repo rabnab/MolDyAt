@@ -152,6 +152,12 @@ cargo run --release -p rust_thermo_wgpu -- --headless --steps 300 --rng-seed 1 -
 ```
 
 ```bash
+# Valves: --valve wall,t_start,t_end[,open|closed] cuts a valve into the
+# --line-segment with that 0-based index (fractions along it, one per wall).
+cargo run -p rust_thermo_wgpu -- --headless --steps 300 --rng-seed 1 --seed-balls 2000 --line-segment 0,-30,0,30,2 --valve 0,0.4,0.6,closed --no-stdout --output /tmp/valves.jsonl
+```
+
+```bash
 # Export summary + per-ball state (larger output)
 cargo run -p rust_thermo_wgpu -- --headless --steps 200 --snapshot-every 20 --detail balls --output /tmp/balls.jsonl --no-stdout
 ```

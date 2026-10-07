@@ -44,6 +44,7 @@ fn test_run_start_record_contains_config_and_operator_counts() {
         world_scale: None,
         seed_speed: None,
         line_segments: Vec::new(),
+        valves: Vec::new(),
     };
 
     let line = run_start_to_jsonl(&config, &snapshot);
@@ -345,6 +346,7 @@ fn test_runs_with_same_seed_and_config_emit_identical_jsonl() {
         world_scale: None,
         seed_speed: None,
         line_segments: Vec::new(),
+        valves: Vec::new(),
     };
     let config_b = HeadlessConfig {
         output: Some(output_path_b.clone()),

@@ -174,6 +174,18 @@ fn run_start_to_jsonl(config: &HeadlessConfig, snapshot: &RendererSnapshot) -> S
                     })
                 })
                 .collect::<Vec<_>>(),
+            "valves": config
+                .valves
+                .iter()
+                .map(|valve| {
+                    json!({
+                        "wall": valve.wall,
+                        "t_start": f32_value(valve.t_start),
+                        "t_end": f32_value(valve.t_end),
+                        "closed": valve.is_closed,
+                    })
+                })
+                .collect::<Vec<_>>(),
         },
         "initial": {
             "step": snapshot.simulation_step,

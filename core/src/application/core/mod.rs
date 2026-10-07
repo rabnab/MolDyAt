@@ -182,6 +182,7 @@ mod snapshot;
 mod source_spheres;
 mod thermostats;
 mod valves;
+pub use valves::valve_span_problem;
 mod verbose;
 
 pub(crate) use simulation_engine::SimulationEngine;
