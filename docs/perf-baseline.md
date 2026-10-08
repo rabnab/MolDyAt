@@ -33,10 +33,11 @@ How a run works:
 - **Seeding once.** Each scenario's world is seeded once with
   `--save-setup` and cached in `target/perf-worlds/<scenario>-<key>/`. Every
   run then starts from it with `--load`. All runs and all binaries start from
-  the same state. Seeding is O(n²) (each candidate is checked against every
-  ball), so the first `large` seed takes about 5 minutes. The cache key is a
-  hash of the seeding arguments. Delete the cache when the save format or
-  seeding changes.
+  the same state. Seeding checks each candidate only against the balls in
+  its neighbouring grid cells (#245): about 0.4 s for `dense` and 2 s for
+  `large` on the machine below (before #245 it was O(n²): 18 s and about
+  5 minutes). The cache key is a hash of the seeding arguments. Delete the
+  cache when the save format or seeding changes.
 - **Timing.** Each run does `STEPS=300` steps. The first `WARMUP=50` steps
   are not counted, because the at-rest `dense` world relaxes in them. The
   binary times itself (`--timings`), so process start and loading are left
@@ -68,9 +69,9 @@ All values are ms per measured step. Snapshot costs are spread over all steps.
 
 ## Baseline
 
-Captured from commit `e4d48a8` (the binary reports it; see
+Captured from commit `6b50e9e` (the binary reports it; see
 [`perf-baseline.json`](perf-baseline.json), schema `headless-perf.v2`), on
-2026-10-07:
+2026-10-08:
 
 - **CPU:** Intel Xeon @ 2.80 GHz, 4 vCPUs (cloud container, shared host)
 - **Threads:** 2 rayon workers (default: cores - 2)
@@ -81,18 +82,17 @@ Median ms/step:
 
 | Scenario | Balls | total | neighbours | positions | forces | apply | cells | thermo | snapshot | other |
 |---|---|---|---|---|---|---|---|---|---|---|
-| dilute | 10 000 | 3.21 | 1.19 | 0.71 | 0.37 | 0.30 | 0.26 | 0.32 | 0.04 | 0.04 |
-| dense | 50 000 | 19.95 | 3.13 | 3.23 | 6.92 | 2.74 | 1.91 | 1.64 | 0.26 | 0.28 |
-| walls_valves | 20 000 | 8.75 | 2.55 | 1.61 | 2.07 | 1.17 | 0.56 | 0.47 | 0.10 | 0.10 |
-| box_walls | 6 000 | 2.84 | 1.32 | 0.47 | 0.51 | 0.19 | 0.19 | 0.11 | 0.03 | 0.02 |
-| large | 200 000 | 113.87 | 25.25 | 15.22 | 32.24 | 12.69 | 11.65 | 13.29 | 1.36 | 2.00 |
+| dilute | 10 000 | 3.24 | 1.22 | 0.70 | 0.39 | 0.27 | 0.26 | 0.33 | 0.04 | 0.04 |
+| dense | 50 000 | 18.96 | 2.89 | 3.03 | 6.36 | 2.51 | 1.96 | 1.69 | 0.23 | 0.28 |
+| walls_valves | 20 000 | 8.28 | 2.36 | 1.57 | 2.06 | 1.11 | 0.50 | 0.46 | 0.08 | 0.10 |
+| box_walls | 6 000 | 2.64 | 1.20 | 0.43 | 0.49 | 0.18 | 0.18 | 0.10 | 0.02 | 0.02 |
+| large | 200 000 | 113.93 | 25.42 | 14.20 | 34.12 | 11.62 | 11.13 | 13.60 | 1.33 | 2.20 |
 
 `output` is about 0.003 ms in every scenario.
 
 `box_walls` replaces the former `test_wall_momentum_performance_impact`,
-which timed 1000 balls but asserted nothing. The short scenarios (`dilute`,
-`box_walls`, about 1 s per run) had a `spread_pct` of about 30 % in this
-capture; see Variance.
+which timed 1000 balls but asserted nothing. All scenarios except `large`
+had a `total` `spread_pct` of 14–19 % in this capture; see Variance.
 
 Do not compare absolute numbers across machines, build profiles (`release`
 uses `target-cpu=native`, `dist` uses x86-64-v2) or thread counts. Recapture
@@ -100,20 +100,21 @@ the baseline on the machine you compare on.
 
 ### Variance
 
-All four captures ran on the machine above with code whose timed paths are
-the same as in `e4d48a8`, from earlier versions of this branch before its
-history was consolidated. Runs 1 and 2 are two full invocations one after
-the other (2026-10-06); run 3 is from the morning of 2026-10-07; run 4 is
-the baseline above, the evening of 2026-10-07 (`box_walls` exists only in
-run 4):
+All five captures ran on the machine above with code whose timed paths are
+the same as in `6b50e9e` (#245 changed only seeding, which is not timed).
+Runs 1 to 3 are from earlier versions of #221 before its history was
+consolidated: runs 1 and 2 are two full invocations one after the other
+(2026-10-06), run 3 is from the morning of 2026-10-07. Run 4 is the previous
+baseline (`4b41546`, the evening of 2026-10-07) and run 5 the baseline above
+(2026-10-08). `box_walls` exists only in runs 4 and 5:
 
-| Scenario | total, run 1 | total, run 2 | total, run 3 | total, run 4 | Run 1 vs 2 | spread_pct within a run |
-|---|---|---|---|---|---|---|
-| dilute | 3.92 | 3.70 | 3.52 | 3.21 | 5.7 % | 8–31 % |
-| dense | 21.49 | 21.17 | 19.18 | 19.95 | 1.5 % | 6–15 % |
-| walls_valves | 10.23 | 9.35 | 8.03 | 8.75 | 8.6 % | 4–20 % |
-| box_walls | – | – | – | 2.84 | – | 32 % |
-| large | 117.36 | 115.54 | 107.88 | 113.87 | 1.5 % | 4–9 % |
+| Scenario | total, run 1 | total, run 2 | total, run 3 | total, run 4 | total, run 5 | Run 1 vs 2 | spread_pct within a run |
+|---|---|---|---|---|---|---|---|
+| dilute | 3.92 | 3.70 | 3.52 | 3.21 | 3.24 | 5.7 % | 8–31 % |
+| dense | 21.49 | 21.17 | 19.18 | 19.95 | 18.96 | 1.5 % | 6–19 % |
+| walls_valves | 10.23 | 9.35 | 8.03 | 8.75 | 8.28 | 8.6 % | 4–20 % |
+| box_walls | – | – | – | 2.84 | 2.64 | – | 19–32 % |
+| large | 117.36 | 115.54 | 107.88 | 113.87 | 113.93 | 1.5 % | 4–9 % |
 
 Back to back, the 5 % target holds for `dense` and `large`. It does not hold
 for the short scenarios (`dilute`, `box_walls`: each run is only about 1 s)
@@ -136,8 +137,9 @@ this script cannot measure them. For a rough reference, master before #221
 (`62c7e7c`) and this branch (as of 2026-10-06, before its history was
 consolidated) were timed with the old outside
 method. That method times two whole runs, 1 step and 300 steps, and takes
-the difference. Both runs include seeding, which is O(n²) and takes about
-20 s at 50k balls against about 9 s of stepping. Seeding noise therefore
+the difference. Both runs include seeding, which was O(n²) at the time
+(before #245) and took about 20 s at 50k balls against about 9 s of
+stepping. Seeding noise therefore
 does not cancel, and it dominates the `dense` numbers. The method has no
 warmup, so the at-rest relaxation of `dense` is included.
 
@@ -168,7 +170,7 @@ The cost of the timers themselves is measured directly in the next section.
 ### Cost of the phase timers
 
 One commit of this branch (before its history was consolidated; the timed
-code paths are the same as in `e4d48a8`) was built twice, once as it is and once with the phase
+code paths are the same as in `6b50e9e`) was built twice, once as it is and once with the phase
 timers in `simulation_engine.rs` compiled out (`Instant` replaced by a no-op
 stub, not committed). Both binaries ran in one invocation with alternating
 rounds, `RUNS=5`, same machine. Total median (min–max) ms/step:

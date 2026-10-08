@@ -8,8 +8,7 @@
 #
 # Each scenario's world is seeded once, saved (--save-setup) and cached; every
 # run then loads it (--load), so all runs and all binaries start from the same
-# state and seeding (which is O(n^2) and takes minutes at 200k balls) is not
-# repeated. The binary times the steps itself (--timings), after WARMUP steps
+# state and seeding (about 2 s at 200k balls) is not repeated. The binary times the steps itself (--timings), after WARMUP steps
 # that are not counted. Binaries alternate within a round, so drift in host
 # load hits all of them; the median over the rounds is reported.
 #
