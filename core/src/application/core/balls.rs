@@ -1,4 +1,5 @@
 use super::line_segments::Obstacle;
+use super::placement::PlacementIndex;
 use super::*;
 use crate::application::{AppError, AppResult, GameLogic};
 use rand::rng;
@@ -63,6 +64,9 @@ impl MainContent {
 
         //let mut r = rng();
         let obstacles = self.world.collect_solid_obstacles();
+        // One index for the whole batch: each candidate is checked against
+        // its neighbourhood only (#245), with the same result as a full scan.
+        let mut index = PlacementIndex::new(&self.world);
         let mut balls_added = 0;
         let max_attempts = count * 4;
         for _ in 0..max_attempts {
@@ -73,7 +77,7 @@ impl MainContent {
             let margin = self.world.physics.equilibrium_edge_distance();
             if self
                 .world
-                .add_candidate_ball_among(nu_ball, margin, &obstacles)
+                .add_candidate_ball_indexed(nu_ball, margin, &obstacles, &mut index)
                 .is_ok()
             {
                 balls_added += 1;
@@ -259,12 +263,38 @@ impl SimulationWorld {
         margin: f32,
         obstacles: &[Obstacle],
     ) -> AppResult {
+        self.place_candidate(candidate, margin, obstacles, None)
+    }
+
+    /// `add_candidate_ball_among` for batch placement: the collision check
+    /// uses `index` (see `placement`), which this keeps up to date.
+    pub(crate) fn add_candidate_ball_indexed(
+        &mut self,
+        candidate: Ball2D,
+        margin: f32,
+        obstacles: &[Obstacle],
+        index: &mut PlacementIndex,
+    ) -> AppResult {
+        self.place_candidate(candidate, margin, obstacles, Some(index))
+    }
+
+    fn place_candidate(
+        &mut self,
+        candidate: Ball2D,
+        margin: f32,
+        obstacles: &[Obstacle],
+        index: Option<&mut PlacementIndex>,
+    ) -> AppResult {
         if !self.is_ball_in_region(&candidate) {
             return Err(AppError::CustomError(
                 "new ball not within region".to_string(),
             ));
         }
-        if self.is_ball_colliding(&candidate, margin) {
+        let colliding = match &index {
+            Some(index) => self.is_ball_colliding_indexed(&candidate, margin, index),
+            None => self.is_ball_colliding(&candidate, margin),
+        };
+        if colliding {
             return Err(AppError::CustomError(
                 "new ball colliding with existing ball".to_string(),
             ));
@@ -274,6 +304,9 @@ impl SimulationWorld {
         }
 
         self.add_ball_and_register(candidate);
+        if let Some(index) = index {
+            index.note_added(self, self.balls.len() - 1);
+        }
         self.sim.clear_energy();
         Ok(())
     }

@@ -1,4 +1,22 @@
+mod accessors;
+mod balls;
+mod ctor;
+mod line_segments;
+mod object_deletion;
+mod operators;
+mod placement;
+mod sim;
+mod simulation_engine;
+mod snapshot;
+mod source_spheres;
+mod thermostats;
+mod valves;
+pub use valves::valve_span_problem;
+mod verbose;
+
 pub(crate) const FPS_GOAL: u32 = 60;
+
+pub(crate) use simulation_engine::SimulationEngine;
 
 use crate::application::game_logic::GameLogicData;
 use crate::application::persistence::SaveStore;
@@ -79,26 +97,6 @@ pub struct SimulationWorld {
     pub(crate) test_faults: TestFaults,
 }
 
-/// Test-only fault injection knobs; the defaults leave physics unchanged.
-#[cfg(test)]
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct TestFaults {
-    /// Multiplies the Verlet movement threshold (> 1 makes lists go stale).
-    pub(crate) neighbor_movement_scale: f32,
-    /// Multiplies the reflected wall velocity (> 1 injects energy).
-    pub(crate) wall_restitution: f32,
-}
-
-#[cfg(test)]
-impl Default for TestFaults {
-    fn default() -> Self {
-        Self {
-            neighbor_movement_scale: 1.0,
-            wall_restitution: 1.0,
-        }
-    }
-}
-
 impl SimulationWorld {
     #[inline]
     pub(crate) fn neighbor_movement_fault_scale(&self) -> f32 {
@@ -173,22 +171,24 @@ pub struct StatsAccumulator {
     pub(crate) max_id: usize,
 }
 
-mod accessors;
-mod balls;
-mod ctor;
-mod line_segments;
-mod object_deletion;
-mod operators;
-mod sim;
-mod simulation_engine;
-mod snapshot;
-mod source_spheres;
-mod thermostats;
-mod valves;
-pub use valves::valve_span_problem;
-mod verbose;
-
-pub(crate) use simulation_engine::SimulationEngine;
-
 #[cfg(test)]
 mod tests;
+/// Test-only fault injection knobs; the defaults leave physics unchanged.
+#[cfg(test)]
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct TestFaults {
+    /// Multiplies the Verlet movement threshold (> 1 makes lists go stale).
+    pub(crate) neighbor_movement_scale: f32,
+    /// Multiplies the reflected wall velocity (> 1 injects energy).
+    pub(crate) wall_restitution: f32,
+}
+
+#[cfg(test)]
+impl Default for TestFaults {
+    fn default() -> Self {
+        Self {
+            neighbor_movement_scale: 1.0,
+            wall_restitution: 1.0,
+        }
+    }
+}

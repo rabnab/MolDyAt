@@ -6,6 +6,7 @@ mod energy_conservation;
 mod gravity;
 mod overlap_resolution;
 mod physics_thread;
+mod placement;
 mod pressure;
 mod resize;
 mod simulation;
