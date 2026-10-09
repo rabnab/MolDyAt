@@ -1,6 +1,6 @@
 # Third-party licenses
 
-ThermoSolver itself is licensed under the MPL-2.0 (see `LICENSE`). The binaries
+MolDyAt (formerly ThermoSolver) itself is licensed under the MPL-2.0 (see `LICENSE`). The binaries
 also contain the following third-party crates, which stay under their own
 licenses. Generated with `cargo about`.
 

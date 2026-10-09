@@ -1,8 +1,10 @@
-# ThermoSolver
+# MolDyAt
 
-A molecular dynamics simulation of a Lennard-Jones gas in a finite box, written in Rust.
+**Mol**ecular **Dy**namics: **At**oms. A molecular dynamics simulation of a Lennard-Jones gas in a finite box, written in Rust.
 
-[![Release](https://img.shields.io/github/v/release/rabnab/molecularLenardJones)](https://github.com/rabnab/molecularLenardJones/releases/latest)
+MolDyAt was formerly called ThermoSolver (releases up to v1.3.0).
+
+[![Release](https://img.shields.io/github/v/release/rabnab/MolDyAt)](https://github.com/rabnab/MolDyAt/releases/latest)
 ![Rust](https://img.shields.io/badge/Rust-nightly-orange)
 
 > **Note:** Earlier versions used [ggez](https://github.com/ggez/ggez) as the rendering backend.
@@ -62,14 +64,14 @@ Placeable tools from the sidebar:
 ### Download (prebuilt binaries)
 
 Prebuilt binaries for Windows and Linux (x86_64) are attached to each
-[release](https://github.com/rabnab/molecularLenardJones/releases/latest).
+[release](https://github.com/rabnab/MolDyAt/releases/latest).
 
 **Windows (PowerShell):**
 
 ```powershell
 $tag = "v1.3.0"
 $name = "rust_thermo_wgpu-$tag-x86_64-pc-windows-msvc"
-Invoke-WebRequest "https://github.com/rabnab/molecularLenardJones/releases/download/$tag/$name.zip" -OutFile "$name.zip"
+Invoke-WebRequest "https://github.com/rabnab/MolDyAt/releases/download/$tag/$name.zip" -OutFile "$name.zip"
 Expand-Archive "$name.zip" -DestinationPath .
 & ".\$name\rust_thermo_wgpu.exe"
 ```
@@ -79,7 +81,7 @@ Expand-Archive "$name.zip" -DestinationPath .
 ```bash
 tag=v1.3.0
 name=rust_thermo_wgpu-$tag-x86_64-unknown-linux-gnu
-curl -LO "https://github.com/rabnab/molecularLenardJones/releases/download/$tag/$name.tar.gz"
+curl -LO "https://github.com/rabnab/MolDyAt/releases/download/$tag/$name.tar.gz"
 tar xzf "$name.tar.gz"
 ./"$name"/rust_thermo_wgpu
 ```
@@ -319,12 +321,12 @@ Versions follow [Semantic Versioning](https://semver.org/). Releases are
 created by pushing a `vMAJOR.MINOR.PATCH` tag; the `Release` workflow
 (`.github/workflows/release.yml`) builds the binaries and publishes the
 release with generated notes. See the
-[release list](https://github.com/rabnab/molecularLenardJones/releases)
+[release list](https://github.com/rabnab/MolDyAt/releases)
 for changes per version.
 
 ## License
 
-ThermoSolver is licensed under the [Mozilla Public License 2.0](LICENSE)
+MolDyAt (formerly ThermoSolver) is licensed under the [Mozilla Public License 2.0](LICENSE)
 (MPL-2.0). In short:
 
 * You may use, modify and redistribute it, also commercially and inside
@@ -340,7 +342,7 @@ ThermoSolver is licensed under the [Mozilla Public License 2.0](LICENSE)
 This licence applies to **all versions** of the project, including every
 earlier commit, tag and release (v1.3.0 and v1.3.0-rc.2 included).
 
-If you use ThermoSolver in scientific work, please cite it; see
+If you use MolDyAt in scientific work, please cite it; see
 [CITATION.cff](CITATION.cff) (GitHub's "Cite this repository" button).
 
 ## Project Structure

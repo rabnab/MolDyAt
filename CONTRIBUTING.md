@@ -1,4 +1,4 @@
-# Contributing to MolecularLenardJones
+# Contributing to MolDyAt
 
 Thank you for your interest in contributing to this molecular dynamics simulation project!
 
