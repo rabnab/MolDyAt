@@ -1,4 +1,4 @@
-# Copilot Instructions for Molecular Lennard-Jones Simulation
+# Copilot Instructions for MolDyAt
 
 This file guides Copilot-style assistants for making correct, safe, and useful edits in this repository.
 
