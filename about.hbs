@@ -1,0 +1,28 @@
+# Third-party licenses
+
+ThermoSolver itself is licensed under the MPL-2.0 (see `LICENSE`). The binaries
+also contain the following third-party crates, which stay under their own
+licenses. Generated with `cargo about`.
+
+## Overview
+
+{{#each overview}}
+- {{{name}}} ({{count}} crate{{#if (gt count 1)}}s{{/if}})
+{{/each}}
+
+## Licenses
+
+{{#each licenses}}
+### {{{name}}}
+
+Used by:
+
+{{#each used_by}}
+- {{{crate.name}}} {{crate.version}}{{#if crate.repository}} - {{crate.repository}}{{/if}}
+{{/each}}
+
+```
+{{{text}}}
+```
+
+{{/each}}

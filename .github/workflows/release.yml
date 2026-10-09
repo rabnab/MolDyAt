@@ -63,7 +63,7 @@ jobs:
           name="${BIN}-${TAG}-${{ matrix.target }}"
           mkdir -p "dist/$name"
           cp "target/${{ matrix.target }}/dist/${BIN}${{ matrix.ext }}" "dist/$name/"
-          cp README.md LICENSE "dist/$name/"
+          cp README.md LICENSE THIRD_PARTY_LICENSES.md "dist/$name/"
           cd dist
           if [ "${{ matrix.archive }}" = "zip" ]; then
             7z a "$name.zip" "$name" > /dev/null
