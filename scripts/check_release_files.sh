@@ -54,8 +54,9 @@ else
 fi
 
 # 6. Every .rs and .wgsl file carries the MPL-2.0 notice in its first lines.
-missing=$(git ls-files -z '*.rs' '*.wgsl' | xargs -0 -I{} sh -c \
-  'head -n 3 "{}" | grep -q "Mozilla Public" || echo "{}"')
+missing=$(git ls-files '*.rs' '*.wgsl' | while IFS= read -r f; do
+  head -n 3 "$f" | grep -q "Mozilla Public" || echo "$f"
+done)
 if [ -z "$missing" ]; then ok "all .rs/.wgsl files have the license header"
 else err "missing MPL-2.0 header in:"$'\n'"$(head -n 20 <<<"$missing")"; fi
 
