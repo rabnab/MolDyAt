@@ -12,7 +12,7 @@ mod usage;
 pub use usage::{OptionGroup, OptionHelp};
 
 /// Name shown in `--help` and `--version`.
-pub const PROGRAM: &str = env!("CARGO_PKG_NAME");
+pub const PROGRAM: &str = env!("CARGO_BIN_NAME");
 
 /// Package version and the git commit the binary was built from (see
 /// `build.rs`), e.g. `1.3.0 (60c70fd)` or `1.3.0 (60c70fd-dirty)`. Shown by

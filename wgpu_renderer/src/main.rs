@@ -52,7 +52,7 @@ fn init_rayon() {
 /// Print startup diagnostics about parallelization and SIMD features.
 fn print_diagnostics() {
     rust_thermo_core::logging::init();
-    log::info!("rust_thermo_wgpu {}", cli::VERSION);
+    log::info!("{} {}", cli::PROGRAM, cli::VERSION);
     log::info!(
         "Parallel: enabled | SIMD: enabled | CPU cores: {}",
         num_cpus::get()

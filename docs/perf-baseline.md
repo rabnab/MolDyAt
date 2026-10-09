@@ -197,9 +197,9 @@ see [Pre-#221 reference](#pre-221-reference).
 
 ```bash
 git switch master && cargo build --release -p rust_thermo_wgpu
-cp target/release/rust_thermo_wgpu /tmp/thermo-base
+cp target/release/moldyat /tmp/thermo-base
 git switch my-branch && cargo build --release -p rust_thermo_wgpu
-scripts/headless_perf.sh /tmp/thermo-base target/release/rust_thermo_wgpu > perf.json
+scripts/headless_perf.sh /tmp/thermo-base target/release/moldyat > perf.json
 ```
 
 The report then has two `results` entries per scenario, one for each
