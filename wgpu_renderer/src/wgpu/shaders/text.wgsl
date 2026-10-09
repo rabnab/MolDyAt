@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 // Bitmap text shader: TriangleList of glyph quads in NDC (u.view_proj is the
 // identity), sampling a one-channel glyph atlas at group 1.
 //

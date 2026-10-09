@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 use super::drift_harness::{create_dense_harness_with_seed, populate_grid_balls};
 use crate::application::thermo_field::{LocalKineticStats, virial_pressure_2d};
 use crate::application::{GameLogic, MainContent};

@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 //! Bitmap text: an 8×8 glyph atlas built from `font8x8` plus a [`GpuBatch`]
 //! of glyph quads in NDC. Used by every text overlay (cursor readout, cell
 //! values, thermostat and source-sphere labels). See `text.wgsl`.

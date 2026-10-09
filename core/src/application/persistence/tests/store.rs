@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 use super::{sample_file, scratch_dir};
 use crate::application::persistence::store::{civil_from_days, save_order, timestamp_utc};
 use crate::application::persistence::{LoadSource, SaveStore};

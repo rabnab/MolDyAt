@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 use super::wgpu_context::WgpuContext;
 use super::wgpu_pipelines::WgpuPipelines;
 use super::wgpu_window::UserEvent;
@@ -27,10 +31,7 @@ impl AppLifecycle {
         proxy: EventLoopProxy<UserEvent>,
     ) -> InitializedApp {
         let window_attrs = Window::default_attributes()
-            .with_title(format!(
-                "Molecular Dynamics Simulation (WGPU) – v{}",
-                crate::cli::VERSION
-            ))
+            .with_title(format!("moldyat – v{}", crate::cli::VERSION))
             .with_inner_size(LogicalSize::new(
                 DEFAULT_WINDOW_WIDTH,
                 DEFAULT_WINDOW_HEIGHT,

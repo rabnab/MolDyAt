@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 //! The wall being drawn or dragged (ghost) collides like a real wall, and a
 //! wall that appears or changes on top of balls lets them leave on their own
 //! path instead of moving them.

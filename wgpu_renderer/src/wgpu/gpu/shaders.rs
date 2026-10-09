@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 //! Every WGSL source, with `common.wgsl` prepended at compile time.
 //!
 //! WGSL has no `#include`, so the shared header (uniforms `u`, `quad_corner`,

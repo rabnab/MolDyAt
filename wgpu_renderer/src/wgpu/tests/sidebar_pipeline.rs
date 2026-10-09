@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 use crate::wgpu::gpu::textures::{
     ICON_SOURCE_CLOSED, ICON_SOURCE_OPEN, ICON_THERMO, ICON_VALVE, ICON_WALL, decode_icon,
 };

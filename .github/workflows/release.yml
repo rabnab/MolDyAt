@@ -20,8 +20,36 @@ env:
   TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
+  verify:
+    name: verify release files
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          toolchain: ${{ env.RUST_NIGHTLY }}
+
+      - name: Install cargo-deny and cargo-about
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny,cargo-about
+
+      - name: Check dependency licenses
+        run: cargo deny check licenses
+
+      # Also checks that the tag matches the Cargo.toml version (uses $TAG).
+      - name: Check license headers, notices and release metadata
+        run: scripts/check_release_files.sh
+
   build:
     name: build (${{ matrix.target }})
+    needs: verify
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
@@ -63,7 +91,7 @@ jobs:
           name="${BIN}-${TAG}-${{ matrix.target }}"
           mkdir -p "dist/$name"
           cp "target/${{ matrix.target }}/dist/${BIN}${{ matrix.ext }}" "dist/$name/"
-          cp README.md "dist/$name/"
+          cp README.md LICENSE THIRD_PARTY_LICENSES.md "dist/$name/"
           cd dist
           if [ "${{ matrix.archive }}" = "zip" ]; then
             7z a "$name.zip" "$name" > /dev/null

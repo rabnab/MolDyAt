@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 // Source sphere icon shader: one instance = one source sphere icon.
 // The atlas at group 1 holds two slots stacked vertically:
 //   slot 0 (V [0.0, 0.5)) -> sourceOpen   (emitting / On)

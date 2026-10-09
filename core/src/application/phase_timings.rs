@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 //! Wall-clock time spent in each phase of the physics step (#221).
 //!
 //! Always on: a step takes milliseconds and the timers cost a few

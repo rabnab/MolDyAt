@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 //! Parse and validate every WGSL source (common header included) with naga,
 //! so shader errors fail `cargo test` instead of panicking at pipeline creation.
 
