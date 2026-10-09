@@ -31,7 +31,7 @@ impl AppLifecycle {
         proxy: EventLoopProxy<UserEvent>,
     ) -> InitializedApp {
         let window_attrs = Window::default_attributes()
-            .with_title(format!("MolDyAt – v{}", crate::cli::VERSION))
+            .with_title(format!("moldyat – v{}", crate::cli::VERSION))
             .with_inner_size(LogicalSize::new(
                 DEFAULT_WINDOW_WIDTH,
                 DEFAULT_WINDOW_HEIGHT,
