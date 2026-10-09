@@ -83,6 +83,36 @@ jobs:
       #  with:
       #    sarif_file: clippy-results.sarif
 
+  # Licensing and release metadata: dependency licenses (deny.toml), notices
+  # file freshness, source headers, version/tag consistency. The same script
+  # runs locally: scripts/check_release_files.sh
+  licenses:
+    name: licenses and release files
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          toolchain: ${{ env.RUST_NIGHTLY }}
+
+      - name: Cache cargo registry
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-deny and cargo-about
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny,cargo-about
+
+      - name: Check dependency licenses
+        run: cargo deny check licenses
+
+      - name: Check license headers, notices and release metadata
+        run: scripts/check_release_files.sh
+
   # One job builds the test binaries once (nextest and cargo test share them),
   # then runs the unit tests, the seeded headless regression and the drift
   # suite. The ignored suites run even if an earlier step failed, so a
