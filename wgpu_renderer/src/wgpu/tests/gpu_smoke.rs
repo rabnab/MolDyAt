@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 //! Builds every pipeline on a real GPU device and renders populated frames
 //! offscreen, failing on any wgpu validation error (shader ↔ vertex layout ↔
 //! bind group mismatches that WGSL validation alone cannot see).

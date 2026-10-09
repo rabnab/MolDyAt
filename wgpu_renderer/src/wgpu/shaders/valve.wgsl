@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 // Valve shader: one instance = one valve rectangle laid over a wall.
 //   style 0 = passable (open):  dark green outline, no fill
 //   style 1 = blocking (closed): dark red outline + diagonal stripe fill

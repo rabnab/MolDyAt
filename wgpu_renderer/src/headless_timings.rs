@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 //! Per-phase step timings of a headless run (`--timings`, #221).
 //!
 //! One JSON object per run, read by `scripts/headless_perf.sh`. All times are

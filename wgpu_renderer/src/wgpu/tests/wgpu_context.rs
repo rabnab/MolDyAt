@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 use super::super::wgpu_context::{
     PendingSurfaceSize, choose_present_mode, default_present_mode, parse_frame_latency,
     parse_present_mode,

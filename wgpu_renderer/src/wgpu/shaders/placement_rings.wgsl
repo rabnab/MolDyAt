@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 // Ball placement preview: one instance = three outlines around the cursor
 // showing the new ball's radius (white), its equilibrium radius (magenta) and
 // its cutoff radius (gray). Matches the rings in ball.wgsl.

@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 //! Small coordinate helpers shared by the pipelines (CPU side).
 //!
 //! Matrices are column-major `[[f32; 4]; 4]`, as uploaded to WGSL `mat4x4<f32>`.

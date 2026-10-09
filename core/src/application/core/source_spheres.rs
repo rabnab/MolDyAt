@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 //! Source sphere operator — placement, toggle, and ball emission.
 //!
 //! A source sphere is a circular emitter that spawns new balls at its

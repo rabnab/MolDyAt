@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 use rust_thermo_core::application::renderer_snapshot::{OperatorSnapshot, ValveSpan, WallSnapshot};
 use rust_thermo_core::objects2d::line_segment::{THICKNESS_TO_WORLD, valve_half_width};
 use rust_thermo_core::objects2d::wall_chain::ObjectRef;

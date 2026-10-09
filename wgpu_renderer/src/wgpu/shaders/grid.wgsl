@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 // Cell grid shader: one instance covers the whole grid.
 // Each cell gets one of six faint pastel colours ((col + row) % 6), and the
 // grid is framed by a reddish border.

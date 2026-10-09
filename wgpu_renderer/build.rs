@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 //! Bakes the git commit into the binary (`GIT_COMMIT`), so perf reports name
 //! the code they measured (`--timings`, `scripts/headless_perf.sh`).
 //!

@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 //! The world file: versioned JSON (`serde_json`), human-readable, diffable
 //! and easy to hand-edit or generate for test scenarios. `f32` values are
 //! written as the shortest decimal that parses back to the same bits, so a

@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 // Wall shader: one instance = one wall segment.
 // Draws a capsule (rectangle with rounded ends) of real world-space thickness.
 // Requires common.wgsl to be prepended (Uniforms `u`, aa()).

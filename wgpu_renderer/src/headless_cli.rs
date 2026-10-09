@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 /// Headless mode CLI argument parsing and configuration.
 ///
 /// This module handles parsing command-line arguments for headless execution mode
