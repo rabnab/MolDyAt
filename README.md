@@ -69,7 +69,7 @@ Prebuilt binaries for Windows and Linux (x86_64) are attached to each
 **Windows (PowerShell):**
 
 ```powershell
-$tag = "v1.3.1"
+$tag = "vX.Y.Z"  # a release from the releases page, newer than v1.3.1
 $name = "moldyat-$tag-x86_64-pc-windows-msvc"
 Invoke-WebRequest "https://github.com/rabnab/MolDyAt/releases/download/$tag/$name.zip" -OutFile "$name.zip"
 Expand-Archive "$name.zip" -DestinationPath .
@@ -79,15 +79,16 @@ Expand-Archive "$name.zip" -DestinationPath .
 **Linux:**
 
 ```bash
-tag=v1.3.1
+tag=vX.Y.Z  # a release from the releases page, newer than v1.3.1
 name=moldyat-$tag-x86_64-unknown-linux-gnu
 curl -LO "https://github.com/rabnab/MolDyAt/releases/download/$tag/$name.tar.gz"
 tar xzf "$name.tar.gz"
 ./"$name"/moldyat
 ```
 
-The archives and the executable are called `moldyat` from v1.3.1 on; releases up to
-v1.3.0 use `rust_thermo_wgpu` instead (adjust `$name` and the executable name).
+The archives and the executable are called `moldyat` in releases after v1.3.1;
+v1.3.1 and earlier use `rust_thermo_wgpu` instead (adjust `$name` and the
+executable name).
 
 Verify a download against its `.sha256` file (`sha256sum -c` on Linux,
 `Get-FileHash` in PowerShell).
@@ -170,7 +171,7 @@ cargo run -p rust_thermo_wgpu -- --help
 ```
 
 ```bash
-# Version and the git commit of the build, e.g. "moldyat 1.3.1 (60c70fd)";
+# Version and the git commit of the build, e.g. "moldyat <version> (60c70fd)";
 # -dirty means the build had uncommitted changes. Also shown in the window title.
 cargo run -p rust_thermo_wgpu -- --version
 ```

@@ -11,7 +11,8 @@ use std::path::PathBuf;
 mod usage;
 pub use usage::{OptionGroup, OptionHelp};
 
-/// Name shown in `--help` and `--version`.
+/// Name shown in `--help` and `--version`: the binary name (`moldyat`), not the
+/// package name. `CARGO_BIN_NAME` exists only while compiling a `[[bin]]` target.
 pub const PROGRAM: &str = env!("CARGO_BIN_NAME");
 
 /// Package version and the git commit the binary was built from (see
