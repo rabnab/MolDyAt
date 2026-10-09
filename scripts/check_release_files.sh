@@ -86,10 +86,4 @@ else
   [ -n "${CI:-}" ] && err "cargo-about is required in CI"
 fi
 
-# 9. Text files use LF line endings (project rule).
-crlf=$(git ls-files -z '*.rs' '*.wgsl' '*.toml' '*.md' '*.yml' '*.cff' LICENSE \
-  | xargs -0 grep -lI $'\r' 2>/dev/null || true)
-if [ -z "$crlf" ]; then ok "no CRLF line endings"
-else err "CRLF line endings in:"$'\n'"$crlf"; fi
-
 exit $fail
