@@ -1320,7 +1320,7 @@ dependencies = [
 
 [[package]]
 name = "moldyat_core"
-version = "1.3.1"
+version = "0.2.0"
 dependencies = [
  "arc-swap",
  "env_logger",
@@ -1339,7 +1339,7 @@ dependencies = [
 
 [[package]]
 name = "moldyat_wgpu"
-version = "1.3.1"
+version = "0.2.0"
 dependencies = [
  "bytemuck",
  "font8x8",

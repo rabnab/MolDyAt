@@ -328,6 +328,12 @@ release with generated notes. See the
 [release list](https://github.com/rabnab/MolDyAt/releases)
 for changes per version.
 
+Note: the commits before v0.2.0 did not follow a strict versioning scheme, so there are versions in older commits:
+- 0.1.0
+- 0.1.1
+- 1.3.0
+- 1.3.1
+
 ## License
 
 MolDyAt (formerly ThermoSolver) is licensed under the [Mozilla Public License 2.0](LICENSE)
