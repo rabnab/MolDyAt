@@ -10,11 +10,11 @@
 //! (a circle is a zero-length one). See `highlight.wgsl`.
 
 use bytemuck::{Pod, Zeroable};
-use rust_thermo_core::application::AppResult;
-use rust_thermo_core::application::renderer_snapshot::OperatorSnapshot;
-use rust_thermo_core::objects2d::line_segment::THICKNESS_TO_WORLD;
-use rust_thermo_core::objects2d::wall_chain::ObjectRef;
-use rust_thermo_core::objects2d::{SOURCE_SPHERE_RADIUS, Vec2D};
+use moldyat_core::application::AppResult;
+use moldyat_core::application::renderer_snapshot::OperatorSnapshot;
+use moldyat_core::objects2d::line_segment::THICKNESS_TO_WORLD;
+use moldyat_core::objects2d::wall_chain::ObjectRef;
+use moldyat_core::objects2d::{SOURCE_SPHERE_RADIUS, Vec2D};
 
 use crate::wgpu::gpu::batch::{BatchDesc, GpuBatch, SceneUniforms};
 use crate::wgpu::gpu::geometry::world_extent;

@@ -6,8 +6,8 @@
 //! viewport, drawn in NDC over the full window. See `frame.wgsl`.
 
 use bytemuck::{Pod, Zeroable};
-use rust_thermo_core::application::AppResult;
-use rust_thermo_core::graphics::renderer::margins::Margins;
+use moldyat_core::application::AppResult;
+use moldyat_core::graphics::renderer::margins::Margins;
 
 use crate::wgpu::gpu::batch::{BatchDesc, GpuBatch};
 use crate::wgpu::gpu::geometry::px_to_ndc;

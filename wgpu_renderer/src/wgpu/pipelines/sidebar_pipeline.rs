@@ -11,10 +11,10 @@
 //! window size, margins or selection change. See `sidebar.wgsl`.
 
 use bytemuck::{Pod, Zeroable};
-use rust_thermo_core::application::AppResult;
-use rust_thermo_core::graphics::renderer::Margins;
-use rust_thermo_core::graphics::renderer::event_loop::OperatorTool;
-use rust_thermo_core::graphics::sidebar::{
+use moldyat_core::application::AppResult;
+use moldyat_core::graphics::renderer::Margins;
+use moldyat_core::graphics::renderer::event_loop::OperatorTool;
+use moldyat_core::graphics::sidebar::{
     ICON_COUNT, SIDEBAR_TOOLS, icon_display_size_for_margin, icon_spacing_for_margin,
     visible_icon_count_for_margin,
 };

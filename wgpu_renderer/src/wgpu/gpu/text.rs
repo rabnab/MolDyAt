@@ -8,8 +8,8 @@
 
 use bytemuck::{Pod, Zeroable};
 use font8x8::UnicodeFonts;
-use rust_thermo_core::graphics::renderer::margins::Margins;
-use rust_thermo_core::graphics::sidebar::sidebar_ui_scale;
+use moldyat_core::graphics::renderer::margins::Margins;
+use moldyat_core::graphics::sidebar::sidebar_ui_scale;
 
 use super::batch::{BatchDesc, GpuBatch, SceneUniforms};
 use super::{shaders, textures};

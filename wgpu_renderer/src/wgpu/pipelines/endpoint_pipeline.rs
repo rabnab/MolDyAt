@@ -9,8 +9,8 @@
 //! valves), so its endpoints are easy to see and grab. See `endpoint.wgsl`.
 
 use bytemuck::{Pod, Zeroable};
-use rust_thermo_core::application::AppResult;
-use rust_thermo_core::objects2d::wall_chain::ObjectRef;
+use moldyat_core::application::AppResult;
+use moldyat_core::objects2d::wall_chain::ObjectRef;
 
 use crate::wgpu::gpu::batch::{BatchDesc, GpuBatch, SceneUniforms};
 use crate::wgpu::gpu::geometry::world_extent;

@@ -13,8 +13,8 @@ use super::event_router::EventRouter;
 use super::frame_renderer::FrameRenderer;
 use super::wgpu_context::WgpuContext;
 use super::wgpu_pipelines::WgpuPipelines;
-use rust_thermo_core::application::MainContent;
-use rust_thermo_core::graphics::renderer::event_loop::UnifiedRenderState;
+use moldyat_core::application::MainContent;
+use moldyat_core::graphics::renderer::event_loop::UnifiedRenderState;
 use std::sync::Arc;
 use winit::event_loop::EventLoopProxy;
 

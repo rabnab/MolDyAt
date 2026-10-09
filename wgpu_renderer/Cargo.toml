@@ -1,5 +1,5 @@
 [package]
-name = "rust_thermo_wgpu"
+name = "moldyat_wgpu"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,7 +12,7 @@ path = "src/main.rs"
 workspace = true
 
 [dependencies]
-rust_thermo_core = { path = "../core" }
+moldyat_core = { path = "../core" }
 
 # WGPU rendering
 wgpu = "28"

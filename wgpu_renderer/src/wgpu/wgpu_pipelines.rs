@@ -28,12 +28,12 @@ use crate::wgpu::pipelines::valve_pipeline::ValvePipeline;
 use crate::wgpu::pipelines::wall_pipeline::WallPipeline;
 use crate::wgpu::render_graph::{PipelineHandle, PrepareContext, RenderGraph, RenderPipeline};
 use crate::wgpu::wgpu_context::WgpuContext;
-use rust_thermo_core::application::AppResult;
-use rust_thermo_core::application::renderer_snapshot::{CellGridSpec, RendererSnapshot};
-use rust_thermo_core::application::scene_layers::SceneLayers;
-use rust_thermo_core::graphics::renderer::Margins;
-use rust_thermo_core::graphics::renderer::event_loop::FramePreviews;
-use rust_thermo_core::graphics::renderer::state_layers::ThermoDisplayMode;
+use moldyat_core::application::AppResult;
+use moldyat_core::application::renderer_snapshot::{CellGridSpec, RendererSnapshot};
+use moldyat_core::application::scene_layers::SceneLayers;
+use moldyat_core::graphics::renderer::Margins;
+use moldyat_core::graphics::renderer::event_loop::FramePreviews;
+use moldyat_core::graphics::renderer::state_layers::ThermoDisplayMode;
 
 /// Named handles for direct pipeline access.
 pub struct PipelineHandles {

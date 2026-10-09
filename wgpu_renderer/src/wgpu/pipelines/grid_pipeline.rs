@@ -9,8 +9,8 @@
 //! `ThermoDisplayMode::Grid`. See `grid.wgsl`.
 
 use bytemuck::{Pod, Zeroable};
-use rust_thermo_core::application::AppResult;
-use rust_thermo_core::graphics::renderer::state_layers::ThermoDisplayMode;
+use moldyat_core::application::AppResult;
+use moldyat_core::graphics::renderer::state_layers::ThermoDisplayMode;
 
 use crate::wgpu::gpu::batch::{BatchDesc, GpuBatch, SceneUniforms};
 use crate::wgpu::gpu::shaders;

@@ -5,9 +5,9 @@
 use crate::headless_cli::HeadlessConfig;
 use crate::headless_output::{HeadlessSnapshotSink, HeadlessWriter};
 use crate::headless_timings::{RunClock, write_timings};
-use rust_thermo_core::application::persistence::{LoadSource, SaveStore};
-use rust_thermo_core::application::{GameLogic, MainContent};
-use rust_thermo_core::objects2d::{Rect, Vec2D};
+use moldyat_core::application::persistence::{LoadSource, SaveStore};
+use moldyat_core::application::{GameLogic, MainContent};
+use moldyat_core::objects2d::{Rect, Vec2D};
 use std::io;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};

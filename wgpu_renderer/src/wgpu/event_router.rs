@@ -7,7 +7,7 @@ use super::wgpu_context::WgpuContext;
 use super::wgpu_input::execute_input_action;
 use super::wgpu_pipelines::WgpuPipelines;
 use crate::wgpu::margins_for_scale_factor;
-use rust_thermo_core::graphics::renderer::event_loop::UnifiedRenderState;
+use moldyat_core::graphics::renderer::event_loop::UnifiedRenderState;
 use winit::{
     event::{DeviceEvent, ElementState, WindowEvent},
     event_loop::ActiveEventLoop,

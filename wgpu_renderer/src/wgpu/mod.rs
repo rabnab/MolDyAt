@@ -40,7 +40,7 @@ mod tests;
 
 pub use wgpu_window::WgpuWindow;
 
-use rust_thermo_core::graphics::renderer::margins::Margins;
+use moldyat_core::graphics::renderer::margins::Margins;
 
 pub const DEFAULT_WINDOW_WIDTH: f64 = 1280.0;
 pub const DEFAULT_WINDOW_HEIGHT: f64 = 720.0;

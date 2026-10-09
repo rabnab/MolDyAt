@@ -3,7 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use super::*;
-use rust_thermo_core::application::renderer_snapshot::RendererSnapshot;
+use moldyat_core::application::renderer_snapshot::RendererSnapshot;
 use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -150,11 +150,11 @@ fn test_summary_frame_excludes_large_ball_payload() {
 fn test_detail_balls_includes_ball_fields() {
     let mut snapshot = RendererSnapshot::new();
     snapshot.balls.push(
-        rust_thermo_core::application::renderer_snapshot::BallRenderData {
+        moldyat_core::application::renderer_snapshot::BallRenderData {
             id: 9,
             size_idx: 2,
-            position: rust_thermo_core::objects2d::Vec2D::new(1.5, -2.5),
-            velocity: rust_thermo_core::objects2d::Vec2D::new(0.25, -0.5),
+            position: moldyat_core::objects2d::Vec2D::new(1.5, -2.5),
+            velocity: moldyat_core::objects2d::Vec2D::new(0.25, -0.5),
             mass: 3.75,
             color: [1.0, 0.0, 0.0, 1.0],
             radius: 0.7,
@@ -166,11 +166,11 @@ fn test_detail_balls_includes_ball_fields() {
         },
     );
     snapshot.balls.push(
-        rust_thermo_core::application::renderer_snapshot::BallRenderData {
+        moldyat_core::application::renderer_snapshot::BallRenderData {
             id: 3,
             size_idx: 1,
-            position: rust_thermo_core::objects2d::Vec2D::new(-0.5, 0.5),
-            velocity: rust_thermo_core::objects2d::Vec2D::new(-0.1, 0.2),
+            position: moldyat_core::objects2d::Vec2D::new(-0.5, 0.5),
+            velocity: moldyat_core::objects2d::Vec2D::new(-0.1, 0.2),
             mass: 1.5,
             color: [0.0, 1.0, 0.0, 1.0],
             radius: 0.5,
@@ -225,13 +225,12 @@ fn test_thermo_detail_serializes_grids_and_non_finite_values_as_null() {
     let mut snapshot = RendererSnapshot::new();
     snapshot.simulation_step = 7;
     snapshot.cell_temperature =
-        rust_thermo_core::application::thermo_field::ThermoGrid::filled(1, 3, 1.0);
+        moldyat_core::application::thermo_field::ThermoGrid::filled(1, 3, 1.0);
     snapshot.cell_temperature.set(0, 1, f32::NAN);
-    snapshot.cell_pressure =
-        rust_thermo_core::application::thermo_field::ThermoGrid::filled(1, 3, 2.0);
+    snapshot.cell_pressure = moldyat_core::application::thermo_field::ThermoGrid::filled(1, 3, 2.0);
     snapshot.cell_pressure.set(0, 2, f32::INFINITY);
     snapshot.thermo_grid_spec = Some(
-        rust_thermo_core::application::renderer_snapshot::ThermoGridSpec {
+        moldyat_core::application::renderer_snapshot::ThermoGridSpec {
             rows: 1,
             cols: 3,
             cell_width: 4.0,
@@ -334,10 +333,10 @@ fn test_runs_with_same_seed_and_config_emit_identical_jsonl() {
         path: output_path_b.clone(),
     };
 
-    let world_rect = rust_thermo_core::application::MainContent::bootstrap_world_rect(
+    let world_rect = moldyat_core::application::MainContent::bootstrap_world_rect(
         1280,
         720,
-        rust_thermo_core::graphics::renderer::margins::Margins::new(110.0, 50.0, 50.0, 50.0),
+        moldyat_core::graphics::renderer::margins::Margins::new(110.0, 50.0, 50.0, 50.0),
     );
 
     let config_a = HeadlessConfig {

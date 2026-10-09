@@ -7,7 +7,7 @@ after (#221, plan item G1 in `refactoring-plan.md`). The raw report is in
 ## One command
 
 ```bash
-cargo build --release -p rust_thermo_wgpu
+cargo build --release -p moldyat_wgpu
 scripts/headless_perf.sh > perf.json        # all scenarios, JSON on stdout
 ```
 
@@ -196,9 +196,9 @@ Older binaries fail at seeding (`Unknown argument: --save-setup`); for those,
 see [Pre-#221 reference](#pre-221-reference).
 
 ```bash
-git switch master && cargo build --release -p rust_thermo_wgpu
+git switch master && cargo build --release -p moldyat_wgpu
 cp target/release/moldyat /tmp/thermo-base
-git switch my-branch && cargo build --release -p rust_thermo_wgpu
+git switch my-branch && cargo build --release -p moldyat_wgpu
 scripts/headless_perf.sh /tmp/thermo-base target/release/moldyat > perf.json
 ```
 

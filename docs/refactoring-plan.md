@@ -23,7 +23,7 @@ plan-local; replace them with GitHub issue numbers when the issues are created.
 
 | Area | Where | Observation |
 |---|---|---|
-| Crate layout | `core` (`rust_thermo_core`) | Holds physics **and** renderer-agnostic UI (event loop, viewport, tools, sidebar) **and** a winit/softbuffer energy window, plus `scirs2-interpolate`/`ndarray`. Headless runs and physics tests pull in winit and heavy deps. |
+| Crate layout | `core` (`moldyat_core`) | Holds physics **and** renderer-agnostic UI (event loop, viewport, tools, sidebar) **and** a winit/softbuffer energy window, plus `scirs2-interpolate`/`ndarray`. Headless runs and physics tests pull in winit and heavy deps. |
 | Crate layout | `wgpu_renderer` | Backend + CLI + headless runner. Headless runner lives in the GPU crate. |
 | Physics model | `ball_impl/ball_physics.rs`, `simd_forces.rs` | Lennard-Jones is hard-wired: `PhysicsConstants { lj_sig, lj_eps, lj_cutoff, … }`, scalar + `f32x4` kernels, Newton solve for `r_cap`. One potential for all pairs; no notion of species. Gravity is a constant inside the velocity kick. |
 | Step | `core/simulation_engine.rs` | Clear step order, but per-step allocations (`old_positions`, `force_results`, `obstacles`, `checked`), serial force application loop, T/P field binned every step, duplicated `#[cfg(feature = "measure-time")]` branches. |
@@ -97,7 +97,7 @@ Size: **S** ≤ 1 day, **M** 2–4 days, **L** ≥ 1 week. "Deps" are hard prere
 | M4 | Replace `println!` in core with `log` / verbose sink | Verbose-ball output goes through a `log` target (`thermo::verbose`) or the snapshot. | S | – |
 | M5 | Split oversized modules | `core/line_segments.rs` (obstacles, sweep, overlap fallback), `unified_render_state.rs`, `line_segment_tool.rs`, `energy_renderer.rs`. Target < 400 lines per file; tests follow the topic-file rule. | M | – |
 | M6 | Central `SimConfig` | Collect `DT_GOAL`, `FPS_GOAL`, LJ defaults, skin, speed limit factor, snapshot interval into one serde struct; CLI and save files read/override it. | M | M1 |
-| M7 | Crate split: `thermo_physics` | Move `objects2d`, `application/core` (world, engine), persistence into a crate without winit/softbuffer/scirs2. Keep `rust_thermo_core` as a re-export shim for one release. | L | M1, M2 |
+| M7 | Crate split: `thermo_physics` | Move `objects2d`, `application/core` (world, engine), persistence into a crate without winit/softbuffer/scirs2. Keep `moldyat_core` as a re-export shim for one release. | L | M1, M2 |
 | M8 | Crate split: `thermo_runtime` + headless | Physics thread, `DomainCommand`, snapshot, headless runner/output move out of the GPU crate. `cargo test -p thermo_physics` builds without a windowing stack. | L | M7 |
 | M9 | Crate split: `thermo_ui` | `graphics/renderer/event_loop`, viewport, sidebar model, interpolation. Energy window leaves the UI crate and becomes a wgpu window in `thermo_wgpu` (V4); `softbuffer` is dropped. | M | M8 |
 | M10 | Docs refresh | Update `architecture.md`, move `refactor_architecture.md` / `headless-renderer-plan.md` / `operator-handling-review.md` to `docs/history/`, update the `operator-framework` skill. | S | after each epic |

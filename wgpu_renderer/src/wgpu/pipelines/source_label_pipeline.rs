@@ -9,8 +9,8 @@
 //! each on a semi-transparent white capsule (see `gpu/label_background.rs`).
 //! Mirrors `ThermostatLabelPipeline`.
 
-use rust_thermo_core::application::AppResult;
-use rust_thermo_core::objects2d::{SOURCE_SPHERE_RADIUS, SimSourceSphere};
+use moldyat_core::application::AppResult;
+use moldyat_core::objects2d::{SOURCE_SPHERE_RADIUS, SimSourceSphere};
 
 use crate::wgpu::gpu::geometry::apply_view_proj;
 use crate::wgpu::gpu::label_background::{CapsuleInstance, LabelBackground, capsule_for_label};

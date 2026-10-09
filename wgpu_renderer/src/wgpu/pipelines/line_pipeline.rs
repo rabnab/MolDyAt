@@ -9,13 +9,13 @@
 //! See `line.wgsl`.
 
 use bytemuck::{Pod, Zeroable};
-use rust_thermo_core::application::AppResult;
-use rust_thermo_core::application::scene_layers::SceneLayers;
-use rust_thermo_core::graphics::renderer::batch_renderer::{
+use moldyat_core::application::AppResult;
+use moldyat_core::application::scene_layers::SceneLayers;
+use moldyat_core::graphics::renderer::batch_renderer::{
     BatchRenderer, LineSegment, collect_neighbor_lines,
 };
-use rust_thermo_core::graphics::renderer::event_loop::DEFAULT_SOURCE_RADIUS;
-use rust_thermo_core::objects2d::SimSourceSphere;
+use moldyat_core::graphics::renderer::event_loop::DEFAULT_SOURCE_RADIUS;
+use moldyat_core::objects2d::SimSourceSphere;
 use std::f32::consts::{FRAC_PI_2, TAU};
 
 use crate::wgpu::gpu::batch::{BatchDesc, GpuBatch, SceneUniforms};

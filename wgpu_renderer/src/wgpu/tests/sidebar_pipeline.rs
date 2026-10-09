@@ -7,7 +7,7 @@ use crate::wgpu::gpu::textures::{
 };
 use crate::wgpu::pipelines::sidebar_pipeline::*;
 use crate::wgpu::{MARGIN_BOTTOM, MARGIN_LEFT, MARGIN_TOP};
-use rust_thermo_core::graphics::sidebar::{ICON_COUNT, ICON_DISPLAY_SIZE, ICON_SPACING};
+use moldyat_core::graphics::sidebar::{ICON_COUNT, ICON_DISPLAY_SIZE, ICON_SPACING};
 
 /// Background quad uses 6 vertices.
 const BG_VERTS: usize = 6;
