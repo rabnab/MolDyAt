@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "If you use this software in scientific work, please cite it as below."
+title: "ThermoSolver"
+abstract: "A molecular dynamics simulation of a Lennard-Jones gas in a finite box, written in Rust."
+type: software
+authors:
+  - family-names: "Kaltseis"
+    given-names: "Rainer"
+repository-code: "https://github.com/rabnab/molecularLenardJones"
+license: MPL-2.0
+version: 1.3.1

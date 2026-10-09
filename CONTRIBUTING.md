@@ -98,6 +98,18 @@ Both formatting and linting must pass without errors.
 
 3. **Never commit directly to master** - All changes go through pull requests
 
+## Licensing of Contributions
+
+The project is licensed under the [MPL-2.0](LICENSE). By submitting a
+contribution you agree that it is licensed under the same terms. New `.rs` and
+`.wgsl` files must start with the MPL-2.0 notice used by the existing files:
+
+```rust
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+```
+
 ## Commit Message Guidelines
 
 - Use imperative mood: "Fix bug" not "Fixed bug" or "Fixes bug"

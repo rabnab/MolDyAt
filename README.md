@@ -322,6 +322,27 @@ release with generated notes. See the
 [release list](https://github.com/rabnab/molecularLenardJones/releases)
 for changes per version.
 
+## License
+
+ThermoSolver is licensed under the [Mozilla Public License 2.0](LICENSE)
+(MPL-2.0). In short:
+
+* You may use, modify and redistribute it, also commercially and inside
+  proprietary products.
+* If you distribute a modified version of a file covered by this licence, you
+  must make the source of your changes to that file available under the
+  MPL-2.0. Your own separate files and the larger product around it can stay
+  under any licence.
+* The licence and copyright notices must be kept.
+* The software is provided as is, without warranty and without liability for
+  any damage caused by using the source code or the binaries.
+
+This licence applies to **all versions** of the project, including every
+earlier commit, tag and release (v1.3.0 and v1.3.0-rc.2 included).
+
+If you use ThermoSolver in scientific work, please cite it; see
+[CITATION.cff](CITATION.cff) (GitHub's "Cite this repository" button).
+
 ## Project Structure
 
 ```
