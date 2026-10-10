@@ -36,11 +36,12 @@ Use this file as the single source of truth for commands and process rules. Othe
 
 Toolchain is pinned in `rust-toolchain.toml` (nightly). Use plain `cargo`. Use `--release` only for performance testing.
 
-- Run a single test (name substring): `cargo test -p rust_thermo_core test_remove_invalid_balls`
-- Run an exact test name: `cargo test -p rust_thermo_core test_remove_invalid_balls -- --exact`
-- Run a single integration test file (`tests/<name>.rs`): `cargo test -p rust_thermo_core --test integration_file_name`
-- Minimal headless run: `cargo run -p rust_thermo_wgpu -- --headless`
-- Deterministic seeded run (reproducible): `cargo run -p rust_thermo_wgpu -- --headless --steps 1000 --rng-seed 12345 --no-stdout`
+- Run a single test (name substring): `cargo test -p moldyat_core test_remove_invalid_balls`
+- Run an exact test name: `cargo test -p moldyat_core test_remove_invalid_balls -- --exact`
+- Run a single integration test file (`tests/<name>.rs`): `cargo test -p moldyat_core --test integration_file_name`
+- Package vs binary: the cargo package is `moldyat_wgpu` (use it with `-p`); the executable it builds is `moldyat` (`target/<profile>/moldyat`).
+- Minimal headless run: `cargo run -p moldyat_wgpu -- --headless`
+- Deterministic seeded run (reproducible): `cargo run -p moldyat_wgpu -- --headless --steps 1000 --rng-seed 12345 --no-stdout`
 - CI format check: `cargo fmt -- --check`
 - Performance baseline (per-phase ms/step JSON, compare binaries): `scripts/headless_perf.sh [BASE_BIN NEW_BIN]`; see `docs/perf-baseline.md`
 

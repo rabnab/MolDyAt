@@ -25,12 +25,12 @@
 //! draws only the pipelines of its layers, so with rendering off (F2) the
 //! ball and thermo pipelines do no work at all.
 
-use rust_thermo_core::application::AppResult;
-use rust_thermo_core::application::renderer_snapshot::RendererSnapshot;
-use rust_thermo_core::application::scene_layers::SceneLayers;
-use rust_thermo_core::graphics::renderer::event_loop::FramePreviews;
-use rust_thermo_core::graphics::renderer::margins::Margins;
-use rust_thermo_core::graphics::renderer::state_layers::ThermoDisplayMode;
+use moldyat_core::application::AppResult;
+use moldyat_core::application::renderer_snapshot::RendererSnapshot;
+use moldyat_core::application::scene_layers::SceneLayers;
+use moldyat_core::graphics::renderer::event_loop::FramePreviews;
+use moldyat_core::graphics::renderer::margins::Margins;
+use moldyat_core::graphics::renderer::state_layers::ThermoDisplayMode;
 use std::any::Any;
 use std::collections::HashSet;
 

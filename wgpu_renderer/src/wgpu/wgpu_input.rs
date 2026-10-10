@@ -7,8 +7,8 @@
 //! Handles actions that target a render pipeline (ring display mode).
 //! All other actions are delegated to UnifiedRenderState.
 
-use rust_thermo_core::graphics::renderer::InputAction;
-use rust_thermo_core::graphics::renderer::event_loop::UnifiedRenderState;
+use moldyat_core::graphics::renderer::InputAction;
+use moldyat_core::graphics::renderer::event_loop::UnifiedRenderState;
 
 use super::wgpu_pipelines::WgpuPipelines;
 

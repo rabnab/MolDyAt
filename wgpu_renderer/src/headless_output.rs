@@ -3,10 +3,10 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::headless_cli::{DetailLevel, HeadlessConfig, OutputFormat};
-use rust_thermo_core::application::renderer_snapshot::{
+use moldyat_core::application::renderer_snapshot::{
     OperatorSnapshot, RendererSnapshot, ThermoGridSpec,
 };
-use rust_thermo_core::application::thermo_field::ThermoGrid;
+use moldyat_core::application::thermo_field::ThermoGrid;
 use serde_json::json;
 use std::fs::File;
 use std::io::{self, BufWriter, Write};
@@ -204,7 +204,7 @@ fn run_start_to_jsonl(config: &HeadlessConfig, snapshot: &RendererSnapshot) -> S
 }
 
 /// World bounds, so `--line-segment` coordinates can be chosen from a run.
-fn world_rect_to_json(rect: &rust_thermo_core::objects2d::Rect) -> serde_json::Value {
+fn world_rect_to_json(rect: &moldyat_core::objects2d::Rect) -> serde_json::Value {
     let (left, top) = rect.get_tl();
     let (right, bottom) = rect.get_br();
     json!({

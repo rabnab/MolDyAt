@@ -7,8 +7,8 @@
 /// This module handles parsing command-line arguments for headless execution mode
 /// and storing the parsed configuration for use by the headless simulation loop.
 use crate::cli::OptionHelp;
-use rust_thermo_core::application::valve_span_problem;
-use rust_thermo_core::objects2d::line_segment::{DEFAULT_THICKNESS, MAX_THICKNESS, MIN_THICKNESS};
+use moldyat_core::application::valve_span_problem;
+use moldyat_core::objects2d::line_segment::{DEFAULT_THICKNESS, MAX_THICKNESS, MIN_THICKNESS};
 use std::path::PathBuf;
 
 /// `--help` entries for every flag `parse_headless_args` takes. Keep in sync:

@@ -9,9 +9,9 @@
 //! behind it so it stays readable on top of the thermostat zone, balls and
 //! walls (see `gpu/label_background.rs`).
 
-use rust_thermo_core::application::AppResult;
-use rust_thermo_core::application::scene_layers::SceneLayers;
-use rust_thermo_core::objects2d::SimThermostat;
+use moldyat_core::application::AppResult;
+use moldyat_core::application::scene_layers::SceneLayers;
+use moldyat_core::objects2d::SimThermostat;
 use std::time::Instant;
 
 use crate::wgpu::gpu::geometry::apply_view_proj;

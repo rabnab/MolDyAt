@@ -17,7 +17,7 @@ Issue coverage status:
 
 ## Constraints
 
-- Keep physics ownership in `rust_thermo_core::application::MainContent`
+- Keep physics ownership in `moldyat_core::application::MainContent`
 - Reuse existing snapshot generation via `MainContent::create_snapshot()`
 - Avoid introducing renderer-specific dependencies into `core`
 - Keep the default interactive startup path unchanged
@@ -276,7 +276,7 @@ Intentional fixture update workflow:
 
 1. Apply the intended headless contract change.
 2. Refresh the fixture:
-   `UPDATE_HEADLESS_FIXTURE=1 cargo test -p rust_thermo_wgpu seeded_headless_regression_fixture_matches_checked_in_jsonl`
+   `UPDATE_HEADLESS_FIXTURE=1 cargo test -p moldyat_wgpu seeded_headless_regression_fixture_matches_checked_in_jsonl`
 3. Re-run the same test without `UPDATE_HEADLESS_FIXTURE` to confirm stability.
 4. Include the fixture diff in PR review as contract evidence.
 
@@ -287,12 +287,12 @@ If the implementation touches `core`, add focused tests there rather than only e
 Canonical command policy lives in `.github/copilot-instructions.md#quick-build-test-and-lint-commands-explicit`.
 When implementation starts, validate in this order:
 
-1. `cargo test -p rust_thermo_wgpu`
-2. `cargo build -p rust_thermo_wgpu`
+1. `cargo test -p moldyat_wgpu`
+2. `cargo build -p moldyat_wgpu`
 3. `cargo fmt`
 4. `cargo clippy --workspace -- -D warnings`
 
-If implementation widens or changes `core`, also run the affected `rust_thermo_core` tests instead of validating only `wgpu_renderer`.
+If implementation widens or changes `core`, also run the affected `moldyat_core` tests instead of validating only `wgpu_renderer`.
 
 For physics-affecting changes, add an energy-drift check. A pure observer/export path should not require physics changes, but the headless output should still expose enough energy data to detect drift.
 

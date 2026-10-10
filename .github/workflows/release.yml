@@ -16,7 +16,8 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   RUST_NIGHTLY: "nightly-2026-09-01" # keep in sync with rust-toolchain.toml
-  BIN: rust_thermo_wgpu
+  PKG: moldyat_wgpu # cargo package
+  BIN: moldyat # binary name, also the archive prefix
   TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
@@ -82,7 +83,7 @@ jobs:
           key: dist-${{ matrix.target }}
 
       - name: Build
-        run: cargo build --locked -p ${{ env.BIN }} --profile dist --target ${{ matrix.target }}
+        run: cargo build --locked -p ${{ env.PKG }} --profile dist --target ${{ matrix.target }}
 
       - name: Package
         shell: bash

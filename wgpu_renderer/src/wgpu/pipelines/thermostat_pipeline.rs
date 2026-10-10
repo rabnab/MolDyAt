@@ -10,8 +10,8 @@
 //! 2. the `thermo.png` icon at its position -- see `thermostat_icon.wgsl`.
 
 use bytemuck::{Pod, Zeroable};
-use rust_thermo_core::application::AppResult;
-use rust_thermo_core::objects2d::OperatorState;
+use moldyat_core::application::AppResult;
+use moldyat_core::objects2d::OperatorState;
 use std::time::Instant;
 
 use crate::wgpu::gpu::batch::{BatchDesc, GpuBatch, SceneUniforms};

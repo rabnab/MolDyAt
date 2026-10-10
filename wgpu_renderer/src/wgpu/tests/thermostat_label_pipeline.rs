@@ -3,7 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::wgpu::pipelines::thermostat_label_pipeline::ThermostatLabelPipeline;
-use rust_thermo_core::objects2d::{SimThermostat, Vec2D};
+use moldyat_core::objects2d::{SimThermostat, Vec2D};
 
 fn identity_view_proj() -> [[f32; 4]; 4] {
     [

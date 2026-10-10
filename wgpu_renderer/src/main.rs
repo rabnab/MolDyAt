@@ -12,8 +12,8 @@ mod headless_timings;
 mod wgpu;
 
 use crate::wgpu::{DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH, MARGINS};
-use rust_thermo_core::application::MainContent;
-use rust_thermo_core::application::persistence::{LoadSource, SaveStore};
+use moldyat_core::application::MainContent;
+use moldyat_core::application::persistence::{LoadSource, SaveStore};
 
 /// Initialize Rayon thread pool for parallel physics computations.
 ///
@@ -51,8 +51,8 @@ fn init_rayon() {
 
 /// Print startup diagnostics about parallelization and SIMD features.
 fn print_diagnostics() {
-    rust_thermo_core::logging::init();
-    log::info!("rust_thermo_wgpu {}", cli::VERSION);
+    moldyat_core::logging::init();
+    log::info!("{} {}", cli::PROGRAM, cli::VERSION);
     log::info!(
         "Parallel: enabled | SIMD: enabled | CPU cores: {}",
         num_cpus::get()

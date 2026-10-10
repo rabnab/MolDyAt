@@ -12,11 +12,11 @@
             "cargo": {
                 "args": [
                     "run",
-                    "-p", "rust_thermo_wgpu"
+                    "-p", "moldyat_wgpu"
                 ]
             },
             "env": {
-                "RUST_LOG": "info,rust_thermo_core=info,rust_thermo_wgpu=info,wgpu=warn,naga=warn,wgpu_hal=warn"
+                "RUST_LOG": "info,moldyat_core=info,moldyat_wgpu=info,wgpu=warn,naga=warn,wgpu_hal=warn"
             },
             "args": []
         },
@@ -27,7 +27,7 @@
             "cargo": {
                 "args": [
                     "test",
-                    "-p", "rust_thermo_core"
+                    "-p", "moldyat_core"
                 ]
             }
         },
@@ -38,7 +38,7 @@
             "cargo": {
                 "args": [
                     "test",
-                    "-p", "rust_thermo_wgpu"
+                    "-p", "moldyat_wgpu"
                 ]
             }
         },

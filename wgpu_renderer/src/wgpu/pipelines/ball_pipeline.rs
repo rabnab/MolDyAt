@@ -9,9 +9,9 @@
 //! See `ball.wgsl`.
 
 use bytemuck::{Pod, Zeroable};
-use rust_thermo_core::application::AppResult;
-use rust_thermo_core::application::renderer_snapshot::BallRenderData;
-use rust_thermo_core::application::scene_layers::SceneLayers;
+use moldyat_core::application::AppResult;
+use moldyat_core::application::renderer_snapshot::BallRenderData;
+use moldyat_core::application::scene_layers::SceneLayers;
 
 use crate::wgpu::gpu::batch::{BatchDesc, GpuBatch, SceneUniforms};
 use crate::wgpu::gpu::shaders;

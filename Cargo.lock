@@ -1319,6 +1319,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "moldyat_core"
+version = "0.2.0"
+dependencies = [
+ "arc-swap",
+ "env_logger",
+ "float-cmp",
+ "log",
+ "ndarray",
+ "rand 0.10.3",
+ "rand_distr 0.6.0",
+ "rayon",
+ "scirs2-interpolate",
+ "serde",
+ "serde_json",
+ "softbuffer",
+ "winit",
+]
+
+[[package]]
+name = "moldyat_wgpu"
+version = "0.2.0"
+dependencies = [
+ "bytemuck",
+ "font8x8",
+ "image",
+ "log",
+ "moldyat_core",
+ "num_cpus",
+ "pollster",
+ "rayon",
+ "serde_json",
+ "wgpu",
+ "winit",
+]
+
+[[package]]
 name = "moxcms"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2331,42 +2367,6 @@ name = "renderdoc-sys"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19b30a45b0cd0bcca8037f3d0dc3421eaf95327a17cad11964fb8179b4fc4832"
-
-[[package]]
-name = "rust_thermo_core"
-version = "1.3.1"
-dependencies = [
- "arc-swap",
- "env_logger",
- "float-cmp",
- "log",
- "ndarray",
- "rand 0.10.3",
- "rand_distr 0.6.0",
- "rayon",
- "scirs2-interpolate",
- "serde",
- "serde_json",
- "softbuffer",
- "winit",
-]
-
-[[package]]
-name = "rust_thermo_wgpu"
-version = "1.3.1"
-dependencies = [
- "bytemuck",
- "font8x8",
- "image",
- "log",
- "num_cpus",
- "pollster",
- "rayon",
- "rust_thermo_core",
- "serde_json",
- "wgpu",
- "winit",
-]
 
 [[package]]
 name = "rustc-hash"

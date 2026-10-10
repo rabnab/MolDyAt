@@ -10,15 +10,15 @@
 
 use std::sync::{Arc, Mutex};
 
-use rust_thermo_core::application::renderer_snapshot::{
+use moldyat_core::application::renderer_snapshot::{
     BallRenderData, CellGridSpec, RendererSnapshot, ThermoGridSpec, ValveSpan, WallSnapshot,
 };
-use rust_thermo_core::application::scene_layers::SceneLayers;
-use rust_thermo_core::application::thermo_field::ThermoGrid;
-use rust_thermo_core::graphics::renderer::event_loop::FramePreviews;
-use rust_thermo_core::graphics::renderer::state_layers::ThermoDisplayMode;
-use rust_thermo_core::objects2d::wall_chain::ObjectRef;
-use rust_thermo_core::objects2d::{
+use moldyat_core::application::scene_layers::SceneLayers;
+use moldyat_core::application::thermo_field::ThermoGrid;
+use moldyat_core::graphics::renderer::event_loop::FramePreviews;
+use moldyat_core::graphics::renderer::state_layers::ThermoDisplayMode;
+use moldyat_core::objects2d::wall_chain::ObjectRef;
+use moldyat_core::objects2d::{
     OperatorState, Rect, SimLineSegment, SimSourceSphere, SimThermostat, Vec2D,
 };
 

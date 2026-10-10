@@ -8,9 +8,9 @@
 //! bottom-right of the simulation pane, inside the bottom margin. Uses the
 //! shared bitmap text renderer (`gpu/text.rs`).
 
-use rust_thermo_core::application::AppResult;
-use rust_thermo_core::graphics::renderer::margins::Margins;
-use rust_thermo_core::graphics::sidebar::sidebar_ui_scale;
+use moldyat_core::application::AppResult;
+use moldyat_core::graphics::renderer::margins::Margins;
+use moldyat_core::graphics::sidebar::sidebar_ui_scale;
 
 use crate::wgpu::gpu::geometry::px_to_ndc;
 use crate::wgpu::gpu::text::{GLYPH_H, GLYPH_W, TextBatch, TextVertex, push_label_vertices};

@@ -69,22 +69,26 @@ Prebuilt binaries for Windows and Linux (x86_64) are attached to each
 **Windows (PowerShell):**
 
 ```powershell
-$tag = "v1.3.0"
-$name = "rust_thermo_wgpu-$tag-x86_64-pc-windows-msvc"
+$tag = "vX.Y.Z"  # a release from the releases page, newer than v1.3.1
+$name = "moldyat-$tag-x86_64-pc-windows-msvc"
 Invoke-WebRequest "https://github.com/rabnab/MolDyAt/releases/download/$tag/$name.zip" -OutFile "$name.zip"
 Expand-Archive "$name.zip" -DestinationPath .
-& ".\$name\rust_thermo_wgpu.exe"
+& ".\$name\moldyat.exe"
 ```
 
 **Linux:**
 
 ```bash
-tag=v1.3.0
-name=rust_thermo_wgpu-$tag-x86_64-unknown-linux-gnu
+tag=vX.Y.Z  # a release from the releases page, newer than v1.3.1
+name=moldyat-$tag-x86_64-unknown-linux-gnu
 curl -LO "https://github.com/rabnab/MolDyAt/releases/download/$tag/$name.tar.gz"
 tar xzf "$name.tar.gz"
-./"$name"/rust_thermo_wgpu
+./"$name"/moldyat
 ```
+
+The archives and the executable are called `moldyat` in releases after v1.3.1;
+v1.3.1 and earlier use `rust_thermo_wgpu` instead (adjust `$name` and the
+executable name).
 
 Verify a download against its `.sha256` file (`sha256sum -c` on Linux,
 `Get-FileHash` in PowerShell).
@@ -106,8 +110,8 @@ Verify a download against its `.sha256` file (`sha256sum -c` on Linux,
 #### Building & Running
 
 ```bash
-cargo build -p rust_thermo_wgpu
-cargo run   -p rust_thermo_wgpu
+cargo build -p moldyat_wgpu
+cargo run   -p moldyat_wgpu
 ```
 
 ### Headless Mode (Examples)
@@ -116,41 +120,41 @@ Headless mode runs the simulation without opening a window and emits structured 
 
 ```bash
 # Minimal headless run (defaults: --steps 1, summary output, stdout enabled)
-cargo run -p rust_thermo_wgpu -- --headless
+cargo run -p moldyat_wgpu -- --headless
 ```
 
 ```bash
 # Run 500 steps, emit snapshots every 50 steps to stdout
-cargo run -p rust_thermo_wgpu -- --headless --steps 500 --snapshot-every 50
+cargo run -p moldyat_wgpu -- --headless --steps 500 --snapshot-every 50
 ```
 
 ```bash
 # Write JSONL records to a file while keeping console summaries
-cargo run -p rust_thermo_wgpu -- --headless --steps 300 --snapshot-every 25 --output /tmp/headless.jsonl
+cargo run -p moldyat_wgpu -- --headless --steps 300 --snapshot-every 25 --output /tmp/headless.jsonl
 ```
 
 ```bash
 # File-only mode (required when disabling stdout)
-cargo run -p rust_thermo_wgpu -- --headless --steps 300 --output /tmp/headless.jsonl --no-stdout
+cargo run -p moldyat_wgpu -- --headless --steps 300 --output /tmp/headless.jsonl --no-stdout
 ```
 
 ```bash
 # Deterministic seeded run for reproducible CI fixtures
-cargo run -p rust_thermo_wgpu -- --headless --steps 1000 --snapshot-every 100 --rng-seed 12345 --seed-balls 64 --output /tmp/seeded.jsonl --no-stdout
+cargo run -p moldyat_wgpu -- --headless --steps 1000 --snapshot-every 100 --rng-seed 12345 --seed-balls 64 --output /tmp/seeded.jsonl --no-stdout
 ```
 
 ```bash
 # Custom time step and interior walls (world coordinates, x1,y1,x2,y2[,thickness]).
 # Walls are placed before --seed-balls, so no ball starts inside a wall.
 # run_start records the effective dt, the walls and the world_rect bounds.
-cargo run -p rust_thermo_wgpu -- --headless --steps 20000 --snapshot-every 100 --rng-seed 12345 --seed-balls 800 --dt 0.005 --line-segment -30,-20,-30,20 --line-segment -20,15,20,15,3 --output /tmp/walls.jsonl --no-stdout
+cargo run -p moldyat_wgpu -- --headless --steps 20000 --snapshot-every 100 --rng-seed 12345 --seed-balls 800 --dt 0.005 --line-segment -30,-20,-30,20 --line-segment -20,15,20,15,3 --output /tmp/walls.jsonl --no-stdout
 ```
 
 ```bash
 # Large, hot world for performance runs: --world-scale multiplies the default
 # world's width and height, --seed-speed gives seeded balls speeds in 0..max.
 # run_start records both.
-cargo run --release -p rust_thermo_wgpu -- --headless --steps 300 --rng-seed 1 --seed-balls 12000 --world-scale 8 --seed-speed 6 --stdout
+cargo run --release -p moldyat_wgpu -- --headless --steps 300 --rng-seed 1 --seed-balls 12000 --world-scale 8 --seed-speed 6 --stdout
 ```
 
 ```bash
@@ -158,54 +162,54 @@ cargo run --release -p rust_thermo_wgpu -- --headless --steps 300 --rng-seed 1 -
 # --line-segment with that 0-based index (fractions along it, one per wall).
 # --timings writes ms/step per phase as JSON, after --timing-warmup steps.
 # --save-setup saves the prepared world to --save-dir before the first step.
-cargo run --release -p rust_thermo_wgpu -- --headless --steps 300 --rng-seed 1 --seed-balls 2000 --line-segment 0,-30,0,30,2 --valve 0,0.4,0.6,closed --timings /tmp/timings.json --timing-warmup 50 --no-stdout --output /tmp/valves.jsonl
+cargo run --release -p moldyat_wgpu -- --headless --steps 300 --rng-seed 1 --seed-balls 2000 --line-segment 0,-30,0,30,2 --valve 0,0.4,0.6,closed --timings /tmp/timings.json --timing-warmup 50 --no-stdout --output /tmp/valves.jsonl
 ```
 
 ```bash
 # All options. An invalid command line prints the error and this usage (exit 2).
-cargo run -p rust_thermo_wgpu -- --help
+cargo run -p moldyat_wgpu -- --help
 ```
 
 ```bash
-# Version and the git commit of the build, e.g. "rust_thermo_wgpu 1.3.0 (60c70fd)";
+# Version and the git commit of the build, e.g. "moldyat <version> (60c70fd)";
 # -dirty means the build had uncommitted changes. Also shown in the window title.
-cargo run -p rust_thermo_wgpu -- --version
+cargo run -p moldyat_wgpu -- --version
 ```
 
 ```bash
 # Performance baseline: fixed seeded scenarios, one JSON report with ms/step
 # per phase. See docs/perf-baseline.md for scenarios and comparing branches.
-cargo build --release -p rust_thermo_wgpu && scripts/headless_perf.sh > perf.json
+cargo build --release -p moldyat_wgpu && scripts/headless_perf.sh > perf.json
 ```
 
 ```bash
 # Export summary + per-ball state (larger output)
-cargo run -p rust_thermo_wgpu -- --headless --steps 200 --snapshot-every 20 --detail balls --output /tmp/balls.jsonl --no-stdout
+cargo run -p moldyat_wgpu -- --headless --steps 200 --snapshot-every 20 --detail balls --output /tmp/balls.jsonl --no-stdout
 ```
 
 ```bash
 # Export thermo grids (temperature + pressure)
-cargo run -p rust_thermo_wgpu -- --headless --steps 200 --snapshot-every 20 --detail thermo --output /tmp/thermo.jsonl --no-stdout
+cargo run -p moldyat_wgpu -- --headless --steps 200 --snapshot-every 20 --detail thermo --output /tmp/thermo.jsonl --no-stdout
 ```
 
 ```bash
 # Export both balls and thermo sections in each frame record
-cargo run -p rust_thermo_wgpu -- --headless --steps 200 --snapshot-every 20 --detail balls+thermo --output /tmp/full.jsonl --no-stdout
+cargo run -p moldyat_wgpu -- --headless --steps 200 --snapshot-every 20 --detail balls+thermo --output /tmp/full.jsonl --no-stdout
 ```
 
 ```bash
 # Same as above, using the accepted alias for balls+thermo
-cargo run -p rust_thermo_wgpu -- --headless --steps 200 --snapshot-every 20 --detail balls-and-thermo --output /tmp/full.jsonl --no-stdout
+cargo run -p moldyat_wgpu -- --headless --steps 200 --snapshot-every 20 --detail balls-and-thermo --output /tmp/full.jsonl --no-stdout
 ```
 
 ```bash
 # Capture output in CI artifact path
-cargo run -p rust_thermo_wgpu -- --headless --steps 1500 --snapshot-every 150 --rng-seed 7 --seed-balls 100 --output ./artifacts/headless-run.jsonl --no-stdout
+cargo run -p moldyat_wgpu -- --headless --steps 1500 --snapshot-every 150 --rng-seed 7 --seed-balls 100 --output ./artifacts/headless-run.jsonl --no-stdout
 ```
 
 ```bash
 # Quick smoke check: ensure expected record kinds are present
-cargo run -p rust_thermo_wgpu -- --headless --steps 10 --snapshot-every 5 --output /tmp/smoke.jsonl --no-stdout
+cargo run -p moldyat_wgpu -- --headless --steps 10 --snapshot-every 5 --output /tmp/smoke.jsonl --no-stdout
 rg '"record_kind":"run_start"|"record_kind":"frame"|"record_kind":"run_end"' /tmp/smoke.jsonl
 ```
 
@@ -221,12 +225,12 @@ Seeded regression fixture workflow (used by CI):
 
 ```bash
 # Run the fixture regression check used in CI
-cargo test -p rust_thermo_wgpu seeded_headless_regression_fixture_matches_checked_in_jsonl
+cargo test -p moldyat_wgpu seeded_headless_regression_fixture_matches_checked_in_jsonl
 ```
 
 ```bash
 # Intentionally refresh the checked-in fixture after approved contract changes
-UPDATE_HEADLESS_FIXTURE=1 cargo test -p rust_thermo_wgpu seeded_headless_regression_fixture_matches_checked_in_jsonl
+UPDATE_HEADLESS_FIXTURE=1 cargo test -p moldyat_wgpu seeded_headless_regression_fixture_matches_checked_in_jsonl
 ```
 
 Fixture file:
@@ -301,8 +305,8 @@ file, pass `--load <path>`; it works with the window and with `--headless`
 as `--dt` or `--seed-balls` are applied on top).
 
 ```bash
-cargo run -p rust_thermo_wgpu -- --load saves/world_20260101_120000.json
-cargo run -p rust_thermo_wgpu -- --save-dir ~/lj-worlds
+cargo run -p moldyat_wgpu -- --load saves/world_20260101_120000.json
+cargo run -p moldyat_wgpu -- --save-dir ~/lj-worlds
 ```
 
 The file is versioned JSON (`"version": 1`) holding the world rectangle, time
@@ -323,6 +327,12 @@ created by pushing a `vMAJOR.MINOR.PATCH` tag; the `Release` workflow
 release with generated notes. See the
 [release list](https://github.com/rabnab/MolDyAt/releases)
 for changes per version.
+
+Note: the commits before v0.2.0 did not follow a strict versioning scheme, so there are versions in older commits:
+- 0.1.0
+- 0.1.1
+- 1.3.0
+- 1.3.1
 
 ## License
 

@@ -32,7 +32,7 @@ const HELP_COLUMN: usize = 30;
 /// The full usage text for `program`, with the version line on top.
 pub fn usage(program: &str, version: &str, groups: &[OptionGroup]) -> String {
     let mut out =
-        format!("{program} {version}\nMolecular dynamics (Lennard-Jones) simulation.\n\n");
+        format!("{program} {version}\nMolDyAt: molecular dynamics (Lennard-Jones) simulation.\n\n");
     out.push_str("Usage:\n");
     out.push_str(&format!(
         "  {program} [OPTIONS]               open the simulation window\n"

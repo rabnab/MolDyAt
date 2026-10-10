@@ -5,7 +5,7 @@
 use super::*;
 use crate::headless_cli::{DetailLevel, LineSegmentSpec, OutputFormat, ValveSpec};
 use crate::headless_output::HeadlessSnapshotSink;
-use rust_thermo_core::application::renderer_snapshot::RendererSnapshot;
+use moldyat_core::application::renderer_snapshot::RendererSnapshot;
 use std::cell::RefCell;
 use std::fs;
 use std::io;
@@ -42,10 +42,10 @@ fn runner_with_snapshot_steps(
     steps: u32,
     snapshot_every: u32,
 ) -> (HeadlessRunner, Rc<RefCell<Vec<u64>>>) {
-    let world_rect = rust_thermo_core::application::MainContent::bootstrap_world_rect(
+    let world_rect = moldyat_core::application::MainContent::bootstrap_world_rect(
         1280,
         720,
-        rust_thermo_core::graphics::renderer::margins::Margins::new(110.0, 50.0, 50.0, 50.0),
+        moldyat_core::graphics::renderer::margins::Margins::new(110.0, 50.0, 50.0, 50.0),
     );
     let application = build_application(world_rect, None).expect("application");
     let recorded = Rc::new(RefCell::new(Vec::new()));
@@ -79,10 +79,10 @@ fn seeded_headless_output() -> String {
     let _output_guard = TempFileGuard {
         path: output_path.clone(),
     };
-    let world_rect = rust_thermo_core::application::MainContent::bootstrap_world_rect(
+    let world_rect = moldyat_core::application::MainContent::bootstrap_world_rect(
         1280,
         720,
-        rust_thermo_core::graphics::renderer::margins::Margins::new(110.0, 50.0, 50.0, 50.0),
+        moldyat_core::graphics::renderer::margins::Margins::new(110.0, 50.0, 50.0, 50.0),
     );
 
     let config = HeadlessConfig {
@@ -204,11 +204,11 @@ fn test_seeded_headless_regression_fixture_matches_checked_in_jsonl() {
     );
 }
 
-fn test_world_rect() -> rust_thermo_core::objects2d::Rect {
-    rust_thermo_core::application::MainContent::bootstrap_world_rect(
+fn test_world_rect() -> moldyat_core::objects2d::Rect {
+    moldyat_core::application::MainContent::bootstrap_world_rect(
         1280,
         720,
-        rust_thermo_core::graphics::renderer::margins::Margins::new(110.0, 50.0, 50.0, 50.0),
+        moldyat_core::graphics::renderer::margins::Margins::new(110.0, 50.0, 50.0, 50.0),
     )
 }
 
@@ -476,7 +476,7 @@ fn test_run_writes_timings_for_steps_after_warmup() {
 
 #[test]
 fn test_write_timings_rejects_runs_with_paused_steps() {
-    use rust_thermo_core::application::phase_timings::PhaseTimings;
+    use moldyat_core::application::phase_timings::PhaseTimings;
 
     let application = build_application(test_world_rect(), Some(1)).expect("build");
     let snapshot = application.create_snapshot();

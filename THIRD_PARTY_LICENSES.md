@@ -5437,8 +5437,8 @@ THE SOFTWARE.
 
 Used by:
 
-- rust_thermo_core 1.3.1
-- rust_thermo_wgpu 1.3.1
+- moldyat_core 0.2.0
+- moldyat_wgpu 0.2.0
 
 ```
 Mozilla Public License Version 2.0

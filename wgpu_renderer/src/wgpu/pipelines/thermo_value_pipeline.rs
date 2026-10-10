@@ -8,11 +8,11 @@
 //! cell that holds a finite T/P value. Hidden unless a thermo display mode
 //! (temperature / pressure) is active.
 
-use rust_thermo_core::application::AppResult;
-use rust_thermo_core::application::renderer_snapshot::ThermoGridSpec;
-use rust_thermo_core::application::scene_layers::SceneLayers;
-use rust_thermo_core::application::thermo_field::ThermoGrid;
-use rust_thermo_core::graphics::renderer::state_layers::ThermoDisplayMode;
+use moldyat_core::application::AppResult;
+use moldyat_core::application::renderer_snapshot::ThermoGridSpec;
+use moldyat_core::application::scene_layers::SceneLayers;
+use moldyat_core::application::thermo_field::ThermoGrid;
+use moldyat_core::graphics::renderer::state_layers::ThermoDisplayMode;
 
 use crate::wgpu::gpu::geometry::apply_view_proj;
 use crate::wgpu::gpu::text::{

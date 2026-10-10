@@ -129,12 +129,12 @@ This makes CI failures diagnosable without rendering.
 Drift scenarios are part of CI through a step of the `test` job (after the unit tests, reusing their build) that executes:
 
 ```bash
-cargo ci-test-drift   # = cargo test -p rust_thermo_core -- --ignored --nocapture
+cargo ci-test-drift   # = cargo test -p moldyat_core -- --ignored --nocapture
 ```
 
 All scenarios are `#[ignore = "suite:drift"]`, so a plain `cargo test` (without `--ignored`) skips them and prints no `DRIFT_SCENARIO` lines. The alias runs them with `--nocapture` so each scenario emits one machine-readable `DRIFT_SCENARIO ...` summary line (convergence tests a `DRIFT_CONVERGENCE` line) directly in CI logs.
 
-The alias runs every ignored test of `rust_thermo_core`, so it also runs the two `#[ignore = "suite:physics (slow)"]` tests (`test_overlap_fallback_stays_rare_in_a_gas_with_walls`, `test_virial_pressure_2d_matches_wall_pressure`). They are not drift scenarios and print no summary line.
+The alias runs every ignored test of `moldyat_core`, so it also runs the two `#[ignore = "suite:physics (slow)"]` tests (`test_overlap_fallback_stays_rare_in_a_gas_with_walls`, `test_virial_pressure_2d_matches_wall_pressure`). They are not drift scenarios and print no summary line.
 
 Canonical command policy reference:
 - `.github/copilot-instructions.md#cargo-command-policy-source-of-truth`
@@ -148,7 +148,7 @@ Threshold updates are allowed only when behavior changed intentionally (for exam
 
 1. Run drift scenarios locally with deterministic inputs:
    ```bash
-   cargo ci-test-drift   # = cargo test -p rust_thermo_core -- --ignored --nocapture
+   cargo ci-test-drift   # = cargo test -p moldyat_core -- --ignored --nocapture
    ```
 2. Collect the `DRIFT_SCENARIO` lines from:
    - current `master` (before change),
