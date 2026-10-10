@@ -12,28 +12,28 @@ This project is a **molecular dynamics physics simulation** implementing Lennard
 ### Critical Constraints
 - ⚠️ **Energy conservation is paramount** - verify total energy preservation
 - 🚫 **Never commit directly to master** - always use pull requests
-- 🧪 **Run tests before pushing** - `cargo +nightly test`
-- 🎨 **Format before committing** - `cargo +nightly fmt`
+- 🧪 **Run tests before pushing** - `cargo test`
+- 🎨 **Format before committing** - `cargo fmt` and `cargo clippy -- -D warnings`
 
 ### Essential Commands
 ```bash
 # Build
-cargo +nightly build
+cargo build
 
 # Test
-cargo +nightly test
+cargo test
 
 # Format
-cargo +nightly fmt
+cargo fmt
 
 # Lint
-cargo +nightly clippy -- -D warnings
+cargo clippy -- -D warnings
 ```
 
 ### Workflow
 1. Create feature branch: `feature/master/descriptive-name`
 2. Make changes and commit
-3. Run `cargo fmt` and `cargo test`
+3. Run `cargo fmt`, `cargo clippy -- -D warnings` and `cargo test`
 4. Push branch and create pull request
 5. Wait for CI and review approval
 6. Merge via pull request (never commit directly to master)
