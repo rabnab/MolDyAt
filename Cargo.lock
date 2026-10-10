@@ -178,7 +178,7 @@ version = "0.38.0+1.3.281"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0bb44936d800fea8f016d7f2311c6a4f97aebd5dc86f09906139ec848cf3a46f"
 dependencies = [
- "libloading",
+ "libloading 0.8.9",
 ]
 
 [[package]]
@@ -593,7 +593,7 @@ version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab8ecd87370524b461f8557c119c405552c396ed91fc0a8eec68679eab26f94a"
 dependencies = [
- "libloading",
+ "libloading 0.8.9",
 ]
 
 [[package]]
@@ -1166,7 +1166,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6aae1df220ece3c0ada96b8153459b67eebe9ae9212258bb0134ae60416fdf76"
 dependencies = [
  "libc",
- "libloading",
+ "libloading 0.8.9",
  "pkg-config",
 ]
 
@@ -1187,6 +1187,16 @@ name = "libloading"
 version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d7c4b02199fee7c5d21a5ae7d8cfa79a6ef5bb2fc834d6e9058e89c825efdc55"
+dependencies = [
+ "cfg-if",
+ "windows-link",
+]
+
+[[package]]
+name = "libloading"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "754ca22de805bb5744484a5b151a9e1a8e837d5dc232c2d7d8c2e3492edc8b60"
 dependencies = [
  "cfg-if",
  "windows-link",
@@ -2444,11 +2454,10 @@ dependencies = [
 
 [[package]]
 name = "scirs2-core"
-version = "0.4.4"
+version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1752aacbc47e36e4cf43d47238ac20694c4d5fd9980c472324f07e1c30a35fb7"
+checksum = "f7d5e6d0c09bd4a0307e073f6526d8b7b534e0fd9cd9ee644a73e169e08b45bd"
 dependencies = [
- "cc",
  "chrono",
  "crc32fast",
  "crossbeam",
@@ -2456,6 +2465,7 @@ dependencies = [
  "crossbeam-utils",
  "getrandom 0.3.4",
  "getrandom 0.4.3",
+ "libloading 0.9.0",
  "ndarray",
  "ndarray-rand",
  "num-complex",
@@ -2479,24 +2489,24 @@ dependencies = [
 
 [[package]]
 name = "scirs2-interpolate"
-version = "0.4.4"
+version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68d61af940346a541bb27b8e44124e4c1a52bd6484a85307c2745b1562a509a7"
+checksum = "7b88ff7b1ed3b65a620b18beddbb98cb5d6e9216b697e459b58133cea3951463"
 dependencies = [
- "fastrand",
  "num_cpus",
  "ordered-float",
  "scirs2-core",
  "scirs2-linalg",
+ "scirs2-spatial",
  "statrs",
  "thiserror 2.0.21",
 ]
 
 [[package]]
 name = "scirs2-linalg"
-version = "0.4.4"
+version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0079a04139f3b839c0a79372bc7063a6de10c47889e44275a958550e4e84bac5"
+checksum = "63cb568d47f1323c4c55b60386d78775a73f98692403e27ab00772d9355cc49c"
 dependencies = [
  "approx",
  "half",
@@ -2504,6 +2514,21 @@ dependencies = [
  "oxicode",
  "scirs2-core",
  "serde",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "scirs2-spatial"
+version = "0.6.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d433758503946feaa7cec8cfdaefcfaa88f31327a1c9485488b230695ea793d"
+dependencies = [
+ "approx",
+ "libc",
+ "num-traits",
+ "num_cpus",
+ "scirs2-core",
+ "statrs",
  "thiserror 2.0.21",
 ]
 
@@ -2846,7 +2871,7 @@ checksum = "a90a0ca3ee6a69f2ad28fd11621a4c3f03b371f366be500b64df260c4ffbafb4"
 dependencies = [
  "as-raw-xcb-connection",
  "ctor",
- "libloading",
+ "libloading 0.8.9",
  "pkg-config",
  "tracing",
 ]
@@ -3289,7 +3314,7 @@ dependencies = [
  "js-sys",
  "khronos-egl",
  "libc",
- "libloading",
+ "libloading 0.8.9",
  "log",
  "metal",
  "naga",
@@ -3643,7 +3668,7 @@ dependencies = [
  "as-raw-xcb-connection",
  "gethostname",
  "libc",
- "libloading",
+ "libloading 0.8.9",
  "once_cell",
  "rustix 1.1.5",
  "x11rb-protocol",

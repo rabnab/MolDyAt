@@ -28,7 +28,7 @@ winit = "0.30.12"
 softbuffer = "0.4"
 
 # Interpolation for T/P field upsampling (#116)
-scirs2-interpolate = { version = "0.4", features = ["simd", "linalg"] }
+scirs2-interpolate = { version = "0.6", features = ["simd", "linalg"] }
 ndarray = "0.17"
 
 [dev-dependencies]
