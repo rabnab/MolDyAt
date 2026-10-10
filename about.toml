@@ -16,5 +16,7 @@ accepted = [
 ]
 # Only crates compiled into the release binaries (see .github/workflows/release.yml).
 targets = ["x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
+# The MolDyAt crates themselves (publish = false) are not third-party.
+private = { ignore = true }
 ignore-dev-dependencies = true
 ignore-build-dependencies = true
