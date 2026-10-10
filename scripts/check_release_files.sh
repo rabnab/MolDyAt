@@ -81,7 +81,7 @@ if command -v cargo-about >/dev/null 2>&1; then
     ok "third-party notices generate (all licenses accepted)"
   else
     head -n 20 "$generated.err"
-    err "cargo about generate failed: a dependency has a license that is not in about.toml"
+    err "cargo about generate failed (see above)"
   fi
   rm -f "$generated" "$generated.err"
 else

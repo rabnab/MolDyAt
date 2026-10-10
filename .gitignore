@@ -375,7 +375,6 @@ FodyWeavers.xsd
 # added myself
 
 flamegraph.svg
-.claude/settings.json
 .claude/settings.local.json
 /saves/
 
