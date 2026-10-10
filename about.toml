@@ -1,5 +1,6 @@
-# cargo-about configuration: generates THIRD_PARTY_LICENSES.md for release archives.
-# Regenerate with: cargo about generate about.hbs -o THIRD_PARTY_LICENSES.md
+# cargo-about configuration: the release workflow generates THIRD_PARTY_LICENSES.md
+# for the release archives (the file is not committed). Try it locally with:
+#   cargo about generate --locked about.hbs -o THIRD_PARTY_LICENSES.md
 # Keep `accepted` in sync with `[licenses] allow` in deny.toml.
 accepted = [
     "MPL-2.0",

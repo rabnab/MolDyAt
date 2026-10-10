@@ -82,6 +82,17 @@ jobs:
         with:
           key: dist-${{ matrix.target }}
 
+      - name: Install cargo-about
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about
+
+      # Licenses and copyright notices of the dependencies compiled into the
+      # binary; shipped in the archive (see about.toml and about.hbs).
+      - name: Generate third-party notices
+        shell: bash
+        run: cargo about generate --locked about.hbs -o THIRD_PARTY_LICENSES.md
+
       - name: Build
         run: cargo build --locked -p ${{ env.PKG }} --profile dist --target ${{ matrix.target }}
 
