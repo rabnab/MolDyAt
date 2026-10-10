@@ -8,6 +8,7 @@ resolver = "2"
 version = "0.2.0"
 edition = "2024"
 license = "MPL-2.0"
+publish = false
 
 [workspace.lints.rust]
 # Add any custom lints here if needed

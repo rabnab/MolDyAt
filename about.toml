@@ -1,5 +1,6 @@
-# cargo-about configuration: generates THIRD_PARTY_LICENSES.md for release archives.
-# Regenerate with: cargo about generate about.hbs -o THIRD_PARTY_LICENSES.md
+# cargo-about configuration: the release workflow generates THIRD_PARTY_LICENSES.md
+# for the release archives (the file is not committed). Try it locally with:
+#   cargo about generate --locked about.hbs -o THIRD_PARTY_LICENSES.md
 # Keep `accepted` in sync with `[licenses] allow` in deny.toml.
 accepted = [
     "MPL-2.0",
@@ -15,5 +16,7 @@ accepted = [
 ]
 # Only crates compiled into the release binaries (see .github/workflows/release.yml).
 targets = ["x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
+# The MolDyAt crates themselves (publish = false) are not third-party.
+private = { ignore = true }
 ignore-dev-dependencies = true
 ignore-build-dependencies = true
