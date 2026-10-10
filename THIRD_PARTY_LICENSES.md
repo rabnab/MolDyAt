@@ -22,7 +22,7 @@ licenses. Generated with `cargo about`.
 
 Used by:
 
-- approx 0.5.1 - https://github.com/brendanzab/approx
+- approx - https://github.com/brendanzab/approx
 
 ```
 
@@ -234,7 +234,7 @@ Used by:
 
 Used by:
 
-- simba 0.9.1 - https://github.com/dimforge/simba
+- simba - https://github.com/dimforge/simba
 
 ```
                                  Apache License
@@ -445,8 +445,8 @@ Used by:
 
 Used by:
 
-- moxcms 0.8.1 - https://github.com/awxkee/moxcms.git
-- pxfm 0.1.30 - https://github.com/awxkee/pxfm
+- moxcms - https://github.com/awxkee/moxcms.git
+- pxfm - https://github.com/awxkee/pxfm
 
 ```
                                  Apache License
@@ -657,7 +657,7 @@ Used by:
 
 Used by:
 
-- oxicode 0.2.6 - https://github.com/cool-japan/oxicode
+- oxicode - https://github.com/cool-japan/oxicode
 
 ```
                                  Apache License
@@ -868,7 +868,7 @@ Used by:
 
 Used by:
 
-- codespan-reporting 0.12.0 - https://github.com/brendanzab/codespan
+- codespan-reporting - https://github.com/brendanzab/codespan
 
 ```
                                  Apache License
@@ -1079,7 +1079,7 @@ Used by:
 
 Used by:
 
-- nalgebra 0.33.3 - https://github.com/dimforge/nalgebra
+- nalgebra - https://github.com/dimforge/nalgebra
 
 ```
                                  Apache License
@@ -1290,7 +1290,7 @@ Used by:
 
 Used by:
 
-- gethostname 1.1.0 - https://codeberg.org/swsnr/gethostname.rs.git
+- gethostname - https://codeberg.org/swsnr/gethostname.rs.git
 
 ```
                               Apache License
@@ -1501,7 +1501,7 @@ limitations under the License.
 
 Used by:
 
-- glutin_wgl_sys 0.6.1 - https://github.com/rust-windowing/glutin
+- glutin_wgl_sys - https://github.com/rust-windowing/glutin
 
 ```
 Apache License
@@ -1712,8 +1712,8 @@ Apache License
 
 Used by:
 
-- dpi 0.1.2 - https://github.com/rust-windowing/winit
-- winit 0.30.13 - https://github.com/rust-windowing/winit
+- dpi - https://github.com/rust-windowing/winit
+- winit - https://github.com/rust-windowing/winit
 
 ```
 Apache License
@@ -1923,19 +1923,19 @@ Apache License
 
 Used by:
 
-- ab_glyph 0.2.32 - https://github.com/alexheretic/ab-glyph
-- ab_glyph_rasterizer 0.1.10 - https://github.com/alexheretic/ab-glyph
-- owned_ttf_parser 0.25.1 - https://github.com/alexheretic/owned-ttf-parser
-- oxiblas-blas 0.2.2 - https://github.com/cool-japan/oxiblas
-- oxiblas-core 0.2.2 - https://github.com/cool-japan/oxiblas
-- oxiblas-lapack 0.2.2 - https://github.com/cool-japan/oxiblas
-- oxiblas-matrix 0.2.2 - https://github.com/cool-japan/oxiblas
-- oxiblas-ndarray 0.2.2 - https://github.com/cool-japan/oxiblas
-- oxicode_derive 0.2.6 - https://github.com/cool-japan/oxicode
-- scirs2-core 0.4.4 - https://github.com/cool-japan/scirs
-- scirs2-interpolate 0.4.4 - https://github.com/cool-japan/scirs
-- scirs2-linalg 0.4.4 - https://github.com/cool-japan/scirs
-- spirv 0.3.0+sdk-1.3.268.0 - https://github.com/gfx-rs/rspirv
+- ab_glyph - https://github.com/alexheretic/ab-glyph
+- ab_glyph_rasterizer - https://github.com/alexheretic/ab-glyph
+- owned_ttf_parser - https://github.com/alexheretic/owned-ttf-parser
+- oxiblas-blas - https://github.com/cool-japan/oxiblas
+- oxiblas-core - https://github.com/cool-japan/oxiblas
+- oxiblas-lapack - https://github.com/cool-japan/oxiblas
+- oxiblas-matrix - https://github.com/cool-japan/oxiblas
+- oxiblas-ndarray - https://github.com/cool-japan/oxiblas
+- oxicode_derive - https://github.com/cool-japan/oxicode
+- scirs2-core - https://github.com/cool-japan/scirs
+- scirs2-interpolate - https://github.com/cool-japan/scirs
+- scirs2-linalg - https://github.com/cool-japan/scirs
+- spirv - https://github.com/gfx-rs/rspirv
 
 ```
 Apache License
@@ -2018,7 +2018,7 @@ limitations under the License.
 
 Used by:
 
-- arrayref 0.3.9 - https://github.com/droundy/arrayref
+- arrayref - https://github.com/droundy/arrayref
 
 ```
 Copyright (c) 2015 David Roundy <roundyd@physics.oregonstate.edu>
@@ -2054,8 +2054,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 Used by:
 
-- tiny-skia-path 0.11.4 - https://github.com/RazrFalcon/tiny-skia/tree/master/path
-- tiny-skia 0.11.4 - https://github.com/RazrFalcon/tiny-skia
+- tiny-skia-path - https://github.com/RazrFalcon/tiny-skia/tree/master/path
+- tiny-skia - https://github.com/RazrFalcon/tiny-skia
 
 ```
 Copyright (c) 2011 Google Inc. All rights reserved.
@@ -2095,7 +2095,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 Used by:
 
-- hexf-parse 0.2.1 - https://github.com/lifthrasiir/hexf
+- hexf-parse - https://github.com/lifthrasiir/hexf
 
 ```
 Creative Commons Legal Code
@@ -2226,7 +2226,7 @@ express Statement of Purpose.
 
 Used by:
 
-- libloading 0.8.9 - https://github.com/nagisa/rust_libloading/
+- libloading - https://github.com/nagisa/rust_libloading/
 
 ```
 Copyright © 2015, Simonas Kazlauskas
@@ -2248,8 +2248,8 @@ THIS SOFTWARE.
 
 Used by:
 
-- rayon-core 1.13.0 - https://github.com/rayon-rs/rayon
-- rayon 1.12.0 - https://github.com/rayon-rs/rayon
+- rayon-core - https://github.com/rayon-rs/rayon
+- rayon - https://github.com/rayon-rs/rayon
 
 ```
 Copyright (c) 2010 The Rust Project Developers
@@ -2284,7 +2284,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- percent-encoding 2.3.2 - https://github.com/servo/rust-url/
+- percent-encoding - https://github.com/servo/rust-url/
 
 ```
 Copyright (c) 2013-2025 The rust-url developers
@@ -2319,8 +2319,8 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- cfg-if 1.0.5 - https://github.com/rust-lang/cfg-if
-- scoped-tls 1.0.1 - https://github.com/alexcrichton/scoped-tls
+- cfg-if - https://github.com/rust-lang/cfg-if
+- scoped-tls - https://github.com/alexcrichton/scoped-tls
 
 ```
 Copyright (c) 2014 Alex Crichton
@@ -2355,7 +2355,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- errno 0.3.14 - https://github.com/lambda-fairy/rust-errno
+- errno - https://github.com/lambda-fairy/rust-errno
 
 ```
 Copyright (c) 2014 Chris Wong
@@ -2390,15 +2390,15 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- bitflags 2.13.2 - https://github.com/bitflags/bitflags
-- log 0.4.34 - https://github.com/rust-lang/log
-- num-complex 0.4.6 - https://github.com/rust-num/num-complex
-- num-integer 0.1.47 - https://github.com/rust-num/num-integer
-- num-rational 0.4.2 - https://github.com/rust-num/num-rational
-- num-traits 0.2.19 - https://github.com/rust-num/num-traits
-- regex-automata 0.4.18 - https://github.com/rust-lang/regex
-- regex-syntax 0.8.11 - https://github.com/rust-lang/regex
-- regex 1.13.1 - https://github.com/rust-lang/regex
+- bitflags - https://github.com/bitflags/bitflags
+- log - https://github.com/rust-lang/log
+- num-complex - https://github.com/rust-num/num-complex
+- num-integer - https://github.com/rust-num/num-integer
+- num-rational - https://github.com/rust-num/num-rational
+- num-traits - https://github.com/rust-num/num-traits
+- regex-automata - https://github.com/rust-lang/regex
+- regex-syntax - https://github.com/rust-lang/regex
+- regex - https://github.com/rust-lang/regex
 
 ```
 Copyright (c) 2014 The Rust Project Developers
@@ -2433,7 +2433,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- uuid 1.27.0 - https://github.com/uuid-rs/uuid
+- uuid - https://github.com/uuid-rs/uuid
 
 ```
 Copyright (c) 2014 The Rust Project Developers
@@ -2469,7 +2469,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- flate2 1.1.10 - https://github.com/rust-lang/flate2-rs
+- flate2 - https://github.com/rust-lang/flate2-rs
 
 ```
 Copyright (c) 2014-2026 Alex Crichton
@@ -2504,8 +2504,8 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- either 1.18.0 - https://github.com/rayon-rs/either
-- rawpointer 0.2.1 - https://github.com/bluss/rawpointer/
+- either - https://github.com/rayon-rs/either
+- rawpointer - https://github.com/bluss/rawpointer/
 
 ```
 Copyright (c) 2015
@@ -2540,7 +2540,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- ndarray-rand 0.16.0 - https://github.com/rust-ndarray/ndarray
+- ndarray-rand - https://github.com/rust-ndarray/ndarray
 
 ```
 Copyright (c) 2015 - 2018 Ulrik Sverdrup "bluss",
@@ -2577,7 +2577,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- ndarray 0.17.2 - https://github.com/rust-ndarray/ndarray
+- ndarray - https://github.com/rust-ndarray/ndarray
 
 ```
 Copyright (c) 2015 - 2021 Ulrik Sverdrup "bluss",
@@ -2614,14 +2614,14 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- wayland-backend 0.3.17 - https://github.com/smithay/wayland-rs
-- wayland-client 0.31.15 - https://github.com/smithay/wayland-rs
-- wayland-cursor 0.31.14 - https://github.com/smithay/wayland-rs
-- wayland-protocols-plasma 0.3.12 - https://github.com/smithay/wayland-rs
-- wayland-protocols-wlr 0.3.12 - https://github.com/smithay/wayland-rs
-- wayland-protocols 0.32.13 - https://github.com/smithay/wayland-rs
-- wayland-scanner 0.31.11 - https://github.com/smithay/wayland-rs
-- wayland-sys 0.31.11 - https://github.com/smithay/wayland-rs
+- wayland-backend - https://github.com/smithay/wayland-rs
+- wayland-client - https://github.com/smithay/wayland-rs
+- wayland-cursor - https://github.com/smithay/wayland-rs
+- wayland-protocols-plasma - https://github.com/smithay/wayland-rs
+- wayland-protocols-wlr - https://github.com/smithay/wayland-rs
+- wayland-protocols - https://github.com/smithay/wayland-rs
+- wayland-scanner - https://github.com/smithay/wayland-rs
+- wayland-sys - https://github.com/smithay/wayland-rs
 
 ```
 Copyright (c) 2015 Elinor Berger
@@ -2650,7 +2650,7 @@ THE SOFTWARE.
 
 Used by:
 
-- ordered-float 5.5.0 - https://github.com/reem/rust-ordered-float
+- ordered-float - https://github.com/reem/rust-ordered-float
 
 ```
 Copyright (c) 2015 Jonathan Reem
@@ -2685,8 +2685,8 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- unicode-segmentation 1.13.3 - https://github.com/unicode-rs/unicode-segmentation
-- unicode-width 0.2.2 - https://github.com/unicode-rs/unicode-width
+- unicode-segmentation - https://github.com/unicode-rs/unicode-segmentation
+- unicode-width - https://github.com/unicode-rs/unicode-width
 
 ```
 Copyright (c) 2015 The Rust Project Developers
@@ -2721,7 +2721,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- dlib 0.5.3 - https://github.com/elinorbgr/dlib
+- dlib - https://github.com/elinorbgr/dlib
 
 ```
 Copyright (c) 2015 Victor Berger
@@ -2749,7 +2749,7 @@ THE SOFTWARE.
 
 Used by:
 
-- png 0.18.1 - https://github.com/image-rs/image-png
+- png - https://github.com/image-rs/image-png
 
 ```
 Copyright (c) 2015 nwin
@@ -2784,7 +2784,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- num_cpus 1.17.0 - https://github.com/seanmonstar/num_cpus
+- num_cpus - https://github.com/seanmonstar/num_cpus
 
 ```
 Copyright (c) 2015-2025 Sean McArthur
@@ -2814,7 +2814,7 @@ THE SOFTWARE.
 
 Used by:
 
-- matrixmultiply 0.3.11 - https://github.com/bluss/matrixmultiply/
+- matrixmultiply - https://github.com/bluss/matrixmultiply/
 
 ```
 Copyright (c) 2016 - 2023 Ulrik Sverdrup "bluss"
@@ -2851,7 +2851,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- ash 0.38.0+1.3.281 - https://github.com/ash-rs/ash
+- ash - https://github.com/ash-rs/ash
 
 ```
 Copyright (c) 2016 ASH
@@ -2886,9 +2886,9 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- hashbrown 0.15.5 - https://github.com/rust-lang/hashbrown
-- hashbrown 0.16.1 - https://github.com/rust-lang/hashbrown
-- hashbrown 0.17.1 - https://github.com/rust-lang/hashbrown
+- hashbrown - https://github.com/rust-lang/hashbrown
+- hashbrown - https://github.com/rust-lang/hashbrown
+- hashbrown - https://github.com/rust-lang/hashbrown
 
 ```
 Copyright (c) 2016 Amanieu d'Antras
@@ -2923,7 +2923,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- utf8parse 0.2.2 - https://github.com/alacritty/vte
+- utf8parse - https://github.com/alacritty/vte
 
 ```
 Copyright (c) 2016 Joe Wilm
@@ -2958,9 +2958,9 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- lock_api 0.4.14 - https://github.com/Amanieu/parking_lot
-- parking_lot 0.12.5 - https://github.com/Amanieu/parking_lot
-- parking_lot_core 0.9.12 - https://github.com/Amanieu/parking_lot
+- lock_api - https://github.com/Amanieu/parking_lot
+- parking_lot - https://github.com/Amanieu/parking_lot
+- parking_lot_core - https://github.com/Amanieu/parking_lot
 
 ```
 Copyright (c) 2016 The Rust Project Developers
@@ -2995,7 +2995,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- indexmap 2.14.2 - https://github.com/indexmap-rs/indexmap
+- indexmap - https://github.com/indexmap-rs/indexmap
 
 ```
 Copyright (c) 2016--2017
@@ -3030,7 +3030,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- equivalent 1.0.2 - https://github.com/indexmap-rs/equivalent
+- equivalent - https://github.com/indexmap-rs/equivalent
 
 ```
 Copyright (c) 2016--2023
@@ -3065,7 +3065,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- scopeguard 1.2.0 - https://github.com/bluss/scopeguard
+- scopeguard - https://github.com/bluss/scopeguard
 
 ```
 Copyright (c) 2016-2019 Ulrik Sverdrup "bluss" and scopeguard developers
@@ -3100,7 +3100,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- arc-swap 1.9.2 - https://github.com/vorner/arc-swap
+- arc-swap - https://github.com/vorner/arc-swap
 
 ```
 Copyright (c) 2017 arc-swap developers
@@ -3135,7 +3135,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- smallvec 1.16.2 - https://github.com/servo/rust-smallvec
+- smallvec - https://github.com/servo/rust-smallvec
 
 ```
 Copyright (c) 2018 The Servo Project Developers
@@ -3170,7 +3170,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- ahash 0.8.12 - https://github.com/tkaitchuck/ahash
+- ahash - https://github.com/tkaitchuck/ahash
 
 ```
 Copyright (c) 2018 Tom Kaitchuck
@@ -3205,7 +3205,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- smithay-client-toolkit 0.19.2 - https://github.com/smithay/client-toolkit
+- smithay-client-toolkit - https://github.com/smithay/client-toolkit
 
 ```
 Copyright (c) 2018 Victor Berger
@@ -3233,7 +3233,7 @@ THE SOFTWARE.
 
 Used by:
 
-- calloop 0.13.0 - https://github.com/Smithay/calloop
+- calloop - https://github.com/Smithay/calloop
 
 ```
 Copyright (c) 2018 Victor Berger
@@ -3262,7 +3262,7 @@ THE SOFTWARE.
 
 Used by:
 
-- ttf-parser 0.25.1 - https://github.com/harfbuzz/ttf-parser
+- ttf-parser - https://github.com/harfbuzz/ttf-parser
 
 ```
 Copyright (c) 2018 Yevhenii Reizner
@@ -3292,7 +3292,7 @@ THE SOFTWARE.
 
 Used by:
 
-- getrandom 0.2.17 - https://github.com/rust-random/getrandom
+- getrandom - https://github.com/rust-random/getrandom
 
 ```
 Copyright (c) 2018-2024 The rust-random Project Developers
@@ -3328,7 +3328,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- getrandom 0.3.4 - https://github.com/rust-random/getrandom
+- getrandom - https://github.com/rust-random/getrandom
 
 ```
 Copyright (c) 2018-2025 The rust-random Project Developers
@@ -3364,7 +3364,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- rand_core 0.10.1 - https://github.com/rust-random/rand_core
+- rand_core - https://github.com/rust-random/rand_core
 
 ```
 Copyright (c) 2018-2026 The Rand Project Developers
@@ -3399,7 +3399,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- getrandom 0.4.3 - https://github.com/rust-random/getrandom
+- getrandom - https://github.com/rust-random/getrandom
 
 ```
 Copyright (c) 2018-2026 The rust-random Project Developers
@@ -3435,7 +3435,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- slab 0.4.12 - https://github.com/tokio-rs/slab
+- slab - https://github.com/tokio-rs/slab
 
 ```
 Copyright (c) 2019 Carl Lerche
@@ -3470,7 +3470,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- presser 0.3.1 - https://github.com/EmbarkStudios/presser
+- presser - https://github.com/EmbarkStudios/presser
 
 ```
 Copyright (c) 2019 Embark Studios
@@ -3505,7 +3505,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- ppv-lite86 0.2.21 - https://github.com/cryptocorrosion/cryptocorrosion
+- ppv-lite86 - https://github.com/cryptocorrosion/cryptocorrosion
 
 ```
 Copyright (c) 2019 The CryptoCorrosion Contributors
@@ -3540,8 +3540,8 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- tracing-core 0.1.36 - https://github.com/tokio-rs/tracing
-- tracing 0.1.44 - https://github.com/tokio-rs/tracing
+- tracing-core - https://github.com/tokio-rs/tracing
+- tracing - https://github.com/tokio-rs/tracing
 
 ```
 Copyright (c) 2019 Tokio Contributors
@@ -3576,7 +3576,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- chacha20 0.10.2 - https://github.com/RustCrypto/stream-ciphers
+- chacha20 - https://github.com/RustCrypto/stream-ciphers
 
 ```
 Copyright (c) 2019-2026 The RustCrypto Project Developers
@@ -3611,7 +3611,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- iana-time-zone 0.1.65 - https://github.com/strawlab/iana-time-zone
+- iana-time-zone - https://github.com/strawlab/iana-time-zone
 
 ```
 Copyright (c) 2020 Andrew D. Straw
@@ -3646,7 +3646,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- downcast-rs 1.2.1 - https://github.com/marcianx/downcast-rs
+- downcast-rs - https://github.com/marcianx/downcast-rs
 
 ```
 Copyright (c) 2020 Ashish Myles and contributors
@@ -3681,7 +3681,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- document-features 0.2.12 - https://github.com/slint-ui/document-features
+- document-features - https://github.com/slint-ui/document-features
 
 ```
 Copyright (c) 2020 Olivier Goffart <ogoffart@sixtyfps.io>
@@ -3710,7 +3710,7 @@ SOFTWARE.
 
 Used by:
 
-- litrs 1.0.0 - https://github.com/LukasKalbertodt/litrs
+- litrs - https://github.com/LukasKalbertodt/litrs
 
 ```
 Copyright (c) 2020 Project Developers
@@ -3745,7 +3745,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- memmap2 0.9.11 - https://github.com/RazrFalcon/memmap2-rs
+- memmap2 - https://github.com/RazrFalcon/memmap2-rs
 
 ```
 Copyright (c) 2020 Yevhenii Reizner
@@ -3781,7 +3781,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- pollster 1.0.1 - https://github.com/zesterer/pollster
+- pollster - https://github.com/zesterer/pollster
 
 ```
 Copyright (c) 2020-2021 Joshua Barretto
@@ -3816,7 +3816,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- cpufeatures 0.3.1 - https://github.com/RustCrypto/utils
+- cpufeatures - https://github.com/RustCrypto/utils
 
 ```
 Copyright (c) 2020-2026 The RustCrypto Project Developers
@@ -3851,7 +3851,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- gpu-allocator 0.28.0 - https://github.com/Traverse-Research/gpu-allocator
+- gpu-allocator - https://github.com/Traverse-Research/gpu-allocator
 
 ```
 Copyright (c) 2021 Traverse Research B.V.
@@ -3867,7 +3867,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 Used by:
 
-- renderdoc-sys 1.1.0 - https://github.com/ebkalderon/renderdoc-rs
+- renderdoc-sys - https://github.com/ebkalderon/renderdoc-rs
 
 ```
 Copyright (c) 2022 Eyal Kalderon
@@ -3902,7 +3902,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- strict-num 0.1.1 - https://github.com/RazrFalcon/strict-num
+- strict-num - https://github.com/RazrFalcon/strict-num
 
 ```
 Copyright (c) 2022 Yevhenii Reizner
@@ -3931,7 +3931,7 @@ THE SOFTWARE.
 
 Used by:
 
-- xkeysym 0.2.1 - https://github.com/notgull/xkeysym
+- xkeysym - https://github.com/notgull/xkeysym
 
 ```
 Copyright (c) 2022-2023 John Nunley
@@ -3960,7 +3960,7 @@ SOFTWARE.
 
 Used by:
 
-- calloop-wayland-source 0.3.0 - https://github.com/smithay/calloop-wayland-source
+- calloop-wayland-source - https://github.com/smithay/calloop-wayland-source
 
 ```
 Copyright (c) 2023 Kirill Chibisov
@@ -3988,8 +3988,8 @@ THE SOFTWARE.
 
 Used by:
 
-- cursor-icon 1.2.0 - https://github.com/rust-windowing/cursor-icon
-- wayland-csd-frame 0.3.0 - https://github.com/rust-windowing/wayland-csd-frame
+- cursor-icon - https://github.com/rust-windowing/cursor-icon
+- wayland-csd-frame - https://github.com/rust-windowing/wayland-csd-frame
 
 ```
 Copyright (c) 2023 Kirill Chibisov
@@ -4018,8 +4018,8 @@ SOFTWARE.
 
 Used by:
 
-- bit-set 0.8.0 - https://github.com/contain-rs/bit-set
-- bit-vec 0.8.0 - https://github.com/contain-rs/bit-vec
+- bit-set - https://github.com/contain-rs/bit-set
+- bit-vec - https://github.com/contain-rs/bit-vec
 
 ```
 Copyright (c) 2023 The Rust Project Developers
@@ -4054,16 +4054,16 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- anstream 1.0.0 - https://github.com/rust-cli/anstyle.git
-- anstyle-parse 1.0.0 - https://github.com/rust-cli/anstyle.git
-- anstyle-query 1.1.5 - https://github.com/rust-cli/anstyle.git
-- anstyle-wincon 3.0.11 - https://github.com/rust-cli/anstyle.git
-- anstyle 1.0.14 - https://github.com/rust-cli/anstyle.git
-- colorchoice 1.0.5 - https://github.com/rust-cli/anstyle.git
-- env_filter 2.0.0 - https://github.com/rust-cli/env_logger
-- env_logger 0.11.11 - https://github.com/rust-cli/env_logger
-- is_terminal_polyfill 1.70.2 - https://github.com/polyfill-rs/is_terminal_polyfill
-- once_cell_polyfill 1.70.2 - https://github.com/polyfill-rs/once_cell_polyfill
+- anstream - https://github.com/rust-cli/anstyle.git
+- anstyle-parse - https://github.com/rust-cli/anstyle.git
+- anstyle-query - https://github.com/rust-cli/anstyle.git
+- anstyle-wincon - https://github.com/rust-cli/anstyle.git
+- anstyle - https://github.com/rust-cli/anstyle.git
+- colorchoice - https://github.com/rust-cli/anstyle.git
+- env_filter - https://github.com/rust-cli/env_logger
+- env_logger - https://github.com/rust-cli/env_logger
+- is_terminal_polyfill - https://github.com/polyfill-rs/is_terminal_polyfill
+- once_cell_polyfill - https://github.com/polyfill-rs/once_cell_polyfill
 
 ```
 Copyright (c) Individual contributors
@@ -4092,7 +4092,7 @@ SOFTWARE.
 
 Used by:
 
-- libc 0.2.190 - https://github.com/rust-lang/libc
+- libc - https://github.com/rust-lang/libc
 
 ```
 Copyright (c) The Rust Project Developers
@@ -4127,7 +4127,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- arrayvec 0.7.8 - https://github.com/bluss/arrayvec
+- arrayvec - https://github.com/bluss/arrayvec
 
 ```
 Copyright (c) Ulrik Sverdrup "bluss" 2015-2023
@@ -4162,9 +4162,9 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- rand_distr 0.4.3 - https://github.com/rust-random/rand
-- rand_distr 0.5.1 - https://github.com/rust-random/rand_distr
-- rand_distr 0.6.0 - https://github.com/rust-random/rand_distr
+- rand_distr - https://github.com/rust-random/rand
+- rand_distr - https://github.com/rust-random/rand_distr
+- rand_distr - https://github.com/rust-random/rand_distr
 
 ```
 Copyright 2018 Developers of the Rand project
@@ -4199,14 +4199,14 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- rand 0.10.3 - https://github.com/rust-random/rand
-- rand 0.8.8 - https://github.com/rust-random/rand
-- rand 0.9.5 - https://github.com/rust-random/rand
-- rand_chacha 0.10.0 - https://github.com/rust-random/rand
-- rand_chacha 0.3.1 - https://github.com/rust-random/rand
-- rand_chacha 0.9.0 - https://github.com/rust-random/rand
-- rand_core 0.6.4 - https://github.com/rust-random/rand
-- rand_core 0.9.5 - https://github.com/rust-random/rand
+- rand - https://github.com/rust-random/rand
+- rand - https://github.com/rust-random/rand
+- rand - https://github.com/rust-random/rand
+- rand_chacha - https://github.com/rust-random/rand
+- rand_chacha - https://github.com/rust-random/rand
+- rand_chacha - https://github.com/rust-random/rand
+- rand_core - https://github.com/rust-random/rand
+- rand_core - https://github.com/rust-random/rand
 
 ```
 Copyright 2018 Developers of the Rand project
@@ -4242,7 +4242,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- as-raw-xcb-connection 1.0.1 - https://github.com/psychon/as-raw-xcb-connection
+- as-raw-xcb-connection - https://github.com/psychon/as-raw-xcb-connection
 
 ```
 Copyright 2019 as-raw-xcb-connection Contributers
@@ -4277,8 +4277,8 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- x11rb-protocol 0.13.2 - https://github.com/psychon/x11rb
-- x11rb 0.13.2 - https://github.com/psychon/x11rb
+- x11rb-protocol - https://github.com/psychon/x11rb
+- x11rb - https://github.com/psychon/x11rb
 
 ```
 Copyright 2019 x11rb Contributers
@@ -4313,7 +4313,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- softbuffer 0.4.8 - https://github.com/rust-windowing/softbuffer
+- softbuffer - https://github.com/rust-windowing/softbuffer
 
 ```
 Copyright 2022 Kirill Chibisov
@@ -4343,8 +4343,8 @@ SOFTWARE.
 
 Used by:
 
-- zerocopy-derive 0.8.59 - https://github.com/google/zerocopy
-- zerocopy 0.8.59 - https://github.com/google/zerocopy
+- zerocopy-derive - https://github.com/google/zerocopy
+- zerocopy - https://github.com/google/zerocopy
 
 ```
 Copyright 2023 The Fuchsia Authors
@@ -4380,7 +4380,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- wayland-protocols 0.32.13 - https://github.com/smithay/wayland-rs
+- wayland-protocols - https://github.com/smithay/wayland-rs
 
 ```
 Copyright © 2008-2013 Kristian Høgsberg
@@ -4423,7 +4423,7 @@ The above is the version of the MIT "Expat" License used by X.org:
 
 Used by:
 
-- statrs 0.18.0 - https://github.com/statrs-dev/statrs
+- statrs - https://github.com/statrs-dev/statrs
 
 ```
 MIT License
@@ -4454,7 +4454,7 @@ SOFTWARE.
 
 Used by:
 
-- font8x8 0.3.1 - https://gitlab.com/saibatizoku/font8x8-rs
+- font8x8 - https://gitlab.com/saibatizoku/font8x8-rs
 
 ```
 MIT License
@@ -4485,7 +4485,7 @@ SOFTWARE.
 
 Used by:
 
-- static_assertions 1.1.0 - https://github.com/nvzqz/static-assertions-rs
+- static_assertions - https://github.com/nvzqz/static-assertions-rs
 
 ```
 MIT License
@@ -4516,7 +4516,7 @@ SOFTWARE.
 
 Used by:
 
-- crc32fast 1.5.2 - https://github.com/srijs/rust-crc32fast
+- crc32fast - https://github.com/srijs/rust-crc32fast
 
 ```
 MIT License
@@ -4547,8 +4547,8 @@ SOFTWARE.
 
 Used by:
 
-- bytemuck 1.25.2 - https://github.com/Lokathor/bytemuck
-- bytemuck_derive 1.12.1 - https://github.com/Lokathor/bytemuck
+- bytemuck - https://github.com/Lokathor/bytemuck
+- bytemuck_derive - https://github.com/Lokathor/bytemuck
 
 ```
 MIT License
@@ -4567,7 +4567,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 Used by:
 
-- raw-window-handle 0.6.2 - https://github.com/rust-windowing/raw-window-handle
+- raw-window-handle - https://github.com/rust-windowing/raw-window-handle
 
 ```
 MIT License
@@ -4598,7 +4598,7 @@ SOFTWARE.
 
 Used by:
 
-- wide 1.7.1 - https://github.com/Lokathor/wide
+- wide - https://github.com/Lokathor/wide
 
 ```
 MIT License
@@ -4629,7 +4629,7 @@ SOFTWARE.
 
 Used by:
 
-- xcursor 0.3.11 - https://github.com/esposm03/xcursor-rs
+- xcursor - https://github.com/esposm03/xcursor-rs
 
 ```
 MIT License
@@ -4660,7 +4660,7 @@ SOFTWARE.
 
 Used by:
 
-- sctk-adwaita 0.10.1 - https://github.com/PolyMeilex/sctk-adwaita
+- sctk-adwaita - https://github.com/PolyMeilex/sctk-adwaita
 
 ```
 MIT License
@@ -4691,7 +4691,7 @@ SOFTWARE.
 
 Used by:
 
-- unty 0.0.5 - https://github.com/bincode-org/unty
+- unty - https://github.com/bincode-org/unty
 
 ```
 MIT License
@@ -4722,8 +4722,8 @@ SOFTWARE.
 
 Used by:
 
-- safe_arch 0.7.4 - https://github.com/Lokathor/safe_arch
-- safe_arch 1.2.0 - https://github.com/Lokathor/safe_arch
+- safe_arch - https://github.com/Lokathor/safe_arch
+- safe_arch - https://github.com/Lokathor/safe_arch
 
 ```
 MIT License
@@ -4742,7 +4742,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 Used by:
 
-- tiny-xlib 0.2.5 - https://github.com/rust-windowing/tiny-xlib
+- tiny-xlib - https://github.com/rust-windowing/tiny-xlib
 
 ```
 MIT License
@@ -4773,7 +4773,7 @@ SOFTWARE.
 
 Used by:
 
-- range-alloc 0.1.5 - https://github.com/gfx-rs/range-alloc
+- range-alloc - https://github.com/gfx-rs/range-alloc
 
 ```
 MIT License
@@ -4804,12 +4804,12 @@ SOFTWARE.
 
 Used by:
 
-- naga 28.0.0 - https://github.com/gfx-rs/wgpu
-- wgpu-core-deps-windows-linux-android 28.0.0 - https://github.com/gfx-rs/wgpu
-- wgpu-core 28.0.1 - https://github.com/gfx-rs/wgpu
-- wgpu-hal 28.0.1 - https://github.com/gfx-rs/wgpu
-- wgpu-types 28.0.0 - https://github.com/gfx-rs/wgpu
-- wgpu 28.0.0 - https://github.com/gfx-rs/wgpu
+- naga - https://github.com/gfx-rs/wgpu
+- wgpu-core-deps-windows-linux-android - https://github.com/gfx-rs/wgpu
+- wgpu-core - https://github.com/gfx-rs/wgpu
+- wgpu-hal - https://github.com/gfx-rs/wgpu
+- wgpu-types - https://github.com/gfx-rs/wgpu
+- wgpu - https://github.com/gfx-rs/wgpu
 
 ```
 MIT License
@@ -4840,31 +4840,31 @@ SOFTWARE.
 
 Used by:
 
-- chrono 0.4.45 - https://github.com/chronotope/chrono
-- dpi 0.1.2 - https://github.com/rust-windowing/winit
-- drm-fourcc 2.2.0 - https://github.com/danielzfranklin/drm-fourcc-rs
-- gpu-descriptor-types 0.2.0 - https://github.com/zakarumych/gpu-descriptor
-- gpu-descriptor 0.3.2 - https://github.com/zakarumych/gpu-descriptor
-- libm 0.2.16 - https://github.com/rust-lang/compiler-builtins
-- profiling 1.0.18 - https://github.com/aclysma/profiling
-- wide 0.7.33 - https://github.com/Lokathor/wide
-- windows-collections 0.3.2 - https://github.com/microsoft/windows-rs
-- windows-core 0.62.2 - https://github.com/microsoft/windows-rs
-- windows-future 0.3.2 - https://github.com/microsoft/windows-rs
-- windows-implement 0.60.2 - https://github.com/microsoft/windows-rs
-- windows-interface 0.59.3 - https://github.com/microsoft/windows-rs
-- windows-link 0.2.1 - https://github.com/microsoft/windows-rs
-- windows-numerics 0.3.1 - https://github.com/microsoft/windows-rs
-- windows-result 0.4.1 - https://github.com/microsoft/windows-rs
-- windows-strings 0.5.1 - https://github.com/microsoft/windows-rs
-- windows-sys 0.52.0 - https://github.com/microsoft/windows-rs
-- windows-sys 0.59.0 - https://github.com/microsoft/windows-rs
-- windows-sys 0.61.2 - https://github.com/microsoft/windows-rs
-- windows-targets 0.52.6 - https://github.com/microsoft/windows-rs
-- windows-threading 0.2.1 - https://github.com/microsoft/windows-rs
-- windows 0.62.2 - https://github.com/microsoft/windows-rs
-- windows_x86_64_gnu 0.52.6 - https://github.com/microsoft/windows-rs
-- windows_x86_64_msvc 0.52.6 - https://github.com/microsoft/windows-rs
+- chrono - https://github.com/chronotope/chrono
+- dpi - https://github.com/rust-windowing/winit
+- drm-fourcc - https://github.com/danielzfranklin/drm-fourcc-rs
+- gpu-descriptor-types - https://github.com/zakarumych/gpu-descriptor
+- gpu-descriptor - https://github.com/zakarumych/gpu-descriptor
+- libm - https://github.com/rust-lang/compiler-builtins
+- profiling - https://github.com/aclysma/profiling
+- wide - https://github.com/Lokathor/wide
+- windows-collections - https://github.com/microsoft/windows-rs
+- windows-core - https://github.com/microsoft/windows-rs
+- windows-future - https://github.com/microsoft/windows-rs
+- windows-implement - https://github.com/microsoft/windows-rs
+- windows-interface - https://github.com/microsoft/windows-rs
+- windows-link - https://github.com/microsoft/windows-rs
+- windows-numerics - https://github.com/microsoft/windows-rs
+- windows-result - https://github.com/microsoft/windows-rs
+- windows-strings - https://github.com/microsoft/windows-rs
+- windows-sys - https://github.com/microsoft/windows-rs
+- windows-sys - https://github.com/microsoft/windows-rs
+- windows-sys - https://github.com/microsoft/windows-rs
+- windows-targets - https://github.com/microsoft/windows-rs
+- windows-threading - https://github.com/microsoft/windows-rs
+- windows - https://github.com/microsoft/windows-rs
+- windows_x86_64_gnu - https://github.com/microsoft/windows-rs
+- windows_x86_64_msvc - https://github.com/microsoft/windows-rs
 
 ```
 MIT License
@@ -4892,7 +4892,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- simd-adler32 0.3.10 - https://github.com/mcountryman/simd-adler32
+- simd-adler32 - https://github.com/mcountryman/simd-adler32
 
 ```
 MIT License
@@ -4923,8 +4923,8 @@ SOFTWARE.
 
 Used by:
 
-- miniz_oxide 0.8.9 - https://github.com/Frommi/miniz_oxide/tree/master/miniz_oxide
-- miniz_oxide 0.9.1 - https://github.com/Frommi/miniz_oxide/tree/master/miniz_oxide
+- miniz_oxide - https://github.com/Frommi/miniz_oxide/tree/master/miniz_oxide
+- miniz_oxide - https://github.com/Frommi/miniz_oxide/tree/master/miniz_oxide
 
 ```
 MIT License
@@ -4959,8 +4959,8 @@ SOFTWARE.
 
 Used by:
 
-- miniz_oxide 0.8.9 - https://github.com/Frommi/miniz_oxide/tree/master/miniz_oxide
-- miniz_oxide 0.9.1 - https://github.com/Frommi/miniz_oxide/tree/master/miniz_oxide
+- miniz_oxide - https://github.com/Frommi/miniz_oxide/tree/master/miniz_oxide
+- miniz_oxide - https://github.com/Frommi/miniz_oxide/tree/master/miniz_oxide
 
 ```
 MIT License
@@ -4994,8 +4994,8 @@ SOFTWARE.
 
 Used by:
 
-- fdeflate 0.3.7 - https://github.com/image-rs/fdeflate
-- image 0.25.10 - https://github.com/image-rs/image
+- fdeflate - https://github.com/image-rs/fdeflate
+- image - https://github.com/image-rs/image
 
 ```
 MIT License
@@ -5030,7 +5030,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- half 2.7.1 - https://github.com/VoidStarKat/half-rs
+- half - https://github.com/VoidStarKat/half-rs
 
 ```
 MIT License
@@ -5059,7 +5059,7 @@ SOFTWARE.
 
 Used by:
 
-- wayland-protocols-plasma 0.3.12 - https://github.com/smithay/wayland-rs
+- wayland-protocols-plasma - https://github.com/smithay/wayland-rs
 
 ```
 MIT License Copyright (c) <year> <copyright holders>
@@ -5088,41 +5088,41 @@ OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- adler2 2.0.1 - https://github.com/oyvindln/adler2
-- concurrent-queue 2.5.0 - https://github.com/smol-rs/concurrent-queue
-- drm-ffi 0.9.1 - https://github.com/Smithay/drm-rs
-- drm-sys 0.8.1 - https://github.com/Smithay/drm-rs
-- drm 0.14.1 - https://github.com/Smithay/drm-rs
-- fastrand 2.5.0 - https://github.com/smol-rs/fastrand
-- itoa 1.0.18 - https://github.com/dtolnay/itoa
-- khronos-egl 6.0.0 - https://github.com/timothee-haudebourg/khronos-egl
-- linux-raw-sys 0.12.1 - https://github.com/sunfishcode/linux-raw-sys
-- linux-raw-sys 0.4.15 - https://github.com/sunfishcode/linux-raw-sys
-- linux-raw-sys 0.9.4 - https://github.com/sunfishcode/linux-raw-sys
-- once_cell 1.21.4 - https://github.com/matklad/once_cell
-- paste 1.0.15 - https://github.com/dtolnay/paste
-- pin-project-lite 0.2.17 - https://github.com/taiki-e/pin-project-lite
-- polling 3.11.0 - https://github.com/smol-rs/polling
-- proc-macro2 1.0.107 - https://github.com/dtolnay/proc-macro2
-- quote 1.0.47 - https://github.com/dtolnay/quote
-- rustc-hash 1.1.0 - https://github.com/rust-lang-nursery/rustc-hash
-- rustix 0.38.44 - https://github.com/bytecodealliance/rustix
-- rustix 1.1.5 - https://github.com/bytecodealliance/rustix
-- rustversion 1.0.23 - https://github.com/dtolnay/rustversion
-- serde 1.0.229 - https://github.com/serde-rs/serde
-- serde_core 1.0.229 - https://github.com/serde-rs/serde
-- serde_derive 1.0.229 - https://github.com/serde-rs/serde
-- serde_json 1.0.151 - https://github.com/serde-rs/json
-- smol_str 0.2.2 - https://github.com/rust-analyzer/smol_str
-- syn 2.0.119 - https://github.com/dtolnay/syn
-- syn 3.0.6 - https://github.com/dtolnay/syn
-- thiserror-impl 1.0.69 - https://github.com/dtolnay/thiserror
-- thiserror-impl 2.0.21 - https://github.com/dtolnay/thiserror
-- thiserror 1.0.69 - https://github.com/dtolnay/thiserror
-- thiserror 2.0.21 - https://github.com/dtolnay/thiserror
-- unicode-ident 1.0.26 - https://github.com/dtolnay/unicode-ident
-- x11-dl 2.21.0 - https://github.com/AltF02/x11-rs.git
-- zmij 1.0.23 - https://github.com/dtolnay/zmij
+- adler2 - https://github.com/oyvindln/adler2
+- concurrent-queue - https://github.com/smol-rs/concurrent-queue
+- drm-ffi - https://github.com/Smithay/drm-rs
+- drm-sys - https://github.com/Smithay/drm-rs
+- drm - https://github.com/Smithay/drm-rs
+- fastrand - https://github.com/smol-rs/fastrand
+- itoa - https://github.com/dtolnay/itoa
+- khronos-egl - https://github.com/timothee-haudebourg/khronos-egl
+- linux-raw-sys - https://github.com/sunfishcode/linux-raw-sys
+- linux-raw-sys - https://github.com/sunfishcode/linux-raw-sys
+- linux-raw-sys - https://github.com/sunfishcode/linux-raw-sys
+- once_cell - https://github.com/matklad/once_cell
+- paste - https://github.com/dtolnay/paste
+- pin-project-lite - https://github.com/taiki-e/pin-project-lite
+- polling - https://github.com/smol-rs/polling
+- proc-macro2 - https://github.com/dtolnay/proc-macro2
+- quote - https://github.com/dtolnay/quote
+- rustc-hash - https://github.com/rust-lang-nursery/rustc-hash
+- rustix - https://github.com/bytecodealliance/rustix
+- rustix - https://github.com/bytecodealliance/rustix
+- rustversion - https://github.com/dtolnay/rustversion
+- serde - https://github.com/serde-rs/serde
+- serde_core - https://github.com/serde-rs/serde
+- serde_derive - https://github.com/serde-rs/serde
+- serde_json - https://github.com/serde-rs/json
+- smol_str - https://github.com/rust-analyzer/smol_str
+- syn - https://github.com/dtolnay/syn
+- syn - https://github.com/dtolnay/syn
+- thiserror-impl - https://github.com/dtolnay/thiserror
+- thiserror-impl - https://github.com/dtolnay/thiserror
+- thiserror - https://github.com/dtolnay/thiserror
+- thiserror - https://github.com/dtolnay/thiserror
+- unicode-ident - https://github.com/dtolnay/unicode-ident
+- x11-dl - https://github.com/AltF02/x11-rs.git
+- zmij - https://github.com/dtolnay/zmij
 
 ```
 Permission is hereby granted, free of charge, to any
@@ -5155,7 +5155,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- glow 0.16.0 - https://github.com/grovesNL/glow
+- glow - https://github.com/grovesNL/glow
 
 ```
 Permission is hereby granted, free of charge, to any
@@ -5187,7 +5187,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- allocator-api2 0.2.21 - https://github.com/zakarumych/allocator-api2
+- allocator-api2 - https://github.com/zakarumych/allocator-api2
 
 ```
 Permission is hereby granted, free of charge, to any
@@ -5220,7 +5220,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- ctor 0.10.1 - https://github.com/mmastrac/rust-ctor
+- ctor - https://github.com/mmastrac/rust-ctor
 
 ```
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
@@ -5234,7 +5234,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 Used by:
 
-- tracing-core 0.1.36 - https://github.com/tokio-rs/tracing
+- tracing-core - https://github.com/tokio-rs/tracing
 
 ```
 The MIT License (MIT)
@@ -5265,7 +5265,7 @@ SOFTWARE.
 
 Used by:
 
-- typenum 1.20.1 - https://github.com/paholg/typenum
+- typenum - https://github.com/paholg/typenum
 
 ```
 The MIT License (MIT)
@@ -5296,11 +5296,11 @@ SOFTWARE.
 
 Used by:
 
-- aho-corasick 1.1.5 - https://github.com/BurntSushi/aho-corasick
-- byteorder-lite 0.1.0 - https://github.com/image-rs/byteorder-lite
-- jiff-core 0.1.1 - https://github.com/BurntSushi/jiff
-- jiff 0.2.37 - https://github.com/BurntSushi/jiff
-- memchr 2.8.3 - https://github.com/BurntSushi/memchr
+- aho-corasick - https://github.com/BurntSushi/aho-corasick
+- byteorder-lite - https://github.com/image-rs/byteorder-lite
+- jiff-core - https://github.com/BurntSushi/jiff
+- jiff - https://github.com/BurntSushi/jiff
+- memchr - https://github.com/BurntSushi/memchr
 
 ```
 The MIT License (MIT)
@@ -5331,12 +5331,12 @@ THE SOFTWARE.
 
 Used by:
 
-- crossbeam-channel 0.5.17 - https://github.com/crossbeam-rs/crossbeam
-- crossbeam-deque 0.8.8 - https://github.com/crossbeam-rs/crossbeam
-- crossbeam-epoch 0.9.21 - https://github.com/crossbeam-rs/crossbeam
-- crossbeam-queue 0.3.14 - https://github.com/crossbeam-rs/crossbeam
-- crossbeam-utils 0.8.23 - https://github.com/crossbeam-rs/crossbeam
-- crossbeam 0.8.5 - https://github.com/crossbeam-rs/crossbeam
+- crossbeam-channel - https://github.com/crossbeam-rs/crossbeam
+- crossbeam-deque - https://github.com/crossbeam-rs/crossbeam
+- crossbeam-epoch - https://github.com/crossbeam-rs/crossbeam
+- crossbeam-queue - https://github.com/crossbeam-rs/crossbeam
+- crossbeam-utils - https://github.com/crossbeam-rs/crossbeam
+- crossbeam - https://github.com/crossbeam-rs/crossbeam
 
 ```
 The MIT License (MIT)
@@ -5373,7 +5373,7 @@ DEALINGS IN THE SOFTWARE.
 
 Used by:
 
-- xkbcommon-dl 0.4.2 - https://github.com/rust-windowing/xkbcommon-dl
+- xkbcommon-dl - https://github.com/rust-windowing/xkbcommon-dl
 
 ```
 The MIT License (MIT)
@@ -5404,7 +5404,7 @@ SOFTWARE.
 
 Used by:
 
-- quick-xml 0.41.0 - https://github.com/tafia/quick-xml
+- quick-xml - https://github.com/tafia/quick-xml
 
 ```
 The MIT License (MIT)
@@ -5437,8 +5437,8 @@ THE SOFTWARE.
 
 Used by:
 
-- moldyat_core 0.2.0
-- moldyat_wgpu 0.2.0
+- moldyat_core
+- moldyat_wgpu
 
 ```
 Mozilla Public License Version 2.0
@@ -5821,7 +5821,7 @@ Exhibit B - "Incompatible With Secondary Licenses" Notice
 
 Used by:
 
-- unicode-ident 1.0.26 - https://github.com/dtolnay/unicode-ident
+- unicode-ident - https://github.com/dtolnay/unicode-ident
 
 ```
 UNICODE LICENSE V3
@@ -5870,8 +5870,8 @@ authorization of the copyright holder.
 
 Used by:
 
-- foldhash 0.1.5 - https://github.com/orlp/foldhash
-- foldhash 0.2.0 - https://github.com/orlp/foldhash
+- foldhash - https://github.com/orlp/foldhash
+- foldhash - https://github.com/orlp/foldhash
 
 ```
 Copyright (c) 2024 Orson Peters
