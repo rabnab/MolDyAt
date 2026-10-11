@@ -16,7 +16,7 @@ workspace = true
 moldyat_core = { path = "../core" }
 
 # WGPU rendering
-wgpu = "28"
+wgpu = "30"
 pollster = "1"
 bytemuck = { version = "1.14", features = ["derive"] }
 font8x8 = "0.3"
