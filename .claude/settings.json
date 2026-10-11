@@ -3,7 +3,7 @@
     "allow": [
       "mcp__rustrover__read_file",
       "Bash(cargo test *)",
-      "Bash(sed:*)",
+      "Bash(sed -n *)",
       "Bash(git --no-pager diff *)",
       "Bash(git --no-pager show *)",
       "Bash(git --no-pager status *)",
@@ -15,7 +15,6 @@
       "mcp__rustrover__get_file_problems",
       "Bash(git --no-pager rev-list *)",
       "Bash(git --no-pager branch --list *)",
-      "mcp__ccd_session_mgmt__search_session_transcripts",
       "mcp__rustrover__search_text",
       "Bash(cargo ci-test-headless-regression)",
       "Bash(cargo ci-test-drift)"
