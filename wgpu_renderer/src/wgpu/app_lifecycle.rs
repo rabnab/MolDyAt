@@ -45,7 +45,7 @@ impl AppLifecycle {
 
         window.set_cursor_visible(false);
 
-        let ctx = WgpuContext::new(Arc::clone(&window));
+        let ctx = WgpuContext::new(Arc::clone(&window), event_loop.owned_display_handle());
         log::debug!("WGPU context initialized, window size: {:?}", ctx.size());
 
         let pipelines = WgpuPipelines::new(&ctx.device, &ctx.queue, ctx.format);

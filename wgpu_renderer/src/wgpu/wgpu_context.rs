@@ -12,6 +12,7 @@ use std::time::Instant;
 use wgpu::{
     Adapter, Device, Instance, PresentMode, Queue, Surface, SurfaceConfiguration, TextureFormat,
 };
+use winit::event_loop::OwnedDisplayHandle;
 use winit::window::Window;
 
 /// Overrides the present mode: `fifo`, `fifo_relaxed`, `mailbox`,
@@ -189,24 +190,25 @@ impl WgpuContext {
     ///
     /// # Arguments
     /// * `window` - The winit window to create a rendering surface for
+    /// * `display` - The event loop's display handle, needed by the GL backend
     ///
     /// # Panics
     /// Panics if no compatible GPU adapter is found or device creation fails.
-    pub fn new(window: Arc<Window>) -> Self {
-        pollster::block_on(Self::new_async(window))
+    pub fn new(window: Arc<Window>, display: OwnedDisplayHandle) -> Self {
+        pollster::block_on(Self::new_async(window, display))
     }
 
     /// Async initialization of WGPU context.
-    async fn new_async(window: Arc<Window>) -> Self {
+    async fn new_async(window: Arc<Window>, display: OwnedDisplayHandle) -> Self {
         // Create the instance with an explicit native backend per platform,
         // unless `WGPU_BACKEND` names another.
         let backends = wgpu::Backends::from_env().unwrap_or(PREFERRED_BACKENDS);
         log::info!("WGPU backends: {:?}", backends);
-        // The display handle only matters for the GL backend (`WGPU_BACKEND=gl`);
-        // for that, use `new_with_display_handle(event_loop.owned_display_handle())`.
+        // The display handle is required by the GL backend (`WGPU_BACKEND=gl`)
+        // and unused by Vulkan and DX12.
         let instance = Instance::new(wgpu::InstanceDescriptor {
             backends,
-            ..wgpu::InstanceDescriptor::new_without_display_handle()
+            ..wgpu::InstanceDescriptor::new_with_display_handle(Box::new(display))
         });
 
         // Create surface from window
