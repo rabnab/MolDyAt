@@ -346,7 +346,7 @@ fn create_pipeline(
 
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some(desc.label),
-        bind_group_layouts: layouts,
+        bind_group_layouts: &layouts.iter().copied().map(Some).collect::<Vec<_>>(),
         immediate_size: 0,
     });
 
@@ -357,11 +357,11 @@ fn create_pipeline(
             module: shader,
             entry_point: Some("vs_main"),
             compilation_options: Default::default(),
-            buffers: &[wgpu::VertexBufferLayout {
+            buffers: &[Some(wgpu::VertexBufferLayout {
                 array_stride: stride,
                 step_mode,
                 attributes: desc.attributes,
-            }],
+            })],
         },
         fragment: Some(wgpu::FragmentState {
             module: shader,

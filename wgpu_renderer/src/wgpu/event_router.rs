@@ -145,6 +145,10 @@ impl EventRouter {
             WindowEvent::ScaleFactorChanged { .. } => {
                 // A follow-up `Resized` event updates the surface dimensions.
             }
+            WindowEvent::Occluded(false) => {
+                // Frames were skipped while hidden.
+                main_window.request_redraw();
+            }
             WindowEvent::Focused(false) => {
                 // Key releases while unfocused never arrive.
                 state.input.release_all_keys();

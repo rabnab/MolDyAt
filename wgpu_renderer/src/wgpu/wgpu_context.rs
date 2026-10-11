@@ -12,6 +12,7 @@ use std::time::Instant;
 use wgpu::{
     Adapter, Device, Instance, PresentMode, Queue, Surface, SurfaceConfiguration, TextureFormat,
 };
+use winit::event_loop::OwnedDisplayHandle;
 use winit::window::Window;
 
 /// Overrides the present mode: `fifo`, `fifo_relaxed`, `mailbox`,
@@ -189,24 +190,25 @@ impl WgpuContext {
     ///
     /// # Arguments
     /// * `window` - The winit window to create a rendering surface for
+    /// * `display` - The event loop's display handle, needed by the GL backend
     ///
     /// # Panics
     /// Panics if no compatible GPU adapter is found or device creation fails.
-    pub fn new(window: Arc<Window>) -> Self {
-        pollster::block_on(Self::new_async(window))
+    pub fn new(window: Arc<Window>, display: OwnedDisplayHandle) -> Self {
+        pollster::block_on(Self::new_async(window, display))
     }
 
     /// Async initialization of WGPU context.
-    async fn new_async(window: Arc<Window>) -> Self {
+    async fn new_async(window: Arc<Window>, display: OwnedDisplayHandle) -> Self {
         // Create the instance with an explicit native backend per platform,
         // unless `WGPU_BACKEND` names another.
         let backends = wgpu::Backends::from_env().unwrap_or(PREFERRED_BACKENDS);
         log::info!("WGPU backends: {:?}", backends);
-        let instance = Instance::new(&wgpu::InstanceDescriptor {
+        // The display handle is required by the GL backend (`WGPU_BACKEND=gl`)
+        // and unused by Vulkan and DX12.
+        let instance = Instance::new(wgpu::InstanceDescriptor {
             backends,
-            flags: wgpu::InstanceFlags::default(),
-            backend_options: wgpu::BackendOptions::default(),
-            memory_budget_thresholds: Default::default(),
+            ..wgpu::InstanceDescriptor::new_with_display_handle(Box::new(display))
         });
 
         // Create surface from window
@@ -221,6 +223,7 @@ impl WgpuContext {
                 power_preference: wgpu::PowerPreference::HighPerformance,
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
+                apply_limit_buckets: false,
             })
             .await
             .expect("Failed to find a compatible GPU adapter");
@@ -273,6 +276,7 @@ impl WgpuContext {
         let config = SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format,
+            color_space: wgpu::SurfaceColorSpace::default(),
             width,
             height,
             present_mode,

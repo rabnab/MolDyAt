@@ -26,11 +26,14 @@ struct FrameTimings {
     acquire: Duration,
     /// Recording, submitting and presenting the frame.
     submit_present: Duration,
+    /// The surface no longer matches the window; configure it again.
+    suboptimal: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum SurfaceErrorAction {
     Exit,
+    Skip,
     Reconfigure,
     RetryLater,
 }
@@ -149,18 +152,31 @@ impl FrameRenderer {
                             timings.submit_present,
                         );
                     }
+                    if timings.suboptimal {
+                        let size = window.inner_size();
+                        ctx.resize(size.width.max(1), size.height.max(1));
+                        ctx.apply_pending_resize();
+                    }
                 }
                 Err(error) => {
-                    log::error!("Render error: {:?}", error);
                     match Self::surface_error_action(&error) {
-                        SurfaceErrorAction::Exit => event_loop.exit(),
+                        SurfaceErrorAction::Exit => {
+                            log::error!("Render error: {:?}", error);
+                            event_loop.exit();
+                        }
+                        SurfaceErrorAction::Skip => {
+                            // Redrawn on `WindowEvent::Occluded(false)`.
+                            log::debug!("Frame skipped: {:?}", error);
+                        }
                         SurfaceErrorAction::Reconfigure => {
+                            log::error!("Render error: {:?}", error);
                             let size = window.inner_size();
                             ctx.resize(size.width.max(1), size.height.max(1));
                             ctx.apply_pending_resize();
                             window.request_redraw();
                         }
                         SurfaceErrorAction::RetryLater => {
+                            log::error!("Render error: {:?}", error);
                             window.request_redraw();
                         }
                     }
@@ -172,14 +188,19 @@ impl FrameRenderer {
         true
     }
 
-    pub(super) fn surface_error_action(error: &wgpu::SurfaceError) -> SurfaceErrorAction {
-        match error {
-            wgpu::SurfaceError::OutOfMemory => SurfaceErrorAction::Exit,
-            wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated => {
+    /// How to react to a frame that could not be acquired. `Success` and
+    /// `Suboptimal` carry a texture and are rendered, so they never get here.
+    pub(super) fn surface_error_action(status: &wgpu::CurrentSurfaceTexture) -> SurfaceErrorAction {
+        match status {
+            wgpu::CurrentSurfaceTexture::Lost | wgpu::CurrentSurfaceTexture::Outdated => {
                 SurfaceErrorAction::Reconfigure
             }
-            wgpu::SurfaceError::Timeout => SurfaceErrorAction::RetryLater,
-            wgpu::SurfaceError::Other => SurfaceErrorAction::RetryLater,
+            wgpu::CurrentSurfaceTexture::Occluded => SurfaceErrorAction::Skip,
+            // Repeats on every attempt, so retrying would only spin.
+            wgpu::CurrentSurfaceTexture::Validation => SurfaceErrorAction::Exit,
+            wgpu::CurrentSurfaceTexture::Timeout
+            | wgpu::CurrentSurfaceTexture::Success(_)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(_) => SurfaceErrorAction::RetryLater,
         }
     }
 
@@ -188,9 +209,13 @@ impl FrameRenderer {
         pipelines: &WgpuPipelines,
         inset: moldyat_core::graphics::renderer::Margins,
         layers: SceneLayers,
-    ) -> Result<FrameTimings, wgpu::SurfaceError> {
+    ) -> Result<FrameTimings, wgpu::CurrentSurfaceTexture> {
         let acquire_start = Instant::now();
-        let output = ctx.surface.get_current_texture()?;
+        let (output, suboptimal) = match ctx.surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(texture) => (texture, false),
+            wgpu::CurrentSurfaceTexture::Suboptimal(texture) => (texture, true),
+            status => return Err(status),
+        };
         let acquire = acquire_start.elapsed();
         let submit_start = Instant::now();
         let view = output
@@ -230,11 +255,12 @@ impl FrameRenderer {
         }
 
         ctx.queue.submit(std::iter::once(encoder.finish()));
-        output.present();
+        ctx.queue.present(output);
 
         Ok(FrameTimings {
             acquire,
             submit_present: submit_start.elapsed(),
+            suboptimal,
         })
     }
 }
