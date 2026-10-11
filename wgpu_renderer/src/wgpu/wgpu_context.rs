@@ -202,11 +202,9 @@ impl WgpuContext {
         // unless `WGPU_BACKEND` names another.
         let backends = wgpu::Backends::from_env().unwrap_or(PREFERRED_BACKENDS);
         log::info!("WGPU backends: {:?}", backends);
-        let instance = Instance::new(&wgpu::InstanceDescriptor {
+        let instance = Instance::new(wgpu::InstanceDescriptor {
             backends,
-            flags: wgpu::InstanceFlags::default(),
-            backend_options: wgpu::BackendOptions::default(),
-            memory_budget_thresholds: Default::default(),
+            ..wgpu::InstanceDescriptor::new_without_display_handle()
         });
 
         // Create surface from window
@@ -221,6 +219,7 @@ impl WgpuContext {
                 power_preference: wgpu::PowerPreference::HighPerformance,
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
+                apply_limit_buckets: false,
             })
             .await
             .expect("Failed to find a compatible GPU adapter");
@@ -273,6 +272,7 @@ impl WgpuContext {
         let config = SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format,
+            color_space: wgpu::SurfaceColorSpace::default(),
             width,
             height,
             present_mode,

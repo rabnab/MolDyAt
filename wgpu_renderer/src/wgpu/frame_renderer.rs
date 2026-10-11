@@ -10,7 +10,6 @@ use moldyat_core::graphics::renderer::event_loop::UnifiedRenderState;
 use moldyat_core::objects2d::ball_impl::BallFactory;
 use std::time::{Duration, Instant};
 use winit::dpi::PhysicalSize;
-use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId};
 
 /// Log target for the timings of frames that apply a window resize. Enable
@@ -30,7 +29,6 @@ struct FrameTimings {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum SurfaceErrorAction {
-    Exit,
     Reconfigure,
     RetryLater,
 }
@@ -66,7 +64,6 @@ impl FrameRenderer {
     /// Returns `true` if the event was handled (i.e., it was for the main window and rendering was attempted), or `false` if the event should be ignored (e.g., it was for a different window).
     pub(super) fn handle_redraw_requested(
         window_id: WindowId,
-        event_loop: &ActiveEventLoop,
         window: &Window,
         ctx: &mut WgpuContext,
         pipelines: &mut WgpuPipelines,
@@ -153,7 +150,6 @@ impl FrameRenderer {
                 Err(error) => {
                     log::error!("Render error: {:?}", error);
                     match Self::surface_error_action(&error) {
-                        SurfaceErrorAction::Exit => event_loop.exit(),
                         SurfaceErrorAction::Reconfigure => {
                             let size = window.inner_size();
                             ctx.resize(size.width.max(1), size.height.max(1));
@@ -172,14 +168,14 @@ impl FrameRenderer {
         true
     }
 
-    pub(super) fn surface_error_action(error: &wgpu::SurfaceError) -> SurfaceErrorAction {
-        match error {
-            wgpu::SurfaceError::OutOfMemory => SurfaceErrorAction::Exit,
-            wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated => {
+    /// How to react to a frame that could not be acquired. `Success` and
+    /// `Suboptimal` carry a texture and are rendered, so they never get here.
+    pub(super) fn surface_error_action(status: &wgpu::CurrentSurfaceTexture) -> SurfaceErrorAction {
+        match status {
+            wgpu::CurrentSurfaceTexture::Lost | wgpu::CurrentSurfaceTexture::Outdated => {
                 SurfaceErrorAction::Reconfigure
             }
-            wgpu::SurfaceError::Timeout => SurfaceErrorAction::RetryLater,
-            wgpu::SurfaceError::Other => SurfaceErrorAction::RetryLater,
+            _ => SurfaceErrorAction::RetryLater,
         }
     }
 
@@ -188,9 +184,13 @@ impl FrameRenderer {
         pipelines: &WgpuPipelines,
         inset: moldyat_core::graphics::renderer::Margins,
         layers: SceneLayers,
-    ) -> Result<FrameTimings, wgpu::SurfaceError> {
+    ) -> Result<FrameTimings, wgpu::CurrentSurfaceTexture> {
         let acquire_start = Instant::now();
-        let output = ctx.surface.get_current_texture()?;
+        let output = match ctx.surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(texture)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(texture) => texture,
+            status => return Err(status),
+        };
         let acquire = acquire_start.elapsed();
         let submit_start = Instant::now();
         let view = output
@@ -230,7 +230,7 @@ impl FrameRenderer {
         }
 
         ctx.queue.submit(std::iter::once(encoder.finish()));
-        output.present();
+        ctx.queue.present(output);
 
         Ok(FrameTimings {
             acquire,

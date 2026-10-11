@@ -50,9 +50,7 @@ impl EventRouter {
                     return;
                 };
 
-                FrameRenderer::handle_redraw_requested(
-                    window_id, event_loop, window, ctx, pipelines, state,
-                );
+                FrameRenderer::handle_redraw_requested(window_id, window, ctx, pipelines, state);
             }
             WindowEventRoute::EnergyWindow => {
                 if matches!(event, WindowEvent::RedrawRequested) {
