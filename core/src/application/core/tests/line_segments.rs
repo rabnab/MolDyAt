@@ -67,6 +67,43 @@ fn collision_reflects_ball() {
     assert!(py.abs() > 0.0);
 }
 
+/// Wall momentum (as bits) of one overlap pass over many balls inside a
+/// wall, on a dedicated Rayon pool of `threads` workers.
+fn overlap_pass_momentum_bits(threads: usize) -> [u32; 2] {
+    let run = || {
+        let mut mc = make_content();
+        mc.add_line_segment(Vec2D::new(-10.0, 0.0), Vec2D::new(10.0, 0.0));
+        for k in 0..400 {
+            let x = -9.0 + 18.0 * (k as f32 / 399.0);
+            let mut ball = Ball2D::new(k + 1, Vec2D::new(x, 0.3), (0, 1.0));
+            // Different speeds and masses, all moving into the wall.
+            ball.v = Vec2D::new((k as f32).sin(), -1.0 - (k as f32 * 0.37).cos().abs() * 7.0);
+            ball.mass = 1.0 + (k % 7) as f32 * 0.31;
+            mc.world_mut().balls.push(ball);
+        }
+        let (px, py) = mc.resolve_line_segment_collisions();
+        [px.to_bits(), py.to_bits()]
+    };
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(threads)
+        .build()
+        .expect("thread pool")
+        .install(run)
+}
+
+#[test]
+fn test_overlap_pass_wall_momentum_does_not_depend_on_thread_count() {
+    let one = overlap_pass_momentum_bits(1);
+    assert_ne!(f32::from_bits(one[1]), 0.0, "no momentum was transferred");
+    for threads in [2, 4, 7] {
+        assert_eq!(
+            one,
+            overlap_pass_momentum_bits(threads),
+            "wall momentum bits differ between 1 and {threads} threads"
+        );
+    }
+}
+
 #[test]
 fn no_collision_when_moving_away() {
     let mut mc = make_content();

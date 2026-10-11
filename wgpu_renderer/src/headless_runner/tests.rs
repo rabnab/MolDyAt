@@ -214,6 +214,8 @@ struct OperatorsRunState {
     seeded_balls: usize,
     /// Kinetic and potential energy after every step.
     energies: Vec<[u32; 2]>,
+    /// Momentum given to the walls (x, y) up to every step.
+    wall_momentum: Vec<[u32; 2]>,
     /// Id, position and velocity of every ball after the last step, by id.
     balls: Vec<(usize, [u32; 4])>,
 }
@@ -229,6 +231,7 @@ fn operators_run_state(threads: usize, seed_balls: u32, steps: u32) -> Operators
         let mut application = operators_application(&config);
         let seeded_balls = application.create_snapshot().balls.len();
         let mut energies = Vec::with_capacity(steps as usize);
+        let mut wall_momentum = Vec::with_capacity(steps as usize);
         for _ in 0..steps {
             application.simulation_step().expect("step");
             let snapshot = application.create_snapshot();
@@ -236,6 +239,8 @@ fn operators_run_state(threads: usize, seed_balls: u32, steps: u32) -> Operators
                 snapshot.kinetic_energy.to_bits(),
                 snapshot.potential_energy.to_bits(),
             ]);
+            let (px, py) = application.wall_momentum();
+            wall_momentum.push([px.to_bits(), py.to_bits()]);
         }
         let mut balls: Vec<_> = application
             .create_snapshot()
@@ -257,6 +262,7 @@ fn operators_run_state(threads: usize, seed_balls: u32, steps: u32) -> Operators
         OperatorsRunState {
             seeded_balls,
             energies,
+            wall_momentum,
             balls,
         }
     };
@@ -356,6 +362,11 @@ fn test_seeded_headless_regression_fixture_matches_checked_in_jsonl() {
     assert_matches_fixture(SEEDED_HEADLESS_FIXTURE_PATH, &seeded_headless_output());
 }
 
+/// Golden output of the operator scenario. The fixture's `run_start.config`
+/// only records the walls and the valve; the thermostat and the source
+/// sphere (positions, both switched on, emit period 20 steps, emission speed
+/// 1.05) show up as `operator_counts` only. See `operators_config` and
+/// `operators_application` for the whole scenario.
 #[test]
 #[ignore = "suite:headless-regression"]
 fn test_seeded_headless_operators_fixture_matches_checked_in_jsonl() {
@@ -388,6 +399,21 @@ fn test_seeded_operators_run_does_not_depend_on_thread_count() {
             step + 1,
             one.energies[step],
             four.energies[step]
+        );
+    }
+    assert_ne!(
+        one.wall_momentum.last(),
+        Some(&[0.0_f32.to_bits(); 2]),
+        "scenario invalid: no ball hit a wall"
+    );
+    if let Some(step) =
+        (0..one.wall_momentum.len()).find(|&i| one.wall_momentum[i] != four.wall_momentum[i])
+    {
+        panic!(
+            "1 thread vs 4 threads: wall momentum bits differ after step {}: {:08x?} vs {:08x?}",
+            step + 1,
+            one.wall_momentum[step],
+            four.wall_momentum[step]
         );
     }
     assert_eq!(

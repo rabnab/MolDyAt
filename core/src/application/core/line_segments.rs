@@ -683,7 +683,9 @@ impl SimulationWorld {
     /// `resolve_line_segment_collisions` with an obstacle list the caller
     /// already built this step (the simulation step shares one list with
     /// `sweep_wall_contact`). Each ball only depends on its own state and the
-    /// obstacles, so balls are handled in parallel.
+    /// obstacles, so balls are handled in parallel. Their results are merged
+    /// serially in ball order: a parallel reduce would add the f32 momenta
+    /// in an order that depends on the thread count (#222).
     pub(crate) fn resolve_wall_overlaps(&mut self, obstacles: &[Obstacle]) -> (f32, f32) {
         if obstacles.is_empty() {
             for ball in &mut self.balls {
@@ -691,11 +693,14 @@ impl SimulationWorld {
             }
             return (0.0, 0.0);
         }
-        let pass = self
+        let passes: Vec<OverlapPass> = self
             .balls
             .par_iter_mut()
             .map(|ball| Self::resolve_ball_overlaps(obstacles, ball))
-            .reduce(OverlapPass::default, OverlapPass::merge);
+            .collect();
+        let pass = passes
+            .into_iter()
+            .fold(OverlapPass::default(), OverlapPass::merge);
         self.sim.wall_overlap_corrections += pass.corrections;
         self.sim.wall_distance_checks += pass.checks;
         (pass.px, pass.py)
