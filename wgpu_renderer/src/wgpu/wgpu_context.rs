@@ -202,6 +202,8 @@ impl WgpuContext {
         // unless `WGPU_BACKEND` names another.
         let backends = wgpu::Backends::from_env().unwrap_or(PREFERRED_BACKENDS);
         log::info!("WGPU backends: {:?}", backends);
+        // The display handle only matters for the GL backend (`WGPU_BACKEND=gl`);
+        // for that, use `new_with_display_handle(event_loop.owned_display_handle())`.
         let instance = Instance::new(wgpu::InstanceDescriptor {
             backends,
             ..wgpu::InstanceDescriptor::new_without_display_handle()

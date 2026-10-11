@@ -50,7 +50,9 @@ impl EventRouter {
                     return;
                 };
 
-                FrameRenderer::handle_redraw_requested(window_id, window, ctx, pipelines, state);
+                FrameRenderer::handle_redraw_requested(
+                    window_id, event_loop, window, ctx, pipelines, state,
+                );
             }
             WindowEventRoute::EnergyWindow => {
                 if matches!(event, WindowEvent::RedrawRequested) {
@@ -142,6 +144,10 @@ impl EventRouter {
             }
             WindowEvent::ScaleFactorChanged { .. } => {
                 // A follow-up `Resized` event updates the surface dimensions.
+            }
+            WindowEvent::Occluded(false) => {
+                // Frames were skipped while hidden.
+                main_window.request_redraw();
             }
             WindowEvent::Focused(false) => {
                 // Key releases while unfocused never arrive.

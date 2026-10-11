@@ -10,6 +10,7 @@ use moldyat_core::graphics::renderer::event_loop::UnifiedRenderState;
 use moldyat_core::objects2d::ball_impl::BallFactory;
 use std::time::{Duration, Instant};
 use winit::dpi::PhysicalSize;
+use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId};
 
 /// Log target for the timings of frames that apply a window resize. Enable
@@ -25,10 +26,14 @@ struct FrameTimings {
     acquire: Duration,
     /// Recording, submitting and presenting the frame.
     submit_present: Duration,
+    /// The surface no longer matches the window; configure it again.
+    suboptimal: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum SurfaceErrorAction {
+    Exit,
+    Skip,
     Reconfigure,
     RetryLater,
 }
@@ -64,6 +69,7 @@ impl FrameRenderer {
     /// Returns `true` if the event was handled (i.e., it was for the main window and rendering was attempted), or `false` if the event should be ignored (e.g., it was for a different window).
     pub(super) fn handle_redraw_requested(
         window_id: WindowId,
+        event_loop: &ActiveEventLoop,
         window: &Window,
         ctx: &mut WgpuContext,
         pipelines: &mut WgpuPipelines,
@@ -146,17 +152,31 @@ impl FrameRenderer {
                             timings.submit_present,
                         );
                     }
+                    if timings.suboptimal {
+                        let size = window.inner_size();
+                        ctx.resize(size.width.max(1), size.height.max(1));
+                        ctx.apply_pending_resize();
+                    }
                 }
                 Err(error) => {
-                    log::error!("Render error: {:?}", error);
                     match Self::surface_error_action(&error) {
+                        SurfaceErrorAction::Exit => {
+                            log::error!("Render error: {:?}", error);
+                            event_loop.exit();
+                        }
+                        SurfaceErrorAction::Skip => {
+                            // Redrawn on `WindowEvent::Occluded(false)`.
+                            log::debug!("Frame skipped: {:?}", error);
+                        }
                         SurfaceErrorAction::Reconfigure => {
+                            log::error!("Render error: {:?}", error);
                             let size = window.inner_size();
                             ctx.resize(size.width.max(1), size.height.max(1));
                             ctx.apply_pending_resize();
                             window.request_redraw();
                         }
                         SurfaceErrorAction::RetryLater => {
+                            log::error!("Render error: {:?}", error);
                             window.request_redraw();
                         }
                     }
@@ -175,7 +195,12 @@ impl FrameRenderer {
             wgpu::CurrentSurfaceTexture::Lost | wgpu::CurrentSurfaceTexture::Outdated => {
                 SurfaceErrorAction::Reconfigure
             }
-            _ => SurfaceErrorAction::RetryLater,
+            wgpu::CurrentSurfaceTexture::Occluded => SurfaceErrorAction::Skip,
+            // Repeats on every attempt, so retrying would only spin.
+            wgpu::CurrentSurfaceTexture::Validation => SurfaceErrorAction::Exit,
+            wgpu::CurrentSurfaceTexture::Timeout
+            | wgpu::CurrentSurfaceTexture::Success(_)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(_) => SurfaceErrorAction::RetryLater,
         }
     }
 
@@ -186,9 +211,9 @@ impl FrameRenderer {
         layers: SceneLayers,
     ) -> Result<FrameTimings, wgpu::CurrentSurfaceTexture> {
         let acquire_start = Instant::now();
-        let output = match ctx.surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(texture)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(texture) => texture,
+        let (output, suboptimal) = match ctx.surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(texture) => (texture, false),
+            wgpu::CurrentSurfaceTexture::Suboptimal(texture) => (texture, true),
             status => return Err(status),
         };
         let acquire = acquire_start.elapsed();
@@ -235,6 +260,7 @@ impl FrameRenderer {
         Ok(FrameTimings {
             acquire,
             submit_present: submit_start.elapsed(),
+            suboptimal,
         })
     }
 }

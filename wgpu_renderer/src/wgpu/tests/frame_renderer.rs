@@ -22,8 +22,20 @@ fn transient_surface_statuses_retry_later() {
         FrameRenderer::surface_error_action(&wgpu::CurrentSurfaceTexture::Timeout),
         SurfaceErrorAction::RetryLater
     );
+}
+
+#[test]
+fn validation_surface_status_exits() {
+    assert_eq!(
+        FrameRenderer::surface_error_action(&wgpu::CurrentSurfaceTexture::Validation),
+        SurfaceErrorAction::Exit
+    );
+}
+
+#[test]
+fn occluded_surface_status_skips_the_frame() {
     assert_eq!(
         FrameRenderer::surface_error_action(&wgpu::CurrentSurfaceTexture::Occluded),
-        SurfaceErrorAction::RetryLater
+        SurfaceErrorAction::Skip
     );
 }
