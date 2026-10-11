@@ -2,11 +2,48 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+use crate::application::GameLogic;
 use crate::application::MainContent;
+use crate::objects2d::operator::MAX_EMIT_PERIOD;
 use crate::objects2d::{OperatorCollection, OperatorState, Rect, Vec2D};
 
 fn make_content() -> MainContent {
     MainContent::new(Rect::new(-20.0, 20.0, 40.0, -40.0)).unwrap()
+}
+
+/// Positions and velocities (as bits) of the balls an emitting source sphere
+/// produced in a world seeded with `seed`.
+fn emitted_ball_state(seed: u64) -> Vec<[u32; 4]> {
+    let mut mc = MainContent::new_with_seed(Rect::new(-20.0, 20.0, 40.0, -40.0), seed).unwrap();
+    mc.add_source_sphere(Vec2D::new(0.0, 0.0));
+    let id = mc.world().source_spheres.spheres()[0].id;
+    mc.toggle_source_sphere(id);
+    mc.adjust_source_sphere_emit_period(id, -(MAX_EMIT_PERIOD as i32));
+    mc.adjust_source_sphere_speed(id, 1.0);
+    for _ in 0..40 {
+        mc.simulation_step().unwrap();
+    }
+    mc.world()
+        .balls
+        .iter()
+        .map(|ball| {
+            let (pos, vel) = (ball.get_position(), ball.v);
+            [
+                pos.x.to_bits(),
+                pos.y.to_bits(),
+                vel.x.to_bits(),
+                vel.y.to_bits(),
+            ]
+        })
+        .collect()
+}
+
+#[test]
+fn test_seeded_source_sphere_emits_the_same_balls_every_run() {
+    let first = emitted_ball_state(99);
+    assert!(first.len() >= 2, "only {} balls emitted", first.len());
+    assert_eq!(first, emitted_ball_state(99));
+    assert_ne!(first, emitted_ball_state(100));
 }
 
 // ── Placement and lifecycle ─────────────────────────────────────────

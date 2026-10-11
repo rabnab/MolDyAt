@@ -12,7 +12,6 @@
 use super::{MainContent, SimulationWorld};
 use crate::objects2d::ball_impl::BallFactory;
 use crate::objects2d::{SOURCE_SPHERE_RADIUS, Vec2D};
-use rand::RngExt;
 
 /// Parameters collected from a source sphere for one emission tick.
 struct EmissionParams {
@@ -86,9 +85,10 @@ impl SimulationWorld {
         }
         let obstacles = self.collect_solid_obstacles();
 
-        let mut rng = rand::rng();
         for params in emissions {
-            let angle: f32 = rng.random_range(0.0..std::f32::consts::TAU);
+            // From the factory's RNG, not the thread RNG: a seeded run must
+            // emit the same balls every time.
+            let angle = ball_factory.random_angle();
             let velocity = Vec2D::new(
                 params.emission_speed * angle.cos(),
                 params.emission_speed * angle.sin(),
