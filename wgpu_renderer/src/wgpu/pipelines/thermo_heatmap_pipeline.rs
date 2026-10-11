@@ -23,7 +23,7 @@ use moldyat_core::application::AppResult;
 use moldyat_core::application::renderer_snapshot::ThermoGridSpec;
 use moldyat_core::application::scene_layers::SceneLayers;
 use moldyat_core::application::thermo_field::ThermoGrid;
-use moldyat_core::graphics::renderer::interpolation::fill_nans;
+use moldyat_core::graphics::renderer::interpolation::fill_nans_with_neighbour_mean;
 use moldyat_core::graphics::renderer::state_layers::ThermoDisplayMode;
 use std::time::Instant;
 
@@ -126,7 +126,7 @@ impl ThermoHeatmapPipeline {
             return false;
         }
 
-        let mut field = fill_nans(grid.as_slice(), rows, cols);
+        let mut field = fill_nans_with_neighbour_mean(grid.as_slice(), rows, cols);
         if field.iter().all(|v| !v.is_finite()) {
             return false;
         }
