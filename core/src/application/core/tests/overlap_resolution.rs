@@ -5,7 +5,7 @@
 //! Overlapping balls in a crowded box must be pushed apart (issue #240).
 
 use super::{DT_GOAL, create_main_content_for_region};
-use crate::application::{GameLogic, MainContent};
+use crate::application::MainContent;
 use crate::objects2d::ball_impl::BallFactory;
 use crate::objects2d::{Rect, Vec2D};
 

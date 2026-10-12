@@ -2,7 +2,6 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use crate::application::LogStuff;
 use crate::application::MainContent;
 use crate::application::renderer_snapshot::{
     BallRenderData, OperatorSnapshot, RendererSnapshot, ThermoGridSpec, WallSnapshot,
@@ -34,9 +33,9 @@ impl MainContent {
             kinetic_energy: self.world.sim.get_kinetic_energy(),
             potential_energy: self.world.sim.get_potential_energy(),
             time: self.world.sim.get_time(),
-            status_text: self.status_text(0, self.game_data.get_time_step()), // FPS not available during snapshot creation
+            status_text: self.status_text(0, self.step_config.get_time_step()), // FPS not available during snapshot creation
             cell_grid_bounds: self.world.cell_grid.world_rect(),
-            cursor_ball_size_idx: self.game_data.get_ball_factory().get_new_ball_size_idx(),
+            cursor_ball_size_idx: self.step_config.get_ball_factory().get_new_ball_size_idx(),
             gravity_force_multiple: current_gravity_force_multiple(
                 self.world.physics.constants.gravity,
             ),

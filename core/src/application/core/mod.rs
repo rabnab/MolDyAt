@@ -22,7 +22,7 @@ pub(crate) const FPS_GOAL: u32 = 60;
 
 pub(crate) use simulation_engine::SimulationEngine;
 
-use crate::application::game_logic::GameLogicData;
+use crate::application::StepConfig;
 use crate::application::persistence::SaveStore;
 use crate::application::phase_timings::PhaseTimings;
 use crate::application::renderer_snapshot::RendererSnapshot;
@@ -131,7 +131,7 @@ impl SimulationWorld {
 ///
 /// `MainContent` is exclusively owned by the physics thread. It keeps the
 /// simulation domain in `world` and holds the remaining thread-owned
-/// coordination state: `game_data`
+/// coordination state: `step_config`
 /// (time-step and ball-factory settings) plus the dedicated
 /// [`PhysicsRuntimeState`] for sleeping, snapshot publication, and
 /// rolling physics-FPS measurement.
@@ -145,7 +145,7 @@ impl SimulationWorld {
 pub struct MainContent {
     world: SimulationWorld,
 
-    game_data: GameLogicData,
+    step_config: StepConfig,
 
     runtime: PhysicsRuntimeState,
 }

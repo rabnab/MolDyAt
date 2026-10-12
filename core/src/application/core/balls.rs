@@ -5,7 +5,7 @@
 use super::line_segments::Obstacle;
 use super::placement::PlacementIndex;
 use super::*;
-use crate::application::{AppError, AppResult, GameLogic};
+use crate::application::{AppError, AppResult};
 use rand::rng;
 use rand_distr::{Distribution, Normal};
 
@@ -39,7 +39,7 @@ impl MainContent {
     /// Also clears all placed operators.
     pub(crate) fn clear_points(&mut self) {
         self.world.clear_balls();
-        self.game_data.get_ball_factory().reset_id_counter();
+        self.step_config.get_ball_factory().reset_id_counter();
         self.world.clear_all_operators();
     }
 
@@ -59,8 +59,8 @@ impl MainContent {
     }
 
     fn add_random_candidates_with_speed(&mut self, count: usize, max_speed: f32) {
-        let time_step = self.game_data.get_time_step();
-        let cur_radius = self.game_data.get_ball_factory().get_new_ball_radius();
+        let time_step = self.step_config.get_time_step();
+        let cur_radius = self.step_config.get_ball_factory().get_new_ball_radius();
 
         let world = self.world.world_region_inset(cur_radius);
         let min_pos = &(world.get_tl().into());
@@ -75,7 +75,7 @@ impl MainContent {
         let max_attempts = count * 4;
         for _ in 0..max_attempts {
             let nu_ball = self
-                .game_data
+                .step_config
                 .get_ball_factory()
                 .create_random((min_pos, max_pos), (0.0, max_speed));
             let margin = self.world.physics.equilibrium_edge_distance();
@@ -149,7 +149,7 @@ impl MainContent {
 
     pub(crate) fn add_candidate_at_pos(&mut self, pos: Vec2D) -> AppResult {
         let candidate = self
-            .game_data
+            .step_config
             .get_ball_factory()
             .create_massive_with_velocity(pos, Vec2D::zero());
         self.world.add_candidate_ball(candidate, 0.)
@@ -196,7 +196,7 @@ impl MainContent {
     }
 
     pub(crate) fn next_ball_size(&mut self) {
-        self.game_data.get_ball_factory().next_ball_size_idx();
+        self.step_config.get_ball_factory().next_ball_size_idx();
     }
 }
 

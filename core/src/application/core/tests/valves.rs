@@ -3,7 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use super::DT_GOAL;
-use crate::application::{GameLogic, MainContent, VerletIntegration};
+use crate::application::MainContent;
 use crate::objects2d::ball_impl::Ball2D;
 use crate::objects2d::{Rect, Vec2D};
 

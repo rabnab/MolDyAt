@@ -215,7 +215,7 @@ Document determinism boundaries explicitly. For CI use, headless mode should be 
 Prefer no required changes for the first version if the mode only:
 
 - constructs `MainContent`
-- advances via `GameLogic::simulation_step()`
+- advances via `MainContent::simulation_step()`
 - reads state via `create_snapshot()`
 - seeds via already-public constructors/helpers
 

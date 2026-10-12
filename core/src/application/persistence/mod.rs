@@ -25,7 +25,7 @@ pub use format::{WORLD_FILE_VERSION, WorldFile};
 pub use store::SaveStore;
 
 use crate::application::core::SimulationWorld;
-use crate::application::{AppResult, GameLogic, MainContent};
+use crate::application::{AppResult, MainContent};
 use crate::objects2d::Rect;
 use std::path::PathBuf;
 
@@ -70,8 +70,8 @@ impl MainContent {
 
         *self.world_mut() = world;
         self.runtime_mut().next_world_generation();
-        let (world, game_data) = self.world_and_game_data();
-        game_data
+        let (world, step_config) = self.world_and_step_config();
+        step_config
             .get_ball_factory()
             .continue_after(world.balls.iter().map(|ball| ball.get_id()));
         self.collect_neighbours_by_cell(file.time_step);

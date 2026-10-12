@@ -3,7 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use super::{MainContent, SimulationEngine};
-use crate::application::VerletIntegration;
+use crate::application::AppResult;
 use crate::objects2d::Rect;
 
 impl MainContent {
@@ -37,8 +37,30 @@ impl MainContent {
     }
 }
 
-impl VerletIntegration for MainContent {
-    fn update_sim(&mut self, dt: f32, bound_rect: &Rect) {
+impl MainContent {
+    pub(crate) fn update_sim(&mut self, dt: f32, bound_rect: &Rect) {
         SimulationEngine::update_sim(self.world_mut(), dt, bound_rect);
+    }
+
+    pub(crate) fn collect_neighbours_by_cell(&mut self, dt: f32) {
+        let (world, step_config) = self.world_and_step_config();
+        SimulationEngine::collect_neighbours_by_cell(world, step_config, dt);
+    }
+
+    /// One step with all derived data (headless runs and tests): the thermo
+    /// fields are recorded for every step that ran.
+    pub fn simulation_step(&mut self) -> AppResult<()> {
+        let dt = self.time_step();
+        self.simulation_step_with_dt(dt)
+    }
+
+    pub(crate) fn simulation_step_with_dt(&mut self, dt: f32) -> AppResult<()> {
+        let (world, step_config) = self.world_and_step_config();
+        let stepped = !world.sim.is_paused();
+        SimulationEngine::simulation_step_with_dt(world, step_config, dt)?;
+        if stepped {
+            SimulationEngine::record_thermo_fields(world);
+        }
+        Ok(())
     }
 }
