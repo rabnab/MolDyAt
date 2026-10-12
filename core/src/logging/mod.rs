@@ -11,7 +11,7 @@
 ///
 /// Call once at program start.  The default filter level is `info`;
 /// override with `RUST_LOG=debug` (or `trace`) for more detail, or with
-/// `RUST_LOG=info,thermo::verbose=debug` for the verbose-ball output only.
+/// `RUST_LOG=info,moldyat::verbose=debug` for the verbose-ball output only.
 pub fn init() {
     env_logger::Builder::from_env(
         env_logger::Env::default().default_filter_or("info,wgpu_core=warn,wgpu_hal=warn"),
@@ -21,12 +21,12 @@ pub fn init() {
 }
 
 /// Log target of the per-step output of balls in console verbose mode
-/// (key `V`, mode `c`), at `debug` level: `RUST_LOG=thermo::verbose=debug`.
-pub const VERBOSE_TARGET: &str = "thermo::verbose";
+/// (key `V`, mode `c`), at `debug` level: `RUST_LOG=moldyat::verbose=debug`.
+pub const VERBOSE_TARGET: &str = "moldyat::verbose";
 
 /// Log target of the step timings shown while the timing display (key
 /// `F4`) is on, at `info` level.
-pub const TIMING_TARGET: &str = "thermo::timing";
+pub const TIMING_TARGET: &str = "moldyat::timing";
 
 /// True if the verbose-ball output is shown with the current log filter.
 pub fn verbose_enabled() -> bool {

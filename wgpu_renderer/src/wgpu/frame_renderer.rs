@@ -14,8 +14,8 @@ use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId};
 
 /// Log target for the timings of frames that apply a window resize. Enable
-/// with `RUST_LOG=info,resize_timing=debug` (issue #217).
-const RESIZE_TIMING: &str = "resize_timing";
+/// with `RUST_LOG=info,moldyat::resize=debug` (issue #217).
+const RESIZE_TIMING: &str = "moldyat::resize";
 
 /// Coordinates redraw handling and frame submission for the WGPU backend.
 pub(super) struct FrameRenderer;

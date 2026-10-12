@@ -305,11 +305,12 @@ on stderr, at level `info` by default. Set `RUST_LOG` to change the filter:
 
 ```bash
 # Per-step output of balls in console verbose mode (key V, mode c)
-RUST_LOG=info,thermo::verbose=debug cargo run -p moldyat_wgpu
+RUST_LOG=info,moldyat::verbose=debug cargo run -p moldyat_wgpu
 ```
 
-- `thermo::verbose` (level `debug`): position, velocity and neighbour output of console-verbose balls. Hidden by default.
-- `thermo::timing` (level `info`): step timings while the timing display (`F4`) is on.
+- `moldyat::verbose` (level `debug`): position, velocity and neighbour output of console-verbose balls. Hidden by default.
+- `moldyat::timing` (level `info`): step timings while the timing display (`F4`) is on.
+- `moldyat::resize` (level `debug`): timings of frames that apply a window resize. Hidden by default.
 
 ## Saving and loading a world
 
