@@ -55,11 +55,11 @@ impl MainContent {
         &mut self.runtime
     }
 
-    pub(crate) fn world_and_game_data(&mut self) -> (&mut SimulationWorld, &GameLogicData) {
+    pub(crate) fn world_and_step_config(&mut self) -> (&mut SimulationWorld, &StepConfig) {
         let Self {
-            world, game_data, ..
+            world, step_config, ..
         } = self;
-        (world, game_data)
+        (world, step_config)
     }
 
     pub(crate) fn toggle_pause(&mut self) {
@@ -142,23 +142,23 @@ impl MainContent {
     }
 
     pub(crate) fn double_time_step(&mut self) {
-        self.game_data.double_time_step();
+        self.step_config.double_time_step();
     }
 
     pub(crate) fn halve_time_step(&mut self) {
-        self.game_data.halve_time_step();
+        self.step_config.halve_time_step();
     }
 
     /// Time step used by every following simulation step.
     pub fn time_step(&self) -> f32 {
-        self.game_data.get_time_step()
+        self.step_config.get_time_step()
     }
 
     /// Set the time step exactly (no clamping, unlike the double/halve
     /// keys). Used by headless runs. A non-finite or non-positive `dt` is
     /// rejected with an error and the current time step is kept.
     pub fn set_time_step(&mut self, dt: f32) -> AppResult<()> {
-        self.game_data.set_time_step(dt)
+        self.step_config.set_time_step(dt)
     }
 }
 

@@ -79,8 +79,8 @@ impl PhysicsRuntime {
 
             let was_paused = simulation.world().sim.is_paused();
             {
-                let (world, game_data) = simulation.world_and_game_data();
-                let _ = SimulationEngine::simulation_step(world, game_data);
+                let (world, step_config) = simulation.world_and_step_config();
+                let _ = SimulationEngine::simulation_step(world, step_config);
             }
             if !was_paused {
                 physics_step_count += 1;

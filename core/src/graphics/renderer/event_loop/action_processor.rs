@@ -3,7 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use super::{InputAction, PhysicsCoordinator};
-use crate::application::{DomainCommand, LogStuff, MainContent};
+use crate::application::DomainCommand;
+use crate::application::log_util;
 use crate::graphics::renderer::state_layers::RendererConfig;
 use std::convert::TryFrom;
 
@@ -40,7 +41,7 @@ pub fn process_action_common(
                 affects_view = true;
             }
             InputAction::PrintHelp => {
-                MainContent::print_help_message();
+                log_util::print_help_message();
             }
             InputAction::CyclePlotContent => {
                 config.cycle_plot_content();

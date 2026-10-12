@@ -3,7 +3,6 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use super::create_main_content;
-use crate::application::GameLogic;
 use crate::application::sim_stats::{HIGH_GRAVITY, NORMAL_GRAVITY};
 use crate::objects2d::Vec2D;
 

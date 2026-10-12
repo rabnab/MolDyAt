@@ -3,7 +3,6 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::application::DomainCommand;
-use crate::application::GameLogic;
 use crate::application::MainContent;
 use crate::application::tests::{sync_commands, wait_for_snapshot};
 use crate::application::{

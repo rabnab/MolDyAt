@@ -3,9 +3,9 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use super::line_segments::Obstacle;
-use super::{GameLogicData, MainContent, SimulationWorld, StatsAccumulator};
+use super::{SimulationWorld, StatsAccumulator, StepConfig};
 use crate::application::thermo_field::compute_cell_thermo;
-use crate::application::{AppResult, LogStuff};
+use crate::application::{AppResult, log_util};
 use crate::logging::log_update_hood_start;
 use crate::objects2d::ball_impl::ball_core::BounceInfo;
 use crate::objects2d::ball_impl::simd_forces::{KernelPoint, force_simd};
@@ -27,12 +27,12 @@ pub(crate) struct SimulationEngine;
 impl SimulationEngine {
     pub(crate) fn collect_neighbours_by_cell(
         world: &mut SimulationWorld,
-        game_data: &GameLogicData,
+        step_config: &StepConfig,
         dt: f32,
     ) {
         if world
             .step_count
-            .is_multiple_of(game_data.neighbour_update_interval())
+            .is_multiple_of(step_config.neighbour_update_interval())
         {
             let start = Instant::now();
             let mut timer = TimingMonad::new();
@@ -51,22 +51,22 @@ impl SimulationEngine {
 
     pub(crate) fn simulation_step(
         world: &mut SimulationWorld,
-        game_data: &GameLogicData,
+        step_config: &StepConfig,
     ) -> AppResult<()> {
-        let dt = game_data.get_time_step();
-        Self::simulation_step_with_dt(world, game_data, dt)
+        let dt = step_config.get_time_step();
+        Self::simulation_step_with_dt(world, step_config, dt)
     }
 
     pub(crate) fn simulation_step_with_dt(
         world: &mut SimulationWorld,
-        game_data: &GameLogicData,
+        step_config: &StepConfig,
         dt: f32,
     ) -> AppResult<()> {
         if world.sim.is_paused() {
             return Ok(());
         }
         if world.show_timings {
-            MainContent::log_separator_line();
+            log_util::log_separator_line();
         }
         if world.step_by_step {
             world.sim.set_pause(true);
@@ -79,17 +79,17 @@ impl SimulationEngine {
 
         #[cfg(feature = "measure-time")]
         timer.time("collect_neighbours", || {
-            Self::collect_neighbours_by_cell(world, game_data, dt)
+            Self::collect_neighbours_by_cell(world, step_config, dt)
         });
         #[cfg(not(feature = "measure-time"))]
-        Self::collect_neighbours_by_cell(world, game_data, dt);
+        Self::collect_neighbours_by_cell(world, step_config, dt);
 
         #[cfg(feature = "measure-time")]
         timer.time("update_sim", || {
-            Self::update_sim_and_move_balls(world, game_data, dt, &bound_rect);
+            Self::update_sim_and_move_balls(world, step_config, dt, &bound_rect);
         });
         #[cfg(not(feature = "measure-time"))]
-        Self::update_sim_and_move_balls(world, game_data, dt, &bound_rect);
+        Self::update_sim_and_move_balls(world, step_config, dt, &bound_rect);
 
         let thermo_start = Instant::now();
         #[cfg(feature = "measure-time")]
@@ -191,7 +191,7 @@ impl SimulationEngine {
 
     fn update_sim_and_move_balls(
         world: &mut SimulationWorld,
-        game_data: &GameLogicData,
+        step_config: &StepConfig,
         dt: f32,
         bound_rect: &Rect,
     ) {
@@ -203,7 +203,7 @@ impl SimulationEngine {
 
         Self::update_sim(world, dt, bound_rect);
         let start = Instant::now();
-        world.emit_from_source_spheres(game_data.get_ball_factory());
+        world.emit_from_source_spheres(step_config.get_ball_factory());
 
         for (i, old_pos) in old_positions.iter().enumerate() {
             let new_pos = *world.balls[i].get_position();
@@ -337,7 +337,7 @@ impl SimulationEngine {
                 if should_toggle {
                     world.balls[i].verbose.toggle_other_neighbour();
                 }
-                MainContent::log_closeness_update(&world.balls[i]);
+                log_util::log_closeness_update(&world.balls[i]);
             }
         }
     }

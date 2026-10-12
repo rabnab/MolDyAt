@@ -12,7 +12,7 @@
 //! the rounded wall ends are covered as well.
 
 use super::create_main_content_for_region;
-use crate::application::{GameLogic, MainContent};
+use crate::application::MainContent;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::BallFactory;
 

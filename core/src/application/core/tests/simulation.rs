@@ -3,7 +3,6 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use super::{DT_GOAL, create_main_content, create_main_content_for_region};
-use crate::application::GameLogic;
 use crate::objects2d::ball_impl::{Ball2D, BallFactory, Named};
 use crate::objects2d::{Vec2D, VerboseInfoMode};
 

@@ -3,7 +3,6 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use super::{create_main_content, create_main_content_for_region};
-use crate::application::GameLogic;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::{Ball2D, BallFactory};
 use float_cmp::approx_eq;
@@ -71,11 +70,11 @@ fn test_is_ball_in_region() {
     println!("ball coordinates are {:?}", ball_coord,);
     let ball_radius = 5.;
     let ball = Ball2D::new(0, ball_coord.into(), (0, ball_radius));
-    assert!(main_content.is_ball_in_region(&ball));
+    assert!(main_content.world().is_ball_in_region(&ball));
 
     let invalid_ball = Ball2D::new(1, (tl.0 - 0.1, tl.1 - 0.1).into(), (0, ball_radius));
     // Move the ball outside the region
-    assert!(!main_content.is_ball_in_region(&invalid_ball));
+    assert!(!main_content.world().is_ball_in_region(&invalid_ball));
 }
 
 #[test]
@@ -105,7 +104,7 @@ fn test_ball_collision() {
     );
 
     assert!(
-        main_content.is_ball_colliding(&colliding_ball, 0.),
+        main_content.world().is_ball_colliding(&colliding_ball, 0.),
         "Collision not detected"
     );
 }

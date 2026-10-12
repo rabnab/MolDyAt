@@ -191,7 +191,6 @@ fn test_snapshot_positions_finite() {
 // ── Thermo snapshot tests (#115) ─────────────────────────────────
 
 fn create_main_content_and_step(ball_count: usize) -> MainContent {
-    use crate::application::GameLogic;
     let mut mc = create_test_main_content_with_balls(ball_count);
     mc.simulation_step().unwrap();
     mc
@@ -298,7 +297,6 @@ fn snapshot_without_heavy_layers_skips_ball_render_data_and_thermo_grids() {
 
 #[test]
 fn dropping_the_thermo_layer_stops_and_clears_the_thermo_fields() {
-    use crate::application::GameLogic;
     use crate::application::core::SimulationEngine;
     use crate::application::scene_layers::SceneLayers;
 

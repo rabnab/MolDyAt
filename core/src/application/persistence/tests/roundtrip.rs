@@ -4,7 +4,7 @@
 
 use super::scratch_dir;
 use crate::application::persistence::{LoadSource, SaveStore, WorldFile};
-use crate::application::{DomainCommand, GameLogic, MainContent, PhysicsEvent, PhysicsThread};
+use crate::application::{DomainCommand, MainContent, PhysicsEvent, PhysicsThread};
 use crate::objects2d::ball_impl::Ball2D;
 use crate::objects2d::{Rect, Vec2D};
 use std::fs;

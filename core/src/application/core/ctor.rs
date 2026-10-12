@@ -3,10 +3,10 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use super::{BallPhysics, CellGrid, MainContent, SimStats, SimulationWorld};
-use crate::application::game_logic::GameLogicData;
+use crate::application::AppResult;
+use crate::application::StepConfig;
 use crate::application::scene_layers::SceneLayers;
 use crate::application::thermo_field::ThermoFieldHistory;
-use crate::application::{AppResult, GameLogic};
 use crate::graphics::renderer::{Margins, ViewportTransform};
 use crate::objects2d::Rect;
 use crate::objects2d::ball_impl::BallFactory;
@@ -37,10 +37,7 @@ impl MainContent {
     fn new_internal(world_rect: Rect, seed: Option<u64>) -> AppResult<Self> {
         Ok(Self {
             world: SimulationWorld::new(world_rect)?,
-            game_data: seed.map_or_else(
-                <Self as GameLogic>::init_game_logic,
-                GameLogicData::with_seed,
-            ),
+            step_config: seed.map_or_else(StepConfig::default, StepConfig::with_seed),
             runtime: super::PhysicsRuntimeState {
                 snapshot_slot: Arc::new(ArcSwapOption::from(None)),
                 wait_time: 0,
