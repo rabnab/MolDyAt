@@ -94,7 +94,7 @@ Size: **S** ≤ 1 day, **M** 2–4 days, **L** ≥ 1 week. "Deps" are hard prere
 | M1 | Replace legacy single-impl traits | Turn `GameLogic`, `LogStuff`, `VerletIntegration` into inherent methods/free functions; `GameLogicData` → `StepConfig`. No behaviour change (G2 green). | S | G2 |
 | M2 | Move UI/debug flags out of `SimulationWorld` | `show_timings`, `show_ball_stats`, `real_data`, `step_by_step` → `RuntimeOptions` in `MainContent`. World holds physical state only. Persistence format unaffected or migrated. | S | M1 |
 | M3 | Unify timing instrumentation | `TimingMonad` becomes a no-op type when `measure-time` is off; remove duplicated `#[cfg]` branches in `simulation_step_with_dt`. Timings feed G1's phase report. | S | G1 |
-| M4 | Replace `println!` in core with `log` / verbose sink | Verbose-ball output goes through a `log` target (`thermo::verbose`) or the snapshot. | S | – |
+| M4 | Replace `println!` in core with `log` / verbose sink | Verbose-ball output goes through a `log` target (`moldyat::verbose`) or the snapshot. | S | – |
 | M5 | Split oversized modules | `core/line_segments.rs` (obstacles, sweep, overlap fallback), `unified_render_state.rs`, `line_segment_tool.rs`, `energy_renderer.rs`. Target < 400 lines per file; tests follow the topic-file rule. | M | – |
 | M6 | Central `SimConfig` | Collect `DT_GOAL`, `FPS_GOAL`, LJ defaults, skin, speed limit factor, snapshot interval into one serde struct; CLI and save files read/override it. | M | M1 |
 | M7 | Crate split: `thermo_physics` | Move `objects2d`, `application/core` (world, engine), persistence into a crate without winit/softbuffer/scirs2. Keep `moldyat_core` as a re-export shim for one release. | L | M1, M2 |

@@ -289,12 +289,28 @@ cargo clippy --workspace -- -D warnings
 | `T` | Cycle thermo overlay (Off → Grid → Temperature → Pressure → Off) |
 | `B` | Toggle ball stats overlay |
 | `P` | Cycle plot content |
+| `F4` | Toggle step timings in the log |
+| `V` | Set a ball verbose: type its ID (or `a` for all, `0` for none) and a mode (`c` console, `m` main neighbours, `o` other neighbours, `s` speed) in the terminal |
 | `Ctrl` + `S` | Save the world (balls, walls, valves, thermostats, sources) to a new file in the save directory |
 | `Ctrl` + `O` | Load the newest save from the save directory; the loaded world starts paused in the default view |
 | `H` | Print help to log |
 | `0` | Reset viewport (zoom + pan) |
 | Scroll wheel | Zoom in / out |
 | Middle-click drag | Pan viewport |
+
+### Logging
+
+The simulation core never prints to stdout; everything goes through the log
+on stderr, at level `info` by default. Set `RUST_LOG` to change the filter:
+
+```bash
+# Per-step output of balls in console verbose mode (key V, mode c)
+RUST_LOG=info,moldyat::verbose=debug cargo run -p moldyat_wgpu
+```
+
+- `moldyat::verbose` (level `debug`): position, velocity and neighbour output of console-verbose balls. Hidden by default.
+- `moldyat::timing` (level `info`): step timings while the timing display (`F4`) is on.
+- `moldyat::resize` (level `debug`): timings of frames that apply a window resize. Hidden by default.
 
 ## Saving and loading a world
 

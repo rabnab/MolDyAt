@@ -25,6 +25,7 @@ mod snapshot;
 mod source_spheres;
 mod thermostats;
 mod valves;
+mod verbose;
 
 use crate::application::MainContent;
 use crate::graphics::renderer::ViewportTransform;
