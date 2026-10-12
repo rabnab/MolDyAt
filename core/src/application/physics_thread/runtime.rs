@@ -48,11 +48,11 @@ impl PhysicsRuntime {
         shutdown_signal: &ShutdownSignal,
         wakeup: &Arc<dyn Fn() + Send + Sync>,
     ) {
-        println!(
+        log::info!(
             "Physics thread ID: {:?} - Started!",
             std::thread::current().id()
         );
-        println!("Entering physics loop (running as fast as possible)...");
+        log::info!("Entering physics loop (running as fast as possible)...");
 
         let mut last_snapshot_time = Instant::now();
         let mut physics_step_count: u64 = 0;

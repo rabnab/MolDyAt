@@ -444,7 +444,12 @@ impl SimulationEngine {
         ball.accel = accel;
 
         if ball.verbose.console {
-            println!("updated to  v {:?}  a {:?}", ball.v, ball.accel);
+            log::debug!(
+                target: crate::logging::VERBOSE_TARGET,
+                "updated to  v {:?}  a {:?}",
+                ball.v,
+                ball.accel
+            );
         }
 
         let momentum = ball.moment();

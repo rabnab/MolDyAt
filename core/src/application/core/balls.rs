@@ -208,7 +208,7 @@ impl SimulationWorld {
             let keep = !ball.get_position().x.is_nan() && !ball.get_position().y.is_nan();
             if !keep {
                 removed_some_balls = true;
-                println!("ball {:?} became invalid. removing", ball);
+                log::warn!("ball {:?} became invalid. removing", ball);
             }
             keep
         });

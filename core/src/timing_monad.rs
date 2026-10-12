@@ -70,13 +70,19 @@ impl TimingMonad {
         result
     }
 
-    /// Print all accumulated timing measurements in microseconds.
-    /// Only prints when "measure-time" feature is enabled.
+    /// Log all accumulated timing measurements in microseconds, at `info`
+    /// level on [`crate::logging::TIMING_TARGET`].
+    /// Only logs when "measure-time" feature is enabled.
     #[cfg(feature = "measure-time")]
     #[inline(never)]
     pub fn log(&self) {
         for (label, duration) in &self.timings {
-            println!("{}: {:?} µs", label, duration.as_nanos() / 1000);
+            log::info!(
+                target: crate::logging::TIMING_TARGET,
+                "{}: {:?} µs",
+                label,
+                duration.as_nanos() / 1000
+            );
         }
     }
 }

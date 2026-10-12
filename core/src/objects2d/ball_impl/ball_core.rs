@@ -226,7 +226,12 @@ impl Ball2D {
             self.braking = true;
 
             if self.verbose.console {
-                println!("braking: over_speed {} at speed {:?}", over_speed, self.v);
+                log::debug!(
+                    target: crate::logging::VERBOSE_TARGET,
+                    "braking: over_speed {} at speed {:?}",
+                    over_speed,
+                    self.v
+                );
             }
         } else {
             self.braking = false;
@@ -304,9 +309,14 @@ impl Ball2D {
         self.set_position_and_update_tail(Vec2D::new(x, y));
 
         if self.verbose.console {
-            println!(
+            log::debug!(
+                target: crate::logging::VERBOSE_TARGET,
                 "moved pos {:?} -->  {:?} at dt {:.3} v {:?} a {:?}",
-                old_pos, self.pos, dt, self.v, self.accel
+                old_pos,
+                self.pos,
+                dt,
+                self.v,
+                self.accel
             );
         }
 

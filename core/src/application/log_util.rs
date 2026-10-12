@@ -139,6 +139,7 @@ impl LogStuff for MainContent {
     fn log_closeness_update(ball: &Ball2D) {
         if ball.verbose.console {
             log::debug!(
+                target: crate::logging::VERBOSE_TARGET,
                 "update_closeness: {} nearest/farthest: {}/{}",
                 ball.get_name(),
                 ball.hood.nearest,

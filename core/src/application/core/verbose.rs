@@ -7,7 +7,14 @@ use super::*;
 
 impl MainContent {
     pub(crate) fn start_handling_verbosity_input(&mut self) {
-        println!("Enter a ball ID (or 'a' to set all balls to verbose) followed by mode ([cmos]):");
+        // Not a log record: this prompt asks for a line on stdin, so it must
+        // show whatever the log filter is. Interactive (window) runs only.
+        #[allow(clippy::print_stdout)]
+        {
+            println!(
+                "Enter a ball ID (or 'a' to set all balls to verbose) followed by mode ([cmos]):"
+            );
+        }
         let mut input = String::new();
         if std::io::stdin().read_line(&mut input).is_ok() {
             let input_trimed = input.trim();
@@ -24,6 +31,7 @@ impl MainContent {
                 (particle_indicator, _) = input_trimed.split_at(input_trimed.len() - 1);
             }
 
+            let console_mode = matches!(mode, VerboseInfoMode::Console);
             if let Ok(number) = particle_indicator.parse::<usize>() {
                 match number {
                     0 => {
@@ -35,6 +43,12 @@ impl MainContent {
                 }
             } else if particle_indicator.trim() == "a" {
                 self.make_all_verbose(mode);
+            }
+            if console_mode && !crate::logging::verbose_enabled() {
+                log::warn!(
+                    "console verbose output is hidden by the log filter; \
+                     start with RUST_LOG=info,thermo::verbose=debug to see it"
+                );
             }
         }
     }

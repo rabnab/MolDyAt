@@ -452,7 +452,8 @@ impl BallPhysics {
         let bounce_info = ball.execute_update_pos(dt, bound, restitution);
 
         if ball.verbose.console {
-            println!(
+            log::debug!(
+                target: crate::logging::VERBOSE_TARGET,
                 "{} --- dt: {} new pos: {} new v: {} neigh_minmax: [{:.2},{:.2}]",
                 ball.get_name(),
                 dt,
