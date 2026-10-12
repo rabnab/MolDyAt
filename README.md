@@ -221,21 +221,22 @@ Key behavior:
 - records are JSON Lines with `schema_version = "headless.v1"`
 - non-finite numbers (`NaN`, `+Inf`, `-Inf`) are encoded as `null`
 
-Seeded regression fixture workflow (used by CI):
+Seeded regression fixture workflow (used by CI; required for refactor PRs, see [CONTRIBUTING.md](CONTRIBUTING.md#refactor-prs-required-gates)):
 
 ```bash
-# Run the fixture regression check used in CI
-cargo test -p moldyat_wgpu seeded_headless_regression_fixture_matches_checked_in_jsonl
+# Run the fixture regression checks used in CI (the tests are #[ignore]d)
+cargo ci-test-headless-regression
 ```
 
 ```bash
-# Intentionally refresh the checked-in fixture after approved contract changes
-UPDATE_HEADLESS_FIXTURE=1 cargo test -p moldyat_wgpu seeded_headless_regression_fixture_matches_checked_in_jsonl
+# Intentionally refresh the checked-in fixtures after approved contract changes
+UPDATE_HEADLESS_FIXTURE=1 cargo ci-test-headless-regression
 ```
 
-Fixture file:
+Fixture files:
 
-- `wgpu_renderer/src/headless_runner/fixtures/seeded_headless_regression.jsonl`
+- `wgpu_renderer/src/headless_runner/fixtures/seeded_headless_regression.jsonl`: free gas, summary records
+- `wgpu_renderer/src/headless_runner/fixtures/seeded_headless_operators.jsonl`: walls, a valve, a thermostat and a source sphere, with per-ball state
 - Regenerate only when changes to headless output are intentional and reviewed.
 
 ### Testing

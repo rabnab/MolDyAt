@@ -24,6 +24,15 @@ impl MainContent {
         self.world.phase_timings.reset();
     }
 
+    /// Momentum `(px, py)` given to walls (box and non-ghost line walls)
+    /// since the start of the run; the pressure readings derive from it.
+    pub fn wall_momentum(&self) -> (f32, f32) {
+        (
+            self.world.sim.wall_momentum_x,
+            self.world.sim.wall_momentum_y,
+        )
+    }
+
     /// Build snapshots with only `layers`. Without `THERMO` the thermo fields
     /// are no longer recorded; their history is dropped, so a heatmap shown
     /// again later never mixes in fields from before.

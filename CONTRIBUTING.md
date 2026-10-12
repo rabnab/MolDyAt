@@ -83,6 +83,31 @@ To avoid documentation drift, treat these sections in `.github/copilot-instructi
 
 Both formatting and linting must pass without errors.
 
+### Refactor PRs: required gates
+
+A refactor must not change simulation results. Besides the steps above, a PR
+that restructures code without an intended behavior change must pass these
+gates unchanged; CI runs all of them in the `test` job:
+
+1. **Seeded headless fixtures**: `cargo ci-test-headless-regression`
+   - `wgpu_renderer/src/headless_runner/fixtures/seeded_headless_regression.jsonl`: free gas, summary records.
+   - `wgpu_renderer/src/headless_runner/fixtures/seeded_headless_operators.jsonl`: walls, a valve, a thermostat and a source sphere, with every ball's position and velocity.
+2. **Drift suite**: `cargo ci-test-drift` (see [docs/drift-test.md](docs/drift-test.md)).
+3. **Thread-count reproducibility**: `cargo test --workspace thread_count`.
+   The same seed must give bit-identical energies, wall momentum and ball
+   state with 1 and with 4 Rayon threads. Collect parallel results in index order and reduce
+   them serially; a parallel `sum`/`reduce` over floats breaks this.
+
+A refactor PR must not touch the fixture files or the drift thresholds. If a
+fixture has to change, the PR changes behavior: say so in the description,
+refresh the fixture with `UPDATE_HEADLESS_FIXTURE=1 cargo ci-test-headless-regression`
+and include the fixture diff as evidence. Fixtures hold f32 results, so
+refresh them with the dev profile on the same target as CI (x86_64 Linux).
+`sin`, `cos` and `exp` come from the platform math library and can give
+different bits on Windows (MSVC) than on Linux (glibc), so the fixture tests
+may fail there without any behavior change. On Windows, run the fixture
+checks via CI or WSL; never refresh fixtures there.
+
 ### Submitting Changes
 
 1. **Push your branch**:

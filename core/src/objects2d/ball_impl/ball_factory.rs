@@ -159,6 +159,14 @@ impl BallFactory {
         self.create_massive_with_velocity(pos, velocity)
     }
 
+    /// A direction angle in `0..TAU` from the factory's RNG, so a seeded
+    /// factory gives a reproducible sequence.
+    pub(crate) fn random_angle(&self) -> f32 {
+        self.rng
+            .borrow_mut()
+            .random_range(0.0..std::f32::consts::TAU)
+    }
+
     /// Creates a collection of balls with normally distributed positions (Gaussian cluster).
     ///
     /// # Arguments

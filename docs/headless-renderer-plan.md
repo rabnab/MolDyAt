@@ -261,11 +261,16 @@ Implemented coverage in `wgpu_renderer` now includes:
 
 ### CI Fixture Strategy (Implemented)
 
-Fixture strategy uses a checked-in golden JSONL file:
+Fixture strategy uses checked-in golden JSONL files:
 
-- fixture path: `wgpu_renderer/src/headless_runner/fixtures/seeded_headless_regression.jsonl`
-- test gate: `seeded_headless_regression_fixture_matches_checked_in_jsonl`
+- free gas, summary records: `wgpu_renderer/src/headless_runner/fixtures/seeded_headless_regression.jsonl`
+  (test gate `seeded_headless_regression_fixture_matches_checked_in_jsonl`)
+- operators (walls, a valve, a thermostat, a source sphere), per-ball state:
+  `wgpu_renderer/src/headless_runner/fixtures/seeded_headless_operators.jsonl`
+  (test gate `seeded_headless_operators_fixture_matches_checked_in_jsonl`)
 - CI: the `Run seeded headless regression fixture` step of the `test` job in `.github/workflows/ci.yml`
+- thread-count reproducibility: `seeded_operators_run_does_not_depend_on_thread_count`
+  runs the operator scenario with 1 and with 4 Rayon threads and compares the f32 bits
 
 Failure behavior:
 
@@ -275,9 +280,9 @@ Failure behavior:
 Intentional fixture update workflow:
 
 1. Apply the intended headless contract change.
-2. Refresh the fixture:
-   `UPDATE_HEADLESS_FIXTURE=1 cargo test -p moldyat_wgpu seeded_headless_regression_fixture_matches_checked_in_jsonl`
-3. Re-run the same test without `UPDATE_HEADLESS_FIXTURE` to confirm stability.
+2. Refresh the fixtures:
+   `UPDATE_HEADLESS_FIXTURE=1 cargo ci-test-headless-regression`
+3. Re-run the same command without `UPDATE_HEADLESS_FIXTURE` to confirm stability.
 4. Include the fixture diff in PR review as contract evidence.
 
 If the implementation touches `core`, add focused tests there rather than only exercising the path from `wgpu_renderer`.

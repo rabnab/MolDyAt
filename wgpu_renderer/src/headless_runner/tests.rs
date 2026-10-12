@@ -5,6 +5,11 @@
 use super::*;
 use crate::headless_cli::{DetailLevel, LineSegmentSpec, OutputFormat, ValveSpec};
 use crate::headless_output::HeadlessSnapshotSink;
+use moldyat_core::application::operator_command::OperatorCommand;
+use moldyat_core::application::operator_command::source::{
+    AdjustSourceSphereEmitPeriod, AdjustSourceSphereSpeed, PlaceSourceSphere, ToggleSourceSphere,
+};
+use moldyat_core::application::operator_command::thermostat::{PlaceThermostat, ToggleThermostat};
 use moldyat_core::application::renderer_snapshot::RendererSnapshot;
 use std::cell::RefCell;
 use std::fs;
@@ -15,6 +20,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 const SEEDED_HEADLESS_FIXTURE_PATH: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/src/headless_runner/fixtures/seeded_headless_regression.jsonl"
+);
+const SEEDED_OPERATORS_FIXTURE_PATH: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/src/headless_runner/fixtures/seeded_headless_operators.jsonl"
 );
 
 struct RecordingSink(Rc<RefCell<Vec<u64>>>);
@@ -59,7 +68,9 @@ fn runner_with_snapshot_steps(
     (runner, recorded)
 }
 
-fn seeded_headless_output() -> String {
+/// Runs `config` on `application` with the JSONL written to a temporary
+/// file; returns its content and the number of snapshots emitted.
+fn headless_output(mut config: HeadlessConfig, application: MainContent) -> (String, u32) {
     struct TempFileGuard {
         path: std::path::PathBuf,
     }
@@ -79,6 +90,18 @@ fn seeded_headless_output() -> String {
     let _output_guard = TempFileGuard {
         path: output_path.clone(),
     };
+    config.output = Some(output_path.clone());
+    config.stdout = false;
+
+    let report = HeadlessRunner::from_config(config, application)
+        .expect("runner")
+        .run()
+        .expect("run");
+    let content = fs::read_to_string(&output_path).expect("read regression output");
+    (content, report.snapshots_emitted)
+}
+
+fn seeded_headless_output() -> String {
     let world_rect = moldyat_core::application::MainContent::bootstrap_world_rect(
         1280,
         720,
@@ -88,7 +111,7 @@ fn seeded_headless_output() -> String {
     let config = HeadlessConfig {
         steps: 6,
         snapshot_every: 2,
-        output: Some(output_path.clone()),
+        output: None,
         format: OutputFormat::Jsonl,
         detail: DetailLevel::Summary,
         rng_seed: Some(12345),
@@ -108,15 +131,146 @@ fn seeded_headless_output() -> String {
         build_application(world_rect, config.rng_seed).expect("build deterministic app");
     application.seed_random_balls(config.seed_balls.expect("seed ball count") as usize);
 
-    let report = HeadlessRunner::from_config(config, application)
-        .expect("runner")
-        .run()
-        .expect("run");
-    assert_eq!(report.snapshots_emitted, 4);
-
-    let content = fs::read_to_string(&output_path).expect("read regression output");
-    let _ = fs::remove_file(&output_path);
+    let (content, snapshots_emitted) = headless_output(config, application);
+    assert_eq!(snapshots_emitted, 4);
     content
+}
+
+/// Balls seeded in the operator scenario, before the source sphere adds more.
+const OPERATORS_SEED_BALLS: u32 = 32;
+
+/// Config of the seeded operator scenario: two walls and an open valve in a
+/// quarter-size world, so that balls reach the operators within the run.
+fn operators_config(steps: u32, snapshot_every: u32) -> HeadlessConfig {
+    HeadlessConfig {
+        steps,
+        snapshot_every,
+        detail: DetailLevel::Balls,
+        rng_seed: Some(222),
+        seed_balls: Some(OPERATORS_SEED_BALLS),
+        seed_speed: Some(3.0),
+        world_scale: Some(0.25),
+        line_segments: vec![
+            LineSegmentSpec {
+                start: (-2.0, -7.0),
+                end: (-2.0, 7.0),
+                thickness: 2.0,
+            },
+            LineSegmentSpec {
+                start: (2.0, -3.0),
+                end: (12.0, -3.0),
+                thickness: 1.0,
+            },
+        ],
+        valves: vec![ValveSpec {
+            wall: 0,
+            t_start: 0.35,
+            t_end: 0.65,
+            is_closed: false,
+        }],
+        ..HeadlessConfig::default()
+    }
+}
+
+/// The operator scenario's world: `config` plus an active thermostat left of
+/// the valve wall and an emitting source sphere right of it. Thermostats and
+/// source spheres have no headless flags, so they go through the same
+/// operator commands as the UI tools.
+fn operators_application(config: &HeadlessConfig) -> MainContent {
+    let world_rect = scale_world_rect(test_world_rect(), config.world_scale.expect("scale"));
+    let mut application =
+        prepare_application(config, world_rect, &SaveStore::new("saves"), None).expect("prepare");
+
+    Box::new(PlaceThermostat {
+        position: Vec2D::new(-8.0, 0.0),
+    })
+    .execute(&mut application);
+    Box::new(PlaceSourceSphere {
+        center: Vec2D::new(7.0, 3.0),
+    })
+    .execute(&mut application);
+    let operators = application.create_snapshot().operators;
+    let thermostat_id = operators.thermostats[0].id;
+    let sphere_id = operators.source_spheres[0].id;
+    Box::new(ToggleThermostat { thermostat_id }).execute(&mut application);
+    Box::new(ToggleSourceSphere { sphere_id }).execute(&mut application);
+    // Default period 3000 steps -> 20, default speed 0.05 -> 1.05.
+    Box::new(AdjustSourceSphereEmitPeriod {
+        sphere_id,
+        delta_steps: -2980,
+    })
+    .execute(&mut application);
+    Box::new(AdjustSourceSphereSpeed {
+        sphere_id,
+        delta: 1.0,
+    })
+    .execute(&mut application);
+    application
+}
+
+/// Bit-exact state of an operator-scenario run, for comparing runs.
+struct OperatorsRunState {
+    /// Balls before the first step.
+    seeded_balls: usize,
+    /// Kinetic and potential energy after every step.
+    energies: Vec<[u32; 2]>,
+    /// Momentum given to the walls (x, y) up to every step.
+    wall_momentum: Vec<[u32; 2]>,
+    /// Id, position and velocity of every ball after the last step, by id.
+    balls: Vec<(usize, [u32; 4])>,
+}
+
+/// Runs the operator scenario, seeded with up to `seed_balls` balls, for
+/// `steps` steps on a dedicated Rayon pool of `threads` workers.
+fn operators_run_state(threads: usize, seed_balls: u32, steps: u32) -> OperatorsRunState {
+    let run = || {
+        let config = HeadlessConfig {
+            seed_balls: Some(seed_balls),
+            ..operators_config(steps, 0)
+        };
+        let mut application = operators_application(&config);
+        let seeded_balls = application.create_snapshot().balls.len();
+        let mut energies = Vec::with_capacity(steps as usize);
+        let mut wall_momentum = Vec::with_capacity(steps as usize);
+        for _ in 0..steps {
+            application.simulation_step().expect("step");
+            let snapshot = application.create_snapshot();
+            energies.push([
+                snapshot.kinetic_energy.to_bits(),
+                snapshot.potential_energy.to_bits(),
+            ]);
+            let (px, py) = application.wall_momentum();
+            wall_momentum.push([px.to_bits(), py.to_bits()]);
+        }
+        let mut balls: Vec<_> = application
+            .create_snapshot()
+            .balls
+            .iter()
+            .map(|ball| {
+                (
+                    ball.id,
+                    [
+                        ball.position.x.to_bits(),
+                        ball.position.y.to_bits(),
+                        ball.velocity.x.to_bits(),
+                        ball.velocity.y.to_bits(),
+                    ],
+                )
+            })
+            .collect();
+        balls.sort_unstable_by_key(|(id, _)| *id);
+        OperatorsRunState {
+            seeded_balls,
+            energies,
+            wall_momentum,
+            balls,
+        }
+    };
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(threads)
+        .build()
+        .expect("thread pool")
+        .install(run)
 }
 
 fn parse_jsonl_records(input: &str) -> Vec<serde_json::Value> {
@@ -134,10 +288,48 @@ fn non_empty_lines(input: &str) -> Vec<&str> {
         .collect()
 }
 
-fn maybe_update_seeded_fixture(actual: &str) {
+fn maybe_update_fixture(fixture_path: &str, actual: &str) {
     if std::env::var("UPDATE_HEADLESS_FIXTURE").ok().as_deref() == Some("1") {
-        fs::write(SEEDED_HEADLESS_FIXTURE_PATH, actual).expect("update seeded fixture");
+        fs::write(fixture_path, actual).expect("update seeded fixture");
     }
+}
+
+/// Fails unless `actual_text` equals the checked-in fixture line by line;
+/// `UPDATE_HEADLESS_FIXTURE=1` rewrites the fixture first.
+fn assert_matches_fixture(fixture_path: &str, actual_text: &str) {
+    maybe_update_fixture(fixture_path, actual_text);
+    let expected_text = fs::read_to_string(fixture_path).expect("read seeded fixture");
+
+    let actual_records = parse_jsonl_records(actual_text);
+    let expected_records = parse_jsonl_records(&expected_text);
+    let actual_lines = non_empty_lines(actual_text);
+    let expected_lines = non_empty_lines(&expected_text);
+
+    if actual_lines != expected_lines {
+        let first_diff = actual_lines
+            .iter()
+            .zip(expected_lines.iter())
+            .position(|(actual, expected)| actual != expected);
+
+        match first_diff {
+            Some(index) => panic!(
+                "seeded headless regression output drifted at line {}\nexpected: {}\nactual:   {}",
+                index + 1,
+                expected_lines[index],
+                actual_lines[index]
+            ),
+            None => panic!(
+                "seeded headless regression output line count drifted: expected {}, actual {}",
+                expected_lines.len(),
+                actual_lines.len()
+            ),
+        }
+    }
+
+    assert_eq!(
+        actual_records, expected_records,
+        "seeded headless regression output drifted from the checked-in fixture"
+    );
 }
 
 #[test]
@@ -167,41 +359,74 @@ fn test_headless_runner_zero_interval_skips_periodic_snapshots() {
 #[test]
 #[ignore = "suite:headless-regression"]
 fn test_seeded_headless_regression_fixture_matches_checked_in_jsonl() {
-    let actual_text = seeded_headless_output();
-    maybe_update_seeded_fixture(&actual_text);
-    let expected_text =
-        fs::read_to_string(SEEDED_HEADLESS_FIXTURE_PATH).expect("read seeded fixture");
+    assert_matches_fixture(SEEDED_HEADLESS_FIXTURE_PATH, &seeded_headless_output());
+}
 
-    let actual_records = parse_jsonl_records(&actual_text);
-    let expected_records = parse_jsonl_records(&expected_text);
-    let actual_lines = non_empty_lines(&actual_text);
-    let expected_lines = non_empty_lines(&expected_text);
+/// Golden output of the operator scenario. The fixture's `run_start.config`
+/// only records the walls and the valve; the thermostat and the source
+/// sphere (positions, both switched on, emit period 20 steps, emission speed
+/// 1.05) show up as `operator_counts` only. See `operators_config` and
+/// `operators_application` for the whole scenario.
+#[test]
+#[ignore = "suite:headless-regression"]
+fn test_seeded_headless_operators_fixture_matches_checked_in_jsonl() {
+    let config = operators_config(200, 100);
+    let application = operators_application(&config);
+    let (actual_text, snapshots_emitted) = headless_output(config, application);
+    assert_eq!(snapshots_emitted, 3);
+    assert_matches_fixture(SEEDED_OPERATORS_FIXTURE_PATH, &actual_text);
+}
 
-    if actual_lines != expected_lines {
-        let first_diff = actual_lines
-            .iter()
-            .zip(expected_lines.iter())
-            .position(|(actual, expected)| actual != expected);
+#[test]
+fn test_seeded_operators_run_does_not_depend_on_thread_count() {
+    // Denser than the fixture run: more pairs interact, so a reduction whose
+    // order depends on the thread count shows up in the f32 bits.
+    const SEED_BALLS: u32 = 120;
+    const STEPS: u32 = 300;
+    let one = operators_run_state(1, SEED_BALLS, STEPS);
+    let four = operators_run_state(4, SEED_BALLS, STEPS);
 
-        match first_diff {
-            Some(index) => panic!(
-                "seeded headless regression output drifted at line {}\nexpected: {}\nactual:   {}",
-                index + 1,
-                expected_lines[index],
-                actual_lines[index]
-            ),
-            None => panic!(
-                "seeded headless regression output line count drifted: expected {}, actual {}",
-                expected_lines.len(),
-                actual_lines.len()
-            ),
-        }
-    }
-
-    assert_eq!(
-        actual_records, expected_records,
-        "seeded headless regression output drifted from the checked-in fixture"
+    // Scenario check: the source sphere emitted, so structural changes
+    // (new balls, list rebuilds) are part of what is compared.
+    assert!(
+        one.balls.len() > one.seeded_balls,
+        "scenario invalid: no ball was emitted ({} balls)",
+        one.balls.len()
     );
+    if let Some(step) = (0..one.energies.len()).find(|&i| one.energies[i] != four.energies[i]) {
+        panic!(
+            "1 thread vs 4 threads: kinetic/potential energy bits differ after step {}: {:08x?} vs {:08x?}",
+            step + 1,
+            one.energies[step],
+            four.energies[step]
+        );
+    }
+    assert_ne!(
+        one.wall_momentum.last(),
+        Some(&[0.0_f32.to_bits(); 2]),
+        "scenario invalid: no ball hit a wall"
+    );
+    if let Some(step) =
+        (0..one.wall_momentum.len()).find(|&i| one.wall_momentum[i] != four.wall_momentum[i])
+    {
+        panic!(
+            "1 thread vs 4 threads: wall momentum bits differ after step {}: {:08x?} vs {:08x?}",
+            step + 1,
+            one.wall_momentum[step],
+            four.wall_momentum[step]
+        );
+    }
+    assert_eq!(
+        one.balls.len(),
+        four.balls.len(),
+        "1 thread vs 4 threads: ball count differs"
+    );
+    if let Some((a, b)) = one.balls.iter().zip(&four.balls).find(|(a, b)| a != b) {
+        panic!(
+            "1 thread vs 4 threads diverged at ball {}: {:08x?} vs ball {}: {:08x?}",
+            a.0, a.1, b.0, b.1
+        );
+    }
 }
 
 fn test_world_rect() -> moldyat_core::objects2d::Rect {
