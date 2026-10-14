@@ -1,7 +1,7 @@
 # Performance baseline
 
 Reproducible ms/step numbers, so a refactor can show its numbers before and
-after (#221, plan item G1 in `refactoring-plan.md`). The raw report is in
+after (#221, plan item G1 in [`refactoring-plan.md`](plan/refactoring-plan.md)). The raw report is in
 [`perf-baseline.json`](perf-baseline.json).
 
 ## One command

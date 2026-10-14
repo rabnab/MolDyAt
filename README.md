@@ -416,10 +416,10 @@ wgpu_renderer/
 * [Runtime Architecture](docs/architecture.md)
 * [Simulation Coordinate Systems](docs/simulation.md)
 * [Reduced Units and Scales](docs/units.md)
-* [Headless Renderer Plan and Contract](docs/headless-renderer-plan.md)
+* [Headless Renderer Plan and Contract](docs/done/headless-renderer-plan.md)
 * [Drift Test Process](docs/drift-test.md)
-* [Operator Implementation Guide](docs/operator-implementation-guide.md)
-* [Nosé-Hoover Thermostat Plan](docs/nose-hoover.md)
+* [Operators](docs/operators.md)
+* [Nosé-Hoover Thermostat Plan](docs/done/nose-hoover.md)
 * [Copilot Instructions](.github/copilot-instructions.md)
 
 ## Contributing

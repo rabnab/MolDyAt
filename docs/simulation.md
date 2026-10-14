@@ -1,10 +1,8 @@
-# Simulation Notes
+# Coordinate Systems
 
-## Coordinate Systems
+The simulation uses a small set of coordinate systems that intentionally overlap in data flow but serve different purposes. The most important distinction is between simulation world space, pixel space in the renderer, and grid/index space for derived fields.
 
-This simulation uses a small set of coordinate systems that intentionally overlap in data flow but serve different purposes. The most important distinction is between simulation world space, pixel space in the renderer, and grid/index space for derived fields.
-
-### World Space
+## World Space
 
 World space is the canonical simulation coordinate system.
 
@@ -12,7 +10,7 @@ World space is the canonical simulation coordinate system.
 - The simulation is treated as Cartesian: positive `x` points right and positive `y` points up.
 - The default visible world is centered around the origin, so `(0, 0)` is the center of the simulation box.
 
-### Rect Representation
+## Rect Representation
 
 `Rect` is a generic container used to describe world bounds and viewport bounds. It stores:
 
@@ -32,7 +30,7 @@ describes a world that spans:
 
 This lets code recover the true bounds with `min`/`max` operations while keeping the stored rectangle compatible with top-left based rendering logic.
 
-### Pixel Space
+## Pixel Space
 
 Renderer input and output operate in window pixel coordinates.
 
@@ -43,7 +41,7 @@ Renderer input and output operate in window pixel coordinates.
 
 Because world `y` points up while pixel `y` points down, the viewport transform flips the vertical axis as part of the mapping.
 
-### Viewport Space
+## Viewport Space
 
 The full window is not always available for simulation rendering. The renderer reserves margins for UI, and the simulation is drawn only inside the viewport rectangle.
 
@@ -52,9 +50,9 @@ The full window is not always available for simulation rendering. The renderer r
 - Pan offsets are stored in world units, not pixels.
 - Zoom changes the visible world rectangle, not the underlying simulation coordinates.
 
-When code needs a visible simulation region, it should use the viewport's world-space view (`visible_world_rect`) rather than assuming the full world bounds are visible.
+The visible part of the world is the viewport's world-space view (`visible_world_rect`); it equals the world bounds only at zoom `1.0` without panning.
 
-### Operator-Local Coordinates
+## Operator-Local Coordinates
 
 Most operators are fully world-space objects, but valve segments add one local parameterization.
 
@@ -64,7 +62,7 @@ Most operators are fully world-space objects, but valve segments add one local p
 
 That means a valve's geometry is not stored as two independent world points. Instead, it is derived from its parent segment plus normalized coordinates along that segment.
 
-### Thermodynamic Grid Space
+## Thermodynamic Grid Space
 
 Derived temperature and pressure fields are stored in row-major grid space.
 
@@ -76,9 +74,9 @@ Derived temperature and pressure fields are stored in row-major grid space.
 
 This grid space is for visualization and analysis only. It does not replace world-space coordinates for simulation objects.
 
-### Practical Rules
+## Summary
 
-- Use world space for all persistent simulation state.
-- Use pixel space only for input, window geometry, and renderer output.
-- Treat `Rect` as a storage format, not as proof of axis direction; inspect bounds with `min`/`max` when orientation matters.
-- Keep operator data in world space unless the operator explicitly uses a local parameterization like valve `t` values.
+- All persistent simulation state is in world space.
+- Pixel space appears only in input handling, window geometry and renderer output.
+- `Rect` is a storage format and does not fix the axis direction; bounds come from `min`/`max`.
+- Operator data is in world space; valves are the only operator with a local parameterization (`t` along the parent wall).

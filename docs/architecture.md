@@ -1,271 +1,212 @@
 # Runtime Architecture
 
-This document describes the target runtime architecture for the refactor track started in issue `#137`, the boundaries that are already implemented, and the small remaining transitional seam after the cleanup in issue `#147`.
+MolDyAt runs a 2D Lennard-Jones simulation on a dedicated physics thread and
+draws it with wgpu on the main thread. The two threads share no mutable
+state: user input reaches the simulation as commands, and the simulation
+reaches the screen as immutable snapshots.
 
-It is not a sequencing document. For the implementation order of the refactor issues, see [refactor_architecture.md](refactor_architecture.md).
+How the layout came about is recorded in
+[refactor_architecture.md](done/refactor_architecture.md); planned changes
+are in [refactoring-plan.md](plan/refactoring-plan.md).
 
-## Goals
+## Crates
 
-The runtime refactor is driving toward four stable properties:
+| Crate | Package | Contents |
+|---|---|---|
+| `core` | `moldyat_core` | Physics (`objects2d`, `application/core`), the physics thread, commands, snapshots, persistence, and the backend-independent UI layer (`graphics`: event loop, tools, viewport, sidebar model, energy plot window) |
+| `wgpu_renderer` | `moldyat_wgpu` | The `moldyat` binary: CLI, the wgpu window and render pipelines, and the headless runner |
 
-- application-level commands are expressed once and routed through a single boundary
-- persistent simulation state is separated from stepping/runtime concerns
-- renderer state is separated from renderer orchestration and backend-specific wiring
-- backend entrypoints stay focused on windowing and rendering instead of owning simulation policy
+`moldyat_wgpu` depends on `moldyat_core`, never the reverse. Inside
+`moldyat_core`, `application` and `objects2d` do not depend on `graphics`;
+the one exception is `MainContent::bootstrap_world_rect`, which uses the
+viewport margins to size the initial world.
 
-## Layer Overview
-
-The current target structure is:
+## Threads
 
 ```text
-input/backend events
-    ↓
-renderer orchestrators and backend shells
-    ↓
-DomainCommand
-    ↓
-physics runtime / command transport
-    ↓
-simulation engine + operator commands
-    ↓
-simulation world state
-    ↓
-RendererSnapshot
-    ↓
-renderer orchestrators / backend frame submission
+main thread (winit event loop)            physics thread
+──────────────────────────────            ──────────────
+WgpuWindow / EventRouter                  PhysicsRuntime loop
+   │                                         │
+UnifiedRenderState + orchestrators           │
+   │  DomainCommand  ── mpsc channel ──►  DomainCommandHandler → MainContent
+   │                                         │   SimulationEngine::simulation_step
+   │  RendererSnapshot ◄── ArcSwap slot ──  MainContent::create_snapshot
+   │  PhysicsEvent     ◄── mpsc channel ──  (save / load results)
+FrameRenderer → RenderGraph → GPU
 ```
 
-## Ownership Boundaries
+- **Main thread.** Owns the window, input handling, the viewport, the active
+  operator tool and all GPU resources. It never touches simulation state.
+- **Physics thread.** Owns `MainContent` exclusively. Each loop iteration
+  drains all queued commands, runs one simulation step (unless paused),
+  and publishes a snapshot when the world changed.
+- **Rayon pool.** The physics step parallelises neighbour-list rebuilds,
+  positions and forces with `par_iter`. The pool has `RAYON_NUM_THREADS`
+  workers, or the number of cores minus 2.
+- **Energy plot window.** A separate winit/softbuffer window
+  (`graphics/energy_plot`) that draws the energy history from snapshots.
 
-### 1. Application Command Boundary
+## Layers
 
-`DomainCommand` is the single application-level command contract produced by renderer-side code.
+| Layer | Type | Lives in | Owns |
+|---|---|---|---|
+| Command boundary | `DomainCommand` | `core/src/application/domain_command.rs` | Every change the UI asks of the simulation |
+| Physics runtime | `PhysicsRuntime`, `DomainCommandHandler` | `core/src/application/physics_thread/` | The thread loop: draining commands, sleep cadence, snapshot cadence, wakeups, shutdown, steps/s reporting |
+| Physics-thread owner | `MainContent` | `core/src/application/core/mod.rs` | The world plus `StepConfig` (time step, ball factory) and `PhysicsRuntimeState` (wait time, snapshot slot, physics FPS, save store, world generation, requested snapshot layers) |
+| World state | `SimulationWorld` | `core/src/application/core/mod.rs` | Balls, `BallPhysics` constants, cell grid, stats, operator collections (line segments, valves, wall chains, source spheres, thermostats), the ghost wall, thermo field history, and a few run flags (step-by-step, timing and stats display, real-units display) |
+| Stepping | `SimulationEngine` | `core/src/application/core/simulation_engine.rs` | One simulation step over a `SimulationWorld` (see below); holds no state |
+| Operator mutations | `OperatorCommand` structs | `core/src/application/operator_command/` | Placing, changing and deleting operators |
+| Physics primitives | `Ball2D`, `BallPhysics`, `CellGrid`, operators | `core/src/objects2d/` | Ball data, pair potential and SIMD force kernel, Verlet lists, wall contact, operator data models |
+| Renderer state | `UnifiedRenderState` | `core/src/graphics/renderer/event_loop/` | Input handler, physics bridge, and `RenderStateData` (viewport, energy window, renderer config, cursor and tool state, last snapshot, frame metrics) |
+| Backend | `WgpuWindow` and friends | `wgpu_renderer/src/wgpu/` | Window, GPU context, event routing, frame submission, render pipelines |
 
-Responsibilities:
+### Simulation step
 
-- represent user intent independently of backend details
-- carry ball-management, simulation-control, resize, and operator actions
-- give renderer code one stable interface for domain mutations
+`SimulationEngine::simulation_step` runs these phases in order (the phase
+names match `core/src/application/phase_timings.rs`):
 
-Current home:
+1. **neighbours**: balls whose displacement since their last rebuild exceeds
+   skin/3 rebuild their Verlet lists from the 3x3 surrounding cells.
+2. **positions**: velocity-Verlet position update. Contacts with the box
+   walls and with line-segment walls are resolved along the wall normal
+   (`ball_impl::wall_contact`).
+3. **forces**: pair forces from the SIMD kernel (`simd_forces`, `f32x4`).
+4. **apply**: velocity update, kinetic and potential energy, wall momentum
+   bookkeeping, the overlap fallback for balls still inside a wall, and the
+   Nosé–Hoover thermostats.
+5. **cells**: source spheres emit balls, balls move between grid cells,
+   invalid (NaN) balls are removed.
+6. **thermo**: global temperature.
 
-- `core/src/application/domain_command.rs`
+While the heatmap is shown, the physics thread also samples the per-cell
+temperature and pressure fields every `THERMO_SAMPLE_STRIDE` steps (see
+[simulation.md](simulation.md#thermodynamic-grid-space)).
 
-### 2. Persistent Simulation State
+### Renderer state and orchestration
 
-`SimulationWorld` is the single source of truth for the physical world state.
+`UnifiedRenderState` is the API that the wgpu backend calls. Its work is
+split into stateless orchestrators that operate on `RenderStateData`:
 
-Responsibilities:
+| Orchestrator | Responsibility |
+|---|---|
+| `FrameOrchestrator` | Frame lifecycle: picks up new snapshots, frame metrics |
+| `InputOrchestrator` | Input actions and operator tool events |
+| `ViewportOrchestrator` | Window resize, pan and zoom |
+| `PhysicsCoordinator` | Spawns the physics thread, sends commands, reads snapshots and events |
 
-- own balls, physics configuration, spatial structures, and operator collections
-- own simulation-facing stats and cached data derived from the world
-- remain a pure state holder rather than a runtime or UI object
+### Backend
 
-Current home:
+| Type | Responsibility |
+|---|---|
+| `WgpuWindow` | winit application shell |
+| `AppLifecycle` | Creates the window, GPU context, pipelines and shared state |
+| `EventRouter` | Classifies window and device events and dispatches them |
+| `FrameRenderer` | Redraws: prepares pipelines from the snapshot and submits the frame |
+| `WgpuContext` | Device, queue, surface and adapter |
+| `RenderGraph` / `WgpuPipelines` | Ordered set of render pipelines with named handles |
 
-- `core/src/application/core/mod.rs`
+## Command flow
 
-### 3. Simulation Stepping
+1. The backend turns window events into `InputAction`s (`InputHandler`), or
+   passes mouse events to the active operator tool.
+2. Action processing and the tools produce `DomainCommand`s.
+3. `PhysicsCoordinator::send_command` puts them on the channel to the
+   physics thread.
+4. `DomainCommandHandler` applies each command to `MainContent`.
 
-`SimulationEngine` owns stepping and update behavior over the world state.
+`DomainCommand` is grouped by concern:
 
-Responsibilities:
+| Variant | Concern |
+|---|---|
+| `Sim(SimControl)` | Running the simulation: pause, step mode, time step, gravity |
+| `Balls(BallCommand)` | Adding, removing and changing balls |
+| `World(WorldCommand)` | The world as a whole: resize, save, load |
+| `View(ViewCommand)` | What is reported or shown: timing display, ball stats, snapshot layers. No effect on physics |
+| `Operator(Box<dyn OperatorCommand>)` | Operator tools: walls, valves, thermostats, source spheres |
 
-- neighbor collection and rebuild cadence
-- force computation and integration updates
-- thermostat/source/operator effects during a simulation step
-- step-scoped stats updates and snapshot prerequisites
+Each group has a `From` impl, so senders pass the group value, for example
+`send_command(WorldCommand::Save)`. The handler dispatches each group to its
+own function (`handle_sim`, `handle_balls`, `handle_world`, `handle_view`);
+operator commands run through `OperatorCommand::execute`. A queued
+`World(Resize)` is held back, so a run of resizes from a window drag is
+applied once, before the next command or at the end of the batch.
 
-Current home:
+Results that the UI must report (a save or load succeeded or failed) come
+back as `PhysicsEvent`s on a second channel.
 
-- `core/src/application/core/simulation_engine.rs`
+## Snapshot flow
 
-### 4. Physics Runtime
+1. After a step or a handled command, the physics thread builds a
+   `RendererSnapshot` (`MainContent::create_snapshot`) and stores it in an
+   `ArcSwapOption` slot. It publishes at most once per snapshot interval
+   (16.7 ms), and immediately after a resize. A paused, untouched world
+   publishes nothing.
+2. A wakeup callback asks the winit event loop for a redraw.
+3. `PhysicsCoordinator` hands the latest snapshot to the orchestrators;
+   `FrameRenderer` prepares the pipelines from it and submits the frame.
 
-`PhysicsRuntime` owns thread-loop concerns, not the physics model itself.
+The renderer chooses which `SceneLayers` it needs (`BASE`, `BALLS`, `THERMO`,
+`READOUTS`) with a `View` command. The physics thread builds only those
+parts of the snapshot, and computes the thermo fields only while `THERMO` is
+requested. With rendering switched off (F2), only `BASE` is requested.
 
-Responsibilities:
+## Render pipelines
 
-- command draining
-- sleep cadence / wait-time handling
-- snapshot cadence and wakeups
-- shutdown handling and performance reporting
+Every visual layer is one `RenderPipeline` in
+`wgpu_renderer/src/wgpu/pipelines/`, registered in draw order in
+`WgpuPipelines::new`. All of them follow one pattern:
 
-Current home:
-
-- `core/src/application/physics_thread/runtime.rs`
-
-### 5. Renderer State And Orchestration
-
-Renderer state is centered around `UnifiedRenderState`, but its internal responsibilities are now split between owned state and focused orchestrators.
-
-Owned renderer state includes:
-
-- viewport transform
-- energy window state
-- renderer configuration
-- cursor/tool bookkeeping
-- frame metrics and last snapshot
-
-Orchestrator responsibilities include:
-
-- frame lifecycle: `FrameOrchestrator`
-- input and tool flow: `InputOrchestrator`
-- resize and pan/zoom coordination: `ViewportOrchestrator`
-- physics thread bridge: `PhysicsCoordinator`
-
-Current home:
-
-- `core/src/graphics/renderer/event_loop/`
-
-### 6. Backend-Specific Wiring
-
-The WGPU backend should own only backend wiring and frame submission.
-
-Responsibilities:
-
-- application shell and winit integration: `WgpuWindow`
-- startup/bootstrap of window, context, pipelines, and shared state: `AppLifecycle`
-- event classification and dispatch: `EventRouter`
-- frame preparation and redraw handling: `FrameRenderer`
-
-Current home:
-
-- `wgpu_renderer/src/wgpu/`
-
-#### Render pipelines
-
-Every visual layer is one `RenderPipeline` in `wgpu_renderer/src/wgpu/pipelines/`,
-registered in draw order in `WgpuPipelines::new`. All of them follow one pattern:
-
-- `new(device, queue, format)`, then `prepare()` fills a `Vec` of `#[repr(C)]`
-  instances or vertices and flushes it to a `GpuBatch`; `render()` only calls
-  `draw()`.
+- `new(device, queue, format)`, then `prepare()` fills a `Vec` of
+  `#[repr(C)]` instances or vertices and flushes it to a `GpuBatch`;
+  `render()` only calls `draw()`.
 - `gpu/batch.rs` (`GpuBatch`) is the only place that creates wgpu pipelines,
-  bind groups and buffers. Two draw modes: instanced quads (one element = one
-  quad, corners from `quad_corner()` in the shader) or plain vertex lists.
+  bind groups and buffers. It has two draw modes: instanced quads (one
+  element is one quad, corners from `quad_corner()` in the shader) or plain
+  vertex lists.
 - Every shader is registered in `gpu/shaders.rs`, which prepends
   `shaders/common.wgsl` (uniforms `u.view_proj` / `u.params`, `quad_corner`,
-  `aa`, `ring_band`). `u.params` is pipeline-specific and documented at the top
-  of each shader. An optional texture lives at `@group(1)`.
+  `aa`, `ring_band`). `u.params` is pipeline-specific and documented at the
+  top of each shader. An optional texture lives at `@group(1)`.
 - Screen-space layers (sidebar, text, labels, frame) build NDC positions and
   keep the identity `view_proj`.
 - Tests: `gpu/tests/shaders.rs` validates all WGSL with naga, and
   `tests/gpu_smoke.rs` builds every pipeline on a real device and renders a
   populated frame (skipped without a GPU adapter).
 
-## Dependency Direction
+## Persistence
 
-The intended dependency direction is one-way:
+`core/src/application/persistence/` saves and loads the whole world
+(Ctrl+S / Ctrl+O, or `--load` on the command line). A `WorldFile` holds a
+format version, the world rectangle, time step, gravity, every ball, and all
+operators including wall chains. Loading replaces the world, increments the
+world generation (the step count starts again, so the renderer can tell the
+new world's snapshots apart), and
+sends `WorldLoaded` so the window can resize to fit the loaded world.
 
-```text
-backend shells
-    → shared renderer/event-loop layer
-        → DomainCommand
-            → physics runtime transport
-                → simulation engine / operator commands
-                    → simulation world
-```
+## Headless mode
 
-That is the compile-time dependency direction.
+`moldyat --headless` runs the same `MainContent` without a window
+(`wgpu_renderer/src/headless_runner.rs`). It steps the simulation directly on
+the main thread and writes snapshots as versioned JSON Lines
+(`headless.v1`: `run_start`, `frame`, `run_end` records) to stdout or a file.
+Seeded runs are deterministic; they back the headless regression fixtures
+and the performance scripts. The record format, CLI
+flags and fixture workflow are documented in
+[headless-renderer-plan.md](done/headless-renderer-plan.md).
 
-The runtime command and snapshot flow is a separate concern. The following diagram is a data-flow view, not a compile-time dependency graph:
+## Boundaries
 
-```mermaid
-flowchart LR
-    Backend[Backend Shells\nWgpuWindow / AppLifecycle / EventRouter / FrameRenderer]
-    Renderer[Shared Renderer Layer\nUnifiedRenderState + orchestrators]
-    Domain[DomainCommand]
-    Runtime[Physics Runtime Transport\nPhysicsCoordinator / PhysicsThread / PhysicsRuntime]
-    Engine[SimulationEngine + Operator Commands]
-    World[SimulationWorld]
-    Snapshot[RendererSnapshot]
+- The renderer never mutates simulation state; every change goes through a
+  `DomainCommand`.
+- The physics thread never touches renderer or GPU types; it only publishes
+  snapshots and events.
+- `SimulationWorld` is the only owner of physical state. `SimulationEngine`
+  and the operator commands change it; nothing keeps indices into its ball
+  vector across a step.
+- Backend modules hold no simulation state or policy; startup policy (world
+  size, loading) runs through `MainContent`.
 
-    Backend --> Renderer
-    Renderer --> Domain
-    Domain --> Runtime
-    Runtime --> Engine
-    Engine --> World
-    World --> Snapshot
-    Snapshot --> Renderer
-    Renderer --> Backend
-```
-
-Read `Backend -> Renderer -> Domain -> Runtime -> Engine -> World` as the write path for user intent and `World -> RendererSnapshot -> Renderer -> Backend` as the read-only rendering path.
-
-Important consequences:
-
-- backend code should not encode simulation bootstrap or mutation policy
-- renderer code should not mutate simulation state directly
-- runtime code should not own renderer concerns
-- world state should not depend on backend or UI types
-
-## Command Flow
-
-The current write path for simulation mutations is:
-
-1. backend input is interpreted into renderer actions
-2. renderer action processing emits `DomainCommand`
-3. `PhysicsCoordinator` forwards the `DomainCommand` directly to the physics thread
-4. `DomainCommandHandler` applies the command against `MainContent`
-5. `SimulationEngine` and operator commands mutate the world state as needed
-
-`DomainCommand` is the single command type used from input handling all the way through to the physics thread. It is grouped by concern:
-
-- `Sim(SimControl)`: running the simulation (pause, step mode, time step, gravity)
-- `Balls(BallCommand)`: adding, removing and changing balls
-- `World(WorldCommand)`: the world as a whole (resize, save, load)
-- `View(ViewCommand)`: what is reported or shown (timing display, ball stats, snapshot layers); no effect on physics
-- `Operator(Box<dyn OperatorCommand>)`: operator tools (walls, valves, thermostats, source spheres)
-
-Senders take anything that converts into a `DomainCommand` (each group has a `From` impl), so call sites send the group value, e.g. `send_command(WorldCommand::Save)`. `DomainCommandHandler` hands each group to its own handler function (`handle_sim`, `handle_balls`, `handle_world`, `handle_view`); operator commands run through `OperatorCommand::execute`. A queued `World(Resize)` is held back, so a run of resizes from a window drag is applied once, before the next command or at the end of the batch.
-
-## Snapshot Flow
-
-The current read path for rendering is:
-
-1. the physics thread advances the simulation
-2. `MainContent` publishes a `RendererSnapshot` into the shared snapshot slot
-3. `PhysicsRuntime` triggers a backend wakeup callback
-4. `PhysicsCoordinator` exposes the latest snapshot to renderer orchestrators
-5. frame orchestration and backend frame submission consume the snapshot
-
-This keeps rendering read-only with respect to the simulation world.
-
-## Current Transitional Seams
-
-The runtime cleanup in issue `#147` removed the command-path adapter and the `MainContent` world facade. The only intentionally transitional backend-facing seam that still remains is described below.
-
-### `UnifiedRenderState` is still a facade
-
-`UnifiedRenderState` is much smaller than before, but it still serves as the backend-facing surface over `RenderStateData` and the orchestrators.
-
-Why it still exists:
-
-- both backends need a stable shared renderer API while internal responsibilities are being decomposed
-
-## Where New Logic Should Live
-
-Use these placement rules when adding new behavior:
-
-- add new user-intent commands at the `DomainCommand` boundary
-- add new persistent simulation data to `SimulationWorld`
-- add new per-step physics or world update logic to `SimulationEngine`
-- add thread-loop, cadence, shutdown, or wakeup behavior to `PhysicsRuntime`
-- add shared renderer coordination to the event-loop orchestrators, not backend shells
-- add backend-specific rendering and event plumbing to `wgpu_renderer/src/wgpu/`
-- add operator-specific mutations under `application/operator_command/`
-
-Avoid these placements:
-
-- do not put simulation policy in `main.rs` or backend entrypoints
-- do not let renderer code mutate the world directly
-- do not add new long-lived domain state to backend modules
-
-## Relationship To Remaining Work
-
-This document describes the target structure after issues `#144`, `#141`, `#145`, `#139`, `#140`, `#143`, `#138`, `#146`, and `#147`.
-
-Issue `#147` removed the `DomainCommand` → `PhysicsCommand` runtime adapter so that `DomainCommand` is now the single command type from input handling all the way into the physics thread. `SimulationEngine` now operates on `SimulationWorld` plus read-only game-logic configuration, and `MainContent` no longer exposes the world as a transparent facade.
-
-Contributors should treat the boundaries described here as the intended structure while the remaining renderer-side facade is decomposed further.
+`UnifiedRenderState` still exposes a wide API to the backend. It is a facade
+over `RenderStateData` and the orchestrators, and the remaining split of
+that facade is tracked in the refactoring plan.
