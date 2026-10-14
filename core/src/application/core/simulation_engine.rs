@@ -4,6 +4,7 @@
 
 use super::line_segments::Obstacle;
 use super::{SimulationWorld, StatsAccumulator, StepConfig};
+use crate::application::phase_timings::{Phase, PhaseClock};
 use crate::application::thermo_field::compute_cell_thermo;
 use crate::application::{AppResult, log_util};
 use crate::logging::log_update_hood_start;
@@ -13,9 +14,7 @@ use crate::objects2d::ball_impl::verlet::Verlet;
 use crate::objects2d::ball_impl::wall_contact::normal_velocity_after_contact;
 use crate::objects2d::ball_impl::{BallFactory, ForceResult};
 use crate::objects2d::{Rect, Vec2D};
-use crate::timing_monad::TimingMonad;
 use rayon::prelude::*;
-use std::time::Instant;
 
 /// Stepping/update behavior over the persistent simulation state.
 ///
@@ -34,18 +33,10 @@ impl SimulationEngine {
             .step_count
             .is_multiple_of(step_config.neighbour_update_interval())
         {
-            let start = Instant::now();
-            let mut timer = TimingMonad::new();
-            timer.time("update neighbours", || {
-                Self::update_neighbor_hoods_for_occupied_cells(world, dt)
-            });
-            timer.time("update statistics", || {
-                Self::update_neighbor_statistics(world)
-            });
-            if world.show_timings {
-                timer.log();
-            }
-            world.phase_timings.neighbours += start.elapsed();
+            let mut clock = PhaseClock::start(world.show_timings);
+            Self::update_neighbor_hoods_for_occupied_cells(world, dt);
+            Self::update_neighbor_statistics(world);
+            clock.lap(&mut world.phase_timings, Phase::Neighbours);
         }
     }
 
@@ -74,40 +65,13 @@ impl SimulationEngine {
 
         let bound_rect = world.world_rect;
 
-        #[cfg(feature = "measure-time")]
-        let mut timer = TimingMonad::new();
-
-        #[cfg(feature = "measure-time")]
-        timer.time("collect_neighbours", || {
-            Self::collect_neighbours_by_cell(world, step_config, dt)
-        });
-        #[cfg(not(feature = "measure-time"))]
         Self::collect_neighbours_by_cell(world, step_config, dt);
-
-        #[cfg(feature = "measure-time")]
-        timer.time("update_sim", || {
-            Self::update_sim_and_move_balls(world, step_config, dt, &bound_rect);
-        });
-        #[cfg(not(feature = "measure-time"))]
         Self::update_sim_and_move_balls(world, step_config, dt, &bound_rect);
 
-        let thermo_start = Instant::now();
-        #[cfg(feature = "measure-time")]
-        timer.time("calculate_temperature", || {
-            let (sim, balls) = (&mut world.sim, &world.balls);
-            sim.calculate_temperature_from_balls(balls);
-        });
-        #[cfg(not(feature = "measure-time"))]
-        {
-            let (sim, balls) = (&mut world.sim, &world.balls);
-            sim.calculate_temperature_from_balls(balls);
-        }
-        world.phase_timings.thermo += thermo_start.elapsed();
-
-        #[cfg(feature = "measure-time")]
-        if world.show_timings {
-            timer.log();
-        }
+        let mut clock = PhaseClock::start(world.show_timings);
+        let (sim, balls) = (&mut world.sim, &world.balls);
+        sim.calculate_temperature_from_balls(balls);
+        clock.lap(&mut world.phase_timings, Phase::Thermo);
 
         world.step_count += 1;
         world.phase_timings.steps += 1;
@@ -122,7 +86,7 @@ impl SimulationEngine {
         if world.balls.len() != world.cached_force_results.len() {
             return;
         }
-        let start = Instant::now();
+        let mut clock = PhaseClock::start(world.show_timings);
         // The T/P overlay uses the physics cell grid's shape (see
         // docs/simulation.md, Thermodynamic Grid Space).
         let (phys_rows, phys_cols) = world.cell_grid.get_grid_size();
@@ -134,7 +98,9 @@ impl SimulationEngine {
             phys_cols.max(1),
         );
         world.thermo_history.push(t_grid, p_grid);
-        world.phase_timings.thermo += start.elapsed();
+        // Booked to `thermo` like the global temperature, but logged under
+        // its own name so the two lines of a step can be told apart.
+        clock.lap_as(&mut world.phase_timings, Phase::Thermo, "thermo fields");
     }
 
     pub(crate) fn update_sim(world: &mut SimulationWorld, dt: f32, bound_rect: &Rect) {
@@ -147,24 +113,23 @@ impl SimulationEngine {
             max_id: 0,
         };
 
-        let start = Instant::now();
+        let mut clock = PhaseClock::start(world.show_timings);
         // Walls cannot change within a step: one list for the contact sweep
         // and the overlap pass.
         let obstacles = world.collect_solid_obstacles();
         let (bounce_infos, sweep_checks) =
             Self::update_positions(world, dt, bound_rect, &obstacles);
+        Self::update_old_positions(world);
+        clock.lap(&mut world.phase_timings, Phase::Positions);
+
+        let force_results = Self::compute_forces(world);
+        clock.lap(&mut world.phase_timings, Phase::Forces);
+
         world.sim.wall_distance_checks += sweep_checks;
         world.sim.wall_contacts += bounce_infos
             .iter()
             .map(|b| b.iter().count() as u64)
             .sum::<u64>();
-        Self::update_old_positions(world);
-        let positions_done = Instant::now();
-        world.phase_timings.positions += positions_done - start;
-
-        let force_results = Self::compute_forces(world);
-        let forces_done = Instant::now();
-        world.phase_timings.forces += forces_done - positions_done;
         let (wall_px, wall_py) = Self::apply_forces_and_collect_stats(
             world,
             &force_results,
@@ -186,7 +151,7 @@ impl SimulationEngine {
             .v_com
             .scaled(1. / stats_accumulator.sum_mass);
         world.sim.update(dt, stats_accumulator);
-        world.phase_timings.apply += forces_done.elapsed();
+        clock.lap(&mut world.phase_timings, Phase::Apply);
     }
 
     fn update_sim_and_move_balls(
@@ -202,7 +167,7 @@ impl SimulationEngine {
             .collect();
 
         Self::update_sim(world, dt, bound_rect);
-        let start = Instant::now();
+        let mut clock = PhaseClock::start(world.show_timings);
         world.emit_from_source_spheres(step_config.get_ball_factory());
 
         for (i, old_pos) in old_positions.iter().enumerate() {
@@ -211,7 +176,7 @@ impl SimulationEngine {
         }
 
         world.remove_invalid_balls();
-        world.phase_timings.cells += start.elapsed();
+        clock.lap(&mut world.phase_timings, Phase::Cells);
     }
 
     /// Rebuild the neighbour lists of the balls that moved far enough.

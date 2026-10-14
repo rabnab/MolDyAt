@@ -189,3 +189,27 @@ fn test_default_speed_limit_is_positive_for_flipped_world_rect() {
     let limit = SimulationEngine::default_speed_limit(&rect);
     assert!((limit - 36.6 * 0.2).abs() < 1e-5, "limit {limit}");
 }
+
+#[test]
+fn test_simulation_step_counts_steps_and_books_phase_time() {
+    let (mut main_content, _) = create_main_content();
+    main_content
+        .add_candidate_at_pos(Vec2D::new(0.0, 0.0))
+        .expect("failed to add first ball");
+    main_content
+        .add_candidate_at_pos(Vec2D::new(2.2, 0.0))
+        .expect("failed to add second ball");
+    main_content.reset_phase_timings();
+
+    for _ in 0..3 {
+        let (world, step_config) = main_content.world_and_step_config();
+        SimulationEngine::simulation_step(world, step_config).expect("simulation step");
+    }
+
+    // Per-phase durations of a two-ball step can be below the clock
+    // resolution, so only the total is checked; `PhaseClock` has its own
+    // tests for booking each lap.
+    let timings = *main_content.phase_timings();
+    assert_eq!(timings.steps, 3);
+    assert!(timings.total() > std::time::Duration::ZERO);
+}

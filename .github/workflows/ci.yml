@@ -76,6 +76,11 @@ jobs:
           set -o pipefail
           cargo ci-clippy | clippy-sarif | tee clippy-results.sarif | sarif-fmt
 
+      # The step timing has one code path; this keeps the build without the
+      # `measure-time` log compiling and warning-free (#225).
+      - name: Run clippy without measure-time
+        run: cargo clippy -p moldyat_core --all-targets --no-default-features -- -D warnings
+
       # only in public repo or for organisations
       #- name: Upload clippy SARIF
       #  if: always()
@@ -169,6 +174,16 @@ jobs:
         run: |
           set -o pipefail
           cargo ci-test-headless-regression | tee headless-regression.log
+
+      # #225: the step timing has one code path, so results must not depend
+      # on the `measure-time` feature (it only gates the F4 log).
+      - name: Run core tests and headless fixtures without measure-time
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p moldyat_core --no-default-features
+          cargo test -p moldyat_wgpu --no-default-features -- --ignored | tee -a headless-regression.log
 
       - name: Upload headless regression log
         if: failure()
