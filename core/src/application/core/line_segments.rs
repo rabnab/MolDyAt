@@ -169,8 +169,8 @@ impl Obstacle {
 }
 
 /// Result of the overlap pass (one ball, or summed over balls).
-#[derive(Default)]
-struct OverlapPass {
+#[derive(Debug, Default, Clone, Copy)]
+pub(crate) struct OverlapPass {
     /// Momentum given to non-ghost walls.
     px: f32,
     py: f32,
@@ -523,13 +523,20 @@ impl SimulationWorld {
     /// type ends up being called.
     pub(crate) fn collect_solid_obstacles(&self) -> Vec<Obstacle> {
         let mut obstacles = Vec::new();
+        self.collect_solid_obstacles_into(&mut obstacles);
+        obstacles
+    }
+
+    /// `collect_solid_obstacles` into `obstacles`, which is cleared first, so
+    /// the step can reuse one buffer.
+    pub(crate) fn collect_solid_obstacles_into(&self, obstacles: &mut Vec<Obstacle>) {
+        obstacles.clear();
         for chain in self.wall_chains.chains() {
-            self.chain_obstacles(chain, &mut obstacles);
+            self.chain_obstacles(chain, obstacles);
         }
         if let Some(g) = self.ghost_wall {
             obstacles.push(Obstacle::new(g.start, g.end, g.thickness, true));
         }
-        obstacles
     }
 
     /// Append `chain`'s solid parts (see `collect_solid_obstacles`).
@@ -687,19 +694,32 @@ impl SimulationWorld {
     /// serially in ball order: a parallel reduce would add the f32 momenta
     /// in an order that depends on the thread count (#222).
     pub(crate) fn resolve_wall_overlaps(&mut self, obstacles: &[Obstacle]) -> (f32, f32) {
+        let mut passes = Vec::new();
+        self.resolve_wall_overlaps_with(obstacles, &mut passes)
+    }
+
+    /// `resolve_wall_overlaps` with a reused buffer for the per-ball passes
+    /// (the simulation step's scratch, #228). The passes are collected in
+    /// ball order and summed serially, so the result does not depend on the
+    /// thread count.
+    pub(crate) fn resolve_wall_overlaps_with(
+        &mut self,
+        obstacles: &[Obstacle],
+        passes: &mut Vec<OverlapPass>,
+    ) -> (f32, f32) {
         if obstacles.is_empty() {
             for ball in &mut self.balls {
                 ball.leaving_wall = false;
             }
             return (0.0, 0.0);
         }
-        let passes: Vec<OverlapPass> = self
-            .balls
+        self.balls
             .par_iter_mut()
             .map(|ball| Self::resolve_ball_overlaps(obstacles, ball))
-            .collect();
+            .collect_into_vec(passes);
         let pass = passes
-            .into_iter()
+            .iter()
+            .copied()
             .fold(OverlapPass::default(), OverlapPass::merge);
         self.sim.wall_overlap_corrections += pass.corrections;
         self.sim.wall_distance_checks += pass.checks;
