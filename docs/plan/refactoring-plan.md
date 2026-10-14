@@ -1,6 +1,7 @@
 # Refactoring Plan: Maintainability, Extensibility, Performance
 
-Status: accepted direction, decisions recorded 2026-10-04 (see §6). Successor to the runtime refactor in
+Status: accepted direction, decisions recorded 2026-10-04 (see §6). Phase 1 has
+landed (2026-10-14, see §4). Successor to the runtime refactor in
 [refactor_architecture.md](../done/refactor_architecture.md) (#137, landed). The current
 structure is described in [architecture.md](../architecture.md).
 
@@ -18,6 +19,13 @@ plan-local; replace them with GitHub issue numbers when the issues are created.
 ---
 
 ## 1. Current state (analysis summary)
+
+This is the analysis from 2026-10-04, before Phase 1. Since then the legacy
+traits (M1), core `println!`s (M4), duplicated timing branches (M3), per-step
+allocations (P1), per-step T/P binning (P3) and the crate-wide
+`#![allow(dead_code)]` (G3) are gone, `DomainCommand` is
+grouped (C1), and `scirs2-interpolate` was dropped (#247). See §4 for the
+current status.
 
 ~38.5k lines of Rust in two crates.
 
@@ -174,10 +182,13 @@ Phase 5 (water + perf):             I9, I10, V6, V7, P5, P6, P10, P8, I11 (if ne
 
 GitHub issues:
 
-| Phase | Parent | Items |
-|---|---|---|
-| 1 | #219 | G1 #221, G2 #222, G3 #223, M1 #224, M3 #225, M4 #226, C1 #227, P1 #228, P3 #229 |
-| 2 | #220 | I1 #230, M6 #231, C2 #232, I2 #233, I3 #234, I4 #235, I5 #236, I6 #237, I7 #238 |
+| Phase | Parent | Landed on `master` | Open |
+|---|---|---|---|
+| 1 | #219 | G1 #221, G2 #222, G3 #223, M1 #224, M3 #225, M4 #226, C1 #227, P1 #228, P3 #229 | – |
+| 2 | #220 | – | I1 #230, M6 #231, C2 #232, I2 #233, I3 #234, I4 #235, I5 #236, I6 #237, I7 #238 |
+
+"Landed" is taken from the commits on `master` (as of 2026-10-14), not from
+the issue states.
 
 Mixed species (Phase 2) lands before the crate split because it is needed soon and
 touches the hot kernel; it is easiest to verify against unchanged baselines. The

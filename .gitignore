@@ -23,6 +23,8 @@ mono_crash.*
 [Dd]ebug/
 [Dd]ebugPublic/
 [Rr]elease/
+# The project skill of the same name is not build output.
+!/.claude/skills/release/
 [Rr]eleases/
 x64/
 x86/

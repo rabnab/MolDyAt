@@ -412,14 +412,24 @@ wgpu_renderer/
 
 ## Documentation
 
-* [Contributing Guide](CONTRIBUTING.md)
+How the application works:
+
 * [Runtime Architecture](docs/architecture.md)
 * [Simulation Coordinate Systems](docs/simulation.md)
 * [Reduced Units and Scales](docs/units.md)
-* [Headless Renderer Plan and Contract](docs/done/headless-renderer-plan.md)
-* [Drift Test Process](docs/drift-test.md)
 * [Operators](docs/operators.md)
-* [Nosé-Hoover Thermostat Plan](docs/done/nose-hoover.md)
+* [Headless Mode](docs/headless.md)
+* [Drift Tests](docs/drift-test.md)
+* [Performance Baseline](docs/perf-baseline.md)
+
+Plans and history:
+
+* [Refactoring Plan](docs/plan/refactoring-plan.md): open work
+* [`docs/done/`](docs/done/): implemented plans and reviews, kept as history
+
+Contributing:
+
+* [Contributing Guide](CONTRIBUTING.md)
 * [Copilot Instructions](.github/copilot-instructions.md)
 
 ## Contributing

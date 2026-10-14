@@ -1,5 +1,7 @@
 # Nosé-Hoover Thermostat Plan
 
+Status (2026-10-14): implemented (issue 129). The thermostat as it works now is described in [operators.md](../operators.md#thermostats); this plan is kept as history.
+
 This document describes how to integrate issue 129 into the current operator architecture. The goal is to add a Nosé-Hoover thermostat that controls the temperature of a finite spherical region around its origin without breaking the existing separation between renderer input, simulation state, and rendering snapshots.
 
 ## Scope

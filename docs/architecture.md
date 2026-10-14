@@ -192,8 +192,7 @@ the main thread and writes snapshots as versioned JSON Lines
 (`headless.v1`: `run_start`, `frame`, `run_end` records) to stdout or a file.
 Seeded runs are deterministic; they back the headless regression fixtures
 and the performance scripts. The record format, CLI
-flags and fixture workflow are documented in
-[headless-renderer-plan.md](done/headless-renderer-plan.md).
+flags and fixtures are described in [headless.md](headless.md).
 
 ## Boundaries
 

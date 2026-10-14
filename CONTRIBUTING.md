@@ -24,11 +24,17 @@ These instructions cover:
 - Testing strategy
 - Git workflow requirements
 
-For architectural placement and migration-boundary guidance, also review:
+For how the application is structured, also review:
 
-- **[Runtime Architecture](docs/architecture.md)** - Target ownership boundaries, command flow, and current migration shims
+- **[Runtime Architecture](docs/architecture.md)** - Crates, threads, layers, command and snapshot flow
 - **[Simulation Coordinate Systems](docs/simulation.md)** - World, viewport, and grid-space conventions
 - **[Reduced Units and Scales](docs/units.md)** - LJ reduced units, SI conversion, and parameters of other species
+- **[Operators](docs/operators.md)** - Walls, valves, thermostats, source spheres and their tools
+- **[Headless Mode](docs/headless.md)** - CLI, JSONL records and regression fixtures
+- **[Drift Tests](docs/drift-test.md)** - Energy and momentum drift suite and threshold changes
+- **[Performance Baseline](docs/perf-baseline.md)** - Benchmark scenarios and comparing binaries
+
+Docs in `docs/` describe the current code; open plans are in `docs/plan/`, implemented ones in `docs/done/`.
 
 ### Canonical command and policy references
 
