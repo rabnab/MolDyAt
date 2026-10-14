@@ -20,7 +20,7 @@ pub mod thermo_field;
 mod tests;
 
 pub use core::{MainContent, valve_span_problem};
-pub use domain_command::DomainCommand;
+pub use domain_command::{BallCommand, DomainCommand, SimControl, ViewCommand, WorldCommand};
 pub use physics_event::PhysicsEvent;
 pub(crate) use physics_thread::PhysicsThread;
 pub(crate) use step_config::StepConfig;

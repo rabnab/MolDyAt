@@ -3,10 +3,10 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use super::runtime::CommandHandler;
-use crate::application::DomainCommand;
 use crate::application::MainContent;
 use crate::application::PhysicsEvent;
 use crate::application::persistence::LoadSource;
+use crate::application::{BallCommand, DomainCommand, SimControl, ViewCommand, WorldCommand};
 use crate::objects2d::Rect;
 use std::sync::mpsc::Sender;
 
@@ -81,100 +81,89 @@ impl<'a> DomainCommandHandler<'a> {
     }
 }
 
-impl CommandHandler<DomainCommand> for DomainCommandHandler<'_> {
-    fn handle_command(&mut self, command: DomainCommand) {
-        self.commands_handled += 1;
-        if !matches!(command, DomainCommand::Resize { .. }) {
-            self.apply_pending_resize();
-        }
+impl DomainCommandHandler<'_> {
+    fn handle_sim(&mut self, command: SimControl) {
+        let mc = &mut *self.main_content;
         match command {
-            DomainCommand::Pause => {
-                if !self.main_content.world().sim.is_paused() {
-                    self.main_content.toggle_pause();
+            SimControl::Pause => {
+                if !mc.world().sim.is_paused() {
+                    mc.toggle_pause();
                 }
             }
-            DomainCommand::Resume => {
-                if self.main_content.world().sim.is_paused() {
-                    self.main_content.toggle_pause();
+            SimControl::Resume => {
+                if mc.world().sim.is_paused() {
+                    mc.toggle_pause();
                 }
             }
-            DomainCommand::TogglePause => {
-                self.main_content.toggle_pause();
+            SimControl::TogglePause => mc.toggle_pause(),
+            SimControl::ToggleStepwise => mc.toggle_stepwise(),
+            SimControl::ToggleGravity => mc.toggle_gravity(),
+            SimControl::DoubleTimeStep => mc.double_time_step(),
+            SimControl::HalveTimeStep => mc.halve_time_step(),
+            SimControl::IncreaseWaitTime => mc.increase_wait_time(),
+            SimControl::DecreaseWaitTime => mc.decrease_wait_time(),
+        }
+    }
+
+    fn handle_balls(&mut self, command: BallCommand) {
+        let mc = &mut *self.main_content;
+        match command {
+            BallCommand::Add(pos) => {
+                let _ = mc.add_candidate_at_pos(pos);
             }
-            DomainCommand::ToggleGravity => {
-                self.main_content.toggle_gravity();
+            BallCommand::AddWithVelocity(ball) => {
+                let _ = mc.add_candidate_ball(ball, 0.);
             }
-            DomainCommand::AddBall(pos) => {
-                let _ = self.main_content.add_candidate_at_pos(pos);
-            }
-            DomainCommand::AddBallWithVelocity(ball) => {
-                let _ = self.main_content.add_candidate_ball(ball, 0.);
-            }
-            DomainCommand::AddRandomBalls(count) => {
-                self.main_content.add_random_candidates(count);
-            }
-            DomainCommand::ClearBalls => {
-                self.main_content.clear_points();
-            }
-            DomainCommand::StopAllBalls => {
-                self.main_content.stop_all_balls();
-            }
-            DomainCommand::RandomizeSpeeds => {
-                self.main_content.randomize_speeds();
-            }
-            DomainCommand::EnableRandomBallSpeed => {
-                self.main_content.enable_random_ball_speed();
-            }
-            DomainCommand::NextBallSize => {
-                self.main_content.next_ball_size();
-            }
-            DomainCommand::IncreaseWaitTime => {
-                self.main_content.increase_wait_time();
-            }
-            DomainCommand::DecreaseWaitTime => {
-                self.main_content.decrease_wait_time();
-            }
-            DomainCommand::DoubleTimeStep => {
-                self.main_content.double_time_step();
-            }
-            DomainCommand::HalveTimeStep => {
-                self.main_content.halve_time_step();
-            }
-            DomainCommand::ToggleRealData => {
-                self.main_content.toggle_real_data();
-            }
-            DomainCommand::ToggleStepwise => {
-                self.main_content.toggle_stepwise();
-            }
-            DomainCommand::ToggleTimingDisplay => {
-                self.main_content.toggle_timing_display();
-            }
-            DomainCommand::ToggleBallStats => {
-                self.main_content.toggle_show_ball_stats();
-            }
-            DomainCommand::StartVerbosityInput => {
-                self.main_content.start_handling_verbosity_input();
-            }
-            DomainCommand::Resize { world_rect } => {
+            BallCommand::AddRandom(count) => mc.add_random_candidates(count),
+            BallCommand::Clear => mc.clear_points(),
+            BallCommand::StopAll => mc.stop_all_balls(),
+            BallCommand::RandomizeSpeeds => mc.randomize_speeds(),
+            BallCommand::EnableRandomSpeed => mc.enable_random_ball_speed(),
+            BallCommand::NextSize => mc.next_ball_size(),
+        }
+    }
+
+    fn handle_world(&mut self, command: WorldCommand) {
+        match command {
+            WorldCommand::Resize { world_rect } => {
                 self.pending_resize = Some(world_rect);
             }
-            DomainCommand::ResumeAfterResize => {
-                self.main_content.unpause_after_resize();
-            }
-            DomainCommand::SaveWorld => {
+            WorldCommand::ResumeAfterResize => self.main_content.unpause_after_resize(),
+            WorldCommand::Save => {
                 let event = self.save_world();
                 self.report(event);
             }
-            DomainCommand::LoadWorld(source) => {
+            WorldCommand::Load(source) => {
                 let event = self.load_world(&source);
                 self.report(event);
             }
-            DomainCommand::SetSnapshotLayers(layers) => {
-                self.main_content.set_snapshot_layers(layers);
-            }
-            DomainCommand::Operator(cmd) => {
-                cmd.execute(self.main_content);
-            }
+        }
+    }
+
+    fn handle_view(&mut self, command: ViewCommand) {
+        let mc = &mut *self.main_content;
+        match command {
+            ViewCommand::ToggleRealData => mc.toggle_real_data(),
+            ViewCommand::ToggleTimingDisplay => mc.toggle_timing_display(),
+            ViewCommand::ToggleBallStats => mc.toggle_show_ball_stats(),
+            ViewCommand::StartVerbosityInput => mc.start_handling_verbosity_input(),
+            ViewCommand::SetSnapshotLayers(layers) => mc.set_snapshot_layers(layers),
+        }
+    }
+}
+
+impl CommandHandler<DomainCommand> for DomainCommandHandler<'_> {
+    fn handle_command(&mut self, command: DomainCommand) {
+        self.commands_handled += 1;
+        if !matches!(command, DomainCommand::World(WorldCommand::Resize { .. })) {
+            self.apply_pending_resize();
+        }
+        match command {
+            DomainCommand::Sim(command) => self.handle_sim(command),
+            DomainCommand::Balls(command) => self.handle_balls(command),
+            DomainCommand::World(command) => self.handle_world(command),
+            DomainCommand::View(command) => self.handle_view(command),
+            DomainCommand::Operator(command) => command.execute(self.main_content),
         }
     }
 

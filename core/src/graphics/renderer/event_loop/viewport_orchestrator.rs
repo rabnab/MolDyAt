@@ -3,7 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use super::unified_render_state::{PendingWindowRequest, UnifiedRenderState};
-use crate::application::DomainCommand;
+use crate::application::WorldCommand;
 use crate::graphics::renderer::ViewportTransform;
 use crate::graphics::renderer::margins::Margins;
 use crate::objects2d::{Rect, Vec2D};
@@ -84,7 +84,7 @@ impl ViewportOrchestrator {
     ) {
         state
             .physics
-            .send_command(DomainCommand::Resize { world_rect });
+            .send_command(WorldCommand::Resize { world_rect });
         state.render.viewport.set_world_bounds(world_rect);
         state
             .render
@@ -97,7 +97,7 @@ impl ViewportOrchestrator {
     pub(super) fn resume_after_resize_if_pending(state: &mut UnifiedRenderState) {
         if state.render.resize_pending {
             state.render.resize_pending = false;
-            state.physics.send_command(DomainCommand::ResumeAfterResize);
+            state.physics.send_command(WorldCommand::ResumeAfterResize);
         }
     }
 
@@ -218,7 +218,7 @@ mod tests {
 
         let commands = log.lock().expect("command log lock should succeed");
         assert!(
-            commands.iter().any(|c| c.starts_with("Resize {")),
+            commands.iter().any(|c| c.starts_with("World(Resize {")),
             "expected a Resize command to be forwarded to physics; got: {commands:?}"
         );
     }
@@ -272,7 +272,7 @@ mod tests {
             log.lock()
                 .unwrap()
                 .iter()
-                .any(|c| c.starts_with("Resize {"))
+                .any(|c| c.starts_with("World(Resize {"))
         );
     }
 
@@ -295,7 +295,7 @@ mod tests {
             log.lock()
                 .unwrap()
                 .iter()
-                .any(|c| c.starts_with("Resize {")),
+                .any(|c| c.starts_with("World(Resize {")),
             "the user's resize refits the world"
         );
         assert!(state.render.pending_window_request.is_none());
@@ -337,7 +337,7 @@ mod tests {
 
         let commands = log.lock().expect("command log lock should succeed");
         assert!(
-            commands.iter().any(|c| c == "ResumeAfterResize"),
+            commands.iter().any(|c| c == "World(ResumeAfterResize)"),
             "expected a ResumeAfterResize command to be forwarded to physics; got: {commands:?}"
         );
     }

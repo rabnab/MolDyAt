@@ -446,8 +446,8 @@ mod tests {
         assert!(!result, "blocked ball placement should return false");
         let commands = log.lock().expect("command log lock should succeed");
         assert!(
-            commands.iter().all(|c| !c.starts_with("AddBall")),
-            "no AddBall command should be sent when placement is blocked; got: {commands:?}"
+            commands.iter().all(|c| !c.starts_with("Balls(Add(")),
+            "no Balls(Add) command should be sent when placement is blocked; got: {commands:?}"
         );
     }
 }

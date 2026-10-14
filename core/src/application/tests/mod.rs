@@ -6,7 +6,7 @@ mod physics_thread;
 mod thermo_field;
 
 use crate::application::renderer_snapshot::RendererSnapshot;
-use crate::application::{DomainCommand, PhysicsThread};
+use crate::application::{BallCommand, PhysicsThread};
 use arc_swap::ArcSwapOption;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -48,7 +48,7 @@ pub(crate) fn sync_commands(
 ) -> Arc<RendererSnapshot> {
     let before = wait_for_snapshot(slot, "a first snapshot", |_| true).cursor_ball_size_idx;
     physics_thread
-        .send_command(DomainCommand::NextBallSize)
+        .send_command(BallCommand::NextSize)
         .expect("send marker command");
     wait_for_snapshot(slot, "the marker command", |s| {
         s.cursor_ball_size_idx != before

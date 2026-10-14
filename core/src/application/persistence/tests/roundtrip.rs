@@ -4,7 +4,7 @@
 
 use super::scratch_dir;
 use crate::application::persistence::{LoadSource, SaveStore, WorldFile};
-use crate::application::{DomainCommand, MainContent, PhysicsEvent, PhysicsThread};
+use crate::application::{MainContent, PhysicsEvent, PhysicsThread, WorldCommand};
 use crate::objects2d::ball_impl::Ball2D;
 use crate::objects2d::{Rect, Vec2D};
 use std::fs;
@@ -197,14 +197,14 @@ fn physics_thread_reports_save_and_load_results() {
     let store = SaveStore::new(scratch_dir("thread"));
     let thread = PhysicsThread::spawn(busy_world().with_save_store(store.clone()), Box::new(|| {}));
 
-    thread.send_command(DomainCommand::SaveWorld).unwrap();
+    thread.send_command(WorldCommand::Save).unwrap();
     let PhysicsEvent::WorldSaved(path) = next_event(&thread) else {
         panic!("expected WorldSaved");
     };
     assert!(path.starts_with(store.dir()));
 
     thread
-        .send_command(DomainCommand::LoadWorld(LoadSource::Latest))
+        .send_command(WorldCommand::Load(LoadSource::Latest))
         .unwrap();
     let PhysicsEvent::WorldLoaded(loaded) = next_event(&thread) else {
         panic!("expected WorldLoaded");
@@ -212,7 +212,7 @@ fn physics_thread_reports_save_and_load_results() {
     assert_eq!(loaded.path, path);
 
     thread
-        .send_command(DomainCommand::LoadWorld(LoadSource::Path(
+        .send_command(WorldCommand::Load(LoadSource::Path(
             store.dir().join("missing.json"),
         )))
         .unwrap();
@@ -225,10 +225,10 @@ fn physics_thread_reports_save_and_load_results() {
 #[test]
 fn without_a_save_store_save_and_load_fail_cleanly() {
     let thread = PhysicsThread::spawn(empty_world(), Box::new(|| {}));
-    thread.send_command(DomainCommand::SaveWorld).unwrap();
+    thread.send_command(WorldCommand::Save).unwrap();
     assert!(matches!(next_event(&thread), PhysicsEvent::SaveFailed(_)));
     thread
-        .send_command(DomainCommand::LoadWorld(LoadSource::Latest))
+        .send_command(WorldCommand::Load(LoadSource::Latest))
         .unwrap();
     assert!(matches!(next_event(&thread), PhysicsEvent::LoadFailed(_)));
     thread.shutdown_and_join().unwrap();

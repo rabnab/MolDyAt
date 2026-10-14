@@ -4,7 +4,7 @@
 
 use super::create_main_content;
 use crate::application::tests::{sync_commands, wait_for_snapshot};
-use crate::application::{DomainCommand, PhysicsThread};
+use crate::application::{PhysicsThread, SimControl};
 use crate::objects2d::Vec2D;
 
 #[test]
@@ -19,7 +19,7 @@ fn test_physics_thread_spawning() {
 
     // The command channel works: a command sent now is applied.
     physics_thread
-        .send_command(DomainCommand::Pause)
+        .send_command(SimControl::Pause)
         .expect("send pause");
     sync_commands(&physics_thread, &snapshot_slot);
 

@@ -3,36 +3,41 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use super::InputAction;
-use crate::application::DomainCommand;
 use crate::application::persistence::LoadSource;
+use crate::application::{BallCommand, DomainCommand, SimControl, ViewCommand, WorldCommand};
 
 impl TryFrom<InputAction> for DomainCommand {
     type Error = InputAction;
 
     fn try_from(action: InputAction) -> Result<Self, Self::Error> {
-        match action {
-            InputAction::AddBall { position } => Ok(DomainCommand::AddBall(position)),
-            InputAction::NextBallSize => Ok(DomainCommand::NextBallSize),
-            InputAction::AddRandomBalls { count } => Ok(DomainCommand::AddRandomBalls(count)),
-            InputAction::StopAllBalls => Ok(DomainCommand::StopAllBalls),
-            InputAction::ClearBalls => Ok(DomainCommand::ClearBalls),
-            InputAction::TogglePause => Ok(DomainCommand::TogglePause),
-            InputAction::ToggleGravity => Ok(DomainCommand::ToggleGravity),
-            InputAction::ToggleStepwise => Ok(DomainCommand::ToggleStepwise),
-            InputAction::RandomizeSpeeds => Ok(DomainCommand::RandomizeSpeeds),
-            InputAction::EnableRandomBallSpeed => Ok(DomainCommand::EnableRandomBallSpeed),
-            InputAction::DoubleTimeStep => Ok(DomainCommand::DoubleTimeStep),
-            InputAction::HalveTimeStep => Ok(DomainCommand::HalveTimeStep),
-            InputAction::IncreaseWaitTime => Ok(DomainCommand::IncreaseWaitTime),
-            InputAction::DecreaseWaitTime => Ok(DomainCommand::DecreaseWaitTime),
-            InputAction::ToggleRealData => Ok(DomainCommand::ToggleRealData),
-            InputAction::ToggleTimingDisplay => Ok(DomainCommand::ToggleTimingDisplay),
-            InputAction::ToggleBallStats => Ok(DomainCommand::ToggleBallStats),
-            InputAction::StartVerbosityInput => Ok(DomainCommand::StartVerbosityInput),
-            InputAction::SaveWorld => Ok(DomainCommand::SaveWorld),
-            InputAction::LoadWorld => Ok(DomainCommand::LoadWorld(LoadSource::Latest)),
-            InputAction::OperatorAction(command) => Ok(DomainCommand::Operator(command)),
-            other => Err(other),
-        }
+        let command = match action {
+            InputAction::TogglePause => SimControl::TogglePause.into(),
+            InputAction::ToggleStepwise => SimControl::ToggleStepwise.into(),
+            InputAction::ToggleGravity => SimControl::ToggleGravity.into(),
+            InputAction::DoubleTimeStep => SimControl::DoubleTimeStep.into(),
+            InputAction::HalveTimeStep => SimControl::HalveTimeStep.into(),
+            InputAction::IncreaseWaitTime => SimControl::IncreaseWaitTime.into(),
+            InputAction::DecreaseWaitTime => SimControl::DecreaseWaitTime.into(),
+
+            InputAction::AddBall { position } => BallCommand::Add(position).into(),
+            InputAction::AddRandomBalls { count } => BallCommand::AddRandom(count).into(),
+            InputAction::ClearBalls => BallCommand::Clear.into(),
+            InputAction::StopAllBalls => BallCommand::StopAll.into(),
+            InputAction::RandomizeSpeeds => BallCommand::RandomizeSpeeds.into(),
+            InputAction::EnableRandomBallSpeed => BallCommand::EnableRandomSpeed.into(),
+            InputAction::NextBallSize => BallCommand::NextSize.into(),
+
+            InputAction::SaveWorld => WorldCommand::Save.into(),
+            InputAction::LoadWorld => WorldCommand::Load(LoadSource::Latest).into(),
+
+            InputAction::ToggleRealData => ViewCommand::ToggleRealData.into(),
+            InputAction::ToggleTimingDisplay => ViewCommand::ToggleTimingDisplay.into(),
+            InputAction::ToggleBallStats => ViewCommand::ToggleBallStats.into(),
+            InputAction::StartVerbosityInput => ViewCommand::StartVerbosityInput.into(),
+
+            InputAction::OperatorAction(command) => DomainCommand::Operator(command),
+            other => return Err(other),
+        };
+        Ok(command)
     }
 }

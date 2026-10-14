@@ -61,7 +61,8 @@ impl PhysicsCoordinator {
     }
 
     /// Send a domain-level command to the physics thread.
-    pub fn send_command(&self, command: DomainCommand) {
+    pub fn send_command(&self, command: impl Into<DomainCommand>) {
+        let command = command.into();
         #[cfg(test)]
         if let Some(recorded) = &self.recorded_commands {
             recorded

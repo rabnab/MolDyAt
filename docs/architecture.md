@@ -210,7 +210,15 @@ The current write path for simulation mutations is:
 4. `DomainCommandHandler` applies the command against `MainContent`
 5. `SimulationEngine` and operator commands mutate the world state as needed
 
-`DomainCommand` is the single command type used from input handling all the way through to the physics thread.
+`DomainCommand` is the single command type used from input handling all the way through to the physics thread. It is grouped by concern:
+
+- `Sim(SimControl)`: running the simulation (pause, step mode, time step, gravity)
+- `Balls(BallCommand)`: adding, removing and changing balls
+- `World(WorldCommand)`: the world as a whole (resize, save, load)
+- `View(ViewCommand)`: what is reported or shown (timing display, ball stats, snapshot layers); no effect on physics
+- `Operator(Box<dyn OperatorCommand>)`: operator tools (walls, valves, thermostats, source spheres)
+
+Senders take anything that converts into a `DomainCommand` (each group has a `From` impl), so call sites send the group value, e.g. `send_command(WorldCommand::Save)`. `DomainCommandHandler` hands each group to its own handler function (`handle_sim`, `handle_balls`, `handle_world`, `handle_view`); operator commands run through `OperatorCommand::execute`. A queued `World(Resize)` is held back, so a run of resizes from a window drag is applied once, before the next command or at the end of the batch.
 
 ## Snapshot Flow
 
