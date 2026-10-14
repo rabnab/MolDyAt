@@ -3,8 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use super::{InputAction, PhysicsCoordinator};
-use crate::application::DomainCommand;
 use crate::application::log_util;
+use crate::application::{DomainCommand, ViewCommand};
 use crate::graphics::renderer::state_layers::RendererConfig;
 use std::convert::TryFrom;
 
@@ -35,7 +35,7 @@ pub fn process_action_common(
             InputAction::ToggleRendering => {
                 config.toggle_rendering();
                 // The physics thread builds only the layers that are drawn.
-                physics.send_command(DomainCommand::SetSnapshotLayers(config.scene_layers()));
+                physics.send_command(ViewCommand::SetSnapshotLayers(config.scene_layers()));
                 // Redraw now with the new layers (back on: from the next full
                 // snapshot; until it arrives, the light one is drawn light).
                 affects_view = true;
@@ -49,7 +49,7 @@ pub fn process_action_common(
             InputAction::CycleThermoDisplay => {
                 config.cycle_thermo_display();
                 // The thermo fields are recorded only while shown.
-                physics.send_command(DomainCommand::SetSnapshotLayers(config.scene_layers()));
+                physics.send_command(ViewCommand::SetSnapshotLayers(config.scene_layers()));
                 affects_view = true;
             }
             // Actions handled elsewhere (not in action_processor)

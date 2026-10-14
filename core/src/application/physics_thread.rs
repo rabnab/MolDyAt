@@ -121,9 +121,9 @@ impl PhysicsThread {
     ///
     /// # Returns
     /// `Ok(())` if the command was sent successfully, `Err` if the channel is disconnected
-    pub fn send_command(&self, command: DomainCommand) -> Result<(), String> {
+    pub fn send_command(&self, command: impl Into<DomainCommand>) -> Result<(), String> {
         self.command_sender
-            .send(command)
+            .send(command.into())
             .map_err(|_| "Physics thread command channel disconnected".to_string())
     }
 

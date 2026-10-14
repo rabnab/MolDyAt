@@ -2,9 +2,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use crate::application::DomainCommand;
 use crate::application::MainContent;
 use crate::application::tests::{sync_commands, wait_for_snapshot};
+use crate::application::{BallCommand, DomainCommand, SimControl, ViewCommand, WorldCommand};
 use crate::application::{
     CommandHandler, DomainCommandHandler, PhysicsRuntime, PhysicsThread, ShutdownSignal,
 };
@@ -50,9 +50,9 @@ fn drain_into(main_content: &mut MainContent, commands: Vec<DomainCommand>) -> u
 }
 
 fn resize_to(width: f32, height: f32) -> DomainCommand {
-    DomainCommand::Resize {
+    DomainCommand::World(WorldCommand::Resize {
         world_rect: Rect::new(0.0, 0.0, width, -height),
-    }
+    })
 }
 
 #[test]
@@ -156,7 +156,7 @@ fn test_command_channel_toggle_pause() {
     // Paused once the Pause command is applied (sync_commands returns the
     // first snapshot published after it).
     physics_thread
-        .send_command(DomainCommand::Pause)
+        .send_command(SimControl::Pause)
         .expect("Failed to send pause command");
     let paused = sync_commands(&physics_thread, &snapshot_slot);
 
@@ -170,7 +170,7 @@ fn test_command_channel_toggle_pause() {
     );
 
     physics_thread
-        .send_command(DomainCommand::Resume)
+        .send_command(SimControl::Resume)
         .expect("Failed to send resume command");
     wait_for_snapshot(&snapshot_slot, "the simulation to resume", |s| {
         s.simulation_step > paused.simulation_step
@@ -191,7 +191,7 @@ fn test_command_channel_speed_control() {
 
     for _ in 0..3 {
         physics_thread
-            .send_command(DomainCommand::DoubleTimeStep)
+            .send_command(SimControl::DoubleTimeStep)
             .expect("Failed to send increase speed command");
     }
     let applied = sync_commands(&physics_thread, &snapshot_slot);
@@ -268,7 +268,10 @@ fn test_no_resize_is_applied_without_a_resize_command() {
     let mut main_content =
         MainContent::new(Rect::new(0.0, 0.0, 100.0, -100.0)).expect("Failed to create MainContent");
 
-    let applied = drain_into(&mut main_content, vec![DomainCommand::ToggleGravity]);
+    let applied = drain_into(
+        &mut main_content,
+        vec![DomainCommand::Sim(SimControl::ToggleGravity)],
+    );
 
     assert_eq!(applied, 0);
 }
@@ -285,7 +288,7 @@ fn test_resize_keeps_its_place_among_other_commands() {
         &mut main_content,
         vec![
             resize_to(300.0, 300.0),
-            DomainCommand::AddBall(in_resized_world_only),
+            DomainCommand::Balls(BallCommand::Add(in_resized_world_only)),
             resize_to(320.0, 320.0),
         ],
     );
@@ -335,9 +338,9 @@ fn test_runtime_publishes_a_snapshot_right_after_a_resize() {
     });
 
     sender
-        .send(DomainCommand::Resize {
+        .send(DomainCommand::World(WorldCommand::Resize {
             world_rect: resized,
-        })
+        }))
         .expect("send should succeed");
 
     let deadline = Instant::now() + Duration::from_secs(5);
@@ -416,12 +419,12 @@ fn test_snapshots_follow_changes_for_paused_and_running_by_layers() {
             };
 
             let pause = if paused {
-                DomainCommand::Pause
+                DomainCommand::Sim(SimControl::Pause)
             } else {
-                DomainCommand::Resume
+                DomainCommand::Sim(SimControl::Resume)
             };
             physics_thread
-                .send_command(DomainCommand::SetSnapshotLayers(layers))
+                .send_command(ViewCommand::SetSnapshotLayers(layers))
                 .expect("send layers");
             physics_thread.send_command(pause).expect("send pause");
             wait_for("with the requested layers", &|s| s.layers == layers);
@@ -467,7 +470,7 @@ fn test_snapshots_follow_changes_for_paused_and_running_by_layers() {
 
             // An edit is published also while paused, at the same step.
             physics_thread
-                .send_command(DomainCommand::NextBallSize)
+                .send_command(BallCommand::NextSize)
                 .expect("send edit");
             let edited = wait_for("after the edit", &|s| {
                 s.cursor_ball_size_idx != after.cursor_ball_size_idx

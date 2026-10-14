@@ -45,7 +45,7 @@ use super::thermostat_tool::ThermostatToolHandler;
 use super::valve_segment_tool::ValveSegmentToolHandler;
 use super::viewport_orchestrator::ViewportOrchestrator;
 
-use crate::application::DomainCommand;
+use crate::application::{BallCommand, DomainCommand, ViewCommand};
 
 /// Owned renderer state that backs the event-loop orchestrators.
 pub(super) struct RenderStateData {
@@ -137,7 +137,7 @@ impl UnifiedRenderState {
             },
         };
         // The physics thread builds only the layers the config draws.
-        state.physics.send_command(DomainCommand::SetSnapshotLayers(
+        state.physics.send_command(ViewCommand::SetSnapshotLayers(
             state.render.config.scene_layers(),
         ));
         // A world loaded with `--load` may not have the window's shape.
@@ -557,7 +557,7 @@ impl UnifiedRenderState {
         use crate::objects2d::ball_impl::NUM_BALL_SIZES;
         self.render.current_ball_size_idx =
             (self.render.current_ball_size_idx + 1) % NUM_BALL_SIZES;
-        self.physics.send_command(DomainCommand::NextBallSize);
+        self.physics.send_command(BallCommand::NextSize);
     }
 
     // ── Centralized mouse event handlers ──────────────────────────────
@@ -678,7 +678,12 @@ mod tests {
             SceneLayers::BASE,
             SceneLayers::ALL.difference(SceneLayers::THERMO),
         ]
-        .map(|layers| format!("{:?}", DomainCommand::SetSnapshotLayers(layers)));
+        .map(|layers| {
+            format!(
+                "{:?}",
+                DomainCommand::View(ViewCommand::SetSnapshotLayers(layers))
+            )
+        });
         assert_eq!(sent, expected);
     }
 
@@ -699,7 +704,12 @@ mod tests {
             SceneLayers::ALL,
             without_thermo,
         ]
-        .map(|layers| format!("{:?}", DomainCommand::SetSnapshotLayers(layers)));
+        .map(|layers| {
+            format!(
+                "{:?}",
+                DomainCommand::View(ViewCommand::SetSnapshotLayers(layers))
+            )
+        });
         assert_eq!(log.lock().unwrap().clone(), expected);
     }
 
