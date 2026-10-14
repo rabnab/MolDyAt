@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use super::line_segments::Obstacle;
+use super::step_scratch::{NeighbourStats, RebuildScratch, UpdateScratch};
 use super::{SimulationWorld, StatsAccumulator, StepConfig};
 use crate::application::phase_timings::{Phase, PhaseClock};
 use crate::application::thermo_field::compute_cell_thermo;
@@ -114,38 +114,45 @@ impl SimulationEngine {
         };
 
         let mut clock = PhaseClock::start(world.show_timings);
-        // Walls cannot change within a step: one list for the contact sweep
-        // and the overlap pass.
-        let obstacles = world.collect_solid_obstacles();
-        let (bounce_infos, sweep_checks) =
-            Self::update_positions(world, dt, bound_rect, &obstacles);
-        Self::update_old_positions(world);
-        clock.lap(&mut world.phase_timings, Phase::Positions);
+        world.with_scratch(
+            |s| &mut s.update,
+            |world, scratch| {
+                // Walls cannot change within a step: one list for the contact
+                // sweep and the overlap pass.
+                world.collect_solid_obstacles_into(&mut scratch.obstacles);
+                let sweep_checks = Self::update_positions(world, dt, bound_rect, scratch);
+                Self::update_old_positions(world);
+                clock.lap(&mut world.phase_timings, Phase::Positions);
 
-        let force_results = Self::compute_forces(world);
-        clock.lap(&mut world.phase_timings, Phase::Forces);
+                Self::compute_forces(world, &mut scratch.force_results);
+                clock.lap(&mut world.phase_timings, Phase::Forces);
 
-        world.sim.wall_distance_checks += sweep_checks;
-        world.sim.wall_contacts += bounce_infos
-            .iter()
-            .map(|b| b.iter().count() as u64)
-            .sum::<u64>();
-        let (wall_px, wall_py) = Self::apply_forces_and_collect_stats(
-            world,
-            &force_results,
-            &bounce_infos,
-            dt,
-            bound_rect,
-            &mut stats_accumulator,
+                world.sim.wall_distance_checks += sweep_checks;
+                world.sim.wall_contacts += scratch
+                    .bounce_infos
+                    .iter()
+                    .map(|b| b.iter().count() as u64)
+                    .sum::<u64>();
+                let (wall_px, wall_py) = Self::apply_forces_and_collect_stats(
+                    world,
+                    &scratch.force_results,
+                    &scratch.bounce_infos,
+                    dt,
+                    bound_rect,
+                    &mut stats_accumulator,
+                );
+
+                // The previous step's results become the next step's buffer.
+                std::mem::swap(&mut world.cached_force_results, &mut scratch.force_results);
+
+                let (seg_px, seg_py) = world
+                    .resolve_wall_overlaps_with(&scratch.obstacles, &mut scratch.overlap_passes);
+                world.apply_thermostats(dt, &mut stats_accumulator);
+
+                world.sim.wall_momentum_x += wall_px + seg_px;
+                world.sim.wall_momentum_y += wall_py + seg_py;
+            },
         );
-
-        world.cached_force_results = force_results;
-
-        let (seg_px, seg_py) = world.resolve_wall_overlaps(&obstacles);
-        world.apply_thermostats(dt, &mut stats_accumulator);
-
-        world.sim.wall_momentum_x += wall_px + seg_px;
-        world.sim.wall_momentum_y += wall_py + seg_py;
 
         stats_accumulator.v_com = stats_accumulator
             .v_com
@@ -160,23 +167,25 @@ impl SimulationEngine {
         dt: f32,
         bound_rect: &Rect,
     ) {
-        let old_positions: Vec<_> = world
-            .balls
-            .iter()
-            .map(|ball| *ball.get_position())
-            .collect();
+        world.with_scratch(
+            |s| &mut s.old_positions,
+            |world, old_positions| {
+                old_positions.clear();
+                old_positions.extend(world.balls.iter().map(|ball| *ball.get_position()));
 
-        Self::update_sim(world, dt, bound_rect);
-        let mut clock = PhaseClock::start(world.show_timings);
-        world.emit_from_source_spheres(step_config.get_ball_factory());
+                Self::update_sim(world, dt, bound_rect);
+                let mut clock = PhaseClock::start(world.show_timings);
+                world.emit_from_source_spheres(step_config.get_ball_factory());
 
-        for (i, old_pos) in old_positions.iter().enumerate() {
-            let new_pos = *world.balls[i].get_position();
-            world.move_ball_in_cell_grid(i, old_pos, &new_pos);
-        }
+                for (i, old_pos) in old_positions.iter().enumerate() {
+                    let new_pos = *world.balls[i].get_position();
+                    world.move_ball_in_cell_grid(i, old_pos, &new_pos);
+                }
 
-        world.remove_invalid_balls();
-        clock.lap(&mut world.phase_timings, Phase::Cells);
+                world.remove_invalid_balls();
+                clock.lap(&mut world.phase_timings, Phase::Cells);
+            },
+        );
     }
 
     /// Rebuild the neighbour lists of the balls that moved far enough.
@@ -188,6 +197,13 @@ impl SimulationEngine {
     ///    changed partners. The result does not depend on that order (see
     ///    `Verlet::apply_rebuild`), so it equals a serial rebuild.
     fn update_neighbor_hoods_for_occupied_cells(world: &mut SimulationWorld, dt: f32) {
+        world.with_scratch(
+            |s| &mut s.rebuild,
+            |world, scratch| Self::rebuild_neighbor_hoods(world, dt, scratch),
+        );
+    }
+
+    fn rebuild_neighbor_hoods(world: &mut SimulationWorld, dt: f32, scratch: &mut RebuildScratch) {
         let cutoff_and_skin =
             world.physics.get_cutoff_distance() + world.physics.get_skin_thickness();
         let max_radius = BallFactory::get_max_radius();
@@ -200,7 +216,9 @@ impl SimulationEngine {
         // the grid itself: only balls in a cell take part, as in the per-cell
         // loop this replaces.
         const NO_CELL: u32 = u32::MAX;
-        let mut cell_of = vec![NO_CELL; world.balls.len()];
+        let cell_of = &mut scratch.cell_of;
+        cell_of.clear();
+        cell_of.resize(world.balls.len(), NO_CELL);
         for row in 0..grid_rows {
             for col in 0..grid_cols {
                 if let Some(cell) = cell_grid.get_cell(row, col) {
@@ -213,12 +231,15 @@ impl SimulationEngine {
         }
 
         // (ball, row, col, rebuild, verbose) for balls that rebuild or log.
-        let checked: Vec<(usize, usize, usize, bool, bool)> = world
+        // One entry per ball (an indexed collect fills the reused buffer in
+        // ball order); `None` for balls with nothing to do.
+        let checked = &mut scratch.checked;
+        world
             .balls
             .par_iter_mut()
             .zip(cell_of.par_iter())
             .enumerate()
-            .filter_map(|(ball_idx, (ball, &flat))| {
+            .map(|(ball_idx, (ball, &flat))| {
                 if flat == NO_CELL {
                     return None;
                 }
@@ -234,38 +255,53 @@ impl SimulationEngine {
                 let rebuild = Verlet::begin_update(ball, dt, min_movement);
                 (rebuild || verbose).then_some((ball_idx, row, col, rebuild, verbose))
             })
-            .collect();
+            .collect_into_vec(checked);
 
         // Verbose balls are logged here, in ball order, not in the parallel pass.
-        for &(ball_idx, _, _, _, verbose) in &checked {
+        for &(ball_idx, _, _, _, verbose) in checked.iter().flatten() {
             if verbose {
                 log_update_hood_start(&world.balls[ball_idx], cutoff_and_skin);
             }
         }
-        let to_rebuild: Vec<(usize, usize, usize)> = checked
-            .into_iter()
-            .filter(|&(_, _, _, rebuild, _)| rebuild)
-            .map(|(ball_idx, row, col, _, _)| (ball_idx, row, col))
-            .collect();
+        let to_rebuild = &mut scratch.to_rebuild;
+        to_rebuild.clear();
+        to_rebuild.extend(
+            checked
+                .iter()
+                .flatten()
+                .filter(|&&(_, _, _, rebuild, _)| rebuild)
+                .map(|&(ball_idx, row, col, _, _)| (ball_idx, row, col)),
+        );
 
         let balls = &world.balls;
-        let rebuilds: Vec<_> = to_rebuild
+        let rebuilds = &mut scratch.rebuilds;
+        to_rebuild
             .par_iter()
             .map_init(Vec::new, |candidates, &(ball_idx, row, col)| {
                 candidates.clear();
                 cell_grid.collect_ball_indices_into(row, col, candidates);
                 Verlet::rebuild(ball_idx, candidates, cutoff_and_skin, balls)
             })
-            .collect();
+            .collect_into_vec(rebuilds);
 
-        for rebuild in rebuilds {
+        for rebuild in rebuilds.drain(..) {
             Verlet::apply_rebuild(rebuild, cutoff_and_skin, &mut world.balls);
         }
     }
 
     fn update_neighbor_statistics(world: &mut SimulationWorld) {
+        world.with_scratch(
+            |s| &mut s.neighbour_stats,
+            Self::update_neighbor_statistics_into,
+        );
+    }
+
+    fn update_neighbor_statistics_into(
+        world: &mut SimulationWorld,
+        stats: &mut Vec<NeighbourStats>,
+    ) {
         let balls = &world.balls;
-        let stats: Vec<(usize, usize, f32, f32, bool)> = (0..balls.len())
+        (0..balls.len())
             .into_par_iter()
             .map(|i| {
                 let ball = &balls[i];
@@ -289,9 +325,9 @@ impl SimulationEngine {
                     !verbose_lines && num_neighbours > 100,
                 )
             })
-            .collect();
+            .collect_into_vec(stats);
 
-        for (i, num_neighbours, nearest, farthest, should_toggle) in stats.into_iter() {
+        for &(i, num_neighbours, nearest, farthest, should_toggle) in stats.iter() {
             if world.balls[i].hood.hood_dirty {
                 let ball_hood = &mut world.balls[i].hood;
                 ball_hood.num_neighbours = num_neighbours;
@@ -311,11 +347,12 @@ impl SimulationEngine {
         world: &mut SimulationWorld,
         dt: f32,
         bound_rect: &Rect,
-        obstacles: &[Obstacle],
-    ) -> (Vec<BounceInfo>, u64) {
+        scratch: &mut UpdateScratch,
+    ) -> u64 {
         let restitution = world.wall_restitution_fault();
         let physics = &world.physics;
-        let results: Vec<(BounceInfo, u64)> = world
+        let obstacles = &scratch.obstacles;
+        world
             .balls
             .par_iter_mut()
             .map(|ball| {
@@ -337,9 +374,8 @@ impl SimulationEngine {
                 }
                 (bounce_info, checks)
             })
-            .collect();
-        let checks = results.iter().map(|(_, c)| c).sum();
-        (results.into_iter().map(|(b, _)| b).collect(), checks)
+            .unzip_into_vecs(&mut scratch.bounce_infos, &mut scratch.sweep_checks);
+        scratch.sweep_checks.iter().sum()
     }
 
     /// Store each ball's position before the force pass and copy what the
@@ -358,14 +394,15 @@ impl SimulationEngine {
             });
     }
 
-    fn compute_forces(world: &SimulationWorld) -> Vec<ForceResult> {
+    /// Pair forces of every ball, into `results` (replaced, in ball order).
+    fn compute_forces(world: &SimulationWorld, results: &mut Vec<ForceResult>) {
         let physics = &world.physics;
         let balls = &world.balls;
         let points = &world.kernel_points;
         (0..balls.len())
             .into_par_iter()
             .map(|i| force_simd(physics, i, balls, points))
-            .collect()
+            .collect_into_vec(results);
     }
 
     fn apply_single_force_and_collect_stats(

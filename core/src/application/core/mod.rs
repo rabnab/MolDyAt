@@ -13,6 +13,7 @@ mod sim;
 mod simulation_engine;
 mod snapshot;
 mod source_spheres;
+mod step_scratch;
 mod thermostats;
 mod valves;
 pub use valves::valve_span_problem;
@@ -39,6 +40,7 @@ use crate::objects2d::{
 };
 use arc_swap::ArcSwapOption;
 use std::sync::Arc;
+use step_scratch::StepScratch;
 
 /// Persistent simulation domain state.
 ///
@@ -61,6 +63,8 @@ pub struct SimulationWorld {
     /// from `update_old_positions` to `compute_forces`. Balls are removed and
     /// added between steps, so read `balls` everywhere else.
     pub(crate) kernel_points: Vec<KernelPoint>,
+    /// Buffers the step reuses instead of allocating (see `StepScratch`).
+    pub(crate) scratch: StepScratch,
     pub(crate) cell_grid: CellGrid,
     pub(crate) real_data: bool,
     pub(crate) step_by_step: bool,

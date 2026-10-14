@@ -73,6 +73,7 @@ impl SimulationWorld {
             was_paused_for_resize: false,
             speed_limit_override: None,
             kernel_points: Vec::new(),
+            scratch: Default::default(),
             cached_force_results: Vec::new(),
             thermo_history: ThermoFieldHistory::new(),
             phase_timings: Default::default(),
