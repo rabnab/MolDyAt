@@ -3,8 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::application::thermo_field::{
-    LocalKineticStats, ThermoFieldHistory, ThermoGrid, compute_cell_thermo, compute_viz_grid_dims,
-    virial_pressure_2d,
+    LocalKineticStats, THERMO_WINDOW, ThermoFieldHistory, ThermoGrid, compute_cell_thermo,
+    compute_viz_grid_dims, virial_pressure_2d,
 };
 use crate::objects2d::Rect;
 use crate::objects2d::Vec2D;
@@ -401,18 +401,17 @@ fn test_history_shape_change_clears() {
 
 #[test]
 fn test_history_ring_wraparound() {
-    // THERMO_WINDOW is 1000, so we push 1005 items to trigger wraparound.
-    // Values 1..=1005, of which the last 1000 (6..=1005) remain.
+    // Push THERMO_WINDOW + 5 samples to trigger wraparound: values
+    // 1..=window+5, of which the last `window` (6..=window+5) remain.
     let mut h = ThermoFieldHistory::new();
-    let total = 1005u32;
-    let window = 1000u32;
+    let window = THERMO_WINDOW as u32;
+    let total = window + 5;
     for i in 1..=total {
         h.push(grid_1x1(i as f32), grid_1x1((i * 2) as f32));
     }
     let (avg_t, avg_p) = h.average().expect("should have data");
-    // Kept values: (total-window+1)..=total  i.e. 6..=1005
-    // T average: sum(6..=1005)/1000 = (6+1005)*1000/2 / 1000 = 505.5
-    // P average: sum(12,14,...,2010)/1000 = 2 * 505.5 = 1011.0
+    // Kept values: (total-window+1)..=total, i.e. 6..=window+5; the T
+    // average is their midpoint and the P values are twice the T values.
     let first_kept = (total - window + 1) as f32;
     let last_kept = total as f32;
     let expected_t = (first_kept + last_kept) / 2.0;

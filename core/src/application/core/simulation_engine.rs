@@ -5,7 +5,7 @@
 use super::step_scratch::{NeighbourStats, RebuildScratch, UpdateScratch};
 use super::{SimulationWorld, StatsAccumulator, StepConfig};
 use crate::application::phase_timings::{Phase, PhaseClock};
-use crate::application::thermo_field::compute_cell_thermo;
+use crate::application::thermo_field::{THERMO_SAMPLE_STRIDE, compute_cell_thermo};
 use crate::application::{AppResult, log_util};
 use crate::logging::log_update_hood_start;
 use crate::objects2d::ball_impl::ball_core::BounceInfo;
@@ -76,6 +76,16 @@ impl SimulationEngine {
         world.step_count += 1;
         world.phase_timings.steps += 1;
         Ok(())
+    }
+
+    /// [`Self::record_thermo_fields`] every [`THERMO_SAMPLE_STRIDE`] steps,
+    /// and right away when the history is empty (just shown, cleared after a
+    /// resize or load), so the heatmap appears without waiting (#229).
+    pub(crate) fn record_thermo_fields_if_due(world: &mut SimulationWorld) {
+        if world.thermo_history.is_empty() || world.step_count.is_multiple_of(THERMO_SAMPLE_STRIDE)
+        {
+            Self::record_thermo_fields(world);
+        }
     }
 
     /// Add the per-cell temperature and pressure of the last step to the

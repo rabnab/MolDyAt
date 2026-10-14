@@ -315,3 +315,99 @@ fn dropping_the_thermo_layer_stops_and_clears_the_thermo_fields() {
     SimulationEngine::record_thermo_fields(main_content.world_mut());
     assert!(main_content.create_snapshot().thermo_grid_spec.is_some());
 }
+
+// ── Thermo field sampling (#229) ──────────────────────────────────
+
+fn seeded_gas(seed: u64, balls: usize) -> MainContent {
+    let world_rect = crate::objects2d::Rect::new(-40.0, 40.0, 80.0, -80.0);
+    let mut mc = MainContent::new_with_seed(world_rect, seed).expect("main content");
+    mc.seed_random_balls_with_speed(balls, 3.0);
+    mc.world_mut().sim.set_pause(false);
+    mc
+}
+
+#[test]
+fn test_thermo_fields_are_sampled_every_stride_steps() {
+    use crate::application::thermo_field::THERMO_SAMPLE_STRIDE;
+
+    let mut mc = seeded_gas(229, 40);
+    let start = mc.world().step_count;
+    let steps = 3 * THERMO_SAMPLE_STRIDE + 2;
+    for _ in 0..steps {
+        mc.simulation_step().unwrap();
+    }
+    // The first step samples (empty history, so the heatmap shows at once),
+    // then every step whose count is a multiple of the stride.
+    let end = start + steps;
+    let strided = (start + 2..=end)
+        .filter(|n| n.is_multiple_of(THERMO_SAMPLE_STRIDE))
+        .count();
+    assert_eq!(mc.world().thermo_history.len(), 1 + strided);
+}
+
+#[test]
+fn test_strided_thermo_average_matches_per_step_average() {
+    use crate::application::thermo_field::{
+        THERMO_SAMPLE_STRIDE, THERMO_WINDOW, THERMO_WINDOW_STEPS, ThermoFieldHistory,
+        compute_cell_thermo,
+    };
+
+    // The same run averaged two ways over the same 1000 steps: every step
+    // (the behaviour before #229) and every stride-th step (the default).
+    let mut mc = seeded_gas(7, 400);
+    for _ in 0..200 {
+        mc.simulation_step().unwrap(); // let the gas settle
+    }
+    let mut every_step = ThermoFieldHistory::with_window(THERMO_WINDOW_STEPS);
+    let mut strided = ThermoFieldHistory::with_window(THERMO_WINDOW);
+    for step in 1..=THERMO_WINDOW_STEPS {
+        mc.simulation_step().unwrap();
+        let world = mc.world();
+        let (rows, cols) = world.cell_grid.get_grid_size();
+        let fields = || {
+            compute_cell_thermo(
+                &world.balls,
+                &world.cached_force_results,
+                &world.world_rect,
+                rows.max(1),
+                cols.max(1),
+            )
+        };
+        let (t, p) = fields();
+        every_step.push(t, p);
+        if step.is_multiple_of(THERMO_SAMPLE_STRIDE) {
+            let (t, p) = fields();
+            strided.push(t, p);
+        }
+    }
+
+    let (t_all, p_all) = every_step.average().expect("per-step average");
+    let (t_strided, p_strided) = strided.average().expect("strided average");
+    for (name, all, sampled) in [("T", &t_all, &t_strided), ("P", &p_all, &p_strided)] {
+        let pairs: Vec<(f32, f32)> = all
+            .as_slice()
+            .iter()
+            .zip(sampled.as_slice())
+            .filter(|(a, b)| a.is_finite() && b.is_finite())
+            .map(|(a, b)| (*a, *b))
+            .collect();
+        assert!(
+            pairs.len() > 10,
+            "{name}: only {} comparable cells",
+            pairs.len()
+        );
+        let mean_all = pairs.iter().map(|(a, _)| a).sum::<f32>() / pairs.len() as f32;
+        let mean_sampled = pairs.iter().map(|(_, b)| b).sum::<f32>() / pairs.len() as f32;
+        let mean_abs_diff =
+            pairs.iter().map(|(a, b)| (a - b).abs()).sum::<f32>() / pairs.len() as f32;
+        // Field-wide mean within 2 %, per-cell deviation within 10 % of it.
+        assert!(
+            (mean_sampled - mean_all).abs() <= 0.02 * mean_all.abs(),
+            "{name}: mean {mean_sampled} vs {mean_all}"
+        );
+        assert!(
+            mean_abs_diff <= 0.10 * mean_all.abs(),
+            "{name}: mean per-cell difference {mean_abs_diff} vs mean {mean_all}"
+        );
+    }
+}
