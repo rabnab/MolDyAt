@@ -245,7 +245,6 @@ impl MainContent {
         self.world.set_ghost_wall(ghost);
     }
 
-    #[cfg(test)]
     /// Resolve ball–line-segment collisions for all balls.
     ///
     /// Each wall is a capsule: its centre line inflated by half its thickness
@@ -256,6 +255,7 @@ impl MainContent {
     /// 2. Velocity-reflected: `v' = v − 2(v · n̂) n̂` (elastic, |v| preserved).
     ///
     /// Returns accumulated wall momentum `(px, py)` for pressure tracking.
+    #[cfg(test)]
     pub(crate) fn resolve_line_segment_collisions(&mut self) -> (f32, f32) {
         self.world.resolve_line_segment_collisions()
     }
@@ -647,7 +647,6 @@ impl SimulationWorld {
         })
     }
 
-    #[cfg(test)]
     /// Resolve ball-wall collisions for all balls, against every currently
     /// solid obstacle (see `collect_solid_obstacles`).
     ///
@@ -680,18 +679,19 @@ impl SimulationWorld {
     /// the actual collision geometry).
     ///
     /// Returns accumulated wall momentum `(px, py)` for pressure tracking.
+    #[cfg(test)]
     pub(crate) fn resolve_line_segment_collisions(&mut self) -> (f32, f32) {
         let obstacles = self.collect_solid_obstacles();
         self.resolve_wall_overlaps(&obstacles)
     }
 
-    #[cfg(test)]
     /// `resolve_line_segment_collisions` with an obstacle list the caller
     /// already built this step (the simulation step shares one list with
     /// `sweep_wall_contact`). Each ball only depends on its own state and the
     /// obstacles, so balls are handled in parallel. Their results are merged
     /// serially in ball order: a parallel reduce would add the f32 momenta
     /// in an order that depends on the thread count (#222).
+    #[cfg(test)]
     pub(crate) fn resolve_wall_overlaps(&mut self, obstacles: &[Obstacle]) -> (f32, f32) {
         let mut passes = Vec::new();
         self.resolve_wall_overlaps_with(obstacles, &mut passes)

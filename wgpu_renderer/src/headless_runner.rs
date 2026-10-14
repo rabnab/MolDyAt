@@ -35,7 +35,7 @@ pub struct HeadlessRunReport {
         not(test),
         expect(
             dead_code,
-            reason = "the binary logs the count in run_end; tests read it here"
+            reason = "only tests read the report; the binary writes the count to run_end itself"
         )
     )]
     pub snapshots_emitted: u32,

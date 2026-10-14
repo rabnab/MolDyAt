@@ -48,8 +48,8 @@ impl Default for Verlet {
 }
 
 impl Verlet {
-    #[cfg(test)]
     /// Creates a new Verlet integration system with default parameters
+    #[cfg(test)]
     pub fn new() -> Self {
         Self::default()
     }
@@ -66,8 +66,8 @@ impl Verlet {
         self.num_neighbours
     }
 
-    #[cfg(test)]
     /// Retrieve the names of all valid neighbours from the ball vector.
+    #[cfg(test)]
     pub fn get_neighbour_names(&self, balls: &[Ball2D]) -> Vec<String> {
         self.neighbours
             .iter()
@@ -98,7 +98,6 @@ impl Verlet {
         self.num_neighbours = 0;
     }
 
-    #[cfg(test)]
     /// Check if a ball index is in this neighbor list.
     ///
     /// # Arguments
@@ -106,6 +105,7 @@ impl Verlet {
     ///
     /// # Returns
     /// `true` if ball is a neighbor
+    #[cfg(test)]
     pub fn is_a_neighbour_idx(&self, idx: usize) -> bool {
         self.neighbours.binary_search(&idx).is_ok()
     }
@@ -162,11 +162,11 @@ impl Verlet {
         Self::has_ball_moved_enough(ball, dt, min_movement_threshold)
     }
 
-    #[cfg(test)]
     /// Rebuild one ball's neighbour list if it moved far enough, and update
     /// its partners' lists. The simulation runs the same steps in parallel
     /// (`SimulationEngine::update_neighbor_hoods_for_occupied_cells`); this
     /// serial form is kept for single-ball callers and tests.
+    #[cfg(test)]
     pub fn update_hood(
         ball_idx: usize,
         dt: f32,

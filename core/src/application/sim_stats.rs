@@ -195,23 +195,6 @@ impl SimStats {
         self.temperature = kinetic.temperature().unwrap_or(0.0);
     }
 
-    // alternative faster temperature calculation that avoids Rc<RefCell<...>>
-    // Use only if callers can provide a slice of Ball2D (borrowed) to avoid runtime borrow checks.
-    #[cfg(test)]
-    #[inline]
-    pub(crate) fn calculate_temperature_fast(&mut self, v_balls: &[&Ball2D]) {
-        let mut kinetic = LocalKineticStats::new();
-        let mut max_neighbours = 0;
-
-        for cur in v_balls {
-            kinetic.add_ball(cur);
-            max_neighbours = max_neighbours.max(cur.hood.get_number_of_neighbors());
-        }
-
-        self.max_neighbours = max_neighbours;
-        self.temperature = kinetic.temperature().unwrap_or(0.0);
-    }
-
     pub(crate) fn get_kinetic_energy(&self) -> f32 {
         self.energy_kin
     }
@@ -322,20 +305,6 @@ mod tests {
         ];
 
         stats.calculate_temperature_from_balls(&balls);
-
-        assert!((stats.temperature - 1.0).abs() < 1e-5);
-    }
-
-    #[test]
-    fn test_calculate_temperature_fast_matches_shared_com_definition() {
-        let mut stats = SimStats::default();
-        let balls = [
-            make_ball(0, Vec2D::new(1.0, 0.0)),
-            make_ball(1, Vec2D::new(-1.0, 0.0)),
-        ];
-        let refs = balls.iter().collect::<Vec<_>>();
-
-        stats.calculate_temperature_fast(&refs);
 
         assert!((stats.temperature - 1.0).abs() < 1e-5);
     }

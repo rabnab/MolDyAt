@@ -169,7 +169,6 @@ fn push_quad(
     verts.extend_from_slice(&[tl, bl, tr, tr, bl, br]);
 }
 
-#[cfg(test)]
 /// Build sidebar geometry: a background rounded-rect quad followed by icon quads.
 ///
 /// Returns the vertex list and the rounded-rect uniform params.
@@ -177,6 +176,7 @@ fn push_quad(
 /// starting below the top margin. Icons that would exceed the bottom margin
 /// are omitted. The background rectangle encloses all visible icons with
 /// [`RECT_PADDING`] on each side.
+#[cfg(test)]
 pub(crate) fn build_sidebar_geometry(
     icon_count: u32,
     win_w: f32,

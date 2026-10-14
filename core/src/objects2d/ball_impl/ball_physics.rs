@@ -6,8 +6,6 @@ use crate::objects2d::Rect;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::ball_core::BounceInfo;
 use crate::objects2d::ball_impl::{Ball2D, Named};
-#[cfg(test)]
-use crate::objects2d::ball_impl::{BallError, BallResult};
 use std::simd::Select;
 use std::simd::f32x4;
 use std::simd::prelude::{SimdFloat, SimdPartialOrd};
@@ -387,20 +385,6 @@ impl BallPhysics {
     /// Get the cached force cap distance
     pub(crate) fn get_force_cap_distance(&self) -> f32 {
         self.constants.r_cap
-    }
-
-    #[cfg(test)]
-    pub(crate) fn calculate_min_dist(actual_dist: f32, min_dist: f32) -> BallResult<f32> {
-        if f32::is_nan(min_dist) {
-            if actual_dist <= 0. {
-                return Err(BallError::DistanceUnderflow);
-            }
-            return Ok(actual_dist);
-        }
-        if actual_dist <= 0. {
-            return Err(BallError::DistanceUnderflow);
-        }
-        Ok(f32::min(min_dist, actual_dist))
     }
 
     /// Calculate edge-to-edge distance between two balls.

@@ -33,8 +33,6 @@ impl CellGrid {
     }
 }
 
-impl CellGrid {}
-
 impl CellGrid {
     /// Create a new CellGrid covering the specified world rectangle with cells sized based on the cutoff distance.
     pub fn new(world_rect: Rect, cutoff_and_skin: f32, max_radius: f32) -> AppResult<Self> {
