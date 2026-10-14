@@ -176,6 +176,7 @@ fn push_quad(
 /// starting below the top margin. Icons that would exceed the bottom margin
 /// are omitted. The background rectangle encloses all visible icons with
 /// [`RECT_PADDING`] on each side.
+#[cfg(test)]
 pub(crate) fn build_sidebar_geometry(
     icon_count: u32,
     win_w: f32,

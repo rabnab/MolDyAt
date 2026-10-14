@@ -7,7 +7,6 @@ use crate::application::thermo_field::LocalKineticStats;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::Ball2D;
 use std::collections::VecDeque;
-use std::collections::vec_deque::Iter;
 
 const PLT_SIZE: usize = 1000;
 const PLT_STEP: usize = 100;
@@ -88,20 +87,9 @@ impl SimStats {
         self.pause
     }
 
-    pub fn iter_vkin(&self) -> Iter<'_, f32> {
-        self.v_kin.iter()
-    }
-
-    pub fn iter_vpot(&self) -> Iter<'_, f32> {
-        self.v_pot.iter()
-    }
-
+    #[cfg(test)]
     pub fn len_v_energy(&self) -> usize {
         self.v_kin.len().max(self.v_pot.len())
-    }
-
-    pub fn is_max_id(&self, id: usize) -> bool {
-        self.max_id == id
     }
 
     pub fn clear_energy(&mut self) {
@@ -204,22 +192,6 @@ impl SimStats {
         self.max_neighbours = max_neighbours;
         // Keep the global temperature definition consistent with thermostats and
         // thermo-field overlays by using the shared COM-subtracted accumulator.
-        self.temperature = kinetic.temperature().unwrap_or(0.0);
-    }
-
-    // alternative faster temperature calculation that avoids Rc<RefCell<...>>
-    // Use only if callers can provide a slice of Ball2D (borrowed) to avoid runtime borrow checks.
-    #[inline]
-    pub(crate) fn calculate_temperature_fast(&mut self, v_balls: &[&Ball2D]) {
-        let mut kinetic = LocalKineticStats::new();
-        let mut max_neighbours = 0;
-
-        for cur in v_balls {
-            kinetic.add_ball(cur);
-            max_neighbours = max_neighbours.max(cur.hood.get_number_of_neighbors());
-        }
-
-        self.max_neighbours = max_neighbours;
         self.temperature = kinetic.temperature().unwrap_or(0.0);
     }
 
@@ -333,20 +305,6 @@ mod tests {
         ];
 
         stats.calculate_temperature_from_balls(&balls);
-
-        assert!((stats.temperature - 1.0).abs() < 1e-5);
-    }
-
-    #[test]
-    fn test_calculate_temperature_fast_matches_shared_com_definition() {
-        let mut stats = SimStats::default();
-        let balls = [
-            make_ball(0, Vec2D::new(1.0, 0.0)),
-            make_ball(1, Vec2D::new(-1.0, 0.0)),
-        ];
-        let refs = balls.iter().collect::<Vec<_>>();
-
-        stats.calculate_temperature_fast(&refs);
 
         assert!((stats.temperature - 1.0).abs() < 1e-5);
     }

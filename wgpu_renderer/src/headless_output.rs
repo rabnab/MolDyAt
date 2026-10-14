@@ -113,16 +113,6 @@ impl HeadlessWriterBuilder {
 }
 
 impl HeadlessWriter {
-    fn write_line(&mut self, line: String) -> io::Result<()> {
-        if let Some(stdout) = self.stdout.as_mut() {
-            writeln!(stdout, "{line}")?;
-        }
-        if let Some(file) = self.file.as_mut() {
-            writeln!(file, "{line}")?;
-        }
-        Ok(())
-    }
-
     fn write_stdout_line(&mut self, line: &str) -> io::Result<()> {
         if let Some(stdout) = self.stdout.as_mut() {
             writeln!(stdout, "{line}")?;
@@ -215,6 +205,7 @@ fn world_rect_to_json(rect: &moldyat_core::objects2d::Rect) -> serde_json::Value
     })
 }
 
+#[cfg(test)]
 fn frame_to_jsonl(snapshot: &RendererSnapshot, initial_total_energy: Option<f32>) -> String {
     frame_to_jsonl_with_config(&HeadlessConfig::default(), snapshot, initial_total_energy)
 }

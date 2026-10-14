@@ -48,6 +48,7 @@ impl MainContent {
 
     /// Open or close a valve. Balls inside it when it closes are not moved;
     /// they leave through either side on their own.
+    #[cfg(test)]
     pub(crate) fn set_valve_closed(&mut self, valve_id: usize, is_closed: bool) {
         self.world.set_valve_closed(valve_id, is_closed);
     }

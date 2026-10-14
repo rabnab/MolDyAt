@@ -101,11 +101,6 @@ impl Vec2D {
         self.x *= scale;
         self.y *= scale;
     }
-
-    /// Negates the vector in place.
-    fn negate_mut(&mut self) {
-        self.scale_mut(-1.0);
-    }
 }
 
 impl Add<Vec2D> for Vec2D {
@@ -286,14 +281,6 @@ mod tests {
         v.scale_mut(2.0);
         assert_eq!(v.x, 4.0);
         assert_eq!(v.y, 6.0);
-    }
-
-    #[test]
-    fn test_private_negate() {
-        let mut v = Vec2D::new(2.0, -3.0);
-        v.negate_mut();
-        assert_eq!(v.x, -2.0);
-        assert_eq!(v.y, 3.0);
     }
 
     #[test]

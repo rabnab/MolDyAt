@@ -3,8 +3,10 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::logging;
+#[cfg(test)]
+use crate::objects2d::ball_impl::Named;
 use crate::objects2d::ball_impl::ball_core::Ball2D;
-use crate::objects2d::ball_impl::{BallPhysics, Named, UPDATE_HOOD_CNT};
+use crate::objects2d::ball_impl::{BallPhysics, UPDATE_HOOD_CNT};
 use crate::objects2d::vec_2d::Vec2D;
 use std::sync::atomic::Ordering;
 
@@ -47,6 +49,7 @@ impl Default for Verlet {
 
 impl Verlet {
     /// Creates a new Verlet integration system with default parameters
+    #[cfg(test)]
     pub fn new() -> Self {
         Self::default()
     }
@@ -64,6 +67,7 @@ impl Verlet {
     }
 
     /// Retrieve the names of all valid neighbours from the ball vector.
+    #[cfg(test)]
     pub fn get_neighbour_names(&self, balls: &[Ball2D]) -> Vec<String> {
         self.neighbours
             .iter()
@@ -101,6 +105,7 @@ impl Verlet {
     ///
     /// # Returns
     /// `true` if ball is a neighbor
+    #[cfg(test)]
     pub fn is_a_neighbour_idx(&self, idx: usize) -> bool {
         self.neighbours.binary_search(&idx).is_ok()
     }
@@ -161,6 +166,7 @@ impl Verlet {
     /// its partners' lists. The simulation runs the same steps in parallel
     /// (`SimulationEngine::update_neighbor_hoods_for_occupied_cells`); this
     /// serial form is kept for single-ball callers and tests.
+    #[cfg(test)]
     pub fn update_hood(
         ball_idx: usize,
         dt: f32,
@@ -324,6 +330,7 @@ impl Verlet {
         (num_neighbours, nearest, farthest)
     }
 
+    #[cfg(test)]
     pub fn update_closeness_stats(&mut self, ball_pos: &Vec2D, balls: &[Ball2D]) {
         let (num_neighbours, nearest, farthest) =
             Self::compute_neighbor_stats(ball_pos, &self.neighbours, balls);

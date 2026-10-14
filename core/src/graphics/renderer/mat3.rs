@@ -134,18 +134,6 @@ impl std::ops::Mul<&Mat3> for Mat3 {
 mod tests {
     use super::*;
 
-    fn approx_eq_mat(a: Mat3, b: Mat3, eps: f32) -> bool {
-        (a.m0 - b.m0).abs() <= eps
-            && (a.m1 - b.m1).abs() <= eps
-            && (a.m2 - b.m2).abs() <= eps
-            && (a.m3 - b.m3).abs() <= eps
-            && (a.m4 - b.m4).abs() <= eps
-            && (a.m5 - b.m5).abs() <= eps
-            && (a.m6 - b.m6).abs() <= eps
-            && (a.m7 - b.m7).abs() <= eps
-            && (a.m8 - b.m8).abs() <= eps
-    }
-
     #[test]
     fn test_mat3_identity() {
         let i = Mat3::identity();

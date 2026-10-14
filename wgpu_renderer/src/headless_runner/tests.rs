@@ -15,7 +15,7 @@ use std::cell::RefCell;
 use std::fs;
 use std::io;
 use std::rc::Rc;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const SEEDED_HEADLESS_FIXTURE_PATH: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),

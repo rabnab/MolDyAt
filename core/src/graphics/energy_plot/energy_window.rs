@@ -396,37 +396,6 @@ impl EnergyPlotWindow {
         }
     }
 
-    /// Simple bitmap font renderer - renders text as pixels
-    fn render_text_to_buffer(buffer: &mut [u32], width: usize, height: usize, text: &str) {
-        const TEXT_COLOR: u32 = 0xFFCCCCCC;
-        let metrics = text_metrics(1.0);
-        let left_margin = metrics.margin_left as usize;
-        let top_margin = metrics.margin_top as usize;
-        let char_width = metrics.char_width as usize;
-        let char_height = metrics.char_height as usize;
-
-        let mut y = top_margin; // top margin
-        for line in text.lines() {
-            if y + char_height >= height {
-                break;
-            }
-
-            let mut x = left_margin;
-            for ch in line.chars() {
-                if x + char_width >= width {
-                    break;
-                }
-
-                // Render actual character using bitmap font
-                Self::draw_char_scaled(buffer, width, x, y, ch, TEXT_COLOR, metrics);
-
-                x += char_width;
-            }
-
-            y += char_height;
-        }
-    }
-
     /// Draw a character using a simple 8x8 bitmap font scaled to ~1.6x (13x19)
     fn draw_char_scaled(
         buffer: &mut [u32],

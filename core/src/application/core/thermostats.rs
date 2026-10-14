@@ -178,6 +178,7 @@ impl MainContent {
     }
 
     /// Apply all active thermostats after force/collision resolution.
+    #[cfg(test)]
     pub(crate) fn apply_thermostats(&mut self, dt: f32, stats_accumulator: &mut StatsAccumulator) {
         self.world.apply_thermostats(dt, stats_accumulator);
     }

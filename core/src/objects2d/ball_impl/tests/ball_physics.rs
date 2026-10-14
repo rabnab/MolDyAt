@@ -3,8 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::objects2d::Vec2D;
+use crate::objects2d::ball_impl::Ball2D;
 use crate::objects2d::ball_impl::ball_physics::{BallPhysics, PhysicsConstants};
-use crate::objects2d::ball_impl::{Ball2D, BallError};
 
 fn approx(a: f32, b: f32, eps: f32) {
     assert!(
@@ -28,21 +28,6 @@ fn test_lj_equilibrium() {
     let force = phys.force(r_eq);
 
     approx(force, 0.0, 1e-5);
-}
-
-#[test]
-fn test_check_min_dist() {
-    // When actual <= 0 -> DistanceUnderflow
-    assert_eq!(
-        BallPhysics::calculate_min_dist(0.0, 1.0).unwrap_err(),
-        BallError::DistanceUnderflow
-    );
-    // When actual < min -> returns actual
-    let val = BallPhysics::calculate_min_dist(0.5, 1.0).unwrap();
-    approx(val, 0.5, 1e-6);
-    // When actual >= min -> returns min
-    let val2 = BallPhysics::calculate_min_dist(2.0, 1.0).unwrap();
-    approx(val2, 1.0, 1e-6);
 }
 
 #[test]

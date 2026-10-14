@@ -6,7 +6,7 @@ use crate::application::AppResult;
 use crate::error::AppError;
 use crate::objects2d::ball_impl::BallFactory;
 
-const DT_GOAL: f32 = 0.01; // 1. / (FPS_GOAL as f32);
+const DT_GOAL: f32 = 0.01;
 
 /// Per-step settings of the physics thread: time step, ball factory and
 /// neighbour update interval.

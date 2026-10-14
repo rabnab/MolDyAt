@@ -149,6 +149,7 @@ impl RenderGraph {
     /// Enable or disable a pipeline.
     ///
     /// Returns `false` if the handle does not belong to this graph.
+    #[cfg(test)]
     pub fn set_enabled(&mut self, handle: PipelineHandle, enabled: bool) -> bool {
         if handle.0 >= self.pipelines.len() {
             return false;
@@ -172,6 +173,7 @@ impl RenderGraph {
     ///
     /// Only handles that refer to registered pipelines are kept;
     /// out-of-range handles are silently dropped.
+    #[cfg(test)]
     pub fn set_execution_order(&mut self, order: Vec<PipelineHandle>) {
         let len = self.pipelines.len();
         self.execution_order = order.into_iter().filter(|h| h.0 < len).collect();
@@ -259,6 +261,7 @@ impl RenderGraph {
     }
 
     /// Number of currently enabled pipelines.
+    #[cfg(test)]
     pub fn enabled_count(&self) -> usize {
         self.execution_order
             .iter()

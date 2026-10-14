@@ -34,21 +34,6 @@ impl CellGrid {
 }
 
 impl CellGrid {
-    pub(crate) fn default() -> Self {
-        Self {
-            cells: Vec::new(),
-            cell_size_x: 0.0,
-            cell_size_y: 0.0,
-            grid_width: 0,
-            grid_height: 0,
-            sim_width: 0.0,
-            sim_height: 0.0,
-            grid_origin: (0.0, 0.0),
-        }
-    }
-}
-
-impl CellGrid {
     /// Create a new CellGrid covering the specified world rectangle with cells sized based on the cutoff distance.
     pub fn new(world_rect: Rect, cutoff_and_skin: f32, max_radius: f32) -> AppResult<Self> {
         let sim_width = world_rect.w;

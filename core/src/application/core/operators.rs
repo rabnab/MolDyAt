@@ -46,10 +46,12 @@ impl SimulationWorld {
 }
 
 impl MainContent {
+    #[cfg(test)]
     pub(crate) fn clear_all_operators(&mut self) {
         self.world.clear_all_operators();
     }
 
+    #[cfg(test)]
     pub(crate) fn rescale_all_operators(&mut self, old_rect: &Rect, new_rect: &Rect) {
         self.world.rescale_all_operators(old_rect, new_rect);
     }

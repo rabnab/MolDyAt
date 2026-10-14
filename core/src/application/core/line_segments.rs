@@ -20,8 +20,6 @@ use rayon::prelude::*;
 /// these, so there's nothing left to get wrong at collision time.
 pub(crate) struct Obstacle {
     start: Vec2D,
-    end: Vec2D,
-    thickness: f32,
     /// The wall being drawn or dragged: collides, but its hits don't count
     /// towards the wall momentum (pressure) totals.
     ghost: bool,
@@ -42,8 +40,6 @@ impl Obstacle {
         let length_sq = direction.norm_sq();
         Self {
             start,
-            end,
-            thickness,
             ghost,
             direction,
             inv_length_sq: if length_sq > 1e-12 {
@@ -259,6 +255,7 @@ impl MainContent {
     /// 2. Velocity-reflected: `v' = v − 2(v · n̂) n̂` (elastic, |v| preserved).
     ///
     /// Returns accumulated wall momentum `(px, py)` for pressure tracking.
+    #[cfg(test)]
     pub(crate) fn resolve_line_segment_collisions(&mut self) -> (f32, f32) {
         self.world.resolve_line_segment_collisions()
     }
@@ -682,6 +679,7 @@ impl SimulationWorld {
     /// the actual collision geometry).
     ///
     /// Returns accumulated wall momentum `(px, py)` for pressure tracking.
+    #[cfg(test)]
     pub(crate) fn resolve_line_segment_collisions(&mut self) -> (f32, f32) {
         let obstacles = self.collect_solid_obstacles();
         self.resolve_wall_overlaps(&obstacles)
@@ -693,6 +691,7 @@ impl SimulationWorld {
     /// obstacles, so balls are handled in parallel. Their results are merged
     /// serially in ball order: a parallel reduce would add the f32 momenta
     /// in an order that depends on the thread count (#222).
+    #[cfg(test)]
     pub(crate) fn resolve_wall_overlaps(&mut self, obstacles: &[Obstacle]) -> (f32, f32) {
         let mut passes = Vec::new();
         self.resolve_wall_overlaps_with(obstacles, &mut passes)
