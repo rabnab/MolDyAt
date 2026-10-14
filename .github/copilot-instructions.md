@@ -60,6 +60,7 @@ Toolchain is pinned in `rust-toolchain.toml` (nightly). Use plain `cargo`. Use `
 - Parallel physics: Rayon `par_iter()` with read-only neighbor access. Avoid introducing shared mutable state inside force loops.
 - Viewport/coordinate rules: world-space is the canonical simulation space (see `docs/simulation.md`). Renderer flips Y for pixel-space; use `ViewportTransform` helpers.
 - Avoid `unsafe` unless necessary for performance-critical sections; document why and which invariants hold.
+- Docs layout: `docs/` describes the current code, `docs/plan/` holds open plans, `docs/done/` implemented plans kept as history. See the `docs-maintenance` skill before adding, moving or renaming a doc.
 - Line endings: Git normalizes text files to LF on commit (`.gitattributes`, `* text=auto`); no further check needed.
 - Operator tools (line segment, valve, thermostat, source sphere): `SIDEBAR_TOOLS` sets the icon order, and the wgpu icon atlas must match it. See the `operator-framework` skill before adding, renaming or reordering tools.
 

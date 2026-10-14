@@ -1,5 +1,7 @@
 # Headless Renderer Plan
 
+Status (2026-10-14): implemented (#179, #180, later extended by #221 and #222). The current CLI, record format and fixture workflow are described in [headless.md](../headless.md); this plan is kept as history.
+
 ## Goal
 
 Add a non-windowed renderer mode that can run the simulation without WGPU or a UI event loop and emit simulation snapshots to the console, a file, or both.
