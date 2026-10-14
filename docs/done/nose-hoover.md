@@ -45,7 +45,7 @@ In 2D that COM-subtracted definition implies a matching kinetic pressure term of
 The full cell pressure is the 2D virial pressure (`thermo_field::virial_pressure_2d`):
 
 $$
-P = \frac{(N - 1) T + \tfrac{1}{2} \sum_{i<j} \mathbf{r}_{ij} \cdot \mathbf{F}_{ij}}{A}
+P = \frac{(N - 1) T + \tfrac{1}{2} \sum_{i \lt j} \mathbf{r}_{ij} \cdot \mathbf{F}_{ij}}{A}
 $$
 
 The $\tfrac{1}{2}$ is $1/d$ for $d = 2$; each pair enters the sum once.

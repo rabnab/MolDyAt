@@ -3,7 +3,7 @@
 This note analyzes issue #137, `Refactor runtime architecture for clearer ownership boundaries`, and recommends an implementation order for its sub-issues.
 
 Status:
-This is a historical planning note for the refactor sequence. Issues `#142` and `#147` have landed; use [architecture.md](architecture.md) for the current runtime structure and remaining active seams.
+This is a historical planning note for the refactor sequence. Issues `#142` and `#147` have landed; use [architecture.md](../architecture.md) for the current runtime structure and remaining active seams.
 
 ## Summary
 
@@ -230,7 +230,7 @@ Status now:
 
 - `DomainCommand` is the single runtime command type end-to-end
 - the `MainContent` compatibility facade has been removed
-- current boundary documentation lives in [architecture.md](architecture.md)
+- current boundary documentation lives in [architecture.md](../architecture.md)
 
 ## Recommended Phases
 

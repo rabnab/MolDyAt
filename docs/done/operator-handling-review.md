@@ -3,6 +3,13 @@
 Review of the `OperatorToolHandler` trait-dispatch architecture after the
 consolidation refactoring.  Items are ranked by impact.
 
+Status (2026-10-14): items 1–6 and 8 are resolved in the code (tool reset on
+switch, thermostat tool, `ToolResponse` everywhere, `ToolPreview` /
+`FramePreviews`, no `LazyLock` fallback, `SIDEBAR_TOOLS` as the single tool
+order, `needs_continuous_redraw` removed).  Item 7 is still open; items 9–11
+are deferred until a tool needs them (a `Box` of a zero-size handler does not
+allocate, so item 9 has no cost).
+
 ---
 
 ## High Priority

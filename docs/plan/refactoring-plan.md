@@ -1,8 +1,8 @@
 # Refactoring Plan: Maintainability, Extensibility, Performance
 
 Status: accepted direction, decisions recorded 2026-10-04 (see §6). Successor to the runtime refactor in
-[refactor_architecture.md](refactor_architecture.md) (#137, landed). The current
-structure is described in [architecture.md](architecture.md).
+[refactor_architecture.md](../done/refactor_architecture.md) (#137, landed). The current
+structure is described in [architecture.md](../architecture.md).
 
 Goals:
 
@@ -100,7 +100,7 @@ Size: **S** ≤ 1 day, **M** 2–4 days, **L** ≥ 1 week. "Deps" are hard prere
 | M7 | Crate split: `thermo_physics` | Move `objects2d`, `application/core` (world, engine), persistence into a crate without winit/softbuffer/scirs2. Keep `moldyat_core` as a re-export shim for one release. | L | M1, M2 |
 | M8 | Crate split: `thermo_runtime` + headless | Physics thread, `DomainCommand`, snapshot, headless runner/output move out of the GPU crate. `cargo test -p thermo_physics` builds without a windowing stack. | L | M7 |
 | M9 | Crate split: `thermo_ui` | `graphics/renderer/event_loop`, viewport, sidebar model, interpolation. Energy window leaves the UI crate and becomes a wgpu window in `thermo_wgpu` (V4); `softbuffer` is dropped. | M | M8 |
-| M10 | Docs refresh | Update `architecture.md`, move `refactor_architecture.md` / `headless-renderer-plan.md` / `operator-handling-review.md` to `docs/history/`, update the `operator-framework` skill. | S | after each epic |
+| M10 | Docs refresh | Update `architecture.md`, move finished plans to `docs/done/` (done for `refactor_architecture.md`, `headless-renderer-plan.md`, `nose-hoover.md`, `operator-handling-review.md`), update the `operator-framework` skill. | S | after each epic |
 
 ### Epic I – Interaction types and mixed species
 

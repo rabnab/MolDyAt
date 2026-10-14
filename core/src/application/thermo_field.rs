@@ -177,7 +177,7 @@ impl CellStats {
 ///
 /// * `n_balls` - balls in the region; the kinetic term uses `N - 1` because
 ///   `temperature` is the centre-of-mass-subtracted temperature (see
-///   `docs/nose-hoover.md`).
+///   `docs/done/nose-hoover.md`).
 /// * `temperature` - COM-subtracted kinetic temperature (k_B = 1).
 /// * `pair_virial` - `Σ_pairs r_ij · F_ij` with each pair counted once,
 ///   positive for repulsion.

@@ -50,7 +50,7 @@ Derivation: `F = −dU/dx = (ε/σ) F*` and `m a = m (σ/τ²) m* a*`. With `τ�
 
 For another species, convert its single-site LJ parameters with `σ* = σ/3.405 Å`, `ε* = (ε/k_B)/122 K` and `m* = m/39.948 u`. The values below are typical literature numbers, rounded. Check them against a cited source before relying on them.
 
-The code currently uses `σ* = ε* = m* = 1` for every ball. Species support is planned (see `refactoring-plan.md`, items I3 and I5).
+The code currently uses `σ* = ε* = m* = 1` for every ball. Species support is planned (see [refactoring-plan.md](plan/refactoring-plan.md), items I3 and I5).
 
 | Species | σ [Å] | ε/k_B [K] | m [u] | σ* | ε* | m* | τ [ps] |
 |---|---|---|---|---|---|---|---|
