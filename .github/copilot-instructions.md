@@ -61,7 +61,7 @@ Toolchain is pinned in `rust-toolchain.toml` (nightly). Use plain `cargo`. Use `
 - Viewport/coordinate rules: world-space is the canonical simulation space (see `docs/simulation.md`). Renderer flips Y for pixel-space; use `ViewportTransform` helpers.
 - Avoid `unsafe` unless necessary for performance-critical sections; document why and which invariants hold.
 - Line endings: Git normalizes text files to LF on commit (`.gitattributes`, `* text=auto`); no further check needed.
-- Operator tools (line segment, valve, thermostat, source sphere): the icon-to-tool mapping must stay in sync across 3 files. See the `operator-framework` skill before adding, renaming or reordering tools.
+- Operator tools (line segment, valve, thermostat, source sphere): `SIDEBAR_TOOLS` sets the icon order, and the wgpu icon atlas must match it. See the `operator-framework` skill before adding, renaming or reordering tools.
 
 ---
 
