@@ -20,8 +20,6 @@ use rayon::prelude::*;
 /// these, so there's nothing left to get wrong at collision time.
 pub(crate) struct Obstacle {
     start: Vec2D,
-    end: Vec2D,
-    thickness: f32,
     /// The wall being drawn or dragged: collides, but its hits don't count
     /// towards the wall momentum (pressure) totals.
     ghost: bool,
@@ -42,8 +40,6 @@ impl Obstacle {
         let length_sq = direction.norm_sq();
         Self {
             start,
-            end,
-            thickness,
             ghost,
             direction,
             inv_length_sq: if length_sq > 1e-12 {
@@ -249,6 +245,7 @@ impl MainContent {
         self.world.set_ghost_wall(ghost);
     }
 
+    #[cfg(test)]
     /// Resolve ball–line-segment collisions for all balls.
     ///
     /// Each wall is a capsule: its centre line inflated by half its thickness
@@ -650,6 +647,7 @@ impl SimulationWorld {
         })
     }
 
+    #[cfg(test)]
     /// Resolve ball-wall collisions for all balls, against every currently
     /// solid obstacle (see `collect_solid_obstacles`).
     ///
@@ -687,6 +685,7 @@ impl SimulationWorld {
         self.resolve_wall_overlaps(&obstacles)
     }
 
+    #[cfg(test)]
     /// `resolve_line_segment_collisions` with an obstacle list the caller
     /// already built this step (the simulation step shares one list with
     /// `sweep_wall_contact`). Each ball only depends on its own state and the

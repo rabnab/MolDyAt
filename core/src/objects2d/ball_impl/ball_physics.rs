@@ -5,7 +5,9 @@
 use crate::objects2d::Rect;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::ball_core::BounceInfo;
-use crate::objects2d::ball_impl::{Ball2D, BallError, BallResult, Named};
+use crate::objects2d::ball_impl::{Ball2D, Named};
+#[cfg(test)]
+use crate::objects2d::ball_impl::{BallError, BallResult};
 use std::simd::Select;
 use std::simd::f32x4;
 use std::simd::prelude::{SimdFloat, SimdPartialOrd};
@@ -264,12 +266,6 @@ impl BallPhysics {
         SQRT6_OF_TWO * self.constants.lj_sig
     }
 
-    /// equilibrium distance of two balls with same radius
-    pub(crate) fn equilibrium_of_radius(&self, radius: f32) -> f32 {
-        //case: r1==r2 --- SQRT6_OF_TWO * LJ_SIG + 2* rad == dist_equi
-        self.equilibrium_edge_distance() * 0.5 + radius
-    }
-
     /// Pair force magnitude (positive = repulsive) at `edge_dist`: Lennard-Jones
     /// down to `r_cap`, below it `max_force + core_stiffness·(r_cap - edge_dist)`,
     /// and zero at and beyond `lj_cutoff`.
@@ -393,6 +389,7 @@ impl BallPhysics {
         self.constants.r_cap
     }
 
+    #[cfg(test)]
     pub(crate) fn calculate_min_dist(actual_dist: f32, min_dist: f32) -> BallResult<f32> {
         if f32::is_nan(min_dist) {
             if actual_dist <= 0. {

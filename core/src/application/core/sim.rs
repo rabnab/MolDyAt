@@ -4,6 +4,7 @@
 
 use super::{MainContent, SimulationEngine};
 use crate::application::AppResult;
+#[cfg(test)]
 use crate::objects2d::Rect;
 
 impl MainContent {
@@ -38,6 +39,7 @@ impl MainContent {
 }
 
 impl MainContent {
+    #[cfg(test)]
     pub(crate) fn update_sim(&mut self, dt: f32, bound_rect: &Rect) {
         SimulationEngine::update_sim(self.world_mut(), dt, bound_rect);
     }

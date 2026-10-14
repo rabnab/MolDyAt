@@ -19,8 +19,6 @@ mod valves;
 pub use valves::valve_span_problem;
 mod verbose;
 
-pub(crate) const FPS_GOAL: u32 = 60;
-
 pub(crate) use simulation_engine::SimulationEngine;
 
 use crate::application::StepConfig;

@@ -146,6 +146,7 @@ impl RenderGraph {
         handle
     }
 
+    #[cfg(test)]
     /// Enable or disable a pipeline.
     ///
     /// Returns `false` if the handle does not belong to this graph.
@@ -168,6 +169,7 @@ impl RenderGraph {
         handle.0 < self.pipelines.len() && self.enabled.contains(&handle)
     }
 
+    #[cfg(test)]
     /// Replace the execution order.
     ///
     /// Only handles that refer to registered pipelines are kept;
@@ -258,6 +260,7 @@ impl RenderGraph {
         self.pipelines.len()
     }
 
+    #[cfg(test)]
     /// Number of currently enabled pipelines.
     pub fn enabled_count(&self) -> usize {
         self.execution_order

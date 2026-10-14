@@ -169,6 +169,7 @@ fn push_quad(
     verts.extend_from_slice(&[tl, bl, tr, tr, bl, br]);
 }
 
+#[cfg(test)]
 /// Build sidebar geometry: a background rounded-rect quad followed by icon quads.
 ///
 /// Returns the vertex list and the rounded-rect uniform params.

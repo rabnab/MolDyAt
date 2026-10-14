@@ -3,8 +3,10 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::logging;
+#[cfg(test)]
+use crate::objects2d::ball_impl::Named;
 use crate::objects2d::ball_impl::ball_core::Ball2D;
-use crate::objects2d::ball_impl::{BallPhysics, Named, UPDATE_HOOD_CNT};
+use crate::objects2d::ball_impl::{BallPhysics, UPDATE_HOOD_CNT};
 use crate::objects2d::vec_2d::Vec2D;
 use std::sync::atomic::Ordering;
 
@@ -46,6 +48,7 @@ impl Default for Verlet {
 }
 
 impl Verlet {
+    #[cfg(test)]
     /// Creates a new Verlet integration system with default parameters
     pub fn new() -> Self {
         Self::default()
@@ -63,6 +66,7 @@ impl Verlet {
         self.num_neighbours
     }
 
+    #[cfg(test)]
     /// Retrieve the names of all valid neighbours from the ball vector.
     pub fn get_neighbour_names(&self, balls: &[Ball2D]) -> Vec<String> {
         self.neighbours
@@ -94,6 +98,7 @@ impl Verlet {
         self.num_neighbours = 0;
     }
 
+    #[cfg(test)]
     /// Check if a ball index is in this neighbor list.
     ///
     /// # Arguments
@@ -157,6 +162,7 @@ impl Verlet {
         Self::has_ball_moved_enough(ball, dt, min_movement_threshold)
     }
 
+    #[cfg(test)]
     /// Rebuild one ball's neighbour list if it moved far enough, and update
     /// its partners' lists. The simulation runs the same steps in parallel
     /// (`SimulationEngine::update_neighbor_hoods_for_occupied_cells`); this
@@ -324,6 +330,7 @@ impl Verlet {
         (num_neighbours, nearest, farthest)
     }
 
+    #[cfg(test)]
     pub fn update_closeness_stats(&mut self, ball_pos: &Vec2D, balls: &[Ball2D]) {
         let (num_neighbours, nearest, farthest) =
             Self::compute_neighbor_stats(ball_pos, &self.neighbours, balls);

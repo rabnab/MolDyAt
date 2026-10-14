@@ -35,31 +35,14 @@ use moldyat_core::graphics::renderer::Margins;
 use moldyat_core::graphics::renderer::event_loop::FramePreviews;
 use moldyat_core::graphics::renderer::state_layers::ThermoDisplayMode;
 
-/// Named handles for direct pipeline access.
-pub struct PipelineHandles {
-    pub sidebar: PipelineHandle,
-    pub frame: PipelineHandle,
-    pub grid: PipelineHandle,
-    pub thermo_heatmap: PipelineHandle,
-    pub thermo_value_overlay: PipelineHandle,
-    pub wall: PipelineHandle,
-    pub valve: PipelineHandle,
-    pub line: PipelineHandle,
-    pub endpoint: PipelineHandle,
-    pub ball: PipelineHandle,
-    pub crosshair: PipelineHandle,
-    pub text: PipelineHandle,
-    pub source_sphere: PipelineHandle,
-}
-
 /// Collection of all rendering pipelines, backed by a [`RenderGraph`].
 ///
 /// Provides:
 /// - Graph-based `prepare` / `render` for the common path
-/// - Named handles for pipeline-specific operations (e.g., cutoff rings)
+/// - A handle to the ball pipeline for its display-mode toggle
 pub struct WgpuPipelines {
     graph: RenderGraph,
-    pub handles: PipelineHandles,
+    ball: PipelineHandle,
 }
 
 impl WgpuPipelines {
@@ -72,51 +55,34 @@ impl WgpuPipelines {
         let mut graph = RenderGraph::new();
         let mut add = |pipeline: Box<dyn RenderPipeline>| graph.add_pipeline(pipeline);
 
-        let sidebar = add(Box::new(SidebarPipeline::new(device, queue, format)));
-        let frame = add(Box::new(FramePipeline::new(device, queue, format)));
-        let grid = add(Box::new(GridPipeline::new(device, queue, format)));
-        let thermo_heatmap = add(Box::new(ThermoHeatmapPipeline::new(device, queue, format)));
-        let thermo_value_overlay = add(Box::new(ThermoValueOverlayPipeline::new(
+        add(Box::new(SidebarPipeline::new(device, queue, format)));
+        add(Box::new(FramePipeline::new(device, queue, format)));
+        add(Box::new(GridPipeline::new(device, queue, format)));
+        add(Box::new(ThermoHeatmapPipeline::new(device, queue, format)));
+        add(Box::new(ThermoValueOverlayPipeline::new(
             device, queue, format,
         )));
-        let wall = add(Box::new(WallPipeline::new(device, queue, format)));
-        let valve = add(Box::new(ValvePipeline::new(device, queue, format)));
-        let line = add(Box::new(LinePipeline::new(device, queue, format)));
-        let endpoint = add(Box::new(EndpointPipeline::new(device, queue, format)));
+        add(Box::new(WallPipeline::new(device, queue, format)));
+        add(Box::new(ValvePipeline::new(device, queue, format)));
+        add(Box::new(LinePipeline::new(device, queue, format)));
+        add(Box::new(EndpointPipeline::new(device, queue, format)));
         add(Box::new(ThermostatPipeline::new(device, queue, format)));
-        let source_sphere = add(Box::new(SourceSpherePipeline::new(device, queue, format)));
+        add(Box::new(SourceSpherePipeline::new(device, queue, format)));
         add(Box::new(HighlightPipeline::new(device, queue, format)));
         let ball = add(Box::new(BallPipeline::new(device, queue, format)));
-        let crosshair = add(Box::new(CrosshairPipeline::new(device, queue, format)));
+        add(Box::new(CrosshairPipeline::new(device, queue, format)));
         add(Box::new(ThermostatLabelPipeline::new(
             device, queue, format,
         )));
         add(Box::new(SourceLabelPipeline::new(device, queue, format)));
-        let text = add(Box::new(TextPipeline::new(device, queue, format)));
+        add(Box::new(TextPipeline::new(device, queue, format)));
 
         log::debug!(
             "{} pipelines registered in RenderGraph",
             graph.pipeline_count()
         );
 
-        Self {
-            graph,
-            handles: PipelineHandles {
-                sidebar,
-                frame,
-                grid,
-                thermo_heatmap,
-                thermo_value_overlay,
-                wall,
-                valve,
-                line,
-                endpoint,
-                ball,
-                crosshair,
-                text,
-                source_sphere,
-            },
-        }
+        Self { graph, ball }
     }
 
     /// Prepare all pipelines from snapshot data.
@@ -192,22 +158,9 @@ impl WgpuPipelines {
 
     /// Cycle ring display mode on the ball pipeline (applied on the next frame).
     pub fn cycle_ring_display_mode(&mut self) {
-        if let Some(ball) = self
-            .graph
-            .get_pipeline_mut::<BallPipeline>(self.handles.ball)
-        {
+        if let Some(ball) = self.graph.get_pipeline_mut::<BallPipeline>(self.ball) {
             ball.cycle_ring_display_mode();
         }
-    }
-
-    /// Enable or disable a pipeline by handle.
-    pub fn set_enabled(&mut self, handle: PipelineHandle, enabled: bool) {
-        self.graph.set_enabled(handle, enabled);
-    }
-
-    /// Check whether a pipeline is enabled.
-    pub fn is_enabled(&self, handle: PipelineHandle) -> bool {
-        self.graph.is_enabled(handle)
     }
 }
 

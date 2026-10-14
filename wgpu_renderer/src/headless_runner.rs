@@ -10,14 +10,13 @@ use moldyat_core::application::persistence::{LoadSource, SaveStore};
 use moldyat_core::objects2d::{Rect, Vec2D};
 use std::io;
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 pub struct HeadlessRunner {
     application: MainContent,
     sink: Box<dyn HeadlessSnapshotSink>,
     steps: u32,
     snapshot_every: u32,
-    dt: f32,
     timings: Option<PathBuf>,
     timing_warmup: u32,
 }
@@ -27,12 +26,18 @@ pub struct HeadlessRunnerBuilder {
     sink: Option<Box<dyn HeadlessSnapshotSink>>,
     steps: u32,
     snapshot_every: u32,
-    dt: f32,
     timings: Option<PathBuf>,
     timing_warmup: u32,
 }
 
 pub struct HeadlessRunReport {
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "the binary logs the count in run_end; tests read it here"
+        )
+    )]
     pub snapshots_emitted: u32,
 }
 
@@ -43,7 +48,6 @@ impl HeadlessRunnerBuilder {
             sink: None,
             steps: 1,
             snapshot_every: 0,
-            dt: Duration::from_millis(1).as_secs_f32(),
             timings: None,
             timing_warmup: 0,
         }
@@ -69,11 +73,6 @@ impl HeadlessRunnerBuilder {
         self
     }
 
-    pub fn dt(mut self, dt: f32) -> Self {
-        self.dt = dt;
-        self
-    }
-
     /// Write per-phase step timings to `path`, from step `warmup` on.
     pub fn timings(mut self, path: Option<PathBuf>, warmup: u32) -> Self {
         self.timings = path;
@@ -87,7 +86,6 @@ impl HeadlessRunnerBuilder {
             sink: self.sink.expect("sink is required"),
             steps: self.steps,
             snapshot_every: self.snapshot_every,
-            dt: self.dt,
             timings: self.timings,
             timing_warmup: self.timing_warmup,
         }

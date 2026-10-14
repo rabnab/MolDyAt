@@ -145,6 +145,7 @@ impl PhysicsThread {
         Ok(())
     }
 
+    #[cfg(test)]
     /// Shutdown and wait for the physics thread to complete
     pub fn shutdown_and_join(mut self) -> Result<(), String> {
         self.shutdown();

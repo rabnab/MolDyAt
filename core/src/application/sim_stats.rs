@@ -7,7 +7,6 @@ use crate::application::thermo_field::LocalKineticStats;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::Ball2D;
 use std::collections::VecDeque;
-use std::collections::vec_deque::Iter;
 
 const PLT_SIZE: usize = 1000;
 const PLT_STEP: usize = 100;
@@ -88,20 +87,9 @@ impl SimStats {
         self.pause
     }
 
-    pub fn iter_vkin(&self) -> Iter<'_, f32> {
-        self.v_kin.iter()
-    }
-
-    pub fn iter_vpot(&self) -> Iter<'_, f32> {
-        self.v_pot.iter()
-    }
-
+    #[cfg(test)]
     pub fn len_v_energy(&self) -> usize {
         self.v_kin.len().max(self.v_pot.len())
-    }
-
-    pub fn is_max_id(&self, id: usize) -> bool {
-        self.max_id == id
     }
 
     pub fn clear_energy(&mut self) {
@@ -209,6 +197,7 @@ impl SimStats {
 
     // alternative faster temperature calculation that avoids Rc<RefCell<...>>
     // Use only if callers can provide a slice of Ball2D (borrowed) to avoid runtime borrow checks.
+    #[cfg(test)]
     #[inline]
     pub(crate) fn calculate_temperature_fast(&mut self, v_balls: &[&Ball2D]) {
         let mut kinetic = LocalKineticStats::new();

@@ -102,6 +102,7 @@ impl Vec2D {
         self.y *= scale;
     }
 
+    #[cfg(test)]
     /// Negates the vector in place.
     fn negate_mut(&mut self) {
         self.scale_mut(-1.0);
