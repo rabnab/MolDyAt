@@ -85,13 +85,14 @@ impl PhysicsRuntime {
             if !was_paused {
                 physics_step_count += 1;
                 changed = true;
-                // The heatmap's fields, only while the heatmap is shown.
+                // The heatmap's fields, only while the heatmap is shown, and
+                // sampled every few steps (see `record_thermo_fields_if_due`).
                 if simulation
                     .runtime()
                     .snapshot_layers()
                     .contains(SceneLayers::THERMO)
                 {
-                    SimulationEngine::record_thermo_fields(simulation.world_mut());
+                    SimulationEngine::record_thermo_fields_if_due(simulation.world_mut());
                 }
             }
 

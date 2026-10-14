@@ -151,7 +151,7 @@ Each item reports before/after numbers from G1 and must keep drift + energy test
 |---|---|---|---|---|
 | P1 | Remove per-step allocations | Reuse scratch buffers for `old_positions`, `force_results`, `bounce_infos`, `obstacles`, rebuild candidate lists. | S | G1 |
 | P2 | Parallel force application + stats | `apply_forces_and_collect_stats` via `par_iter_mut`; stats reduced over **fixed-size chunks** combined in chunk order, so sums do not depend on thread count or scheduling (reproducibility test from G2 must pass). | M | G1, G2 |
-| P3 | Thermo field at snapshot cadence | Bin T/P only when a snapshot or metric is due (or accumulate cheap per-cell sums in the apply pass). | S | G1 |
+| P3 | Thermo field at snapshot cadence | Bin T/P every `THERMO_SAMPLE_STRIDE` steps instead of every step; the rolling window counts samples and still spans 1000 steps. A fixed step stride (not wall-clock snapshot time) keeps headless runs deterministic. | S | G1 |
 | P4 | Flat cell grid (CSR) | `CellGrid` as counting-sort arrays (`cell_start`, `ball_idx`) rebuilt per step in parallel instead of `Vec<Vec<Cell>>` with per-cell `Vec`s. | M | P1 |
 | P5 | Spatial reordering of balls | Periodically sort `balls` by cell (Morton/row order) for cache locality; follow the index contract (clear lists, rebuild grid). | M | P4 |
 | P6 | Hot/cold split of `Ball2D` | Hot SoA arrays (pos, v, accel, radius, mass, species) vs cold per-ball data (verbose, tail, counters). Large mechanical change — do after M7 to limit churn. | L | M7, P4 |

@@ -286,16 +286,29 @@ pub fn compute_cell_thermo(
     (temp_grid, pres_grid)
 }
 
-/// Number of simulation steps to average over for T/P field smoothing.
-/// A larger window suppresses per-cell noise from small-sample statistics.
-const THERMO_WINDOW: usize = 1000;
+/// Steps between two T/P field samples (#229). Binning every ball into the
+/// field grid costs O(balls) per sample; consecutive steps are strongly
+/// correlated, so a sample every few steps averages to nearly the same field.
+pub const THERMO_SAMPLE_STRIDE: usize = 10;
+
+/// Steps the T/P field average spans. A larger window suppresses per-cell
+/// noise from small-sample statistics.
+pub const THERMO_WINDOW_STEPS: usize = 1000;
+
+/// Samples kept for the average: the window in samples, one sample every
+/// [`THERMO_SAMPLE_STRIDE`] steps, so it spans [`THERMO_WINDOW_STEPS`] steps.
+pub const THERMO_WINDOW: usize = THERMO_WINDOW_STEPS / THERMO_SAMPLE_STRIDE;
 
 /// Rolling-window averager for per-cell temperature and pressure grids.
 ///
-/// Maintains a ring buffer of the last [`THERMO_WINDOW`] grids and computes
-/// element-wise NaN-aware averages. When the pushed grid shape differs from
-/// the stored shape, the history is cleared and starts fresh.
+/// Maintains a ring buffer of the last `window` samples (default
+/// [`THERMO_WINDOW`]) and computes element-wise NaN-aware averages. The
+/// window counts samples, not steps; the caller decides how often to sample
+/// (see `SimulationEngine::record_thermo_fields_if_due`). When the pushed grid
+/// shape differs from the stored shape, the history is cleared and starts
+/// fresh.
 pub struct ThermoFieldHistory {
+    window: usize,
     t_buffer: VecDeque<ThermoGrid>,
     p_buffer: VecDeque<ThermoGrid>,
     shape: (usize, usize),
@@ -313,15 +326,32 @@ impl Default for ThermoFieldHistory {
 
 impl ThermoFieldHistory {
     pub fn new() -> Self {
+        Self::with_window(THERMO_WINDOW)
+    }
+
+    /// A history that averages over the last `window` samples.
+    pub fn with_window(window: usize) -> Self {
+        assert!(window > 0, "thermo window must hold at least one sample");
         Self {
-            t_buffer: VecDeque::with_capacity(THERMO_WINDOW),
-            p_buffer: VecDeque::with_capacity(THERMO_WINDOW),
+            window,
+            t_buffer: VecDeque::with_capacity(window),
+            p_buffer: VecDeque::with_capacity(window),
             shape: (0, 0),
             t_sum: Vec::new(),
             p_sum: Vec::new(),
             t_count: Vec::new(),
             p_count: Vec::new(),
         }
+    }
+
+    /// Samples currently buffered (at most the window).
+    pub fn len(&self) -> usize {
+        self.t_buffer.len()
+    }
+
+    /// True if no sample is buffered (new, or just cleared).
+    pub fn is_empty(&self) -> bool {
+        self.t_buffer.is_empty()
     }
 
     /// Discard all buffered grids so the next `push` starts fresh.
@@ -362,7 +392,7 @@ impl ThermoFieldHistory {
             self.reset_accumulators(new_len);
         }
 
-        if self.t_buffer.len() == THERMO_WINDOW {
+        if self.t_buffer.len() == self.window {
             if let Some(old_t) = self.t_buffer.pop_front() {
                 Self::remove_grid(&old_t, &mut self.t_sum, &mut self.t_count);
             }
@@ -379,7 +409,7 @@ impl ThermoFieldHistory {
 
     /// Compute element-wise NaN-aware averages over the buffered grids.
     ///
-    /// For each cell position, the average is taken over all stored steps
+    /// For each cell position, the average is taken over all stored samples
     /// where the value is finite. If every step is NaN at that position,
     /// the output is NaN.
     ///

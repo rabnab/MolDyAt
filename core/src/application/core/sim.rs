@@ -48,7 +48,8 @@ impl MainContent {
     }
 
     /// One step with all derived data (headless runs and tests): the thermo
-    /// fields are recorded for every step that ran.
+    /// fields are sampled as in the physics thread (see
+    /// `SimulationEngine::record_thermo_fields_if_due`).
     pub fn simulation_step(&mut self) -> AppResult<()> {
         let dt = self.time_step();
         self.simulation_step_with_dt(dt)
@@ -59,7 +60,7 @@ impl MainContent {
         let stepped = !world.sim.is_paused();
         SimulationEngine::simulation_step_with_dt(world, step_config, dt)?;
         if stepped {
-            SimulationEngine::record_thermo_fields(world);
+            SimulationEngine::record_thermo_fields_if_due(world);
         }
         Ok(())
     }
