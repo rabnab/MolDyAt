@@ -5,6 +5,7 @@
 use super::*;
 use crate::objects2d::ball_impl::BallPhysics;
 use crate::objects2d::ball_impl::ball_physics::PhysicsConstants;
+use crate::objects2d::ball_impl::pair_potential::LennardJones;
 
 #[test]
 #[ignore = "suite:drift"]
@@ -96,8 +97,11 @@ fn test_force_cap_transition_drift() {
     let mut main_content = create_dense_harness_with_seed(202);
     main_content.world_mut().speed_limit_override = Some(f32::INFINITY);
 
-    let capped_constants = PhysicsConstants::new_for_test(1.0, 1.0, 10.0);
-    main_content.world_mut().physics = BallPhysics::new(capped_constants);
+    let capped_constants = PhysicsConstants {
+        max_force: 10.0,
+        ..PhysicsConstants::default()
+    };
+    main_content.world_mut().physics = BallPhysics::new(capped_constants, LennardJones::default());
 
     let factory = BallFactory::new();
     let r_cap = main_content.world().physics.get_force_cap_distance();

@@ -149,13 +149,12 @@ fn test_simd_potential_energy_correctness() {
     let simd_result = force_simd(&physics, 0, &balls, &kernel_points(&balls));
 
     // Expected: U(r) = U(r_cap) - max_force·(r - r_cap) + ½·k·(r - r_cap)², shifted at the cutoff
-    let pot_at_cap = physics.constants.pot_at_cap;
+    let shifted_pot_at_cap = physics.potential(r_cap);
     let max_force = physics.constants.max_force;
     let stiffness = physics.constants.core_stiffness;
     let compression = r_cap - edge_dist_capped;
     let expected_core_pot =
-        pot_at_cap + max_force * compression + 0.5 * stiffness * compression * compression
-            - physics.constants.pot_at_cutoff;
+        shifted_pot_at_cap + max_force * compression + 0.5 * stiffness * compression * compression;
 
     approx(simd_result.potential_energy, expected_core_pot, 1e-4);
 }

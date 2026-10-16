@@ -415,7 +415,7 @@ fn trajectory_hash(
 fn pair_step_stats(main_content: &MainContent, step: usize) -> PairStepStats {
     let world = main_content.world();
     let balls = &world.balls;
-    let lj_cutoff = world.physics.constants.lj_cutoff;
+    let lj_cutoff = world.physics.get_cutoff_distance();
     let max_force = world.physics.constants.max_force;
     let mut stats = PairStepStats {
         step,

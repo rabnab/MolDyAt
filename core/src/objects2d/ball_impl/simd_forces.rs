@@ -2,10 +2,12 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! SIMD-optimized Lennard-Jones force calculations with force capping
+//! SIMD-optimized pair force calculations
 //!
-//! This module provides vectorized Lennard-Jones force calculations using portable
-//! `std::simd` (`f32x4`, 4 neighbours per chunk, scalar code for the remainder).
+//! This module provides the vectorized force kernel using portable `std::simd`
+//! (`f32x4`, 4 neighbours per chunk, scalar code for the remainder). The pair
+//! interaction itself (law, force cap, cutoff shift) lives in
+//! [`pair_potential`](super::pair_potential).
 //!
 //! There is no runtime dispatch or multiversioning: the instruction set is fixed at
 //! compile time by the target features. The dev profile uses the target's baseline
@@ -22,7 +24,7 @@
 //!
 //! The corresponding potential energy uses the quadratic continuation
 //! U(r) = U(r_cap) - max_force·(r - r_cap) + ½·core_stiffness·(r - r_cap)² below r_cap and is shifted to zero at the cutoff, so neighbour-list changes (which only
-//! happen beyond the cutoff) do not change the energy. See `BallPhysics::potential()` for details.
+//! happen beyond the cutoff) do not change the energy. See `CappedPotential` for details.
 
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::{Ball2D, BallPhysics, ForceResult};

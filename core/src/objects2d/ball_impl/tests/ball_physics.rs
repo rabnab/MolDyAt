@@ -5,6 +5,7 @@
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::Ball2D;
 use crate::objects2d::ball_impl::ball_physics::{BallPhysics, PhysicsConstants};
+use crate::objects2d::ball_impl::pair_potential::{LennardJones, PairLaw};
 
 fn approx(a: f32, b: f32, eps: f32) {
     assert!(
@@ -24,7 +25,8 @@ fn test_lj_equilibrium() {
     let pot = phys.potential(r_eq);
 
     // -ε, shifted so the potential is zero at the cutoff
-    approx(pot, -1.0 - phys.constants.pot_at_cutoff, 1e-5);
+    let pot_at_cutoff = LennardJones::default().potential(phys.get_cutoff_distance());
+    approx(pot, -1.0 - pot_at_cutoff, 1e-5);
     let force = phys.force(r_eq);
 
     approx(force, 0.0, 1e-5);
@@ -32,7 +34,7 @@ fn test_lj_equilibrium() {
 
 #[test]
 fn test_is_colliding_detection() {
-    use crate::objects2d::ball_impl::ball_physics::LJ_SIG;
+    use crate::objects2d::ball_impl::pair_potential::LJ_SIG;
 
     let phys = BallPhysics::default();
     let a = Ball2D::new(1, Vec2D::new(2.0, 3.0), (0, 4.0));
@@ -169,17 +171,15 @@ fn test_force_cap_calculation_robustness() {
     ];
 
     for (lj_sig, lj_eps, max_force) in test_cases {
-        let constants = PhysicsConstants::new_for_test(lj_sig, lj_eps, max_force);
-        println!(
-            "Testing force cap calculation for sig={}, eps={}, F_max={}",
-            lj_sig, lj_eps, max_force
-        );
-        println!(
-            "Constants: sig: {}, eps: {}, max_force: {}",
-            constants.lj_sig, constants.lj_eps, constants.max_force
-        );
-
-        let phys = BallPhysics::new(constants);
+        let constants = PhysicsConstants {
+            max_force,
+            ..PhysicsConstants::default()
+        };
+        let lj = LennardJones {
+            sigma: lj_sig,
+            epsilon: lj_eps,
+        };
+        let phys = BallPhysics::new(constants, lj);
         let r_cap = phys.get_force_cap_distance();
 
         // r_cap should be positive and less than sigma

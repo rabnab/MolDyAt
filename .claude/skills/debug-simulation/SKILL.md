@@ -33,7 +33,7 @@ Map the symptom to the step phase (`docs/architecture.md`, Simulation step) and 
 
 | Symptom | Look at |
 |---|---|
-| Energy jumps when pairs approach or separate | force/potential mismatch, cutoff shift, force cap (`ball_physics.rs`), scalar vs SIMD path (`simd_forces.rs`) |
+| Energy jumps when pairs approach or separate | force/potential mismatch, cutoff shift, force cap (`pair_potential.rs`), scalar vs SIMD path (`simd_forces.rs`) |
 | Energy jumps at neighbour-list changes | pairs beyond the cutoff contributing, stale lists (skin/3 threshold, `verlet.rs`), cell size (`cell_grid.rs`) |
 | Energy gain at walls, balls resting on walls drift | wall contact (`wall_contact.rs`), overlap fallback (`line_segments.rs`) |
 | Balls escape through walls or valves | `collect_solid_obstacles`, valve state, ghost wall, thickness |

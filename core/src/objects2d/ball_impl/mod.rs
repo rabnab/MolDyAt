@@ -13,6 +13,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 pub mod ball_core;
 mod ball_factory;
 pub mod ball_physics;
+pub mod pair_potential;
 pub mod simd_forces;
 pub mod verlet;
 pub mod wall_contact;
