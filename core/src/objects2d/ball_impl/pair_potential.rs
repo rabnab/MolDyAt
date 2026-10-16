@@ -10,10 +10,9 @@
 //! implemented once. [`Potential`] lists the laws the simulation can use.
 //!
 //! All distances are edge distances (centre distance minus both radii), so
-//! Lennard-Jones here acts as a Kihara-type potential with a hard core of
-//! `R_i + R_j`.
+//! Lennard-Jones here acts as a Kihara-type potential whose hard cores are the
+//! balls themselves: the edge distance is zero at centre distance `R_i + R_j`.
 
-use crate::objects2d::ball_impl::PhysicsConstants;
 use std::simd::Select;
 use std::simd::f32x4;
 use std::simd::prelude::{SimdFloat, SimdPartialOrd};
@@ -21,6 +20,34 @@ use std::simd::prelude::{SimdFloat, SimdPartialOrd};
 pub(crate) const LJ_SIG: f32 = 1.;
 const LJ_EPS: f32 = 1.;
 const SQRT6_OF_TWO: f32 = 1.122_462; // == 2^(1/6)
+
+const MAX_FORCE: f32 = 100.0; // max repulsive force to cap at
+/// Slope of the repulsion below `r_cap`: the force grows by this much per unit
+/// of extra compression, so deeper overlaps push harder than shallow ones.
+/// Stability: smallest reduced mass 0.5 gives ω·dt ≈ 0.2 at dt = 0.01.
+const CORE_STIFFNESS: f32 = 200.0;
+const CUTOFF_FACTOR: f32 = 4.0;
+
+/// Force cap and cutoff settings of a [`CappedPotential`], fixed when it is built.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CapSettings {
+    /// Force at `r_cap`, where the sloped core starts.
+    pub max_force: f32,
+    /// Force slope below `r_cap`.
+    pub core_stiffness: f32,
+    /// Cutoff as a multiple of the law's length scale (σ).
+    pub cutoff_factor: f32,
+}
+
+impl Default for CapSettings {
+    fn default() -> Self {
+        CapSettings {
+            max_force: MAX_FORCE,
+            core_stiffness: CORE_STIFFNESS,
+            cutoff_factor: CUTOFF_FACTOR,
+        }
+    }
+}
 
 /// A pair interaction as the force kernel sees it: force magnitude (positive =
 /// repulsive) and potential energy at edge distance `r`, zero at and beyond
@@ -128,8 +155,7 @@ impl PairLaw for LennardJones {
 #[derive(Clone, Debug)]
 pub struct CappedPotential<L> {
     law: L,
-    max_force: f32,
-    core_stiffness: f32,
+    settings: CapSettings,
     cutoff: f32,
     r_cap: f32,
     pot_at_cap: f32,
@@ -137,12 +163,11 @@ pub struct CappedPotential<L> {
 }
 
 impl<L: PairLaw> CappedPotential<L> {
-    pub fn new(law: L, constants: &PhysicsConstants) -> Self {
-        let r_cap = force_cap_distance(&law, constants.max_force);
-        let cutoff = constants.cutoff_factor * law.length_scale();
+    pub fn new(law: L, settings: CapSettings) -> Self {
+        let r_cap = force_cap_distance(&law, settings.max_force);
+        let cutoff = settings.cutoff_factor * law.length_scale();
         CappedPotential {
-            max_force: constants.max_force,
-            core_stiffness: constants.core_stiffness,
+            settings,
             cutoff,
             r_cap,
             pot_at_cap: law.potential(r_cap),
@@ -153,6 +178,10 @@ impl<L: PairLaw> CappedPotential<L> {
 
     pub fn law(&self) -> &L {
         &self.law
+    }
+
+    pub fn settings(&self) -> &CapSettings {
+        &self.settings
     }
 
     /// Distance below which the force follows the sloped core.
@@ -172,7 +201,7 @@ impl<L: PairLaw> PairPotential for CappedPotential<L> {
         if r >= self.cutoff {
             return 0.;
         }
-        self.law.force(r.max(self.r_cap)) + self.core_stiffness * (self.r_cap - r).max(0.)
+        self.law.force(r.max(self.r_cap)) + self.settings.core_stiffness * (self.r_cap - r).max(0.)
     }
 
     #[inline]
@@ -183,7 +212,8 @@ impl<L: PairLaw> PairPotential for CappedPotential<L> {
         let potential = if r < self.r_cap {
             let compression = self.r_cap - r;
             self.pot_at_cap
-                + compression * (self.max_force + 0.5 * self.core_stiffness * compression)
+                + compression
+                    * (self.settings.max_force + 0.5 * self.settings.core_stiffness * compression)
         } else {
             self.law.potential(r)
         };
@@ -195,7 +225,8 @@ impl<L: PairLaw> PairPotential for CappedPotential<L> {
         // The law is evaluated at max(r, r_cap) only, so it stays finite in the core.
         let r_outer = r.simd_max(f32x4::splat(self.r_cap));
         let compression = (r_outer - r).simd_max(f32x4::splat(0.));
-        let force = self.law.force_simd(r_outer) + f32x4::splat(self.core_stiffness) * compression;
+        let force =
+            self.law.force_simd(r_outer) + f32x4::splat(self.settings.core_stiffness) * compression;
         self.inside_cutoff(r).select(force, f32x4::splat(0.))
     }
 
@@ -206,8 +237,8 @@ impl<L: PairLaw> PairPotential for CappedPotential<L> {
         let compression = r_cap - r;
         let potential_core = f32x4::splat(self.pot_at_cap)
             + compression
-                * (f32x4::splat(self.max_force)
-                    + f32x4::splat(0.5 * self.core_stiffness) * compression);
+                * (f32x4::splat(self.settings.max_force)
+                    + f32x4::splat(0.5 * self.settings.core_stiffness) * compression);
         let potential_shifted = r.simd_lt(r_cap).select(potential_core, potential_outer)
             - f32x4::splat(self.pot_at_cutoff);
         self.inside_cutoff(r)
@@ -265,8 +296,14 @@ pub enum Potential {
 }
 
 impl Potential {
-    pub fn lennard_jones(lj: LennardJones, constants: &PhysicsConstants) -> Self {
-        Potential::LennardJones(CappedPotential::new(lj, constants))
+    pub fn lennard_jones(lj: LennardJones, settings: CapSettings) -> Self {
+        Potential::LennardJones(CappedPotential::new(lj, settings))
+    }
+
+    pub fn cap_settings(&self) -> &CapSettings {
+        match self {
+            Potential::LennardJones(p) => p.settings(),
+        }
     }
 
     pub fn r_cap(&self) -> f32 {

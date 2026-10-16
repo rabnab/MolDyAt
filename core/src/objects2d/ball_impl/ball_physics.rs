@@ -5,39 +5,18 @@
 use crate::objects2d::Rect;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::ball_core::BounceInfo;
-use crate::objects2d::ball_impl::pair_potential::{LennardJones, PairPotential, Potential};
+use crate::objects2d::ball_impl::pair_potential::{
+    CapSettings, LennardJones, PairPotential, Potential,
+};
 use crate::objects2d::ball_impl::{Ball2D, Named};
 use std::simd::f32x4;
 
-const MAX_FORCE: f32 = 100.0; // max repulsive force to cap at
-/// Slope of the repulsion below `r_cap`: the force grows by this much per unit
-/// of extra compression, so deeper overlaps push harder than shallow ones.
-/// Stability: smallest reduced mass 0.5 gives ω·dt ≈ 0.2 at dt = 0.01.
-const CORE_STIFFNESS: f32 = 200.0;
-const CUTOFF_FACTOR: f32 = 4.0;
-
-/// Physics settings that do not belong to a pair potential. The cap and cutoff
-/// settings are read when the potential is built ([`BallPhysics::new`]).
-#[derive(Clone)]
+/// Physics settings that do not belong to the pair potential; they may change
+/// while the simulation runs. The force cap and cutoff live in the potential
+/// ([`CapSettings`]).
+#[derive(Clone, Default)]
 pub struct PhysicsConstants {
     pub gravity: f32,
-    /// Force at `r_cap`, where the sloped core starts.
-    pub max_force: f32,
-    /// Force slope below `r_cap` (see [`CappedPotential`](super::pair_potential::CappedPotential)).
-    pub core_stiffness: f32,
-    /// Cutoff as a multiple of the potential's length scale (σ).
-    pub cutoff_factor: f32,
-}
-
-impl Default for PhysicsConstants {
-    fn default() -> Self {
-        PhysicsConstants {
-            gravity: 0.0,
-            max_force: MAX_FORCE,
-            core_stiffness: CORE_STIFFNESS,
-            cutoff_factor: CUTOFF_FACTOR,
-        }
-    }
 }
 
 /// Result of force calculation for a ball, including minimum distance to neighbors,
@@ -70,17 +49,26 @@ pub struct BallPhysics {
 
 impl Default for BallPhysics {
     fn default() -> Self {
-        BallPhysics::new(PhysicsConstants::default(), LennardJones::default())
+        BallPhysics::new(
+            PhysicsConstants::default(),
+            LennardJones::default(),
+            CapSettings::default(),
+        )
     }
 }
 
 impl BallPhysics {
-    pub fn new(constants: PhysicsConstants, lj: LennardJones) -> Self {
-        let pair_potential = Potential::lennard_jones(lj, &constants);
+    pub fn new(constants: PhysicsConstants, lj: LennardJones, cap: CapSettings) -> Self {
+        let pair_potential = Potential::lennard_jones(lj, cap);
         BallPhysics {
             constants,
             pair_potential,
         }
+    }
+
+    /// Force cap and cutoff settings of the pair potential.
+    pub fn cap_settings(&self) -> &CapSettings {
+        self.pair_potential.cap_settings()
     }
 
     /// Pairs interact only below this edge distance.

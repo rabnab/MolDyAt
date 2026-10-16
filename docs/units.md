@@ -4,7 +4,7 @@ The simulation runs in reduced Lennard-Jones units with argon as the reference s
 
 ## Pair potential
 
-`U(r) = 4 ε ((σ/r)^12 − (σ/r)^6)`, with `r` the edge distance (centre distance minus both radii). Applied to the edge distance, this is a Kihara-type potential with a hard core of diameter `R_i + R_j`; it becomes plain Lennard-Jones on the centre distance with the species work (plan item I3).
+`U(r) = 4 ε ((σ/r)^12 − (σ/r)^6)`, with `r` the edge distance (centre distance minus both radii). Applied to the edge distance, this is a Kihara-type potential whose hard cores are the balls themselves: the edge distance is zero at centre distance `R_i + R_j`; it becomes plain Lennard-Jones on the centre distance with the species work (plan item I3).
 
 - σ is the zero crossing of `U`.
 - The minimum (equilibrium distance) is at `r_m = 2^(1/6) σ ≈ 1.1225 σ`.

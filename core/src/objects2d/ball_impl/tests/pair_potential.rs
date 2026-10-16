@@ -2,9 +2,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use crate::objects2d::ball_impl::ball_physics::PhysicsConstants;
 use crate::objects2d::ball_impl::pair_potential::{
-    CappedPotential, LennardJones, PairLaw, PairPotential,
+    CapSettings, CappedPotential, LennardJones, PairLaw, PairPotential,
 };
 use std::simd::f32x4;
 
@@ -59,7 +58,7 @@ fn lennard_jones_cases() -> [LennardJones; 5] {
 }
 
 fn capped<L: PairLaw>(law: L) -> CappedPotential<L> {
-    CappedPotential::new(law, &PhysicsConstants::default())
+    CappedPotential::new(law, CapSettings::default())
 }
 
 /// Calls `check` for every Lennard-Jones case and the repulsive test law.
@@ -120,7 +119,7 @@ fn test_capped_potential_simd_matches_scalar_bit_for_bit() {
 }
 
 fn check_force_at_r_cap_is_max_force<L: PairLaw>(p: &CappedPotential<L>) {
-    let max_force = PhysicsConstants::default().max_force;
+    let max_force = p.settings().max_force;
     approx(p.force(p.r_cap()), max_force, 1e-2, "F(r_cap)");
     assert!(p.r_cap() > 0.0 && p.r_cap() < p.law().length_scale());
 }
@@ -170,14 +169,14 @@ fn check_energy_continuity_at_cutoff<L: PairLaw>(p: &CappedPotential<L>) {
         assert_eq!(p.force(r), 0.0, "force at {r}");
         assert_eq!(p.potential(r), 0.0, "potential at {r}");
     }
-    // Just inside, U ≈ -F·(cutoff - r): no jump when a pair crosses the cutoff.
-    let h = 1e-3 * sigma;
+    // Just inside, U(cutoff - h) = ∫F ≈ F(cutoff - h/2)·h: no jump when a pair
+    // crosses the cutoff. The midpoint rule errs by O(h²) relative, far below 1 %.
+    let h = 0.05 * sigma;
     let inside = p.potential(cutoff - h);
-    approx(
-        inside,
-        p.force(cutoff - h) * h,
-        1e-5,
-        "U just inside the cutoff",
+    let expected = p.force(cutoff - 0.5 * h) * h;
+    assert!(
+        (inside - expected).abs() <= 0.01 * expected.abs(),
+        "U just inside the cutoff: {inside} vs {expected}"
     );
 }
 
@@ -188,9 +187,9 @@ fn test_capped_potential_energy_continuity_at_cutoff() {
 
 #[test]
 fn test_cutoff_is_cutoff_factor_times_length_scale() {
-    let constants = PhysicsConstants::default();
+    let settings = CapSettings::default();
     for lj in lennard_jones_cases() {
-        let p = CappedPotential::new(lj, &constants);
-        assert_eq!(p.cutoff(), constants.cutoff_factor * lj.sigma);
+        let p = CappedPotential::new(lj, settings);
+        assert_eq!(p.cutoff(), settings.cutoff_factor * lj.sigma);
     }
 }

@@ -416,7 +416,7 @@ fn pair_step_stats(main_content: &MainContent, step: usize) -> PairStepStats {
     let world = main_content.world();
     let balls = &world.balls;
     let lj_cutoff = world.physics.get_cutoff_distance();
-    let max_force = world.physics.constants.max_force;
+    let max_force = world.physics.cap_settings().max_force;
     let mut stats = PairStepStats {
         step,
         min_edge_distance: f32::INFINITY,
@@ -463,7 +463,7 @@ fn sample_step(main_content: &MainContent, step: usize) -> DriftSample {
     let mut max_overlap_depth = 0.0f32;
     let mut cap_hits = 0usize;
     let mut pair_count = 0usize;
-    let max_force = world.physics.constants.max_force;
+    let max_force = world.physics.cap_settings().max_force;
 
     for ball in &world.balls {
         let speed_sq = ball.v.x * ball.v.x + ball.v.y * ball.v.y;
