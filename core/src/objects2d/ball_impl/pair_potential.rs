@@ -62,9 +62,8 @@ pub trait PairPotential {
 
 /// A bare interaction law, without cap or cutoff.
 ///
-/// `force` must equal `-dU/dr` of `potential`, and fall monotonically from
-/// `0.1·length_scale()` to `equilibrium_distance()`, so that the cap distance
-/// is unique and inside that range.
+/// `force` must equal `-dU/dr` of `potential`, and fall monotonically across
+/// [`Self::cap_search_range`], so that the cap distance is unique and inside it.
 pub trait PairLaw {
     fn force(&self, r: f32) -> f32;
     /// `dF/dr`, used by the Newton solve for `r_cap`.
@@ -76,6 +75,11 @@ pub trait PairLaw {
     fn length_scale(&self) -> f32;
     /// Distance of the potential minimum, where the force is zero.
     fn equilibrium_distance(&self) -> f32;
+    /// Interval that contains the cap distance for any positive cap: the force
+    /// falls monotonically across it and is below every cap at its upper end.
+    fn cap_search_range(&self) -> (f32, f32) {
+        (0.1 * self.length_scale(), self.equilibrium_distance())
+    }
 }
 
 /// Lennard-Jones: U(r) = 4·ε·[(σ/r)^12 - (σ/r)^6], minimum -ε at 2^(1/6)·σ.
@@ -254,34 +258,39 @@ impl<L: PairLaw> PairPotential for CappedPotential<L> {
 /// method, with a bisection as fallback.
 fn force_cap_distance<L: PairLaw>(law: &L, max_force: f32) -> f32 {
     newton_cap_distance(law, max_force).unwrap_or_else(|| {
-        log::warn!("r_cap: Newton did not converge for max_force {max_force}, bisecting");
+        log::warn!("r_cap: Newton found no valid root for max_force {max_force}, bisecting");
         bisect_cap_distance(law, max_force)
     })
 }
 
-/// Newton's method from `r = σ/2`; `None` if it does not converge.
+/// Newton's method from `r = σ/2`; `None` if it does not converge, or if it
+/// converges to a point that is not a valid cap distance (outside the search
+/// range, or where the force is not `max_force`).
 pub(crate) fn newton_cap_distance<L: PairLaw>(law: &L, max_force: f32) -> Option<f32> {
     const MAX_ITERATIONS: usize = 20;
     const CONVERGENCE_THRESHOLD: f32 = 1e-6;
+    const FORCE_TOLERANCE: f32 = 1e-4;
 
     let mut r = 0.5 * law.length_scale();
     for _ in 0..MAX_ITERATIONS {
         let delta = (law.force(r) - max_force) / law.force_derivative(r);
         r -= delta;
         if delta.abs() < CONVERGENCE_THRESHOLD * r {
-            return Some(r);
+            let (_, r_high) = law.cap_search_range();
+            let in_core = r > 0.0 && r < r_high;
+            let hits_cap = (law.force(r) - max_force).abs() <= FORCE_TOLERANCE * max_force;
+            return (r.is_finite() && in_core && hits_cap).then_some(r);
         }
     }
     None
 }
 
-/// Bisection over `[0.1·σ, equilibrium distance]`: the force falls to zero at
-/// the equilibrium distance, so the root lies there for any positive `max_force`.
+/// Bisection over [`PairLaw::cap_search_range`], which contains the root for
+/// any positive `max_force`.
 pub(crate) fn bisect_cap_distance<L: PairLaw>(law: &L, max_force: f32) -> f32 {
     const ITERATIONS: usize = 50;
 
-    let mut r_low = 0.1 * law.length_scale();
-    let mut r_high = law.equilibrium_distance();
+    let (mut r_low, mut r_high) = law.cap_search_range();
     for _ in 0..ITERATIONS {
         let r_mid = (r_low + r_high) / 2.0;
         if law.force(r_mid) > max_force {

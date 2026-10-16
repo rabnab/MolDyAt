@@ -4,8 +4,8 @@
 
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::Ball2D;
-use crate::objects2d::ball_impl::ball_physics::{BallPhysics, PhysicsConstants};
-use crate::objects2d::ball_impl::pair_potential::{CapSettings, LennardJones, PairLaw};
+use crate::objects2d::ball_impl::ball_physics::BallPhysics;
+use crate::objects2d::ball_impl::pair_potential::{LennardJones, PairLaw};
 
 fn approx(a: f32, b: f32, eps: f32) {
     assert!(
@@ -154,60 +154,6 @@ fn test_energy_conservation_with_force_cap() {
     for r in [r_cap * 0.9, r_cap * 0.5, 0.0, -0.4, -1.2] {
         let slope = (phys.potential(r + h) - phys.potential(r - h)) / (2. * h);
         approx(phys.force(r), -slope, 1e-2);
-    }
-}
-
-#[test]
-fn test_force_cap_calculation_robustness() {
-    // Test that r_cap calculation works for various parameter combinations
-    let test_cases = vec![
-        (1.0, 1.0, 50.0),  // Standard parameters, lower max_force
-        (1.0, 1.0, 100.0), // Default parameters
-        (1.0, 1.0, 200.0), // Higher max_force
-        (0.5, 1.0, 100.0), // Smaller sigma
-        (2.0, 1.0, 100.0), // Larger sigma
-        (1.0, 0.5, 100.0), // Weaker epsilon
-        (1.0, 2.0, 100.0), // Stronger epsilon
-    ];
-
-    for (lj_sig, lj_eps, max_force) in test_cases {
-        let cap = CapSettings {
-            max_force,
-            ..CapSettings::default()
-        };
-        let lj = LennardJones {
-            sigma: lj_sig,
-            epsilon: lj_eps,
-        };
-        let phys = BallPhysics::new(PhysicsConstants::default(), lj, cap);
-        let r_cap = phys.get_force_cap_distance();
-
-        // r_cap should be positive and less than sigma
-        assert!(
-            r_cap > 0.0,
-            "r_cap must be positive for sig={}, eps={}, F_max={}",
-            lj_sig,
-            lj_eps,
-            max_force
-        );
-        assert!(
-            r_cap < lj_sig,
-            "r_cap should be less than sigma for sig={}, eps={}, F_max={}",
-            lj_sig,
-            lj_eps,
-            max_force
-        );
-
-        // Force at r_cap should approximately equal max_force
-        let force_at_cap = phys.force(r_cap);
-        let rel_error = (force_at_cap - max_force).abs() / max_force;
-        assert!(
-            rel_error < 0.01, // 1% tolerance
-            "Force at r_cap should equal max_force: got {}, expected {}, error = {}%",
-            force_at_cap,
-            max_force,
-            rel_error * 100.0
-        );
     }
 }
 

@@ -47,9 +47,14 @@ impl PairLaw for RepulsiveCore {
         self.sigma
     }
 
-    /// No minimum; at 2σ the force is ~0.006·ε/σ, below any cap.
+    /// No minimum: the force only vanishes as r → ∞.
     fn equilibrium_distance(&self) -> f32 {
-        2. * self.sigma
+        f32::INFINITY
+    }
+
+    /// At 2σ the force is ~0.006·ε/σ, below any cap.
+    fn cap_search_range(&self) -> (f32, f32) {
+        (0.1 * self.sigma, 2. * self.sigma)
     }
 }
 
@@ -84,6 +89,50 @@ impl PairLaw for NewtonFails {
 
     fn equilibrium_distance(&self) -> f32 {
         self.0.equilibrium_distance()
+    }
+}
+
+/// Lennard-Jones whose derivative sends the first Newton step to `target`
+/// (or nowhere, if `None`) and then stalls Newton there, so it "converges" to a
+/// point that is not the cap distance.
+#[derive(Clone, Copy)]
+struct NewtonMisleads {
+    lj: LennardJones,
+    max_force: f32,
+    target: Option<f32>,
+}
+
+impl PairLaw for NewtonMisleads {
+    fn force(&self, r: f32) -> f32 {
+        self.lj.force(r)
+    }
+
+    fn force_derivative(&self, r: f32) -> f32 {
+        let start = 0.5 * self.lj.sigma;
+        match self.target {
+            Some(target) if r == start => (self.force(r) - self.max_force) / (r - target),
+            _ => 1e30,
+        }
+    }
+
+    fn potential(&self, r: f32) -> f32 {
+        self.lj.potential(r)
+    }
+
+    fn force_simd(&self, r: f32x4) -> f32x4 {
+        self.lj.force_simd(r)
+    }
+
+    fn potential_simd(&self, r: f32x4) -> f32x4 {
+        self.lj.potential_simd(r)
+    }
+
+    fn length_scale(&self) -> f32 {
+        self.lj.length_scale()
+    }
+
+    fn equilibrium_distance(&self) -> f32 {
+        self.lj.equilibrium_distance()
     }
 }
 
@@ -135,7 +184,7 @@ fn probe_distances<L: PairLaw>(p: &CappedPotential<L>) -> [f32; 12] {
         r_cap,
         1.01 * r_cap,
         sigma,
-        p.law().equilibrium_distance(),
+        p.law().cap_search_range().1,
         0.5 * cutoff,
         cutoff - 1e-3 * sigma,
         cutoff,
@@ -173,7 +222,7 @@ fn check_force_at_r_cap_is_max_force<L: PairLaw>(p: &CappedPotential<L>, max_for
         (force - max_force).abs() <= 1e-4 * max_force,
         "F(r_cap) = {force} for max_force {max_force}"
     );
-    assert!(p.r_cap() > 0.0 && p.r_cap() < p.law().equilibrium_distance());
+    assert!(p.r_cap() > 0.0 && p.r_cap() < p.law().cap_search_range().1);
 }
 
 #[test]
@@ -282,5 +331,28 @@ fn test_cap_distance_falls_back_to_bisection_when_newton_fails() {
         let p = capped(law, max_force);
         assert_eq!(p.r_cap(), bisect_cap_distance(&law, max_force));
         check_force_at_r_cap_is_max_force(&p, max_force);
+    }
+}
+
+#[test]
+fn test_newton_rejects_a_root_that_is_not_the_cap_distance() {
+    let lj = LennardJones::default();
+    // Stalls at σ/2 (F ≠ max_force), lands at -σ, lands beyond the range.
+    for target in [None, Some(-1.0), Some(3.0)] {
+        for max_force in MAX_FORCES {
+            let law = NewtonMisleads {
+                lj,
+                max_force,
+                target,
+            };
+            assert_eq!(
+                newton_cap_distance(&law, max_force),
+                None,
+                "target {target:?}, max_force {max_force}"
+            );
+            let p = capped(law, max_force);
+            assert_eq!(p.r_cap(), bisect_cap_distance(&lj, max_force));
+            check_force_at_r_cap_is_max_force(&p, max_force);
+        }
     }
 }
