@@ -88,7 +88,7 @@ up before they fail the build.
 | dense_gas_dt_quartering (dense gas at dt and dt/4, same physical time) | `dense_gas.rs` | max energy drift at dt/4 over that at dt | <= 0.125 | 0.094 | ~1.3x (dt^2 gives 0.0625); 75% of the threshold, CI warns, see [Baseline history](#baseline-history) |
 | two_body_lj_baseline (2 balls near equilibrium distance, 2000 steps) | `tests.rs` | relative energy drift (final) | 3.0e-2 | 4.46e-3 (max 4.59e-3) | ~6.7x |
 | | | relative momentum drift | 3.0e-3 | 0 | |
-| force_cap_transition (2 balls driven into the force cap, cap lowered to 10, 300 steps) | `tests.rs` | relative energy drift (final) | 3.0e-1 | 1.40e-1 | ~2.1x; the stiff core is not energy-conserving at this dt, the test checks continuity, not conservation (see #276 in [Baseline history](#baseline-history)) |
+| force_cap_transition (2 balls driven into the force cap, cap lowered to 10, 300 steps) | `tests.rs` | relative energy drift (final) | 3.0e-1 | 1.40e-1 | ~2.1x; the cap region is not energy-conserving at this dt, the test checks continuity, not conservation (see #276 in [Baseline history](#baseline-history)) |
 | | | relative momentum drift | 3.0e-3 | 0 | |
 | | | force-cap region reached (max cap-hit ratio) | >= 1.0e-2 | 1.0 | |
 | two_body_dt_halving (two-body scenario at dt and dt/2, same physical time) | `tests.rs` | relative energy drift at dt/2 vs at dt | <= 2 x coarse | 2.98e-3 vs 5.99e-3 (ratio 0.50) | weak check: it only rejects drift that grows when dt shrinks; the two-body drift converges ~linearly in dt, not as dt^2 |
