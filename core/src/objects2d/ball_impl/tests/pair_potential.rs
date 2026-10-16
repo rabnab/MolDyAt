@@ -3,7 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::objects2d::ball_impl::pair_potential::{
-    CapSettings, CappedPotential, LennardJones, PairLaw, PairPotential,
+    CapSettings, CappedPotential, LennardJones, PairLaw, PairPotential, bisect_cap_distance,
+    newton_cap_distance,
 };
 use std::simd::f32x4;
 
@@ -14,8 +15,7 @@ fn approx(a: f32, b: f32, eps: f32, what: &str) {
     );
 }
 
-/// Purely repulsive r^-12 law with an exact derivative, so the Newton solve
-/// for `r_cap` converges (Lennard-Jones goes through the bisection fallback).
+/// Purely repulsive r^-12 law, to show the cap and cutoff work for any law.
 #[derive(Clone, Copy)]
 struct RepulsiveCore {
     sigma: f32,
@@ -47,30 +47,77 @@ impl PairLaw for RepulsiveCore {
         self.sigma
     }
 
+    /// No minimum; at 2σ the force is ~0.006·ε/σ, below any cap.
     fn equilibrium_distance(&self) -> f32 {
-        self.sigma
+        2. * self.sigma
     }
 }
+
+/// Lennard-Jones whose derivative is NaN, so Newton never converges.
+#[derive(Clone, Copy)]
+struct NewtonFails(LennardJones);
+
+impl PairLaw for NewtonFails {
+    fn force(&self, r: f32) -> f32 {
+        self.0.force(r)
+    }
+
+    fn force_derivative(&self, _r: f32) -> f32 {
+        f32::NAN
+    }
+
+    fn potential(&self, r: f32) -> f32 {
+        self.0.potential(r)
+    }
+
+    fn force_simd(&self, r: f32x4) -> f32x4 {
+        self.0.force_simd(r)
+    }
+
+    fn potential_simd(&self, r: f32x4) -> f32x4 {
+        self.0.potential_simd(r)
+    }
+
+    fn length_scale(&self) -> f32 {
+        self.0.length_scale()
+    }
+
+    fn equilibrium_distance(&self) -> f32 {
+        self.0.equilibrium_distance()
+    }
+}
+
+/// Includes caps below F_LJ(σ) = 24·ε/σ (the drift suite's 10), where the
+/// cap distance lies above σ.
+const MAX_FORCES: [f32; 5] = [10.0, 24.0, 50.0, 100.0, 200.0];
 
 fn lennard_jones_cases() -> [LennardJones; 5] {
     [(1.0, 1.0), (0.5, 1.0), (2.0, 1.0), (1.0, 0.5), (1.0, 2.0)]
         .map(|(sigma, epsilon)| LennardJones { sigma, epsilon })
 }
 
-fn capped<L: PairLaw>(law: L) -> CappedPotential<L> {
-    CappedPotential::new(law, CapSettings::default())
+fn capped<L: PairLaw>(law: L, max_force: f32) -> CappedPotential<L> {
+    let settings = CapSettings {
+        max_force,
+        ..CapSettings::default()
+    };
+    CappedPotential::new(law, settings)
 }
 
-/// Calls `check` for every Lennard-Jones case and the repulsive test law.
+/// Calls `check(potential, max_force)` for every Lennard-Jones case and the
+/// repulsive test law, at every cap in `MAX_FORCES`.
 macro_rules! for_each_potential {
     ($check:ident) => {
-        for lj in lennard_jones_cases() {
-            $check(&capped(lj));
+        for max_force in MAX_FORCES {
+            for lj in lennard_jones_cases() {
+                $check(&capped(lj, max_force), max_force);
+            }
+            let core = RepulsiveCore {
+                sigma: 1.0,
+                epsilon: 1.0,
+            };
+            $check(&capped(core, max_force), max_force);
         }
-        $check(&capped(RepulsiveCore {
-            sigma: 1.0,
-            epsilon: 1.0,
-        }));
     };
 }
 
@@ -96,7 +143,7 @@ fn probe_distances<L: PairLaw>(p: &CappedPotential<L>) -> [f32; 12] {
     ]
 }
 
-fn check_simd_matches_scalar<L: PairLaw>(p: &CappedPotential<L>) {
+fn check_simd_matches_scalar<L: PairLaw>(p: &CappedPotential<L>, _max_force: f32) {
     let dists = probe_distances(p);
     for (chunk_idx, chunk) in dists.as_chunks::<4>().0.iter().enumerate() {
         let force = p.force_simd(f32x4::from(*chunk)).to_array();
@@ -118,10 +165,15 @@ fn test_capped_potential_simd_matches_scalar_bit_for_bit() {
     for_each_potential!(check_simd_matches_scalar);
 }
 
-fn check_force_at_r_cap_is_max_force<L: PairLaw>(p: &CappedPotential<L>) {
-    let max_force = p.settings().max_force;
-    approx(p.force(p.r_cap()), max_force, 1e-2, "F(r_cap)");
-    assert!(p.r_cap() > 0.0 && p.r_cap() < p.law().length_scale());
+/// The core force starts at `max_force`, the slope of the core potential, so
+/// F = -dU/dr holds below `r_cap` too.
+fn check_force_at_r_cap_is_max_force<L: PairLaw>(p: &CappedPotential<L>, max_force: f32) {
+    let force = p.law().force(p.r_cap());
+    assert!(
+        (force - max_force).abs() <= 1e-4 * max_force,
+        "F(r_cap) = {force} for max_force {max_force}"
+    );
+    assert!(p.r_cap() > 0.0 && p.r_cap() < p.law().equilibrium_distance());
 }
 
 #[test]
@@ -131,7 +183,7 @@ fn test_capped_potential_force_at_r_cap_is_max_force() {
 
 /// F = -dU/dr on both sides of `r_cap` and across the core. A jump in U at
 /// `r_cap` would show up as a slope error in the one-sided differences there.
-fn check_energy_continuity_at_r_cap<L: PairLaw>(p: &CappedPotential<L>) {
+fn check_energy_continuity_at_r_cap<L: PairLaw>(p: &CappedPotential<L>, _max_force: f32) {
     let sigma = p.law().length_scale();
     let r_cap = p.r_cap();
     let h = 1e-3 * sigma;
@@ -162,7 +214,7 @@ fn test_capped_potential_energy_continuity_at_r_cap() {
     for_each_potential!(check_energy_continuity_at_r_cap);
 }
 
-fn check_energy_continuity_at_cutoff<L: PairLaw>(p: &CappedPotential<L>) {
+fn check_energy_continuity_at_cutoff<L: PairLaw>(p: &CappedPotential<L>, _max_force: f32) {
     let sigma = p.law().length_scale();
     let cutoff = p.cutoff();
     for r in [cutoff, cutoff + 0.1 * sigma, 10.0 * cutoff] {
@@ -191,5 +243,44 @@ fn test_cutoff_is_cutoff_factor_times_length_scale() {
     for lj in lennard_jones_cases() {
         let p = CappedPotential::new(lj, settings);
         assert_eq!(p.cutoff(), settings.cutoff_factor * lj.sigma);
+    }
+}
+
+#[test]
+fn test_newton_converges_for_lennard_jones() {
+    for max_force in MAX_FORCES.into_iter().chain([1000.0]) {
+        for lj in lennard_jones_cases() {
+            assert!(
+                newton_cap_distance(&lj, max_force).is_some(),
+                "Newton did not converge for {lj:?}, max_force {max_force}"
+            );
+        }
+    }
+}
+
+#[test]
+fn test_bisection_agrees_with_newton() {
+    for max_force in MAX_FORCES {
+        for lj in lennard_jones_cases() {
+            let newton = newton_cap_distance(&lj, max_force).unwrap();
+            let bisection = bisect_cap_distance(&lj, max_force);
+            approx(
+                bisection,
+                newton,
+                1e-5,
+                &format!("{lj:?}, max_force {max_force}"),
+            );
+        }
+    }
+}
+
+#[test]
+fn test_cap_distance_falls_back_to_bisection_when_newton_fails() {
+    for max_force in MAX_FORCES {
+        let law = NewtonFails(LennardJones::default());
+        assert_eq!(newton_cap_distance(&law, max_force), None);
+        let p = capped(law, max_force);
+        assert_eq!(p.r_cap(), bisect_cap_distance(&law, max_force));
+        check_force_at_r_cap_is_max_force(&p, max_force);
     }
 }
