@@ -136,7 +136,7 @@ fn test_force_cap_transition_drift() {
         },
     );
 
-    const MAX_REL_ENERGY_DRIFT: f32 = 7.0e-1;
+    const MAX_REL_ENERGY_DRIFT: f32 = 3.0e-1;
     const MAX_REL_MOMENTUM_DRIFT: f32 = 3.0e-3;
     const MIN_CAP_HIT_RATIO: f32 = 1.0e-2;
     let max_cap_hit_ratio = metrics
