@@ -275,7 +275,7 @@ pub(crate) fn newton_cap_distance<L: PairLaw>(law: &L, max_force: f32) -> Option
     for _ in 0..MAX_ITERATIONS {
         let delta = (law.force(r) - max_force) / law.force_derivative(r);
         r -= delta;
-        if delta.abs() < CONVERGENCE_THRESHOLD * r {
+        if delta.abs() < CONVERGENCE_THRESHOLD * r.abs() {
             let (_, r_high) = law.cap_search_range();
             let in_core = r > 0.0 && r < r_high;
             let hits_cap = (law.force(r) - max_force).abs() <= FORCE_TOLERANCE * max_force;
