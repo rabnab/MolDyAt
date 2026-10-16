@@ -149,13 +149,12 @@ fn test_simd_potential_energy_correctness() {
     let simd_result = force_simd(&physics, 0, &balls, &kernel_points(&balls));
 
     // Expected: U(r) = U(r_cap) - max_force·(r - r_cap) + ½·k·(r - r_cap)², shifted at the cutoff
-    let pot_at_cap = physics.constants.pot_at_cap;
-    let max_force = physics.constants.max_force;
-    let stiffness = physics.constants.core_stiffness;
+    let shifted_pot_at_cap = physics.potential(r_cap);
+    let max_force = physics.cap_settings().max_force;
+    let stiffness = physics.cap_settings().core_stiffness;
     let compression = r_cap - edge_dist_capped;
     let expected_core_pot =
-        pot_at_cap + max_force * compression + 0.5 * stiffness * compression * compression
-            - physics.constants.pot_at_cutoff;
+        shifted_pot_at_cap + max_force * compression + 0.5 * stiffness * compression * compression;
 
     approx(simd_result.potential_energy, expected_core_pot, 1e-4);
 }
@@ -197,7 +196,7 @@ fn test_virial_single_neighbour_known_geometry() {
 fn test_virial_force_capped_regime() {
     let physics = BallPhysics::default();
     let r_cap = physics.get_force_cap_distance();
-    let max_force = physics.constants.max_force;
+    let max_force = physics.cap_settings().max_force;
 
     // Place neighbour so edge_dist is well below r_cap
     let edge_dist_capped = r_cap * 0.5;
@@ -214,7 +213,8 @@ fn test_virial_force_capped_regime() {
     // (≈ max_force): F(r_cap) + k·(r_cap - r). virial = center_dist * core_force
     let force_at_cap = physics.force(r_cap);
     approx(force_at_cap, max_force, 1e-3);
-    let core_force = force_at_cap + physics.constants.core_stiffness * (r_cap - edge_dist_capped);
+    let core_force =
+        force_at_cap + physics.cap_settings().core_stiffness * (r_cap - edge_dist_capped);
     approx(physics.force(edge_dist_capped), core_force, 1e-5);
     let expected_virial = center_dist * core_force;
 

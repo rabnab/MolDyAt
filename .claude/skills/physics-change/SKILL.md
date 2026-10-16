@@ -1,6 +1,6 @@
 ---
 name: physics-change
-description: Contract for changing simulation physics - pair forces and potentials, force capping, cutoff, the integrator, wall contacts, neighbour lists, the cell grid, the step order, thermostats, or anything that changes simulated trajectories. Use before editing ball_physics.rs, simd_forces.rs, verlet.rs, wall_contact.rs, simulation_engine.rs, cell_grid.rs or the thermostat/source physics.
+description: Contract for changing simulation physics - pair forces and potentials, force capping, cutoff, the integrator, wall contacts, neighbour lists, the cell grid, the step order, thermostats, or anything that changes simulated trajectories. Use before editing ball_physics.rs, pair_potential.rs, simd_forces.rs, verlet.rs, wall_contact.rs, simulation_engine.rs, cell_grid.rs or the thermostat/source physics.
 ---
 
 # Physics Change Contract
@@ -8,9 +8,9 @@ description: Contract for changing simulation physics - pair forces and potentia
 The simulation must conserve energy where the physics says it should, and seeded runs must stay reproducible. Every physics change proves both with tests and, if results move, with baseline evidence.
 
 ## Invariants
-- **Force and potential match.** `F = -dU/dr` everywhere, in the scalar path (`BallPhysics::force` / `potential`) and the SIMD path (`force_simd` / `potential_simd`). Any change to one needs the matching change to the other and to both paths.
-- **Cutoff.** Pairs interact only for edge distance `< lj_cutoff`; `U` is shifted by `U(lj_cutoff)` so it is zero there. Pairs in a neighbour list beyond the cutoff contribute no force and no energy.
-- **Force cap.** Below `r_cap` the force is `max_force + core_stiffness * (r_cap - r)` with `U(r) = U(r_cap) - max_force * (r - r_cap) + 0.5 * core_stiffness * (r - r_cap)^2`. `r_cap` is cached and computed with Newton's method in `calculate_force_cap_distance()`. Do not flatten the cap (#240).
+- **Force and potential match.** `F = -dU/dr` everywhere, in the scalar path (`PairPotential::force` / `potential`) and the SIMD path (`force_simd` / `potential_simd`), for every `PairLaw` and in `CappedPotential`. Any change to one needs the matching change to the other and to both paths.
+- **Cutoff.** Pairs interact only for edge distance `< cutoff` (`PairPotential::cutoff`); `U` is shifted by `U(cutoff)` so it is zero there. Pairs in a neighbour list beyond the cutoff contribute no force and no energy.
+- **Force cap.** Below `r_cap` the force is `max_force + core_stiffness * (r_cap - r)` with `U(r) = U(r_cap) - max_force * (r - r_cap) + 0.5 * core_stiffness * (r - r_cap)^2`. Cap and cutoff shift are implemented once in `CappedPotential`, generic over the `PairLaw`; `r_cap` is cached there and computed by `force_cap_distance()`. Do not flatten the cap (#240).
 - **Neighbour lists.** A ball rebuilds its Verlet list when its displacement since its last rebuild exceeds skin/3 (`get_min_movement_for_update_hood`); rebuilds are per ball and asynchronous, so skin/2 is not enough. Cells are at least cutoff + skin + 2 x max radius wide (cell count rounded down). Lists are sorted by ball index.
 - **Index contract.** Cells and Verlet lists store indices into `balls`. After `retain`/`remove`/`swap_remove`, clear all neighbour lists and rebuild the cell grid immediately (`remove_invalid_balls`). Never keep indices across a structural change.
 - **Walls.** Contacts are resolved along the wall normal in the position update (`ball_impl::wall_contact`); never project or mirror the whole overshoot. See the `operator-framework` skill for line walls and valves.

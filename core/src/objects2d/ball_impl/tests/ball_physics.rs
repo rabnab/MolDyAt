@@ -5,6 +5,7 @@
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::Ball2D;
 use crate::objects2d::ball_impl::ball_physics::{BallPhysics, PhysicsConstants};
+use crate::objects2d::ball_impl::pair_potential::{CapSettings, LennardJones, PairLaw};
 
 fn approx(a: f32, b: f32, eps: f32) {
     assert!(
@@ -24,7 +25,8 @@ fn test_lj_equilibrium() {
     let pot = phys.potential(r_eq);
 
     // -ε, shifted so the potential is zero at the cutoff
-    approx(pot, -1.0 - phys.constants.pot_at_cutoff, 1e-5);
+    let pot_at_cutoff = LennardJones::default().potential(phys.get_cutoff_distance());
+    approx(pot, -1.0 - pot_at_cutoff, 1e-5);
     let force = phys.force(r_eq);
 
     approx(force, 0.0, 1e-5);
@@ -32,7 +34,7 @@ fn test_lj_equilibrium() {
 
 #[test]
 fn test_is_colliding_detection() {
-    use crate::objects2d::ball_impl::ball_physics::LJ_SIG;
+    use crate::objects2d::ball_impl::pair_potential::LJ_SIG;
 
     let phys = BallPhysics::default();
     let a = Ball2D::new(1, Vec2D::new(2.0, 3.0), (0, 4.0));
@@ -94,8 +96,8 @@ fn test_min_movement_threshold_formula() {
 #[test]
 fn test_force_cap_at_max_force() {
     let phys = BallPhysics::default();
-    let max_force = phys.constants.max_force;
-    let stiffness = phys.constants.core_stiffness;
+    let max_force = phys.cap_settings().max_force;
+    let stiffness = phys.cap_settings().core_stiffness;
     let r_cap = phys.get_force_cap_distance();
 
     // At r_cap, force should be approximately max_force
@@ -111,8 +113,8 @@ fn test_force_cap_at_max_force() {
 #[test]
 fn test_potential_quadratic_below_cap() {
     let phys = BallPhysics::default();
-    let max_force = phys.constants.max_force;
-    let stiffness = phys.constants.core_stiffness;
+    let max_force = phys.cap_settings().max_force;
+    let stiffness = phys.cap_settings().core_stiffness;
     let r_cap = phys.get_force_cap_distance();
 
     let pot_at_cap = phys.potential(r_cap);
@@ -127,7 +129,7 @@ fn test_potential_quadratic_below_cap() {
 #[test]
 fn test_force_not_capped_above_threshold() {
     let phys = BallPhysics::default();
-    let max_force = phys.constants.max_force;
+    let max_force = phys.cap_settings().max_force;
     let r_cap = phys.get_force_cap_distance();
 
     // Above r_cap, force should follow normal LJ formula
@@ -169,17 +171,15 @@ fn test_force_cap_calculation_robustness() {
     ];
 
     for (lj_sig, lj_eps, max_force) in test_cases {
-        let constants = PhysicsConstants::new_for_test(lj_sig, lj_eps, max_force);
-        println!(
-            "Testing force cap calculation for sig={}, eps={}, F_max={}",
-            lj_sig, lj_eps, max_force
-        );
-        println!(
-            "Constants: sig: {}, eps: {}, max_force: {}",
-            constants.lj_sig, constants.lj_eps, constants.max_force
-        );
-
-        let phys = BallPhysics::new(constants);
+        let cap = CapSettings {
+            max_force,
+            ..CapSettings::default()
+        };
+        let lj = LennardJones {
+            sigma: lj_sig,
+            epsilon: lj_eps,
+        };
+        let phys = BallPhysics::new(PhysicsConstants::default(), lj, cap);
         let r_cap = phys.get_force_cap_distance();
 
         // r_cap should be positive and less than sigma
@@ -461,7 +461,7 @@ fn test_potential_continuity_at_rcap() {
     // Verify potential is continuous at the r_cap boundary
     let phys = BallPhysics::default();
     let r_cap = phys.get_force_cap_distance();
-    let max_force = phys.constants.max_force;
+    let max_force = phys.cap_settings().max_force;
 
     println!("\n=== Testing Potential Continuity at r_cap ===");
 
@@ -528,8 +528,8 @@ fn test_overlapping_balls_force_capped() {
     // must keep rising with the overlap so crowded neighbours cannot pin a
     // deeply overlapping pair (issue #240).
     let phys = BallPhysics::default();
-    let max_force = phys.constants.max_force;
-    let stiffness = phys.constants.core_stiffness;
+    let max_force = phys.cap_settings().max_force;
+    let stiffness = phys.cap_settings().core_stiffness;
     let r_cap = phys.get_force_cap_distance();
 
     let edge_dist = -0.40344;
