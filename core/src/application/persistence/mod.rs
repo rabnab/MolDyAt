@@ -13,6 +13,16 @@
 //! `DomainCommand`s, and `--load` calls `load_world` before the run starts.
 //! The view (window size, zoom, pan) is not saved; a loaded world is shown in
 //! the default view.
+//!
+//! # Reference saves
+//!
+//! `tests/fixtures/` holds one save per format version (`v1.json`, ...),
+//! written by the build that introduced that version, and
+//! `tests/reference_saves.rs` loads each one through [`MainContent::load_world`]
+//! and checks its contents. An existing fixture is never edited or
+//! regenerated: it stands for the files users already have. A change that
+//! bumps [`WORLD_FILE_VERSION`] adds a new fixture, and every older one must
+//! keep loading.
 
 mod convert;
 pub mod format;
