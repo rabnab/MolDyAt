@@ -17,7 +17,9 @@
       "Bash(git --no-pager branch --list *)",
       "mcp__rustrover__search_text",
       "Bash(cargo ci-test-headless-regression)",
-      "Bash(cargo ci-test-drift)"
+      "Bash(cargo ci-test-drift)",
+      "Bash(git check-ignore *)",
+      "Bash(git --no-pager branch --show-current)"
     ]
   },
   "attribution": {
