@@ -7,7 +7,7 @@ use super::wgpu_pipelines::{WgpuPipelines, compute_view_proj};
 use crate::wgpu::margins_for_scale_factor;
 use moldyat_core::application::scene_layers::SceneLayers;
 use moldyat_core::graphics::renderer::event_loop::UnifiedRenderState;
-use moldyat_core::objects2d::ball_impl::BallFactory;
+use moldyat_core::objects2d::ball_impl::SpeciesTable;
 use std::time::{Duration, Instant};
 use winit::dpi::PhysicalSize;
 use winit::event_loop::ActiveEventLoop;
@@ -118,7 +118,9 @@ impl FrameRenderer {
                 snapshot,
                 view_proj,
                 cursor_wp,
-                BallFactory::radius_for_size_idx(state.current_ball_size_idx()),
+                SpeciesTable::builtin()
+                    .get(state.current_species())
+                    .map_or(0.0, |s| s.display_radius),
                 show_ball_outline,
                 state.config().thermo_display,
                 state.viewport().margins(),

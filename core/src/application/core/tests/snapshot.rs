@@ -5,9 +5,10 @@
 use std::sync::Arc;
 
 use crate::application::MainContent;
-use crate::application::renderer_snapshot::{get_special_ball_color, size_class_to_rgba};
+use crate::application::renderer_snapshot::get_special_ball_color;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::BallFactory;
+use crate::objects2d::ball_impl::SpeciesTable;
 
 fn create_test_main_content_with_balls(ball_count: usize) -> MainContent {
     let world_rect = crate::objects2d::Rect::new(0.0, 0.0, 100.0, 100.0);
@@ -38,9 +39,10 @@ fn test_collect_all_neighbors_empty() {
 
 #[test]
 fn test_snapshot_colors_are_valid_rgba() {
-    // Verify the color helper functions work correctly
-    for size_class in 0..6 {
-        let color = size_class_to_rgba(size_class);
+    // Verify the species colours are valid
+    let table = SpeciesTable::builtin();
+    for i in 0..table.len() {
+        let color = table.species(table.id(i).unwrap()).colour;
         assert!(color[0] >= 0.0 && color[0] <= 1.0);
         assert!(color[1] >= 0.0 && color[1] <= 1.0);
         assert!(color[2] >= 0.0 && color[2] <= 1.0);

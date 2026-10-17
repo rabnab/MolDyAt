@@ -5,7 +5,7 @@
 use super::scratch_dir;
 use crate::application::persistence::{LoadSource, SaveStore, WorldFile};
 use crate::application::{MainContent, PhysicsEvent, PhysicsThread, WorldCommand};
-use crate::objects2d::ball_impl::Ball2D;
+use crate::objects2d::ball_impl::{Ball2D, SpeciesId};
 use crate::objects2d::{Rect, Vec2D};
 use std::fs;
 use std::time::{Duration, Instant};
@@ -27,7 +27,8 @@ fn busy_world() -> MainContent {
     mc.world_mut().physics.constants.gravity = 0.5;
 
     for (i, x) in [-6.0, -2.0, 2.0, 6.0].into_iter().enumerate() {
-        let mut ball = Ball2D::new(10 + i, Vec2D::new(x, 0.0), (i % 3, 1.0));
+        let mut ball = Ball2D::new(10 + i, Vec2D::new(x, 0.0), 1.0);
+        ball.species = SpeciesId::new((i % 3) as u16);
         ball.v = Vec2D::new(0.1 * i as f32, -0.2);
         ball.accel = Vec2D::new(0.01, -0.5);
         ball.pre_update_pos = Vec2D::new(x - 0.01, 0.01);

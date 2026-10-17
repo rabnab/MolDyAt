@@ -2,11 +2,12 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+use crate::wgpu::gpu::text::TextVertex;
 use crate::wgpu::gpu::textures::{
     ICON_SOURCE_CLOSED, ICON_SOURCE_OPEN, ICON_THERMO, ICON_VALVE, ICON_WALL, decode_icon,
 };
 use crate::wgpu::pipelines::sidebar_pipeline::*;
-use crate::wgpu::{MARGIN_BOTTOM, MARGIN_LEFT, MARGIN_TOP};
+use crate::wgpu::{MARGIN_BOTTOM, MARGIN_LEFT, MARGIN_TOP, MARGINS};
 use moldyat_core::graphics::sidebar::{ICON_COUNT, ICON_DISPLAY_SIZE, ICON_SPACING};
 
 /// Background quad uses 6 vertices.
@@ -280,4 +281,57 @@ fn rect_params_zero_when_no_icons_visible() {
     let (_, params) = build_sidebar_geometry(4, 800.0, too_short, None);
     assert!((params.size_px[0]).abs() < 1e-5, "rect width should be 0");
     assert!((params.size_px[1]).abs() < 1e-5, "rect height should be 0");
+}
+
+/// Bounding box (NDC) of a label's glyph quads: (min_x, max_x, min_y, max_y).
+fn label_bounds(verts: &[TextVertex]) -> (f32, f32, f32, f32) {
+    verts.iter().fold(
+        (f32::MAX, f32::MIN, f32::MAX, f32::MIN),
+        |(x0, x1, y0, y1), v| {
+            (
+                x0.min(v.position[0]),
+                x1.max(v.position[0]),
+                y0.min(v.position[1]),
+                y1.max(v.position[1]),
+            )
+        },
+    )
+}
+
+#[test]
+fn ball_label_is_centred_on_the_ball_icon() {
+    let (w, h) = (1920.0, 1080.0);
+    let verts = ball_label_vertices("XL", w, h, MARGINS);
+    assert_eq!(verts.len(), 2 * 6, "two glyphs");
+
+    // The ball is the first icon.
+    let centre_px = (
+        MARGIN_LEFT * 0.5,
+        MARGIN_TOP + ICON_SPACING + ICON_DISPLAY_SIZE * 0.5,
+    );
+    let expected = [centre_px.0 / w * 2.0 - 1.0, 1.0 - centre_px.1 / h * 2.0];
+    let (x0, x1, y0, y1) = label_bounds(&verts);
+    assert!(((x0 + x1) * 0.5 - expected[0]).abs() < 1e-5);
+    assert!(((y0 + y1) * 0.5 - expected[1]).abs() < 1e-5);
+    // Two 16 px glyphs.
+    assert!(((x1 - x0) * w * 0.5 - 32.0).abs() < 1e-3);
+}
+
+#[test]
+fn long_ball_label_shrinks_to_fit_the_icon() {
+    let (w, h) = (1920.0, 1080.0);
+    let verts = ball_label_vertices("Methane", w, h, MARGINS);
+    let (x0, x1, _, _) = label_bounds(&verts);
+    let width_px = (x1 - x0) * w * 0.5;
+    assert!(
+        width_px <= ICON_DISPLAY_SIZE * 0.8 + 1e-3,
+        "label {width_px} px wide"
+    );
+}
+
+#[test]
+fn no_ball_label_without_a_visible_icon() {
+    let too_short = MARGIN_TOP + ICON_SPACING + ICON_DISPLAY_SIZE + MARGIN_BOTTOM - 1.0;
+    assert!(ball_label_vertices("M", 800.0, too_short, MARGINS).is_empty());
+    assert!(ball_label_vertices("", 1920.0, 1080.0, MARGINS).is_empty());
 }

@@ -15,7 +15,7 @@ tests) are in the `operator-framework` skill (`.claude/skills/`).
 | Wall (line segment) | `OperatorTool::LineSegment` | `SimLineSegment { id, start, end, thickness }`, grouped into `WallChain`s | always on | Impenetrable capsule; balls reflect elastically |
 | Valve | `OperatorTool::ValveSegment` | `ValveSegment { id, is_closed, … }` on a wall, range `t_start..t_end` along it | open / closed | A closed valve blocks like the wall; an open one is a gap |
 | Thermostat | `OperatorTool::Thermostat` | `SimThermostat { id, position, state, target_temperature, radius, chain, tau, current_local_temp }` | on / off | Nosé–Hoover chain thermostat on the balls inside its radius |
-| Source sphere | `OperatorTool::SourceSphere` | `SimSourceSphere { id, center, state, emit_period, ball_size_idx, emission_speed }` | on / off | Emits a ball at its perimeter every `emit_period` steps |
+| Source sphere | `OperatorTool::SourceSphere` | `SimSourceSphere { id, center, state, emit_period, ball_species, emission_speed }` | on / off | Emits a ball at its perimeter every `emit_period` steps |
 
 The data models live in `core/src/objects2d/` (`line_segment.rs`,
 `wall_chain.rs`, `operator/`). `SimulationWorld` holds one collection per
@@ -83,7 +83,7 @@ The design history is in [nose-hoover.md](done/nose-hoover.md).
 
 ### Source spheres
 
-An active source sphere emits a ball of its size class at its perimeter every
+An active source sphere emits a ball of its species at its perimeter every
 `emit_period` steps, with speed `emission_speed`. Emission runs after the
 velocity update, so new balls do not enter the thermostats in the step they
 appear.
@@ -129,7 +129,7 @@ an `OperatorCommand` for the physics thread. Handlers also supply the frame's
 | Wall | press–drag–release draws a wall; drags an endpoint of an existing wall; snaps to walls and endpoints | – | – | thickness of the wall under the cursor |
 | Valve | press on a wall and drag to cut a valve; click on a valve toggles open/closed | – | – | – |
 | Thermostat | click on empty space places one; click on one toggles it; drag moves it | – | target temperature | radius |
-| Source sphere | click on empty space places one; click on one toggles it | cycles the emitted ball size | emission speed | emission period |
+| Source sphere | click on empty space places one; click on one toggles it | cycles the emitted species | emission speed | emission period |
 
 Hover and delete: every tool reports the object of its own kind under the
 cursor (or being dragged) as an `ObjectRef`. The renderer highlights it with

@@ -276,7 +276,7 @@ mod tests {
                 view_dirty: false,
                 last_snapshot: None,
                 cursor_world_pos: Vec2D::zero(),
-                current_ball_size_idx: 2,
+                current_species: crate::objects2d::ball_impl::DEFAULT_SPECIES,
                 metrics: MetricsCollector::new(),
                 active_tool: OperatorTool::None,
                 tool_handler: None,
@@ -335,7 +335,10 @@ mod tests {
             InputOrchestrator::process_action(&mut state, InputAction::NextBallSize, None, None);
 
         assert!(!affects_view);
-        assert_eq!(state.render.current_ball_size_idx, 3);
+        assert_eq!(
+            state.render.current_species,
+            crate::objects2d::ball_impl::SpeciesId::new(3)
+        );
         assert!(state.render.view_dirty);
     }
 
@@ -423,7 +426,7 @@ mod tests {
             center: sphere_center,
             state: OperatorState::On,
             emit_period: 60,
-            ball_size_idx: 2,
+            ball_species: crate::objects2d::ball_impl::DEFAULT_SPECIES,
             emission_speed: 1.0,
         });
 

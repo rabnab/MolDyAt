@@ -238,7 +238,7 @@ mod tests {
     use crate::objects2d::ball_impl::Ball2D;
 
     fn make_ball(id: usize, velocity: Vec2D) -> Ball2D {
-        let mut ball = Ball2D::new(id, Vec2D::zero(), (0, 1.0));
+        let mut ball = Ball2D::new(id, Vec2D::zero(), 1.0);
         ball.v = velocity;
         ball
     }

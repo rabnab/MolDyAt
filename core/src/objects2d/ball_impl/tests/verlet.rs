@@ -7,7 +7,7 @@ use crate::objects2d::ball_impl::Ball2D;
 use crate::objects2d::ball_impl::verlet::Verlet;
 
 fn make_ball(id: usize, pos: Vec2D) -> Ball2D {
-    Ball2D::new(id, pos, (0, 1.0))
+    Ball2D::new(id, pos, 1.0)
 }
 
 #[test]
@@ -48,7 +48,7 @@ fn test_needs_update_hood_thresholds() {
     // Simulate that the ball was just updated by resetting updates_since_refresh
     v.updates_since_refresh = 0;
 
-    let mut ball = Ball2D::new(1, Vec2D::zero(), (0, 1.0));
+    let mut ball = Ball2D::new(1, Vec2D::zero(), 1.0);
     ball.last_update_hood_pos = Vec2D::new(0.0, 0.0);
     ball.v = Vec2D::new(1.0, 0.0);
     // With small dt and high threshold -> false
@@ -59,7 +59,7 @@ fn test_needs_update_hood_thresholds() {
 
 #[test]
 fn test_has_ball_moved_enough_true() {
-    let mut ball = Ball2D::new(1, Vec2D::zero(), (0, 1.0));
+    let mut ball = Ball2D::new(1, Vec2D::zero(), 1.0);
     ball.last_update_hood_pos = Vec2D::new(0.0, 0.0);
     ball.v = Vec2D::new(3.0, 4.0); // velocity vector
 
@@ -75,7 +75,7 @@ fn test_has_ball_moved_enough_true() {
 
 #[test]
 fn test_has_ball_moved_enough_false() {
-    let mut ball = Ball2D::new(1, Vec2D::new(0.1, 0.1), (0, 1.0));
+    let mut ball = Ball2D::new(1, Vec2D::new(0.1, 0.1), 1.0);
     ball.last_update_hood_pos = Vec2D::new(0.0, 0.0);
     ball.v = Vec2D::new(0.1, 0.1);
 
@@ -91,7 +91,7 @@ fn test_has_ball_moved_enough_false() {
 
 #[test]
 fn test_has_ball_moved_enough_edge_case() {
-    let mut ball = Ball2D::new(1, Vec2D::new(2., 0.), (0, 1.0));
+    let mut ball = Ball2D::new(1, Vec2D::new(2., 0.), 1.0);
     ball.last_update_hood_pos = Vec2D::new(0.0, 0.0);
     ball.v = Vec2D::new(1.0, 0.0);
 
@@ -108,7 +108,7 @@ fn test_has_ball_moved_enough_edge_case() {
 
 #[test]
 fn test_has_ball_moved_enough_zero_threshold() {
-    let mut ball = Ball2D::new(1, Vec2D::zero(), (0, 1.0));
+    let mut ball = Ball2D::new(1, Vec2D::zero(), 1.0);
     ball.last_update_hood_pos = Vec2D::new(0.0, 0.0);
     ball.v = Vec2D::new(0.0, 0.0);
 

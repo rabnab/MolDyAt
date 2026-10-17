@@ -3,9 +3,9 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::objects2d::Vec2D;
-use crate::objects2d::ball_impl::Ball2D;
 use crate::objects2d::ball_impl::ball_physics::BallPhysics;
 use crate::objects2d::ball_impl::pair_potential::{LennardJones, PairLaw};
+use crate::objects2d::ball_impl::{Ball2D, DEFAULT_SPECIES};
 
 fn approx(a: f32, b: f32, eps: f32) {
     assert!(
@@ -37,16 +37,16 @@ fn test_is_colliding_detection() {
     use crate::objects2d::ball_impl::pair_potential::LJ_SIG;
 
     let phys = BallPhysics::default();
-    let a = Ball2D::new(1, Vec2D::new(2.0, 3.0), (0, 4.0));
+    let a = Ball2D::new(1, Vec2D::new(2.0, 3.0), 4.0);
 
     let b_pos = Vec2D::new(2.0 + LJ_SIG * 0.99999, 3.0);
-    let b = Ball2D::new(2, b_pos, (0, 6.0));
+    let b = Ball2D::new(2, b_pos, 6.0);
 
     assert!(phys.is_colliding(&a, &b, 0.));
 
     let c_radius = 6.0;
     let c_pos = Vec2D::new(2.0, 3.0 + (a.radius + c_radius) + LJ_SIG * 1.00001);
-    let c = Ball2D::new(2, c_pos, (0, c_radius));
+    let c = Ball2D::new(2, c_pos, c_radius);
 
     assert!(!phys.is_colliding(&a, &c, 0.));
 }
@@ -173,10 +173,10 @@ fn test_energy_conservation_two_balls_integration() {
     let r_cap = phys.get_force_cap_distance();
     let separation = r_cap * 0.8; // Place them close enough to trigger force cap
 
-    let ball1 = factory.create_basic(Vec2D::new(0.0, 0.0), 2);
+    let ball1 = factory.create_basic(Vec2D::new(0.0, 0.0), DEFAULT_SPECIES);
     let radius_sum = ball1.radius * 2.0; // Both balls have same radius
     let mut ball1 = ball1;
-    let mut ball2 = factory.create_basic(Vec2D::new(separation + radius_sum, 0.0), 2);
+    let mut ball2 = factory.create_basic(Vec2D::new(separation + radius_sum, 0.0), DEFAULT_SPECIES);
 
     // Give them small initial velocities to make the interaction more interesting
     ball1.v = Vec2D::new(0.1, 0.05);

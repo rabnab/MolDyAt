@@ -7,8 +7,9 @@
 //! Draws the tool icons in the left margin of the window on a rounded-rect
 //! background, plus a highlight frame behind the selected tool. Icons are
 //! arranged vertically from top to bottom: ball (procedural), wall, valve,
-//! thermo, sourceOpen. Geometry is built in NDC and only rebuilt when the
-//! window size, margins or selection change. See `sidebar.wgsl`.
+//! thermo, sourceOpen. The name of the species new balls get is written
+//! centred on the ball icon. Geometry is built in NDC and only rebuilt when
+//! the window size, margins, selection or species change. See `sidebar.wgsl`.
 
 use bytemuck::{Pod, Zeroable};
 use moldyat_core::application::AppResult;
@@ -16,13 +17,18 @@ use moldyat_core::graphics::renderer::Margins;
 use moldyat_core::graphics::renderer::event_loop::OperatorTool;
 use moldyat_core::graphics::sidebar::{
     ICON_COUNT, SIDEBAR_TOOLS, icon_display_size_for_margin, icon_spacing_for_margin,
-    visible_icon_count_for_margin,
+    sidebar_ui_scale, visible_icon_count_for_margin,
 };
+use moldyat_core::objects2d::ball_impl::{SpeciesId, SpeciesTable};
 
 use crate::wgpu::MARGINS;
 use crate::wgpu::gpu::batch::{BatchDesc, GpuBatch, SceneUniforms};
 use crate::wgpu::gpu::geometry::px_to_ndc;
 use crate::wgpu::gpu::shaders;
+use crate::wgpu::gpu::text::{
+    ASCII_CHARS, BLACK_TEXT_COLOR, GLYPH_W, TextBatch, TextVertex, push_label_vertices,
+    window_glyph_ndc_size,
+};
 use crate::wgpu::gpu::textures::{
     ICON_SOURCE_OPEN, ICON_THERMO, ICON_VALVE, ICON_WALL, icon_atlas,
 };
@@ -52,6 +58,13 @@ const MODE_BACKGROUND: f32 = 0.0;
 const MODE_ATLAS_ICON: f32 = 1.0;
 const MODE_HIGHLIGHT: f32 = 2.0;
 const MODE_BALL_ICON: f32 = 3.0;
+
+/// Glyph size of the species label on the ball icon, in 8×8 glyphs at UI
+/// scale 1 (16 px per glyph).
+const BALL_LABEL_GLYPH_SCALE: f32 = 2.0;
+/// Widest the species label may be, as a share of the icon width. Longer
+/// names get smaller glyphs.
+const BALL_LABEL_MAX_WIDTH: f32 = 0.8;
 
 /// Sidebar vertex (NDC). Layout must match `Vertex` in sidebar.wgsl.
 #[repr(C)]
@@ -93,12 +106,16 @@ impl RoundedRectParams {
 /// margins or selection change. No per-frame work is done otherwise.
 pub struct SidebarPipeline {
     gpu: GpuBatch<SidebarVertex>,
+    /// Name of the species of new balls, drawn on the ball icon.
+    ball_label: TextBatch,
     /// Cached window size to skip redundant vertex rebuilds.
     last_window_size: (u32, u32),
     /// Cached selected icon to detect selection changes.
     last_selected_icon: Option<usize>,
     /// Cached margins to detect DPI-scale changes.
     last_margin: Margins,
+    /// Cached species of new balls, to rebuild the label when it changes.
+    last_species: Option<SpeciesId>,
 }
 
 impl SidebarPipeline {
@@ -122,9 +139,18 @@ impl SidebarPipeline {
                 )
                 .texture(&atlas, wgpu::FilterMode::Linear),
             ),
+            ball_label: TextBatch::new(
+                device,
+                queue,
+                format,
+                "Sidebar Ball Label",
+                &ASCII_CHARS,
+                BLACK_TEXT_COLOR,
+            ),
             last_window_size: (0, 0),
             last_selected_icon: None,
             last_margin: MARGINS,
+            last_species: None,
         }
     }
 }
@@ -169,6 +195,62 @@ fn push_quad(
     verts.extend_from_slice(&[tl, bl, tr, tr, bl, br]);
 }
 
+/// Pixel rectangle of sidebar icon `i` (window pixels, y down).
+fn icon_px_rect(i: u32, margin: Margins) -> PxRect {
+    let icon_size = icon_display_size_for_margin(margin.left);
+    let icon_spacing = icon_spacing_for_margin(margin.left);
+    let left = (margin.left - icon_size) * 0.5;
+    let top = margin.top + icon_spacing + i as f32 * (icon_size + icon_spacing);
+    PxRect {
+        left,
+        top,
+        right: left + icon_size,
+        bottom: top + icon_size,
+    }
+}
+
+/// Glyph quads (NDC) for `name` centred on the ball icon. Empty when the ball
+/// icon does not fit in the window. Glyphs shrink so the name stays within
+/// [`BALL_LABEL_MAX_WIDTH`] of the icon.
+pub(crate) fn ball_label_vertices(
+    name: &str,
+    win_w: f32,
+    win_h: f32,
+    margin: Margins,
+) -> Vec<TextVertex> {
+    let mut verts = Vec::new();
+    let Some(ball_idx) = SIDEBAR_TOOLS.iter().position(|&t| t == OperatorTool::Ball) else {
+        return verts;
+    };
+    let visible = visible_icon_count_for_margin(win_h, margin.top, margin.bottom, margin.left);
+    let len = name.chars().count();
+    if ball_idx >= visible || len == 0 {
+        return verts;
+    }
+
+    let icon = icon_px_rect(ball_idx as u32, margin);
+    let nominal = BALL_LABEL_GLYPH_SCALE * sidebar_ui_scale(margin.left);
+    let fit = (icon.right - icon.left) * BALL_LABEL_MAX_WIDTH / (len as f32 * GLYPH_W as f32);
+    let scale = nominal.min(fit);
+    let [cx, cy] = px_to_ndc(
+        (icon.left + icon.right) * 0.5,
+        (icon.top + icon.bottom) * 0.5,
+        win_w,
+        win_h,
+    );
+    let (glyph_ndc_w, glyph_ndc_h) = window_glyph_ndc_size((win_w, win_h), scale);
+    push_label_vertices(
+        &mut verts,
+        &ASCII_CHARS,
+        name,
+        cx,
+        cy,
+        glyph_ndc_w,
+        glyph_ndc_h,
+    );
+    verts
+}
+
 /// Build sidebar geometry: a background rounded-rect quad followed by icon quads.
 ///
 /// Returns the vertex list and the rounded-rect uniform params.
@@ -202,15 +284,7 @@ pub(crate) fn build_sidebar_geometry_with_margins(
     let icon_spacing = icon_spacing_for_margin(margin.left);
     let icon_left = (margin.left - icon_size) * 0.5;
     let first_icon_top = margin.top + icon_spacing;
-    let icon_rect = |i: u32| {
-        let top = first_icon_top + i as f32 * (icon_size + icon_spacing);
-        PxRect {
-            left: icon_left,
-            top,
-            right: icon_left + icon_size,
-            bottom: top + icon_size,
-        }
-    };
+    let icon_rect = |i: u32| icon_px_rect(i, margin);
 
     // Icons that fit, clamped to the number of tools in the shared ordering.
     let visible_count =
@@ -282,15 +356,18 @@ impl RenderPipeline for SidebarPipeline {
 
     fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
         let selected = ctx.operator_previews.selected_sidebar_icon;
+        let species = ctx.snapshot.cursor_species;
         if ctx.window_size == self.last_window_size
             && selected == self.last_selected_icon
             && ctx.margin == self.last_margin
+            && Some(species) == self.last_species
         {
             return Ok(());
         }
         self.last_window_size = ctx.window_size;
         self.last_selected_icon = selected;
         self.last_margin = ctx.margin;
+        self.last_species = Some(species);
 
         let (w, h) = ctx.window_size;
         let (verts, rect_params) = build_sidebar_geometry_with_margins(
@@ -303,10 +380,17 @@ impl RenderPipeline for SidebarPipeline {
         self.gpu
             .set_uniforms(ctx.queue, SceneUniforms::ndc(rect_params.as_params()));
         self.gpu.flush(ctx.device, ctx.queue, &verts);
+
+        let name = SpeciesTable::builtin()
+            .get(species)
+            .map_or("", |s| s.name.as_str());
+        let label = ball_label_vertices(name, w as f32, h as f32, ctx.margin);
+        self.ball_label.upload(ctx.device, ctx.queue, &label);
         Ok(())
     }
 
     fn render<'rp>(&'rp self, render_pass: &mut wgpu::RenderPass<'rp>) {
         self.gpu.draw(render_pass);
+        self.ball_label.draw(render_pass);
     }
 }

@@ -53,7 +53,7 @@ fn collision_reflects_ball() {
     mc.add_line_segment(Vec2D::new(-10.0, 0.0), Vec2D::new(10.0, 0.0));
 
     // Ball at y=0.5, radius=1.0, moving downward
-    let mut ball = Ball2D::new(1, Vec2D::new(0.0, 0.5), (0, 1.0));
+    let mut ball = Ball2D::new(1, Vec2D::new(0.0, 0.5), 1.0);
     ball.v = Vec2D::new(0.0, -5.0);
     mc.world_mut().balls.push(ball);
 
@@ -75,7 +75,7 @@ fn overlap_pass_momentum_bits(threads: usize) -> [u32; 2] {
         mc.add_line_segment(Vec2D::new(-10.0, 0.0), Vec2D::new(10.0, 0.0));
         for k in 0..400 {
             let x = -9.0 + 18.0 * (k as f32 / 399.0);
-            let mut ball = Ball2D::new(k + 1, Vec2D::new(x, 0.3), (0, 1.0));
+            let mut ball = Ball2D::new(k + 1, Vec2D::new(x, 0.3), 1.0);
             // Different speeds and masses, all moving into the wall.
             ball.v = Vec2D::new((k as f32).sin(), -1.0 - (k as f32 * 0.37).cos().abs() * 7.0);
             ball.mass = 1.0 + (k % 7) as f32 * 0.31;
@@ -110,7 +110,7 @@ fn no_collision_when_moving_away() {
     mc.add_line_segment(Vec2D::new(-10.0, 0.0), Vec2D::new(10.0, 0.0));
 
     // Ball overlapping but moving away
-    let mut ball = Ball2D::new(1, Vec2D::new(0.0, 0.5), (0, 1.0));
+    let mut ball = Ball2D::new(1, Vec2D::new(0.0, 0.5), 1.0);
     ball.v = Vec2D::new(0.0, 5.0); // moving away from segment
     mc.world_mut().balls.push(ball);
 

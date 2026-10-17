@@ -473,7 +473,7 @@ fn test_snapshots_follow_changes_for_paused_and_running_by_layers() {
                 .send_command(BallCommand::NextSize)
                 .expect("send edit");
             let edited = wait_for("after the edit", &|s| {
-                s.cursor_ball_size_idx != after.cursor_ball_size_idx
+                s.cursor_species != after.cursor_species
             });
             if paused {
                 assert_eq!(edited.simulation_step, after.simulation_step, "{case}");

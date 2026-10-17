@@ -42,12 +42,13 @@ fn request_device() -> Option<(wgpu::Device, wgpu::Queue)> {
 fn ball(id: usize, x: f32, y: f32) -> BallRenderData {
     BallRenderData {
         id,
-        size_idx: 0,
+        species: Default::default(),
         position: Vec2D::new(x, y),
         velocity: Vec2D::new(0.0, 0.0),
         mass: 1.0,
         color: [0.8, 0.3, 0.2, 1.0],
         radius: 0.5,
+        display_radius: 0.5,
         show_neighbor_lines: true,
         show_main_neighbors_only: false,
         neighbors: vec![(1 - id, 1.0)],

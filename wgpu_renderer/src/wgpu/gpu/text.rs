@@ -18,6 +18,17 @@ pub(crate) const GLYPH_W: u32 = 8;
 pub(crate) const GLYPH_H: u32 = 8;
 pub(crate) const BLACK_TEXT_COLOR: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 
+/// Printable ASCII, in atlas order.
+pub(crate) const ASCII_CHARS: [char; 95] = {
+    let mut chars = [' '; 95];
+    let mut i = 0;
+    while i < chars.len() {
+        chars[i] = (b' ' + i as u8) as char;
+        i += 1;
+    }
+    chars
+};
+
 /// One glyph-quad corner. Layout must match `Vertex` in text.wgsl.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
@@ -43,6 +54,15 @@ pub(crate) fn inset_glyph_ndc_size(
     (
         GLYPH_W as f32 * ui_scale * 2.0 / inset_w,
         GLYPH_H as f32 * ui_scale * 2.0 / inset_h,
+    )
+}
+
+/// Glyph size in NDC for a full-window overlay, with each glyph pixel drawn
+/// `scale` window pixels wide (the UI scale, or a larger factor).
+pub(crate) fn window_glyph_ndc_size((win_w, win_h): (f32, f32), scale: f32) -> (f32, f32) {
+    (
+        GLYPH_W as f32 * scale * 2.0 / win_w.max(1.0),
+        GLYPH_H as f32 * scale * 2.0 / win_h.max(1.0),
     )
 }
 

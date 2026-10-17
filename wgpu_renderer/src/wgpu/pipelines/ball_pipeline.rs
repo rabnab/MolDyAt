@@ -38,7 +38,7 @@ impl GpuBallData {
     pub fn from_render_data(data: &BallRenderData) -> Self {
         Self {
             position: [data.position.x, data.position.y],
-            radius: data.radius,
+            radius: data.display_radius,
             color: pack_color(data.color),
         }
     }

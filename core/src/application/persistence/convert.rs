@@ -14,7 +14,7 @@
 use super::format::{BallData, SourceSphereData, ThermostatData, WORLD_FILE_VERSION, WorldFile};
 use crate::application::AppResult;
 use crate::application::core::SimulationWorld;
-use crate::objects2d::ball_impl::{Ball2D, BallFactory};
+use crate::objects2d::ball_impl::{Ball2D, BallFactory, SpeciesId, SpeciesTable};
 use crate::objects2d::operator::{OperatorState, SimSourceSphere, SimThermostat};
 
 impl WorldFile {
@@ -81,7 +81,7 @@ impl From<&Ball2D> for BallData {
     fn from(ball: &Ball2D) -> Self {
         Self {
             id: ball.get_id(),
-            size_idx: ball.get_size_idx(),
+            size_idx: ball.species().index(),
             pos: *ball.get_position(),
             v: ball.v,
             pre_update_pos: ball.pre_update_pos,
@@ -92,11 +92,20 @@ impl From<&Ball2D> for BallData {
 
 impl From<&BallData> for Ball2D {
     fn from(data: &BallData) -> Self {
-        let mut ball = BallFactory::restore(data.id, data.size_idx, data.pos, data.v);
+        let species = species_for_size_idx(data.size_idx);
+        let mut ball = BallFactory::restore(data.id, species, data.pos, data.v);
         ball.pre_update_pos = data.pre_update_pos;
         ball.accel = data.accel;
         ball
     }
+}
+
+/// The species a file's `size_idx` stands for: size class `i` is built-in
+/// species `i`. `WorldFile::validate` has checked the index.
+fn species_for_size_idx(size_idx: usize) -> SpeciesId {
+    SpeciesTable::builtin()
+        .id(size_idx)
+        .expect("validate() checks size_idx against the species table")
 }
 
 fn operator_state(active: bool) -> OperatorState {
@@ -114,7 +123,7 @@ impl From<&SimSourceSphere> for SourceSphereData {
             center: sphere.center,
             active: sphere.state.is_on(),
             emit_period: sphere.emit_period,
-            ball_size_idx: sphere.ball_size_idx,
+            ball_size_idx: sphere.ball_species.index(),
             emission_speed: sphere.emission_speed,
         }
     }
@@ -125,7 +134,7 @@ impl From<&SourceSphereData> for SimSourceSphere {
         let mut sphere = SimSourceSphere::new(data.id, data.center);
         sphere.state = operator_state(data.active);
         sphere.emit_period = data.emit_period;
-        sphere.ball_size_idx = data.ball_size_idx;
+        sphere.ball_species = species_for_size_idx(data.ball_size_idx);
         sphere.emission_speed = data.emission_speed;
         sphere
     }
