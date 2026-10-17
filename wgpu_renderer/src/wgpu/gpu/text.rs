@@ -57,6 +57,15 @@ pub(crate) fn inset_glyph_ndc_size(
     )
 }
 
+/// Glyph size in NDC for a full-window overlay, with each glyph pixel drawn
+/// `scale` window pixels wide (the UI scale, or a larger factor).
+pub(crate) fn window_glyph_ndc_size((win_w, win_h): (f32, f32), scale: f32) -> (f32, f32) {
+    (
+        GLYPH_W as f32 * scale * 2.0 / win_w.max(1.0),
+        GLYPH_H as f32 * scale * 2.0 / win_h.max(1.0),
+    )
+}
+
 /// Append one label (6 vertices per glyph) centred on `(center_x, center_y)`
 /// in NDC. Characters missing from `atlas_chars` are skipped but keep their
 /// space.

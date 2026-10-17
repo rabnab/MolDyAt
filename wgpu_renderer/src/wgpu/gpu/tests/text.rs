@@ -2,9 +2,17 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use crate::wgpu::gpu::text::{TextVertex, push_label_vertices};
+use crate::wgpu::gpu::text::{TextVertex, push_label_vertices, window_glyph_ndc_size};
 
 const CHARS: [char; 3] = ['1', '2', '.'];
+
+#[test]
+fn window_glyph_size_scales_the_8px_glyph_to_ndc() {
+    // 8 px glyph at scale 2 = 16 px; NDC spans 2 over the window size.
+    let (w, h) = window_glyph_ndc_size((800.0, 400.0), 2.0);
+    assert!((w - 0.04).abs() < 1e-6, "{w}");
+    assert!((h - 0.08).abs() < 1e-6, "{h}");
+}
 
 #[test]
 fn each_known_glyph_emits_one_quad() {
