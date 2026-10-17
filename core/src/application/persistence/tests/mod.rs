@@ -5,6 +5,7 @@
 //! Tests for saving and loading the world, one file per layer.
 
 mod format;
+mod migrate;
 mod reference_saves;
 mod roundtrip;
 mod store;

@@ -334,7 +334,8 @@ default view. The window is asked to take the world's shape; if the OS gives
 it another size (screen too small, maximised or tiled window), the world is
 letterboxed, never stretched or rescaled. A later window resize refits the
 world to the window as usual. A file that fails validation is rejected and the running world
-is left untouched. Results are logged.
+is left untouched. Results are logged. Saves from older versions are upgraded
+when they are loaded; a save from a newer MolDyAt is rejected with an error.
 
 ## Releases & Versioning
 

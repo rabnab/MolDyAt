@@ -184,6 +184,24 @@ world generation (the step count starts again, so the renderer can tell the
 new world's snapshots apart), and
 sends `WorldLoaded` so the window can resize to fit the loaded world.
 
+### Format versions and migrations
+
+Every file carries `version`; saving always writes the current
+`WORLD_FILE_VERSION`. Loading parses the file into a JSON value first, then
+`migrate::upgrade` runs the migrations from the file's version up to the
+current one (`v1 → v2 → …`), and only then is it read into the current
+`WorldFile` and validated. Files without a version, with version 0, or from a
+newer build are rejected with a clear error.
+
+- An additive change (a new optional field whose default reproduces the old
+  behaviour) keeps the version.
+- A breaking change (rename, removal, changed type, unit or meaning) bumps
+  `WORLD_FILE_VERSION` and adds one `migrate_vN_to_vN+1(&mut Value)` to
+  `MIGRATIONS` in `persistence/migrate.rs`, with a test that loads the
+  version-`N` reference save.
+- Every version has a reference save in `persistence/tests/fixtures/`
+  (`v1.json`, …). Existing ones are never edited; all must keep loading.
+
 ## Headless mode
 
 `moldyat --headless` runs the same `MainContent` without a window

@@ -6,6 +6,7 @@
 //!
 //! - [`format`]: the file layout ([`WorldFile`]) and its validation.
 //! - `convert`: live world ⇄ file.
+//! - `migrate`: upgrading files of older format versions before they are read.
 //! - [`store`]: where files live ([`SaveStore`]).
 //!
 //! [`MainContent::save_world`] and [`MainContent::load_world`] are the only
@@ -26,6 +27,7 @@
 
 mod convert;
 pub mod format;
+mod migrate;
 pub mod store;
 
 #[cfg(test)]
