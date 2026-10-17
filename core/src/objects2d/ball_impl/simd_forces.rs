@@ -27,6 +27,7 @@
 //! happen beyond the cutoff) do not change the energy. See `CappedPotential` for details.
 
 use crate::objects2d::Vec2D;
+use crate::objects2d::ball_impl::pair_potential::{PairPotential, Potential};
 use crate::objects2d::ball_impl::{Ball2D, BallPhysics, ForceResult};
 use std::simd::prelude::SimdFloat;
 use std::simd::{StdFloat, f32x4};
@@ -92,6 +93,21 @@ pub fn force_simd(
     balls: &[Ball2D],
     points: &[KernelPoint],
 ) -> ForceResult {
+    // Static dispatch: one match per ball, outside the neighbour loop; the
+    // kernel below is monomorphised for each law, with no branch per neighbour.
+    match physics.pair_potential() {
+        Potential::LennardJones(p) => force_kernel(p, ball_idx, balls, points),
+    }
+}
+
+/// The force kernel of [`force_simd`] for one concrete pair potential.
+#[inline]
+fn force_kernel<P: PairPotential>(
+    potential: &P,
+    ball_idx: usize,
+    balls: &[Ball2D],
+    points: &[KernelPoint],
+) -> ForceResult {
     let mut force = Vec2D::new(0., 0.);
     let mut min_dist = f32::NAN;
     let mut total_pot = 0.;
@@ -144,9 +160,9 @@ pub fn force_simd(
         let radius_sum = radii_vec + f32x4::splat(ball_radius);
         let edge_dist = center_dist - radius_sum;
 
-        // Lennard-Jones force, sloped from max_force below r_cap and zero
-        // beyond the cutoff (see BallPhysics::force).
-        let lj_force = physics.force_simd(edge_dist);
+        // Pair force, sloped from max_force below r_cap and zero beyond the
+        // cutoff (see CappedPotential).
+        let lj_force = potential.force_simd(edge_dist);
 
         // Force direction: force / center_dist
         // Avoid division by zero: if center_dist is 0, use a small epsilon to prevent Inf/NaN
@@ -157,9 +173,9 @@ pub fn force_simd(
         let fx = dx_vec * force_to_dist;
         let fy = dy_vec * force_to_dist;
 
-        // Shifted LJ potential with quadratic continuation below r_cap, zero
-        // beyond the cutoff (see BallPhysics::potential).
-        let potential_used = physics.potential_simd(edge_dist);
+        // Shifted potential with quadratic continuation below r_cap, zero
+        // beyond the cutoff (see CappedPotential).
+        let potential_used = potential.potential_simd(edge_dist);
 
         // Virial: Σ (r_ij · F_ij).
         // Since fx = dx_vec * force_to_dist and fy = dy_vec * force_to_dist,
@@ -197,7 +213,7 @@ pub fn force_simd(
                 continue; // Skip self-interaction or invalid distance
             }
 
-            let lj_force = physics.force(edge_dist);
+            let lj_force = potential.force(edge_dist);
 
             // Force direction: force / center_dist
             // Avoid division by zero: if center_dist is 0, use a small epsilon to prevent Inf/NaN
@@ -214,7 +230,7 @@ pub fn force_simd(
             force.x += fx;
             force.y += fy;
 
-            total_pot += physics.potential(edge_dist);
+            total_pot += potential.potential(edge_dist);
 
             // Store per-neighbor force magnitude for visualization
             if collect_neighbor_forces {
