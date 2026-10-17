@@ -4,6 +4,7 @@
 
 use super::*;
 use moldyat_core::application::renderer_snapshot::RendererSnapshot;
+use moldyat_core::objects2d::ball_impl::SpeciesId;
 use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -152,12 +153,13 @@ fn test_detail_balls_includes_ball_fields() {
     snapshot.balls.push(
         moldyat_core::application::renderer_snapshot::BallRenderData {
             id: 9,
-            size_idx: 2,
+            species: SpeciesId::new(2),
             position: moldyat_core::objects2d::Vec2D::new(1.5, -2.5),
             velocity: moldyat_core::objects2d::Vec2D::new(0.25, -0.5),
             mass: 3.75,
             color: [1.0, 0.0, 0.0, 1.0],
             radius: 0.7,
+            display_radius: 0.7,
             show_neighbor_lines: false,
             show_main_neighbors_only: false,
             neighbors: Vec::new(),
@@ -168,12 +170,13 @@ fn test_detail_balls_includes_ball_fields() {
     snapshot.balls.push(
         moldyat_core::application::renderer_snapshot::BallRenderData {
             id: 3,
-            size_idx: 1,
+            species: SpeciesId::new(1),
             position: moldyat_core::objects2d::Vec2D::new(-0.5, 0.5),
             velocity: moldyat_core::objects2d::Vec2D::new(-0.1, 0.2),
             mass: 1.5,
             color: [0.0, 1.0, 0.0, 1.0],
             radius: 0.5,
+            display_radius: 0.5,
             show_neighbor_lines: false,
             show_main_neighbors_only: false,
             neighbors: Vec::new(),

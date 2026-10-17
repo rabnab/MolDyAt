@@ -23,8 +23,8 @@ fn test_simd_energy_conservation() {
     let physics = BallPhysics::default();
 
     // Create two balls
-    let mut ball_a = Ball2D::new(0, Vec2D::new(0.0, 0.0), (0, 1.0));
-    let ball_b = Ball2D::new(1, Vec2D::new(2.5, 0.0), (0, 1.0));
+    let mut ball_a = Ball2D::new(0, Vec2D::new(0.0, 0.0), 1.0);
+    let ball_b = Ball2D::new(1, Vec2D::new(2.5, 0.0), 1.0);
 
     ball_a.hood.add_neighbour(1);
     let balls = vec![ball_a, ball_b];
@@ -47,10 +47,10 @@ fn test_simd_vs_scalar_negative_edge_dist() {
     let physics = BallPhysics::default();
 
     // Create two balls that are overlapping (negative edge distance)
-    let mut ball_a = Ball2D::new(0, Vec2D::new(0.0, 0.0), (0, 1.0));
+    let mut ball_a = Ball2D::new(0, Vec2D::new(0.0, 0.0), 1.0);
     // Position ball_b very close - closer than the sum of radii
     // Sum of radii = 2.0, so distance < 2.0 means negative edge_dist
-    let ball_b = Ball2D::new(1, Vec2D::new(1.5, 0.0), (0, 1.0));
+    let ball_b = Ball2D::new(1, Vec2D::new(1.5, 0.0), 1.0);
 
     // Set up neighbor list
     ball_a.hood.add_neighbour(1);
@@ -90,8 +90,8 @@ fn test_simd_potential_energy_correctness() {
     ];
 
     for &center_dist in &test_distances {
-        let mut ball_a = Ball2D::new(0, Vec2D::new(0.0, 0.0), (0, 1.0));
-        let ball_b = Ball2D::new(1, Vec2D::new(center_dist, 0.0), (0, 1.0));
+        let mut ball_a = Ball2D::new(0, Vec2D::new(0.0, 0.0), 1.0);
+        let ball_b = Ball2D::new(1, Vec2D::new(center_dist, 0.0), 1.0);
 
         ball_a.hood.add_neighbour(1);
         let balls = vec![ball_a, ball_b];
@@ -111,10 +111,10 @@ fn test_simd_potential_energy_correctness() {
 
     // Test Case 2: Multiple neighbors
     // Verify that total potential is the sum of individual pair potentials
-    let mut ball_a = Ball2D::new(0, Vec2D::new(0.0, 0.0), (0, 1.0));
-    let ball_b = Ball2D::new(1, Vec2D::new(2.5, 0.0), (0, 1.0));
-    let ball_c = Ball2D::new(2, Vec2D::new(0.0, 3.0), (0, 1.0));
-    let ball_d = Ball2D::new(3, Vec2D::new(3.5, 3.5), (0, 1.0));
+    let mut ball_a = Ball2D::new(0, Vec2D::new(0.0, 0.0), 1.0);
+    let ball_b = Ball2D::new(1, Vec2D::new(2.5, 0.0), 1.0);
+    let ball_c = Ball2D::new(2, Vec2D::new(0.0, 3.0), 1.0);
+    let ball_d = Ball2D::new(3, Vec2D::new(3.5, 3.5), 1.0);
 
     ball_a.hood.add_neighbour(1);
     ball_a.hood.add_neighbour(2);
@@ -140,8 +140,8 @@ fn test_simd_potential_energy_correctness() {
     let r_cap = physics.get_force_cap_distance();
     let edge_dist_capped = r_cap * 0.5; // Well below r_cap
 
-    let mut ball_a = Ball2D::new(0, Vec2D::new(0.0, 0.0), (0, 1.0));
-    let ball_b = Ball2D::new(1, Vec2D::new(edge_dist_capped + 2.0, 0.0), (0, 1.0));
+    let mut ball_a = Ball2D::new(0, Vec2D::new(0.0, 0.0), 1.0);
+    let ball_b = Ball2D::new(1, Vec2D::new(edge_dist_capped + 2.0, 0.0), 1.0);
 
     ball_a.hood.add_neighbour(1);
     let balls = vec![ball_a, ball_b];
@@ -164,7 +164,7 @@ fn test_simd_potential_energy_correctness() {
 #[test]
 fn test_virial_no_neighbours() {
     let physics = BallPhysics::default();
-    let ball_a = Ball2D::new(0, Vec2D::new(0.0, 0.0), (0, 1.0));
+    let ball_a = Ball2D::new(0, Vec2D::new(0.0, 0.0), 1.0);
     let balls = vec![ball_a];
     let result = force_simd(&physics, 0, &balls, &kernel_points(&balls));
     assert_eq!(result.virial, 0.0, "Virial must be 0 with no neighbours");
@@ -176,8 +176,8 @@ fn test_virial_single_neighbour_known_geometry() {
 
     // Ball A at origin, Ball B at (2.5, 0). Both have radius 1.0.
     // center_dist = 2.5, edge_dist = 0.5
-    let mut ball_a = Ball2D::new(0, Vec2D::new(0.0, 0.0), (0, 1.0));
-    let ball_b = Ball2D::new(1, Vec2D::new(2.5, 0.0), (0, 1.0));
+    let mut ball_a = Ball2D::new(0, Vec2D::new(0.0, 0.0), 1.0);
+    let ball_b = Ball2D::new(1, Vec2D::new(2.5, 0.0), 1.0);
     ball_a.hood.add_neighbour(1);
     let balls = vec![ball_a, ball_b];
 
@@ -202,8 +202,8 @@ fn test_virial_force_capped_regime() {
     let edge_dist_capped = r_cap * 0.5;
     let center_dist = edge_dist_capped + 2.0; // both radii = 1.0
 
-    let mut ball_a = Ball2D::new(0, Vec2D::new(0.0, 0.0), (0, 1.0));
-    let ball_b = Ball2D::new(1, Vec2D::new(center_dist, 0.0), (0, 1.0));
+    let mut ball_a = Ball2D::new(0, Vec2D::new(0.0, 0.0), 1.0);
+    let ball_b = Ball2D::new(1, Vec2D::new(center_dist, 0.0), 1.0);
     ball_a.hood.add_neighbour(1);
     let balls = vec![ball_a, ball_b];
 
@@ -235,13 +235,13 @@ fn test_virial_simd_and_scalar_paths_agree() {
         Vec2D::new(3.0, 3.0), // 5th → scalar remainder
     ];
 
-    let mut ball_a = Ball2D::new(0, Vec2D::new(0.0, 0.0), (0, 1.0));
+    let mut ball_a = Ball2D::new(0, Vec2D::new(0.0, 0.0), 1.0);
     for i in 0..positions.len() {
         ball_a.hood.add_neighbour(i + 1);
     }
     let mut balls = vec![ball_a];
     for (i, &pos) in positions.iter().enumerate() {
-        let b = Ball2D::new(i + 1, pos, (0, 1.0));
+        let b = Ball2D::new(i + 1, pos, 1.0);
         balls.push(b);
     }
 
@@ -271,12 +271,12 @@ fn test_listed_neighbours_beyond_cutoff_do_not_interact() {
     let radius = 0.5;
     // Five listed neighbours (one SIMD chunk + one scalar remainder), all
     // inside the neighbour-list radius but beyond the LJ cutoff.
-    let mut balls = vec![Ball2D::new(0, Vec2D::new(0.0, 0.0), (0, radius))];
+    let mut balls = vec![Ball2D::new(0, Vec2D::new(0.0, 0.0), radius)];
     for k in 1..=5 {
         let center_dist = 2.0 * radius + cutoff + 0.1 * k as f32;
         let angle = k as f32;
         let pos = Vec2D::new(center_dist * angle.cos(), center_dist * angle.sin());
-        balls.push(Ball2D::new(k, pos, (0, radius)));
+        balls.push(Ball2D::new(k, pos, radius));
         balls[0].hood.add_neighbour(k);
     }
 
@@ -294,7 +294,7 @@ fn test_kernel_point_is_one_aligned_16_byte_record() {
 
 #[test]
 fn test_kernel_point_reads_pre_update_pos_and_radius() {
-    let mut ball = Ball2D::new(0, Vec2D::new(1.0, 2.0), (0, 3.0));
+    let mut ball = Ball2D::new(0, Vec2D::new(1.0, 2.0), 3.0);
     ball.pre_update_pos = Vec2D::new(4.0, 5.0);
     let point = KernelPoint::from(&ball);
     assert_eq!((point.x, point.y, point.radius), (4.0, 5.0, 3.0));

@@ -49,7 +49,7 @@ fn open_valve_allows_pass_through() {
     // Full-line valve section, open.
     mc.add_valve_segment(0, 0.0, 1.0, false);
 
-    let mut ball = Ball2D::new(1, Vec2D::new(0.0, 0.5), (0, 1.0));
+    let mut ball = Ball2D::new(1, Vec2D::new(0.0, 0.5), 1.0);
     ball.v = Vec2D::new(0.0, -5.0);
     mc.world_mut().balls.push(ball);
 
@@ -65,7 +65,7 @@ fn closed_valve_reflects_like_wall() {
     // Full-line valve section, closed.
     mc.add_valve_segment(0, 0.0, 1.0, true);
 
-    let mut ball = Ball2D::new(1, Vec2D::new(0.0, 0.5), (0, 1.0));
+    let mut ball = Ball2D::new(1, Vec2D::new(0.0, 0.5), 1.0);
     ball.v = Vec2D::new(0.0, -5.0);
     mc.world_mut().balls.push(ball);
 
@@ -91,7 +91,7 @@ fn ball_caught_in_a_closing_valve_leaves_without_gaining_energy() {
     let mut mc = make_content_with_wall();
     mc.add_valve_segment(0, 0.0, 1.0, false);
 
-    let mut ball = Ball2D::new(1, Vec2D::new(0.0, 0.1), (0, 1.0));
+    let mut ball = Ball2D::new(1, Vec2D::new(0.0, 0.1), 1.0);
     ball.v = Vec2D::new(0.3, -5.0);
     mc.world_mut().balls.push(ball);
 
@@ -121,7 +121,7 @@ fn ball_trapped_near_a_valve_end_is_not_deflected_by_the_next_piece() {
     mc.add_valve_segment(0, 0.25, 0.75, false);
 
     // Centre inside the valve, body overlapping piece 0's end cap.
-    let mut ball = Ball2D::new(1, Vec2D::new(-4.8, 0.1), (0, 1.0));
+    let mut ball = Ball2D::new(1, Vec2D::new(-4.8, 0.1), 1.0);
     ball.v = Vec2D::new(0.0, -5.0);
     mc.world_mut().balls.push(ball);
     let id = mc.world().valve_segments.valves()[0].id;
@@ -138,7 +138,7 @@ fn ball_approaching_a_closed_valve_from_outside_still_bounces() {
     let mut mc = make_content_with_wall();
     mc.add_valve_segment(0, 0.25, 0.75, true);
 
-    let mut ball = Ball2D::new(1, Vec2D::new(0.0, 3.0), (0, 1.0));
+    let mut ball = Ball2D::new(1, Vec2D::new(0.0, 3.0), 1.0);
     ball.v = Vec2D::new(0.0, -5.0);
     mc.world_mut().balls.push(ball);
 
@@ -211,7 +211,7 @@ fn closed_valve_collides_at_wall_thickness_changed_after_creation() {
     // Above the valve centre: outside the old reach (0.5 + radius) and
     // outside the new wall body (2.0), but inside the new reach
     // (2.0 + radius), and far from the pieces' ends.
-    let mut ball = Ball2D::new(1, Vec2D::new(0.0, 2.2), (0, 1.0));
+    let mut ball = Ball2D::new(1, Vec2D::new(0.0, 2.2), 1.0);
     ball.v = Vec2D::new(0.0, -5.0);
     mc.world_mut().balls.push(ball);
 
@@ -357,10 +357,10 @@ fn open_valve_between_pieces_lets_ball_through_but_pieces_still_reflect() {
     mc.add_valve_segment(0, 0.4, 0.6, false); // open gap at x in [-2, 2]
 
     // Ball above the gap heading down: passes through.
-    let mut through = Ball2D::new(1, Vec2D::new(0.0, 0.5), (0, 1.0));
+    let mut through = Ball2D::new(1, Vec2D::new(0.0, 0.5), 1.0);
     through.v = Vec2D::new(0.0, -5.0);
     // Ball above the left piece heading down: reflects.
-    let mut blocked = Ball2D::new(2, Vec2D::new(-8.0, 0.5), (0, 1.0));
+    let mut blocked = Ball2D::new(2, Vec2D::new(-8.0, 0.5), 1.0);
     blocked.v = Vec2D::new(0.0, -5.0);
     mc.world_mut().balls.push(through);
     mc.world_mut().balls.push(blocked);
@@ -398,7 +398,7 @@ fn fire_ball_at_open_valve(start_x: f32) -> (Vec2D, f32, f32) {
     mc.add_valve_segment(0, 0.4, 0.6, false);
     mc.world_mut().speed_limit_override = Some(f32::INFINITY);
 
-    let mut ball = Ball2D::new(1, Vec2D::new(start_x, 10.0), (0, 1.0));
+    let mut ball = Ball2D::new(1, Vec2D::new(start_x, 10.0), 1.0);
     ball.v = Vec2D::new(0.0, -5.0);
     let speed_before = ball.v.norm();
     mc.world_mut().balls.push(ball);

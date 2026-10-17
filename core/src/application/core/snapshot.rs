@@ -4,13 +4,14 @@
 
 use crate::application::MainContent;
 use crate::application::renderer_snapshot::{
-    BallRenderData, OperatorSnapshot, RendererSnapshot, ThermoGridSpec, WallSnapshot,
-    get_special_ball_color, size_class_to_rgba,
+    BallRenderData, OperatorSnapshot, RendererSnapshot, ThermoGridSpec, UNKNOWN_SPECIES_COLOUR,
+    WallSnapshot, get_special_ball_color,
 };
 use crate::application::scene_layers::SceneLayers;
 use crate::application::sim_stats::NORMAL_GRAVITY;
 use crate::application::thermo_field::ThermoGrid;
 use crate::objects2d::SimThermostat;
+use crate::objects2d::ball_impl::SpeciesTable;
 use std::sync::Arc;
 
 impl MainContent {
@@ -35,7 +36,7 @@ impl MainContent {
             time: self.world.sim.get_time(),
             status_text: self.status_text(0, self.step_config.get_time_step()), // FPS not available during snapshot creation
             cell_grid_bounds: self.world.cell_grid.world_rect(),
-            cursor_ball_size_idx: self.step_config.get_ball_factory().get_new_ball_size_idx(),
+            cursor_species: self.step_config.get_ball_factory().new_ball_species(),
             gravity_force_multiple: current_gravity_force_multiple(
                 self.world.physics.constants.gravity,
             ),
@@ -100,15 +101,18 @@ impl MainContent {
     fn build_ball_render_data(&self) -> Vec<BallRenderData> {
         let ball_count = self.world.balls.len();
         let mut balls = Vec::with_capacity(ball_count);
+        let species_table = SpeciesTable::builtin();
 
         // Create BallRenderData for each ball
         for (ball_idx, ball) in self.world.balls.iter().enumerate() {
-            // Determine color: special colors (verbose/braking) override size class color
+            let species = species_table.get(ball.species());
+            // Special colors (verbose/braking) override the species colour
             let color = get_special_ball_color(
                 ball.verbose.console || ball.verbose.lines(),
                 ball.is_braking(),
             )
-            .unwrap_or_else(|| size_class_to_rgba(ball.get_size_idx()));
+            .or(species.map(|s| s.colour))
+            .unwrap_or(UNKNOWN_SPECIES_COLOUR);
 
             let show_neighbor_lines = ball.verbose.lines();
             let show_main_neighbors_only = ball.verbose.is_main();
@@ -132,12 +136,13 @@ impl MainContent {
 
             balls.push(BallRenderData {
                 id: ball.get_id(),
-                size_idx: ball.get_size_idx(),
+                species: ball.species(),
                 position: *ball.get_position(),
                 velocity: *ball.get_velocity(),
                 mass: ball.get_mass(),
                 color,
                 radius: ball.get_radius(),
+                display_radius: species.map_or(ball.get_radius(), |s| s.display_radius),
                 show_neighbor_lines,
                 show_main_neighbors_only,
                 neighbors,

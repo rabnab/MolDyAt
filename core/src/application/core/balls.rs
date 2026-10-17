@@ -197,7 +197,7 @@ impl MainContent {
     }
 
     pub(crate) fn next_ball_size(&mut self) {
-        self.step_config.get_ball_factory().next_ball_size_idx();
+        self.step_config.get_ball_factory().next_species();
     }
 }
 

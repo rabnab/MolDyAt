@@ -239,8 +239,8 @@ fn frame_to_jsonl_with_config(
             .map(|ball| {
                 json!({
                     "id": ball.id,
-                    "size_idx": ball.size_idx,
-                    "size_class": ball.size_idx,
+                    "size_idx": ball.species.index(),
+                    "size_class": ball.species.index(),
                     "position": {
                         "x": f32_value(ball.position.x),
                         "y": f32_value(ball.position.y),

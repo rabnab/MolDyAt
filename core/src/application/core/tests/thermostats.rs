@@ -6,7 +6,7 @@ use super::DT_GOAL;
 use crate::application::MainContent;
 use crate::application::core::StatsAccumulator;
 use crate::application::thermo_field::LocalKineticStats;
-use crate::objects2d::ball_impl::BallFactory;
+use crate::objects2d::ball_impl::{BallFactory, SpeciesId};
 use crate::objects2d::{
     DEFAULT_THERMOSTAT_CHAIN_LENGTH, OperatorCollection, OperatorState, Rect, Vec2D,
 };
@@ -36,9 +36,9 @@ fn add_ball(mc: &mut MainContent, pos: Vec2D, velocity: Vec2D) {
     mc.add_candidate_to_vec(factory.create_massive_with_velocity(pos, velocity));
 }
 
-fn add_ball_with_size(mc: &mut MainContent, pos: Vec2D, velocity: Vec2D, size_idx: usize) {
+fn add_ball_of_species(mc: &mut MainContent, pos: Vec2D, velocity: Vec2D, species: SpeciesId) {
     let factory = BallFactory::new();
-    mc.add_candidate_to_vec(factory.create_with_size_and_velocity(pos, size_idx, velocity));
+    mc.add_candidate_to_vec(factory.create_with_species_and_velocity(pos, species, velocity));
 }
 
 fn cluster_kinetic_stats(mc: &MainContent) -> LocalKineticStats {
@@ -188,7 +188,12 @@ fn hot_thermostat_heats_cold_cluster_without_changing_com_drift() {
         } else {
             Vec2D::new(-rel_speed, 0.0)
         };
-        add_ball_with_size(&mut mc, pos, drift_velocity + thermal_velocity, 0);
+        add_ball_of_species(
+            &mut mc,
+            pos,
+            drift_velocity + thermal_velocity,
+            SpeciesId::new(0),
+        );
     }
 
     assert_eq!(mc.world().balls.len(), 10);

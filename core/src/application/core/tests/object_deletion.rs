@@ -48,7 +48,7 @@ fn deleted_wall_no_longer_reflects_balls() {
     let (mut mc, _) = make_two_walls_one_valve();
     mc.delete_object(ObjectRef::Wall(0));
 
-    let mut ball = Ball2D::new(1, Vec2D::new(-8.0, 0.5), (0, 1.0));
+    let mut ball = Ball2D::new(1, Vec2D::new(-8.0, 0.5), 1.0);
     ball.v = Vec2D::new(0.0, -5.0);
     mc.world_mut().balls.push(ball);
     let _ = mc.resolve_line_segment_collisions();
@@ -92,7 +92,7 @@ fn gap_left_by_deleted_closed_valve_lets_balls_through() {
     mc.delete_object(ObjectRef::Valve(valve_id));
 
     // Above the former valve (x = -5..5), heading down.
-    let mut ball = Ball2D::new(1, Vec2D::new(0.0, 0.5), (0, 1.0));
+    let mut ball = Ball2D::new(1, Vec2D::new(0.0, 0.5), 1.0);
     ball.v = Vec2D::new(0.0, -5.0);
     mc.world_mut().balls.push(ball);
     let _ = mc.resolve_line_segment_collisions();

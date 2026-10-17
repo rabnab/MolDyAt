@@ -69,10 +69,10 @@ fn test_is_ball_in_region() {
     let ball_coord = (0., 0.);
     println!("ball coordinates are {:?}", ball_coord,);
     let ball_radius = 5.;
-    let ball = Ball2D::new(0, ball_coord.into(), (0, ball_radius));
+    let ball = Ball2D::new(0, ball_coord.into(), ball_radius);
     assert!(main_content.world().is_ball_in_region(&ball));
 
-    let invalid_ball = Ball2D::new(1, (tl.0 - 0.1, tl.1 - 0.1).into(), (0, ball_radius));
+    let invalid_ball = Ball2D::new(1, (tl.0 - 0.1, tl.1 - 0.1).into(), ball_radius);
     // Move the ball outside the region
     assert!(!main_content.world().is_ball_in_region(&invalid_ball));
 }

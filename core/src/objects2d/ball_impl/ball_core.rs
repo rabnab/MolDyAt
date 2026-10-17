@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::objects2d::Rect;
+use crate::objects2d::ball_impl::species::SpeciesId;
 use crate::objects2d::ball_impl::verlet::Verlet;
 use crate::objects2d::ball_impl::wall_contact::{
     NormalPosition, WallContact, resolve_normal_position,
@@ -48,7 +49,7 @@ impl BounceInfo {
 
 pub struct Ball2D {
     pub radius: f32,
-    pub size_idx: usize,
+    pub species: SpeciesId,
     pos: Vec2D,
     pub(crate) id: BallId,
     pub mass: f32,
@@ -75,7 +76,7 @@ impl Default for Ball2D {
     fn default() -> Ball2D {
         Ball2D {
             radius: 1.,
-            size_idx: usize::MAX,
+            species: SpeciesId::default(),
             pos: Vec2D::zero(),
             id: 0,
             mass: 1.,
@@ -95,19 +96,15 @@ impl Default for Ball2D {
 }
 
 impl Ball2D {
-    /// Create a new ball with specified ID, position, and radius.
+    /// Create a new ball with specified ID, position, and radius, of the
+    /// default species and with unit mass; [`BallFactory`](super::BallFactory)
+    /// sets species and mass consistently.
     /// Sets pre_update_pos and last_update_hood_pos to the initial position.
-    ///
-    /// # Arguments
-    /// * `id` - Unique ball identifier
-    /// * `pos` - Initial position
-    /// * `radius` - Tuple of (size_index, radius_value)
-    pub fn new(id: BallId, pos: Vec2D, radius: (usize, f32)) -> Ball2D {
+    pub fn new(id: BallId, pos: Vec2D, radius: f32) -> Ball2D {
         Ball2D {
             id,
             pos,
-            radius: radius.1,
-            size_idx: radius.0,
+            radius,
             pre_update_pos: pos,
             last_update_hood_pos: pos,
             ..Ball2D::default()
@@ -118,8 +115,8 @@ impl Ball2D {
         self.id
     }
 
-    pub fn get_size_idx(&self) -> usize {
-        self.size_idx
+    pub fn species(&self) -> SpeciesId {
+        self.species
     }
 
     // Basic position and property access methods
@@ -486,7 +483,7 @@ mod tests {
 
     #[test]
     fn test_tail_only_kept_for_verbose_balls() {
-        let mut b = Ball2D::new(1, Vec2D::zero(), (0, 1.0));
+        let mut b = Ball2D::new(1, Vec2D::zero(), 1.0);
         b.set_position_and_update_tail(Vec2D::new(5.0, 0.0));
         assert!(b.get_tail_positions().is_none());
 

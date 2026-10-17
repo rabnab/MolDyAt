@@ -24,6 +24,7 @@
 //! - **Immutability**: Snapshots are immutable after creation, so no need for
 //!   partial field updates that might benefit from SoA.
 
+use crate::objects2d::ball_impl::{DEFAULT_SPECIES, SpeciesId};
 use crate::objects2d::line_segment::valve_half_width;
 use crate::objects2d::{SimLineSegment, SimSourceSphere, SimThermostat, Vec2D};
 use std::time::Instant;
@@ -224,8 +225,8 @@ pub struct BallRenderData {
     /// Ball ID for debugging and tracking
     pub id: usize,
 
-    /// Ball size index (0-4 for different size classes)
-    pub size_idx: usize,
+    /// Particle type: index into the species table
+    pub species: SpeciesId,
 
     /// Ball position in 2D space
     pub position: Vec2D,
@@ -240,8 +241,11 @@ pub struct BallRenderData {
     /// NOT ggez::Color to maintain framework independence
     pub color: [f32; 4],
 
-    /// Ball radius for rendering (must be positive and finite)
+    /// Physics radius (edge distance = centre distance minus both radii)
     pub radius: f32,
+
+    /// Radius the renderer draws (must be positive and finite)
+    pub display_radius: f32,
 
     /// Whether to draw neighbor lines for this ball (verbose mode)
     pub show_neighbor_lines: bool,
@@ -295,8 +299,8 @@ pub struct RendererSnapshot {
     /// Cell grid world bounds (for rendering the grid)
     pub cell_grid_bounds: crate::objects2d::Rect,
 
-    /// Current ball size index for cursor display
-    pub cursor_ball_size_idx: usize,
+    /// Species of new balls, for the cursor preview
+    pub cursor_species: SpeciesId,
 
     /// Current gravity preset as a multiple of Earth gravity (0, 1, or 2).
     pub gravity_force_multiple: u8,
@@ -349,7 +353,7 @@ impl RendererSnapshot {
             time: 0.0,
             status_text: None,
             cell_grid_bounds: crate::objects2d::Rect::new(0.0, 0.0, 0.0, 0.0),
-            cursor_ball_size_idx: 0,
+            cursor_species: DEFAULT_SPECIES,
             gravity_force_multiple: 0,
             created_at: Instant::now(),
             grid_spec: CellGridSpec {
@@ -385,7 +389,7 @@ impl RendererSnapshot {
             time: 0.0,
             status_text: None,
             cell_grid_bounds: crate::objects2d::Rect::new(0.0, 0.0, 0.0, 0.0),
-            cursor_ball_size_idx: 0,
+            cursor_species: DEFAULT_SPECIES,
             gravity_force_multiple: 0,
             created_at: Instant::now(),
             grid_spec: CellGridSpec {
@@ -428,18 +432,8 @@ impl Default for RendererSnapshot {
     }
 }
 
-/// Convert size class to RGBA color (framework-independent)
-/// This function determines ball colors based on their size class.
-pub fn size_class_to_rgba(size_class: usize) -> [f32; 4] {
-    match size_class {
-        0 => [1.0, 0.0, 0.0, 1.0], // Red
-        1 => [0.0, 1.0, 0.0, 1.0], // Green
-        2 => [0.0, 0.0, 1.0, 1.0], // Blue
-        3 => [1.0, 1.0, 0.0, 1.0], // Yellow
-        4 => [1.0, 0.0, 1.0, 1.0], // Magenta
-        _ => [1.0, 1.0, 1.0, 1.0], // White (fallback)
-    }
-}
+/// Colour of a ball whose species is not in the species table (white).
+pub const UNKNOWN_SPECIES_COLOUR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 
 /// Apply special coloring for verbose or braking balls
 /// Returns Some(color) if special coloring should override size class color
@@ -456,6 +450,7 @@ pub fn get_special_ball_color(is_verbose: bool, is_braking: bool) -> Option<[f32
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::objects2d::ball_impl::SpeciesTable;
 
     #[test]
     fn test_snapshot_new() {
@@ -473,24 +468,14 @@ mod tests {
     }
 
     #[test]
-    fn test_size_class_to_rgba() {
-        assert_eq!(size_class_to_rgba(0), [1.0, 0.0, 0.0, 1.0]); // Red
-        assert_eq!(size_class_to_rgba(1), [0.0, 1.0, 0.0, 1.0]); // Green
-        assert_eq!(size_class_to_rgba(2), [0.0, 0.0, 1.0, 1.0]); // Blue
-        assert_eq!(size_class_to_rgba(3), [1.0, 1.0, 0.0, 1.0]); // Yellow
-        assert_eq!(size_class_to_rgba(4), [1.0, 0.0, 1.0, 1.0]); // Magenta
-        assert_eq!(size_class_to_rgba(999), [1.0, 1.0, 1.0, 1.0]); // White (fallback)
-    }
-
-    #[test]
-    fn test_colors_are_valid_rgba() {
-        for size_class in 0..6 {
-            let color = size_class_to_rgba(size_class);
-            // All RGBA values should be in [0.0, 1.0]
-            assert!(color[0] >= 0.0 && color[0] <= 1.0);
-            assert!(color[1] >= 0.0 && color[1] <= 1.0);
-            assert!(color[2] >= 0.0 && color[2] <= 1.0);
-            assert!(color[3] >= 0.0 && color[3] <= 1.0);
+    fn species_colours_are_valid_rgba() {
+        let table = SpeciesTable::builtin();
+        for color in (0..table.len())
+            .filter_map(|i| table.id(i))
+            .map(|id| table.species(id).colour)
+            .chain([UNKNOWN_SPECIES_COLOUR])
+        {
+            assert!(color.iter().all(|c| (0.0..=1.0).contains(c)), "{color:?}");
         }
     }
 
