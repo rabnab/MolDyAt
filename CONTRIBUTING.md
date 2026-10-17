@@ -114,6 +114,21 @@ different bits on Windows (MSVC) than on Linux (glibc), so the fixture tests
 may fail there without any behavior change. On Windows, run the fixture
 checks via CI or WSL; never refresh fixtures there.
 
+### Save format: reference saves
+
+`core/src/application/persistence/tests/fixtures/` holds one reference save per
+world-file format version (`v1.json`, ...), each written by the build that
+introduced that version. `cargo test -p moldyat_core reference_saves` loads
+every one of them through the real load path and checks its contents.
+
+- **Never edit or regenerate an existing reference save.** It stands for the
+  files users already have.
+- A format change that bumps `WORLD_FILE_VERSION` adds a new fixture (and its
+  entry in `FIXTURES` in `tests/reference_saves.rs`); all older fixtures must
+  keep loading. The test fails if the current version has no fixture.
+- Details: the `save-format` skill and the module doc of
+  `core/src/application/persistence`.
+
 ### Submitting Changes
 
 1. **Push your branch**:

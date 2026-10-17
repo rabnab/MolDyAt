@@ -14,7 +14,7 @@ Saves are pretty-printed JSON files written by `SaveStore` (`core/src/applicatio
 | `convert.rs` | live world ⇄ file (`WorldFile::capture(world, time_step)`, `TryFrom<&WorldFile> for SimulationWorld`, `From` impls for each `*Data` struct) |
 | `store.rs` | save directory, file names, atomic write (temp file, then rename), `latest()` |
 | `mod.rs` | `MainContent::load_world`: resolve, read, validate, build, then swap in |
-| `tests/` | `format.rs`, `roundtrip.rs`, `store.rs` |
+| `tests/` | `format.rs`, `roundtrip.rs`, `store.rs`, `reference_saves.rs` (one fixture per format version in `tests/fixtures/`) |
 
 ## Rules
 - **The file has its own types.** Balls, source spheres and thermostats are written through dedicated `*Data` structs, not their runtime types. Keep it that way for new state: runtime-only fields (caches, neighbour lists, chain scratch) must not leak into the file.
@@ -27,13 +27,13 @@ Saves are pretty-printed JSON files written by `SaveStore` (`core/src/applicatio
 Today the loader accepts only `version == WORLD_FILE_VERSION` (1) and has no migration path. The first incompatible change must add one:
 1. Decide whether the change is compatible. Adding an optional field with `#[serde(default)]` whose default reproduces the old behaviour is compatible and keeps the version. Renaming, removing, changing type, unit or meaning is not.
 2. For an incompatible change: bump `WORLD_FILE_VERSION`, and make loading accept every older version by upgrading it step by step (`v1 → v2 → …`) before `validate()`, e.g. by reading the version first and deserializing the matching old struct or patching the JSON value. Saving always writes the newest version.
-3. Keep a real old save as a test fixture (a small JSON file under `persistence/tests/`) and test that it loads, validates and round-trips into the new version. Do not regenerate that fixture from the new code.
+3. Add the new version's reference save to `persistence/tests/fixtures/` (written by the new build) with its checks in `FIXTURES` (`tests/reference_saves.rs`). Existing fixtures are never edited or regenerated; they must keep loading through the migration.
 4. Plan item I3 (species replace size classes) is the first planned migration: `size_idx` becomes a species, with σ chosen so the old equilibrium distance is kept.
 
 ## Tests and checks
 - Round trip: save, load, compare (`world_survives_a_save_and_load`); add the new state to `busy_world()` in `tests/roundtrip.rs` so it is covered.
 - Validation: one test per rejected case (non-finite, out of range, duplicate id, dangling reference).
-- Old-version fixtures load (once versions exist).
+- Every reference save loads: `cargo test -p moldyat_core reference_saves` (#269).
 - `cargo test -p moldyat_core persistence`, then `cargo fmt` and `cargo clippy --workspace -- -D warnings`.
 - `scripts/headless_perf.sh` caches worlds saved with `--save-setup` in `target/perf-worlds/`; after a format change, delete that cache.
 - Update `README.md` (save/load section) if user-visible behaviour changes.
