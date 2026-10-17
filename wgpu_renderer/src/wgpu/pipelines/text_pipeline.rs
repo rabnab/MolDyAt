@@ -13,21 +13,12 @@ use moldyat_core::graphics::renderer::margins::Margins;
 use moldyat_core::graphics::sidebar::sidebar_ui_scale;
 
 use crate::wgpu::gpu::geometry::px_to_ndc;
-use crate::wgpu::gpu::text::{GLYPH_H, GLYPH_W, TextBatch, TextVertex, push_label_vertices};
+use crate::wgpu::gpu::text::{
+    ASCII_CHARS, GLYPH_H, GLYPH_W, TextBatch, TextVertex, push_label_vertices,
+};
 use crate::wgpu::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
 
 const CURSOR_TEXT_COLOR: [f32; 4] = [0.92, 0.9, 0.84, 1.0];
-
-/// Printable ASCII, in atlas order.
-const ASCII_CHARS: [char; 95] = {
-    let mut chars = [' '; 95];
-    let mut i = 0;
-    while i < chars.len() {
-        chars[i] = (b' ' + i as u8) as char;
-        i += 1;
-    }
-    chars
-};
 
 /// Gap between the text and the pane edges, in pixels at UI scale 1.
 const PADDING_PX: f32 = 4.0;
