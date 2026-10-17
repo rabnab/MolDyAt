@@ -15,6 +15,7 @@ use moldyat_core::graphics::sidebar::sidebar_ui_scale;
 use crate::wgpu::gpu::geometry::px_to_ndc;
 use crate::wgpu::gpu::text::{
     ASCII_CHARS, GLYPH_H, GLYPH_W, TextBatch, TextVertex, push_label_vertices,
+    window_glyph_ndc_size,
 };
 use crate::wgpu::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
 
@@ -59,6 +60,7 @@ pub(crate) fn cursor_text_vertices(
     let left = (win_w - margin.right - text_w - padding).max(margin.left);
     let top = (win_h - margin.bottom + padding).max(0.0);
     let [cx, cy] = px_to_ndc(left + text_w * 0.5, top + glyph_h * 0.5, win_w, win_h);
+    let (glyph_ndc_w, glyph_ndc_h) = window_glyph_ndc_size((win_w, win_h), ui_scale);
 
     let mut verts = Vec::new();
     push_label_vertices(
@@ -67,8 +69,8 @@ pub(crate) fn cursor_text_vertices(
         text,
         cx,
         cy,
-        glyph_w * 2.0 / win_w,
-        glyph_h * 2.0 / win_h,
+        glyph_ndc_w,
+        glyph_ndc_h,
     );
     verts
 }

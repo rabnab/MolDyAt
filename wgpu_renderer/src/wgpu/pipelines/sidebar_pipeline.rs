@@ -26,7 +26,8 @@ use crate::wgpu::gpu::batch::{BatchDesc, GpuBatch, SceneUniforms};
 use crate::wgpu::gpu::geometry::px_to_ndc;
 use crate::wgpu::gpu::shaders;
 use crate::wgpu::gpu::text::{
-    ASCII_CHARS, BLACK_TEXT_COLOR, GLYPH_H, GLYPH_W, TextBatch, TextVertex, push_label_vertices,
+    ASCII_CHARS, BLACK_TEXT_COLOR, GLYPH_W, TextBatch, TextVertex, push_label_vertices,
+    window_glyph_ndc_size,
 };
 use crate::wgpu::gpu::textures::{
     ICON_SOURCE_OPEN, ICON_THERMO, ICON_VALVE, ICON_WALL, icon_atlas,
@@ -237,14 +238,15 @@ pub(crate) fn ball_label_vertices(
         win_w,
         win_h,
     );
+    let (glyph_ndc_w, glyph_ndc_h) = window_glyph_ndc_size((win_w, win_h), scale);
     push_label_vertices(
         &mut verts,
         &ASCII_CHARS,
         name,
         cx,
         cy,
-        GLYPH_W as f32 * scale * 2.0 / win_w,
-        GLYPH_H as f32 * scale * 2.0 / win_h,
+        glyph_ndc_w,
+        glyph_ndc_h,
     );
     verts
 }
