@@ -9,6 +9,7 @@ use crate::objects2d::ball_impl::pair_potential::{
     CapSettings, LennardJones, PairPotential, Potential,
 };
 use crate::objects2d::ball_impl::{Ball2D, Named};
+#[cfg(test)]
 use std::simd::f32x4;
 
 /// Physics settings that do not belong to the pair potential; they may change
@@ -114,17 +115,25 @@ impl BallPhysics {
         self.pair_potential.force(edge_dist)
     }
 
+    /// The pair potential; the force kernel matches on it once per ball.
+    pub(crate) fn pair_potential(&self) -> &Potential {
+        &self.pair_potential
+    }
+
     /// SIMD version of [`Self::force`] for four edge distances.
+    #[cfg(test)]
     pub(crate) fn force_simd(&self, edge_dist: f32x4) -> f32x4 {
         self.pair_potential.force_simd(edge_dist)
     }
 
     /// Pair potential energy at `edge_dist`, zero at the cutoff.
+    #[cfg(test)]
     pub(crate) fn potential(&self, edge_dist: f32) -> f32 {
         self.pair_potential.potential(edge_dist)
     }
 
     /// SIMD version of [`Self::potential`] for four edge distances.
+    #[cfg(test)]
     pub(crate) fn potential_simd(&self, edge_dist: f32x4) -> f32x4 {
         self.pair_potential.potential_simd(edge_dist)
     }
