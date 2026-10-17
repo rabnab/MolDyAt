@@ -3,7 +3,10 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::application::persistence::WORLD_FILE_VERSION;
-use crate::application::persistence::migrate::{MIGRATIONS, Migration, upgrade, upgrade_with};
+use crate::application::persistence::WorldFile;
+use crate::application::persistence::migrate::{
+    MIGRATIONS, Migration, parse_with, take_field, upgrade, upgrade_with,
+};
 use crate::error::AppResult;
 use serde_json::{Value, json};
 use std::path::PathBuf;
@@ -14,24 +17,34 @@ fn v1_fixture() -> Value {
     serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
 }
 
-fn error_text(result: AppResult<u32>) -> String {
+fn v1_json() -> String {
+    serde_json::to_string(&v1_fixture()).unwrap()
+}
+
+fn error_text<T: std::fmt::Debug>(result: AppResult<T>) -> String {
     format!("{:?}", result.unwrap_err())
 }
 
-/// Test-only v1 → v2: `time_step` is renamed to `dt`.
+/// Test-only v1 → v2: `time_step` is renamed to `dt`. Written like a real
+/// migration: no panics on unexpected input.
 fn rename_time_step(file: &mut Value) -> AppResult {
-    let object = file.as_object_mut().unwrap();
-    let dt = object.remove("time_step").unwrap();
-    object.insert("dt".into(), dt);
+    let dt = take_field(file, "time_step")?;
+    file["dt"] = dt;
     Ok(())
 }
 
 /// Test-only v2 → v3: `dt` is stored in milliseconds; needs v2's `dt`.
 fn dt_to_milliseconds(file: &mut Value) -> AppResult {
-    let dt = file["dt"].as_f64().expect("v2 has dt");
+    let dt = take_field(file, "dt")?;
+    let dt = dt
+        .as_f64()
+        .ok_or_else(|| crate::error::AppError::CustomError("dt is not a number".into()))?;
     file["dt_ms"] = json!(dt * 1000.0);
-    file.as_object_mut().unwrap().remove("dt");
     Ok(())
+}
+
+fn must_not_run(_: &mut Value) -> AppResult {
+    panic!("a current-version file went through a migration");
 }
 
 const TEST_CHAIN: &[Migration] = &[
@@ -109,5 +122,43 @@ fn missing_zero_or_malformed_version_is_rejected() {
     ] {
         let error = error_text(upgrade(&mut file.clone()));
         assert!(error.contains(expected), "{file}: {error}");
+    }
+}
+
+#[test]
+fn migration_on_a_file_missing_a_field_is_an_error_not_a_panic() {
+    let mut file = v1_fixture();
+    file.as_object_mut().unwrap().remove("time_step");
+    let error = error_text(upgrade_with(&mut file, TEST_CHAIN, 2));
+    assert!(error.contains("missing field `time_step`"), "{error}");
+}
+
+#[test]
+fn current_version_file_skips_the_migration_path() {
+    let chain = [Migration {
+        from: 1,
+        apply: must_not_run,
+    }];
+    let file: WorldFile = parse_with(&v1_json(), &chain, 1).unwrap();
+    assert_eq!(file.version, 1);
+}
+
+#[test]
+fn older_file_is_parsed_through_the_migrations() {
+    let file: Value = parse_with(&v1_json(), TEST_CHAIN, 3).unwrap();
+    assert_eq!(file["version"], 3);
+    assert_eq!(file["dt_ms"], json!(5.0));
+}
+
+#[test]
+fn parse_rejects_bad_versions_before_reading_the_rest() {
+    for (json, expected) in [
+        (r#"{"balls": []}"#, "missing version"),
+        (r#"{"version": 0}"#, "version 0"),
+        (r#"{"version": "1"}"#, "positive integer"),
+        (r#"{"version": 99}"#, "newer than this build"),
+    ] {
+        let error = error_text(parse_with::<Value>(json, TEST_CHAIN, 3));
+        assert!(error.contains(expected), "{json}: {error}");
     }
 }

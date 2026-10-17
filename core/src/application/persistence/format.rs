@@ -304,10 +304,7 @@ impl WorldFile {
     /// Parse a world file of any supported version, upgrade it to the
     /// current one (see [`migrate`](super::migrate)) and validate it.
     pub fn from_json(json: &str) -> AppResult<Self> {
-        let mut value: serde_json::Value =
-            serde_json::from_str(json).map_err(|e| invalid(e.to_string()))?;
-        super::migrate::upgrade(&mut value)?;
-        let file: Self = serde_json::from_value(value).map_err(|e| invalid(e.to_string()))?;
+        let file: Self = super::migrate::parse(json)?;
         file.validate()?;
         Ok(file)
     }
