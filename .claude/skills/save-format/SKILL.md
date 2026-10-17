@@ -11,7 +11,7 @@ Saves are pretty-printed JSON files written by `SaveStore` (`core/src/applicatio
 | File | Role |
 |---|---|
 | `format.rs` | `WorldFile`, its data structs (`BallData`, `SourceSphereData`, `ThermostatData`), `WORLD_FILE_VERSION`, `validate()`, `to_json` / `from_json` |
-| `migrate.rs` | `MIGRATIONS` chain and `upgrade()`: older files are rewritten as JSON values up to `WORLD_FILE_VERSION` before deserializing |
+| `migrate.rs` | `parse()` (version first, fast path for current files), the `MIGRATIONS` chain and `take_field` for writing migrations |
 | `convert.rs` | live world ⇄ file (`WorldFile::capture(world, time_step)`, `TryFrom<&WorldFile> for SimulationWorld`, `From` impls for each `*Data` struct) |
 | `store.rs` | save directory, file names, atomic write (temp file, then rename), `latest()` |
 | `mod.rs` | `MainContent::load_world`: resolve, read, validate, build, then swap in |
@@ -25,9 +25,9 @@ Saves are pretty-printed JSON files written by `SaveStore` (`core/src/applicatio
 - **Index contract.** The loaded world rebuilds the cell grid and neighbour lists from scratch (`collect_neighbours_by_cell`); never restore stored indices.
 
 ## Changing the format
-Loading parses to `serde_json::Value`, runs `migrate::upgrade` (the `MIGRATIONS` chain from the file's version to `WORLD_FILE_VERSION`, #272), then deserializes and validates. Files without a version, version 0 or newer than the build are rejected.
+Loading (`migrate::parse`, #272) reads the version first: a current-version file is deserialized directly (the `Value` path is many times slower for large saves), an older one is parsed to `serde_json::Value`, upgraded through the `MIGRATIONS` chain, logged, then deserialized. Both are validated. Files without a version, version 0 or newer than the build are rejected.
 1. Decide whether the change is compatible. Adding an optional field with `#[serde(default)]` whose default reproduces the old behaviour is compatible and keeps the version. Renaming, removing, changing type, unit or meaning is not.
-2. For an incompatible change: bump `WORLD_FILE_VERSION` to `N + 1` and add `migrate_vN_to_vN+1(&mut Value)` to `MIGRATIONS` in `persistence/migrate.rs` (the chain test checks that entry `i` upgrades version `i + 1`). Saving always writes the newest version.
+2. For an incompatible change: bump `WORLD_FILE_VERSION` to `N + 1` and add `migrate_vN_to_vN+1(&mut Value)` to `MIGRATIONS` in `persistence/migrate.rs` (the chain test checks that entry `i` upgrades version `i + 1`). A migration must not panic on unexpected input: use `take_field` and return `invalid(..)` for missing or mistyped fields, never `unwrap` or index. Remove the `expect(dead_code)` on `take_field` with the first real migration. Saving always writes the newest version.
 3. Add the new version's reference save to `persistence/tests/fixtures/` (written by the new build) with its checks in `FIXTURES` (`tests/reference_saves.rs`). Existing fixtures are never edited or regenerated; they must keep loading through the migration.
 4. Plan item I3 (species replace size classes) is the first planned migration: `size_idx` becomes a species, with σ chosen so the old equilibrium distance is kept.
 
