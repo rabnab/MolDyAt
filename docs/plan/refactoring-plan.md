@@ -119,7 +119,7 @@ guardrails. Water (I9–I10) follows. See §5 for the model choice behind it.
 |---|---|---|---|---|
 | I1 | Extract `PairPotential` from `BallPhysics` | Trait/enum with `force(r)`, `potential(r)`, `force_simd(f32x4)`, `potential_simd`, `cutoff()`; capping (`r_cap`, sloped core with quadratic potential) and cutoff shift implemented **once**, generic over the potential. LJ becomes `LennardJones { sigma, epsilon }`. Bit-identical drift baselines (same target/profile). | M | G2 |
 | I2 | Static dispatch for the SIMD kernel | `force_simd` generic over the potential (enum match outside the neighbour loop, monomorphised inner loop). Perf within ±2 % of G1. | M | I1 |
-| I3 | Species replace size classes; LJ on centre distance | `Species { name, mass, sigma, epsilon, display_radius, colour }` replaces `size_idx` everywhere (balls, factory, snapshot, renderer colours, persistence). Interaction is standard Lennard-Jones on the **centre distance** with `σ_ij`; `display_radius` is adjustable and used **only for rendering**. Every physics use of `Ball2D::radius` (~20 files: force kernel, wall sweep/contact, line-wall overlap, cell size, cutoff, thermostat/source overlap checks, placement collision) switches to species data: interaction range from `σ_ij`, wall contact distance from a derived collision radius (assumption: `σ_i / 2`). `KernelPoint` carries the species index instead of the radius. **Intentional behaviour change:** recapture drift baselines per `docs/drift-test.md`; update the "Radius awareness" rule in `.github/copilot-instructions.md`. Old saves migrate size classes to species with `σ` chosen so the old equilibrium centre distance is kept (approximate). | L | I1, I2 |
+| I3 | Species replace size classes; LJ on centre distance | `Species { name, mass, sigma, epsilon, display_radius, colour }` replaces `size_idx` everywhere (balls, factory, snapshot, renderer colours, persistence). Interaction is standard Lennard-Jones on the **centre distance** with `σ_ij`; `display_radius` is adjustable and used **only for rendering**. Every physics use of `Ball2D::radius` (~20 files: force kernel, wall sweep/contact, line-wall overlap, cell size, cutoff, thermostat/source overlap checks, placement collision) switches to species data: interaction range from `σ_ij`, wall contact distance from a derived collision radius (assumption: `σ_i / 2`), behind a small `WallLaw` interface (hard contact only for now) so I12 can add a soft wall without touching the call sites. `KernelPoint` carries the species index instead of the radius. **Intentional behaviour change:** recapture drift baselines per `docs/drift-test.md`; update the "Radius awareness" rule in `.github/copilot-instructions.md`. Old saves migrate size classes to species with `σ` chosen so the old equilibrium centre distance is kept (approximate). | L | I1, I2 |
 | I4 | Interaction table and mixing rules | `InteractionTable` (N×N `Potential`) built with Lorentz–Berthelot (`σ_ij = (σ_i+σ_j)/2`, `ε_ij = √(ε_i ε_j)`), per-pair overrides from config. Per-pair cutoff, `r_cap` and `U(cutoff)` cached; neighbour-list radius = max pair cutoff + skin. Tests: binary-mixture drift scenario (energy), scalar ↔ SIMD parity with mixed species in one chunk. | M | I3 |
 | I5 | Unit system with N₂ as reference | Reduced units stay internal with N₂ as the unit: `σ_N₂ = 1`, `ε_N₂ = 1`, `m_N₂ = 1` (28.01 amu). With σ ≈ 3.7 Å and ε/k_B ≈ 95 K the time unit is τ = σ·√(m/ε) ≈ 2.2 ps and the temperature unit 95 K (final values from one cited source, recorded in `docs/simulation.md`). `UnitSystem` converts literature parameters of other species and display values (T in K, time in ps, length in Å). Current default balls (σ = 1, ε = 1) become N₂ directly. | M | I3, M6 |
 | I6 | Species library | Species defined in the config file (M6): N₂, Ar, Ne, CH₄, O₂ (single-site LJ) plus the `legacy` preset. | S | I4, I5 |
@@ -128,6 +128,7 @@ guardrails. Water (I9–I10) follows. See §5 for the model choice behind it.
 | I9 | Orientational degrees of freedom | Optional per-species orientation θ, angular velocity ω, moment of inertia; rotational velocity-Verlet step; rotational kinetic energy in stats, temperature and the Nosé–Hoover thermostat. Prerequisite for water. Deterministic (no new reductions). | L | I3 |
 | I10 | 2D water: Mercedes-Benz model (pending decision) | LJ core + three hydrogen-bond arms (Gaussian in distance and arm alignment), parameters from Silverstein, Haymet & Dill (1998). Torques from the same potential. Tests: energy conservation, force/torque vs finite differences, smoke test for the density maximum. Water–N₂ via the LJ part only (mixing rules). | L | I9, I4 |
 | I11 | Multi-site molecules (only if needed later) | Rigid two-site N₂ or atomistic water (SPC/E, TIP4P) need molecules, constraints (SHAKE/RATTLE) and electrostatics (damped shifted force). Not needed for mixed species or MB water. | L | I9 |
+| I12 | Soft wall potential with hard-contact backstop | `WallLaw` gets a soft variant `U_w(z)` (z = distance from the wall): WCA-type by default, optional attraction `ε_w` (adsorption, wetting). The wall is a pseudo-species in the I4 table (`σ_iw`, `ε_iw` by mixing or override). Signed distance for box walls and closed chains, so the force points inward after an overshoot. The existing hard contact (`wall_contact`) stays as a **backstop** at a deeper distance (e.g. `z ≈ 0.3·σ_i`, where `U_w ≫ k_B T`): a soft wall alone does not stop crossing (finite barrier with the force cap, discrete steps, two-sided segments flip the force), so thin segments and valves rely on it. Backstop hits are counted like cap hits; the drift suite expects none in normal scenarios. Wall pressure from the force sum; no energy bumps at chain joints; walls in the cell grid. Restitution < 1 stays hard-wall only or gets a documented damping term. Tests: energy conservation (new drift scenario), no ball behind a wall in a hot-gas scenario or with injected fast balls, continuity across joints, thread-count reproducibility. | L | I3, I4 |
 
 ### Epic C – Input commands
 
@@ -177,7 +178,7 @@ Phase 1 (guardrails + quick wins):  G1, G2, G3, M1, M3, M4, C1, P1, P3
 Phase 2 (mixed species):            I1, I2, I3, I4, M6, I5, I6, C2, I7
 Phase 3 (crate split):              M2, M5, M7, M8, M9, C4, P2
 Phase 4 (graphs + seams):           V3, V1, V2, V4, C3, C5, I8, P4, P7, V5
-Phase 5 (water + perf):             I9, I10, V6, V7, P5, P6, P10, P8, I11 (if needed)
+Phase 5 (water + perf):             I9, I10, I12, V6, V7, P5, P6, P10, P8, I11 (if needed)
 ```
 
 GitHub issues:
@@ -186,6 +187,7 @@ GitHub issues:
 |---|---|---|---|
 | 1 | #219 | G1 #221, G2 #222, G3 #223, M1 #224, M3 #225, M4 #226, C1 #227, P1 #228, P3 #229 | – |
 | 2 | #220 | I1 #230 | M6 #231, C2 #232, I2 #233, I3 #234, I4 #235, I5 #236, I6 #237, I7 #238 |
+| 5 | – | – | I12 #280 |
 
 "Landed" is taken from the commits on `master` (as of 2026-10-14), not from
 the issue states.
@@ -237,4 +239,4 @@ Decisions (2026-10-04):
 ## 7. Open questions
 
 1. Water model: Mercedes-Benz (recommended) or atomistic water (I11)? Pending: owner is reading up on the MB model.
-2. Wall contact distance for species: `σ_i / 2` (assumed) or `2^(1/6)·σ_i / 2`, or a smooth LJ wall potential instead of hard reflection?
+2. Hard wall contact distance for species in I3: `σ_i / 2` (assumed; matches LJ's closest approach ≈ 0.97 σ at T* = 1) or `2^(1/6)·σ_i / 2` (only consistent with purely repulsive WCA balls)? A smooth wall potential is no longer an alternative here: it is item I12 and keeps the hard contact as a backstop.
