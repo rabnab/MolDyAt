@@ -18,6 +18,17 @@ pub(crate) const GLYPH_W: u32 = 8;
 pub(crate) const GLYPH_H: u32 = 8;
 pub(crate) const BLACK_TEXT_COLOR: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 
+/// Printable ASCII, in atlas order.
+pub(crate) const ASCII_CHARS: [char; 95] = {
+    let mut chars = [' '; 95];
+    let mut i = 0;
+    while i < chars.len() {
+        chars[i] = (b' ' + i as u8) as char;
+        i += 1;
+    }
+    chars
+};
+
 /// One glyph-quad corner. Layout must match `Vertex` in text.wgsl.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
