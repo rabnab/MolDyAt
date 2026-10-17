@@ -79,10 +79,6 @@ Toolchain is pinned in `rust-toolchain.toml` (nightly). Use plain `cargo`. Use `
 
 ## Git/PR details
 
-- Commit trailer: include the Co-authored-by trailer in commits when using Copilot-assisted commits unless the author requests otherwise:
-
-  Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
-
 - Reference issues/PRs in commit messages when relevant; use imperative mood ("Fix index invalidation").
 - Squash and merge when appropriate; verify energy conservation for physics changes.
 
