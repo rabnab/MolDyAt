@@ -27,7 +27,8 @@ use crate::objects2d::{Rect, SimLineSegment, ValveSegment, Vec2D};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
-/// Layout version written to every file; bump when the format changes.
+/// Layout version written to every file. Bump it for a breaking format change
+/// and add the matching migration (see [`migrate`](super::migrate)).
 pub const WORLD_FILE_VERSION: u32 = 1;
 
 /// Everything needed to rebuild a world. Energy plot data and simulation
@@ -79,7 +80,7 @@ pub struct ThermostatData {
     pub chain: Vec<f32>,
 }
 
-fn invalid(message: impl Into<String>) -> AppError {
+pub(super) fn invalid(message: impl Into<String>) -> AppError {
     AppError::CustomError(format!("invalid world file: {}", message.into()))
 }
 
@@ -300,9 +301,13 @@ impl WorldFile {
             .map_err(|e| AppError::CustomError(format!("cannot serialize world: {e}")))
     }
 
-    /// Parse and validate a world file.
+    /// Parse a world file of any supported version, upgrade it to the
+    /// current one (see [`migrate`](super::migrate)) and validate it.
     pub fn from_json(json: &str) -> AppResult<Self> {
-        let file: Self = serde_json::from_str(json).map_err(|e| invalid(e.to_string()))?;
+        let mut value: serde_json::Value =
+            serde_json::from_str(json).map_err(|e| invalid(e.to_string()))?;
+        super::migrate::upgrade(&mut value)?;
+        let file: Self = serde_json::from_value(value).map_err(|e| invalid(e.to_string()))?;
         file.validate()?;
         Ok(file)
     }
