@@ -19,5 +19,9 @@
       "Bash(cargo ci-test-headless-regression)",
       "Bash(cargo ci-test-drift)"
     ]
+  },
+  "attribution": {
+    "commit": "assisted by: Claude <noreply@anthropic.com>",
+    "pr": ""
   }
 }
