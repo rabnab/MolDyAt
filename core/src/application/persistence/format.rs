@@ -16,7 +16,7 @@
 //! zoom, pan) are never written.
 
 use crate::error::{AppError, AppResult};
-use crate::objects2d::ball_impl::NUM_BALL_SIZES;
+use crate::objects2d::ball_impl::SpeciesTable;
 use crate::objects2d::operator::{
     DEFAULT_THERMOSTAT_CHAIN_LENGTH, MAX_EMISSION_SPEED, MAX_EMIT_PERIOD, MAX_TARGET_TEMPERATURE,
     MAX_THERMOSTAT_RADIUS, MIN_EMISSION_SPEED, MIN_EMIT_PERIOD, MIN_TARGET_TEMPERATURE,
@@ -48,7 +48,9 @@ pub struct WorldFile {
     pub thermostats: Vec<ThermostatData>,
 }
 
-/// A ball. The radius and mass follow from `size_idx` and are not stored.
+/// A ball. `size_idx` is the index of its species in the built-in species
+/// table (the former size class); radius and mass follow from the species and
+/// are not stored.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct BallData {
     pub id: usize,
@@ -131,10 +133,11 @@ impl WorldFile {
         check_finite(&[self.gravity], "gravity")?;
 
         check_unique_ids(self.balls.iter().map(|b| b.id), "ball")?;
+        let species_count = SpeciesTable::builtin().len();
         for ball in &self.balls {
-            if ball.size_idx >= NUM_BALL_SIZES {
+            if ball.size_idx >= species_count {
                 return Err(invalid(format!(
-                    "ball {} has size_idx {} (must be below {NUM_BALL_SIZES})",
+                    "ball {} has size_idx {} (must be below {species_count})",
                     ball.id, ball.size_idx
                 )));
             }
@@ -206,7 +209,7 @@ impl WorldFile {
                     sphere.id, sphere.emission_speed
                 )));
             }
-            if sphere.ball_size_idx >= NUM_BALL_SIZES {
+            if sphere.ball_size_idx >= species_count {
                 return Err(invalid(format!(
                     "source sphere {} has ball_size_idx {}",
                     sphere.id, sphere.ball_size_idx

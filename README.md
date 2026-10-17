@@ -25,7 +25,7 @@ MolDyAt was formerly called ThermoSolver (releases up to v1.3.0).
 * **Lennard-Jones potential** with configurable force capping for energy conservation
 * **Verlet neighbor lists** with automatic rebuild based on movement threshold
 * **Spatial partitioning** via cell grid for O(N) neighbor lookups
-* **5 ball size classes** with radius-aware interactions
+* **5 built-in particle species** (sizes XS to XL) with radius-aware interactions
 * **Physics thread** — simulation runs independently from the render loop
 
 ### Operators

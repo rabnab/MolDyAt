@@ -116,7 +116,7 @@ fn check_v1(mc: &MainContent) {
     let balls: Vec<(usize, usize)> = world
         .balls
         .iter()
-        .map(|b| (b.get_id(), b.get_size_idx()))
+        .map(|b| (b.get_id(), b.species().index()))
         .collect();
     assert_eq!(
         balls,
@@ -246,7 +246,7 @@ fn check_v1(mc: &MainContent) {
                 s.id,
                 s.state,
                 s.emit_period,
-                s.ball_size_idx,
+                s.ball_species.index(),
                 s.emission_speed,
             )
         })

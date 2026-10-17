@@ -8,7 +8,7 @@ use super::create_main_content_for_region;
 use crate::application::core::SimulationWorld;
 use crate::application::core::placement::PlacementIndex;
 use crate::objects2d::Vec2D;
-use crate::objects2d::ball_impl::{Ball2D, BallFactory, NUM_BALL_SIZES};
+use crate::objects2d::ball_impl::{Ball2D, BallFactory, SpeciesId, SpeciesTable};
 
 /// Small deterministic generator, so the test needs no RNG plumbing.
 struct XorShift(u64);
@@ -25,14 +25,20 @@ impl XorShift {
         lo + (hi - lo) * self.next_f32()
     }
 
-    fn size_idx(&mut self) -> usize {
-        ((self.next_f32() * NUM_BALL_SIZES as f32) as usize).min(NUM_BALL_SIZES - 1)
+    fn species(&mut self) -> SpeciesId {
+        let table = SpeciesTable::builtin();
+        let count = table.len();
+        let index = ((self.next_f32() * count as f32) as usize).min(count - 1);
+        table.id(index).unwrap()
     }
 }
 
-fn ball(factory: &BallFactory, x: f32, y: f32, size_idx: usize) -> Ball2D {
-    factory.create_with_size_and_velocity(Vec2D::new(x, y), size_idx, Vec2D::zero())
+fn ball(factory: &BallFactory, x: f32, y: f32, species: SpeciesId) -> Ball2D {
+    factory.create_with_species_and_velocity(Vec2D::new(x, y), species, Vec2D::zero())
 }
+
+/// The medium species, for the hand-placed cases.
+const M: SpeciesId = SpeciesId::new(2);
 
 /// Check `candidate` both ways and return the shared answer.
 fn same_answer(world: &SimulationWorld, candidate: &Ball2D, margin: f32) -> bool {
@@ -61,7 +67,7 @@ fn test_indexed_collision_check_matches_full_scan() {
             &factory,
             rng.range(-49.0, 49.0),
             rng.range(-49.0, 49.0),
-            rng.size_idx(),
+            rng.species(),
         );
         world.add_ball_and_register(b);
     }
@@ -78,7 +84,7 @@ fn test_indexed_collision_check_matches_full_scan() {
             &factory,
             rng.range(-55.0, 55.0),
             rng.range(-55.0, 55.0),
-            rng.size_idx(),
+            rng.species(),
         );
         for margin in margins {
             let indexed = world.is_ball_colliding_indexed(&candidate, margin, &index);
@@ -104,8 +110,8 @@ fn test_indexed_collision_check_finds_balls_missing_from_the_grid() {
     let world = main_content.world_mut();
 
     // In `balls` but never registered in a cell.
-    world.balls.push(ball(&factory, 0.0, 0.0, 2));
-    let candidate = ball(&factory, 0.1, 0.0, 2);
+    world.balls.push(ball(&factory, 0.0, 0.0, M));
+    let candidate = ball(&factory, 0.1, 0.0, M);
     assert!(same_answer(world, &candidate, 0.0));
 }
 
@@ -116,10 +122,10 @@ fn test_indexed_collision_check_finds_balls_with_a_stale_cell() {
     let world = main_content.world_mut();
 
     // Registered at the origin, then moved far away without a grid update.
-    world.add_ball_and_register(ball(&factory, 0.0, 0.0, 2));
+    world.add_ball_and_register(ball(&factory, 0.0, 0.0, M));
     world.balls[0].set_position_and_update_tail(Vec2D::new(30.0, -30.0));
-    assert!(same_answer(world, &ball(&factory, 30.1, -30.0, 2), 0.0));
-    assert!(!same_answer(world, &ball(&factory, 0.1, 0.0, 2), 0.0));
+    assert!(same_answer(world, &ball(&factory, 30.1, -30.0, M), 0.0));
+    assert!(!same_answer(world, &ball(&factory, 0.1, 0.0, M), 0.0));
 }
 
 #[test]
@@ -129,10 +135,10 @@ fn test_indexed_placement_rejects_a_ball_placed_earlier_in_the_batch() {
     let world = main_content.world_mut();
     let mut index = PlacementIndex::new(world);
 
-    let first = world.add_candidate_ball_indexed(ball(&factory, 5.0, 5.0, 2), 0.0, &[], &mut index);
+    let first = world.add_candidate_ball_indexed(ball(&factory, 5.0, 5.0, M), 0.0, &[], &mut index);
     assert!(first.is_ok());
     let second =
-        world.add_candidate_ball_indexed(ball(&factory, 5.2, 5.0, 2), 0.0, &[], &mut index);
+        world.add_candidate_ball_indexed(ball(&factory, 5.2, 5.0, M), 0.0, &[], &mut index);
     assert!(second.is_err(), "overlaps the ball placed just before");
     assert_eq!(world.balls.len(), 1);
 }

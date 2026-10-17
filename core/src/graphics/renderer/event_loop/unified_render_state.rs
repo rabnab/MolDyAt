@@ -27,6 +27,7 @@ use crate::graphics::energy_plot::{EnergyData, SharedEnergyData};
 use crate::graphics::renderer::ViewportTransform;
 use crate::graphics::renderer::margins::Margins;
 use crate::graphics::renderer::state_layers::RendererConfig;
+use crate::objects2d::ball_impl::{DEFAULT_SPECIES, SpeciesId, SpeciesTable};
 use crate::objects2d::wall_chain::ObjectRef;
 use crate::objects2d::{Rect, Vec2D};
 use std::sync::{Arc, Mutex};
@@ -55,7 +56,7 @@ pub(super) struct RenderStateData {
     pub(super) view_dirty: bool,
     pub(super) last_snapshot: Option<Arc<RendererSnapshot>>,
     pub(super) cursor_world_pos: Vec2D,
-    pub(super) current_ball_size_idx: usize,
+    pub(super) current_species: SpeciesId,
     pub(super) metrics: MetricsCollector,
     pub(super) active_tool: OperatorTool,
     pub(super) tool_handler: Option<Box<dyn OperatorToolHandler>>,
@@ -126,7 +127,7 @@ impl UnifiedRenderState {
                 view_dirty: true,
                 last_snapshot: None,
                 cursor_world_pos: Vec2D::zero(),
-                current_ball_size_idx: 2,
+                current_species: DEFAULT_SPECIES,
                 metrics: MetricsCollector::new(),
                 active_tool: OperatorTool::None,
                 tool_handler: None,
@@ -169,8 +170,9 @@ impl UnifiedRenderState {
         self.render.cursor_world_pos
     }
 
-    pub fn current_ball_size_idx(&self) -> usize {
-        self.render.current_ball_size_idx
+    /// Species of new balls, for the cursor preview.
+    pub fn current_species(&self) -> SpeciesId {
+        self.render.current_species
     }
 
     pub fn active_tool(&self) -> OperatorTool {
@@ -550,13 +552,11 @@ impl UnifiedRenderState {
 
     // ── Ball size helpers ────────────────────────────────────────────
 
-    /// Cycle to the next ball size.
+    /// Cycle to the next ball species.
     ///
-    /// Updates the local size index and sends command to physics thread.
+    /// Updates the local species and sends command to physics thread.
     pub fn next_ball_size(&mut self) {
-        use crate::objects2d::ball_impl::NUM_BALL_SIZES;
-        self.render.current_ball_size_idx =
-            (self.render.current_ball_size_idx + 1) % NUM_BALL_SIZES;
+        self.render.current_species = SpeciesTable::builtin().next(self.render.current_species);
         self.physics.send_command(BallCommand::NextSize);
     }
 
@@ -772,7 +772,7 @@ mod tests {
                 view_dirty: false,
                 last_snapshot: None,
                 cursor_world_pos: Vec2D::zero(),
-                current_ball_size_idx: 2,
+                current_species: DEFAULT_SPECIES,
                 metrics: MetricsCollector::new(),
                 active_tool: OperatorTool::None,
                 tool_handler: None,
@@ -826,7 +826,7 @@ mod tests {
         let affects_view = state.process_action(InputAction::NextBallSize, None, None);
 
         assert!(!affects_view);
-        assert_eq!(state.render.current_ball_size_idx, 3);
+        assert_eq!(state.render.current_species, SpeciesId::new(3));
         assert!(state.render.view_dirty);
     }
 }

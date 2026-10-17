@@ -27,7 +27,7 @@ fn ghost() -> GhostWall {
 }
 
 fn push_ball(mc: &mut MainContent, pos: Vec2D, v: Vec2D) {
-    let mut ball = Ball2D::new(1, pos, (0, 1.0));
+    let mut ball = Ball2D::new(1, pos, 1.0);
     ball.v = v;
     mc.world_mut().balls.push(ball);
 }

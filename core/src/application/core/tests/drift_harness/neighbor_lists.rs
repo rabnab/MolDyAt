@@ -18,7 +18,7 @@ use super::dense_gas::run_dense_gas;
 use super::*;
 use crate::application::core::TestFaults;
 use crate::objects2d::Rect;
-use crate::objects2d::ball_impl::{Ball2D, NUM_BALL_SIZES};
+use crate::objects2d::ball_impl::{Ball2D, SpeciesId, SpeciesTable};
 
 const HOT_SEED: u64 = 505;
 const HOT_BALLS: usize = 400;
@@ -166,13 +166,14 @@ fn populate_cell_border_pairs(main_content: &mut MainContent) -> usize {
     let old_h = h / (h / range).ceil();
     let r_max = BallFactory::get_max_radius();
     let pair_dist = 2.0 * r_max + 0.95 * physics.get_cutoff_distance();
-    let max_size = NUM_BALL_SIZES - 1;
+    let max_size = SpeciesTable::builtin().len() - 1;
     let slow = |i: usize| Vec2D::new((i as f32 * 1.7).sin() * 0.3, (i as f32 * 0.9).cos() * 0.3);
 
     let mut balls: Vec<Ball2D> = Vec::new();
     let mut add = |pos: Vec2D, size: usize| {
         let i = balls.len();
-        balls.push(factory.create_with_size_and_velocity(pos, size, slow(i)));
+        let species = SpeciesId::new(size as u16);
+        balls.push(factory.create_with_species_and_velocity(pos, species, slow(i)));
     };
     // Horizontal pair across two old column borders, near the bottom.
     let ax = old_w - 0.1;

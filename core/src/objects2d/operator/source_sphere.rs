@@ -8,6 +8,7 @@ use super::{
     OperatorCollection, OperatorIdCounter, OperatorState, Rect, Vec2D, is_degenerate, remap_point,
     remove_by_id,
 };
+use crate::objects2d::ball_impl::{DEFAULT_SPECIES, SpeciesId, SpeciesTable};
 
 // ── Source Sphere ────────────────────────────────────────────────────
 
@@ -26,14 +27,12 @@ pub struct SimSourceSphere {
     pub state: OperatorState,
     /// Emit one ball every this many simulation steps (when On).
     pub emit_period: usize,
-    /// Ball size class index (0–4) for emitted balls.
-    pub ball_size_idx: usize,
+    /// Species of the emitted balls.
+    pub ball_species: SpeciesId,
     /// Speed magnitude for emitted balls (world units per step).
     pub emission_speed: f32,
 }
 
-/// Default ball size class index for new source spheres (medium).
-const DEFAULT_BALL_SIZE_IDX: usize = 2;
 /// Shared source sphere radius in world units.
 pub const SOURCE_SPHERE_RADIUS: f32 = 1.2;
 /// Default emission speed magnitude for new source spheres.
@@ -59,7 +58,7 @@ impl SimSourceSphere {
             center,
             state: OperatorState::Off,
             emit_period: DEFAULT_EMIT_PERIOD,
-            ball_size_idx: DEFAULT_BALL_SIZE_IDX,
+            ball_species: DEFAULT_SPECIES,
             emission_speed: DEFAULT_EMISSION_SPEED,
         }
     }
@@ -69,9 +68,9 @@ impl SimSourceSphere {
         self.state.is_on()
     }
 
-    /// Cycle to the next ball size class, wrapping around.
-    pub fn cycle_ball_size(&mut self) {
-        self.ball_size_idx = (self.ball_size_idx + 1) % crate::objects2d::ball_impl::NUM_BALL_SIZES;
+    /// Cycle to the next species, wrapping around.
+    pub fn cycle_ball_species(&mut self) {
+        self.ball_species = SpeciesTable::builtin().next(self.ball_species);
     }
 
     /// Adjust emission speed by `delta` (positive = faster), clamped.

@@ -10,13 +10,13 @@
 //! simulation steps.
 
 use super::{MainContent, SimulationWorld};
-use crate::objects2d::ball_impl::BallFactory;
+use crate::objects2d::ball_impl::{BallFactory, SpeciesId};
 use crate::objects2d::{SOURCE_SPHERE_RADIUS, Vec2D};
 
 /// Parameters collected from a source sphere for one emission tick.
 struct EmissionParams {
     center: Vec2D,
-    ball_size_idx: usize,
+    ball_species: SpeciesId,
     emission_speed: f32,
 }
 
@@ -31,9 +31,9 @@ impl MainContent {
         self.world.toggle_source_sphere(sphere_id);
     }
 
-    /// Cycle the emitted ball size for a source sphere.
-    pub(crate) fn cycle_source_sphere_ball_size(&mut self, sphere_id: usize) {
-        self.world.cycle_source_sphere_ball_size(sphere_id);
+    /// Cycle the species a source sphere emits.
+    pub(crate) fn cycle_source_sphere_species(&mut self, sphere_id: usize) {
+        self.world.cycle_source_sphere_species(sphere_id);
     }
 
     /// Adjust the emission speed of a source sphere.
@@ -59,9 +59,9 @@ impl SimulationWorld {
         }
     }
 
-    pub(crate) fn cycle_source_sphere_ball_size(&mut self, sphere_id: usize) {
+    pub(crate) fn cycle_source_sphere_species(&mut self, sphere_id: usize) {
         if let Some(sphere) = self.source_spheres.find_mut(sphere_id) {
-            sphere.cycle_ball_size();
+            sphere.cycle_ball_species();
         }
     }
 
@@ -98,9 +98,9 @@ impl SimulationWorld {
                 params.center.y + SOURCE_SPHERE_RADIUS * angle.sin(),
             );
 
-            let candidate = ball_factory.create_with_size_and_velocity(
+            let candidate = ball_factory.create_with_species_and_velocity(
                 emit_pos,
-                params.ball_size_idx,
+                params.ball_species,
                 velocity,
             );
 
@@ -119,7 +119,7 @@ impl SimulationWorld {
             .filter(|s| s.is_emitting() && step.is_multiple_of(s.emit_period))
             .map(|s| EmissionParams {
                 center: s.center,
-                ball_size_idx: s.ball_size_idx,
+                ball_species: s.ball_species,
                 emission_speed: s.emission_speed,
             })
             .collect()

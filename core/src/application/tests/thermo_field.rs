@@ -22,7 +22,7 @@ fn make_force_result(virial: f32) -> ForceResult {
 }
 
 fn make_ball(id: usize, pos: Vec2D, velocity: Vec2D, mass: f32) -> Ball2D {
-    let mut b = Ball2D::new(id, pos, (0, 1.0));
+    let mut b = Ball2D::new(id, pos, 1.0);
     b.v = velocity;
     b.mass = mass;
     b

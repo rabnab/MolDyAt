@@ -40,7 +40,7 @@ pub struct CycleSourceSphereBallSize {
 
 impl OperatorCommand for CycleSourceSphereBallSize {
     fn execute(self: Box<Self>, content: &mut MainContent) {
-        content.cycle_source_sphere_ball_size(self.sphere_id);
+        content.cycle_source_sphere_species(self.sphere_id);
     }
 }
 

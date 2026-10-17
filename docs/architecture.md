@@ -57,7 +57,7 @@ FrameRenderer → RenderGraph → GPU
 | World state | `SimulationWorld` | `core/src/application/core/mod.rs` | Balls, `BallPhysics` constants, cell grid, stats, operator collections (line segments, valves, wall chains, source spheres, thermostats), the ghost wall, thermo field history, and a few run flags (step-by-step, timing and stats display, real-units display) |
 | Stepping | `SimulationEngine` | `core/src/application/core/simulation_engine.rs` | One simulation step over a `SimulationWorld` (see below); holds no state |
 | Operator mutations | `OperatorCommand` structs | `core/src/application/operator_command/` | Placing, changing and deleting operators |
-| Physics primitives | `Ball2D`, `BallPhysics`, `CellGrid`, operators | `core/src/objects2d/` | Ball data, pair potential and SIMD force kernel, Verlet lists, wall contact, operator data models |
+| Physics primitives | `Ball2D`, `SpeciesTable`, `BallPhysics`, `CellGrid`, operators | `core/src/objects2d/` | Ball data, particle species, pair potential and SIMD force kernel, Verlet lists, wall contact, operator data models |
 | Renderer state | `UnifiedRenderState` | `core/src/graphics/renderer/event_loop/` | Input handler, physics bridge, and `RenderStateData` (viewport, energy window, renderer config, cursor and tool state, last snapshot, frame metrics) |
 | Backend | `WgpuWindow` and friends | `wgpu_renderer/src/wgpu/` | Window, GPU context, event routing, frame submission, render pipelines |
 

@@ -4,8 +4,9 @@
 
 use crate::objects2d::ball_impl::BallId;
 use crate::objects2d::ball_impl::ball_core::Ball2D;
+use crate::objects2d::ball_impl::species::{DEFAULT_SPECIES, SpeciesId, SpeciesTable};
 use crate::objects2d::vec_2d::Vec2D;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 use rand::rngs::{StdRng, SysRng};
 use rand::{RngExt, SeedableRng};
@@ -14,7 +15,7 @@ use rand_distr::{Distribution, Normal};
 /// Factory for creating Ball2D instances with various configurations
 pub struct BallFactory {
     next_id: RefCell<usize>,
-    new_ball_size_idx: RefCell<usize>,
+    new_ball_species: Cell<SpeciesId>,
     rng: RefCell<StdRng>,
 }
 
@@ -24,16 +25,11 @@ impl Default for BallFactory {
     fn default() -> Self {
         BallFactory {
             next_id: RefCell::new(FIRST_BALL_ID),
-            new_ball_size_idx: RefCell::new(2),
+            new_ball_species: Cell::new(DEFAULT_SPECIES),
             rng: RefCell::new(StdRng::try_from_rng(&mut SysRng).unwrap()),
         }
     }
 }
-
-/// Minimum ball radius (smallest size class)
-pub const MIN_BALL_SIZE: f32 = 0.15;
-/// Number of ball size classes
-pub const NUM_BALL_SIZES: usize = 5;
 
 impl BallFactory {
     pub fn new() -> Self {
@@ -44,63 +40,40 @@ impl BallFactory {
     pub fn with_seed(seed: u64) -> Self {
         BallFactory {
             next_id: RefCell::new(FIRST_BALL_ID),
-            new_ball_size_idx: RefCell::new(2),
+            new_ball_species: Cell::new(DEFAULT_SPECIES),
             rng: RefCell::new(StdRng::seed_from_u64(seed)),
         }
     }
 
-    /// Calculate ball radius for a given size index.
-    /// Radii increase exponentially: MIN_BALL_SIZE * 2^size_idx
-    ///
-    /// # Arguments
-    /// * `size_idx` - Size class index (0-4)
-    ///
-    /// # Returns
-    /// Ball radius in world units
-    pub fn radius_for_size_idx(size_idx: usize) -> f32 {
-        const BASE_EXPONENT: f32 = 2.0;
-        MIN_BALL_SIZE * BASE_EXPONENT.powi(size_idx as i32)
+    fn table() -> &'static SpeciesTable {
+        SpeciesTable::builtin()
     }
 
-    fn mass_for_size_idx(size_idx: usize) -> f32 {
-        let density = 2. / 10.;
-        let radius = Self::radius_for_size_idx(size_idx);
-        1. + density * (radius / MIN_BALL_SIZE - 1.).powf(1.2)
+    /// Switch new balls to the next species.
+    pub(crate) fn next_species(&self) {
+        self.new_ball_species
+            .set(Self::table().next(self.new_ball_species.get()));
     }
 
-    pub(crate) fn next_ball_size_idx(&self) {
-        let current_idx = *self.new_ball_size_idx.borrow();
-        *self.new_ball_size_idx.borrow_mut() = (current_idx + 1) % NUM_BALL_SIZES;
-    }
-
-    /// Create vector containing all possible ball radii.
-    ///
-    /// # Returns
-    /// Vector of 5 radii values for size indices 0-4
-    pub fn create_all_radii() -> Vec<f32> {
-        (0..NUM_BALL_SIZES).map(Self::radius_for_size_idx).collect()
-    }
-
-    /// Returns the maximum possible ball radius (for the largest size index)
+    /// The largest physics radius of any species.
     pub fn get_max_radius() -> f32 {
-        Self::radius_for_size_idx(NUM_BALL_SIZES - 1)
+        Self::table().max_radius()
     }
 
-    pub(crate) fn get_new_ball_size_idx(&self) -> usize {
-        *self.new_ball_size_idx.borrow()
+    /// The species of new balls.
+    pub(crate) fn new_ball_species(&self) -> SpeciesId {
+        self.new_ball_species.get()
     }
 
     pub(crate) fn get_new_ball_radius(&self) -> f32 {
-        Self::radius_for_size_idx(*self.new_ball_size_idx.borrow())
+        Self::table().species(self.new_ball_species.get()).radius
     }
 
-    /// Creates a new ball with specified position and radius
-    pub(crate) fn create_basic(&self, pos: impl Into<Vec2D>, size_idx: usize) -> Ball2D {
-        let pos_vec = pos.into();
+    /// A ball of `species` at rest, with the next free id.
+    pub(crate) fn create_basic(&self, pos: impl Into<Vec2D>, species: SpeciesId) -> Ball2D {
         let id = *self.next_id.borrow();
         *self.next_id.borrow_mut() += 1;
-
-        Ball2D::new(id, pos_vec, (size_idx, Self::radius_for_size_idx(size_idx)))
+        Self::restore(id, species, pos.into(), Vec2D::zero())
     }
 
     /// Creates a ball with specified mass and initial velocity
@@ -109,19 +82,17 @@ impl BallFactory {
         pos: impl Into<Vec2D>,
         initial_velocity: Vec2D,
     ) -> Ball2D {
-        let size_idx = self.get_new_ball_size_idx();
-        self.create_with_size_and_velocity(pos, size_idx, initial_velocity)
+        self.create_with_species_and_velocity(pos, self.new_ball_species(), initial_velocity)
     }
 
-    /// Creates a ball with a specific size class and initial velocity.
-    pub fn create_with_size_and_velocity(
+    /// Creates a ball of a given species with an initial velocity.
+    pub fn create_with_species_and_velocity(
         &self,
         pos: impl Into<Vec2D>,
-        size_idx: usize,
+        species: SpeciesId,
         velocity: Vec2D,
     ) -> Ball2D {
-        let mut ball = self.create_basic(pos, size_idx);
-        ball.mass = Self::mass_for_size_idx(size_idx);
+        let mut ball = self.create_basic(pos, species);
         ball.v = velocity;
         ball
     }
@@ -232,10 +203,12 @@ impl BallFactory {
     }
 
     /// A ball with a given id (e.g. from a save): radius and mass follow from
-    /// `size_idx`. Does not touch the id counter; see [`Self::continue_after`].
-    pub(crate) fn restore(id: BallId, size_idx: usize, pos: Vec2D, velocity: Vec2D) -> Ball2D {
-        let mut ball = Ball2D::new(id, pos, (size_idx, Self::radius_for_size_idx(size_idx)));
-        ball.mass = Self::mass_for_size_idx(size_idx);
+    /// `species`. Does not touch the id counter; see [`Self::continue_after`].
+    pub(crate) fn restore(id: BallId, species: SpeciesId, pos: Vec2D, velocity: Vec2D) -> Ball2D {
+        let data = Self::table().species(species);
+        let mut ball = Ball2D::new(id, pos, data.radius);
+        ball.species = species;
+        ball.mass = data.mass;
         ball.v = velocity;
         ball
     }
@@ -264,12 +237,15 @@ mod tests {
     fn test_basic_ball_creation() {
         let factory = BallFactory::new();
         let pos = Vec2D::new(1.0, 2.0);
-        let ball = factory.create_basic(pos, 0);
+        let species = SpeciesId::new(0);
+        let ball = factory.create_basic(pos, species);
 
+        let expected = SpeciesTable::builtin().species(species);
         assert_eq!(ball.get_id(), 1);
+        assert_eq!(ball.species(), species);
         assert_eq!(*ball.get_position(), pos);
-        assert_eq!(ball.get_radius(), MIN_BALL_SIZE);
-        assert_eq!(ball.get_mass(), BallFactory::mass_for_size_idx(0));
+        assert_eq!(ball.get_radius(), expected.radius);
+        assert_eq!(ball.get_mass(), expected.mass);
         assert_eq!(*ball.get_velocity(), Vec2D::zero());
     }
 
