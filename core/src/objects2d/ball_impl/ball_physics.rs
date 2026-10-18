@@ -5,12 +5,10 @@
 use crate::objects2d::Rect;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::ball_core::BounceInfo;
-use crate::objects2d::ball_impl::pair_potential::{
-    CapSettings, LennardJones, PairPotential, Potential,
-};
+use crate::objects2d::ball_impl::pair_potential::{CapSettings, LJ_SIG, Potential};
+use crate::objects2d::ball_impl::species::{DEFAULT_SPECIES, SpeciesId, SpeciesSet, SpeciesTable};
+use crate::objects2d::ball_impl::wall_law::{HardContact, WallLaw};
 use crate::objects2d::ball_impl::{Ball2D, Named};
-#[cfg(test)]
-use std::simd::f32x4;
 
 /// Physics settings that do not belong to the pair potential; they may change
 /// while the simulation runs. The force cap and cutoff live in the potential
@@ -24,7 +22,8 @@ pub struct PhysicsConstants {
 /// total force vector, and total potential energy from interactions.
 #[derive(Clone, Debug)]
 pub struct ForceResult {
-    /// Minimum edge-to-edge distance to the nearest neighbor
+    /// Smallest centre distance to a neighbour, minus that pair's `σ_ij`
+    /// (negative inside the repulsive core)
     pub min_dist: f32,
     /// Total force vector acting on the ball from all neighbors
     pub force: Vec2D,
@@ -46,24 +45,34 @@ pub struct ForceResult {
 pub struct BallPhysics {
     pub constants: PhysicsConstants,
     pair_potential: Potential,
+    wall_law: HardContact,
+    /// Wall contact distance of each species, from `wall_law`.
+    wall_contact: Vec<f32>,
 }
 
 impl Default for BallPhysics {
     fn default() -> Self {
         BallPhysics::new(
             PhysicsConstants::default(),
-            LennardJones::default(),
+            SpeciesTable::builtin(),
             CapSettings::default(),
         )
     }
 }
 
 impl BallPhysics {
-    pub fn new(constants: PhysicsConstants, lj: LennardJones, cap: CapSettings) -> Self {
-        let pair_potential = Potential::lennard_jones(lj, cap);
+    /// Lennard-Jones between every pair of `species` (Lorentz–Berthelot
+    /// mixing), capped and cut off per `cap`, and hard wall contacts.
+    pub fn new(constants: PhysicsConstants, species: &SpeciesTable, cap: CapSettings) -> Self {
+        let wall_law = HardContact;
         BallPhysics {
             constants,
-            pair_potential,
+            pair_potential: Potential::lennard_jones(species, cap),
+            wall_contact: species
+                .iter()
+                .map(|s| wall_law.contact_distance(s))
+                .collect(),
+            wall_law,
         }
     }
 
@@ -72,19 +81,35 @@ impl BallPhysics {
         self.pair_potential.cap_settings()
     }
 
-    /// Pairs interact only below this edge distance.
-    pub fn get_cutoff_distance(&self) -> f32 {
-        self.pair_potential.cutoff()
+    /// Species `a` and `b` interact only below this centre distance.
+    pub fn cutoff(&self, a: SpeciesId, b: SpeciesId) -> f32 {
+        self.pair_potential.cutoff(a, b)
     }
 
-    /// A skin of 1.0 is usually a good balance.
-    /// If you want it dynamic, you could use 0.2 * self.get_cutoff_distance()
+    /// Verlet skin: a fixed share of the reference cutoff (`N2`), the same for
+    /// every pair, so the rebuild threshold does not depend on the species.
     pub fn get_skin_thickness(&self) -> f32 {
-        0.2 * self.get_cutoff_distance()
+        0.2 * self.cap_settings().cutoff_factor * LJ_SIG
     }
 
-    pub fn get_cutoff_and_skin(&self) -> f32 {
-        self.get_cutoff_distance() + self.get_skin_thickness()
+    /// Centre distance below which a pair of `a` and `b` is listed as
+    /// neighbours: its cutoff plus the skin.
+    pub fn list_radius(&self, a: SpeciesId, b: SpeciesId) -> f32 {
+        self.cutoff(a, b) + self.get_skin_thickness()
+    }
+
+    /// Largest [`Self::list_radius`] over the pairs of `present`; the cell
+    /// grid needs cells at least this wide. For an empty set, that of the
+    /// default species.
+    pub fn max_list_radius(&self, present: SpeciesSet) -> f32 {
+        if present.is_empty() {
+            return self.list_radius(DEFAULT_SPECIES, DEFAULT_SPECIES);
+        }
+        present
+            .iter()
+            .flat_map(|a| present.iter().map(move |b| (a, b)))
+            .map(|(a, b)| self.list_radius(a, b))
+            .fold(0.0, f32::max)
     }
 
     /// Returns the minimum movement threshold before a ball's neighbor list needs updating.
@@ -96,65 +121,58 @@ impl BallPhysics {
     /// guarantees no pair gets inside the cutoff without being listed; half
     /// the skin (the textbook value for synchronous rebuilds) does not.
     ///
-    /// # Arguments
-    /// * `_max_radius` - Maximum ball radius (currently unused, reserved for dynamic calculations)
-    ///
     /// # Returns
     /// Movement threshold in world units (skin_thickness / 3)
-    pub fn get_min_movement_for_update_hood(&self, _max_radius: f32) -> f32 {
+    pub fn get_min_movement_for_update_hood(&self) -> f32 {
         self.get_skin_thickness() / 3.0
     }
 
-    pub(crate) fn equilibrium_edge_distance(&self) -> f32 {
-        self.pair_potential.equilibrium_distance()
+    /// Centre distance of the potential minimum of a pair of `a` and `b`.
+    pub(crate) fn equilibrium_distance(&self, a: SpeciesId, b: SpeciesId) -> f32 {
+        self.pair_potential.equilibrium_distance(a, b)
     }
 
-    /// Pair force magnitude (positive = repulsive) at `edge_dist`; see
+    /// Pair force magnitude (positive = repulsive) at centre distance `r`; see
     /// [`CappedPotential`](super::pair_potential::CappedPotential).
-    pub(crate) fn force(&self, edge_dist: f32) -> f32 {
-        self.pair_potential.force(edge_dist)
+    #[cfg(test)]
+    pub(crate) fn force(&self, a: SpeciesId, b: SpeciesId, r: f32) -> f32 {
+        self.pair_potential.force(a, b, r)
     }
 
-    /// The pair potential; the force kernel matches on it once per ball.
+    /// Pair potential energy at centre distance `r`, zero at the cutoff.
+    #[cfg(test)]
+    pub(crate) fn potential(&self, a: SpeciesId, b: SpeciesId, r: f32) -> f32 {
+        self.pair_potential.potential(a, b, r)
+    }
+
+    /// The pair potentials; the force kernel matches on them once per ball.
     pub(crate) fn pair_potential(&self) -> &Potential {
         &self.pair_potential
     }
 
-    /// SIMD version of [`Self::force`] for four edge distances.
+    /// Distance below which the force of the pair follows the sloped core.
     #[cfg(test)]
-    pub(crate) fn force_simd(&self, edge_dist: f32x4) -> f32x4 {
-        self.pair_potential.force_simd(edge_dist)
+    pub(crate) fn get_force_cap_distance(&self, a: SpeciesId, b: SpeciesId) -> f32 {
+        self.pair_potential.r_cap(a, b)
     }
 
-    /// Pair potential energy at `edge_dist`, zero at the cutoff.
-    #[cfg(test)]
-    pub(crate) fn potential(&self, edge_dist: f32) -> f32 {
-        self.pair_potential.potential(edge_dist)
+    /// The law that decides how balls meet walls.
+    pub fn wall_law(&self) -> &impl WallLaw {
+        &self.wall_law
     }
 
-    /// SIMD version of [`Self::potential`] for four edge distances.
-    #[cfg(test)]
-    pub(crate) fn potential_simd(&self, edge_dist: f32x4) -> f32x4 {
-        self.pair_potential.potential_simd(edge_dist)
+    /// Centre distance from a wall surface at which a ball of `species` is
+    /// reflected (see [`WallLaw::contact_distance`]).
+    #[inline]
+    pub fn wall_contact_distance(&self, species: SpeciesId) -> f32 {
+        self.wall_contact[species.index()]
     }
 
-    /// Distance below which the force follows the sloped core.
-    #[cfg(test)]
-    pub(crate) fn get_force_cap_distance(&self) -> f32 {
-        self.pair_potential.r_cap()
-    }
-
-    /// Calculate edge-to-edge distance between two balls.
-    ///
-    /// # Arguments
-    /// * `a` - First ball
-    /// * `b` - Second ball
-    ///
-    /// # Returns
-    /// Distance between ball surfaces (negative if overlapping)
+    /// Gap between the contact discs of two balls (radius `σ/2` each): the
+    /// centre distance minus `σ_ij`, zero where the pair potential crosses
+    /// zero, negative if they overlap.
     pub fn distance_of_edges(a: &Ball2D, b: &Ball2D) -> f32 {
-        let center_dist = a.get_position().dist(b.get_position()).norm();
-        center_dist - (a.radius + b.radius)
+        a.get_edge_distance(b)
     }
 
     /// Check if two balls are colliding within a margin.
@@ -165,7 +183,7 @@ impl BallPhysics {
     /// * `margin` - Collision margin (positive = earlier detection)
     ///
     /// # Returns
-    /// `true` if edge distance is less than margin
+    /// `true` if the gap between their contact discs is less than margin
     pub fn is_colliding(&self, this: &Ball2D, other: &Ball2D, margin: f32) -> bool {
         this.get_edge_distance(other) < margin
     }
@@ -187,7 +205,8 @@ impl BallPhysics {
         bound: &Rect,
         restitution: f32,
     ) -> BounceInfo {
-        let bounce_info = ball.execute_update_pos(dt, bound, restitution);
+        let contact = self.wall_contact_distance(ball.species());
+        let bounce_info = ball.execute_update_pos(dt, bound, contact, restitution);
 
         if ball.verbose.console {
             log::debug!(
@@ -203,24 +222,5 @@ impl BallPhysics {
         }
 
         bounce_info
-    }
-
-    pub fn get_neighbour_force_and_pos(
-        &self,
-        ball: &Ball2D,
-        balls: &[Ball2D],
-    ) -> Vec<(Vec2D, f32)> {
-        let ball_pos = *ball.get_position();
-        let ball_radius = ball.radius;
-        ball.hood
-            .get_neighbour_indices()
-            .iter()
-            .filter_map(|&idx| balls.get(idx))
-            .map(|other| {
-                let center_dist = ball_pos.dist(other.get_position()).norm();
-                let edge_dist = center_dist - (ball_radius + other.radius);
-                (*other.get_position(), self.force(edge_dist))
-            })
-            .collect()
     }
 }

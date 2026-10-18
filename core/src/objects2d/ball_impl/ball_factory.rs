@@ -55,18 +55,22 @@ impl BallFactory {
             .set(Self::table().next(self.new_ball_species.get()));
     }
 
-    /// The largest physics radius of any species.
-    pub fn get_max_radius() -> f32 {
-        Self::table().max_radius()
-    }
-
     /// The species of new balls.
     pub(crate) fn new_ball_species(&self) -> SpeciesId {
         self.new_ball_species.get()
     }
 
+    /// Make new balls of `species`.
+    #[cfg(test)]
+    pub(crate) fn set_new_ball_species(&self, species: SpeciesId) {
+        self.new_ball_species.set(species);
+    }
+
+    /// Contact radius (`σ / 2`) of the species of new balls.
     pub(crate) fn get_new_ball_radius(&self) -> f32 {
-        Self::table().species(self.new_ball_species.get()).radius
+        Self::table()
+            .species(self.new_ball_species.get())
+            .contact_radius()
     }
 
     /// A ball of `species` at rest, with the next free id.
@@ -205,10 +209,7 @@ impl BallFactory {
     /// A ball with a given id (e.g. from a save): radius and mass follow from
     /// `species`. Does not touch the id counter; see [`Self::continue_after`].
     pub(crate) fn restore(id: BallId, species: SpeciesId, pos: Vec2D, velocity: Vec2D) -> Ball2D {
-        let data = Self::table().species(species);
-        let mut ball = Ball2D::new(id, pos, data.radius);
-        ball.species = species;
-        ball.mass = data.mass;
+        let mut ball = Ball2D::new(id, pos, species);
         ball.v = velocity;
         ball
     }
@@ -244,7 +245,7 @@ mod tests {
         assert_eq!(ball.get_id(), 1);
         assert_eq!(ball.species(), species);
         assert_eq!(*ball.get_position(), pos);
-        assert_eq!(ball.get_radius(), expected.radius);
+        assert_eq!(ball.get_contact_radius(), expected.contact_radius());
         assert_eq!(ball.get_mass(), expected.mass);
         assert_eq!(*ball.get_velocity(), Vec2D::zero());
     }
@@ -282,7 +283,7 @@ mod tests {
         let ball = factory
             .create_validated(Vec2D::zero(), Vec2D::zero())
             .unwrap();
-        assert_eq!(ball.get_radius(), rad_expect);
+        assert_eq!(ball.get_contact_radius(), rad_expect);
     }
 
     #[test]

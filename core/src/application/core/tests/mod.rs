@@ -24,6 +24,7 @@ mod line_segments;
 mod object_deletion;
 mod snapshot;
 mod source_spheres;
+mod species;
 mod thermostats;
 mod valves;
 mod verbose;

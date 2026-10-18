@@ -12,8 +12,13 @@ use serde_json::{Value, json};
 use std::path::PathBuf;
 
 fn v1_fixture() -> Value {
+    fixture("v1.json")
+}
+
+fn fixture(name: &str) -> Value {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("src/application/persistence/tests/fixtures/v1.json");
+        .join("src/application/persistence/tests/fixtures")
+        .join(name);
     serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
 }
 
@@ -136,11 +141,64 @@ fn migration_on_a_file_missing_a_field_is_an_error_not_a_panic() {
 #[test]
 fn current_version_file_skips_the_migration_path() {
     let chain = [Migration {
-        from: 1,
+        from: 2,
         apply: must_not_run,
     }];
-    let file: WorldFile = parse_with(&v1_json(), &chain, 1).unwrap();
-    assert_eq!(file.version, 1);
+    let v2_json = serde_json::to_string(&fixture("v2.json")).unwrap();
+    let file: WorldFile = parse_with(&v2_json, &chain, 2).unwrap();
+    assert_eq!(file.version, 2);
+}
+
+// ── v1 → v2 (#234): size classes become species ─────────────────
+
+#[test]
+fn v1_size_classes_become_species_names() {
+    let mut file = v1_fixture();
+    let before = file.clone();
+    assert_eq!(upgrade(&mut file).unwrap(), 1);
+    assert_eq!(file["version"], 2);
+
+    let names = ["XS", "S", "M", "L"];
+    let balls = file["balls"].as_array().unwrap();
+    for (ball, old) in balls.iter().zip(before["balls"].as_array().unwrap()) {
+        let size_idx = old["size_idx"].as_u64().unwrap() as usize;
+        assert_eq!(ball["species"], names[size_idx], "ball {}", ball["id"]);
+        assert!(ball.get("size_idx").is_none());
+        assert_eq!(ball["pos"], old["pos"]);
+    }
+    let spheres = file["source_spheres"].as_array().unwrap();
+    assert_eq!(spheres[0]["ball_species"], "M");
+    assert_eq!(spheres[1]["ball_species"], "S");
+    assert!(spheres[0].get("ball_size_idx").is_none());
+    // Everything else is untouched.
+    assert_eq!(file["wall_chains"], before["wall_chains"]);
+    assert_eq!(file["thermostats"], before["thermostats"]);
+}
+
+#[test]
+fn v1_size_class_out_of_range_is_an_error_not_a_panic() {
+    for bad in [json!(5), json!(-1), json!("M"), json!(null)] {
+        let mut file = v1_fixture();
+        file["balls"][0]["size_idx"] = bad.clone();
+        let error = error_text(upgrade(&mut file));
+        assert!(error.contains("is not a size class"), "{bad}: {error}");
+    }
+}
+
+#[test]
+fn v1_ball_without_size_class_is_an_error_not_a_panic() {
+    let mut file = v1_fixture();
+    file["source_spheres"][1]
+        .as_object_mut()
+        .unwrap()
+        .remove("ball_size_idx");
+    let error = error_text(upgrade(&mut file));
+    assert!(error.contains("missing field `ball_size_idx`"), "{error}");
+
+    let mut file = v1_fixture();
+    file["balls"] = json!({"not": "a list"});
+    let error = error_text(upgrade(&mut file));
+    assert!(error.contains("`balls` must be a list"), "{error}");
 }
 
 #[test]

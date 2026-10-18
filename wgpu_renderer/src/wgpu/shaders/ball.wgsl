@@ -4,12 +4,15 @@
 
 // Ball shader: one instance = one ball.
 // Draws up to three circles per ball, from the outside in:
-//   1. cutoff outline (gray)       - interaction range, ring mode 1 only
-//   2. equilibrium outline (magenta) - where equal-size balls reach equilibrium,
-//                                    hidden in ring mode 2
+//   1. cutoff outline (gray)       - half the like pair's cutoff: the rings of
+//                                    two balls touch where their pair stops
+//                                    interacting; ring mode 1 only
+//   2. equilibrium outline (magenta) - half the like pair's equilibrium
+//                                    distance: the rings of two balls touch at
+//                                    their potential minimum; hidden in ring mode 2
 //   3. filled ball, shaded as a sphere
 //
-// u.params = (equilibrium edge distance, cutoff distance, ring mode, unused)
+// u.params = (unused, unused, ring mode, unused)
 //   ring mode: 0 = equilibrium only, 1 = equilibrium + cutoff, 2 = no rings
 
 // Stroke thickness of the outlines in world units (~2 px at default zoom).
@@ -20,6 +23,8 @@ struct Inst {
     @location(1) radius: f32,
     // Packed RGBA, 0xAABBGGRR
     @location(2) color: u32,
+    // (equilibrium ring radius, cutoff ring radius)
+    @location(3) rings: vec2<f32>,
 }
 
 struct VOut {
@@ -33,12 +38,12 @@ struct VOut {
 
 @vertex
 fn vs_main(@builtin(vertex_index) vi: u32, inst: Inst) -> VOut {
-    let eq_radius = inst.radius + u.params.x * 0.5;
-    let cutoff_radius = eq_radius + u.params.y;
+    let eq_radius = inst.rings.x;
+    let cutoff_radius = inst.rings.y;
 
     // Half a stroke of extra room so the outer ring is never clipped by the
     // quad edge (that caused holes and flicker at the quadrant points).
-    let reach = cutoff_radius + STROKE_WIDTH * 0.5;
+    let reach = max(max(cutoff_radius, eq_radius), inst.radius) + STROKE_WIDTH * 0.5;
     let q = (quad_corner(vi) * 2.0 - 1.0) * reach;
 
     var out: VOut;

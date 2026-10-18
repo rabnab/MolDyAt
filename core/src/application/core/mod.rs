@@ -30,7 +30,7 @@ use crate::application::sim_stats::SimStats;
 use crate::application::thermo_field::ThermoFieldHistory;
 use crate::objects2d::ball_cell::cell_grid::CellGrid;
 use crate::objects2d::ball_impl::simd_forces::KernelPoint;
-use crate::objects2d::ball_impl::{Ball2D, BallPhysics, ForceResult};
+use crate::objects2d::ball_impl::{Ball2D, BallPhysics, ForceResult, SpeciesId, SpeciesSet};
 use crate::objects2d::wall_chain::WallChainCollection;
 use crate::objects2d::{
     LineSegmentCollection, Rect, SourceSphereCollection, ThermostatCollection, ValveCollection,
@@ -56,7 +56,7 @@ pub struct SimulationWorld {
 
     pub(crate) sim: SimStats,
     pub(crate) balls: Vec<Ball2D>,
-    /// Per-ball position and radius for the force kernel, refilled every step
+    /// Per-ball position and species for the force kernel, refilled every step
     /// (same indices as `balls`). Scratch data: valid only inside `update_sim`,
     /// from `update_old_positions` to `compute_forces`. Balls are removed and
     /// added between steps, so read `balls` everywhere else.
@@ -64,6 +64,10 @@ pub struct SimulationWorld {
     /// Buffers the step reuses instead of allocating (see `StepScratch`).
     pub(crate) scratch: StepScratch,
     pub(crate) cell_grid: CellGrid,
+    /// Species of the balls in the world (it may also hold species whose
+    /// last ball is gone, until the next `rebuild_cell_grid`). The cell size
+    /// follows the largest pair list radius among them.
+    pub(crate) species_present: SpeciesSet,
     pub(crate) real_data: bool,
     pub(crate) step_by_step: bool,
     pub(crate) show_timings: bool,

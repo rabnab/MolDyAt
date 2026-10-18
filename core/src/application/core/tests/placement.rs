@@ -50,7 +50,7 @@ fn same_answer(world: &SimulationWorld, candidate: &Ball2D, margin: f32) -> bool
         full,
         "candidate at {:?} (r {}), margin {margin}",
         candidate.get_position(),
-        candidate.get_radius()
+        candidate.get_contact_radius()
     );
     full
 }
@@ -73,7 +73,7 @@ fn test_indexed_collision_check_matches_full_scan() {
     }
 
     let index = PlacementIndex::new(world);
-    let equilibrium = world.physics.equilibrium_edge_distance();
+    let equilibrium = world.equilibrium_gap(crate::objects2d::ball_impl::DEFAULT_SPECIES);
     let (cell_x, _) = world.cell_grid.get_cell_size();
     // Small, the seeding margin, near a cell, and one past it (full scan).
     let margins = [0.0, equilibrium, 0.9 * cell_x, 2.0 * cell_x];
@@ -94,7 +94,7 @@ fn test_indexed_collision_check_matches_full_scan() {
                 full,
                 "candidate at {:?} (r {}), margin {margin}",
                 candidate.get_position(),
-                candidate.get_radius()
+                candidate.get_contact_radius()
             );
             if full { hits += 1 } else { misses += 1 }
         }

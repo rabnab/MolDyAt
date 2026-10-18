@@ -22,7 +22,7 @@ fn test_frame_record_contains_v1_schema_and_summary_fields() {
     let line = frame_to_jsonl(&snapshot, Some(2.0));
     let value: serde_json::Value = serde_json::from_str(&line).expect("valid json");
 
-    assert_eq!(value["schema_version"], "headless.v1");
+    assert_eq!(value["schema_version"], "headless.v2");
     assert_eq!(value["record_kind"], "frame");
     assert_eq!(value["step"], 42);
     assert_eq!(value["ball_count"], 0);
@@ -58,7 +58,7 @@ fn test_run_start_record_contains_config_and_operator_counts() {
     let line = run_start_to_jsonl(&config, &snapshot);
     let value: serde_json::Value = serde_json::from_str(&line).expect("valid json");
 
-    assert_eq!(value["schema_version"], "headless.v1");
+    assert_eq!(value["schema_version"], "headless.v2");
     assert_eq!(value["record_kind"], "run_start");
     assert_eq!(value["config"]["steps"], 1000);
     assert_eq!(value["config"]["snapshot_every"], 100);
@@ -76,7 +76,7 @@ fn test_run_end_record_contains_v1_schema_and_summary_fields() {
     let line = run_end_to_jsonl(&snapshot, 7);
     let value: serde_json::Value = serde_json::from_str(&line).expect("valid json");
 
-    assert_eq!(value["schema_version"], "headless.v1");
+    assert_eq!(value["schema_version"], "headless.v2");
     assert_eq!(value["record_kind"], "run_end");
     assert_eq!(value["snapshots_emitted"], 7);
     assert_eq!(value["final_step"], 10);
@@ -130,9 +130,9 @@ fn test_jsonl_records_are_valid_json_lines_and_ordered() {
     assert_eq!(parsed[0]["record_kind"], "run_start");
     assert_eq!(parsed[1]["record_kind"], "frame");
     assert_eq!(parsed[2]["record_kind"], "run_end");
-    assert_eq!(parsed[0]["schema_version"], "headless.v1");
-    assert_eq!(parsed[1]["schema_version"], "headless.v1");
-    assert_eq!(parsed[2]["schema_version"], "headless.v1");
+    assert_eq!(parsed[0]["schema_version"], "headless.v2");
+    assert_eq!(parsed[1]["schema_version"], "headless.v2");
+    assert_eq!(parsed[2]["schema_version"], "headless.v2");
 }
 
 #[test]
@@ -158,8 +158,10 @@ fn test_detail_balls_includes_ball_fields() {
             velocity: moldyat_core::objects2d::Vec2D::new(0.25, -0.5),
             mass: 3.75,
             color: [1.0, 0.0, 0.0, 1.0],
-            radius: 0.7,
+            contact_radius: 0.7,
             display_radius: 0.7,
+            equilibrium_radius: 0.8,
+            cutoff_radius: 2.8,
             show_neighbor_lines: false,
             show_main_neighbors_only: false,
             neighbors: Vec::new(),
@@ -175,8 +177,10 @@ fn test_detail_balls_includes_ball_fields() {
             velocity: moldyat_core::objects2d::Vec2D::new(-0.1, 0.2),
             mass: 1.5,
             color: [0.0, 1.0, 0.0, 1.0],
-            radius: 0.5,
+            contact_radius: 0.5,
             display_radius: 0.5,
+            equilibrium_radius: 0.6,
+            cutoff_radius: 2.0,
             show_neighbor_lines: false,
             show_main_neighbors_only: false,
             neighbors: Vec::new(),
@@ -193,15 +197,15 @@ fn test_detail_balls_includes_ball_fields() {
     let value: serde_json::Value = serde_json::from_str(&line).expect("valid json");
 
     assert_eq!(value["balls"][0]["id"], 3);
-    assert_eq!(value["balls"][0]["size_idx"], 1);
+    assert_eq!(value["balls"][0]["species"], "XS");
     assert_eq!(value["balls"][1]["id"], 9);
-    assert_eq!(value["balls"][1]["size_idx"], 2);
-    assert_eq!(value["balls"][1]["size_class"], 2);
+    assert_eq!(value["balls"][1]["species"], "S");
+    assert!(value["balls"][1].get("size_idx").is_none());
     assert!((value["balls"][1]["position"]["x"].as_f64().unwrap() - 1.5).abs() < 1e-6);
     assert!((value["balls"][1]["position"]["y"].as_f64().unwrap() + 2.5).abs() < 1e-6);
     assert!((value["balls"][1]["velocity"]["vx"].as_f64().unwrap() - 0.25).abs() < 1e-6);
     assert!((value["balls"][1]["velocity"]["vy"].as_f64().unwrap() + 0.5).abs() < 1e-6);
-    assert!((value["balls"][1]["radius"].as_f64().unwrap() - 0.7).abs() < 1e-6);
+    assert!((value["balls"][1]["contact_radius"].as_f64().unwrap() - 0.7).abs() < 1e-6);
     assert!((value["balls"][1]["mass"].as_f64().unwrap() - 3.75).abs() < 1e-6);
 }
 

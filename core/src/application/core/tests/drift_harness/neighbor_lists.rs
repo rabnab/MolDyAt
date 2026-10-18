@@ -139,12 +139,13 @@ fn test_hot_sparse_gas_catches_injected_stale_neighbor_lists() {
     assert!(joined.contains("stale neighbour lists"), "{joined}");
 }
 
-/// World of `cells_x` x `cells_y` interaction-range cells (cutoff + skin +
-/// 2 x max radius): with a fractional count the old rounded-up grid made the
-/// cells narrower than that range.
+/// World of `cells_x` x `cells_y` interaction-range cells (the list radius of
+/// the largest pair, `XL`–`XL`): with a fractional count the old rounded-up
+/// grid made the cells narrower than that range.
 fn cell_border_world(cells_x: f32, cells_y: f32) -> MainContent {
     let physics = crate::objects2d::ball_impl::BallPhysics::default();
-    let range = physics.get_cutoff_and_skin() + 2.0 * BallFactory::get_max_radius();
+    let xl = largest_species();
+    let range = physics.list_radius(xl, xl);
     let (w, h) = (cells_x * range, cells_y * range);
     let mut main_content = MainContent::new_with_seed(Rect::new(0.0, h, w, -h), 606)
         .expect("Could not create cell-border world");
@@ -152,21 +153,27 @@ fn cell_border_world(cells_x: f32, cells_y: f32) -> MainContent {
     main_content
 }
 
+/// The species with the largest `σ` (`XL`), whose pair sets the cell size.
+fn largest_species() -> SpeciesId {
+    SpeciesId::new((SpeciesTable::builtin().len() - 1) as u16)
+}
+
 /// Pairs of the largest balls just inside the LJ cutoff of each other, the
 /// first ball just before a border of the rounded-up grid and the second two
-/// such cells further on, plus smaller balls of every other size.
+/// such cells further on, plus smaller balls of every other species.
 fn populate_cell_border_pairs(main_content: &mut MainContent) -> usize {
-    let factory = BallFactory::new();
+    let factory = scenario_factory();
     let world_rect = main_content.world().world_region();
     let (w, h) = (world_rect.w.abs(), world_rect.h.abs());
     let physics = crate::objects2d::ball_impl::BallPhysics::default();
-    let range = physics.get_cutoff_and_skin() + 2.0 * BallFactory::get_max_radius();
+    let xl = largest_species();
+    let range = physics.list_radius(xl, xl);
     // Cell sizes of the old grid, which rounded the cell count up.
     let old_w = w / (w / range).ceil();
     let old_h = h / (h / range).ceil();
-    let r_max = BallFactory::get_max_radius();
-    let pair_dist = 2.0 * r_max + 0.95 * physics.get_cutoff_distance();
-    let max_size = SpeciesTable::builtin().len() - 1;
+    let r_max = SpeciesTable::builtin().species(xl).contact_radius();
+    let pair_dist = 0.95 * physics.cutoff(xl, xl);
+    let max_size = xl.index();
     let slow = |i: usize| Vec2D::new((i as f32 * 1.7).sin() * 0.3, (i as f32 * 0.9).cos() * 0.3);
 
     let mut balls: Vec<Ball2D> = Vec::new();
@@ -299,7 +306,7 @@ fn test_neighbor_lists_survive_balls_removed_and_added() {
     let second = run_after_structural_change(&mut main_content, SEGMENT);
 
     // Add balls at free spots (rejected where they would overlap).
-    let factory = BallFactory::new();
+    let factory = scenario_factory();
     let world_rect = main_content.world().world_region();
     let (tl_x, tl_y) = world_rect.get_tl();
     let (br_x, br_y) = world_rect.get_br();

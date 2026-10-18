@@ -5,7 +5,7 @@
 use super::{DT_GOAL, create_main_content_for_region};
 use crate::application::MainContent;
 use crate::objects2d::Vec2D;
-use crate::objects2d::ball_impl::{BallFactory, BallId};
+use crate::objects2d::ball_impl::{BallFactory, BallId, SPECIES_M, SpeciesId};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
@@ -251,8 +251,20 @@ pub fn world_center(main_content: &MainContent) -> Vec2D {
     Vec2D::new(world.x + 0.5 * world.w, world.y + 0.5 * world.h)
 }
 
-pub fn populate_grid_balls(main_content: &mut MainContent, num_balls: usize, thermal_v: f32) {
+/// Species of the drift scenarios: `M`, the size class they were designed
+/// with. As a species it keeps its mass and its like-pair equilibrium
+/// distance (2.32), so the scenarios keep their density and spacing.
+pub const SCENARIO_SPECIES: SpeciesId = SPECIES_M;
+
+/// A factory whose new balls are of [`SCENARIO_SPECIES`].
+pub fn scenario_factory() -> BallFactory {
     let factory = BallFactory::new();
+    factory.set_new_ball_species(SCENARIO_SPECIES);
+    factory
+}
+
+pub fn populate_grid_balls(main_content: &mut MainContent, num_balls: usize, thermal_v: f32) {
+    let factory = scenario_factory();
     let world_rect = main_content.world().world_region();
     let margin = 2.0;
     let (tl_x, tl_y) = world_rect.get_tl();
@@ -415,7 +427,6 @@ fn trajectory_hash(
 fn pair_step_stats(main_content: &MainContent, step: usize) -> PairStepStats {
     let world = main_content.world();
     let balls = &world.balls;
-    let lj_cutoff = world.physics.get_cutoff_distance();
     let max_force = world.physics.cap_settings().max_force;
     let mut stats = PairStepStats {
         step,
@@ -426,7 +437,9 @@ fn pair_step_stats(main_content: &MainContent, step: usize) -> PairStepStats {
     for i in 0..balls.len() {
         for j in (i + 1)..balls.len() {
             let center_dist = balls[j].get_position().dist(balls[i].get_position()).norm();
-            let edge_dist = center_dist - (balls[i].radius + balls[j].radius);
+            let (a, b) = (balls[i].species(), balls[j].species());
+            // Gap between the contact discs (σ/2 each): negative = overlap.
+            let edge_dist = balls[i].get_edge_distance(&balls[j]);
             stats.pair_count += 1;
             stats.min_edge_distance = stats.min_edge_distance.min(edge_dist);
 
@@ -435,7 +448,7 @@ fn pair_step_stats(main_content: &MainContent, step: usize) -> PairStepStats {
             if i_lists_j != j_lists_i {
                 stats.asymmetric_neighbor_pairs += 1;
             }
-            if edge_dist < lj_cutoff && !(i_lists_j && j_lists_i) {
+            if center_dist < world.physics.cutoff(a, b) && !(i_lists_j && j_lists_i) {
                 stats.missed_neighbor_pairs += 1;
             }
 
@@ -446,7 +459,9 @@ fn pair_step_stats(main_content: &MainContent, step: usize) -> PairStepStats {
             {
                 stats.deepest_overlap = Some((balls[i].get_id(), balls[j].get_id(), -edge_dist));
             }
-            if max_force.is_finite() && world.physics.force(edge_dist).abs() >= max_force * 0.999 {
+            if max_force.is_finite()
+                && world.physics.force(a, b, center_dist).abs() >= max_force * 0.999
+            {
                 stats.cap_hits += 1;
             }
         }
@@ -480,14 +495,16 @@ fn sample_step(main_content: &MainContent, step: usize) -> DriftSample {
                 .get_position()
                 .dist(world.balls[i].get_position());
             let center_dist = dist_vec.norm();
-            let edge_dist = center_dist - (world.balls[i].radius + world.balls[j].radius);
-            potential += world.physics.potential(edge_dist);
+            let (a, b) = (world.balls[i].species(), world.balls[j].species());
+            // Gap between the contact discs (σ/2 each): negative = overlap.
+            let edge_dist = world.balls[i].get_edge_distance(&world.balls[j]);
+            potential += world.physics.potential(a, b, center_dist);
             pair_count += 1;
             if edge_dist < 0.0 {
                 max_overlap_depth = max_overlap_depth.max(-edge_dist);
             }
             if max_force.is_finite() {
-                let force_mag = world.physics.force(edge_dist).abs();
+                let force_mag = world.physics.force(a, b, center_dist).abs();
                 if force_mag >= max_force * 0.999 {
                     cap_hits += 1;
                 }

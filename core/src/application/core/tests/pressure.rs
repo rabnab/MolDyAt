@@ -26,7 +26,7 @@ fn wall_impulse(before: &[(f32, f32)], main_content: &MainContent) -> f64 {
     let mut impulse = 0.0f64;
     for (ball, &(vx, vy)) in world.balls.iter().zip(before) {
         let pos = ball.get_position();
-        let touching = |gap: f32| gap < ball.radius + 0.5;
+        let touching = |gap: f32| gap < ball.contact_radius + 0.5;
         let mass = ball.mass as f64;
         if vx * ball.v.x < 0.0 && (touching(pos.x - min_x) || touching(max_x - pos.x)) {
             impulse += mass * (ball.v.x - vx).abs() as f64;

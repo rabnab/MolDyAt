@@ -29,7 +29,11 @@ use std::collections::HashSet;
 
 /// Layout version written to every file. Bump it for a breaking format change
 /// and add the matching migration (see [`migrate`](super::migrate)).
-pub const WORLD_FILE_VERSION: u32 = 1;
+///
+/// - v1: balls and source spheres name a size class by index (`size_idx`).
+/// - v2 (#234): they name a species of the built-in table (`species`,
+///   `ball_species`); interaction is Lennard-Jones on the centre distance.
+pub const WORLD_FILE_VERSION: u32 = 2;
 
 /// Everything needed to rebuild a world. Energy plot data and simulation
 /// statistics are deliberately not part of it.
@@ -48,26 +52,26 @@ pub struct WorldFile {
     pub thermostats: Vec<ThermostatData>,
 }
 
-/// A ball. `size_idx` is the index of its species in the built-in species
-/// table (the former size class); radius and mass follow from the species and
-/// are not stored.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+/// A ball. `species` is the name of a built-in species; mass and `σ` follow
+/// from it and are not stored.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BallData {
     pub id: usize,
-    pub size_idx: usize,
+    pub species: String,
     pub pos: Vec2D,
     pub v: Vec2D,
     pub pre_update_pos: Vec2D,
     pub accel: Vec2D,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SourceSphereData {
     pub id: usize,
     pub center: Vec2D,
     pub active: bool,
     pub emit_period: usize,
-    pub ball_size_idx: usize,
+    /// Name of the species it emits.
+    pub ball_species: String,
     pub emission_speed: f32,
 }
 
@@ -133,12 +137,12 @@ impl WorldFile {
         check_finite(&[self.gravity], "gravity")?;
 
         check_unique_ids(self.balls.iter().map(|b| b.id), "ball")?;
-        let species_count = SpeciesTable::builtin().len();
+        let species = SpeciesTable::builtin();
         for ball in &self.balls {
-            if ball.size_idx >= species_count {
+            if species.by_name(&ball.species).is_none() {
                 return Err(invalid(format!(
-                    "ball {} has size_idx {} (must be below {species_count})",
-                    ball.id, ball.size_idx
+                    "ball {} has unknown species {:?}",
+                    ball.id, ball.species
                 )));
             }
             check_finite(
@@ -209,10 +213,10 @@ impl WorldFile {
                     sphere.id, sphere.emission_speed
                 )));
             }
-            if sphere.ball_size_idx >= species_count {
+            if species.by_name(&sphere.ball_species).is_none() {
                 return Err(invalid(format!(
-                    "source sphere {} has ball_size_idx {}",
-                    sphere.id, sphere.ball_size_idx
+                    "source sphere {} has unknown species {:?}",
+                    sphere.id, sphere.ball_species
                 )));
             }
         }

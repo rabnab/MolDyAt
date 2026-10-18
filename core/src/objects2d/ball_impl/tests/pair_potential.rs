@@ -3,8 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::objects2d::ball_impl::pair_potential::{
-    CapSettings, CappedPotential, LennardJones, PairLaw, PairPotential, bisect_cap_distance,
-    newton_cap_distance,
+    CapSettings, CappedPotential, LennardJones, PairLaw, PairPotential, ScalarLanes,
+    bisect_cap_distance, newton_cap_distance,
 };
 use std::simd::f32x4;
 
@@ -23,6 +23,12 @@ struct RepulsiveCore {
 }
 
 impl PairLaw for RepulsiveCore {
+    type Lanes = ScalarLanes<Self>;
+
+    fn lanes(laws: [&Self; 4]) -> Self::Lanes {
+        ScalarLanes(laws.map(|l| *l))
+    }
+
     fn force(&self, r: f32) -> f32 {
         48. * self.epsilon * (self.sigma / r).powi(12) / r
     }
@@ -33,14 +39,6 @@ impl PairLaw for RepulsiveCore {
 
     fn potential(&self, r: f32) -> f32 {
         4. * self.epsilon * (self.sigma / r).powi(12)
-    }
-
-    fn force_simd(&self, r: f32x4) -> f32x4 {
-        f32x4::from_array(r.to_array().map(|r| self.force(r)))
-    }
-
-    fn potential_simd(&self, r: f32x4) -> f32x4 {
-        f32x4::from_array(r.to_array().map(|r| self.potential(r)))
     }
 
     fn length_scale(&self) -> f32 {
@@ -63,6 +61,12 @@ impl PairLaw for RepulsiveCore {
 struct NewtonFails(LennardJones);
 
 impl PairLaw for NewtonFails {
+    type Lanes = ScalarLanes<Self>;
+
+    fn lanes(laws: [&Self; 4]) -> Self::Lanes {
+        ScalarLanes(laws.map(|l| *l))
+    }
+
     fn force(&self, r: f32) -> f32 {
         self.0.force(r)
     }
@@ -73,14 +77,6 @@ impl PairLaw for NewtonFails {
 
     fn potential(&self, r: f32) -> f32 {
         self.0.potential(r)
-    }
-
-    fn force_simd(&self, r: f32x4) -> f32x4 {
-        self.0.force_simd(r)
-    }
-
-    fn potential_simd(&self, r: f32x4) -> f32x4 {
-        self.0.potential_simd(r)
     }
 
     fn length_scale(&self) -> f32 {
@@ -103,6 +99,12 @@ struct NewtonMisleads {
 }
 
 impl PairLaw for NewtonMisleads {
+    type Lanes = ScalarLanes<Self>;
+
+    fn lanes(laws: [&Self; 4]) -> Self::Lanes {
+        ScalarLanes(laws.map(|l| *l))
+    }
+
     fn force(&self, r: f32) -> f32 {
         self.lj.force(r)
     }
@@ -117,14 +119,6 @@ impl PairLaw for NewtonMisleads {
 
     fn potential(&self, r: f32) -> f32 {
         self.lj.potential(r)
-    }
-
-    fn force_simd(&self, r: f32x4) -> f32x4 {
-        self.lj.force_simd(r)
-    }
-
-    fn potential_simd(&self, r: f32x4) -> f32x4 {
-        self.lj.potential_simd(r)
     }
 
     fn length_scale(&self) -> f32 {

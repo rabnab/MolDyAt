@@ -157,13 +157,13 @@ fn test_snapshot_radii_positive() {
     // All radii should be positive
     for (i, ball_data) in snapshot.balls.iter().enumerate() {
         assert!(
-            ball_data.radius > 0.0,
+            ball_data.display_radius > 0.0,
             "Ball {} has non-positive radius {}",
             i,
-            ball_data.radius
+            ball_data.display_radius
         );
         assert!(
-            ball_data.radius.is_finite(),
+            ball_data.display_radius.is_finite(),
             "Ball {} has non-finite radius",
             i
         );

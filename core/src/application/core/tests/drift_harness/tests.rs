@@ -3,9 +3,9 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use super::*;
-use crate::objects2d::ball_impl::BallPhysics;
 use crate::objects2d::ball_impl::ball_physics::PhysicsConstants;
-use crate::objects2d::ball_impl::pair_potential::{CapSettings, LennardJones};
+use crate::objects2d::ball_impl::pair_potential::CapSettings;
+use crate::objects2d::ball_impl::{BallPhysics, SpeciesTable};
 
 #[test]
 #[ignore = "suite:drift"]
@@ -34,10 +34,13 @@ fn test_two_body_lj_baseline_drift() {
     let mut main_content = create_dense_harness_with_seed(101);
     main_content.world_mut().speed_limit_override = Some(f32::INFINITY);
 
-    let factory = BallFactory::new();
-    let r_eq = 2.0_f32.powf(1.0 / 6.0);
-    let edge_dist = r_eq * 1.05;
-    let center_sep = 2.0 * factory.get_new_ball_radius() + edge_dist;
+    let factory = scenario_factory();
+    // Just beyond the potential minimum.
+    let center_sep = 1.05
+        * main_content
+            .world()
+            .physics
+            .equilibrium_distance(SCENARIO_SPECIES, SCENARIO_SPECIES);
     let center = world_center(&main_content);
     let x_off = center_sep * 0.5;
 
@@ -102,12 +105,14 @@ fn test_force_cap_transition_drift() {
         ..CapSettings::default()
     };
     main_content.world_mut().physics =
-        BallPhysics::new(PhysicsConstants::default(), LennardJones::default(), cap);
+        BallPhysics::new(PhysicsConstants::default(), SpeciesTable::builtin(), cap);
 
-    let factory = BallFactory::new();
-    let r_cap = main_content.world().physics.get_force_cap_distance();
-    let edge_dist = r_cap * 0.95;
-    let center_sep = 2.0 * factory.get_new_ball_radius() + edge_dist;
+    let factory = scenario_factory();
+    let r_cap = main_content
+        .world()
+        .physics
+        .get_force_cap_distance(SCENARIO_SPECIES, SCENARIO_SPECIES);
+    let center_sep = r_cap * 0.95;
     let center = world_center(&main_content);
     let x_off = center_sep * 0.5;
 
@@ -118,12 +123,9 @@ fn test_force_cap_transition_drift() {
         Vec2D::new(-0.8, 0.0),
     );
 
-    main_content
-        .add_candidate_ball(b1, 0.0)
-        .expect("could not add first cap-transition ball");
-    main_content
-        .add_candidate_ball(b2, 0.0)
-        .expect("could not add second cap-transition ball");
+    // Inside the core the contact discs overlap, so no placement check.
+    main_content.add_candidate_to_vec(b1);
+    main_content.add_candidate_to_vec(b2);
     main_content.world_mut().rebuild_cell_grid();
     main_content.collect_neighbours_by_cell(DT_GOAL);
 
@@ -183,10 +185,13 @@ fn test_two_body_drift_converges_with_smaller_timestep() {
         let mut main_content = create_dense_harness_with_seed(303);
         main_content.world_mut().speed_limit_override = Some(f32::INFINITY);
 
-        let factory = BallFactory::new();
-        let r_eq = 2.0_f32.powf(1.0 / 6.0);
-        let edge_dist = r_eq * 1.05;
-        let center_sep = 2.0 * factory.get_new_ball_radius() + edge_dist;
+        let factory = scenario_factory();
+        // Just beyond the potential minimum.
+        let center_sep = 1.05
+            * main_content
+                .world()
+                .physics
+                .equilibrium_distance(SCENARIO_SPECIES, SCENARIO_SPECIES);
         let center = world_center(&main_content);
         let x_off = center_sep * 0.5;
 

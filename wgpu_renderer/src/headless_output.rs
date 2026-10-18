@@ -7,6 +7,7 @@ use moldyat_core::application::renderer_snapshot::{
     OperatorSnapshot, RendererSnapshot, ThermoGridSpec,
 };
 use moldyat_core::application::thermo_field::ThermoGrid;
+use moldyat_core::objects2d::ball_impl::SpeciesTable;
 use serde_json::json;
 use std::fs::File;
 use std::io::{self, BufWriter, Write};
@@ -136,13 +137,17 @@ impl HeadlessWriter {
     }
 }
 
-/// Versioned, machine-readable headless JSONL schema ("headless.v1").
+/// Schema of every record. v2 (#234): balls name their `species` and give
+/// `contact_radius` (`σ / 2`) instead of `size_idx`, `size_class` and `radius`.
+pub(crate) const SCHEMA_VERSION: &str = "headless.v2";
+
+/// Versioned, machine-readable headless JSONL schema ([`SCHEMA_VERSION`]).
 ///
 /// Records are newline-delimited JSON objects with a `schema_version` and `record_kind`.
 /// Consumers should treat unknown `record_kind` values and unknown fields as forward-compatible.
 fn run_start_to_jsonl(config: &HeadlessConfig, snapshot: &RendererSnapshot) -> String {
     json!({
-        "schema_version": "headless.v1",
+        "schema_version": SCHEMA_VERSION,
         "record_kind": "run_start",
         "config": {
             "steps": config.steps,
@@ -218,7 +223,7 @@ fn frame_to_jsonl_with_config(
     let total_energy = snapshot.kinetic_energy + snapshot.potential_energy;
     let delta_energy = initial_total_energy.map(|initial| total_energy - initial);
     let mut frame = json!({
-        "schema_version": "headless.v1",
+        "schema_version": SCHEMA_VERSION,
         "record_kind": "frame",
         "step": snapshot.simulation_step,
         "time": f32_value(snapshot.time),
@@ -239,8 +244,9 @@ fn frame_to_jsonl_with_config(
             .map(|ball| {
                 json!({
                     "id": ball.id,
-                    "size_idx": ball.species.index(),
-                    "size_class": ball.species.index(),
+                    "species": SpeciesTable::builtin()
+                        .get(ball.species)
+                        .map(|s| s.name.as_str()),
                     "position": {
                         "x": f32_value(ball.position.x),
                         "y": f32_value(ball.position.y),
@@ -249,7 +255,7 @@ fn frame_to_jsonl_with_config(
                         "vx": f32_value(ball.velocity.x),
                         "vy": f32_value(ball.velocity.y),
                     },
-                    "radius": f32_value(ball.radius),
+                    "contact_radius": f32_value(ball.contact_radius),
                     "mass": f32_value(ball.mass),
                 })
             })
@@ -266,7 +272,7 @@ fn frame_to_jsonl_with_config(
 
 fn run_end_to_jsonl(snapshot: &RendererSnapshot, snapshots_emitted: u32) -> String {
     json!({
-        "schema_version": "headless.v1",
+        "schema_version": SCHEMA_VERSION,
         "record_kind": "run_end",
         "final_step": snapshot.simulation_step,
         "final_time": f32_value(snapshot.time),

@@ -5,7 +5,7 @@
 use super::{DT_GOAL, create_main_content_for_region};
 use crate::application::MainContent;
 use crate::objects2d::Vec2D;
-use crate::objects2d::ball_impl::BallFactory;
+use crate::objects2d::ball_impl::{BallFactory, DEFAULT_SPECIES};
 
 #[test]
 fn test_energy_conservation_1000_balls() {
@@ -99,9 +99,8 @@ fn test_energy_conservation_1000_balls() {
                     .get_position()
                     .dist(world.balls[i].get_position());
                 let center_dist = dist_vec.norm();
-                let edge_dist = center_dist - (world.balls[i].radius + world.balls[j].radius);
-
-                let pair_potential = world.physics.potential(edge_dist);
+                let (a, b) = (world.balls[i].species(), world.balls[j].species());
+                let pair_potential = world.physics.potential(a, b, center_dist);
                 potential += pair_potential;
             }
         }
@@ -267,7 +266,11 @@ fn test_cutoff_energy_loss() {
     let (mut main_content, _win_def) = create_main_content_for_region(-50.0, 50.0);
 
     let factory = BallFactory::new();
-    let cutoff = main_content.world().physics.get_cutoff_distance();
+    // Both balls are of the default species; the cutoff is a centre distance.
+    let cutoff = main_content
+        .world()
+        .physics
+        .cutoff(DEFAULT_SPECIES, DEFAULT_SPECIES);
 
     println!("Cutoff distance: {:.6}", cutoff);
 
@@ -291,9 +294,8 @@ fn test_cutoff_energy_loss() {
         .expect("Could not add ball2");
 
     println!(
-        "Initial separation (edge-to-edge): {:.6}",
+        "Initial separation (centre to centre): {:.6}",
         initial_separation
-            - (main_content.world().balls[0].radius + main_content.world().balls[1].radius)
     );
 
     // // Add balls to cell grid
@@ -330,10 +332,11 @@ fn test_cutoff_energy_loss() {
         let ball1 = &world.balls[1];
         let dist_vec = ball1.get_position().dist(ball0.get_position());
         let center_dist = dist_vec.norm();
-        let edge_dist = center_dist - (ball0.radius + ball1.radius);
 
         // Use physics calculation but without cutoff check
-        let pair_potential = world.physics.potential(edge_dist);
+        let pair_potential = world
+            .physics
+            .potential(ball0.species(), ball1.species(), center_dist);
         potential += pair_potential;
 
         (kinetic, potential, kinetic + potential)
@@ -379,13 +382,11 @@ fn test_cutoff_energy_loss() {
         let ball1 = &main_content.world().balls[1];
         let dist_vec = ball1.get_position().dist(ball0.get_position());
         let center_dist = dist_vec.norm();
-        let edge_dist = center_dist - (ball0.radius + ball1.radius);
-
-        if !crossed_cutoff && edge_dist > cutoff {
+        if !crossed_cutoff && center_dist > cutoff {
             crossed_cutoff = true;
             step_crossed = step + 1;
             println!("\n>>> Crossed cutoff at step {}", step_crossed);
-            println!("    Edge distance: {:.6}", edge_dist);
+            println!("    Centre distance: {:.6}", center_dist);
 
             // Check neighbor lists
             let neighbors0 = ball0.hood.get_neighbour_indices().len();
@@ -435,9 +436,9 @@ fn test_cutoff_energy_loss() {
             let ball1_neighbors = ball1.hood.get_neighbour_indices();
 
             println!(
-                "Step {}: edge_dist={:.6}, KE={:.6}, PE={:.6}, Total={:.6}, Drift={:.6} ({:.4}%)",
+                "Step {}: center_dist={:.6}, KE={:.6}, PE={:.6}, Total={:.6}, Drift={:.6} ({:.4}%)",
                 step + 1,
-                edge_dist,
+                center_dist,
                 ke,
                 pe,
                 total,
@@ -509,8 +510,12 @@ fn listed_pair_potential(main_content: &MainContent) -> f64 {
     for (i, ball) in world.balls.iter().enumerate() {
         for &j in ball.hood.get_neighbour_indices() {
             if j > i {
-                let edge_dist = ball.get_edge_distance(&world.balls[j]);
-                potential += world.physics.potential(edge_dist) as f64;
+                let other = &world.balls[j];
+                let center_dist = ball.get_position().dist(other.get_position()).norm();
+                potential += world
+                    .physics
+                    .potential(ball.species(), other.species(), center_dist)
+                    as f64;
             }
         }
     }

@@ -29,7 +29,7 @@ const CELL_SLACK: f32 = 1e-4;
 pub(crate) struct PlacementIndex {
     /// Balls not found in the grid cell of their position (should not happen, defensive).
     orphans: Vec<usize>,
-    /// Largest radius of any ball in the world.
+    /// Largest contact radius of any ball in the world.
     max_radius: f32,
 }
 
@@ -64,7 +64,7 @@ impl PlacementIndex {
         let max_radius = world
             .balls
             .iter()
-            .map(Ball2D::get_radius)
+            .map(Ball2D::get_contact_radius)
             .fold(0.0, f32::max);
         Self {
             orphans,
@@ -76,7 +76,7 @@ impl PlacementIndex {
     /// `SimulationWorld::add_ball_and_register`.
     pub(crate) fn note_added(&mut self, world: &SimulationWorld, ball_idx: usize) {
         let ball = &world.balls[ball_idx];
-        self.max_radius = self.max_radius.max(ball.get_radius());
+        self.max_radius = self.max_radius.max(ball.get_contact_radius());
         // `add_ball_and_register` puts a ball into the cell of its position
         // when there is one; otherwise the grid does not hold it.
         if world
@@ -98,7 +98,7 @@ impl SimulationWorld {
         index: &PlacementIndex,
     ) -> bool {
         let grid = &self.cell_grid;
-        let reach = candidate.get_radius() + index.max_radius + margin;
+        let reach = candidate.get_contact_radius() + index.max_radius + margin;
         let (num_rows, num_cols) = grid.get_grid_size();
         let (cellsize_x, cellsize_y) = grid.get_cell_size();
         // A 3x3 window spans a whole axis of at most two cells.

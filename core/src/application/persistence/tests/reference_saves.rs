@@ -10,6 +10,7 @@
 use super::scratch_dir;
 use crate::application::MainContent;
 use crate::application::persistence::{LoadSource, SaveStore, WORLD_FILE_VERSION, WorldFile};
+use crate::objects2d::ball_impl::{SpeciesId, SpeciesTable};
 use crate::objects2d::operator::OperatorState;
 use crate::objects2d::wall_chain::Joint;
 use crate::objects2d::{Rect, Vec2D};
@@ -24,11 +25,18 @@ struct Fixture {
 }
 
 /// Every reference save, oldest first.
-const FIXTURES: &[Fixture] = &[Fixture {
-    version: 1,
-    file: "v1.json",
-    check: check_v1,
-}];
+const FIXTURES: &[Fixture] = &[
+    Fixture {
+        version: 1,
+        file: "v1.json",
+        check: check_v1,
+    },
+    Fixture {
+        version: 2,
+        file: "v2.json",
+        check: check_v2,
+    },
+];
 
 fn fixtures_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/application/persistence/tests/fixtures")
@@ -106,31 +114,36 @@ fn current_reference_save_loads_every_field() {
     }
 }
 
-/// v1: written by the build that introduced the format.
+fn species_name(id: SpeciesId) -> &'static str {
+    &SpeciesTable::builtin().species(id).name
+}
+
+/// v1: written by the build that introduced the format. Its size classes
+/// load as the species of the same name (`size_idx` 0 to 3: `XS` to `L`).
 fn check_v1(mc: &MainContent) {
+    check_world(mc, ["XS", "S", "M", "L", "XS", "S", "M", "L"], ["M", "S"]);
+}
+
+/// v2 (#234): the v1 world saved by the species build, with ball 14 and the
+/// second source sphere changed to `N2` and ball 15 to `XL`.
+fn check_v2(mc: &MainContent) {
+    check_world(mc, ["XS", "S", "M", "L", "N2", "XL", "M", "L"], ["M", "N2"]);
+}
+
+/// Content shared by the reference saves; they differ only in species.
+fn check_world(mc: &MainContent, ball_species: [&str; 8], sphere_species: [&str; 2]) {
     let world = mc.world();
     assert_eq!(mc.time_step(), 0.005);
     assert_eq!(world.physics.constants.gravity, 0.5);
     assert_eq!(world.world_region(), Rect::new(-20.0, 15.0, 40.0, -30.0));
 
-    let balls: Vec<(usize, usize)> = world
+    let balls: Vec<(usize, &str)> = world
         .balls
         .iter()
-        .map(|b| (b.get_id(), b.species().index()))
+        .map(|b| (b.get_id(), species_name(b.species())))
         .collect();
-    assert_eq!(
-        balls,
-        vec![
-            (10, 0),
-            (11, 1),
-            (12, 2),
-            (13, 3),
-            (14, 0),
-            (15, 1),
-            (16, 2),
-            (17, 3)
-        ]
-    );
+    let expected: Vec<(usize, &str)> = (10..).zip(ball_species).collect();
+    assert_eq!(balls, expected);
     // Ball i sits at (x_i, i - 4) with v = (0.1·i, -0.2 - 0.05·i); the saved
     // accelerations are the ones the build stored (gravity included).
     let xs = [-12.0, -6.0, 0.0, 6.0, 12.0, -3.0, 3.0, 8.0];
@@ -246,7 +259,7 @@ fn check_v1(mc: &MainContent) {
                 s.id,
                 s.state,
                 s.emit_period,
-                s.ball_species.index(),
+                species_name(s.ball_species),
                 s.emission_speed,
             )
         })
@@ -254,8 +267,8 @@ fn check_v1(mc: &MainContent) {
     assert_eq!(
         spheres,
         vec![
-            (0, OperatorState::On, 3000, 2, 0.05),
-            (1, OperatorState::Off, 1500, 1, 0.08)
+            (0, OperatorState::On, 3000, sphere_species[0], 0.05),
+            (1, OperatorState::Off, 1500, sphere_species[1], 0.08)
         ]
     );
     assert_eq!(

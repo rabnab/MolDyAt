@@ -6,8 +6,10 @@
 //!
 //! This module provides the vectorized force kernel using portable `std::simd`
 //! (`f32x4`, 4 neighbours per chunk, scalar code for the remainder). The pair
-//! interaction itself (law, force cap, cutoff shift) lives in
-//! [`pair_potential`](super::pair_potential).
+//! interaction itself (law, force cap, cutoff shift, one potential per species
+//! pair) lives in [`pair_potential`](super::pair_potential). Distances are
+//! centre distances; each chunk gathers the potentials of its 4 pairs from the
+//! ball's row of the pair table, by the neighbours' species.
 //!
 //! There is no runtime dispatch or multiversioning: the instruction set is fixed at
 //! compile time by the target features. The dev profile uses the target's baseline
@@ -27,25 +29,29 @@
 //! happen beyond the cutoff) do not change the energy. See `CappedPotential` for details.
 
 use crate::objects2d::Vec2D;
-use crate::objects2d::ball_impl::pair_potential::{PairPotential, Potential};
+use crate::objects2d::ball_impl::pair_potential::{
+    CappedLanes, PairLaw, PairPotential, PairTable, Potential,
+};
 use crate::objects2d::ball_impl::{Ball2D, BallPhysics, ForceResult};
 use std::simd::prelude::SimdFloat;
 use std::simd::{StdFloat, f32x4};
 
-/// The 12 bytes of a ball the force kernel reads for every neighbour: position
-/// (`pre_update_pos`) and radius.
+/// The 16 bytes of a ball the force kernel reads for every neighbour: position
+/// (`pre_update_pos`), species and contact radius.
 ///
 /// Neighbour lookups are random accesses, so one packed 16-byte record (4 per
 /// cache line) costs one cache line per neighbour, where a full `Ball2D` or
-/// three separate x/y/radius arrays would cost one or three. Rebuilt every
-/// step by `KernelPoint::from`, so it never holds indices that could go stale.
+/// separate arrays would cost one or more. Rebuilt every step by
+/// `KernelPoint::from`, so it never holds indices that could go stale.
 #[derive(Debug, Clone, Copy, Default)]
 #[repr(C, align(16))]
 pub struct KernelPoint {
     pub x: f32,
     pub y: f32,
-    pub radius: f32,
-    _pad: f32,
+    /// Index of the ball's species.
+    pub species: u32,
+    /// `σ / 2` of the species, for the overlap gap in `ForceResult::min_dist`.
+    pub contact_radius: f32,
 }
 
 impl From<&Ball2D> for KernelPoint {
@@ -54,8 +60,8 @@ impl From<&Ball2D> for KernelPoint {
         Self {
             x: ball.pre_update_pos.x,
             y: ball.pre_update_pos.y,
-            radius: ball.radius,
-            _pad: 0.0,
+            species: ball.species().index() as u32,
+            contact_radius: ball.contact_radius,
         }
     }
 }
@@ -80,7 +86,7 @@ pub(crate) fn kernel_points(balls: &[Ball2D]) -> Vec<KernelPoint> {
 /// Conditionally collects per-neighbor force magnitudes only when visualization is enabled.
 ///
 /// # Arguments
-/// * `physics` - Physics engine with LJ parameters and force cap settings
+/// * `physics` - Physics engine with the pair potentials and force cap settings
 /// * `ball_idx` - Index of ball to calculate forces for
 /// * `balls` - Slice of all balls (read-only access)
 /// * `points` - `KernelPoint` of every ball (same indices as `balls`), taken after `update_old_pos`
@@ -96,14 +102,14 @@ pub fn force_simd(
     // Static dispatch: one match per ball, outside the neighbour loop; the
     // kernel below is monomorphised for each law, with no branch per neighbour.
     match physics.pair_potential() {
-        Potential::LennardJones(p) => force_kernel(p, ball_idx, balls, points),
+        Potential::LennardJones(table) => force_kernel(table, ball_idx, balls, points),
     }
 }
 
-/// The force kernel of [`force_simd`] for one concrete pair potential.
+/// The force kernel of [`force_simd`] for one concrete pair law.
 #[inline]
-fn force_kernel<P: PairPotential>(
-    potential: &P,
+fn force_kernel<L: PairLaw>(
+    table: &PairTable<L>,
     ball_idx: usize,
     balls: &[Ball2D],
     points: &[KernelPoint],
@@ -122,9 +128,12 @@ fn force_kernel<P: PairPotential>(
         Vec::new()
     };
 
-    let ball_pos = balls[ball_idx].get_position();
-    let ball_radius = balls[ball_idx].radius;
-    let neighbour_indices = balls[ball_idx].hood.get_neighbour_indices();
+    let ball = &balls[ball_idx];
+    let ball_pos = ball.get_position();
+    let ball_contact = ball.contact_radius;
+    // This ball's potential with each species.
+    let pairs = table.row(ball.species());
+    let neighbour_indices = ball.hood.get_neighbour_indices();
 
     // Process neighbors in chunks of 4 for SIMD
     let (chunks, unchunked) = neighbour_indices.as_chunks::<4>();
@@ -133,7 +142,8 @@ fn force_kernel<P: PairPotential>(
         // SIMD path: process 4 neighbors at once
         let mut dx = [0.0f32; 4];
         let mut dy = [0.0f32; 4];
-        let mut radii = [0.0f32; 4];
+        let mut contacts = [0.0f32; 4];
+        let mut chunk_pairs = [&pairs[0]; 4];
 
         // Gather data for 4 neighbors
         for (i, &neighbour_idx) in chunk.iter().enumerate() {
@@ -141,28 +151,25 @@ fn force_kernel<P: PairPotential>(
                 let dist_vec = neighbour.dist(ball_pos);
                 dx[i] = dist_vec.x;
                 dy[i] = dist_vec.y;
-                radii[i] = neighbour.radius;
+                contacts[i] = neighbour.contact_radius;
+                chunk_pairs[i] = &pairs[neighbour.species as usize];
             } else {
                 panic!("Invalid neighbor index in SIMD force calculation");
             }
         }
+        let potential = CappedLanes::gather(chunk_pairs);
 
         // Load into SIMD vectors
         let dx_vec = f32x4::from(dx);
         let dy_vec = f32x4::from(dy);
-        let radii_vec = f32x4::from(radii);
 
         // Calculate distances: sqrt(dx^2 + dy^2)
         let center_dist_sq = dx_vec * dx_vec + dy_vec * dy_vec;
         let center_dist = center_dist_sq.sqrt();
 
-        // Calculate edge distances
-        let radius_sum = radii_vec + f32x4::splat(ball_radius);
-        let edge_dist = center_dist - radius_sum;
-
         // Pair force, sloped from max_force below r_cap and zero beyond the
         // cutoff (see CappedPotential).
-        let lj_force = potential.force_simd(edge_dist);
+        let lj_force = potential.force(center_dist);
 
         // Force direction: force / center_dist
         // Avoid division by zero: if center_dist is 0, use a small epsilon to prevent Inf/NaN
@@ -175,7 +182,7 @@ fn force_kernel<P: PairPotential>(
 
         // Shifted potential with quadratic continuation below r_cap, zero
         // beyond the cutoff (see CappedPotential).
-        let potential_used = potential.potential_simd(edge_dist);
+        let potential_used = potential.potential(center_dist);
 
         // Virial: Σ (r_ij · F_ij).
         // Since fx = dx_vec * force_to_dist and fy = dy_vec * force_to_dist,
@@ -185,7 +192,8 @@ fn force_kernel<P: PairPotential>(
         force.x += fx.reduce_sum();
         force.y += fy.reduce_sum();
         total_pot += potential_used.reduce_sum();
-        let min_dist_of_chunk = edge_dist.reduce_min();
+        let gap = center_dist - (f32x4::from(contacts) + f32x4::splat(ball_contact));
+        let min_dist_of_chunk = gap.reduce_min();
         min_dist = if f32::is_nan(min_dist) {
             min_dist_of_chunk
         } else {
@@ -206,14 +214,10 @@ fn force_kernel<P: PairPotential>(
         if let Some(b) = points.get(neighbour_idx) {
             let dist_vec = b.dist(ball_pos);
             let center_dist = dist_vec.norm();
-            let radius_sum = b.radius + ball_radius;
-            let edge_dist = center_dist - radius_sum;
+            let gap = center_dist - (b.contact_radius + ball_contact);
+            let potential = &pairs[b.species as usize];
 
-            if center_dist < 0. {
-                continue; // Skip self-interaction or invalid distance
-            }
-
-            let lj_force = potential.force(edge_dist);
+            let lj_force = potential.force(center_dist);
 
             // Force direction: force / center_dist
             // Avoid division by zero: if center_dist is 0, use a small epsilon to prevent Inf/NaN
@@ -230,22 +234,17 @@ fn force_kernel<P: PairPotential>(
             force.x += fx;
             force.y += fy;
 
-            total_pot += potential.potential(edge_dist);
+            total_pot += potential.potential(center_dist);
 
             // Store per-neighbor force magnitude for visualization
             if collect_neighbor_forces {
                 neighbor_forces.push((neighbour_idx, lj_force.abs()));
             }
-            // Update min_dist
-            if edge_dist > 0. {
-                min_dist = if f32::is_nan(min_dist) {
-                    edge_dist
-                } else {
-                    f32::min(min_dist, edge_dist)
-                };
+            min_dist = if f32::is_nan(min_dist) {
+                gap
             } else {
-                min_dist = 0.;
-            }
+                f32::min(min_dist, gap)
+            };
         }
     }
 

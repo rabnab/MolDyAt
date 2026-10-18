@@ -17,12 +17,12 @@ use std::path::PathBuf;
 pub(super) fn sample_file() -> WorldFile {
     WorldFile::from_json(
         r#"{
-            "version": 1,
+            "version": 2,
             "world_rect": {"x": -20.0, "y": 20.0, "w": 40.0, "h": -40.0},
             "time_step": 0.01,
             "gravity": 0.0,
             "balls": [
-                {"id": 1, "size_idx": 2, "pos": {"x": 1.0, "y": 2.0}, "v": {"x": 0.5, "y": -0.5},
+                {"id": 1, "species": "M", "pos": {"x": 1.0, "y": 2.0}, "v": {"x": 0.5, "y": -0.5},
                  "pre_update_pos": {"x": 0.9, "y": 2.1}, "accel": {"x": 0.0, "y": 0.0}}
             ],
             "line_segments": [], "valves": [], "wall_chains": [],

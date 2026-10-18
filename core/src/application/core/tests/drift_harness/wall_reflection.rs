@@ -290,14 +290,14 @@ fn run_single_ball(
 ) -> ReflectionRun {
     main_content.world_mut().speed_limit_override = Some(f32::INFINITY);
     main_content.world_mut().test_faults = faults;
-    let factory = BallFactory::new();
+    let factory = scenario_factory();
     main_content
         .add_candidate_ball(factory.create_massive_with_velocity(start, velocity), 0.0)
         .expect("could not add reflection ball");
     main_content.world_mut().rebuild_cell_grid();
     main_content.collect_neighbours_by_cell(DT_GOAL);
 
-    let radius = main_content.world().balls[0].radius;
+    let radius = main_content.world().balls[0].contact_radius;
     let inward: Vec<Vec2D> = surfaces.iter().map(|s| s.inward_normal(start)).collect();
     let expected_events =
         expected_event_count(start, velocity, radius, surfaces, STEPS as f32 * DT_GOAL);
@@ -328,7 +328,7 @@ fn run_single_ball(
             let pos = *ball.get_position();
             for (k, s) in surfaces.iter().enumerate() {
                 let gap = dot(Vec2D::new(pos.x - s.point.x, pos.y - s.point.y), inward[k])
-                    - (ball.radius + s.extra_reach);
+                    - (ball.contact_radius + s.extra_reach);
                 if gap < -PENETRATION_TOLERANCE && step_violations.len() < 5 {
                     step_violations.push(format!(
                         "ball escaped/tunnelled through surface {k}: gap={gap:.4} tolerance={PENETRATION_TOLERANCE} step={step} pos={pos:?} v={:?}",
@@ -341,7 +341,7 @@ fn run_single_ball(
                 events.push(ReflectionEvent {
                     step,
                     position: pos,
-                    radius: ball.radius,
+                    radius: ball.contact_radius,
                     v_before: prev_v,
                     v_after: ball.v,
                 });
