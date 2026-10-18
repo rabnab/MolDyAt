@@ -46,16 +46,16 @@ impl MainContent {
             .add_valve_on_piece(line_id, t_start, t_end, is_closed)
     }
 
+    /// Toggle a valve between open and closed.
+    pub(crate) fn toggle_valve(&mut self, valve_id: usize) {
+        self.world.toggle_valve(valve_id);
+    }
+
     /// Open or close a valve. Balls inside it when it closes are not moved;
     /// they leave through either side on their own.
     #[cfg(test)]
     pub(crate) fn set_valve_closed(&mut self, valve_id: usize, is_closed: bool) {
         self.world.set_valve_closed(valve_id, is_closed);
-    }
-
-    /// Toggle a valve between open and closed.
-    pub(crate) fn toggle_valve(&mut self, valve_id: usize) {
-        self.world.toggle_valve(valve_id);
     }
 }
 
@@ -66,7 +66,7 @@ impl SimulationWorld {
         };
         self.valve_segments.get_mut(idx).is_closed = is_closed;
         // Balls in the span when it closes are not moved: they leave on
-        // their own (see `resolve_line_segment_collisions`).
+        // their own (see `SimulationWorld::resolve_wall_overlaps_with`).
         if is_closed {
             self.flag_balls_overlapping_valve(valve_id);
         }

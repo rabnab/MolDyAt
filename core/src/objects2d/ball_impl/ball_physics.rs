@@ -132,28 +132,9 @@ impl BallPhysics {
         self.pair_potential.equilibrium_distance(a, b)
     }
 
-    /// Pair force magnitude (positive = repulsive) at centre distance `r`; see
-    /// [`CappedPotential`](super::pair_potential::CappedPotential).
-    #[cfg(test)]
-    pub(crate) fn force(&self, a: SpeciesId, b: SpeciesId, r: f32) -> f32 {
-        self.pair_potential.force(a, b, r)
-    }
-
-    /// Pair potential energy at centre distance `r`, zero at the cutoff.
-    #[cfg(test)]
-    pub(crate) fn potential(&self, a: SpeciesId, b: SpeciesId, r: f32) -> f32 {
-        self.pair_potential.potential(a, b, r)
-    }
-
     /// The pair potentials; the force kernel matches on them once per ball.
     pub(crate) fn pair_potential(&self) -> &Potential {
         &self.pair_potential
-    }
-
-    /// Distance below which the force of the pair follows the sloped core.
-    #[cfg(test)]
-    pub(crate) fn get_force_cap_distance(&self, a: SpeciesId, b: SpeciesId) -> f32 {
-        self.pair_potential.r_cap(a, b)
     }
 
     /// The law that decides how balls meet walls.
@@ -222,5 +203,24 @@ impl BallPhysics {
         }
 
         bounce_info
+    }
+
+    /// Pair force magnitude (positive = repulsive) at centre distance `r`; see
+    /// [`CappedPotential`](super::pair_potential::CappedPotential).
+    #[cfg(test)]
+    pub(crate) fn force(&self, a: SpeciesId, b: SpeciesId, r: f32) -> f32 {
+        self.pair_potential.force(a, b, r)
+    }
+
+    /// Pair potential energy at centre distance `r`, zero at the cutoff.
+    #[cfg(test)]
+    pub(crate) fn potential(&self, a: SpeciesId, b: SpeciesId, r: f32) -> f32 {
+        self.pair_potential.potential(a, b, r)
+    }
+
+    /// Distance below which the force of the pair follows the sloped core.
+    #[cfg(test)]
+    pub(crate) fn get_force_cap_distance(&self, a: SpeciesId, b: SpeciesId) -> f32 {
+        self.pair_potential.r_cap(a, b)
     }
 }

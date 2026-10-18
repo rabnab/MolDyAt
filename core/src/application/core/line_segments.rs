@@ -249,8 +249,8 @@ impl MainContent {
     ///
     /// Each wall is a capsule: its centre line inflated by half its thickness
     /// (`thickness * THICKNESS_TO_WORLD / 2`), with rounded ends. For each ball
-    /// that overlaps a wall (centre-line distance < radius + half thickness) and
-    /// is moving toward it (`v · n < 0`), the ball is:
+    /// that overlaps a wall (centre-line distance < wall contact distance + half
+    /// thickness) and is moving toward it (`v · n < 0`), the ball is:
     /// 1. Position-corrected so it no longer overlaps.
     /// 2. Velocity-reflected: `v' = v − 2(v · n̂) n̂` (elastic, |v| preserved).
     ///
@@ -600,7 +600,7 @@ impl SimulationWorld {
     /// current position is the free (unreflected) end of the drift. `contact`
     /// is the ball's wall contact distance (`BallPhysics::wall_contact_distance`). A ball
     /// flagged `leaving_wall`, or one that starts the step inside a wall, is
-    /// left to `resolve_line_segment_collisions`. Distance checks are added to
+    /// left to the overlap pass (`resolve_wall_overlaps_with`). Distance checks are added to
     /// `checks` (see `SimStats::wall_distance_checks`).
     pub(crate) fn sweep_wall_contact(
         obstacles: &[Obstacle],
@@ -650,8 +650,10 @@ impl SimulationWorld {
         })
     }
 
-    /// Resolve ball-wall collisions for all balls, against every currently
-    /// solid obstacle (see `collect_solid_obstacles`).
+    /// Resolve ball-wall overlaps for all balls, against `obstacles`, the
+    /// currently solid obstacles the caller built this step (see
+    /// `collect_solid_obstacles`; the simulation step shares one list with
+    /// `sweep_wall_contact`).
     ///
     /// Contacts during a step are resolved by `sweep_wall_contact`; this pass
     /// only catches what that cannot: balls that started a step inside a wall
@@ -659,9 +661,9 @@ impl SimulationWorld {
     ///
     /// Each obstacle is a capsule: its centre line inflated by half its
     /// thickness (`thickness * THICKNESS_TO_WORLD / 2`), with rounded ends.
-    /// For each ball that overlaps an obstacle (centre-line distance <
-    /// radius + half thickness) and is moving toward it (`v · n < 0`), the
-    /// ball is:
+    /// For each ball that overlaps an obstacle (centre-line distance < wall
+    /// contact distance + half thickness) and is moving toward it
+    /// (`v · n < 0`), the ball is:
     /// 1. Position-corrected so it no longer overlaps.
     /// 2. Velocity-reflected: `v' = v − 2(v · n̂) n̂` (elastic, |v| preserved).
     ///
@@ -681,29 +683,14 @@ impl SimulationWorld {
     /// (mismatched t-along-the-wall points between the openness check and
     /// the actual collision geometry).
     ///
+    /// Each ball only depends on its own state and the obstacles, so balls
+    /// are handled in parallel, with `passes` as the reused buffer for the
+    /// per-ball results (the simulation step's scratch, #228). They are
+    /// collected in ball order and summed serially: a parallel reduce would
+    /// add the f32 momenta in an order that depends on the thread count
+    /// (#222).
+    ///
     /// Returns accumulated wall momentum `(px, py)` for pressure tracking.
-    #[cfg(test)]
-    pub(crate) fn resolve_line_segment_collisions(&mut self) -> (f32, f32) {
-        let obstacles = self.collect_solid_obstacles();
-        self.resolve_wall_overlaps(&obstacles)
-    }
-
-    /// `resolve_line_segment_collisions` with an obstacle list the caller
-    /// already built this step (the simulation step shares one list with
-    /// `sweep_wall_contact`). Each ball only depends on its own state and the
-    /// obstacles, so balls are handled in parallel. Their results are merged
-    /// serially in ball order: a parallel reduce would add the f32 momenta
-    /// in an order that depends on the thread count (#222).
-    #[cfg(test)]
-    pub(crate) fn resolve_wall_overlaps(&mut self, obstacles: &[Obstacle]) -> (f32, f32) {
-        let mut passes = Vec::new();
-        self.resolve_wall_overlaps_with(obstacles, &mut passes)
-    }
-
-    /// `resolve_wall_overlaps` with a reused buffer for the per-ball passes
-    /// (the simulation step's scratch, #228). The passes are collected in
-    /// ball order and summed serially, so the result does not depend on the
-    /// thread count.
     pub(crate) fn resolve_wall_overlaps_with(
         &mut self,
         obstacles: &[Obstacle],
@@ -819,14 +806,29 @@ impl SimulationWorld {
         }
     }
 
-    /// True if a ball of `radius` at `pos` would overlap any of `obstacles`
-    /// (from `collect_solid_obstacles`, the same list
-    /// `resolve_line_segment_collisions` uses, so spawn placement and
+    /// True if a ball of wall contact distance `radius` at `pos` would overlap
+    /// any of `obstacles` (from `collect_solid_obstacles`, the same list the
+    /// overlap pass `resolve_wall_overlaps_with` uses, so spawn placement and
     /// collision can never disagree about what counts as a wall). Callers
     /// placing many balls build the list once and reuse it.
     pub(crate) fn overlaps_any_wall(obstacles: &[Obstacle], pos: &Vec2D, radius: f32) -> bool {
         obstacles
             .iter()
             .any(|obstacle| !obstacle.is_degenerate() && obstacle.overlaps(pos, radius))
+    }
+
+    /// [`Self::resolve_wall_overlaps_with`] against the current solid
+    /// obstacles, with a fresh buffer.
+    #[cfg(test)]
+    pub(crate) fn resolve_line_segment_collisions(&mut self) -> (f32, f32) {
+        let obstacles = self.collect_solid_obstacles();
+        self.resolve_wall_overlaps(&obstacles)
+    }
+
+    /// [`Self::resolve_wall_overlaps_with`] with a fresh buffer.
+    #[cfg(test)]
+    pub(crate) fn resolve_wall_overlaps(&mut self, obstacles: &[Obstacle]) -> (f32, f32) {
+        let mut passes = Vec::new();
+        self.resolve_wall_overlaps_with(obstacles, &mut passes)
     }
 }

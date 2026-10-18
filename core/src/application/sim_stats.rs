@@ -87,11 +87,6 @@ impl SimStats {
         self.pause
     }
 
-    #[cfg(test)]
-    pub fn len_v_energy(&self) -> usize {
-        self.v_kin.len().max(self.v_pot.len())
-    }
-
     pub fn clear_energy(&mut self) {
         self.v_kin.clear();
         self.v_pot.clear();
@@ -205,6 +200,11 @@ impl SimStats {
 
     pub(crate) fn get_time(&self) -> f32 {
         self.time
+    }
+
+    #[cfg(test)]
+    pub fn len_v_energy(&self) -> usize {
+        self.v_kin.len().max(self.v_pot.len())
     }
 }
 

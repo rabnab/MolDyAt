@@ -48,12 +48,6 @@ impl Default for Verlet {
 }
 
 impl Verlet {
-    /// Creates a new Verlet integration system with default parameters
-    #[cfg(test)]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     /// Get slice of neighbor ball indices.
     ///
     /// # Returns
@@ -64,16 +58,6 @@ impl Verlet {
 
     pub(crate) fn get_number_of_neighbors(&self) -> usize {
         self.num_neighbours
-    }
-
-    /// Retrieve the names of all valid neighbours from the ball vector.
-    #[cfg(test)]
-    pub fn get_neighbour_names(&self, balls: &[Ball2D]) -> Vec<String> {
-        self.neighbours
-            .iter()
-            .filter_map(|&idx| balls.get(idx))
-            .map(|ball| ball.get_name())
-            .collect()
     }
 
     /// Add a neighbor to this ball's Verlet list, keeping it sorted by index.
@@ -96,18 +80,6 @@ impl Verlet {
     pub fn clear_neighbours(&mut self) {
         self.neighbours.clear();
         self.num_neighbours = 0;
-    }
-
-    /// Check if a ball index is in this neighbor list.
-    ///
-    /// # Arguments
-    /// * `idx` - Ball index to check
-    ///
-    /// # Returns
-    /// `true` if ball is a neighbor
-    #[cfg(test)]
-    pub fn is_a_neighbour_idx(&self, idx: usize) -> bool {
-        self.neighbours.binary_search(&idx).is_ok()
     }
 
     /// Remove a neighbor from this Verlet list.
@@ -160,29 +132,6 @@ impl Verlet {
             return true;
         }
         Self::has_ball_moved_enough(ball, dt, min_movement_threshold)
-    }
-
-    /// Rebuild one ball's neighbour list if it moved far enough, and update
-    /// its partners' lists. The simulation runs the same steps in parallel
-    /// (`SimulationEngine::update_neighbor_hoods_for_occupied_cells`); this
-    /// serial form is kept for single-ball callers and tests.
-    #[cfg(test)]
-    pub fn update_hood(
-        ball_idx: usize,
-        dt: f32,
-        candidates: &[usize],
-        physics: &BallPhysics,
-        min_movement_threshold: f32,
-        balls: &mut [Ball2D],
-    ) {
-        if balls[ball_idx].verbose.console {
-            logging::log_update_hood_start(&balls[ball_idx], physics.get_skin_thickness());
-        }
-        if !Self::begin_update(&mut balls[ball_idx], dt, min_movement_threshold) {
-            return;
-        }
-        let rebuild = Self::rebuild(ball_idx, candidates, physics, balls);
-        Self::apply_rebuild(rebuild, physics, balls);
     }
 
     /// Per-step bookkeeping for one ball. Returns whether its list must be
@@ -338,6 +287,57 @@ impl Verlet {
         self.num_neighbours = num_neighbours;
         self.nearest = nearest;
         self.farthest = farthest;
+    }
+
+    /// Creates a new Verlet integration system with default parameters
+    #[cfg(test)]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Retrieve the names of all valid neighbours from the ball vector.
+    #[cfg(test)]
+    pub fn get_neighbour_names(&self, balls: &[Ball2D]) -> Vec<String> {
+        self.neighbours
+            .iter()
+            .filter_map(|&idx| balls.get(idx))
+            .map(|ball| ball.get_name())
+            .collect()
+    }
+
+    /// Check if a ball index is in this neighbor list.
+    ///
+    /// # Arguments
+    /// * `idx` - Ball index to check
+    ///
+    /// # Returns
+    /// `true` if ball is a neighbor
+    #[cfg(test)]
+    pub fn is_a_neighbour_idx(&self, idx: usize) -> bool {
+        self.neighbours.binary_search(&idx).is_ok()
+    }
+
+    /// Rebuild one ball's neighbour list if it moved far enough, and update
+    /// its partners' lists. The simulation runs the same steps in parallel
+    /// (`SimulationEngine::update_neighbor_hoods_for_occupied_cells`); this
+    /// serial form is kept for single-ball callers and tests.
+    #[cfg(test)]
+    pub fn update_hood(
+        ball_idx: usize,
+        dt: f32,
+        candidates: &[usize],
+        physics: &BallPhysics,
+        min_movement_threshold: f32,
+        balls: &mut [Ball2D],
+    ) {
+        if balls[ball_idx].verbose.console {
+            logging::log_update_hood_start(&balls[ball_idx], physics.get_skin_thickness());
+        }
+        if !Self::begin_update(&mut balls[ball_idx], dt, min_movement_threshold) {
+            return;
+        }
+        let rebuild = Self::rebuild(ball_idx, candidates, physics, balls);
+        Self::apply_rebuild(rebuild, physics, balls);
     }
 }
 
