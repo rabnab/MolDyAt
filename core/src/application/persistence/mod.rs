@@ -24,6 +24,15 @@
 //! regenerated: it stands for the files users already have. A change that
 //! bumps [`WORLD_FILE_VERSION`] adds a new fixture, and every older one must
 //! keep loading.
+//!
+//! # Built-in species
+//!
+//! A file names each ball's species; mass, `σ` and `ε` come from the built-in
+//! species table when the file is loaded. So the built-in names and their
+//! mass, `σ` and `ε` are part of the file format: changing one is a breaking
+//! change (bump [`WORLD_FILE_VERSION`] and add a migration), or add a new
+//! species instead of changing an existing one. `builtin_table_is_pinned`
+//! (in `objects2d/ball_impl/species.rs`) fails on any such change.
 
 mod convert;
 pub mod format;

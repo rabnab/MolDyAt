@@ -33,6 +33,12 @@ use std::collections::HashSet;
 /// - v1: balls and source spheres name a size class by index (`size_idx`).
 /// - v2 (#234): they name a species of the built-in table (`species`,
 ///   `ball_species`); interaction is Lennard-Jones on the centre distance.
+///
+/// Since v2 the built-in species names and their mass, `σ` and `ε` are part
+/// of the file format: a file stores only the name, the rest comes from
+/// `SpeciesTable::builtin()` when it is loaded. Changing one is a breaking
+/// change: bump this version and add a migration, or add a new species
+/// instead of changing an existing one (`builtin_table_is_pinned`).
 pub const WORLD_FILE_VERSION: u32 = 2;
 
 /// Everything needed to rebuild a world. Energy plot data and simulation

@@ -282,6 +282,40 @@ mod tests {
         assert_eq!(table.by_name("Ar"), None);
     }
 
+    /// The built-in table is part of the save format: a file names a species,
+    /// and its mass, `σ` and `ε` come from this table when the file is loaded.
+    /// If this test fails, read "Built-in species" in the `save-format` skill
+    /// before updating it: renaming or changing a species needs a format
+    /// version bump and a migration; otherwise add a new species instead.
+    #[test]
+    fn builtin_table_is_pinned() {
+        // (name, f32 bits of mass, sigma, epsilon, display_radius), in table order.
+        const PINNED: [(&str, u32, u32, u32, u32); 6] = [
+            ("N2", 0x3f800000, 0x3f800000, 0x3f800000, 0x3f000000), // 1, 1, 1, 0.5
+            ("XS", 0x3f800000, 0x3fa235e4, 0x3f800000, 0x3f2235e4), // 1, 1.2672696
+            ("S", 0x3f99999a, 0x3fc46bc8, 0x3f800000, 0x3f446bc8),  // 1.2, 1.5345392
+            ("M", 0x3fdfac12, 0x40046bc8, 0x3f800000, 0x3f846bc8),  // 1.7474387, 2.0690784
+            ("L", 0x40443ab3, 0x4048d790, 0x3f800000, 0x3fc8d790),  // 3.0660827, 3.138157
+            ("XL", 0x40c5008b, 0x40a8d790, 0x3f800000, 0x4028d790), // 6.1563163, 5.276314
+        ];
+        let actual: Vec<_> = SpeciesTable::builtin()
+            .iter()
+            .map(|s| {
+                (
+                    s.name.as_str(),
+                    s.mass.to_bits(),
+                    s.sigma.to_bits(),
+                    s.epsilon.to_bits(),
+                    s.display_radius.to_bits(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            actual, PINNED,
+            "the built-in species changed; this breaks saved worlds (see the save-format skill)"
+        );
+    }
+
     #[test]
     fn species_set_holds_ids() {
         let set: SpeciesSet = [SpeciesId::new(3), SpeciesId::new(0)].into_iter().collect();
