@@ -21,11 +21,11 @@ const STEPS: usize = 1_000;
 /// (i + 1, j) moves -x, so a few pairs are driven into the force-cap region
 /// while the bulk gas stays cool enough not to reach the walls.
 const PROJECTILE_SLOTS: [usize; 3] = [4, 8, 11];
-/// Head-on at ±3.0 a pair brings ≈ 15.8·ε, enough to pass `U(r_cap) ≈ 14.5·ε`
-/// of the `M`–`M` pair (#234; the edge-distance core of the size classes
-/// started at ≈ 4.4·ε, which ±2.0 reached). ±3.5 hits the core harder and
-/// raised the energy drift to ~90 % of its threshold.
-const PROJECTILE_V: f32 = 3.0;
+/// Head-on at ±3.5 a pair brings ≈ 21·ε, which drives it well past
+/// `U(r_cap) ≈ 14.5·ε` of the `M`–`M` pair into the sloped core (#234; the
+/// edge-distance core of the size classes started at ≈ 4.4·ε, which ±2.0
+/// reached, and ±2.0 no longer gets there).
+const PROJECTILE_V: f32 = 3.5;
 
 // Thresholds: see docs/drift-test.md for the calibration process.
 const MAX_REL_ENERGY_DRIFT: f32 = 4.0e-3;
