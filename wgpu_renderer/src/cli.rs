@@ -6,6 +6,7 @@
 //! before the headless options.
 
 use crate::headless_cli::{CliError, HEADLESS_OPTIONS};
+use moldyat_core::application::SimConfig;
 use std::path::PathBuf;
 
 mod usage;
@@ -56,6 +57,14 @@ pub const COMMON_OPTIONS: &[OptionHelp] = &[
         names: &["--load"],
         value: Some("<PATH>"),
         help: &["Start from this saved world"],
+    },
+    OptionHelp {
+        names: &["--config"],
+        value: Some("<PATH>"),
+        help: &[
+            "Simulation config file (TOML); flags such as --dt override it",
+            "Not with --load: a save brings its own config",
+        ],
     },
     OptionHelp {
         names: &["--save-dir"],
@@ -111,6 +120,8 @@ pub struct CommonArgs {
     pub load: Option<PathBuf>,
     /// `--save-dir <dir>`: directory for Ctrl+S / Ctrl+O saves.
     pub save_dir: PathBuf,
+    /// `--config <path>`: simulation config file (TOML).
+    pub config: Option<PathBuf>,
 }
 
 impl Default for CommonArgs {
@@ -118,6 +129,7 @@ impl Default for CommonArgs {
         Self {
             load: None,
             save_dir: PathBuf::from(DEFAULT_SAVE_DIR),
+            config: None,
         }
     }
 }
@@ -132,10 +144,30 @@ pub fn split_common_args(args: &[String]) -> Result<(CommonArgs, Vec<String>), C
         match arg.as_str() {
             "--load" => common.load = Some(PathBuf::from(value_of(&mut iter, "--load")?)),
             "--save-dir" => common.save_dir = PathBuf::from(value_of(&mut iter, "--save-dir")?),
+            "--config" => common.config = Some(PathBuf::from(value_of(&mut iter, "--config")?)),
             _ => rest.push(arg.clone()),
         }
     }
+    // A save restores the config it ran with; a second source would leave
+    // it unclear which one wins.
+    if common.config.is_some() && common.load.is_some() {
+        return Err(CliError::new(
+            "--config cannot be combined with --load: a save brings its own config \
+             (edit its `config` section instead)",
+        ));
+    }
     Ok((common, rest))
+}
+
+impl CommonArgs {
+    /// The simulation config: the `--config` file, or the defaults without one.
+    pub fn sim_config(&self) -> Result<SimConfig, CliError> {
+        match &self.config {
+            None => Ok(SimConfig::default()),
+            Some(path) => SimConfig::load(path)
+                .map_err(|error| CliError::new(format!("--config {}: {error:?}", path.display()))),
+        }
+    }
 }
 
 fn value_of<'a>(

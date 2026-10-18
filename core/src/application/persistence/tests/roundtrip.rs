@@ -4,20 +4,38 @@
 
 use super::scratch_dir;
 use crate::application::persistence::{LoadSource, SaveStore, WorldFile};
-use crate::application::{MainContent, PhysicsEvent, PhysicsThread, WorldCommand};
+use crate::application::{MainContent, PhysicsEvent, PhysicsThread, SimConfig, WorldCommand};
 use crate::objects2d::ball_impl::{Ball2D, SpeciesId};
 use crate::objects2d::{Rect, Vec2D};
 use std::fs;
 use std::time::{Duration, Instant};
 
+fn world_rect() -> Rect {
+    Rect::new(-10.0, 10.0, 100.0, -100.0)
+}
+
 fn empty_world() -> MainContent {
-    MainContent::new(Rect::new(-10.0, 10.0, 100.0, -100.0)).expect("create MainContent")
+    MainContent::new(world_rect()).expect("create MainContent")
+}
+
+/// A config with every value changed from its default.
+fn custom_config() -> SimConfig {
+    let mut config = SimConfig::default();
+    config.integration.time_step = 0.005;
+    config.integration.speed_limit_factor = 0.3;
+    config.potential.max_force = 80.0;
+    config.potential.core_stiffness = 150.0;
+    config.potential.cutoff_factor = 3.5;
+    config.neighbours.skin_factor = 0.25;
+    config.display.snapshot_interval_us = 33_333;
+    config
 }
 
 /// A world with every kind of saved object: balls, a split wall, a closed
-/// valve, a running source sphere and a thermostat.
+/// valve, a running source sphere and a thermostat, run with a custom config.
 fn busy_world() -> MainContent {
-    let mut mc = empty_world();
+    let mut mc =
+        MainContent::with_config(world_rect(), &custom_config(), None).expect("create MainContent");
     mc.add_line_segment(Vec2D::new(-8.0, 5.0), Vec2D::new(8.0, 5.0));
     mc.add_valve_segment(0, 0.4, 0.6, true);
     mc.add_source_sphere(Vec2D::new(-5.0, -5.0));
@@ -37,7 +55,7 @@ fn busy_world() -> MainContent {
 }
 
 fn capture(mc: &MainContent) -> WorldFile {
-    WorldFile::capture(mc.world(), mc.time_step())
+    WorldFile::capture(mc)
 }
 
 #[test]
@@ -55,6 +73,26 @@ fn world_survives_a_save_and_load() {
 
     assert_eq!(capture(&target), capture(&source));
     assert!(target.world().sim.is_paused());
+    let _ = fs::remove_dir_all(store.dir());
+}
+
+#[test]
+fn config_survives_a_save_and_load() {
+    let store = SaveStore::new(scratch_dir("config"));
+    let source = busy_world();
+    assert_eq!(source.config(), custom_config());
+    let path = source.save_world(&store).unwrap();
+    let saved = WorldFile::from_json(&fs::read_to_string(path).unwrap()).unwrap();
+    assert_eq!(saved.config, Some(custom_config()));
+
+    let mut target = empty_world();
+    target
+        .load_world(&store, &LoadSource::Latest, true)
+        .unwrap();
+    assert_eq!(target.config(), custom_config());
+    let physics = &target.world().physics;
+    assert_eq!(physics.cap_settings().cutoff_factor, 3.5);
+    assert_eq!(physics.get_skin_thickness(), 0.25 * 3.5);
     let _ = fs::remove_dir_all(store.dir());
 }
 

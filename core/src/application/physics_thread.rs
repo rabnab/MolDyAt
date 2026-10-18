@@ -91,7 +91,7 @@ impl PhysicsThread {
         let thread_wakeup = Arc::clone(&wakeup);
 
         let thread_handle = thread::spawn(move || {
-            let runtime = runtime::PhysicsRuntime::default();
+            let runtime = runtime::PhysicsRuntime;
             runtime.run(
                 &mut main_content,
                 &command_receiver,

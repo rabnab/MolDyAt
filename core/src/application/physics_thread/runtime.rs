@@ -21,15 +21,12 @@ pub(crate) trait CommandHandler<C> {
     fn flush(&mut self) {}
 }
 
-pub(crate) struct PhysicsRuntime {
-    snapshot_interval: Duration,
-}
+/// The physics loop. Its settings come from the `MainContent` it runs (the
+/// snapshot interval from `SimConfig::display`), so a loaded world brings its
+/// own.
+pub(crate) struct PhysicsRuntime;
 
 impl PhysicsRuntime {
-    pub(crate) fn new(snapshot_interval: Duration) -> Self {
-        Self { snapshot_interval }
-    }
-
     pub(crate) fn drain_commands<C, H>(&self, receiver: &Receiver<C>, handler: &mut H)
     where
         H: CommandHandler<C>,
@@ -102,7 +99,8 @@ impl PhysicsRuntime {
             // wait for the next interval.
             if changed
                 && (world_resized
-                    || now.duration_since(last_snapshot_time) >= self.snapshot_interval)
+                    || now.duration_since(last_snapshot_time)
+                        >= simulation.runtime().snapshot_interval())
             {
                 let snapshot_start = Instant::now();
                 let snapshot = simulation.create_snapshot();
@@ -147,11 +145,5 @@ impl PhysicsRuntime {
 
             std::thread::yield_now();
         }
-    }
-}
-
-impl Default for PhysicsRuntime {
-    fn default() -> Self {
-        Self::new(Duration::from_micros(16667))
     }
 }

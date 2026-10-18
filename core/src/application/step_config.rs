@@ -6,8 +6,6 @@ use crate::application::AppResult;
 use crate::error::AppError;
 use crate::objects2d::ball_impl::BallFactory;
 
-const DT_GOAL: f32 = 0.01;
-
 /// Per-step settings of the physics thread: time step, ball factory and
 /// neighbour update interval.
 pub struct StepConfig {
@@ -16,21 +14,14 @@ pub struct StepConfig {
     neighbour_update_interval: usize,
 }
 
-impl Default for StepConfig {
-    fn default() -> Self {
-        StepConfig {
-            dt_goal: DT_GOAL,
-            ball_factory: BallFactory::new(),
-            neighbour_update_interval: 1,
-        }
-    }
-}
-
 impl StepConfig {
-    pub(crate) fn with_seed(seed: u64) -> Self {
-        Self {
-            ball_factory: BallFactory::with_seed(seed),
-            ..Self::default()
+    /// Starts at `time_step`; balls are seeded from `seed` if given, else
+    /// from entropy.
+    pub(crate) fn new(time_step: f32, seed: Option<u64>) -> Self {
+        StepConfig {
+            dt_goal: time_step,
+            ball_factory: seed.map_or_else(BallFactory::new, BallFactory::with_seed),
+            neighbour_update_interval: 1,
         }
     }
 

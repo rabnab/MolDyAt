@@ -6,10 +6,11 @@ use super::{BallPhysics, CellGrid, MainContent, SimStats, SimulationWorld};
 use crate::application::AppResult;
 use crate::application::StepConfig;
 use crate::application::scene_layers::SceneLayers;
+use crate::application::sim_config::SimConfig;
 use crate::application::thermo_field::ThermoFieldHistory;
 use crate::graphics::renderer::{Margins, ViewportTransform};
 use crate::objects2d::Rect;
-use crate::objects2d::ball_impl::SpeciesSet;
+use crate::objects2d::ball_impl::{PhysicsConstants, SpeciesSet, SpeciesTable};
 use arc_swap::ArcSwapOption;
 use std::sync::Arc;
 
@@ -26,18 +27,23 @@ impl MainContent {
         )
     }
 
+    /// An empty world with the default [`SimConfig`].
     pub fn new(world_rect: Rect) -> AppResult<Self> {
-        Self::new_internal(world_rect, None)
+        Self::with_config(world_rect, &SimConfig::default(), None)
     }
 
+    /// [`Self::new`], with balls seeded from `seed` for reproducible runs.
     pub fn new_with_seed(world_rect: Rect, seed: u64) -> AppResult<Self> {
-        Self::new_internal(world_rect, Some(seed))
+        Self::with_config(world_rect, &SimConfig::default(), Some(seed))
     }
 
-    fn new_internal(world_rect: Rect, seed: Option<u64>) -> AppResult<Self> {
+    /// An empty world run with `config` (validated first); balls are seeded
+    /// from `seed` if given.
+    pub fn with_config(world_rect: Rect, config: &SimConfig, seed: Option<u64>) -> AppResult<Self> {
+        config.validate()?;
         Ok(Self {
-            world: SimulationWorld::new(world_rect)?,
-            step_config: seed.map_or_else(StepConfig::default, StepConfig::with_seed),
+            world: SimulationWorld::with_config(world_rect, config)?,
+            step_config: StepConfig::new(config.integration.time_step, seed),
             runtime: super::PhysicsRuntimeState {
                 snapshot_slot: Arc::new(ArcSwapOption::from(None)),
                 wait_time: 0,
@@ -45,15 +51,22 @@ impl MainContent {
                 save_store: None,
                 world_generation: 0,
                 snapshot_layers: SceneLayers::ALL,
+                snapshot_interval_us: config.display.snapshot_interval_us,
             },
         })
     }
 }
 
 impl SimulationWorld {
-    /// An empty world: no balls, no operators, default physics, not paused.
-    pub(crate) fn new(world_rect: Rect) -> AppResult<Self> {
-        let physics = BallPhysics::default();
+    /// An empty world: no balls, no operators, physics per `config`, not
+    /// paused. `config` must be valid (`SimConfig::validate`).
+    pub(crate) fn with_config(world_rect: Rect, config: &SimConfig) -> AppResult<Self> {
+        let physics = BallPhysics::new(
+            PhysicsConstants::default(),
+            SpeciesTable::builtin(),
+            config.potential.cap_settings(),
+        )
+        .with_skin_factor(config.neighbours.skin_factor);
         let species_present = SpeciesSet::default();
         let cell_grid = CellGrid::new(world_rect, physics.max_list_radius(species_present))?;
         Ok(Self {
@@ -69,6 +82,7 @@ impl SimulationWorld {
             show_timings: false,
             show_ball_stats: true,
             was_paused_for_resize: false,
+            speed_limit_factor: config.integration.speed_limit_factor,
             speed_limit_override: None,
             kernel_points: Vec::new(),
             scratch: Default::default(),

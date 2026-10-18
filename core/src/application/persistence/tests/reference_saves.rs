@@ -8,9 +8,9 @@
 //! the real load path.
 
 use super::scratch_dir;
-use crate::application::MainContent;
 use crate::application::persistence::migrate;
 use crate::application::persistence::{LoadSource, SaveStore, WORLD_FILE_VERSION, WorldFile};
+use crate::application::{MainContent, SimConfig};
 use crate::objects2d::ball_impl::{SpeciesId, SpeciesTable};
 use crate::objects2d::operator::OperatorState;
 use crate::objects2d::wall_chain::Joint;
@@ -93,26 +93,23 @@ fn every_fixture_file_is_listed() {
 fn reference_saves_survive_a_save_and_load() {
     for fixture in FIXTURES {
         let mc = load_fixture(fixture.file);
-        let file = WorldFile::capture(mc.world(), mc.time_step());
+        let file = WorldFile::capture(&mc);
         let reloaded = WorldFile::from_json(&file.to_json().unwrap()).unwrap();
         assert_eq!(reloaded, file, "{}", fixture.file);
     }
 }
 
 /// The newest format needs no migration, so its reference save must come
-/// back field for field. Older ones are checked by their `check_vN`.
+/// back field for field. Older ones are checked by their `check_vN`. Fields
+/// added since (`config`, #231) come back with their defaults.
 #[test]
 fn current_reference_save_loads_every_field() {
     for fixture in FIXTURES.iter().filter(|f| f.version == WORLD_FILE_VERSION) {
         let json = fs::read_to_string(fixtures_dir().join(fixture.file)).unwrap();
-        let expected = WorldFile::from_json(&json).unwrap();
+        let mut expected = WorldFile::from_json(&json).unwrap();
+        expected.config = Some(expected.sim_config());
         let mc = load_fixture(fixture.file);
-        assert_eq!(
-            WorldFile::capture(mc.world(), mc.time_step()),
-            expected,
-            "{}",
-            fixture.file
-        );
+        assert_eq!(WorldFile::capture(&mc), expected, "{}", fixture.file);
     }
 }
 
@@ -200,6 +197,10 @@ fn check_v2(mc: &MainContent) {
 fn check_world(mc: &MainContent, ball_species: [&str; 8], sphere_species: [&str; 2]) {
     let world = mc.world();
     assert_eq!(mc.time_step(), 0.005);
+    // Both predate the saved config (#231): they run with the defaults.
+    let mut config = SimConfig::default();
+    config.integration.time_step = 0.005;
+    assert_eq!(mc.config(), config);
     assert_eq!(world.physics.constants.gravity, 0.5);
     assert_eq!(world.world_region(), Rect::new(-20.0, 15.0, 40.0, -30.0));
 

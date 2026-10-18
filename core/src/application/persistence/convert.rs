@@ -12,20 +12,22 @@
 //! here, side by side, so adding a field means touching one place.
 
 use super::format::{BallData, SourceSphereData, ThermostatData, WORLD_FILE_VERSION, WorldFile};
-use crate::application::AppResult;
 use crate::application::core::SimulationWorld;
+use crate::application::{AppResult, MainContent};
 use crate::objects2d::ball_impl::{Ball2D, BallFactory, SpeciesId, SpeciesTable};
 use crate::objects2d::operator::{OperatorState, SimSourceSphere, SimThermostat};
 
 impl WorldFile {
-    /// The world in file form. The time step is a run setting kept outside
-    /// the world, so it is passed in.
-    pub(crate) fn capture(world: &SimulationWorld, time_step: f32) -> Self {
+    /// The world of `mc` in file form, with the config it runs with.
+    pub(crate) fn capture(mc: &MainContent) -> Self {
+        let world = mc.world();
+        let config = mc.config();
         Self {
             version: WORLD_FILE_VERSION,
             world_rect: world.world_rect,
-            time_step,
+            time_step: config.integration.time_step,
             gravity: world.physics.constants.gravity,
+            config: Some(config),
             balls: world.balls.iter().map(BallData::from).collect(),
             line_segments: world.line_segments.segments().to_vec(),
             valves: world.valve_segments.valves().to_vec(),
@@ -49,12 +51,12 @@ impl WorldFile {
 impl TryFrom<&WorldFile> for SimulationWorld {
     type Error = crate::application::AppError;
 
-    /// A fresh world holding the file's contents (validated first). Neighbour
-    /// lists are not built yet; that needs the run settings (see
-    /// `MainContent::load_world`).
+    /// A fresh world holding the file's contents (validated first), with the
+    /// physics of its config. Neighbour lists are not built yet; that needs
+    /// the run settings (see `MainContent::load_world`).
     fn try_from(file: &WorldFile) -> AppResult<Self> {
         file.validate()?;
-        let mut world = SimulationWorld::new(file.world_rect)?;
+        let mut world = SimulationWorld::with_config(file.world_rect, &file.sim_config())?;
         world.physics.constants.gravity = file.gravity;
         world.balls = file.balls.iter().map(Ball2D::from).collect();
         world.rebuild_cell_grid();

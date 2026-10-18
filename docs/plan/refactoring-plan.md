@@ -186,7 +186,7 @@ GitHub issues:
 | Phase | Parent | Landed on `master` | Open |
 |---|---|---|---|
 | 1 | #219 | G1 #221, G2 #222, G3 #223, M1 #224, M3 #225, M4 #226, C1 #227, P1 #228, P3 #229 | – |
-| 2 | #220 | I1 #230, I2 #233, I3 #234 | M6 #231, C2 #232, I4 #235, I5 #236, I6 #237, I7 #238 |
+| 2 | #220 | I1 #230, I2 #233, I3 #234, M6 #231 | C2 #232, I4 #235, I5 #236, I6 #237, I7 #238 |
 | 5 | – | – | I12 #280 |
 
 "Landed" is taken from the commits on `master` (as of 2026-10-14), not from

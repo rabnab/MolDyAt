@@ -56,7 +56,8 @@ fn runner_with_snapshot_steps(
         720,
         moldyat_core::graphics::renderer::margins::Margins::new(110.0, 50.0, 50.0, 50.0),
     );
-    let application = build_application(world_rect, None).expect("application");
+    let application =
+        build_application(world_rect, &SimConfig::default(), None).expect("application");
     let recorded = Rc::new(RefCell::new(Vec::new()));
     let sink = RecordingSink(recorded.clone());
     let runner = HeadlessRunner::builder()
@@ -127,8 +128,8 @@ fn seeded_headless_output() -> String {
         save_setup: false,
     };
 
-    let mut application =
-        build_application(world_rect, config.rng_seed).expect("build deterministic app");
+    let mut application = build_application(world_rect, &SimConfig::default(), config.rng_seed)
+        .expect("build deterministic app");
     application.seed_random_balls(config.seed_balls.expect("seed ball count") as usize);
 
     let (content, snapshots_emitted) = headless_output(config, application);
@@ -178,8 +179,14 @@ fn operators_config(steps: u32, snapshot_every: u32) -> HeadlessConfig {
 /// operator commands as the UI tools.
 fn operators_application(config: &HeadlessConfig) -> MainContent {
     let world_rect = scale_world_rect(test_world_rect(), config.world_scale.expect("scale"));
-    let mut application =
-        prepare_application(config, world_rect, &SaveStore::new("saves"), None).expect("prepare");
+    let mut application = prepare_application(
+        config,
+        &SimConfig::default(),
+        world_rect,
+        &SaveStore::new("saves"),
+        None,
+    )
+    .expect("prepare");
 
     Box::new(PlaceThermostat {
         position: Vec2D::new(-8.0, 0.0),
@@ -464,9 +471,14 @@ fn test_prepare_application_applies_dt_and_line_segments() {
         ..HeadlessConfig::default()
     };
 
-    let mut application =
-        prepare_application(&config, test_world_rect(), &SaveStore::new("saves"), None)
-            .expect("prepare");
+    let mut application = prepare_application(
+        &config,
+        &SimConfig::default(),
+        test_world_rect(),
+        &SaveStore::new("saves"),
+        None,
+    )
+    .expect("prepare");
     assert_eq!(application.time_step(), 0.005);
 
     let snapshot = application.create_snapshot();
@@ -518,9 +530,14 @@ fn test_run_start_records_effective_dt_segments_and_world_rect() {
         }],
         ..HeadlessConfig::default()
     };
-    let application =
-        prepare_application(&config, test_world_rect(), &SaveStore::new("saves"), None)
-            .expect("prepare");
+    let application = prepare_application(
+        &config,
+        &SimConfig::default(),
+        test_world_rect(),
+        &SaveStore::new("saves"),
+        None,
+    )
+    .expect("prepare");
     let default_dt = application.time_step();
     HeadlessRunner::from_config(config, application)
         .expect("runner")
@@ -567,6 +584,7 @@ fn test_prepare_application_seeds_moving_balls() {
     let speeds = |seed_speed| {
         let app = prepare_application(
             &config(seed_speed),
+            &SimConfig::default(),
             test_world_rect(),
             &SaveStore::new("saves"),
             None,
@@ -618,9 +636,14 @@ fn test_prepare_application_places_valves_on_their_walls() {
         ],
         ..HeadlessConfig::default()
     };
-    let application =
-        prepare_application(&config, test_world_rect(), &SaveStore::new("saves"), None)
-            .expect("prepare");
+    let application = prepare_application(
+        &config,
+        &SimConfig::default(),
+        test_world_rect(),
+        &SaveStore::new("saves"),
+        None,
+    )
+    .expect("prepare");
     let operators = application.create_snapshot().operators;
     assert_eq!(operators.walls.len(), 2);
     assert_eq!(operators.valve_spans.len(), 2);
@@ -656,9 +679,14 @@ fn test_run_writes_timings_for_steps_after_warmup() {
         timing_warmup: 2,
         ..HeadlessConfig::default()
     };
-    let application =
-        prepare_application(&config, test_world_rect(), &SaveStore::new("saves"), None)
-            .expect("prepare");
+    let application = prepare_application(
+        &config,
+        &SimConfig::default(),
+        test_world_rect(),
+        &SaveStore::new("saves"),
+        None,
+    )
+    .expect("prepare");
     HeadlessRunner::builder()
         .application(application)
         .sink(Box::new(RecordingSink(Rc::new(RefCell::new(Vec::new())))))
@@ -708,7 +736,8 @@ fn test_run_writes_timings_for_steps_after_warmup() {
 fn test_write_timings_rejects_runs_with_paused_steps() {
     use moldyat_core::application::phase_timings::PhaseTimings;
 
-    let application = build_application(test_world_rect(), Some(1)).expect("build");
+    let application =
+        build_application(test_world_rect(), &SimConfig::default(), Some(1)).expect("build");
     let snapshot = application.create_snapshot();
     let mut clock = RunClock::start(0);
     clock.steps = 5;
@@ -736,10 +765,12 @@ fn test_run_with_timings_fails_at_the_first_paused_step() {
         .as_nanos();
     let dir = std::env::temp_dir().join(format!("headless-paused-{}-{nanos}", std::process::id()));
     let store = SaveStore::new(&dir);
-    let mut seeded = build_application(test_world_rect(), Some(5)).expect("build");
+    let mut seeded =
+        build_application(test_world_rect(), &SimConfig::default(), Some(5)).expect("build");
     seeded.seed_random_balls(20);
     let saved = seeded.save_world(&store).expect("save");
-    let mut paused = build_application(test_world_rect(), Some(5)).expect("build");
+    let mut paused =
+        build_application(test_world_rect(), &SimConfig::default(), Some(5)).expect("build");
     paused
         .load_world(&store, &LoadSource::Path(saved), true)
         .expect("load paused");
@@ -758,4 +789,41 @@ fn test_run_with_timings_fails_at_the_first_paused_step() {
     let error = result.err().expect("a paused run must fail");
     assert!(error.to_string().contains("step 0"), "{error}");
     assert!(!written);
+}
+
+#[test]
+fn test_prepare_application_runs_with_the_sim_config() {
+    let mut sim_config = SimConfig::default();
+    sim_config.integration.time_step = 0.02;
+    sim_config.potential.cutoff_factor = 3.0;
+    let config = HeadlessConfig::default();
+    let application = prepare_application(
+        &config,
+        &sim_config,
+        test_world_rect(),
+        &SaveStore::new("saves"),
+        None,
+    )
+    .expect("prepare");
+    assert_eq!(application.config(), sim_config);
+}
+
+#[test]
+fn test_dt_flag_overrides_the_sim_config() {
+    let mut sim_config = SimConfig::default();
+    sim_config.integration.time_step = 0.02;
+    let config = HeadlessConfig {
+        dt: Some(0.005),
+        ..HeadlessConfig::default()
+    };
+    let application = prepare_application(
+        &config,
+        &sim_config,
+        test_world_rect(),
+        &SaveStore::new("saves"),
+        None,
+    )
+    .expect("prepare");
+    assert_eq!(application.time_step(), 0.005);
+    assert_eq!(application.config().integration.time_step, 0.005);
 }

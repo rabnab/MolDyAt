@@ -41,10 +41,16 @@ pub struct ForceResult {
     pub virial: f32,
 }
 
+/// Default Verlet skin as a share of the reference cutoff (see
+/// [`BallPhysics::get_skin_thickness`]).
+pub const DEFAULT_SKIN_FACTOR: f32 = 0.2;
+
 #[derive(Clone)]
 pub struct BallPhysics {
     pub constants: PhysicsConstants,
     pair_potential: Potential,
+    /// Skin as a share of the reference cutoff.
+    skin_factor: f32,
     wall_law: HardContact,
     /// Wall contact distance of each species, from `wall_law`.
     wall_contact: Vec<f32>,
@@ -68,12 +74,24 @@ impl BallPhysics {
         BallPhysics {
             constants,
             pair_potential: Potential::lennard_jones(species, cap),
+            skin_factor: DEFAULT_SKIN_FACTOR,
             wall_contact: species
                 .iter()
                 .map(|s| wall_law.contact_distance(s))
                 .collect(),
             wall_law,
         }
+    }
+
+    /// The same physics with a Verlet skin of `skin_factor` times the
+    /// reference cutoff.
+    pub fn with_skin_factor(mut self, skin_factor: f32) -> Self {
+        self.skin_factor = skin_factor;
+        self
+    }
+
+    pub fn skin_factor(&self) -> f32 {
+        self.skin_factor
     }
 
     /// Force cap and cutoff settings of the pair potential.
@@ -86,10 +104,11 @@ impl BallPhysics {
         self.pair_potential.cutoff(a, b)
     }
 
-    /// Verlet skin: a fixed share of the reference cutoff (`N2`), the same for
-    /// every pair, so the rebuild threshold does not depend on the species.
+    /// Verlet skin: a fixed share (`skin_factor`) of the reference cutoff
+    /// (`N2`), the same for every pair, so the rebuild threshold does not
+    /// depend on the species.
     pub fn get_skin_thickness(&self) -> f32 {
-        0.2 * self.cap_settings().cutoff_factor * LJ_SIG
+        self.skin_factor * self.cap_settings().cutoff_factor * LJ_SIG
     }
 
     /// Centre distance below which a pair of `a` and `b` is listed as

@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use super::sample_file;
+use crate::application::SimConfig;
 use crate::application::persistence::WorldFile;
 use crate::application::persistence::format::{
     BallData, MAX_ID, SourceSphereData, ThermostatData, WORLD_FILE_VERSION,
@@ -206,4 +207,42 @@ fn rejects_ids_that_would_overflow_the_id_counters() {
     let mut file = sample_file();
     file.balls[0].id = MAX_ID;
     assert!(file.validate().is_ok(), "the bound itself is allowed");
+}
+
+#[test]
+fn file_without_config_runs_with_the_default_config() {
+    let file = sample_file();
+    assert_eq!(file.config, None);
+    let mut expected = SimConfig::default();
+    expected.integration.time_step = file.time_step;
+    assert_eq!(file.sim_config(), expected);
+}
+
+#[test]
+fn saved_config_is_validated() {
+    let mut file = sample_file();
+    let mut config = file.sim_config();
+    config.potential.cutoff_factor = 0.5;
+    file.config = Some(config);
+    assert!(error_text(&file).contains("cutoff_factor"));
+}
+
+#[test]
+fn saved_config_must_match_the_time_step() {
+    let mut file = sample_file();
+    let mut config = file.sim_config();
+    config.integration.time_step = file.time_step * 2.0;
+    file.config = Some(config);
+    assert!(error_text(&file).contains("time_step"));
+}
+
+#[test]
+fn unknown_config_keys_are_rejected() {
+    let json = sample_file().to_json().unwrap().replacen(
+        "\"gravity\"",
+        "\"config\": {\"potential\": {\"max_forc\": 80.0}},\n  \"gravity\"",
+        1,
+    );
+    let error = format!("{:?}", WorldFile::from_json(&json).unwrap_err());
+    assert!(error.contains("max_forc"), "{error}");
 }

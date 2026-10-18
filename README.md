@@ -327,7 +327,7 @@ cargo run -p moldyat_wgpu -- --save-dir ~/lj-worlds
 ```
 
 The file is versioned JSON (`"version": 2`) holding the world rectangle, time
-step, gravity, every ball (`id`, `species`, `pos`, `v`, `pre_update_pos`,
+step, gravity, the [simulation config](#simulation-config), every ball (`id`, `species`, `pos`, `v`, `pre_update_pos`,
 `accel`) and all operators. Saves of format 1 (size classes) still load: each
 size class becomes the species of the same name (`XS` to `XL`). The view
 (window size, zoom, pan), the energy plot
@@ -338,6 +338,45 @@ letterboxed, never stretched or rescaled. A later window resize refits the
 world to the window as usual. A file that fails validation is rejected and the running world
 is left untouched. Results are logged. Saves from older versions are upgraded
 when they are loaded; a save from a newer MolDyAt is rejected with an error.
+
+## Simulation config
+
+Settings that are not part of the world (time step, speed limit, force cap and
+cutoff, Verlet skin, snapshot rate) come from a TOML file passed with
+`--config <path>`, in the window and with `--headless`. Every section and key
+is optional: missing ones keep their default, and without `--config` all
+defaults apply, so results are the same as without a config file. Unknown keys
+are rejected, so a typo is an error, not a silent default. Flags that set the
+same value, such as `--dt`, override the file.
+
+The defaults, as a complete file:
+
+```toml
+[integration]
+time_step = 0.01            # reduced time units; + / - change it while running
+speed_limit_factor = 0.2    # speed limit as a share of the shorter world side
+
+[potential]
+max_force = 100.0           # repulsive force where the sloped core starts
+core_stiffness = 200.0      # force slope inside the core
+cutoff_factor = 4.0         # pair cutoff in units of sigma_ij
+
+[neighbours]
+skin_factor = 0.2           # Verlet skin as a share of the N2 cutoff
+
+[display]
+snapshot_interval_us = 16667  # least time between two frames sent to the window
+```
+
+```bash
+cargo run -p moldyat_wgpu -- --config my-run.toml
+cargo run -p moldyat_wgpu -- --headless --config my-run.toml --dt 0.005 --steps 1000
+```
+
+A save stores the config of the run in its `config` section, and loading the
+save restores it, so `--config` cannot be combined with `--load`. Saves
+written before the config existed load with the defaults. A `[species]`
+section for the species library will follow (#237).
 
 ## Releases & Versioning
 
@@ -386,6 +425,7 @@ core/
     │   │   └── tests/         # Topic-based test files (ball_management, energy, …)
     │   ├── operator_command/  # Valve, thermostat, source commands
     │   ├── persistence/       # Versioned JSON save / load
+    │   ├── sim_config.rs      # SimConfig: run settings, --config file
     │   └── physics_thread/    # Physics thread internals
     ├── graphics/
     │   ├── energy_plot/       # Energy plot window

@@ -75,6 +75,8 @@ pub struct SimulationWorld {
     pub(crate) step_count: usize,
 
     pub(crate) was_paused_for_resize: bool,
+    /// Speed limit as a share of the shorter world side (`SimConfig`).
+    pub(crate) speed_limit_factor: f32,
     /// Override for speed limit (None = use default calculation, Some(f32::INFINITY) = disable)
     pub(crate) speed_limit_override: Option<f32>,
     /// Cached force results from last physics step for reuse in rendering
@@ -170,6 +172,9 @@ pub(crate) struct PhysicsRuntimeState {
     world_generation: u64,
     /// Layers the renderer wants in its snapshots (see `SceneLayers`).
     snapshot_layers: SceneLayers,
+    /// Least time between two published snapshots, in microseconds
+    /// (`SimConfig::display`).
+    snapshot_interval_us: u64,
 }
 
 pub struct StatsAccumulator {

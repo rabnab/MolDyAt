@@ -15,6 +15,7 @@
 //! membership, tails, energy plot, `SimStats`) and the view (window size,
 //! zoom, pan) are never written.
 
+use crate::application::sim_config::SimConfig;
 use crate::error::{AppError, AppResult};
 use crate::objects2d::ball_impl::SpeciesTable;
 use crate::objects2d::operator::{
@@ -54,8 +55,15 @@ pub struct WorldFile {
     pub version: u32,
     /// World rectangle (`x`, `y` is the top-left corner, `h` is negative).
     pub world_rect: Rect,
+    /// Time step of the run. It wins over `config.integration.time_step`,
+    /// which must equal it when a config is present.
     pub time_step: f32,
     pub gravity: f32,
+    /// The config the world ran with (#231). Saves written before it existed
+    /// have none and load with the default config, which reproduces how
+    /// those builds ran.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config: Option<SimConfig>,
     pub balls: Vec<BallData>,
     pub line_segments: Vec<SimLineSegment>,
     pub valves: Vec<ValveSegment>,
@@ -147,6 +155,15 @@ impl WorldFile {
             return Err(invalid("time_step must be finite and positive"));
         }
         check_finite(&[self.gravity], "gravity")?;
+        if let Some(config) = &self.config {
+            config.validate()?;
+            if config.integration.time_step != self.time_step {
+                return Err(invalid(format!(
+                    "config.integration.time_step {} differs from time_step {}",
+                    config.integration.time_step, self.time_step
+                )));
+            }
+        }
 
         check_unique_ids(self.balls.iter().map(|b| b.id), "ball")?;
         let species = SpeciesTable::builtin();
@@ -313,6 +330,14 @@ impl WorldFile {
             }
         }
         Ok(())
+    }
+
+    /// The config to run this world with: the saved one, or the default for
+    /// files without one, with the file's time step.
+    pub fn sim_config(&self) -> SimConfig {
+        let mut config = self.config.clone().unwrap_or_default();
+        config.integration.time_step = self.time_step;
+        config
     }
 
     pub fn to_json(&self) -> AppResult<String> {

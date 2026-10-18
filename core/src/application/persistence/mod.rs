@@ -95,7 +95,7 @@ pub struct LoadedWorld {
 impl MainContent {
     /// Write the world to a new save in `store`; returns its path.
     pub fn save_world(&self, store: &SaveStore) -> AppResult<PathBuf> {
-        store.save(&WorldFile::capture(self.world(), self.time_step()))
+        store.save(&WorldFile::capture(self))
     }
 
     /// Replace the world with the save `source` refers to.
@@ -113,7 +113,10 @@ impl MainContent {
         let file = store.load(&path)?;
         let mut world = SimulationWorld::try_from(&file)?;
         world.sim.set_pause(start_paused);
-        self.set_time_step(file.time_step)?;
+        let config = file.sim_config();
+        self.set_time_step(config.integration.time_step)?;
+        self.runtime_mut()
+            .set_snapshot_interval_us(config.display.snapshot_interval_us);
 
         *self.world_mut() = world;
         self.runtime_mut().next_world_generation();

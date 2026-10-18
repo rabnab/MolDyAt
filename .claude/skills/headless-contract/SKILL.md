@@ -11,7 +11,7 @@ description: Contract for changing headless mode - CLI flags, the JSONL headless
 | Concern | File | Tests |
 |---|---|---|
 | Flags, defaults, validation, `--help` table (`HEADLESS_OPTIONS`) | `wgpu_renderer/src/headless_cli.rs` | `headless_cli/tests.rs` |
-| Shared flags (`--load`, `--save-dir`), `--help` (`GENERAL_OPTIONS`) | `wgpu_renderer/src/cli.rs`, `cli/usage.rs` | `cli/tests.rs` |
+| Shared flags (`--load`, `--save-dir`, `--config`), `--help` (`GENERAL_OPTIONS`) | `wgpu_renderer/src/cli.rs`, `cli/usage.rs` | `cli/tests.rs` |
 | World setup order, step loop, frame cadence | `wgpu_renderer/src/headless_runner.rs` | `headless_runner/tests.rs` |
 | JSONL records, console line, non-finite policy | `wgpu_renderer/src/headless_output.rs` | `headless_output/tests.rs` |
 | `--timings` report (`headless-timings.v1`) | `wgpu_renderer/src/headless_timings.rs` | read by `scripts/headless_perf.sh` |
@@ -23,6 +23,7 @@ description: Contract for changing headless mode - CLI flags, the JSONL headless
 - **Non-finite numbers.** Every exported `f32` goes through `f32_value`, so `NaN` and `±Inf` become `null`, including thermo grids and summary fields.
 - **Payload size.** `summary` stays the default; per-ball and thermo data stay opt-in through `--detail`.
 - **Flags.** Every flag that `parse_headless_args` accepts has an `OptionHelp` entry (`every_parsed_flag_is_documented` in `cli/tests.rs` checks it) and a row in `docs/headless.md`. Parse with `std::env::args()`; add a CLI crate only if the option surface grows a lot. The default (windowed) start must not change.
+- **Config.** `prepare_application` builds the world from the `SimConfig` (`--config` or defaults) with `--dt` overriding its time step, and `--dt` also beats a loaded save's time step. Without `--config` the run must stay byte-identical to the fixtures. `SimConfig` is not exported in the records (adding it would change the fixtures); `run_start` records the effective `dt`.
 - **Setup order.** Time step, then walls and valves, then seeded balls, so seeded balls never start inside a wall. Seeding is deterministic for a given `--rng-seed`.
 - **Determinism.** The same seed, flags and build give byte-identical output, independent of the Rayon thread count. Do not add wall-clock values or unordered collections to records (`physics_fps` is always 0 in headless runs, which have no physics thread).
 - **Timings report.** `scripts/headless_perf.sh` parses `headless-timings.v1`. Changing its fields or phase names means updating the script (and its `headless-perf.v2` report) in the same change.
