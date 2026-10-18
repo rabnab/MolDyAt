@@ -194,9 +194,20 @@ JSON value, the migrations from its version up to the current one run
 `WorldFile`. Both are validated. Files without a version, with version 0, or
 from a newer build are rejected with a clear error.
 
-- An additive change (a new optional field whose default reproduces the old
-  behaviour) keeps the version.
-- A breaking change (rename, removal, changed type, unit or meaning) bumps
+- An additive change keeps the version and needs no migration: a new field
+  with `#[serde(default)]` or `#[serde(default = "…")]` whose default
+  reproduces the behaviour of older builds, or a new top-level list
+  (`#[serde(default)] Vec<…>`, e.g. a new operator kind). Older files lack
+  the field and load with the default, which `validate()` accepts. Example:
+
+  ```rust
+  #[serde(default = "elastic")] // returns 1.0, today's elastic walls
+  pub wall_restitution: f32,
+  #[serde(default)]             // older files have no sinks
+  pub sinks: Vec<SinkData>,
+  ```
+- A breaking change (rename, removal, changed type, unit or meaning, or a
+  changed default that older files rely on) bumps
   `WORLD_FILE_VERSION` and adds one `migrate_vN_to_vN+1(&mut Value)` to
   `MIGRATIONS` in `persistence/migrate.rs`, with a test that loads the
   version-`N` reference save. A migration must not panic on unexpected input:

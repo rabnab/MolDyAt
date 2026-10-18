@@ -12,8 +12,10 @@
 //! cases. Saving always writes the current version.
 //!
 //! # Changing the format
-//! - An additive change (a new optional field whose default reproduces the old
-//!   behaviour) keeps the version.
+//! - An additive change (a new field with `#[serde(default)]` whose default
+//!   reproduces the old behaviour, or a new `#[serde(default)]` list) keeps
+//!   the version and needs no migration; see the module doc of
+//!   [`persistence`](super) for the rule.
 //! - A breaking change (rename, removal, changed type, unit or meaning) bumps
 //!   [`WORLD_FILE_VERSION`] to `N + 1` and adds one function
 //!   `migrate_vN_to_vN+1(&mut Value)` to [`MIGRATIONS`], which rewrites a

@@ -126,6 +126,11 @@ every one of them through the real load path and checks its contents.
 - A format change that bumps `WORLD_FILE_VERSION` adds a new fixture (and its
   entry in `FIXTURES` in `tests/reference_saves.rs`); all older fixtures must
   keep loading. The test fails if the current version has no fixture.
+- A new field or list that older files lack is additive: give it
+  `#[serde(default)]` with a default that reproduces the old behaviour, no
+  version bump. Renames, removals and changed types, units or meanings are
+  breaking and need a migration. See
+  [Format versions and migrations](docs/architecture.md#format-versions-and-migrations).
 - Details: the `save-format` skill and the module doc of
   `core/src/application/persistence`.
 

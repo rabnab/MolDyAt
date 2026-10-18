@@ -43,6 +43,12 @@ pub const WORLD_FILE_VERSION: u32 = 2;
 
 /// Everything needed to rebuild a world. Energy plot data and simulation
 /// statistics are deliberately not part of it.
+///
+/// A field added to this or any saved type after its format version gets
+/// `#[serde(default)]` (or `#[serde(default = "…")]`) with a default that
+/// reproduces the old behaviour, and `validate()` accepts that default, so
+/// older files keep loading without a version bump. See the
+/// [`persistence`](super) module doc for what is additive and what is breaking.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WorldFile {
     pub version: u32,
