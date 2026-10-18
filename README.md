@@ -218,7 +218,7 @@ Key behavior:
 - emits an initial frame at step `0`
 - emits interval frames when `--snapshot-every > 0`
 - always emits a final frame at the last step
-- records are JSON Lines with `schema_version = "headless.v1"`
+- records are JSON Lines with `schema_version = "headless.v2"`
 - non-finite numbers (`NaN`, `+Inf`, `-Inf`) are encoded as `null`
 
 Seeded regression fixture workflow (used by CI; required for refactor PRs, see [CONTRIBUTING.md](CONTRIBUTING.md#refactor-prs-required-gates)):
@@ -326,9 +326,11 @@ cargo run -p moldyat_wgpu -- --load saves/world_20260101_120000.json
 cargo run -p moldyat_wgpu -- --save-dir ~/lj-worlds
 ```
 
-The file is versioned JSON (`"version": 1`) holding the world rectangle, time
-step, gravity, every ball (`id`, `size_idx`, `pos`, `v`, `pre_update_pos`,
-`accel`) and all operators. The view (window size, zoom, pan), the energy plot
+The file is versioned JSON (`"version": 2`) holding the world rectangle, time
+step, gravity, every ball (`id`, `species`, `pos`, `v`, `pre_update_pos`,
+`accel`) and all operators. Saves of format 1 (size classes) still load: each
+size class becomes the species of the same name (`XS` to `XL`). The view
+(window size, zoom, pan), the energy plot
 and simulation statistics are not saved; a loaded world is shown in the
 default view. The window is asked to take the world's shape; if the OS gives
 it another size (screen too small, maximised or tiled window), the world is

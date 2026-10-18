@@ -29,7 +29,7 @@ Loading (`migrate::parse`, #272) reads the version first: a current-version file
 1. Decide whether the change is compatible. Adding an optional field with `#[serde(default)]` whose default reproduces the old behaviour is compatible and keeps the version. Renaming, removing, changing type, unit or meaning is not.
 2. For an incompatible change: bump `WORLD_FILE_VERSION` to `N + 1` and add `migrate_vN_to_vN+1(&mut Value)` to `MIGRATIONS` in `persistence/migrate.rs` (the chain test checks that entry `i` upgrades version `i + 1`). A migration must not panic on unexpected input: use `take_field` and return `invalid(..)` for missing or mistyped fields, never `unwrap` or index. Remove the `expect(dead_code)` on `take_field` with the first real migration. Saving always writes the newest version.
 3. Add the new version's reference save to `persistence/tests/fixtures/` (written by the new build) with its checks in `FIXTURES` (`tests/reference_saves.rs`). Existing fixtures are never edited or regenerated; they must keep loading through the migration.
-4. Plan item I3 (species replace size classes) is the first planned migration: `size_idx` becomes a species, with σ chosen so the old equilibrium distance is kept.
+4. Example: v1 → v2 (#234, `migrate_v1_to_v2`) turned each ball's `size_idx` and each source sphere's `ball_size_idx` into the name of a built-in species (`species`, `ball_species`); the size class species keep the old equilibrium distances.
 
 ## Tests and checks
 - Round trip: save, load, compare (`world_survives_a_save_and_load`); add the new state to `busy_world()` in `tests/roundtrip.rs` so it is covered.

@@ -4,11 +4,23 @@ The simulation runs in reduced Lennard-Jones units with argon as the reference s
 
 ## Pair potential
 
-`U(r) = 4 ε ((σ/r)^12 − (σ/r)^6)`, with `r` the edge distance (centre distance minus both radii). Applied to the edge distance, this is a Kihara-type potential whose hard cores are the balls themselves: the edge distance is zero at centre distance `R_i + R_j`; it becomes plain Lennard-Jones on the centre distance with the species work (plan item I3).
+`U(r) = 4 ε_ij ((σ_ij/r)^12 − (σ_ij/r)^6)`, with `r` the centre distance. Each ball has a species with its own `σ`, `ε` and mass; a pair uses Lorentz–Berthelot mixing, `σ_ij = (σ_i + σ_j)/2` and `ε_ij = √(ε_i ε_j)` (`PairTable` in `pair_potential.rs`, #234).
 
-- σ is the zero crossing of `U`.
-- The minimum (equilibrium distance) is at `r_m = 2^(1/6) σ ≈ 1.1225 σ`.
-- The code (`core/src/objects2d/ball_impl/pair_potential.rs`) separates the law (`LennardJones`, a `PairLaw`) from the force cap below `r_cap` and the cutoff at `4 σ`, where `U` is shifted to zero (`CappedPotential`).
+- σ_ij is the zero crossing of `U`; the drawing radius of a ball (`display_radius`, default `σ/2`) has no effect on the physics.
+- The minimum (equilibrium distance) is at `r_m = 2^(1/6) σ_ij ≈ 1.1225 σ_ij`.
+- The code (`core/src/objects2d/ball_impl/pair_potential.rs`) separates the law (`LennardJones`, a `PairLaw`) from the force cap below `r_cap` and the cutoff at `4 σ_ij`, where `U` is shifted to zero (`CappedPotential`), one per species pair.
+- Walls reflect a ball at centre distance `σ_i / 2` (`WallLaw`, hard contact).
+
+### Built-in species
+
+| Species | σ* | ε* | m* | Note |
+|---|---|---|---|---|
+| N2 | 1 | 1 | 1 | default for new balls; the unit species |
+| XS, S, M, L, XL | `2·R·2^(-1/6) + 1` (1.27, 1.53, 2.07, 3.14, 5.28) | 1 | 1.0 … 6.16 | the former size classes of radius `R` = 0.15 … 2.4 |
+
+Before #234 the potential acted on the edge distance (centre distance minus both radii) with `σ = 1` for every ball. With `σ_i = 2·R_i·2^(-1/6) + 1` and arithmetic mixing, every pair of former size classes keeps its old equilibrium centre distance `R_i + R_j + 2^(1/6)`, so saves migrate (format v2). The shape of the potential still changes: the larger size classes are softer and reach further (cutoff `4 σ_ij`), and they stay `σ_i / 2` from walls instead of `R_i` (e.g. `M`: 1.03 instead of 0.6).
+
+The reduced units below still use argon for the SI display; `N2` here means only the unit species until the units move to N₂ (#236).
 
 ## Reduced units
 
@@ -51,7 +63,7 @@ Derivation: `F = −dU/dx = (ε/σ) F*` and `m a = m (σ/τ²) m* a*`. With `τ�
 
 For another species, convert its single-site LJ parameters with `σ* = σ/3.405 Å`, `ε* = (ε/k_B)/122 K` and `m* = m/39.948 u`. The values below are typical literature numbers, rounded. Check them against a cited source before relying on them.
 
-The code currently uses `σ* = ε* = m* = 1` for every ball. Species support is planned (see [refactoring-plan.md](plan/refactoring-plan.md), items I3 and I5).
+The built-in species are listed above; a species library and the N₂ unit system are planned (see [refactoring-plan.md](plan/refactoring-plan.md), items I5 and I6).
 
 | Species | σ [Å] | ε/k_B [K] | m [u] | σ* | ε* | m* | τ [ps] |
 |---|---|---|---|---|---|---|---|
