@@ -196,16 +196,6 @@ impl Ball2D {
         self.v.scaled(self.mass)
     }
 
-    #[cfg(test)] //Only used in tests
-    pub fn get_neighbour_names(&self, balls: &[Ball2D]) -> Vec<String> {
-        self.hood.get_neighbour_names(balls)
-    }
-
-    // pub fn get_neighbour_force_and_pos(&self) -> Vec<(Vec2D, f32)> {
-    //   self.hood
-    //       .get_neighbour_force_and_pos(&self.pos, self.radius)
-    // }
-
     pub(crate) fn accel_with_speed_limit(
         &mut self,
         total_force: &Vec2D,
@@ -358,6 +348,11 @@ impl Ball2D {
             self.tail = None;
         }
         self.pos = new_pos;
+    }
+
+    #[cfg(test)]
+    pub fn get_neighbour_names(&self, balls: &[Ball2D]) -> Vec<String> {
+        self.hood.get_neighbour_names(balls)
     }
 
     #[cfg(test)]

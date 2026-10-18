@@ -185,10 +185,6 @@ impl MainContent {
         let sig = f32::sqrt(f32::sqrt(sx2 / (n - 1.5) * sy2 / (n - 1.5)));
         Normal::new(0., f32::max(0.3, sig)).expect("Invalid distribution parameters")
     }
-    #[cfg(test)]
-    pub(crate) fn remove_invalid_balls(&mut self) {
-        self.world.remove_invalid_balls();
-    }
 
     pub(crate) fn stop_all_balls(&mut self) {
         for ball in &mut self.world.balls {
@@ -198,6 +194,11 @@ impl MainContent {
 
     pub(crate) fn next_ball_size(&mut self) {
         self.step_config.get_ball_factory().next_species();
+    }
+
+    #[cfg(test)]
+    pub(crate) fn remove_invalid_balls(&mut self) {
+        self.world.remove_invalid_balls();
     }
 }
 

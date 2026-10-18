@@ -60,12 +60,6 @@ impl BallFactory {
         self.new_ball_species.get()
     }
 
-    /// Make new balls of `species`.
-    #[cfg(test)]
-    pub(crate) fn set_new_ball_species(&self, species: SpeciesId) {
-        self.new_ball_species.set(species);
-    }
-
     /// Contact radius (`σ / 2`) of the species of new balls.
     pub(crate) fn get_new_ball_radius(&self) -> f32 {
         Self::table()
@@ -227,6 +221,12 @@ impl BallFactory {
     /// Get the next available ID without incrementing the counter
     pub fn peek_next_id(&self) -> usize {
         *self.next_id.borrow()
+    }
+
+    /// Make new balls of `species`.
+    #[cfg(test)]
+    pub(crate) fn set_new_ball_species(&self, species: SpeciesId) {
+        self.new_ball_species.set(species);
     }
 }
 
