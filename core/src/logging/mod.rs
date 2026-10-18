@@ -37,8 +37,8 @@ pub fn verbose_enabled() -> bool {
 
 use crate::objects2d::ball_impl::{Ball2D, Named};
 
-pub fn log_update_hood_start(ball: &Ball2D, cutoff: f32) {
-    log::debug!("update_hood: {:?} cutoff_and_skin: {}", ball, cutoff);
+pub fn log_update_hood_start(ball: &Ball2D, skin: f32) {
+    log::debug!("update_hood: {:?} skin: {}", ball, skin);
 }
 
 pub fn log_neighbour_add(ball: &Ball2D, cur_ref: &Ball2D, dist_sq: f32, dist_limit_sq: f32) {

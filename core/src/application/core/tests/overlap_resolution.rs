@@ -6,15 +6,21 @@
 
 use super::{DT_GOAL, create_main_content_for_region};
 use crate::application::MainContent;
-use crate::objects2d::ball_impl::{BallFactory, SpeciesId};
+use crate::objects2d::ball_impl::{BallFactory, SPECIES_M, SpeciesId};
 use crate::objects2d::{Rect, Vec2D};
 
-const SPECIES: SpeciesId = SpeciesId::new(2);
+const SPECIES: SpeciesId = SPECIES_M;
+/// Side of the crowded box: 22 balls at spacing 1.65 with every ball clear
+/// of the walls (`place_grid`).
+const BOX: f32 = 36.8;
 
-/// (overlapping pairs, deep pairs with centre distance below one radius,
-/// smallest centre distance)
+/// (overlapping pairs, deep pairs with centre distance below a quarter of
+/// their equilibrium distance, smallest centre distance). For `M` a quarter
+/// is 0.58, close to the size class radius 0.6 that "deep" meant before
+/// species.
 fn overlap_stats(main_content: &MainContent) -> (usize, usize, f32) {
-    let balls = &main_content.world().balls;
+    let world = main_content.world();
+    let balls = &world.balls;
     let mut overlapping = 0;
     let mut deep = 0;
     let mut min_centre_dist = f32::INFINITY;
@@ -22,10 +28,13 @@ fn overlap_stats(main_content: &MainContent) -> (usize, usize, f32) {
         for j in (i + 1)..balls.len() {
             let centre_dist = balls[i].get_position().dist(balls[j].get_position()).norm();
             min_centre_dist = min_centre_dist.min(centre_dist);
-            if centre_dist < balls[i].radius + balls[j].radius {
+            if centre_dist < balls[i].contact_radius + balls[j].contact_radius {
                 overlapping += 1;
             }
-            if centre_dist < balls[i].radius.min(balls[j].radius) {
+            let equilibrium = world
+                .physics
+                .equilibrium_distance(balls[i].species(), balls[j].species());
+            if centre_dist < 0.25 * equilibrium {
                 deep += 1;
             }
         }
@@ -53,15 +62,19 @@ fn run_steps(main_content: &mut MainContent, steps: usize) {
     }
 }
 
-/// `cols` x `rows` balls on a grid with the given spacing, starting one
-/// spacing inside the top-left corner, with small deterministic velocities.
+/// `cols` x `rows` balls on a grid with the given spacing, starting 0.6
+/// spacings (but at least the wall contact distance) inside the top-left
+/// corner, with small deterministic velocities. A ball placed within the
+/// contact distance would be pushed out by the box walls on the first step.
 fn place_grid(main_content: &mut MainContent, rect: &Rect, cols: usize, rows: usize, spacing: f32) {
     let factory = BallFactory::new();
+    let contact = main_content.world().physics.wall_contact_distance(SPECIES);
+    let offset = (0.6 * spacing).max(contact + 0.05);
     for i in 0..cols {
         for j in 0..rows {
             let pos = Vec2D::new(
-                rect.x + spacing * (i as f32 + 0.6),
-                rect.y - spacing * (j as f32 + 0.6),
+                rect.x + offset + spacing * i as f32,
+                rect.y - offset - spacing * j as f32,
             );
             let v = Vec2D::new(((i * 7 + j) as f32).sin(), ((i + 3 * j) as f32).cos());
             let ball = factory.create_with_species_and_velocity(pos, SPECIES, v);
@@ -77,7 +90,7 @@ fn test_deep_overlaps_in_a_crowded_box_separate() {
     // neighbours pinned such pairs in place.
     let (mut main_content, transform) = create_main_content_for_region(-10., 10.);
     let full = transform.world_bounds();
-    let rect = Rect::new(full.x, full.y, 36.6, -36.6);
+    let rect = Rect::new(full.x, full.y, BOX, -BOX);
     main_content.resize(rect);
     main_content.unpause_after_resize();
 
@@ -121,7 +134,7 @@ fn test_overlaps_after_shrinking_the_box_separate() {
     main_content.collect_neighbours_by_cell(DT_GOAL);
     run_steps(&mut main_content, 50);
 
-    let shrunk = Rect::new(full.x, full.y, 36.6, -36.6);
+    let shrunk = Rect::new(full.x, full.y, BOX, -BOX);
     main_content.resize(shrunk);
     main_content.unpause_after_resize();
 
@@ -148,7 +161,7 @@ fn total_energy(main_content: &MainContent) -> f32 {
             let centre_dist = ball.get_position().dist(other.get_position()).norm();
             energy += world
                 .physics
-                .potential(centre_dist - ball.radius - other.radius);
+                .potential(ball.species(), other.species(), centre_dist);
         }
     }
     energy
@@ -162,7 +175,7 @@ fn test_separating_overlaps_conserves_energy() {
     let (mut main_content, transform) = create_main_content_for_region(-10., 10.);
     main_content.world_mut().speed_limit_override = Some(f32::INFINITY);
     let full = transform.world_bounds();
-    let rect = Rect::new(full.x, full.y, 36.6, -36.6);
+    let rect = Rect::new(full.x, full.y, BOX, -BOX);
     main_content.resize(rect);
     main_content.unpause_after_resize();
 

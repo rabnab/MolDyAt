@@ -5,7 +5,7 @@
 use super::create_main_content;
 use crate::objects2d::Rect;
 use crate::objects2d::Vec2D;
-use crate::objects2d::ball_impl::Ball2D;
+use crate::objects2d::ball_impl::{Ball2D, SPECIES_M};
 
 #[test]
 //#[ignore] // TODO: Fix resize after removing renderer from MainContent
@@ -190,7 +190,7 @@ fn test_unpause_after_resize_leaves_every_ball_in_its_cell() {
     let (mut main_content, _win_def) = create_main_content();
     for i in 0..20 {
         let pos = Vec2D::new(-5.0 + (i % 5) as f32 * 18.0, 5.0 - (i / 5) as f32 * 18.0);
-        main_content.add_candidate_to_vec(Ball2D::new(i, pos, 1.0));
+        main_content.add_candidate_to_vec(Ball2D::new(i, pos, SPECIES_M));
     }
 
     main_content.resize(Rect::new(0., 0., 300.0, -200.0));
@@ -240,7 +240,7 @@ fn test_resize_remaps_ball_positions_fractionally() {
 
     // World from helper: Rect::new(-10, 10, 100, -100).
     // This point is exactly at 50%/50% in that world.
-    let ball = Ball2D::new(0, Vec2D::new(40.0, -40.0), 1.0);
+    let ball = Ball2D::new(0, Vec2D::new(40.0, -40.0), SPECIES_M);
     main_content.add_candidate_to_vec(ball);
 
     let new_world_rect = Rect::new(0.0, 0.0, 200.0, -200.0);

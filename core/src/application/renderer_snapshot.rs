@@ -241,11 +241,20 @@ pub struct BallRenderData {
     /// NOT ggez::Color to maintain framework independence
     pub color: [f32; 4],
 
-    /// Physics radius (edge distance = centre distance minus both radii)
-    pub radius: f32,
+    /// `σ / 2` of the species: two balls touch (zero pair potential) when
+    /// their centres are the sum of their contact radii apart
+    pub contact_radius: f32,
 
     /// Radius the renderer draws (must be positive and finite)
     pub display_radius: f32,
+
+    /// Half the equilibrium distance of a like pair, `2^(1/6)·σ / 2`: the
+    /// rings of two balls touch at their pair's potential minimum
+    pub equilibrium_radius: f32,
+
+    /// Half the cutoff of a like pair: the rings of two balls touch where
+    /// their pair stops interacting
+    pub cutoff_radius: f32,
 
     /// Whether to draw neighbor lines for this ball (verbose mode)
     pub show_neighbor_lines: bool,
@@ -302,6 +311,10 @@ pub struct RendererSnapshot {
     /// Species of new balls, for the cursor preview
     pub cursor_species: SpeciesId,
 
+    /// Equilibrium and cutoff ring radii of `cursor_species` (see
+    /// [`BallRenderData::equilibrium_radius`]), for the cursor preview
+    pub cursor_ring_radii: [f32; 2],
+
     /// Current gravity preset as a multiple of Earth gravity (0, 1, or 2).
     pub gravity_force_multiple: u8,
 
@@ -314,14 +327,6 @@ pub struct RendererSnapshot {
     /// Actual physics thread step rate (steps per second)
     /// This is the true simulation performance, independent of rendering
     pub physics_fps: f32,
-
-    /// Equilibrium edge distance from physics (2^(1/6) * lj_sig)
-    /// Used for drawing equilibrium circles around balls
-    pub equilibrium_edge_distance: f32,
-
-    /// Cutoff distance for LJ interactions from physics
-    /// Used for drawing cutoff circles around balls
-    pub cutoff_distance: f32,
 
     /// Per-cell temperature field (row-major flat grid, NaN for underpopulated cells).
     /// Empty grid (0×0) until at least one step of data is available.
@@ -354,6 +359,7 @@ impl RendererSnapshot {
             status_text: None,
             cell_grid_bounds: crate::objects2d::Rect::new(0.0, 0.0, 0.0, 0.0),
             cursor_species: DEFAULT_SPECIES,
+            cursor_ring_radii: DEFAULT_RING_RADII,
             gravity_force_multiple: 0,
             created_at: Instant::now(),
             grid_spec: CellGridSpec {
@@ -365,8 +371,6 @@ impl RendererSnapshot {
                 origin_y: 0.0,
             },
             physics_fps: 0.0,
-            equilibrium_edge_distance: 1.122_462, // Default: 2^(1/6) * 1.0
-            cutoff_distance: 4.0,
             cell_temperature: ThermoGrid::filled(0, 0, 0.0),
             cell_pressure: ThermoGrid::filled(0, 0, 0.0),
             thermo_grid_spec: None,
@@ -390,6 +394,7 @@ impl RendererSnapshot {
             status_text: None,
             cell_grid_bounds: crate::objects2d::Rect::new(0.0, 0.0, 0.0, 0.0),
             cursor_species: DEFAULT_SPECIES,
+            cursor_ring_radii: DEFAULT_RING_RADII,
             gravity_force_multiple: 0,
             created_at: Instant::now(),
             grid_spec: CellGridSpec {
@@ -401,8 +406,6 @@ impl RendererSnapshot {
                 origin_y: 0.0,
             },
             physics_fps: 0.0,
-            equilibrium_edge_distance: 1.122_462, // Default: 2^(1/6) * 1.0
-            cutoff_distance: 4.0,
             cell_temperature: ThermoGrid::filled(0, 0, 0.0),
             cell_pressure: ThermoGrid::filled(0, 0, 0.0),
             thermo_grid_spec: None,
@@ -434,6 +437,10 @@ impl Default for RendererSnapshot {
 
 /// Colour of a ball whose species is not in the species table (white).
 pub const UNKNOWN_SPECIES_COLOUR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
+
+/// Ring radii of `N2` with the default cutoff (`2^(1/6) / 2`, `4 / 2`), until
+/// the first snapshot of a world arrives.
+const DEFAULT_RING_RADII: [f32; 2] = [0.561_231, 2.0];
 
 /// Apply special coloring for verbose or braking balls
 /// Returns Some(color) if special coloring should override size class color

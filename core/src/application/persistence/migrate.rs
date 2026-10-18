@@ -28,6 +28,7 @@
 
 use super::format::{WORLD_FILE_VERSION, invalid};
 use crate::error::AppResult;
+use crate::objects2d::ball_impl::species::SIZE_CLASS_NAMES;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
@@ -40,9 +41,39 @@ pub(crate) struct Migration {
 }
 
 /// Every migration, oldest first. Entry `i` upgrades version `i + 1`, so the
-/// list has `WORLD_FILE_VERSION - 1` entries. Version 1 is the first format;
-/// there are no migrations yet.
-pub(crate) const MIGRATIONS: &[Migration] = &[];
+/// list has `WORLD_FILE_VERSION - 1` entries.
+pub(crate) const MIGRATIONS: &[Migration] = &[Migration {
+    from: 1,
+    apply: migrate_v1_to_v2,
+}];
+
+/// v1 → v2 (#234): size classes became species. A ball's `size_idx` becomes
+/// `species` with the name of the former size class (`XS` to `XL`), whose `σ`
+/// keeps every pair's old equilibrium distance; a source sphere's
+/// `ball_size_idx` becomes `ball_species` the same way.
+fn migrate_v1_to_v2(file: &mut Value) -> AppResult {
+    for (list, from, to) in [
+        ("balls", "size_idx", "species"),
+        ("source_spheres", "ball_size_idx", "ball_species"),
+    ] {
+        let entries = file
+            .get_mut(list)
+            .and_then(Value::as_array_mut)
+            .ok_or_else(|| invalid(format!("`{list}` must be a list")))?;
+        for entry in entries {
+            let size_idx = take_field(entry, from)?;
+            let name = size_idx
+                .as_u64()
+                .and_then(|i| SIZE_CLASS_NAMES.get(usize::try_from(i).ok()?))
+                .ok_or_else(|| invalid(format!("`{from}` {size_idx} is not a size class")))?;
+            entry
+                .as_object_mut()
+                .ok_or_else(|| invalid(format!("entries of `{list}` must be objects")))?
+                .insert(to.to_string(), Value::from(*name));
+        }
+    }
+    Ok(())
+}
 
 /// Parse a world file of any supported version into `T`, upgrading it first
 /// if it is older than [`WORLD_FILE_VERSION`].
@@ -100,13 +131,6 @@ pub(crate) fn upgrade_with(
 }
 
 /// Remove and return `key`, or a clean error if the file has no such field.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "for migrations; the first one comes with I3 (#234)"
-    )
-)]
 pub(crate) fn take_field(file: &mut Value, key: &str) -> AppResult<Value> {
     file.as_object_mut()
         .and_then(|object| object.remove(key))

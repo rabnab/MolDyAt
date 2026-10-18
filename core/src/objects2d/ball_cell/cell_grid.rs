@@ -20,6 +20,8 @@ pub struct CellGrid {
     sim_height: f32,
     /// Origin of the grid in world coordinates (top-left corner)
     grid_origin: (f32, f32), // (top-left x, top-left y)
+    /// Neighbour-list radius (centre distance) the cells were sized for.
+    list_radius: f32,
 }
 
 impl CellGrid {
@@ -34,17 +36,18 @@ impl CellGrid {
 }
 
 impl CellGrid {
-    /// Create a new CellGrid covering the specified world rectangle with cells sized based on the cutoff distance.
-    pub fn new(world_rect: Rect, cutoff_and_skin: f32, max_radius: f32) -> AppResult<Self> {
+    /// Create a new CellGrid covering the specified world rectangle with cells
+    /// at least `list_radius` wide: the largest centre distance at which two
+    /// balls are neighbours (pair cutoff plus skin).
+    pub fn new(world_rect: Rect, list_radius: f32) -> AppResult<Self> {
         let sim_width = world_rect.w;
         let sim_height = world_rect.h;
         let (top_left_x, top_left_y) = world_rect.get_tl();
 
-        // Cell size must be large enough to contain the interaction radius (cutoff + skin)
-        // plus the diameter of the largest ball (2 * max_radius) to ensure that
-        // checking 3x3 neighbors covers all potential interactions. Rounding the
-        // cell count down keeps every cell at least this large.
-        let cell_size = cutoff_and_skin + 2.0 * max_radius;
+        // Cells at least as wide as the list radius make the 3x3 cells around
+        // a ball cover every possible neighbour. Rounding the cell count down
+        // keeps every cell at least this large.
+        let cell_size = list_radius;
 
         let grid_width = ((sim_width.abs() / cell_size).floor() as usize).max(1);
         let grid_height = ((sim_height.abs() / cell_size).floor() as usize).max(1);
@@ -77,9 +80,15 @@ impl CellGrid {
             sim_width,
             sim_height,
             grid_origin: (top_left_x, top_left_y),
+            list_radius,
         };
 
         Ok(grid)
+    }
+
+    /// Neighbour-list radius the cells were sized for.
+    pub(crate) fn list_radius(&self) -> f32 {
+        self.list_radius
     }
 
     pub(crate) fn get_cell_size(&self) -> (f32, f32) {
@@ -243,6 +252,7 @@ impl Clone for CellGrid {
             sim_width: self.sim_width,
             sim_height: self.sim_height,
             grid_origin: self.grid_origin,
+            list_radius: self.list_radius,
         }
     }
 }

@@ -8,11 +8,11 @@ use crate::application::phase_timings::{Phase, PhaseClock};
 use crate::application::thermo_field::{THERMO_SAMPLE_STRIDE, compute_cell_thermo};
 use crate::application::{AppResult, log_util};
 use crate::logging::log_update_hood_start;
+use crate::objects2d::ball_impl::ForceResult;
 use crate::objects2d::ball_impl::ball_core::BounceInfo;
 use crate::objects2d::ball_impl::simd_forces::{KernelPoint, force_simd};
 use crate::objects2d::ball_impl::verlet::Verlet;
 use crate::objects2d::ball_impl::wall_contact::normal_velocity_after_contact;
-use crate::objects2d::ball_impl::{BallFactory, ForceResult};
 use crate::objects2d::{Rect, Vec2D};
 use rayon::prelude::*;
 
@@ -207,6 +207,9 @@ impl SimulationEngine {
     ///    changed partners. The result does not depend on that order (see
     ///    `Verlet::apply_rebuild`), so it equals a serial rebuild.
     fn update_neighbor_hoods_for_occupied_cells(world: &mut SimulationWorld, dt: f32) {
+        // Every ball is in the cell of its position now, so the grid can be
+        // rebuilt if a new species needs wider cells.
+        world.fit_cell_grid();
         world.with_scratch(
             |s| &mut s.rebuild,
             |world, scratch| Self::rebuild_neighbor_hoods(world, dt, scratch),
@@ -214,11 +217,9 @@ impl SimulationEngine {
     }
 
     fn rebuild_neighbor_hoods(world: &mut SimulationWorld, dt: f32, scratch: &mut RebuildScratch) {
-        let cutoff_and_skin =
-            world.physics.get_cutoff_distance() + world.physics.get_skin_thickness();
-        let max_radius = BallFactory::get_max_radius();
-        let min_movement = world.physics.get_min_movement_for_update_hood(max_radius)
-            * world.neighbor_movement_fault_scale();
+        let physics = &world.physics;
+        let min_movement =
+            physics.get_min_movement_for_update_hood() * world.neighbor_movement_fault_scale();
         let cell_grid = &world.cell_grid;
         let (grid_rows, grid_cols) = cell_grid.get_grid_size();
 
@@ -270,7 +271,7 @@ impl SimulationEngine {
         // Verbose balls are logged here, in ball order, not in the parallel pass.
         for &(ball_idx, _, _, _, verbose) in checked.iter().flatten() {
             if verbose {
-                log_update_hood_start(&world.balls[ball_idx], cutoff_and_skin);
+                log_update_hood_start(&world.balls[ball_idx], physics.get_skin_thickness());
             }
         }
         let to_rebuild = &mut scratch.to_rebuild;
@@ -290,12 +291,12 @@ impl SimulationEngine {
             .map_init(Vec::new, |candidates, &(ball_idx, row, col)| {
                 candidates.clear();
                 cell_grid.collect_ball_indices_into(row, col, candidates);
-                Verlet::rebuild(ball_idx, candidates, cutoff_and_skin, balls)
+                Verlet::rebuild(ball_idx, candidates, physics, balls)
             })
             .collect_into_vec(rebuilds);
 
         for rebuild in rebuilds.drain(..) {
-            Verlet::apply_rebuild(rebuild, cutoff_and_skin, &mut world.balls);
+            Verlet::apply_rebuild(rebuild, physics, &mut world.balls);
         }
     }
 
@@ -373,9 +374,11 @@ impl SimulationEngine {
                 // walls this step (the contact normals must stay orthogonal);
                 // if it ends inside one, the overlap pass handles it.
                 if !bounce_info.touched_box() {
+                    let contact = physics.wall_contact_distance(ball.species());
                     bounce_info.line_wall = SimulationWorld::sweep_wall_contact(
                         obstacles,
                         ball,
+                        contact,
                         start,
                         dt,
                         restitution,

@@ -3,11 +3,17 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::objects2d::Vec2D;
-use crate::objects2d::ball_impl::Ball2D;
 use crate::objects2d::ball_impl::verlet::Verlet;
+use crate::objects2d::ball_impl::{Ball2D, BallPhysics, DEFAULT_SPECIES};
 
+/// A ball of the default species (`N2`).
 fn make_ball(id: usize, pos: Vec2D) -> Ball2D {
-    Ball2D::new(id, pos, 1.0)
+    Ball2D::new(id, pos, DEFAULT_SPECIES)
+}
+
+/// Centre distance below which two default balls are listed: cutoff + skin.
+fn list_radius(physics: &BallPhysics) -> f32 {
+    physics.list_radius(DEFAULT_SPECIES, DEFAULT_SPECIES)
 }
 
 #[test]
@@ -48,7 +54,7 @@ fn test_needs_update_hood_thresholds() {
     // Simulate that the ball was just updated by resetting updates_since_refresh
     v.updates_since_refresh = 0;
 
-    let mut ball = Ball2D::new(1, Vec2D::zero(), 1.0);
+    let mut ball = Ball2D::new(1, Vec2D::zero(), DEFAULT_SPECIES);
     ball.last_update_hood_pos = Vec2D::new(0.0, 0.0);
     ball.v = Vec2D::new(1.0, 0.0);
     // With small dt and high threshold -> false
@@ -59,7 +65,7 @@ fn test_needs_update_hood_thresholds() {
 
 #[test]
 fn test_has_ball_moved_enough_true() {
-    let mut ball = Ball2D::new(1, Vec2D::zero(), 1.0);
+    let mut ball = Ball2D::new(1, Vec2D::zero(), DEFAULT_SPECIES);
     ball.last_update_hood_pos = Vec2D::new(0.0, 0.0);
     ball.v = Vec2D::new(3.0, 4.0); // velocity vector
 
@@ -75,7 +81,7 @@ fn test_has_ball_moved_enough_true() {
 
 #[test]
 fn test_has_ball_moved_enough_false() {
-    let mut ball = Ball2D::new(1, Vec2D::new(0.1, 0.1), 1.0);
+    let mut ball = Ball2D::new(1, Vec2D::new(0.1, 0.1), DEFAULT_SPECIES);
     ball.last_update_hood_pos = Vec2D::new(0.0, 0.0);
     ball.v = Vec2D::new(0.1, 0.1);
 
@@ -91,7 +97,7 @@ fn test_has_ball_moved_enough_false() {
 
 #[test]
 fn test_has_ball_moved_enough_edge_case() {
-    let mut ball = Ball2D::new(1, Vec2D::new(2., 0.), 1.0);
+    let mut ball = Ball2D::new(1, Vec2D::new(2., 0.), DEFAULT_SPECIES);
     ball.last_update_hood_pos = Vec2D::new(0.0, 0.0);
     ball.v = Vec2D::new(1.0, 0.0);
 
@@ -108,7 +114,7 @@ fn test_has_ball_moved_enough_edge_case() {
 
 #[test]
 fn test_has_ball_moved_enough_zero_threshold() {
-    let mut ball = Ball2D::new(1, Vec2D::zero(), 1.0);
+    let mut ball = Ball2D::new(1, Vec2D::zero(), DEFAULT_SPECIES);
     ball.last_update_hood_pos = Vec2D::new(0.0, 0.0);
     ball.v = Vec2D::new(0.0, 0.0);
 
@@ -198,25 +204,15 @@ fn test_num_neighbours_consistency_with_neighbours_vec() {
 
 #[test]
 fn test_update_hood_respects_effective_cutoff() {
-    // Test that update_hood only includes neighbors within cutoff_and_skin (Verlet radius)
-    use crate::objects2d::ball_impl::BallPhysics;
-
+    // Test that update_hood only includes neighbors within the list radius
+    // (cutoff + skin, centre distance)
     let physics = BallPhysics::default();
-    let cutoff = physics.get_cutoff_distance(); // 4.0
-    let skin_thickness = physics.get_skin_thickness(); // 2.0 * cutoff = 8.0
-    let cutoff_and_skin = cutoff + skin_thickness; // 12.0
+    let list_radius = list_radius(&physics);
 
     // Create three balls: one at origin, one within range, one beyond range
     let mut ball0 = make_ball(0, Vec2D::new(0.0, 0.0));
-
-    // Position balls at specific center-to-center distances
-    // Note: make_ball creates balls with radius 1.0, and distance check uses edge-to-edge distance
-    // Edge-to-edge distance = center_distance - 2*radius
-    // For edge distance to be within cutoff_and_skin: center_distance - 2.0 < cutoff_and_skin
-    // So: center_distance < cutoff_and_skin + 2.0
-    let ball_radius = 1.0;
-    let dist1 = cutoff_and_skin * 0.8 + 2.0 * ball_radius; // Edge within range
-    let dist2 = cutoff_and_skin * 1.2 + 2.0 * ball_radius; // Edge beyond range
+    let dist1 = list_radius * 0.8; // within range
+    let dist2 = list_radius * 1.2; // beyond range
     let mut ball1 = make_ball(1, Vec2D::new(dist1, 0.0));
     let mut ball2 = make_ball(2, Vec2D::new(dist2, 0.0));
 
@@ -230,34 +226,29 @@ fn test_update_hood_respects_effective_cutoff() {
     // All balls are candidates (simulate what cell grid provides)
     let candidates = vec![1, 2];
 
-    // Update hood for ball 0 using cutoff_and_skin as the Verlet radius
-    Verlet::update_hood(0, 0.01, &candidates, cutoff_and_skin, 0.1, &mut balls);
+    Verlet::update_hood(0, 0.01, &candidates, &physics, 0.1, &mut balls);
 
     // Ball 0 should have ball 1 as neighbor (within range) but not ball 2 (beyond range)
     let neighbors = &balls[0].hood.neighbours;
     assert!(
         neighbors.contains(&1),
-        "Ball 1 should be a neighbor (edge distance {} < cutoff_and_skin {})",
-        dist1 - 2.0 * ball_radius,
-        cutoff_and_skin
+        "Ball 1 should be a neighbor (distance {} < list radius {})",
+        dist1,
+        list_radius
     );
     assert!(
         !neighbors.contains(&2),
-        "Ball 2 should NOT be a neighbor (edge distance {} > cutoff_and_skin {})",
-        dist2 - 2.0 * ball_radius,
-        cutoff_and_skin
+        "Ball 2 should NOT be a neighbor (distance {} > list radius {})",
+        dist2,
+        list_radius
     );
 }
 
 #[test]
 fn test_update_hood_removes_distant_neighbors() {
-    // Test that neighbors moving beyond cutoff_and_skin are removed
-    use crate::objects2d::ball_impl::BallPhysics;
-
+    // Test that neighbors moving beyond the list radius are removed
     let physics = BallPhysics::default();
-    let cutoff = physics.get_cutoff_distance(); // 4.0
-    let skin_thickness = physics.get_skin_thickness(); // 8.0
-    let cutoff_and_skin = cutoff + skin_thickness; // 12.0
+    let list_radius = list_radius(&physics);
 
     // Create two balls initially close together
     let mut ball0 = make_ball(0, Vec2D::new(0.0, 0.0));
@@ -269,22 +260,21 @@ fn test_update_hood_removes_distant_neighbors() {
     let mut balls = vec![ball0, ball1];
 
     // Initial update - ball 1 should be a neighbor
-    Verlet::update_hood(0, 0.01, &[1], cutoff_and_skin, 0.1, &mut balls);
+    Verlet::update_hood(0, 0.01, &[1], &physics, 0.1, &mut balls);
     assert!(
         balls[0].hood.neighbours.contains(&1),
         "Ball 1 should initially be a neighbor"
     );
 
-    // Move ball 1 far away (beyond cutoff_and_skin + 2*radius for edge distance)
-    // Edge distance needs to exceed cutoff_and_skin, so center distance > cutoff_and_skin + 2*radius
-    balls[1].set_position_and_update_tail(Vec2D::new(cutoff_and_skin + 2.0 + 0.5, 0.0));
+    // Move ball 1 beyond the list radius
+    balls[1].set_position_and_update_tail(Vec2D::new(list_radius + 0.5, 0.0));
     balls[0].last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
 
     // Update again - ball 1 should be removed
-    Verlet::update_hood(0, 0.01, &[1], cutoff_and_skin, 0.1, &mut balls);
+    Verlet::update_hood(0, 0.01, &[1], &physics, 0.1, &mut balls);
     assert!(
         !balls[0].hood.neighbours.contains(&1),
-        "Ball 1 should be removed after moving beyond cutoff_and_skin"
+        "Ball 1 should be removed after moving beyond the list radius"
     );
 }
 
@@ -301,11 +291,7 @@ fn test_hood_dirty_flag_initialized_true() {
 #[test]
 fn test_hood_dirty_flag_set_when_neighbor_added() {
     // Test that hood_dirty is set to true when a neighbor is added
-    use crate::objects2d::ball_impl::BallPhysics;
-
     let physics = BallPhysics::default();
-    let cutoff = physics.get_cutoff_distance();
-    let cutoff_and_skin = cutoff + physics.get_skin_thickness();
 
     let mut ball0 = make_ball(0, Vec2D::new(0.0, 0.0));
     let mut ball1 = make_ball(1, Vec2D::new(1.0, 0.0));
@@ -320,7 +306,7 @@ fn test_hood_dirty_flag_set_when_neighbor_added() {
     assert!(balls[1].hood.hood_dirty);
 
     // Perform update_hood which adds a neighbor
-    Verlet::update_hood(0, 0.01, &[1], cutoff_and_skin, 0.1, &mut balls);
+    Verlet::update_hood(0, 0.01, &[1], &physics, 0.1, &mut balls);
 
     // After update, hood_dirty should still be true (marks as dirty when neighbors change)
     assert!(
@@ -336,11 +322,8 @@ fn test_hood_dirty_flag_set_when_neighbor_added() {
 #[test]
 fn test_hood_dirty_flag_set_when_neighbor_removed() {
     // Test that hood_dirty is set to true when a neighbor is removed
-    use crate::objects2d::ball_impl::BallPhysics;
-
     let physics = BallPhysics::default();
-    let cutoff = physics.get_cutoff_distance();
-    let cutoff_and_skin = cutoff + physics.get_skin_thickness();
+    let list_radius = list_radius(&physics);
 
     let mut ball0 = make_ball(0, Vec2D::new(0.0, 0.0));
     let mut ball1 = make_ball(1, Vec2D::new(1.0, 0.0));
@@ -351,7 +334,7 @@ fn test_hood_dirty_flag_set_when_neighbor_removed() {
     let mut balls = vec![ball0, ball1];
 
     // First, add a neighbor
-    Verlet::update_hood(0, 0.01, &[1], cutoff_and_skin, 0.1, &mut balls);
+    Verlet::update_hood(0, 0.01, &[1], &physics, 0.1, &mut balls);
     assert!(balls[0].hood.neighbours.contains(&1));
 
     // Simulate resetting hood_dirty to false (as would happen after stats computation)
@@ -359,11 +342,11 @@ fn test_hood_dirty_flag_set_when_neighbor_removed() {
     balls[1].hood.hood_dirty = false;
 
     // Move ball 1 far away and update
-    balls[1].set_position_and_update_tail(Vec2D::new(cutoff_and_skin + 2.0 + 0.5, 0.0));
+    balls[1].set_position_and_update_tail(Vec2D::new(list_radius + 0.5, 0.0));
     balls[0].last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
 
     // Perform update_hood which removes the neighbor
-    Verlet::update_hood(0, 0.01, &[1], cutoff_and_skin, 0.1, &mut balls);
+    Verlet::update_hood(0, 0.01, &[1], &physics, 0.1, &mut balls);
 
     // After removal, hood_dirty should be true again
     assert!(
@@ -441,12 +424,11 @@ fn test_add_neighbour_keeps_list_sorted() {
 
 #[test]
 fn test_update_hood_keeps_lists_sorted_and_symmetric() {
-    use crate::objects2d::ball_impl::BallPhysics;
-
-    let cutoff_and_skin = BallPhysics::default().get_cutoff_and_skin();
-    let far = Vec2D::new(cutoff_and_skin + 10.0, 0.0);
+    let physics = BallPhysics::default();
+    let list_radius = list_radius(&physics);
+    let far = Vec2D::new(list_radius + 10.0, 0.0);
     // Ball 4, the farthest, is still within range of ball 0.
-    let spacing = (cutoff_and_skin + 2.0) / 5.0;
+    let spacing = list_radius / 5.0;
     let mut balls: Vec<Ball2D> = (0..5)
         .map(|i| make_ball(i, Vec2D::new(i as f32 * spacing, 0.0)))
         .collect();
@@ -455,7 +437,7 @@ fn test_update_hood_keeps_lists_sorted_and_symmetric() {
     }
 
     // Candidates arrive in cell order, not index order.
-    Verlet::update_hood(0, 0.01, &[4, 2, 0, 1, 3], cutoff_and_skin, 0.1, &mut balls);
+    Verlet::update_hood(0, 0.01, &[4, 2, 0, 1, 3], &physics, 0.1, &mut balls);
     assert_eq!(balls[0].hood.neighbours, vec![1, 2, 3, 4]);
     for partner in &balls[1..] {
         assert_eq!(
@@ -470,7 +452,7 @@ fn test_update_hood_keeps_lists_sorted_and_symmetric() {
     // Ball 3 leaves: ball 0 drops it and ball 3 drops ball 0.
     balls[3].set_position_and_update_tail(far);
     balls[0].last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
-    Verlet::update_hood(0, 0.01, &[1, 0, 2, 4], cutoff_and_skin, 0.1, &mut balls);
+    Verlet::update_hood(0, 0.01, &[1, 0, 2, 4], &physics, 0.1, &mut balls);
     assert_eq!(balls[0].hood.neighbours, vec![1, 2, 4]);
     assert!(balls[3].hood.neighbours.is_empty());
     assert_eq!(balls[4].hood.neighbours, vec![0]);
@@ -507,9 +489,7 @@ fn test_parallel_style_rebuild_matches_serial_update_hood() {
     // The engine builds all lists first (reading only) and applies them
     // afterwards. That must give the same lists as rebuilding ball after
     // ball, in any order.
-    use crate::objects2d::ball_impl::BallPhysics;
-
-    let cutoff_and_skin = BallPhysics::default().get_cutoff_and_skin();
+    let physics = BallPhysics::default();
     let all: Vec<usize> = (0..48).collect();
     let mut serial = jittered_balls(0.0);
     let mut batched = jittered_balls(0.0);
@@ -520,7 +500,7 @@ fn test_parallel_style_rebuild_matches_serial_update_hood() {
         reposition(&mut batched, &target);
 
         for idx in all.iter().rev() {
-            Verlet::update_hood(*idx, 0.01, &all, cutoff_and_skin, 0.1, &mut serial);
+            Verlet::update_hood(*idx, 0.01, &all, &physics, 0.1, &mut serial);
         }
 
         let rebuild_now: Vec<usize> = all
@@ -530,10 +510,10 @@ fn test_parallel_style_rebuild_matches_serial_update_hood() {
             .collect();
         let rebuilds: Vec<_> = rebuild_now
             .iter()
-            .map(|&idx| Verlet::rebuild(idx, &all, cutoff_and_skin, &batched))
+            .map(|&idx| Verlet::rebuild(idx, &all, &physics, &batched))
             .collect();
         for rebuild in rebuilds {
-            Verlet::apply_rebuild(rebuild, cutoff_and_skin, &mut batched);
+            Verlet::apply_rebuild(rebuild, &physics, &mut batched);
         }
 
         for (s, b) in serial.iter().zip(&batched) {

@@ -337,7 +337,7 @@ mod tests {
         assert!(!affects_view);
         assert_eq!(
             state.render.current_species,
-            crate::objects2d::ball_impl::SpeciesId::new(3)
+            crate::objects2d::ball_impl::SpeciesId::new(1)
         );
         assert!(state.render.view_dirty);
     }

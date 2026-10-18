@@ -64,7 +64,7 @@ fn test_box_wall_and_line_wall_in_the_same_step() {
 
     let factory = BallFactory::new();
     let probe = factory.create_massive_with_velocity(Vec2D::zero(), Vec2D::zero());
-    let radius = probe.radius;
+    let radius = probe.contact_radius;
     let wall_surface_x = WALL_X - half_thickness - radius - WALL_CONTACT_MARGIN;
     let floor_y = -50.0 + radius;
     // 0.05 from both surfaces, moving 0.1 towards each within one step.

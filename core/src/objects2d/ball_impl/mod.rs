@@ -5,7 +5,9 @@
 pub use self::ball_factory::*;
 pub use self::ball_physics::*;
 // Re-export core components for external use
-pub use self::species::{DEFAULT_SPECIES, Species, SpeciesId, SpeciesTable};
+#[cfg(test)]
+pub(crate) use self::species::SPECIES_M;
+pub use self::species::{DEFAULT_SPECIES, Species, SpeciesId, SpeciesSet, SpeciesTable};
 pub use crate::objects2d::ball_impl::ball_core::Ball2D;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -16,9 +18,10 @@ mod ball_factory;
 pub mod ball_physics;
 pub mod pair_potential;
 pub mod simd_forces;
-mod species;
+pub(crate) mod species;
 pub mod verlet;
 pub mod wall_contact;
+pub mod wall_law;
 
 /// Neighbour-list rebuilds so far; rebuild checks run in parallel.
 static UPDATE_HOOD_CNT: AtomicUsize = AtomicUsize::new(0);

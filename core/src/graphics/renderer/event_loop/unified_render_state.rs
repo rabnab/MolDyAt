@@ -826,7 +826,7 @@ mod tests {
         let affects_view = state.process_action(InputAction::NextBallSize, None, None);
 
         assert!(!affects_view);
-        assert_eq!(state.render.current_species, SpeciesId::new(3));
+        assert_eq!(state.render.current_species, SpeciesId::new(1));
         assert!(state.render.view_dirty);
     }
 }

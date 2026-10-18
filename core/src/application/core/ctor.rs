@@ -9,7 +9,7 @@ use crate::application::scene_layers::SceneLayers;
 use crate::application::thermo_field::ThermoFieldHistory;
 use crate::graphics::renderer::{Margins, ViewportTransform};
 use crate::objects2d::Rect;
-use crate::objects2d::ball_impl::BallFactory;
+use crate::objects2d::ball_impl::SpeciesSet;
 use arc_swap::ArcSwapOption;
 use std::sync::Arc;
 
@@ -54,15 +54,13 @@ impl SimulationWorld {
     /// An empty world: no balls, no operators, default physics, not paused.
     pub(crate) fn new(world_rect: Rect) -> AppResult<Self> {
         let physics = BallPhysics::default();
-        let cell_grid = CellGrid::new(
-            world_rect,
-            physics.get_cutoff_and_skin(),
-            BallFactory::get_max_radius(),
-        )?;
+        let species_present = SpeciesSet::default();
+        let cell_grid = CellGrid::new(world_rect, physics.max_list_radius(species_present))?;
         Ok(Self {
             balls: Vec::new(),
             physics,
             cell_grid,
+            species_present,
             world_rect,
             sim: SimStats::default(),
             real_data: false,

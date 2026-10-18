@@ -9,7 +9,7 @@
 use crate::application::MainContent;
 use crate::application::operator_command::OperatorCommand;
 use crate::application::operator_command::line::SetGhostWall;
-use crate::objects2d::ball_impl::Ball2D;
+use crate::objects2d::ball_impl::{Ball2D, SPECIES_M};
 use crate::objects2d::line_segment::GhostWall;
 use crate::objects2d::{Rect, Vec2D};
 
@@ -27,7 +27,7 @@ fn ghost() -> GhostWall {
 }
 
 fn push_ball(mc: &mut MainContent, pos: Vec2D, v: Vec2D) {
-    let mut ball = Ball2D::new(1, pos, 1.0);
+    let mut ball = Ball2D::new(1, pos, SPECIES_M);
     ball.v = v;
     mc.world_mut().balls.push(ball);
 }
@@ -103,7 +103,10 @@ fn a_ball_under_a_new_wall_leaves_with_unchanged_velocity() {
     move_and_collide(&mut mc, 30, 0.02);
 
     let ball = &mc.world().balls[0];
-    assert!(ball.get_position().y < -(ball.radius + 0.5), "{ball:?}");
+    assert!(
+        ball.get_position().y < -(ball.contact_radius + 0.5),
+        "{ball:?}"
+    );
     assert_eq!(ball.v, Vec2D::new(0.5, -4.0));
     assert!(!ball.leaving_wall, "flag clears once the ball is free");
 }
@@ -146,7 +149,7 @@ fn a_fast_ball_whose_centre_tunnelled_into_a_wall_is_pushed_back() {
     let ball = &mc.world().balls[0];
     assert!(ball.v.y > 0.0, "reflected");
     assert!(
-        ball.get_position().y >= ball.radius + 0.5,
+        ball.get_position().y >= ball.contact_radius + 0.5,
         "pushed back out"
     );
 }

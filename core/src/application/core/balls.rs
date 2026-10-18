@@ -78,7 +78,7 @@ impl MainContent {
                 .step_config
                 .get_ball_factory()
                 .create_random((min_pos, max_pos), (0.0, max_speed));
-            let margin = self.world.physics.equilibrium_edge_distance();
+            let margin = self.world.equilibrium_gap(nu_ball.species());
             if self
                 .world
                 .add_candidate_ball_indexed(nu_ball, margin, &obstacles, &mut index)
@@ -129,11 +129,11 @@ impl MainContent {
                 "{}. Ball {} (r={:.2}) at ({:.2}, {:.2}) <-> Ball {} (r={:.2}) at ({:.2}, {:.2}) | distance: {:.4}",
                 idx + 1,
                 ball_i.get_name(),
-                ball_i.get_radius(),
+                ball_i.get_contact_radius(),
                 ball_i.get_position().x,
                 ball_i.get_position().y,
                 ball_j.get_name(),
-                ball_j.get_radius(),
+                ball_j.get_contact_radius(),
                 ball_j.get_position().x,
                 ball_j.get_position().y,
                 dist,
@@ -232,7 +232,7 @@ impl SimulationWorld {
     }
 
     pub(crate) fn is_ball_in_region(&self, pt: &Ball2D) -> bool {
-        let inner_margin = pt.radius;
+        let inner_margin = self.physics.wall_contact_distance(pt.species());
         let region = self.world_rect;
         let tl = region.get_tl();
         let world = Rect::new(
@@ -304,7 +304,8 @@ impl SimulationWorld {
                 "new ball colliding with existing ball".to_string(),
             ));
         }
-        if Self::overlaps_any_wall(obstacles, candidate.get_position(), candidate.get_radius()) {
+        let contact = self.physics.wall_contact_distance(candidate.species());
+        if Self::overlaps_any_wall(obstacles, candidate.get_position(), contact) {
             return Err(AppError::CustomError("overlaps with wall".to_string()));
         }
 
@@ -318,6 +319,10 @@ impl SimulationWorld {
 
     pub(crate) fn add_ball_and_register(&mut self, mut candidate: Ball2D) {
         candidate.accel.y -= self.physics.constants.gravity;
+        // A new species may need wider cells; the grid is refitted before the
+        // next neighbour rebuild (`fit_cell_grid`), when every ball is in its
+        // cell.
+        self.species_present.insert(candidate.species());
         let ball_idx = self.balls.len();
         self.balls.push(candidate);
         self.cell_grid.add_ball(ball_idx, &mut self.balls);
@@ -325,14 +330,40 @@ impl SimulationWorld {
 
     pub(crate) fn clear_balls(&mut self) {
         self.balls.clear();
-        self.cell_grid.clear_all_cells();
+        self.rebuild_cell_grid();
     }
 
+    /// Put every ball into the grid from scratch, with cells sized for the
+    /// species now in the world.
     pub(crate) fn rebuild_cell_grid(&mut self) {
+        self.species_present = self.balls.iter().map(Ball2D::species).collect();
+        let list_radius = self.physics.max_list_radius(self.species_present);
+        if list_radius != self.cell_grid.list_radius() {
+            self.cell_grid = CellGrid::new(self.world_rect, list_radius)
+                .expect("Failed to create cell grid for the species present");
+        }
         self.cell_grid.clear_all_cells();
         for i in 0..self.balls.len() {
             self.cell_grid.add_ball(i, &mut self.balls);
         }
+    }
+
+    /// Rebuild the grid if the species added since the last rebuild need
+    /// wider cells than it has, so the 3x3 cells around a ball still cover all
+    /// its neighbours. Call only while every ball is registered in the cell of
+    /// its position (not between a position update and the grid moves).
+    pub(crate) fn fit_cell_grid(&mut self) {
+        if self.physics.max_list_radius(self.species_present) > self.cell_grid.list_radius() {
+            self.rebuild_cell_grid();
+        }
+    }
+
+    /// Gap between the contact discs of two balls of `species` at their
+    /// potential minimum: the placement margin that seeds balls without
+    /// compressed pairs.
+    pub(crate) fn equilibrium_gap(&self, species: SpeciesId) -> f32 {
+        let contact = self.physics.wall_contact_distance(species);
+        self.physics.equilibrium_distance(species, species) - 2.0 * contact
     }
 
     pub(crate) fn move_ball_in_cell_grid(
@@ -345,14 +376,10 @@ impl SimulationWorld {
             .move_ball(ball_idx, &mut self.balls, old_pos, new_pos);
     }
 
-    pub(crate) fn resize_cell_grid(
-        &mut self,
-        world_rect: crate::objects2d::Rect,
-        cutoff_and_skin: f32,
-        max_radius: f32,
-    ) {
+    pub(crate) fn resize_cell_grid(&mut self, world_rect: crate::objects2d::Rect) {
         self.world_rect = world_rect;
-        self.cell_grid = CellGrid::new(self.world_rect, cutoff_and_skin, max_radius)
+        let list_radius = self.physics.max_list_radius(self.species_present);
+        self.cell_grid = CellGrid::new(self.world_rect, list_radius)
             .expect("Failed to create cell grid on resize");
         self.rebuild_cell_grid();
     }

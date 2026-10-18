@@ -21,7 +21,11 @@ const STEPS: usize = 1_000;
 /// (i + 1, j) moves -x, so a few pairs are driven into the force-cap region
 /// while the bulk gas stays cool enough not to reach the walls.
 const PROJECTILE_SLOTS: [usize; 3] = [4, 8, 11];
-const PROJECTILE_V: f32 = 2.0;
+/// Head-on at ±3.0 a pair brings ≈ 15.8·ε, enough to pass `U(r_cap) ≈ 14.5·ε`
+/// of the `M`–`M` pair (#234; the edge-distance core of the size classes
+/// started at ≈ 4.4·ε, which ±2.0 reached). ±3.5 hits the core harder and
+/// raised the energy drift to ~90 % of its threshold.
+const PROJECTILE_V: f32 = 3.0;
 
 // Thresholds: see docs/drift-test.md for the calibration process.
 const MAX_REL_ENERGY_DRIFT: f32 = 4.0e-3;
@@ -44,7 +48,7 @@ const DENSE_GAS_MAX_DT_QUARTER_RATIO: f32 = 0.125;
 /// Places `SIDE * SIDE` balls on a square grid around the world centre.
 /// Velocities are deterministic and the total momentum is removed.
 fn populate_central_grid(main_content: &mut MainContent, thermal_v: f32, projectiles: bool) {
-    let factory = BallFactory::new();
+    let factory = scenario_factory();
     let world_rect = main_content.world().world_region();
     let (tl_x, tl_y) = world_rect.get_tl();
     let (br_x, br_y) = world_rect.get_br();
@@ -99,7 +103,7 @@ fn min_wall_clearance(main_content: &MainContent) -> f32 {
             let p = b.get_position();
             let dx = (p.x - tl_x).min(br_x - p.x);
             let dy = (tl_y - p.y).min(p.y - br_y);
-            dx.min(dy) - b.radius
+            dx.min(dy) - b.contact_radius
         })
         .fold(f32::INFINITY, f32::min)
 }
@@ -224,7 +228,7 @@ fn run_dense_gas_timed(
     main_content.world_mut().speed_limit_override = Some(f32::INFINITY);
     main_content.world_mut().test_faults = faults;
     populate_central_grid(&mut main_content, THERMAL_V, projectiles);
-    let ball_radius = main_content.world().balls[0].radius;
+    let ball_radius = main_content.world().balls[0].contact_radius;
 
     let mut min_clearance = min_wall_clearance(&main_content);
     let metrics = run_drift_harness_with_observer(

@@ -299,7 +299,8 @@ impl SimulationWorld {
     /// being moved (which would add energy or land it on another ball).
     fn flag_balls_overlapping(&mut self, obstacle: &Obstacle) {
         for ball in &mut self.balls {
-            if obstacle.overlaps(ball.get_position(), ball.radius) {
+            let contact = self.physics.wall_contact_distance(ball.species());
+            if obstacle.overlaps(ball.get_position(), contact) {
                 ball.leaving_wall = true;
             }
         }
@@ -596,13 +597,15 @@ impl SimulationWorld {
     /// returned contact. Forces are then computed at the resolved position.
     ///
     /// `start` is the ball's position before this step's drift; the ball's
-    /// current position is the free (unreflected) end of the drift. A ball
+    /// current position is the free (unreflected) end of the drift. `contact`
+    /// is the ball's wall contact distance (`BallPhysics::wall_contact_distance`). A ball
     /// flagged `leaving_wall`, or one that starts the step inside a wall, is
     /// left to `resolve_line_segment_collisions`. Distance checks are added to
     /// `checks` (see `SimStats::wall_distance_checks`).
     pub(crate) fn sweep_wall_contact(
         obstacles: &[Obstacle],
         ball: &mut Ball2D,
+        contact: f32,
         start: Vec2D,
         dt: f32,
         restitution: f32,
@@ -615,7 +618,7 @@ impl SimulationWorld {
         let mut local_checks = 0;
         let mut first: Option<(f32, &Obstacle)> = None;
         for obstacle in obstacles {
-            if let Some(t) = obstacle.first_touch(&start, &end, ball.radius, &mut local_checks)
+            if let Some(t) = obstacle.first_touch(&start, &end, contact, &mut local_checks)
                 && first.is_none_or(|(best, _)| t < best)
             {
                 first = Some((t, obstacle));
@@ -712,9 +715,13 @@ impl SimulationWorld {
             }
             return (0.0, 0.0);
         }
+        let physics = &self.physics;
         self.balls
             .par_iter_mut()
-            .map(|ball| Self::resolve_ball_overlaps(obstacles, ball))
+            .map(|ball| {
+                let contact = physics.wall_contact_distance(ball.species());
+                Self::resolve_ball_overlaps(obstacles, ball, contact)
+            })
             .collect_into_vec(passes);
         let pass = passes
             .iter()
@@ -726,7 +733,12 @@ impl SimulationWorld {
     }
 
     /// Overlap pass for one ball against every obstacle, in list order.
-    fn resolve_ball_overlaps(obstacles: &[Obstacle], ball: &mut Ball2D) -> OverlapPass {
+    /// `contact` is the ball's wall contact distance.
+    fn resolve_ball_overlaps(
+        obstacles: &[Obstacle],
+        ball: &mut Ball2D,
+        contact: f32,
+    ) -> OverlapPass {
         let mut total_px = 0.0_f32;
         let mut total_py = 0.0_f32;
         let mut corrections = 0;
@@ -735,7 +747,7 @@ impl SimulationWorld {
         if ball.leaving_wall
             && !obstacles
                 .iter()
-                .any(|o| o.within_counted(ball.get_position(), o.reach(ball.radius), &mut checks))
+                .any(|o| o.within_counted(ball.get_position(), o.reach(contact), &mut checks))
         {
             ball.leaving_wall = false;
         }
@@ -750,7 +762,7 @@ impl SimulationWorld {
             // are rounded, matching what wall.wgsl draws.
             // Ball touches the wall surface when its centre is closer to the
             // centre line than this.
-            let reach = obstacle.reach(ball.radius);
+            let reach = obstacle.reach(contact);
             if !obstacle.within_counted(ball.get_position(), reach, &mut checks) {
                 continue; // no collision (cheap reject, no square root)
             }

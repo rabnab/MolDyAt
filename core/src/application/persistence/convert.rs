@@ -81,7 +81,7 @@ impl From<&Ball2D> for BallData {
     fn from(ball: &Ball2D) -> Self {
         Self {
             id: ball.get_id(),
-            size_idx: ball.species().index(),
+            species: species_name(ball.species()),
             pos: *ball.get_position(),
             v: ball.v,
             pre_update_pos: ball.pre_update_pos,
@@ -92,7 +92,7 @@ impl From<&Ball2D> for BallData {
 
 impl From<&BallData> for Ball2D {
     fn from(data: &BallData) -> Self {
-        let species = species_for_size_idx(data.size_idx);
+        let species = species_by_name(&data.species);
         let mut ball = BallFactory::restore(data.id, species, data.pos, data.v);
         ball.pre_update_pos = data.pre_update_pos;
         ball.accel = data.accel;
@@ -100,12 +100,16 @@ impl From<&BallData> for Ball2D {
     }
 }
 
-/// The species a file's `size_idx` stands for: size class `i` is built-in
-/// species `i`. `WorldFile::validate` has checked the index.
-fn species_for_size_idx(size_idx: usize) -> SpeciesId {
+/// The built-in species called `name`. `WorldFile::validate` has checked
+/// that it exists.
+fn species_by_name(name: &str) -> SpeciesId {
     SpeciesTable::builtin()
-        .id(size_idx)
-        .expect("validate() checks size_idx against the species table")
+        .by_name(name)
+        .expect("validate() checks species names against the species table")
+}
+
+fn species_name(id: SpeciesId) -> String {
+    SpeciesTable::builtin().species(id).name.clone()
 }
 
 fn operator_state(active: bool) -> OperatorState {
@@ -123,7 +127,7 @@ impl From<&SimSourceSphere> for SourceSphereData {
             center: sphere.center,
             active: sphere.state.is_on(),
             emit_period: sphere.emit_period,
-            ball_size_idx: sphere.ball_species.index(),
+            ball_species: species_name(sphere.ball_species),
             emission_speed: sphere.emission_speed,
         }
     }
@@ -134,7 +138,7 @@ impl From<&SourceSphereData> for SimSourceSphere {
         let mut sphere = SimSourceSphere::new(data.id, data.center);
         sphere.state = operator_state(data.active);
         sphere.emit_period = data.emit_period;
-        sphere.ball_species = species_for_size_idx(data.ball_size_idx);
+        sphere.ball_species = species_by_name(&data.ball_species);
         sphere.emission_speed = data.emission_speed;
         sphere
     }

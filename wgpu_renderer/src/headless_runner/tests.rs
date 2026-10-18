@@ -194,7 +194,9 @@ fn operators_application(config: &HeadlessConfig) -> MainContent {
     let sphere_id = operators.source_spheres[0].id;
     Box::new(ToggleThermostat { thermostat_id }).execute(&mut application);
     Box::new(ToggleSourceSphere { sphere_id }).execute(&mut application);
-    // Default period 3000 steps -> 20, default speed 0.05 -> 1.05.
+    // Default period 3000 steps -> 20, default speed 0.05 -> 3.0. At 3.0 an
+    // emitted ball moves 0.6 in one period, out of the way of the next one
+    // (emission needs a free spot at the sphere's perimeter).
     Box::new(AdjustSourceSphereEmitPeriod {
         sphere_id,
         delta_steps: -2980,
@@ -202,7 +204,7 @@ fn operators_application(config: &HeadlessConfig) -> MainContent {
     .execute(&mut application);
     Box::new(AdjustSourceSphereSpeed {
         sphere_id,
-        delta: 1.0,
+        delta: 2.95,
     })
     .execute(&mut application);
     application
@@ -365,7 +367,7 @@ fn test_seeded_headless_regression_fixture_matches_checked_in_jsonl() {
 /// Golden output of the operator scenario. The fixture's `run_start.config`
 /// only records the walls and the valve; the thermostat and the source
 /// sphere (positions, both switched on, emit period 20 steps, emission speed
-/// 1.05) show up as `operator_counts` only. See `operators_config` and
+/// 3.0) show up as `operator_counts` only. See `operators_config` and
 /// `operators_application` for the whole scenario.
 #[test]
 #[ignore = "suite:headless-regression"]
@@ -380,8 +382,11 @@ fn test_seeded_headless_operators_fixture_matches_checked_in_jsonl() {
 #[test]
 fn test_seeded_operators_run_does_not_depend_on_thread_count() {
     // Denser than the fixture run: more pairs interact, so a reduction whose
-    // order depends on the thread count shows up in the f32 bits.
-    const SEED_BALLS: u32 = 120;
+    // order depends on the thread count shows up in the f32 bits. Not much
+    // denser: from about 80 seeded balls of the small default species (`N2`)
+    // on, the gas keeps the source sphere's perimeter occupied and nothing
+    // is emitted.
+    const SEED_BALLS: u32 = 60;
     const STEPS: u32 = 300;
     let one = operators_run_state(1, SEED_BALLS, STEPS);
     let four = operators_run_state(4, SEED_BALLS, STEPS);
@@ -473,7 +478,7 @@ fn test_prepare_application_applies_dt_and_line_segments() {
     // Walls are placed before seeding, so no ball starts inside one.
     for ball in &snapshot.balls {
         for wall in walls {
-            let clearance = wall.distance_to_ball(&ball.position, ball.radius);
+            let clearance = wall.distance_to_ball(&ball.position, ball.contact_radius);
             assert!(
                 clearance >= 0.5 * wall.thickness,
                 "ball {} starts inside wall {}",

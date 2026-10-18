@@ -7,7 +7,6 @@ use crate::application::AppResult;
 use crate::application::phase_timings::PhaseTimings;
 use crate::application::sim_stats::{HIGH_GRAVITY, NORMAL_GRAVITY};
 use crate::objects2d::Rect;
-use crate::objects2d::ball_impl::BallFactory;
 use crate::objects2d::operator::{is_degenerate, remap_point};
 
 impl MainContent {
@@ -131,10 +130,7 @@ impl MainContent {
         }
 
         // Rebuild cell grid with new dimensions
-        let cutoff_and_skin =
-            world.physics.get_cutoff_distance() + world.physics.get_skin_thickness();
-        let max_radius = BallFactory::get_max_radius();
-        world.resize_cell_grid(world_rect, cutoff_and_skin, max_radius);
+        world.resize_cell_grid(world_rect);
 
         // Discard stale thermo history — accumulated grids used the old
         // world rect and would produce incorrect cell-to-world mapping.

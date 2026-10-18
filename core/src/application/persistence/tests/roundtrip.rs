@@ -27,8 +27,7 @@ fn busy_world() -> MainContent {
     mc.world_mut().physics.constants.gravity = 0.5;
 
     for (i, x) in [-6.0, -2.0, 2.0, 6.0].into_iter().enumerate() {
-        let mut ball = Ball2D::new(10 + i, Vec2D::new(x, 0.0), 1.0);
-        ball.species = SpeciesId::new((i % 3) as u16);
+        let mut ball = Ball2D::new(10 + i, Vec2D::new(x, 0.0), SpeciesId::new((i % 3) as u16));
         ball.v = Vec2D::new(0.1 * i as f32, -0.2);
         ball.accel = Vec2D::new(0.01, -0.5);
         ball.pre_update_pos = Vec2D::new(x - 0.01, 0.01);
@@ -129,7 +128,7 @@ fn ids_continue_after_the_restored_ones() {
 fn invalid_file_leaves_the_running_world_untouched() {
     let store = SaveStore::new(scratch_dir("invalid"));
     let mut file = capture(&busy_world());
-    let duplicate = file.balls[0];
+    let duplicate = file.balls[0].clone();
     file.balls.push(duplicate);
     fs::create_dir_all(store.dir()).unwrap();
     let path = store.dir().join("world_invalid.json");

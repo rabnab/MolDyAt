@@ -27,10 +27,12 @@ const RING_DISPLAY_MODES: u32 = 3;
 pub struct GpuBallData {
     /// Center position in world coordinates (x, y)
     pub position: [f32; 2],
-    /// Ball radius in world units
+    /// Drawn ball radius in world units
     pub radius: f32,
     /// Packed RGBA color as u32 (0xAABBGGRR format, little-endian)
     pub color: u32,
+    /// Equilibrium and cutoff ring radii in world units
+    pub rings: [f32; 2],
 }
 
 impl GpuBallData {
@@ -40,12 +42,13 @@ impl GpuBallData {
             position: [data.position.x, data.position.y],
             radius: data.display_radius,
             color: pack_color(data.color),
+            rings: [data.equilibrium_radius, data.cutoff_radius],
         }
     }
 }
 
-const BALL_ATTRS: [wgpu::VertexAttribute; 3] =
-    wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32, 2 => Uint32];
+const BALL_ATTRS: [wgpu::VertexAttribute; 4] =
+    wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32, 2 => Uint32, 3 => Float32x2];
 
 /// Pack RGBA [0.0-1.0] color into u32 (0xAABBGGRR format, little-endian).
 fn pack_color(color: [f32; 4]) -> u32 {
@@ -96,12 +99,7 @@ impl RenderPipeline for BallPipeline {
     }
 
     fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
-        let params = [
-            ctx.snapshot.equilibrium_edge_distance,
-            ctx.snapshot.cutoff_distance,
-            self.ring_display_mode as f32,
-            0.0,
-        ];
+        let params = [0.0, 0.0, self.ring_display_mode as f32, 0.0];
         self.gpu
             .set_uniforms(ctx.queue, SceneUniforms::new(ctx.view_proj, params));
 
@@ -134,8 +132,8 @@ mod tests {
 
     #[test]
     fn test_gpu_ball_data_size() {
-        // position: vec2<f32> = 8, radius: f32 = 4, color: u32 = 4
-        assert_eq!(std::mem::size_of::<GpuBallData>(), 16);
+        // position: vec2<f32> = 8, radius: f32 = 4, color: u32 = 4, rings: vec2<f32> = 8
+        assert_eq!(std::mem::size_of::<GpuBallData>(), 24);
     }
 
     #[test]

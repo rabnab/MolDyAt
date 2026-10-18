@@ -11,7 +11,7 @@ use crate::application::scene_layers::SceneLayers;
 use crate::application::sim_stats::NORMAL_GRAVITY;
 use crate::application::thermo_field::ThermoGrid;
 use crate::objects2d::SimThermostat;
-use crate::objects2d::ball_impl::SpeciesTable;
+use crate::objects2d::ball_impl::{BallPhysics, SpeciesId, SpeciesTable};
 use std::sync::Arc;
 
 impl MainContent {
@@ -37,6 +37,10 @@ impl MainContent {
             status_text: self.status_text(0, self.step_config.get_time_step()), // FPS not available during snapshot creation
             cell_grid_bounds: self.world.cell_grid.world_rect(),
             cursor_species: self.step_config.get_ball_factory().new_ball_species(),
+            cursor_ring_radii: ring_radii(
+                &self.world.physics,
+                self.step_config.get_ball_factory().new_ball_species(),
+            ),
             gravity_force_multiple: current_gravity_force_multiple(
                 self.world.physics.constants.gravity,
             ),
@@ -57,8 +61,6 @@ impl MainContent {
                 }
             },
             physics_fps: self.runtime.physics_fps(),
-            equilibrium_edge_distance: self.world.physics.equilibrium_edge_distance(),
-            cutoff_distance: self.world.physics.get_cutoff_distance(),
             operators: OperatorSnapshot {
                 line_segments: self.world.line_segments.segments().to_vec(),
                 walls: self
@@ -102,10 +104,21 @@ impl MainContent {
         let ball_count = self.world.balls.len();
         let mut balls = Vec::with_capacity(ball_count);
         let species_table = SpeciesTable::builtin();
+        let physics = &self.world.physics;
+        // Ring radii per species: half the like pair's equilibrium distance
+        // and cutoff.
+        let rings: Vec<[f32; 2]> = species_table
+            .ids()
+            .map(|s| ring_radii(physics, s))
+            .collect();
 
         // Create BallRenderData for each ball
         for (ball_idx, ball) in self.world.balls.iter().enumerate() {
             let species = species_table.get(ball.species());
+            let [equilibrium_radius, cutoff_radius] = rings
+                .get(ball.species().index())
+                .copied()
+                .unwrap_or_default();
             // Special colors (verbose/braking) override the species colour
             let color = get_special_ball_color(
                 ball.verbose.console || ball.verbose.lines(),
@@ -141,8 +154,10 @@ impl MainContent {
                 velocity: *ball.get_velocity(),
                 mass: ball.get_mass(),
                 color,
-                radius: ball.get_radius(),
-                display_radius: species.map_or(ball.get_radius(), |s| s.display_radius),
+                contact_radius: ball.get_contact_radius(),
+                display_radius: species.map_or(ball.get_contact_radius(), |s| s.display_radius),
+                equilibrium_radius,
+                cutoff_radius,
                 show_neighbor_lines,
                 show_main_neighbors_only,
                 neighbors,
@@ -217,4 +232,13 @@ impl MainContent {
 
 fn current_gravity_force_multiple(gravity: f32) -> u8 {
     (gravity / NORMAL_GRAVITY).round() as u8
+}
+
+/// Equilibrium and cutoff ring radii of `species`: half the like pair's
+/// equilibrium distance and cutoff, so the rings of two balls touch there.
+fn ring_radii(physics: &BallPhysics, species: SpeciesId) -> [f32; 2] {
+    [
+        0.5 * physics.equilibrium_distance(species, species),
+        0.5 * physics.cutoff(species, species),
+    ]
 }

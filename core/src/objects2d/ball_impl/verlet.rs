@@ -171,18 +171,18 @@ impl Verlet {
         ball_idx: usize,
         dt: f32,
         candidates: &[usize],
-        cutoff_and_skin: f32,
+        physics: &BallPhysics,
         min_movement_threshold: f32,
         balls: &mut [Ball2D],
     ) {
         if balls[ball_idx].verbose.console {
-            logging::log_update_hood_start(&balls[ball_idx], cutoff_and_skin);
+            logging::log_update_hood_start(&balls[ball_idx], physics.get_skin_thickness());
         }
         if !Self::begin_update(&mut balls[ball_idx], dt, min_movement_threshold) {
             return;
         }
-        let rebuild = Self::rebuild(ball_idx, candidates, cutoff_and_skin, balls);
-        Self::apply_rebuild(rebuild, cutoff_and_skin, balls);
+        let rebuild = Self::rebuild(ball_idx, candidates, physics, balls);
+        Self::apply_rebuild(rebuild, physics, balls);
     }
 
     /// Per-step bookkeeping for one ball. Returns whether its list must be
@@ -210,11 +210,12 @@ impl Verlet {
     ///
     /// # Arguments
     /// * `candidates` - Balls in the 3x3 cells around the ball's cell
-    /// * `cutoff_and_skin` - Verlet radius, compared with the edge-to-edge distance
+    /// * `physics` - Gives each pair's list radius (cutoff + skin), compared
+    ///   with the centre distance
     pub(crate) fn rebuild(
         ball_idx: usize,
         candidates: &[usize],
-        cutoff_and_skin: f32,
+        physics: &BallPhysics,
         balls: &[Ball2D],
     ) -> HoodRebuild {
         // The new list holds the candidates from the 3x3 cells within range.
@@ -222,12 +223,15 @@ impl Verlet {
         // duplicates, and the cell size guarantees that every ball in range is
         // among them (see `CellGrid::new`).
         let ball = &balls[ball_idx];
+        let species = ball.species();
         let mut neighbours: Vec<usize> = candidates
             .iter()
             .copied()
             .filter(|&neighbour_idx| {
+                let other = &balls[neighbour_idx];
+                let radius = physics.list_radius(species, other.species());
                 neighbour_idx != ball_idx
-                    && BallPhysics::distance_of_edges(ball, &balls[neighbour_idx]) < cutoff_and_skin
+                    && ball.get_position().dist(other.get_position()).norm_sq() < radius * radius
             })
             .collect();
         neighbours.sort_unstable();
@@ -260,7 +264,7 @@ impl Verlet {
     /// exactly when this ball holds the partner, and both sides compute the
     /// same distance), so applying the rebuilds of one pass in any order gives
     /// the same lists.
-    pub(crate) fn apply_rebuild(rebuild: HoodRebuild, cutoff_and_skin: f32, balls: &mut [Ball2D]) {
+    pub(crate) fn apply_rebuild(rebuild: HoodRebuild, physics: &BallPhysics, balls: &mut [Ball2D]) {
         let HoodRebuild {
             ball_idx,
             neighbours,
@@ -273,13 +277,9 @@ impl Verlet {
         for neighbour_idx in added {
             let (ball, partner) = (&balls[ball_idx], &balls[neighbour_idx]);
             if ball.verbose.console || partner.verbose.console {
-                let dist = BallPhysics::distance_of_edges(ball, partner);
-                logging::log_neighbour_add(
-                    ball,
-                    partner,
-                    dist * dist,
-                    cutoff_and_skin * cutoff_and_skin,
-                );
+                let dist_sq = ball.get_position().dist(partner.get_position()).norm_sq();
+                let radius = physics.list_radius(ball.species(), partner.species());
+                logging::log_neighbour_add(ball, partner, dist_sq, radius * radius);
             }
             let partner_hood = &mut balls[neighbour_idx].hood;
             partner_hood.add_neighbour(ball_idx);

@@ -45,7 +45,7 @@ fn dropped_ball(on_wall: bool, height: f32) -> (MainContent, f32) {
     main_content.world_mut().physics.constants.gravity = GRAVITY;
     let factory = BallFactory::new();
     let probe = factory.create_massive_with_velocity(Vec2D::zero(), Vec2D::zero());
-    let radius = probe.radius;
+    let radius = probe.contact_radius;
 
     let surface_y = if on_wall {
         main_content.add_line_segment(Vec2D::new(-30.0, WALL_Y), Vec2D::new(30.0, WALL_Y));
@@ -84,7 +84,7 @@ fn mechanical_energy_floor(main_content: &MainContent) -> f32 {
     world
         .balls
         .iter()
-        .map(|b| b.mass * gravity * (y0.min(y1) + b.radius))
+        .map(|b| b.mass * gravity * (y0.min(y1) + b.contact_radius))
         .sum()
 }
 
@@ -198,7 +198,7 @@ fn test_ball_sliding_across_wall_joints_is_not_deflected() {
         Vec2D::zero(),
     );
     assert_eq!(main_content.world().valve_segments.valves().len(), 1);
-    let radius = main_content.world().balls[0].radius;
+    let radius = main_content.world().balls[0].contact_radius;
     let half_thickness = 0.5 * main_content.world().line_segments.segments()[0].thickness;
     let surface_y = WALL_Y + half_thickness + radius + WALL_CONTACT_MARGIN;
     const START_X: f32 = -20.0;

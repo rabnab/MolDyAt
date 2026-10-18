@@ -235,10 +235,10 @@ impl Default for SimStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::objects2d::ball_impl::Ball2D;
+    use crate::objects2d::ball_impl::{Ball2D, DEFAULT_SPECIES};
 
     fn make_ball(id: usize, velocity: Vec2D) -> Ball2D {
-        let mut ball = Ball2D::new(id, Vec2D::zero(), 1.0);
+        let mut ball = Ball2D::new(id, Vec2D::zero(), DEFAULT_SPECIES);
         ball.v = velocity;
         ball
     }

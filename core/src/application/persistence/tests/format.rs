@@ -32,16 +32,16 @@ fn rejects_unsupported_version() {
 #[test]
 fn rejects_duplicate_ball_ids() {
     let mut file = sample_file();
-    let ball: BallData = file.balls[0];
+    let ball: BallData = file.balls[0].clone();
     file.balls.push(ball);
     assert!(error_text(&file).contains("duplicate ball id"));
 }
 
 #[test]
-fn rejects_out_of_range_size_idx() {
+fn rejects_unknown_species() {
     let mut file = sample_file();
-    file.balls[0].size_idx = 99;
-    assert!(error_text(&file).contains("size_idx"));
+    file.balls[0].species = "Unobtainium".to_string();
+    assert!(error_text(&file).contains("unknown species"));
 }
 
 #[test]
@@ -89,7 +89,7 @@ fn sample_sphere() -> SourceSphereData {
         center: Vec2D::zero(),
         active: true,
         emit_period: 3000,
-        ball_size_idx: 2,
+        ball_species: "M".to_string(),
         emission_speed: 0.05,
     }
 }
