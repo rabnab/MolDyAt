@@ -53,7 +53,8 @@ FrameRenderer → RenderGraph → GPU
 |---|---|---|---|
 | Command boundary | `DomainCommand` | `core/src/application/domain_command.rs` | Every change the UI asks of the simulation |
 | Physics runtime | `PhysicsRuntime`, `DomainCommandHandler` | `core/src/application/physics_thread/` | The thread loop: draining commands, sleep cadence, snapshot cadence, wakeups, shutdown, steps/s reporting |
-| Physics-thread owner | `MainContent` | `core/src/application/core/mod.rs` | The world plus `StepConfig` (time step, ball factory) and `PhysicsRuntimeState` (wait time, snapshot slot, physics FPS, save store, world generation, requested snapshot layers) |
+| Physics-thread owner | `MainContent` | `core/src/application/core/mod.rs` | The world plus `StepConfig` (time step, ball factory) and `PhysicsRuntimeState` (wait time, snapshot slot, snapshot interval, physics FPS, save store, world generation, requested snapshot layers) |
+| Run settings | `SimConfig` | `core/src/application/sim_config.rs` | Time step, speed limit, force cap and cutoff, Verlet skin, snapshot interval; built from defaults, a `--config` TOML file and CLI flags, stored in saves (see below) |
 | World state | `SimulationWorld` | `core/src/application/core/mod.rs` | Balls, `BallPhysics` constants, cell grid, stats, operator collections (line segments, valves, wall chains, source spheres, thermostats), the ghost wall, thermo field history, and a few run flags (step-by-step, timing and stats display, real-units display) |
 | Stepping | `SimulationEngine` | `core/src/application/core/simulation_engine.rs` | One simulation step over a `SimulationWorld` (see below); holds no state |
 | Operator mutations | `OperatorCommand` structs | `core/src/application/operator_command/` | Placing, changing and deleting operators |
@@ -178,11 +179,33 @@ Every visual layer is one `RenderPipeline` in
 
 `core/src/application/persistence/` saves and loads the whole world
 (Ctrl+S / Ctrl+O, or `--load` on the command line). A `WorldFile` holds a
-format version, the world rectangle, time step, gravity, every ball, and all
-operators including wall chains. Loading replaces the world, increments the
+format version, the world rectangle, time step, gravity, the simulation
+config, every ball, and all operators including wall chains. Loading replaces the world, increments the
 world generation (the step count starts again, so the renderer can tell the
 new world's snapshots apart), and
 sends `WorldLoaded` so the window can resize to fit the loaded world.
+
+### Simulation config
+
+`SimConfig` gathers the run settings that are not part of the world: the time
+step and speed limit factor (`[integration]`), the force cap and cutoff of the
+pair potential (`[potential]`, turned into `CapSettings`), the Verlet skin
+factor (`[neighbours]`) and the snapshot interval of the physics thread
+(`[display]`). Its defaults are the values the code used before it existed.
+`MainContent::with_config` builds the world from it: `BallPhysics` takes the
+cap settings and skin factor, `SimulationWorld` the speed limit factor,
+`StepConfig` the time step and `PhysicsRuntimeState` the snapshot interval.
+`MainContent::config()` reads them back, with the current time step, so it is
+always the config the simulation runs with.
+
+`main` reads the config once: the defaults, or the TOML file given with
+`--config` (missing keys keep their default, unknown keys are an error), and
+headless `--dt` overrides its time step. A save stores the config in
+`WorldFile::config`; loading builds the new world from it, so a loaded world
+runs as it did when it was saved. `config` is a defaulted field (see below):
+saves written before it existed load with the defaults. The top-level
+`time_step` stays the time step of the file, and a saved config must agree
+with it.
 
 ### Format versions and migrations
 

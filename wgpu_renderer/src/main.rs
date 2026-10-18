@@ -10,8 +10,8 @@ mod headless_timings;
 mod wgpu;
 
 use crate::wgpu::{DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH, MARGINS};
-use moldyat_core::application::MainContent;
 use moldyat_core::application::persistence::{LoadSource, SaveStore};
+use moldyat_core::application::{MainContent, SimConfig};
 
 /// Initialize Rayon thread pool for parallel physics computations.
 ///
@@ -58,7 +58,7 @@ fn print_diagnostics() {
     init_rayon();
 }
 
-fn run_wgpu_renderer(common: cli::CommonArgs) {
+fn run_wgpu_renderer(common: cli::CommonArgs, sim_config: &SimConfig) {
     use wgpu::WgpuWindow;
 
     log::info!("Renderer: wgpu");
@@ -70,7 +70,8 @@ fn run_wgpu_renderer(common: cli::CommonArgs) {
     );
 
     let store = SaveStore::new(&common.save_dir);
-    let mut application = MainContent::new(world_rect).expect("Failed to create MainContent");
+    let mut application = MainContent::with_config(world_rect, sim_config, None)
+        .expect("Failed to create MainContent");
     if let Some(path) = common.load {
         // Same entry point as Ctrl+O; the window then shows the loaded world.
         match application.load_world(&store, &LoadSource::Path(path.clone()), true) {
@@ -90,6 +91,7 @@ fn run_wgpu_renderer(common: cli::CommonArgs) {
 fn run_headless_renderer(
     config: headless_cli::HeadlessConfig,
     common: cli::CommonArgs,
+    sim_config: &SimConfig,
 ) -> std::io::Result<()> {
     log::info!("Renderer: headless");
 
@@ -104,7 +106,7 @@ fn run_headless_renderer(
     };
     let store = SaveStore::new(&common.save_dir);
     let application =
-        headless_runner::prepare_application(&config, world_rect, &store, common.load)?;
+        headless_runner::prepare_application(&config, sim_config, world_rect, &store, common.load)?;
     if config.save_setup {
         let path = application
             .save_world(&store)
@@ -136,11 +138,15 @@ fn main() {
         return;
     }
     let (common, args) = cli::split_common_args(&args).unwrap_or_else(|e| usage_error(&e));
+    let sim_config = common.sim_config().unwrap_or_else(|e| {
+        eprintln!("{e}");
+        std::process::exit(1);
+    });
     match headless_cli::parse_headless_args(&args) {
         Ok(Some(config)) => {
             print_diagnostics();
             log::info!("Running in headless mode");
-            if let Err(error) = run_headless_renderer(config, common) {
+            if let Err(error) = run_headless_renderer(config, common, &sim_config) {
                 eprintln!("headless renderer failed: {error}");
                 std::process::exit(1);
             }
@@ -148,7 +154,7 @@ fn main() {
         Ok(None) => {
             cli::reject_window_args(&args).unwrap_or_else(|e| usage_error(&e));
             print_diagnostics();
-            run_wgpu_renderer(common);
+            run_wgpu_renderer(common, &sim_config);
         }
         Err(e) => usage_error(&e),
     }

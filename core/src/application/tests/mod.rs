@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 mod physics_thread;
+mod sim_config;
 mod thermo_field;
 
 use crate::application::renderer_snapshot::RendererSnapshot;

@@ -12,6 +12,7 @@ mod physics_event;
 mod physics_thread;
 pub mod renderer_snapshot;
 pub mod scene_layers;
+pub mod sim_config;
 mod sim_stats;
 mod step_config;
 pub mod thermo_field;
@@ -23,6 +24,7 @@ pub use core::{MainContent, valve_span_problem};
 pub use domain_command::{BallCommand, DomainCommand, SimControl, ViewCommand, WorldCommand};
 pub use physics_event::PhysicsEvent;
 pub(crate) use physics_thread::PhysicsThread;
+pub use sim_config::SimConfig;
 pub(crate) use step_config::StepConfig;
 
 #[cfg(test)]

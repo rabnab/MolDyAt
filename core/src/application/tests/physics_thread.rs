@@ -37,7 +37,7 @@ impl<T> CommandHandler<T> for RecordingHandler<T> {
 /// Drains `commands` into `main_content` as the physics thread would and
 /// returns how many resizes were applied.
 fn drain_into(main_content: &mut MainContent, commands: Vec<DomainCommand>) -> u32 {
-    let runtime = PhysicsRuntime::default();
+    let runtime = PhysicsRuntime;
     let (sender, receiver) = std::sync::mpsc::channel();
     let (events, _event_receiver) = std::sync::mpsc::channel();
     for command in commands {
@@ -214,7 +214,7 @@ fn test_command_channel_speed_control() {
 
 #[test]
 fn test_runtime_drains_all_available_commands() {
-    let runtime = PhysicsRuntime::default();
+    let runtime = PhysicsRuntime;
     let (sender, receiver) = std::sync::mpsc::channel();
     let mut handler = RecordingHandler::new();
 
@@ -229,7 +229,7 @@ fn test_runtime_drains_all_available_commands() {
 
 #[test]
 fn test_runtime_flushes_the_handler_once_after_draining() {
-    let runtime = PhysicsRuntime::default();
+    let runtime = PhysicsRuntime;
     let (sender, receiver) = std::sync::mpsc::channel();
     let mut handler = RecordingHandler::new();
 
@@ -309,6 +309,11 @@ fn test_runtime_publishes_a_snapshot_right_after_a_resize() {
 
     let mut main_content =
         MainContent::new(Rect::new(0.0, 0.0, 100.0, -100.0)).expect("Failed to create MainContent");
+    // No regular snapshot comes within this interval (far above what a
+    // config may set): only a resize can publish one.
+    main_content
+        .runtime_mut()
+        .set_snapshot_interval_us(Duration::from_secs(3600).as_micros() as u64);
     let snapshot_slot = main_content.get_snapshot_slot();
     let resized = Rect::new(0.0, 0.0, 300.0, -200.0);
 
@@ -323,9 +328,7 @@ fn test_runtime_publishes_a_snapshot_right_after_a_resize() {
         })
     };
 
-    // No regular snapshot comes within this interval: only a resize can
-    // publish one.
-    let runtime = PhysicsRuntime::new(Duration::from_secs(3600));
+    let runtime = PhysicsRuntime;
     let thread_signal = signal.clone();
     let handle = std::thread::spawn(move || {
         runtime.run(

@@ -484,10 +484,11 @@ impl SimulationEngine {
         (wall_px, wall_py)
     }
 
-    /// 20% of the shorter world side. World rects have a negative height
+    /// `factor` times the shorter world side (`speed_limit_factor` of
+    /// `SimConfig`, 20% by default). World rects have a negative height
     /// (y points up), so the extents are taken as absolute values.
-    pub(crate) fn default_speed_limit(bound_rect: &Rect) -> f32 {
-        f32::min(bound_rect.w.abs(), bound_rect.h.abs()) * 0.2
+    pub(crate) fn default_speed_limit(bound_rect: &Rect, factor: f32) -> f32 {
+        f32::min(bound_rect.w.abs(), bound_rect.h.abs()) * factor
     }
 
     fn apply_forces_and_collect_stats(
@@ -500,7 +501,7 @@ impl SimulationEngine {
     ) -> (f32, f32) {
         let speed_limit = world
             .speed_limit_override
-            .unwrap_or_else(|| Self::default_speed_limit(bound_rect));
+            .unwrap_or_else(|| Self::default_speed_limit(bound_rect, world.speed_limit_factor));
         let mut total_wall_px = 0.0;
         let mut total_wall_py = 0.0;
 

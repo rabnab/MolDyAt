@@ -47,6 +47,12 @@
 //! files rely on. A plain `#[serde(default)]` would load such a file without
 //! an error but with the wrong values.
 //!
+//! Exception: a save's `config` (`SimConfig`) rejects unknown keys, so a
+//! config key added later makes the newer saves unreadable for older builds
+//! of the same version (they report that the save is probably newer). And
+//! builds from before `config` existed ignore it: they run such a save with
+//! the default config. See #273 for the rule on newer files.
+//!
 //! `tests/reference_saves.rs` (`old_saves_load_into_a_file_type_with_new_fields`)
 //! loads every reference save into a file type with extra defaulted fields
 //! and checks the defaults.
@@ -95,7 +101,7 @@ pub struct LoadedWorld {
 impl MainContent {
     /// Write the world to a new save in `store`; returns its path.
     pub fn save_world(&self, store: &SaveStore) -> AppResult<PathBuf> {
-        store.save(&WorldFile::capture(self.world(), self.time_step()))
+        store.save(&WorldFile::capture(self))
     }
 
     /// Replace the world with the save `source` refers to.
@@ -113,7 +119,10 @@ impl MainContent {
         let file = store.load(&path)?;
         let mut world = SimulationWorld::try_from(&file)?;
         world.sim.set_pause(start_paused);
-        self.set_time_step(file.time_step)?;
+        let config = file.sim_config();
+        self.set_time_step(config.integration.time_step)?;
+        self.runtime_mut()
+            .set_snapshot_interval_us(config.display.snapshot_interval_us);
 
         *self.world_mut() = world;
         self.runtime_mut().next_world_generation();

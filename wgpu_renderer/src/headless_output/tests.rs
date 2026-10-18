@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use super::*;
+use moldyat_core::application::SimConfig;
 use moldyat_core::application::renderer_snapshot::RendererSnapshot;
 use moldyat_core::objects2d::ball_impl::SpeciesId;
 use std::fs;
@@ -369,16 +370,24 @@ fn test_runs_with_same_seed_and_config_emit_identical_jsonl() {
         ..config_a.clone()
     };
 
-    let mut app_a = super::super::headless_runner::build_application(world_rect, config_a.rng_seed)
-        .expect("build app a");
+    let mut app_a = super::super::headless_runner::build_application(
+        world_rect,
+        &SimConfig::default(),
+        config_a.rng_seed,
+    )
+    .expect("build app a");
     app_a.seed_random_balls(config_a.seed_balls.expect("seed ball count") as usize);
     let runner_a = super::super::headless_runner::HeadlessRunner::from_config(config_a, app_a)
         .expect("runner a");
     let report_a = runner_a.run().expect("run a");
     assert_eq!(report_a.snapshots_emitted, 4);
 
-    let mut app_b = super::super::headless_runner::build_application(world_rect, config_b.rng_seed)
-        .expect("build app b");
+    let mut app_b = super::super::headless_runner::build_application(
+        world_rect,
+        &SimConfig::default(),
+        config_b.rng_seed,
+    )
+    .expect("build app b");
     app_b.seed_random_balls(config_b.seed_balls.expect("seed ball count") as usize);
     let runner_b = super::super::headless_runner::HeadlessRunner::from_config(config_b, app_b)
         .expect("runner b");

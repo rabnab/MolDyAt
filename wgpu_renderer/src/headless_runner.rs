@@ -5,8 +5,8 @@
 use crate::headless_cli::HeadlessConfig;
 use crate::headless_output::{HeadlessSnapshotSink, HeadlessWriter};
 use crate::headless_timings::{RunClock, write_timings};
-use moldyat_core::application::MainContent;
 use moldyat_core::application::persistence::{LoadSource, SaveStore};
+use moldyat_core::application::{MainContent, SimConfig};
 use moldyat_core::objects2d::{Rect, Vec2D};
 use std::io;
 use std::path::PathBuf;
@@ -179,24 +179,30 @@ pub fn scale_world_rect(rect: Rect, scale: f32) -> Rect {
     )
 }
 
-pub fn build_application(world_rect: Rect, rng_seed: Option<u64>) -> io::Result<MainContent> {
-    let application = if let Some(seed) = rng_seed {
-        MainContent::new_with_seed(world_rect, seed)
-    } else {
-        MainContent::new(world_rect)
-    };
-    application.map_err(|error| io::Error::other(format!("{error:?}")))
+pub fn build_application(
+    world_rect: Rect,
+    sim_config: &SimConfig,
+    rng_seed: Option<u64>,
+) -> io::Result<MainContent> {
+    MainContent::with_config(world_rect, sim_config, rng_seed)
+        .map_err(|error| io::Error::other(format!("{error:?}")))
 }
 
-/// Build the application for a headless run: time step, then walls, then
-/// seeded balls (so seeding never places a ball inside a wall).
+/// Build the application for a headless run from `sim_config` (or the
+/// loaded save's config), with `--dt` overriding either: time step, then
+/// walls, then seeded balls (so seeding never places a ball inside a wall).
 pub fn prepare_application(
     config: &HeadlessConfig,
+    sim_config: &SimConfig,
     world_rect: Rect,
     store: &SaveStore,
     load: Option<PathBuf>,
 ) -> io::Result<MainContent> {
-    let mut application = build_application(world_rect, config.rng_seed)?;
+    let mut sim_config = sim_config.clone();
+    if let Some(dt) = config.dt {
+        sim_config.integration.time_step = dt;
+    }
+    let mut application = build_application(world_rect, &sim_config, config.rng_seed)?;
     if let Some(path) = load {
         // Same entry point as Ctrl+O, but running: a headless run has no
         // one to look at a paused world.
@@ -204,6 +210,7 @@ pub fn prepare_application(
             .load_world(store, &LoadSource::Path(path), false)
             .map_err(|error| io::Error::other(format!("{error:?}")))?;
     }
+    // `--dt` also beats the time step of a loaded save.
     if let Some(dt) = config.dt {
         application
             .set_time_step(dt)

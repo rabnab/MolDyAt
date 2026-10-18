@@ -5,9 +5,13 @@
 use super::*;
 use crate::application::AppResult;
 use crate::application::phase_timings::PhaseTimings;
+use crate::application::sim_config::{
+    DisplayConfig, IntegrationConfig, NeighbourConfig, PotentialConfig, SimConfig,
+};
 use crate::application::sim_stats::{HIGH_GRAVITY, NORMAL_GRAVITY};
 use crate::objects2d::Rect;
 use crate::objects2d::operator::{is_degenerate, remap_point};
+use std::time::Duration;
 
 impl MainContent {
     pub fn world(&self) -> &SimulationWorld {
@@ -179,6 +183,25 @@ impl SimulationWorld {
 }
 
 impl MainContent {
+    /// The config the simulation runs with now: the one it was built or
+    /// loaded with, with the current time step.
+    pub fn config(&self) -> SimConfig {
+        let physics = &self.world.physics;
+        SimConfig {
+            integration: IntegrationConfig {
+                time_step: self.time_step(),
+                speed_limit_factor: self.world.speed_limit_factor,
+            },
+            potential: PotentialConfig::from(*physics.cap_settings()),
+            neighbours: NeighbourConfig {
+                skin_factor: physics.skin_factor(),
+            },
+            display: DisplayConfig {
+                snapshot_interval_us: self.runtime.snapshot_interval_us,
+            },
+        }
+    }
+
     /// Directory for Ctrl+S / Ctrl+O saves (set once at startup).
     pub fn with_save_store(mut self, store: SaveStore) -> Self {
         self.runtime.save_store = Some(store);
@@ -206,6 +229,15 @@ impl PhysicsRuntimeState {
 
     fn set_snapshot_layers(&mut self, layers: SceneLayers) {
         self.snapshot_layers = layers;
+    }
+
+    /// Least time between two snapshots the physics thread publishes.
+    pub(crate) fn snapshot_interval(&self) -> Duration {
+        Duration::from_micros(self.snapshot_interval_us)
+    }
+
+    pub(crate) fn set_snapshot_interval_us(&mut self, interval_us: u64) {
+        self.snapshot_interval_us = interval_us;
     }
 
     pub(crate) fn wait_time(&self) -> u64 {

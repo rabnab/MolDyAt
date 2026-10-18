@@ -15,6 +15,7 @@
 //! membership, tails, energy plot, `SimStats`) and the view (window size,
 //! zoom, pan) are never written.
 
+use crate::application::sim_config::{MAX_TIME_STEP, MIN_TIME_STEP, SimConfig, check_time_step};
 use crate::error::{AppError, AppResult};
 use crate::objects2d::ball_impl::SpeciesTable;
 use crate::objects2d::operator::{
@@ -54,8 +55,15 @@ pub struct WorldFile {
     pub version: u32,
     /// World rectangle (`x`, `y` is the top-left corner, `h` is negative).
     pub world_rect: Rect,
+    /// Time step of the run. It wins over `config.integration.time_step`,
+    /// which must equal it when a config is present.
     pub time_step: f32,
     pub gravity: f32,
+    /// The config the world ran with (#231). Saves written before it existed
+    /// have none and load with the default config, which reproduces how
+    /// those builds ran.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config: Option<SimConfig>,
     pub balls: Vec<BallData>,
     pub line_segments: Vec<SimLineSegment>,
     pub valves: Vec<ValveSegment>,
@@ -143,10 +151,22 @@ impl WorldFile {
         if rect.w <= 0.0 || rect.h >= 0.0 {
             return Err(invalid("world_rect needs w > 0 and h < 0"));
         }
-        if !(self.time_step.is_finite() && self.time_step > 0.0) {
-            return Err(invalid("time_step must be finite and positive"));
-        }
+        check_time_step(self.time_step).map_err(|_| {
+            invalid(format!(
+                "time_step must be within {MIN_TIME_STEP}..={MAX_TIME_STEP}, got {}",
+                self.time_step
+            ))
+        })?;
         check_finite(&[self.gravity], "gravity")?;
+        if let Some(config) = &self.config {
+            config.validate()?;
+            if config.integration.time_step != self.time_step {
+                return Err(invalid(format!(
+                    "config.integration.time_step {} differs from time_step {}",
+                    config.integration.time_step, self.time_step
+                )));
+            }
+        }
 
         check_unique_ids(self.balls.iter().map(|b| b.id), "ball")?;
         let species = SpeciesTable::builtin();
@@ -315,6 +335,14 @@ impl WorldFile {
         Ok(())
     }
 
+    /// The config to run this world with: the saved one, or the default for
+    /// files without one, with the file's time step.
+    pub fn sim_config(&self) -> SimConfig {
+        let mut config = self.config.clone().unwrap_or_default();
+        config.integration.time_step = self.time_step;
+        config
+    }
+
     pub fn to_json(&self) -> AppResult<String> {
         serde_json::to_string_pretty(self)
             .map_err(|e| AppError::CustomError(format!("cannot serialize world: {e}")))
@@ -323,8 +351,22 @@ impl WorldFile {
     /// Parse a world file of any supported version, upgrade it to the
     /// current one (see [`migrate`](super::migrate)) and validate it.
     pub fn from_json(json: &str) -> AppResult<Self> {
-        let file: Self = super::migrate::parse(json)?;
+        let file: Self = super::migrate::parse(json).map_err(newer_build_hint)?;
         file.validate()?;
         Ok(file)
+    }
+}
+
+/// Only `config` rejects unknown keys (`SimConfig` uses
+/// `deny_unknown_fields`), and a key it does not know was most likely added
+/// by a newer build that still writes the same format version. Say so.
+fn newer_build_hint(error: AppError) -> AppError {
+    match error {
+        AppError::CustomError(message) if message.contains("unknown field") => {
+            AppError::CustomError(format!(
+                "{message} (the save was probably written by a newer MolDyAt build)"
+            ))
+        }
+        other => other,
     }
 }

@@ -7,6 +7,7 @@
 /// This module handles parsing command-line arguments for headless execution mode
 /// and storing the parsed configuration for use by the headless simulation loop.
 use crate::cli::OptionHelp;
+use moldyat_core::application::sim_config::{MAX_TIME_STEP, MIN_TIME_STEP};
 use moldyat_core::application::valve_span_problem;
 use moldyat_core::objects2d::line_segment::{DEFAULT_THICKNESS, MAX_THICKNESS, MIN_THICKNESS};
 use std::path::PathBuf;
@@ -72,7 +73,7 @@ pub const HEADLESS_OPTIONS: &[OptionHelp] = &[
     OptionHelp {
         names: &["--dt"],
         value: Some("<SECONDS>"),
-        help: &["Time step (default: the simulation default)"],
+        help: &["Time step, 0.000625..=0.16 (default: the simulation default)"],
     },
     OptionHelp {
         names: &["--world-scale"],
@@ -413,8 +414,12 @@ fn parse_headless_args_with_args(args: &[String]) -> Result<Option<HeadlessConfi
                 let dt = args[i]
                     .parse::<f32>()
                     .ok()
-                    .filter(|dt| dt.is_finite() && *dt > 0.0)
-                    .ok_or_else(|| CliError::new("--dt value must be a positive number"))?;
+                    .filter(|dt| (MIN_TIME_STEP..=MAX_TIME_STEP).contains(dt))
+                    .ok_or_else(|| {
+                        CliError::new(format!(
+                            "--dt value must be a number within {MIN_TIME_STEP}..={MAX_TIME_STEP}"
+                        ))
+                    })?;
                 config.dt = Some(dt);
             }
             "--world-scale" => {

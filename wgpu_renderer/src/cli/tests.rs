@@ -35,9 +35,61 @@ fn takes_load_and_save_dir_and_keeps_the_rest_in_order() {
 }
 
 #[test]
+fn takes_config_in_both_modes() {
+    let (common, rest) =
+        split_common_args(&args(&["program", "--config", "run.toml", "--headless"])).unwrap();
+    assert_eq!(common.config, Some(PathBuf::from("run.toml")));
+    assert_eq!(rest, args(&["program", "--headless"]));
+}
+
+#[test]
+fn config_and_load_cannot_be_combined() {
+    let error = split_common_args(&args(&[
+        "program",
+        "--config",
+        "run.toml",
+        "--load",
+        "saves/a.json",
+    ]))
+    .unwrap_err();
+    assert!(error.message.contains("--config"), "{}", error.message);
+    assert!(error.message.contains("--load"), "{}", error.message);
+}
+
+#[test]
+fn sim_config_defaults_without_a_file() {
+    assert_eq!(
+        CommonArgs::default().sim_config().unwrap(),
+        SimConfig::default()
+    );
+}
+
+#[test]
+fn sim_config_reads_the_file_and_reports_errors_with_its_path() {
+    let dir = std::env::temp_dir().join(format!("moldyat_cli_config_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let good = dir.join("good.toml");
+    std::fs::write(&good, "[integration]\ntime_step = 0.005\n").unwrap();
+    let bad = dir.join("bad.toml");
+    std::fs::write(&bad, "[integration]\ntime_stp = 0.005\n").unwrap();
+
+    let common = |path: &PathBuf| CommonArgs {
+        config: Some(path.clone()),
+        ..CommonArgs::default()
+    };
+    let config = common(&good).sim_config().unwrap();
+    assert_eq!(config.integration.time_step, 0.005);
+    let error = common(&bad).sim_config().unwrap_err();
+    assert!(error.message.contains("bad.toml"), "{}", error.message);
+    assert!(error.message.contains("time_stp"), "{}", error.message);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn shared_options_need_a_value() {
     assert!(split_common_args(&args(&["program", "--load"])).is_err());
     assert!(split_common_args(&args(&["program", "--save-dir"])).is_err());
+    assert!(split_common_args(&args(&["program", "--config"])).is_err());
     assert!(split_common_args(&args(&["program", "--load", "--headless"])).is_err());
 }
 
