@@ -240,7 +240,9 @@ fn test_set_time_step_accepts_positive_and_rejects_invalid_values() {
     main_content.set_time_step(0.004).expect("positive dt");
     assert_eq!(main_content.time_step(), 0.004);
 
-    for dt in [0.0, -0.01, f32::NAN, f32::INFINITY] {
+    // Outside the range the `+` / `-` keys keep to (`MIN_TIME_STEP` to
+    // `MAX_TIME_STEP`), as well as non-finite values.
+    for dt in [0.0, -0.01, 0.0001, 0.2, f32::NAN, f32::INFINITY] {
         assert!(
             main_content.set_time_step(dt).is_err(),
             "dt={dt} should be rejected"

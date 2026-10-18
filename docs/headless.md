@@ -44,7 +44,7 @@ the last step even when the interval does not divide the step count.
 | `--rng-seed <N>` | Seed for reproducible runs |
 | `--seed-balls <N>` | Place up to N random balls before the first step |
 | `--seed-speed <V>` | Seeded balls get speeds uniform in `0..V` in random directions (default 0: at rest); net momentum is not removed |
-| `--dt <SECONDS>` | Time step (default: the simulation default, or the `--config` file's); also overrides a loaded save's |
+| `--dt <SECONDS>` | Time step, `0.000625..=0.16` (the range the `+` / `-` keys keep to; default: the simulation default, or the `--config` file's); also overrides a loaded save's |
 | `--world-scale <F>` | Scale the default world's width and height by F around its centre |
 | `--line-segment <x1,y1,x2,y2[,t]>` | Add a wall in world coordinates, thickness 1..20 (default 1); repeatable |
 | `--valve <wall,t0,t1[,open\|closed]>` | Cut a valve into `--line-segment` number `wall` (0-based) over fractions `t0..t1` of its length; one per wall, default open |

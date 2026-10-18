@@ -47,6 +47,12 @@
 //! files rely on. A plain `#[serde(default)]` would load such a file without
 //! an error but with the wrong values.
 //!
+//! Exception: a save's `config` (`SimConfig`) rejects unknown keys, so a
+//! config key added later makes the newer saves unreadable for older builds
+//! of the same version (they report that the save is probably newer). And
+//! builds from before `config` existed ignore it: they run such a save with
+//! the default config. See #273 for the rule on newer files.
+//!
 //! `tests/reference_saves.rs` (`old_saves_load_into_a_file_type_with_new_fields`)
 //! loads every reference save into a file type with extra defaulted fields
 //! and checks the defaults.

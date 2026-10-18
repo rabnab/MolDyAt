@@ -401,7 +401,7 @@ fn test_dt_flag() {
 
 #[test]
 fn test_dt_flag_rejects_non_positive_and_invalid_values() {
-    for value in ["0", "-0.01", "abc", "NaN", "inf"] {
+    for value in ["0", "-0.01", "0.0001", "0.2", "abc", "NaN", "inf"] {
         let result = parse_headless_args_with_args(&headless_args(&["--dt", value]));
         assert!(result.is_err(), "--dt {value} should be rejected");
     }

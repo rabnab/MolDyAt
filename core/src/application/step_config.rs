@@ -3,7 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::application::AppResult;
-use crate::error::AppError;
+use crate::application::sim_config::{MAX_TIME_STEP, MIN_TIME_STEP, check_time_step};
 use crate::objects2d::ball_impl::BallFactory;
 
 /// Per-step settings of the physics thread: time step, ball factory and
@@ -35,17 +35,17 @@ impl StepConfig {
 
     pub(crate) fn double_time_step(&mut self) {
         self.dt_goal *= 2.0;
-        // Clamp to reasonable range to prevent instability
-        if self.dt_goal > 0.16 {
-            self.dt_goal = 0.16;
+        // Clamp to the accepted range to prevent instability
+        if self.dt_goal > MAX_TIME_STEP {
+            self.dt_goal = MAX_TIME_STEP;
         }
     }
 
     pub(crate) fn halve_time_step(&mut self) {
         self.dt_goal *= 0.5;
-        // Clamp to reasonable range
-        if self.dt_goal < 0.000625 {
-            self.dt_goal = 0.000625;
+        // Clamp to the accepted range
+        if self.dt_goal < MIN_TIME_STEP {
+            self.dt_goal = MIN_TIME_STEP;
         }
     }
 
@@ -53,14 +53,11 @@ impl StepConfig {
         self.dt_goal
     }
 
-    /// Set the time step exactly. Rejects non-finite or non-positive values
-    /// and keeps the current time step.
+    /// Set the time step exactly. Rejects values outside
+    /// `MIN_TIME_STEP..=MAX_TIME_STEP` (NaN included) and keeps the current
+    /// time step.
     pub(crate) fn set_time_step(&mut self, dt: f32) -> AppResult<()> {
-        if !(dt.is_finite() && dt > 0.0) {
-            return Err(AppError::CustomError(format!(
-                "time step must be finite and positive, got {dt}"
-            )));
-        }
+        check_time_step(dt)?;
         self.dt_goal = dt;
         Ok(())
     }

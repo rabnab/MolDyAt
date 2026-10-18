@@ -20,6 +20,17 @@
 //! restores that config, so a loaded world runs as it did when it was saved.
 //! Saves written before the config existed load with the defaults.
 //!
+//! Every key has an accepted range (the `MIN_*` / `MAX_*` constants), checked
+//! by [`SimConfig::validate`] for a config file, `--dt` and a save.
+//!
+//! Unknown keys are rejected, here and in a save's `config`. That makes every
+//! key part of the save format: a key added later is unknown to this build,
+//! so this build refuses a save written by a newer build of the same format
+//! version (with a hint that the save is newer) instead of running it with
+//! settings it cannot see. That is accepted; bump `WORLD_FILE_VERSION` if a
+//! new key must not lock older builds out. Builds from before `SimConfig`
+//! ignore the whole `config` of a save and run it with the defaults (#273).
+//!
 //! The species library (#237) will be another section here (`[species]`),
 //! added as a defaulted field like the others.
 
@@ -37,9 +48,30 @@ pub const DEFAULT_SPEED_LIMIT_FACTOR: f32 = 0.2;
 /// The physics thread publishes a snapshot at most this often (about 60 Hz).
 pub const DEFAULT_SNAPSHOT_INTERVAL_US: u64 = 16_667;
 
-/// `2^(1/6)`: the Lennard-Jones minimum in units of `σ`. The cutoff must lie
-/// beyond it, or the attractive well is cut away.
-const LJ_MINIMUM_FACTOR: f32 = 1.122_462;
+// Accepted ranges (inclusive). A config file is written by hand, so a value
+// far outside them is a typo, not a setting: it would make the run unstable,
+// crawl (one huge cell, every ball rebuilding every step) or freeze the window.
+
+/// Time steps the `+` / `-` keys stay within; a config, `--dt` and a save
+/// must too. Above the maximum the sloped core (`core_stiffness`) is unstable.
+pub const MIN_TIME_STEP: f32 = 0.000_625;
+pub const MAX_TIME_STEP: f32 = 0.16;
+pub const MIN_SPEED_LIMIT_FACTOR: f32 = 0.01;
+pub const MAX_SPEED_LIMIT_FACTOR: f32 = 10.0;
+pub const MIN_MAX_FORCE: f32 = 1.0;
+pub const MAX_MAX_FORCE: f32 = 10_000.0;
+/// 0 is a flat core (no slope below `r_cap`).
+pub const MIN_CORE_STIFFNESS: f32 = 0.0;
+pub const MAX_CORE_STIFFNESS: f32 = 10_000.0;
+/// Above the Lennard-Jones minimum (`2^(1/6) ≈ 1.12`), so the attractive well
+/// is not cut away.
+pub const MIN_CUTOFF_FACTOR: f32 = 1.2;
+pub const MAX_CUTOFF_FACTOR: f32 = 10.0;
+pub const MIN_SKIN_FACTOR: f32 = 0.01;
+pub const MAX_SKIN_FACTOR: f32 = 1.0;
+/// 1 ms to 1 s between two snapshots for the window.
+pub const MIN_SNAPSHOT_INTERVAL_US: u64 = 1_000;
+pub const MAX_SNAPSHOT_INTERVAL_US: u64 = 1_000_000;
 
 /// Every setting of a run that is not part of the world itself. Each section
 /// and key is optional in a config file or save; missing ones keep their
@@ -151,12 +183,29 @@ fn invalid(message: impl Into<String>) -> AppError {
     AppError::CustomError(format!("invalid config: {}", message.into()))
 }
 
-fn check_positive(value: f32, key: &str) -> AppResult {
-    if value.is_finite() && value > 0.0 {
+/// `value` must lie in `min..=max` (NaN never does).
+fn check_range<T: PartialOrd + Copy + std::fmt::Display>(
+    value: T,
+    min: T,
+    max: T,
+    key: &str,
+) -> AppResult {
+    if (min..=max).contains(&value) {
         Ok(())
     } else {
         Err(invalid(format!(
-            "{key} must be finite and positive, got {value}"
+            "{key} must be within {min}..={max}, got {value}"
+        )))
+    }
+}
+
+/// Check a time step against [`MIN_TIME_STEP`]`..=`[`MAX_TIME_STEP`].
+pub fn check_time_step(time_step: f32) -> AppResult {
+    if (MIN_TIME_STEP..=MAX_TIME_STEP).contains(&time_step) {
+        Ok(())
+    } else {
+        Err(AppError::CustomError(format!(
+            "time step must be within {MIN_TIME_STEP}..={MAX_TIME_STEP}, got {time_step}"
         )))
     }
 }
@@ -176,39 +225,62 @@ impl SimConfig {
         Ok(config)
     }
 
-    /// Check every value against the range the simulation accepts. The
-    /// defaults pass.
+    /// Check every value against its range (the `MIN_*` / `MAX_*`
+    /// constants). The defaults pass.
     pub fn validate(&self) -> AppResult {
         let IntegrationConfig {
             time_step,
             speed_limit_factor,
         } = self.integration;
-        check_positive(time_step, "integration.time_step")?;
-        check_positive(speed_limit_factor, "integration.speed_limit_factor")?;
+        check_range(
+            time_step,
+            MIN_TIME_STEP,
+            MAX_TIME_STEP,
+            "integration.time_step",
+        )?;
+        check_range(
+            speed_limit_factor,
+            MIN_SPEED_LIMIT_FACTOR,
+            MAX_SPEED_LIMIT_FACTOR,
+            "integration.speed_limit_factor",
+        )?;
 
         let PotentialConfig {
             max_force,
             core_stiffness,
             cutoff_factor,
         } = self.potential;
-        check_positive(max_force, "potential.max_force")?;
-        if !(core_stiffness.is_finite() && core_stiffness >= 0.0) {
-            return Err(invalid(format!(
-                "potential.core_stiffness must be finite and not negative, got {core_stiffness}"
-            )));
-        }
-        if !(cutoff_factor.is_finite() && cutoff_factor > LJ_MINIMUM_FACTOR) {
-            return Err(invalid(format!(
-                "potential.cutoff_factor must be finite and above {LJ_MINIMUM_FACTOR} \
-                 (the potential minimum), got {cutoff_factor}"
-            )));
-        }
+        check_range(
+            max_force,
+            MIN_MAX_FORCE,
+            MAX_MAX_FORCE,
+            "potential.max_force",
+        )?;
+        check_range(
+            core_stiffness,
+            MIN_CORE_STIFFNESS,
+            MAX_CORE_STIFFNESS,
+            "potential.core_stiffness",
+        )?;
+        check_range(
+            cutoff_factor,
+            MIN_CUTOFF_FACTOR,
+            MAX_CUTOFF_FACTOR,
+            "potential.cutoff_factor",
+        )?;
 
-        check_positive(self.neighbours.skin_factor, "neighbours.skin_factor")?;
-        if self.display.snapshot_interval_us == 0 {
-            return Err(invalid("display.snapshot_interval_us must be positive"));
-        }
-        Ok(())
+        check_range(
+            self.neighbours.skin_factor,
+            MIN_SKIN_FACTOR,
+            MAX_SKIN_FACTOR,
+            "neighbours.skin_factor",
+        )?;
+        check_range(
+            self.display.snapshot_interval_us,
+            MIN_SNAPSHOT_INTERVAL_US,
+            MAX_SNAPSHOT_INTERVAL_US,
+            "display.snapshot_interval_us",
+        )
     }
 
     pub fn snapshot_interval(&self) -> Duration {

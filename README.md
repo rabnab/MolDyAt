@@ -346,26 +346,27 @@ cutoff, Verlet skin, snapshot rate) come from a TOML file passed with
 `--config <path>`, in the window and with `--headless`. Every section and key
 is optional: missing ones keep their default, and without `--config` all
 defaults apply, so results are the same as without a config file. Unknown keys
-are rejected, so a typo is an error, not a silent default. Flags that set the
-same value, such as `--dt`, override the file.
+are rejected, so a typo is an error, not a silent default, and so is a value
+outside its range (given after the default below). Flags that set the same
+value, such as `--dt`, override the file.
 
-The defaults, as a complete file:
+The defaults, as a complete file, with each key's accepted range:
 
 ```toml
 [integration]
-time_step = 0.01            # reduced time units; + / - change it while running
-speed_limit_factor = 0.2    # speed limit as a share of the shorter world side
+time_step = 0.01              # 0.000625..0.16, reduced time units; + / - change it while running
+speed_limit_factor = 0.2      # 0.01..10, speed limit as a share of the shorter world side
 
 [potential]
-max_force = 100.0           # repulsive force where the sloped core starts
-core_stiffness = 200.0      # force slope inside the core
-cutoff_factor = 4.0         # pair cutoff in units of sigma_ij
+max_force = 100.0             # 1..10000, repulsive force where the sloped core starts
+core_stiffness = 200.0        # 0..10000, force slope inside the core (0: flat)
+cutoff_factor = 4.0           # 1.2..10, pair cutoff in units of sigma_ij
 
 [neighbours]
-skin_factor = 0.2           # Verlet skin as a share of the N2 cutoff
+skin_factor = 0.2             # 0.01..1, Verlet skin as a share of the N2 cutoff
 
 [display]
-snapshot_interval_us = 16667  # least time between two frames sent to the window
+snapshot_interval_us = 16667  # 1000..1000000, least time between two frames sent to the window
 ```
 
 ```bash
@@ -375,7 +376,9 @@ cargo run -p moldyat_wgpu -- --headless --config my-run.toml --dt 0.005 --steps 
 
 A save stores the config of the run in its `config` section, and loading the
 save restores it, so `--config` cannot be combined with `--load`. Saves
-written before the config existed load with the defaults. A `[species]`
+written before the config existed load with the defaults. Builds from before
+the config ignore it and run such a save with the defaults; a build that does
+not know a key in a save's `config` refuses to load it. A `[species]`
 section for the species library will follow (#237).
 
 ## Releases & Versioning

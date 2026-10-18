@@ -8,6 +8,7 @@ use crate::application::persistence::WorldFile;
 use crate::application::persistence::format::{
     BallData, MAX_ID, SourceSphereData, ThermostatData, WORLD_FILE_VERSION,
 };
+use crate::application::sim_config::{MAX_TIME_STEP, MIN_TIME_STEP};
 use crate::objects2d::wall_chain::{ChainPiece, WallChain};
 use crate::objects2d::{SimLineSegment, Vec2D};
 
@@ -245,4 +246,19 @@ fn unknown_config_keys_are_rejected() {
     );
     let error = format!("{:?}", WorldFile::from_json(&json).unwrap_err());
     assert!(error.contains("max_forc"), "{error}");
+    assert!(error.contains("newer MolDyAt build"), "{error}");
+}
+
+#[test]
+fn rejects_time_step_outside_the_accepted_range() {
+    for time_step in [MIN_TIME_STEP / 2.0, MAX_TIME_STEP * 2.0] {
+        let mut file = sample_file();
+        file.time_step = time_step;
+        assert!(error_text(&file).contains("time_step"), "{time_step}");
+    }
+    for time_step in [MIN_TIME_STEP, MAX_TIME_STEP] {
+        let mut file = sample_file();
+        file.time_step = time_step;
+        assert!(file.validate().is_ok(), "{time_step}");
+    }
 }

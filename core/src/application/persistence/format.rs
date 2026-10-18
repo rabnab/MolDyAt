@@ -15,7 +15,7 @@
 //! membership, tails, energy plot, `SimStats`) and the view (window size,
 //! zoom, pan) are never written.
 
-use crate::application::sim_config::SimConfig;
+use crate::application::sim_config::{MAX_TIME_STEP, MIN_TIME_STEP, SimConfig, check_time_step};
 use crate::error::{AppError, AppResult};
 use crate::objects2d::ball_impl::SpeciesTable;
 use crate::objects2d::operator::{
@@ -151,9 +151,12 @@ impl WorldFile {
         if rect.w <= 0.0 || rect.h >= 0.0 {
             return Err(invalid("world_rect needs w > 0 and h < 0"));
         }
-        if !(self.time_step.is_finite() && self.time_step > 0.0) {
-            return Err(invalid("time_step must be finite and positive"));
-        }
+        check_time_step(self.time_step).map_err(|_| {
+            invalid(format!(
+                "time_step must be within {MIN_TIME_STEP}..={MAX_TIME_STEP}, got {}",
+                self.time_step
+            ))
+        })?;
         check_finite(&[self.gravity], "gravity")?;
         if let Some(config) = &self.config {
             config.validate()?;
@@ -348,8 +351,22 @@ impl WorldFile {
     /// Parse a world file of any supported version, upgrade it to the
     /// current one (see [`migrate`](super::migrate)) and validate it.
     pub fn from_json(json: &str) -> AppResult<Self> {
-        let file: Self = super::migrate::parse(json)?;
+        let file: Self = super::migrate::parse(json).map_err(newer_build_hint)?;
         file.validate()?;
         Ok(file)
+    }
+}
+
+/// Only `config` rejects unknown keys (`SimConfig` uses
+/// `deny_unknown_fields`), and a key it does not know was most likely added
+/// by a newer build that still writes the same format version. Say so.
+fn newer_build_hint(error: AppError) -> AppError {
+    match error {
+        AppError::CustomError(message) if message.contains("unknown field") => {
+            AppError::CustomError(format!(
+                "{message} (the save was probably written by a newer MolDyAt build)"
+            ))
+        }
+        other => other,
     }
 }

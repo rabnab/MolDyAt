@@ -2,12 +2,12 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+use crate::application::MainContent;
 use crate::application::tests::{sync_commands, wait_for_snapshot};
 use crate::application::{BallCommand, DomainCommand, SimControl, ViewCommand, WorldCommand};
 use crate::application::{
     CommandHandler, DomainCommandHandler, PhysicsRuntime, PhysicsThread, ShutdownSignal,
 };
-use crate::application::{MainContent, SimConfig};
 use crate::objects2d::{Rect, Vec2D};
 
 struct RecordingHandler<T> {
@@ -307,13 +307,13 @@ fn test_runtime_publishes_a_snapshot_right_after_a_resize() {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::{Duration, Instant};
 
-    // No regular snapshot comes within this interval: only a resize can
-    // publish one.
-    let mut config = SimConfig::default();
-    config.display.snapshot_interval_us = Duration::from_secs(3600).as_micros() as u64;
     let mut main_content =
-        MainContent::with_config(Rect::new(0.0, 0.0, 100.0, -100.0), &config, None)
-            .expect("Failed to create MainContent");
+        MainContent::new(Rect::new(0.0, 0.0, 100.0, -100.0)).expect("Failed to create MainContent");
+    // No regular snapshot comes within this interval (far above what a
+    // config may set): only a resize can publish one.
+    main_content
+        .runtime_mut()
+        .set_snapshot_interval_us(Duration::from_secs(3600).as_micros() as u64);
     let snapshot_slot = main_content.get_snapshot_slot();
     let resized = Rect::new(0.0, 0.0, 300.0, -200.0);
 
