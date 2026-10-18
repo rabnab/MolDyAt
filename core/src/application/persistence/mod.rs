@@ -25,6 +25,32 @@
 //! bumps [`WORLD_FILE_VERSION`] adds a new fixture, and every older one must
 //! keep loading.
 //!
+//! # Additive and breaking changes (#271)
+//!
+//! A change to a file type ([`WorldFile`] and the types saved in it) is either
+//! additive, which keeps [`WORLD_FILE_VERSION`], or breaking, which bumps it
+//! and adds a migration (see `migrate`).
+//!
+//! Additive, no version bump: older files simply lack the new data, and serde
+//! fills it in.
+//! - A new field gets `#[serde(default)]` or `#[serde(default = "…")]` with a
+//!   default that reproduces the behaviour of builds before the field
+//!   existed, e.g. `#[serde(default = "default_friction")] friction: f32`
+//!   where `default_friction()` returns the value that used to be hard-coded.
+//! - A new top-level list (e.g. a new operator kind) is
+//!   `#[serde(default)] sinks: Vec<SinkData>`: older files have none.
+//! - [`WorldFile::validate`] must accept the default, so an old file that
+//!   lacks the field passes validation.
+//!
+//! Breaking, bump the version and add a migration: renaming or removing a
+//! field, changing its type, unit or meaning, or changing a default that old
+//! files rely on. A plain `#[serde(default)]` would load such a file without
+//! an error but with the wrong values.
+//!
+//! `tests/reference_saves.rs` (`old_saves_load_into_a_file_type_with_new_fields`)
+//! loads every reference save into a file type with extra defaulted fields
+//! and checks the defaults.
+//!
 //! # Built-in species
 //!
 //! A file names each ball's species; mass, `σ` and `ε` come from the built-in

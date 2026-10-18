@@ -9,11 +9,13 @@
 
 use super::scratch_dir;
 use crate::application::MainContent;
+use crate::application::persistence::migrate;
 use crate::application::persistence::{LoadSource, SaveStore, WORLD_FILE_VERSION, WorldFile};
 use crate::objects2d::ball_impl::{SpeciesId, SpeciesTable};
 use crate::objects2d::operator::OperatorState;
 use crate::objects2d::wall_chain::Joint;
 use crate::objects2d::{Rect, Vec2D};
+use serde::Deserialize;
 use std::fs;
 use std::path::PathBuf;
 
@@ -112,6 +114,70 @@ fn current_reference_save_loads_every_field() {
             fixture.file
         );
     }
+}
+
+/// `WorldFile` as a later build might extend it the additive way (#271): a
+/// new field whose default reproduces today's behaviour and a new top-level
+/// list. Old files lack both and must still load.
+#[derive(Debug, Deserialize)]
+struct ExtendedWorldFile {
+    #[serde(flatten)]
+    file: WorldFile,
+    /// Today walls reflect elastically, so the default is 1.
+    #[serde(default = "elastic")]
+    wall_restitution: f32,
+    /// A new operator kind; older files have none.
+    #[serde(default)]
+    sinks: Vec<SinkData>,
+}
+
+#[derive(Debug, PartialEq, Deserialize)]
+struct SinkData {
+    id: usize,
+    center: Vec2D,
+}
+
+fn elastic() -> f32 {
+    1.0
+}
+
+fn read_fixture(file: &str) -> String {
+    fs::read_to_string(fixtures_dir().join(file)).unwrap()
+}
+
+#[test]
+fn old_saves_load_into_a_file_type_with_new_fields() {
+    for fixture in FIXTURES {
+        let json = read_fixture(fixture.file);
+        let extended: ExtendedWorldFile = migrate::parse(&json)
+            .unwrap_or_else(|e| panic!("{} does not parse: {e:?}", fixture.file));
+        extended.file.validate().unwrap();
+        assert_eq!(extended.wall_restitution, 1.0, "{}", fixture.file);
+        assert!(extended.sinks.is_empty(), "{}", fixture.file);
+        // The defaulted fields change nothing about the rest of the file.
+        assert_eq!(
+            extended.file,
+            WorldFile::from_json(&json).unwrap(),
+            "{}",
+            fixture.file
+        );
+    }
+}
+
+#[test]
+fn new_fields_are_read_when_present() {
+    let mut value: serde_json::Value = serde_json::from_str(&read_fixture("v2.json")).unwrap();
+    value["wall_restitution"] = 0.5.into();
+    value["sinks"] = serde_json::json!([{"id": 3, "center": {"x": 1.0, "y": -2.0}}]);
+    let extended: ExtendedWorldFile = migrate::parse(&value.to_string()).unwrap();
+    assert_eq!(extended.wall_restitution, 0.5);
+    assert_eq!(
+        extended.sinks,
+        vec![SinkData {
+            id: 3,
+            center: Vec2D::new(1.0, -2.0)
+        }]
+    );
 }
 
 fn species_name(id: SpeciesId) -> &'static str {
