@@ -32,8 +32,10 @@ one piece and no joints, so adding a valve always splits one piece.
 
 Collision code does not know about chains or valve state. Once per step,
 `collect_solid_obstacles` flattens every piece and every closed valve into
-plain capsules; an open valve produces no obstacle. Contacts are then
-resolved in two places:
+plain capsules; an open valve produces no obstacle. A ball touches a wall
+when its centre is its wall contact distance from the surface
+(`BallPhysics::wall_contact_distance`, from the `WallLaw`: hard contact at
+`σ_i / 2` of its species). Contacts are then resolved in two places:
 
 - **Position update.** `SimulationWorld::sweep_wall_contact` finds the
   contact time on the ball's path and reflects it along the surface normal

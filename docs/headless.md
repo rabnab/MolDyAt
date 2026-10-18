@@ -68,11 +68,13 @@ step=120 time=1.20000 balls=32 kinetic=14.72000 potential=-21.04000 total=-6.320
 `dE` is the total energy change since the step-0 frame; `operators` counts
 line segments, valves, source spheres and thermostats.
 
-## JSONL records (`headless.v1`)
+## JSONL records (`headless.v2`)
 
-Every line is one JSON object with `schema_version: "headless.v1"` and a
+Every line is one JSON object with `schema_version: "headless.v2"` and a
 `record_kind`. Consumers should ignore unknown record kinds and unknown
-fields.
+fields. v2 (#234) replaced the per-ball `size_idx`, `size_class` and
+`radius` of v1 by `species` and `contact_radius`; everything else is
+unchanged.
 
 | `record_kind` | When | Contents |
 |---|---|---|
@@ -82,8 +84,8 @@ fields.
 
 Detail sections in `frame` records, chosen with `--detail`:
 
-- `balls`: per ball, sorted by id: id, size class, position, velocity,
-  radius, mass.
+- `balls`: per ball, sorted by id: id, `species` (name), position,
+  velocity, `contact_radius` (`σ / 2`), mass.
 - `thermo`: the per-cell temperature and pressure grids and the grid spec.
   The fields are sampled every `THERMO_SAMPLE_STRIDE` steps (see
   [simulation.md](simulation.md#thermodynamic-grid-space)).

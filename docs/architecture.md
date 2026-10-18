@@ -210,7 +210,7 @@ from a newer build are rejected with a clear error.
 `moldyat --headless` runs the same `MainContent` without a window
 (`wgpu_renderer/src/headless_runner.rs`). It steps the simulation directly on
 the main thread and writes snapshots as versioned JSON Lines
-(`headless.v1`: `run_start`, `frame`, `run_end` records) to stdout or a file.
+(`headless.v2`: `run_start`, `frame`, `run_end` records) to stdout or a file.
 Seeded runs are deterministic; they back the headless regression fixtures
 and the performance scripts. The record format, CLI
 flags and fixtures are described in [headless.md](headless.md).

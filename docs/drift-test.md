@@ -77,34 +77,34 @@ up before they fail the build.
 
 | Scenario | File | Metric | Threshold | Baseline | Margin |
 |---|---|---|---:|---:|---|
-| dense_gas_many_body (256 balls, 1000 steps, 9 head-on projectile pairs) | `dense_gas.rs` | max relative energy drift | 4.0e-3 | 2.02e-3 | ~2x |
-| | | relative momentum drift | 1.5e-7 | 9.8e-8 | ~1.5x; f32 rounding noise, see below |
-| | | per-ball rebuild rate | [5.0e-3, 5.0e-2] | 2.4e-2 | cadence band, not a drift threshold |
+| dense_gas_many_body (256 balls, 1000 steps, 9 head-on projectile pairs at ±3.0) | `dense_gas.rs` | max relative energy drift | 4.0e-3 | 1.68e-3 | ~2.4x |
+| | | relative momentum drift | 1.5e-7 | 7.3e-8 | ~2x; f32 rounding noise, see below |
+| | | per-ball rebuild rate | [5.0e-3, 5.0e-2] | 2.8e-2 | cadence band, not a drift threshold |
 | | | in-cutoff pairs missing from a neighbour list (every step) | 0 | 0 | exact |
 | | | pairs listed by only one ball (every step) | 0 | 0 | exact |
-| | | same pair deeper than 0.5 x radius, consecutive steps | <= 5 | 0 | |
-| | | force-cap region reached (validity) | >= 1 hit | 40 | |
-| | | balls lost / wall clearance (validity) | none / >= 1.0 | none / 20.07 | |
-| dense_gas_dt_quartering (dense gas at dt and dt/4, same physical time) | `dense_gas.rs` | max energy drift at dt/4 over that at dt | <= 0.125 | 0.094 | ~1.3x (dt^2 gives 0.0625); 75% of the threshold, CI warns, see [Baseline history](#baseline-history) |
-| two_body_lj_baseline (2 balls near equilibrium distance, 2000 steps) | `tests.rs` | relative energy drift (final) | 3.0e-2 | 4.46e-3 (max 4.59e-3) | ~6.7x |
+| | | same pair deeper than 0.5 x contact radius, consecutive steps | <= 5 | 0 | |
+| | | force-cap region reached (validity) | >= 1 hit | 52 | |
+| | | balls lost / wall clearance (validity) | none / >= 1.0 | none / 19.03 | |
+| dense_gas_dt_quartering (dense gas at dt and dt/4, same physical time) | `dense_gas.rs` | max energy drift at dt/4 over that at dt | <= 0.125 | 0.031 | ~4x (dt^2 gives 0.0625) |
+| two_body_lj_baseline (2 balls at 1.05 x their equilibrium distance, 2000 steps) | `tests.rs` | relative energy drift (final) | 3.0e-2 | 2.14e-3 (max 2.18e-3) | ~14x |
 | | | relative momentum drift | 3.0e-3 | 0 | |
-| force_cap_transition (2 balls driven into the force cap, cap lowered to 10, 300 steps) | `tests.rs` | relative energy drift (final) | 3.0e-1 | 1.40e-1 | ~2.1x; the cap region is not energy-conserving at this dt, the test checks continuity, not conservation (see #276 in [Baseline history](#baseline-history)) |
+| force_cap_transition (2 balls driven into the force cap, cap lowered to 10, 300 steps) | `tests.rs` | relative energy drift (final) | 3.0e-1 | 8.31e-2 | ~3.6x; the cap region is not energy-conserving at this dt, the test checks continuity, not conservation (see #276 in [Baseline history](#baseline-history)) |
 | | | relative momentum drift | 3.0e-3 | 0 | |
 | | | force-cap region reached (max cap-hit ratio) | >= 1.0e-2 | 1.0 | |
-| two_body_dt_halving (two-body scenario at dt and dt/2, same physical time) | `tests.rs` | relative energy drift at dt/2 vs at dt | <= 2 x coarse | 2.98e-3 vs 5.99e-3 (ratio 0.50) | weak check: it only rejects drift that grows when dt shrinks; the two-body drift converges ~linearly in dt, not as dt^2 |
-| hot_sparse_gas (400 balls over the whole world, speeds up to ~8, 1000 steps) | `neighbor_lists.rs` | max relative energy drift | 8.0e-3 | 2.91e-3 | ~2.7x; kept at 8.0e-3 because the value is realisation noise, see [Baseline history](#baseline-history) |
+| two_body_dt_halving (two-body scenario at dt and dt/2, same physical time) | `tests.rs` | relative energy drift at dt/2 vs at dt | <= 2 x coarse | 1.41e-3 vs 2.83e-3 (ratio 0.50) | weak check: it only rejects drift that grows when dt shrinks; the two-body drift converges ~linearly in dt, not as dt^2 |
+| hot_sparse_gas (400 balls over the whole world, speeds up to ~8, 1000 steps) | `neighbor_lists.rs` | max relative energy drift | 8.0e-3 | 1.37e-3 | ~5.8x; kept at 8.0e-3 because the value is realisation noise, see [Baseline history](#baseline-history) |
 | | | per-ball rebuild rate | [1.0e-1, 4.0e-1] | 2.2e-1 | cadence band, ~10x the dense gas |
 | | | in-cutoff pairs missing / listed by one ball (every step) | 0 / 0 | 0 / 0 | exact |
 | | | balls lost | none | none | |
-| mixed_sizes_cell_borders (21 balls of all sizes, world of 2.2 x 3.3 interaction ranges, 300 steps) | `neighbor_lists.rs` | in-cutoff pairs missing / listed by one ball (every step) | 0 / 0 | 0 / 0 | exact |
+| mixed_sizes_cell_borders (54 balls of all species, world of 2.2 x 3.3 `XL`–`XL` list radii, 300 steps) | `neighbor_lists.rs` | in-cutoff pairs missing / listed by one ball (every step) | 0 / 0 | 0 / 0 | exact |
 | trajectory vs thread count (hot gas and dense gas, 1 vs 4 Rayon threads) | `neighbor_lists.rs` | trajectory hash | equal | equal | exact |
 | balls_removed_and_added (hot gas, 3 x 300 steps: remove 40, then add 38) | `neighbor_lists.rs` | in-cutoff pairs missing / listed by one ball (every step after each rebuild) | 0 / 0 | 0 / 0 | exact |
-| | | ball counts after removal and after adding | exact | 360 / 398 | |
+| | | ball counts after removal and after adding | exact | 360 / 381 | |
 | elastic_world_wall / elastic_line_segment (1 ball, 10000 steps) | `wall_reflection.rs` | relative speed change per reflection | 1.0e-5 | <= 1.1e-6 | |
 | | | impulse alignment with surface normal | >= 0.999 | 1.0 | |
 | | | kinetic energy deviation (every step and per event) | 1.0e-5 | 2.2e-6 | ~4.5x |
 | | | kinetic energy slope per event | 1.0e-6 | ~0 | |
-| | | reflection count vs ray-traced reference | +-1 | 15/15 and 25/25 | |
+| | | reflection count vs ray-traced reference | +-1 | 15/15 and 26/26 | |
 | | | ball stays inside the box and on its side of the barrier (every step) | penetration <= one step of travel | holds | |
 
 **Baseline provenance.** Measured with `cargo ci-test-drift` (dev profile, which is optimized) on an x86_64 host, on the PR #205 branch on top of `master` at `4f8b801`, after the Verlet movement threshold changed to skin/3. `simd_forces` uses `std::simd` (`f32x4`), so the SIMD path is fixed at compile time by the target features: the dev profile sets no `target-cpu`, so x86_64 drift builds use SSE2 even on AVX2/AVX-512 hosts (aarch64 uses NEON). Only the release profile uses `target-cpu=native` (with AMX disabled, see the workspace `Cargo.toml`). f32 results can differ between targets or `RUSTFLAGS`; rerun on the same target when comparing baselines.
@@ -181,3 +181,5 @@ stated.
 **Re-measurement on `master` at `6349f72`** (after #240, #242 and #244): every value in the scenario table is unchanged except dense_gas_dt_quartering, whose ratio is now 0.095 (coarse 2.000e-3, fine 1.893e-4). The table showed 0.064, measured before #240; the change comes from #240 (0.064 at `b599515^`, 0.095 at `b599515`). Only pairs inside `r_cap` changed there, which the dense gas's projectile pairs reach (40 cap hits); the fine run's max drift rose 1.32e-4 -> 1.89e-4 while the coarse run's fell 2.05e-3 -> 2.00e-3. It passes (threshold 0.125), and CI prints a `DRIFT_WARNING` at 76%. The threshold is unchanged. The two-body, force-cap and two-body dt-halving tests now print summary lines too; their values were measured in the same run and added to the table.
 
 **Force-cap distance (#276).** `r_cap` solves `F_LJ(r_cap) = max_force`. The Newton step used `14·(σ/r)^12` instead of `26·(σ/r)^12` in `dF/dr`, so it never converged and a bisection over `[0.1σ, σ]` set `r_cap`, to within 0.1 % of `max_force` (default `r_cap` 0.919360 -> 0.919338). For caps below `F_LJ(σ) = 24ε/σ` the root lies above σ, so the bisection pinned `r_cap` at σ: in force_cap_transition (cap 10) the core force started at 24 while the core potential's slope started at 10, so F was not -dU/dr below `r_cap` (now `r_cap` = 1.0425). Newton now uses the correct derivative and converges; the fallback bisects over `[0.1σ, equilibrium distance]`. Only pairs inside the core change. Re-measured: force_cap_transition relative energy drift 5.27e-1 -> 1.40e-1 (threshold 7.0e-1 -> 3.0e-1, ~2.1x), cap hits 12 -> 14; hot_sparse_gas max relative energy drift 6.53e-3 -> 2.91e-3, so its CI warning is gone (threshold unchanged: over initial speeds the value is realisation noise, see #240 above); dense_gas max relative energy drift 2.000e-3 -> 2.021e-3, final 1.347e-3 -> 1.377e-3, relative momentum drift 8.06e-8 -> 9.83e-8 (66% of its threshold); dense_gas_dt_quartering ratio 0.095 -> 0.094; balls_removed_and_added max overlap depth 4.3e-2 -> 2.8e-2; mixed_sizes_cell_borders (no energy threshold) 1.5e-2 -> 1.7e-2. two_body_lj_baseline, two_body_dt_halving and the wall-reflection scenarios never reach the core and are bit-identical. The seeded operators headless fixture changed (energies in the 4th-5th significant digit, positions by up to 3e-4); the plain seeded fixture did not.
+
+**Species: Lennard-Jones on the centre distance (#234).** The pair potential acts on the centre distance with a per-species-pair `σ_ij` instead of on the edge distance with one `σ`; walls reflect at `σ_i / 2` instead of the ball radius. The scenarios now use species `M` explicitly (the default for new balls became `N2`), the size class they were built with: as a species it keeps its mass and its like-pair equilibrium distance (2.32), but its core is softer (`r_cap` at centre distance 1.78, `U(r_cap) ≈ 14.5 ε`, where the edge-distance core started at 2.12 and ≈ 4.4 ε), it reaches further (cutoff 8.28 instead of 5.2) and stays 1.03 from walls instead of 0.6. Scenario changes: the two-body scenarios start at 1.05 x the `M`–`M` equilibrium distance (2.44, before 2.38); force_cap_transition places its balls without a placement check, since inside the core their contact discs overlap; dense_gas projectiles move at ±3.0 instead of ±2.0, because ±2.0 no longer reaches the core (0 cap hits; ±3.5 reached it but raised the energy drift to 88 % of its threshold). Re-measured against the part-1 branch (`ac0cf4c`, same results as `master`), thresholds unchanged: dense_gas max relative energy drift 2.02e-3 -> 1.68e-3, momentum 9.8e-8 -> 7.3e-8, rebuild rate 2.4e-2 -> 2.8e-2, cap hits 40 -> 52, wall clearance 20.07 -> 19.03; dense_gas_dt_quartering 0.094 -> 0.031 (its warning is gone); two_body_lj_baseline final 4.46e-3 -> 2.14e-3; two_body_dt_halving 5.99e-3 / 2.98e-3 -> 2.83e-3 / 1.41e-3; force_cap_transition 1.40e-1 -> 8.31e-2; hot_sparse_gas 2.91e-3 -> 1.37e-3; balls_removed_and_added re-adds 21 balls instead of 38 (larger wall and contact distance) with max drift 4.15e-3 -> 5.96e-4; mixed_sizes_cell_borders places 54 balls instead of 21 (its world is sized in `XL`–`XL` list radii, now 21.9) and has no energy threshold (max drift 9.6e-2, before 1.7e-2); elastic_line_segment sees 26 reflections instead of 25. Both headless fixtures changed (`N2` balls, `headless.v2`).
