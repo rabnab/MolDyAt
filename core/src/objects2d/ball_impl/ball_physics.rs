@@ -5,7 +5,7 @@
 use crate::objects2d::Rect;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::ball_core::BounceInfo;
-use crate::objects2d::ball_impl::pair_potential::{CapSettings, LJ_SIG, Potential};
+use crate::objects2d::ball_impl::pair_potential::{CapSettings, LJ_SIG, PairOverride, Potential};
 use crate::objects2d::ball_impl::species::{DEFAULT_SPECIES, SpeciesId, SpeciesSet, SpeciesTable};
 use crate::objects2d::ball_impl::wall_law::{HardContact, WallLaw};
 use crate::objects2d::ball_impl::{Ball2D, Named};
@@ -49,6 +49,8 @@ pub const DEFAULT_SKIN_FACTOR: f32 = 0.2;
 pub struct BallPhysics {
     pub constants: PhysicsConstants,
     pair_potential: Potential,
+    /// The pairs of `pair_potential` that do not follow the mixing rule.
+    pair_overrides: Vec<PairOverride>,
     /// Skin as a share of the reference cutoff.
     skin_factor: f32,
     wall_law: HardContact,
@@ -70,10 +72,22 @@ impl BallPhysics {
     /// Lennard-Jones between every pair of `species` (Lorentz–Berthelot
     /// mixing), capped and cut off per `cap`, and hard wall contacts.
     pub fn new(constants: PhysicsConstants, species: &SpeciesTable, cap: CapSettings) -> Self {
+        Self::with_pair_overrides(constants, species, cap, Vec::new())
+    }
+
+    /// [`Self::new`], with the pairs in `overrides` taking their `σ_ij` /
+    /// `ε_ij` from there instead of the mixing rule.
+    pub fn with_pair_overrides(
+        constants: PhysicsConstants,
+        species: &SpeciesTable,
+        cap: CapSettings,
+        overrides: Vec<PairOverride>,
+    ) -> Self {
         let wall_law = HardContact;
         BallPhysics {
             constants,
-            pair_potential: Potential::lennard_jones(species, cap),
+            pair_potential: Potential::lennard_jones(species, cap, &overrides),
+            pair_overrides: overrides,
             skin_factor: DEFAULT_SKIN_FACTOR,
             wall_contact: species
                 .iter()
@@ -97,6 +111,12 @@ impl BallPhysics {
     /// Force cap and cutoff settings of the pair potential.
     pub fn cap_settings(&self) -> &CapSettings {
         self.pair_potential.cap_settings()
+    }
+
+    /// The species pairs whose `σ_ij` / `ε_ij` do not come from the mixing
+    /// rule.
+    pub fn pair_overrides(&self) -> &[PairOverride] {
+        &self.pair_overrides
     }
 
     /// Species `a` and `b` interact only below this centre distance.

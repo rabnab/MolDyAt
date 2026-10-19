@@ -8,8 +8,9 @@
 
 use super::DT_GOAL;
 use crate::application::MainContent;
+use crate::application::sim_config::{PairOverrideConfig, SimConfig};
 use crate::objects2d::ball_impl::ball_physics::PhysicsConstants;
-use crate::objects2d::ball_impl::pair_potential::CapSettings;
+use crate::objects2d::ball_impl::pair_potential::{CapSettings, PairOverride};
 use crate::objects2d::ball_impl::{Ball2D, BallPhysics, SpeciesId, SpeciesTable};
 use crate::objects2d::{Rect, Vec2D};
 
@@ -155,6 +156,74 @@ fn cell_grid_follows_the_species_present() {
         mc.world().cell_grid.list_radius(),
         physics.list_radius(n2, n2)
     );
+}
+
+/// An override that makes an unlike pair reach further than any like pair
+/// of the species present widens the cells for it (#235).
+#[test]
+fn cell_grid_fits_an_overridden_pair() {
+    let mut config = SimConfig::default();
+    config.potential.pair_overrides.push(PairOverrideConfig {
+        a: "XS".into(),
+        b: "N2".into(),
+        sigma: Some(3.0),
+        epsilon: None,
+    });
+    let rect = Rect::new(-50.0, 50.0, 100.0, -100.0);
+    let mut mc = MainContent::with_config(rect, &config, Some(3)).unwrap();
+    let (n2, xs) = (species("N2"), species("XS"));
+    let physics = mc.world().physics.clone();
+    assert_eq!(physics.cutoff(n2, xs), 4.0 * 3.0);
+    assert_eq!(physics.cutoff(xs, n2), 4.0 * 3.0);
+
+    // 11.9 apart: inside the overridden cutoff, but more than two cells of
+    // the widest like pair, so only cells sized for the override find it.
+    let like = physics.list_radius(n2, n2).max(physics.list_radius(xs, xs));
+    assert!(11.9 < physics.cutoff(n2, xs));
+    assert!(11.9 > 2.0 * like);
+    mc.add_candidate_to_vec(Ball2D::new(1, Vec2D::new(-5.95, 0.0), n2));
+    mc.add_candidate_to_vec(Ball2D::new(2, Vec2D::new(5.95, 0.0), xs));
+    mc.collect_neighbours_by_cell(DT_GOAL);
+    assert_eq!(
+        mc.world().cell_grid.list_radius(),
+        physics.list_radius(n2, xs)
+    );
+    assert!(mc.world().balls[0].hood.is_a_neighbour_idx(1));
+    assert!(mc.world().balls[1].hood.is_a_neighbour_idx(0));
+}
+
+#[test]
+fn overridden_pairs_conserve_energy() {
+    let (n2, m) = (species("N2"), species("M"));
+    let overrides = vec![
+        PairOverride {
+            a: n2,
+            b: m,
+            sigma: Some(2.0),
+            epsilon: Some(1.5),
+        },
+        PairOverride {
+            a: m,
+            b: m,
+            sigma: None,
+            epsilon: Some(0.8),
+        },
+    ];
+    let physics = BallPhysics::with_pair_overrides(
+        PhysicsConstants::default(),
+        SpeciesTable::builtin(),
+        CapSettings::default(),
+        overrides,
+    );
+    let mut mc = mixed_world(physics);
+    let start = total_energy(&mc);
+    let mut max_rel_drift = 0.0f64;
+    for _ in 0..10 {
+        run(&mut mc, 50);
+        max_rel_drift = max_rel_drift.max((total_energy(&mc) - start).abs() / start.abs());
+    }
+    println!("start energy {start}, max relative drift {max_rel_drift:.3e}");
+    assert!(max_rel_drift < 1e-3, "energy drift {max_rel_drift}");
 }
 
 /// A ball thrown at the box wall is reflected at centre distance `σ / 2`.

@@ -61,10 +61,12 @@ impl SimulationWorld {
     /// An empty world: no balls, no operators, physics per `config`, not
     /// paused. `config` must be valid (`SimConfig::validate`).
     pub(crate) fn with_config(world_rect: Rect, config: &SimConfig) -> AppResult<Self> {
-        let physics = BallPhysics::new(
+        let species = SpeciesTable::builtin();
+        let physics = BallPhysics::with_pair_overrides(
             PhysicsConstants::default(),
-            SpeciesTable::builtin(),
+            species,
             config.potential.cap_settings(),
+            config.potential.resolve_pair_overrides(species)?,
         )
         .with_skin_factor(config.neighbours.skin_factor);
         let species_present = SpeciesSet::default();
