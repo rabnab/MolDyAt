@@ -438,8 +438,8 @@ fn pair_step_stats(main_content: &MainContent, step: usize) -> PairStepStats {
         for j in (i + 1)..balls.len() {
             let center_dist = balls[j].get_position().dist(balls[i].get_position()).norm();
             let (a, b) = (balls[i].species(), balls[j].species());
-            // Gap between the contact discs (σ/2 each): negative = overlap.
-            let edge_dist = balls[i].get_edge_distance(&balls[j]);
+            // Centre distance minus the pair's contact distance: negative = overlap.
+            let edge_dist = world.physics.edge_gap(&balls[i], &balls[j]);
             stats.pair_count += 1;
             stats.min_edge_distance = stats.min_edge_distance.min(edge_dist);
 
@@ -496,8 +496,8 @@ fn sample_step(main_content: &MainContent, step: usize) -> DriftSample {
                 .dist(world.balls[i].get_position());
             let center_dist = dist_vec.norm();
             let (a, b) = (world.balls[i].species(), world.balls[j].species());
-            // Gap between the contact discs (σ/2 each): negative = overlap.
-            let edge_dist = world.balls[i].get_edge_distance(&world.balls[j]);
+            // Centre distance minus the pair's contact distance: negative = overlap.
+            let edge_dist = world.physics.edge_gap(&world.balls[i], &world.balls[j]);
             potential += world.physics.potential(a, b, center_dist);
             pair_count += 1;
             if edge_dist < 0.0 {
@@ -531,6 +531,8 @@ fn sample_step(main_content: &MainContent, step: usize) -> DriftSample {
     }
 }
 
+#[cfg(test)]
+mod binary_mixture;
 #[cfg(test)]
 mod dense_gas;
 #[cfg(test)]

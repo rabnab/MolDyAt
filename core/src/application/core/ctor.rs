@@ -40,7 +40,6 @@ impl MainContent {
     /// An empty world run with `config` (validated first); balls are seeded
     /// from `seed` if given.
     pub fn with_config(world_rect: Rect, config: &SimConfig, seed: Option<u64>) -> AppResult<Self> {
-        config.validate()?;
         Ok(Self {
             world: SimulationWorld::with_config(world_rect, config)?,
             step_config: StepConfig::new(config.integration.time_step, seed),
@@ -59,12 +58,15 @@ impl MainContent {
 
 impl SimulationWorld {
     /// An empty world: no balls, no operators, physics per `config`, not
-    /// paused. `config` must be valid (`SimConfig::validate`).
+    /// paused. Fails if `config` is invalid: checking it
+    /// (`SimConfig::validated_pair_overrides`) also resolves its pair
+    /// overrides, in one pass.
     pub(crate) fn with_config(world_rect: Rect, config: &SimConfig) -> AppResult<Self> {
-        let physics = BallPhysics::new(
+        let physics = BallPhysics::with_pair_overrides(
             PhysicsConstants::default(),
             SpeciesTable::builtin(),
             config.potential.cap_settings(),
+            config.validated_pair_overrides()?,
         )
         .with_skin_factor(config.neighbours.skin_factor);
         let species_present = SpeciesSet::default();

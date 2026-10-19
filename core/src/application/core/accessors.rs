@@ -6,10 +6,12 @@ use super::*;
 use crate::application::AppResult;
 use crate::application::phase_timings::PhaseTimings;
 use crate::application::sim_config::{
-    DisplayConfig, IntegrationConfig, NeighbourConfig, PotentialConfig, SimConfig,
+    DisplayConfig, IntegrationConfig, NeighbourConfig, PairOverrideConfig, PotentialConfig,
+    SimConfig,
 };
 use crate::application::sim_stats::{HIGH_GRAVITY, NORMAL_GRAVITY};
 use crate::objects2d::Rect;
+use crate::objects2d::ball_impl::SpeciesTable;
 use crate::objects2d::operator::{is_degenerate, remap_point};
 use std::time::Duration;
 
@@ -192,7 +194,14 @@ impl MainContent {
                 time_step: self.time_step(),
                 speed_limit_factor: self.world.speed_limit_factor,
             },
-            potential: PotentialConfig::from(*physics.cap_settings()),
+            potential: PotentialConfig {
+                pair_overrides: physics
+                    .pair_overrides()
+                    .iter()
+                    .map(|o| PairOverrideConfig::named(o, SpeciesTable::builtin()))
+                    .collect(),
+                ..PotentialConfig::from(*physics.cap_settings())
+            },
             neighbours: NeighbourConfig {
                 skin_factor: physics.skin_factor(),
             },

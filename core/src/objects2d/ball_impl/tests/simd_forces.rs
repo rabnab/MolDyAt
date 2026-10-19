@@ -3,8 +3,10 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::objects2d::Vec2D;
-use crate::objects2d::ball_impl::ball_physics::BallPhysics;
-use crate::objects2d::ball_impl::pair_potential::{PairPotential, Potential};
+use crate::objects2d::ball_impl::ball_physics::{BallPhysics, ForceResult, PhysicsConstants};
+use crate::objects2d::ball_impl::pair_potential::{
+    CapSettings, PairOverride, PairPotential, Potential,
+};
 use crate::objects2d::ball_impl::simd_forces::{KernelPoint, force_simd, kernel_points};
 use crate::objects2d::ball_impl::{Ball2D, DEFAULT_SPECIES, SpeciesId, SpeciesTable};
 use std::simd::f32x4;
@@ -155,10 +157,8 @@ fn test_virial_force_capped_regime() {
 
 /// One SIMD chunk of four unlike pairs plus scalar remainders: every lane
 /// must use its own pair's potential, and the chunk must agree with the
-/// scalar functions pair by pair.
-#[test]
-fn test_mixed_species_in_one_chunk_match_scalar_pairs() {
-    let physics = BallPhysics::default();
+/// scalar functions pair by pair. Returns the kernel's result.
+fn assert_mixed_chunk_matches_scalar_pairs(physics: &BallPhysics) -> ForceResult {
     let neighbours = [
         (Vec2D::new(1.3, 0.0), species("XS")),
         (Vec2D::new(0.0, 2.1), species("M")),
@@ -169,7 +169,7 @@ fn test_mixed_species_in_one_chunk_match_scalar_pairs() {
     ];
     let balls = n2_with_neighbours(&neighbours);
 
-    let result = force_simd(&physics, 0, &balls, &kernel_points(&balls));
+    let result = force_simd(physics, 0, &balls, &kernel_points(&balls));
 
     let (mut force, mut potential, mut virial) = (Vec2D::new(0.0, 0.0), 0.0f32, 0.0f32);
     let mut min_gap = f32::INFINITY;
@@ -188,6 +188,43 @@ fn test_mixed_species_in_one_chunk_match_scalar_pairs() {
     approx(result.potential_energy, potential, 1e-4);
     approx(result.virial, virial, 1e-4);
     approx(result.min_dist, min_gap, 1e-5);
+    result
+}
+
+#[test]
+fn test_mixed_species_in_one_chunk_match_scalar_pairs() {
+    assert_mixed_chunk_matches_scalar_pairs(&BallPhysics::default());
+}
+
+/// An overridden pair in the SIMD chunk (`N2`–`XS`, pushed into its core)
+/// and one in the scalar remainder (`N2`–`S`): the kernel gathers the
+/// overridden potentials like any other (#235).
+#[test]
+fn test_overridden_pairs_in_a_mixed_chunk_match_scalar_pairs() {
+    let overrides = vec![
+        PairOverride {
+            a: species("XS"),
+            b: N2,
+            sigma: Some(1.6),
+            epsilon: Some(2.0),
+        },
+        PairOverride {
+            a: N2,
+            b: species("S"),
+            sigma: None,
+            epsilon: Some(0.4),
+        },
+    ];
+    let physics = BallPhysics::with_pair_overrides(
+        PhysicsConstants::default(),
+        SpeciesTable::builtin(),
+        CapSettings::default(),
+        overrides,
+    );
+    assert!(1.3 < physics.get_force_cap_distance(N2, species("XS")));
+    let overridden = assert_mixed_chunk_matches_scalar_pairs(&physics);
+    let mixed = assert_mixed_chunk_matches_scalar_pairs(&BallPhysics::default());
+    assert_ne!(overridden.force, mixed.force, "the overrides must matter");
 }
 
 #[test]

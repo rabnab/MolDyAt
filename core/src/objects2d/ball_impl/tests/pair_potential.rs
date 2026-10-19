@@ -3,9 +3,10 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::objects2d::ball_impl::pair_potential::{
-    CapSettings, CappedPotential, LennardJones, PairLaw, PairPotential, ScalarLanes,
-    bisect_cap_distance, newton_cap_distance,
+    CapSettings, CappedPotential, LennardJones, PairLaw, PairOverride, PairPotential, PairTable,
+    Potential, ScalarLanes, bisect_cap_distance, newton_cap_distance,
 };
+use crate::objects2d::ball_impl::{SpeciesId, SpeciesTable};
 use std::simd::f32x4;
 
 fn approx(a: f32, b: f32, eps: f32, what: &str) {
@@ -347,6 +348,114 @@ fn test_newton_rejects_a_root_that_is_not_the_cap_distance() {
             let p = capped(law, max_force);
             assert_eq!(p.r_cap(), bisect_cap_distance(&lj, max_force));
             check_force_at_r_cap_is_max_force(&p, max_force);
+        }
+    }
+}
+
+// ── Per-pair overrides (#235) ────────────────────────────────────
+
+fn species(name: &str) -> SpeciesId {
+    SpeciesTable::builtin().by_name(name).unwrap()
+}
+
+fn lj_table(overrides: &[PairOverride]) -> PairTable<LennardJones> {
+    let Potential::LennardJones(table) =
+        Potential::lennard_jones(SpeciesTable::builtin(), CapSettings::default(), overrides);
+    table
+}
+
+/// The same law, cap, cutoff and shift, bit for bit.
+fn assert_same_pair(a: &CappedPotential<LennardJones>, b: &CappedPotential<LennardJones>) {
+    assert_eq!(a.law(), b.law());
+    assert_eq!(a.cutoff().to_bits(), b.cutoff().to_bits());
+    assert_eq!(a.r_cap().to_bits(), b.r_cap().to_bits());
+    for r in [0.3, 0.9, 1.2, 2.0, 0.99 * a.cutoff()] {
+        assert_eq!(a.force(r).to_bits(), b.force(r).to_bits(), "force at {r}");
+        assert_eq!(
+            a.potential(r).to_bits(),
+            b.potential(r).to_bits(),
+            "potential at {r}"
+        );
+    }
+}
+
+#[test]
+fn test_override_replaces_exactly_that_pair_in_both_orders() {
+    let o = PairOverride {
+        a: species("N2"),
+        b: species("XS"),
+        sigma: Some(1.6),
+        epsilon: Some(2.0),
+    };
+    let mixed = lj_table(&[]);
+    let overridden = lj_table(&[o]);
+    let law = LennardJones {
+        sigma: 1.6,
+        epsilon: 2.0,
+    };
+    let expected = CappedPotential::new(law, CapSettings::default());
+    let ids: Vec<_> = SpeciesTable::builtin().ids().collect();
+    for &a in &ids {
+        for &b in &ids {
+            let pair = overridden.pair(a, b);
+            if o.is_for(a, b) {
+                // Cutoff, r_cap and U(cutoff) follow from the overridden law.
+                assert_same_pair(pair, &expected);
+                assert_eq!(pair.cutoff(), 4.0 * 1.6);
+                assert_ne!(pair.r_cap(), mixed.pair(a, b).r_cap());
+            } else {
+                assert_same_pair(pair, mixed.pair(a, b));
+            }
+            assert_same_pair(pair, overridden.pair(b, a));
+        }
+    }
+}
+
+#[test]
+fn test_partial_override_keeps_the_other_mixed_value() {
+    let (n2, m) = (species("N2"), species("M"));
+    let mixed = *lj_table(&[]).pair(n2, m).law();
+    let sigma_only = PairOverride {
+        a: m,
+        b: n2,
+        sigma: Some(2.5),
+        epsilon: None,
+    };
+    let epsilon_only = PairOverride {
+        a: m,
+        b: m,
+        sigma: None,
+        epsilon: Some(0.5),
+    };
+    let table = lj_table(&[sigma_only, epsilon_only]);
+    assert_eq!(
+        *table.pair(n2, m).law(),
+        LennardJones {
+            sigma: 2.5,
+            epsilon: mixed.epsilon
+        }
+    );
+    let like_mixed = *lj_table(&[]).pair(m, m).law();
+    assert_eq!(
+        *table.pair(m, m).law(),
+        LennardJones {
+            sigma: like_mixed.sigma,
+            epsilon: 0.5
+        }
+    );
+}
+
+#[test]
+fn test_without_overrides_the_table_is_the_mixed_one() {
+    let table = lj_table(&[]);
+    let builtin = SpeciesTable::builtin();
+    for a in builtin.ids() {
+        for b in builtin.ids() {
+            let law = LennardJones::mixed(builtin.species(a), builtin.species(b));
+            assert_same_pair(
+                table.pair(a, b),
+                &CappedPotential::new(law, CapSettings::default()),
+            );
         }
     }
 }

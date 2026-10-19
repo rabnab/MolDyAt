@@ -8,8 +8,10 @@
 use crate::application::MainContent;
 use crate::application::core::SimulationEngine;
 use crate::application::sim_config::*;
+use crate::error::AppError;
 use crate::objects2d::Rect;
-use crate::objects2d::ball_impl::BallPhysics;
+use crate::objects2d::ball_impl::pair_potential::PairOverride;
+use crate::objects2d::ball_impl::{BallPhysics, SpeciesTable};
 use std::time::Duration;
 
 fn rect() -> Rect {
@@ -289,4 +291,181 @@ fn load_reads_a_file_and_reports_a_missing_one() {
     let error = format!("{:?}", SimConfig::load(&missing).unwrap_err());
     assert!(error.contains("missing.toml"), "{error}");
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ── Pair overrides (#235) ────────────────────────────────────────
+
+fn pair(a: &str, b: &str, sigma: Option<f32>, epsilon: Option<f32>) -> PairOverrideConfig {
+    PairOverrideConfig {
+        a: a.into(),
+        b: b.into(),
+        sigma,
+        epsilon,
+    }
+}
+
+fn with_pairs(pairs: Vec<PairOverrideConfig>) -> SimConfig {
+    let mut config = SimConfig::default();
+    config.potential.pair_overrides = pairs;
+    config
+}
+
+#[test]
+fn pair_overrides_are_read() {
+    let config = SimConfig::from_toml(
+        "[[potential.pair_override]]\n\
+         a = \"N2\"\n\
+         b = \"XS\"\n\
+         sigma = 1.1\n\
+         epsilon = 1.2\n\
+         [[potential.pair_override]]\n\
+         a = \"XS\"\n\
+         b = \"XS\"\n\
+         epsilon = 1.5\n",
+    )
+    .unwrap();
+    assert_eq!(
+        config,
+        with_pairs(vec![
+            pair("N2", "XS", Some(1.1), Some(1.2)),
+            pair("XS", "XS", None, Some(1.5)),
+        ])
+    );
+}
+
+#[test]
+fn main_content_runs_with_its_pair_overrides() {
+    let config = with_pairs(vec![
+        pair("XS", "N2", Some(1.1), Some(1.2)),
+        pair("M", "M", None, Some(0.5)),
+    ]);
+    let mc = MainContent::with_config(rect(), &config, None).unwrap();
+    assert_eq!(mc.config(), config);
+    let species = SpeciesTable::builtin();
+    let id = |name| species.by_name(name).unwrap();
+    assert_eq!(
+        mc.world().physics.pair_overrides(),
+        [
+            PairOverride {
+                a: id("XS"),
+                b: id("N2"),
+                sigma: Some(1.1),
+                epsilon: Some(1.2)
+            },
+            PairOverride {
+                a: id("M"),
+                b: id("M"),
+                sigma: None,
+                epsilon: Some(0.5)
+            },
+        ]
+    );
+    assert_eq!(mc.world().physics.cutoff(id("N2"), id("XS")), 4.0 * 1.1);
+}
+
+#[test]
+fn no_pair_overrides_are_not_written() {
+    let json = serde_json::to_string(&SimConfig::default()).unwrap();
+    assert!(!json.contains("pair_override"), "{json}");
+    let json = serde_json::to_string(&with_pairs(vec![pair("N2", "N2", Some(1.1), None)])).unwrap();
+    assert!(json.contains("pair_override"), "{json}");
+    assert!(
+        !json.contains("epsilon"),
+        "an unset value is left out: {json}"
+    );
+}
+
+#[test]
+fn invalid_pair_overrides_are_rejected() {
+    for (pairs, expected) in [
+        (
+            vec![pair("N2", "Ar", Some(1.1), None)],
+            "potential.pair_override[0].b: unknown species \"Ar\" (known: N2, XS, S, M, L, XL)",
+        ),
+        (
+            vec![pair("n2", "N2", Some(1.1), None)],
+            "potential.pair_override[0].a: unknown species \"n2\"",
+        ),
+        (
+            vec![pair("N2", "XS", None, None)],
+            "potential.pair_override[0] (N2 – XS) sets neither sigma nor epsilon",
+        ),
+        (
+            vec![pair("N2", "XS", Some(f32::NAN), None)],
+            "potential.pair_override[0].sigma must be within",
+        ),
+        (
+            vec![pair("N2", "XS", None, Some(-1.0))],
+            "potential.pair_override[0].epsilon must be within",
+        ),
+        (
+            vec![pair("N2", "XS", None, Some(f32::INFINITY))],
+            "potential.pair_override[0].epsilon must be within",
+        ),
+        (
+            vec![
+                pair("N2", "N2", Some(1.1), None),
+                pair("N2", "XS", Some(1.1), None),
+                pair("XS", "N2", None, Some(2.0)),
+            ],
+            "potential.pair_override[2] overrides the pair XS – N2 again (first in potential.pair_override[1])",
+        ),
+    ] {
+        let config = with_pairs(pairs);
+        let AppError::CustomError(error) = config.validate().expect_err(expected);
+        assert!(error.contains(expected), "expected {expected:?} in {error}");
+        assert!(MainContent::with_config(rect(), &config, None).is_err());
+    }
+}
+
+#[test]
+fn pair_override_values_have_a_range() {
+    for (sigma, epsilon) in [
+        (MIN_PAIR_SIGMA, MIN_PAIR_EPSILON),
+        (MAX_PAIR_SIGMA, MAX_PAIR_EPSILON),
+    ] {
+        let config = with_pairs(vec![pair("N2", "XS", Some(sigma), Some(epsilon))]);
+        assert!(config.validate().is_ok(), "{sigma}, {epsilon}");
+    }
+    for (sigma, epsilon, key) in [
+        (MIN_PAIR_SIGMA * 0.99, 1.0, "sigma"),
+        (MAX_PAIR_SIGMA * 1.01, 1.0, "sigma"),
+        (1.0, MIN_PAIR_EPSILON * 0.99, "epsilon"),
+        (1.0, MAX_PAIR_EPSILON * 1.01, "epsilon"),
+    ] {
+        let config = with_pairs(vec![pair("N2", "XS", Some(sigma), Some(epsilon))]);
+        let error = format!("{:?}", config.validate().expect_err(key));
+        assert!(
+            error.contains(&format!("potential.pair_override[0].{key}")),
+            "{error}"
+        );
+    }
+}
+
+#[test]
+fn unknown_keys_in_a_pair_override_are_rejected() {
+    let error = error_text(
+        "[[potential.pair_override]]\n\
+         a = \"N2\"\n\
+         b = \"XS\"\n\
+         sigma_ij = 1.1\n",
+    );
+    assert!(error.contains("sigma_ij"), "{error}");
+    let error = error_text("[[potential.pair_override]]\nsigma = 1.1\n");
+    assert!(error.contains("missing field"), "{error}");
+}
+
+/// The commented-out override in the README example is a valid config.
+#[test]
+fn readme_pair_override_example_is_valid() {
+    let readme = include_str!("../../../../README.md");
+    let start = readme.find("```toml\n").expect("README has a TOML example") + "```toml\n".len();
+    let end = start + readme[start..].find("```").unwrap();
+    let uncommented: String = readme[start..end]
+        .lines()
+        .map(|line| line.strip_prefix("# ").unwrap_or(line))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let config = SimConfig::from_toml(&uncommented).unwrap();
+    assert_eq!(config.potential.pair_overrides.len(), 1, "{uncommented}");
 }

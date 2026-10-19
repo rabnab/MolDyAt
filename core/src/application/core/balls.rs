@@ -110,7 +110,7 @@ impl MainContent {
                 // Only count each pair once (i < neighbor_idx)
                 if i < neighbor_idx {
                     let other = &self.world.balls[neighbor_idx];
-                    let distance = ball.get_edge_distance(other);
+                    let distance = self.world.physics.edge_gap(ball, other);
                     pairs.push((i, neighbor_idx, distance));
                 }
             }
@@ -359,12 +359,12 @@ impl SimulationWorld {
         }
     }
 
-    /// Gap between the contact discs of two balls of `species` at their
-    /// potential minimum: the placement margin that seeds balls without
-    /// compressed pairs.
+    /// Edge gap of two balls of `species` at their potential minimum: the
+    /// placement margin that seeds balls without compressed pairs. Never
+    /// negative, since it applies to pairs with every other species too.
     pub(crate) fn equilibrium_gap(&self, species: SpeciesId) -> f32 {
-        let contact = self.physics.wall_contact_distance(species);
-        self.physics.equilibrium_distance(species, species) - 2.0 * contact
+        let contact = self.physics.contact_distance(species, species);
+        (self.physics.equilibrium_distance(species, species) - contact).max(0.0)
     }
 
     pub(crate) fn move_ball_in_cell_grid(

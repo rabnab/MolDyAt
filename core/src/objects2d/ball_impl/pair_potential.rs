@@ -8,8 +8,9 @@
 //! A [`PairLaw`] is the bare law (Lennard-Jones, ...). [`CappedPotential`] adds
 //! the force cap below `r_cap` and the cutoff shift to any law, so both are
 //! implemented once. A [`PairTable`] holds one capped potential per pair of
-//! species, mixed from the species parameters. [`Potential`] lists the laws the
-//! simulation can use.
+//! species, mixed from the species parameters; a [`PairOverride`] replaces the
+//! mixed parameters of one pair. [`Potential`] lists the laws the simulation
+//! can use.
 //!
 //! All distances are centre distances. The SIMD kernel evaluates four pairs at
 //! once whose parameters may differ: [`PairLaw::lanes`] and
@@ -148,6 +149,35 @@ impl LennardJones {
             sigma: 0.5 * (a.sigma + b.sigma),
             epsilon: (a.epsilon * b.epsilon).sqrt(),
         }
+    }
+
+    /// This law with the `σ` and `ε` that `o` sets.
+    pub fn overridden(self, o: &PairOverride) -> Self {
+        LennardJones {
+            sigma: o.sigma.unwrap_or(self.sigma),
+            epsilon: o.epsilon.unwrap_or(self.epsilon),
+        }
+    }
+}
+
+/// Replaces the mixed `σ_ij` and/or `ε_ij` of one species pair, in both
+/// orders. The pair's cutoff, `r_cap` and `U(cutoff)` follow from the new
+/// law. `σ` and `ε` must be finite and positive (`SimConfig::validate`
+/// checks the configured ones).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PairOverride {
+    pub a: SpeciesId,
+    pub b: SpeciesId,
+    /// `σ_ij`; `None` keeps the mixed value.
+    pub sigma: Option<f32>,
+    /// `ε_ij`; `None` keeps the mixed value.
+    pub epsilon: Option<f32>,
+}
+
+impl PairOverride {
+    /// Whether this override is for the pair `(a, b)`, in either order.
+    pub fn is_for(&self, a: SpeciesId, b: SpeciesId) -> bool {
+        (self.a, self.b) == (a, b) || (self.a, self.b) == (b, a)
     }
 }
 
@@ -426,15 +456,16 @@ pub struct PairTable<L> {
 }
 
 impl<L: PairLaw> PairTable<L> {
-    /// The table for `species`, with each pair's law from `law_for`.
+    /// The table for `species`, with each pair's law from `law_for`, which
+    /// must be symmetric (`law_for(a, b) == law_for(b, a)`).
     pub fn new(
         species: &SpeciesTable,
         settings: CapSettings,
-        law_for: impl Fn(&Species, &Species) -> L,
+        law_for: impl Fn(SpeciesId, SpeciesId) -> L,
     ) -> Self {
         let pairs = species
-            .iter()
-            .flat_map(|a| species.iter().map(move |b| (a, b)))
+            .ids()
+            .flat_map(|a| species.ids().map(move |b| (a, b)))
             .map(|(a, b)| CappedPotential::new(law_for(a, b), settings))
             .collect();
         PairTable {
@@ -474,9 +505,20 @@ pub enum Potential {
 }
 
 impl Potential {
-    /// Lennard-Jones between all species, mixed by Lorentz–Berthelot.
-    pub fn lennard_jones(species: &SpeciesTable, settings: CapSettings) -> Self {
-        Potential::LennardJones(PairTable::new(species, settings, LennardJones::mixed))
+    /// Lennard-Jones between all species, mixed by Lorentz–Berthelot, except
+    /// for the pairs in `overrides` (the first override of a pair wins).
+    pub fn lennard_jones(
+        species: &SpeciesTable,
+        settings: CapSettings,
+        overrides: &[PairOverride],
+    ) -> Self {
+        Potential::LennardJones(PairTable::new(species, settings, |a, b| {
+            let mixed = LennardJones::mixed(species.species(a), species.species(b));
+            match overrides.iter().find(|o| o.is_for(a, b)) {
+                Some(o) => mixed.overridden(o),
+                None => mixed,
+            }
+        }))
     }
 
     pub fn cap_settings(&self) -> &CapSettings {

@@ -361,6 +361,13 @@ speed_limit_factor = 0.2      # 0.01..10, speed limit as a share of the shorter 
 max_force = 100.0             # 1..10000, repulsive force where the sloped core starts
 core_stiffness = 200.0        # 0..10000, force slope inside the core (0: flat)
 cutoff_factor = 4.0           # 1.2..10, pair cutoff in units of sigma_ij
+## Optional, one block per species pair: replaces the mixed sigma_ij and/or
+## epsilon_ij of that pair (both orders); a missing value keeps the mixed one.
+# [[potential.pair_override]]
+# a = "N2"                    # species names: N2, XS, S, M, L, XL
+# b = "XS"
+# sigma = 1.1                 # 0.5..8
+# epsilon = 1.2               # 0.1..10
 
 [neighbours]
 skin_factor = 0.2             # 0.01..1, Verlet skin as a share of the N2 cutoff
@@ -378,7 +385,9 @@ A save stores the config of the run in its `config` section, and loading the
 save restores it, so `--config` cannot be combined with `--load`. Saves
 written before the config existed load with the defaults. Builds from before
 the config ignore it and run such a save with the defaults; a build that does
-not know a key in a save's `config` refuses to load it. A `[species]`
+not know a key in a save's `config` refuses to load it; pair overrides are
+written only when there are any, so other saves stay loadable for builds from
+before them. A `[species]`
 section for the species library will follow (#237).
 
 ## Releases & Versioning

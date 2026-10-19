@@ -6,7 +6,8 @@
 //!
 //! [`SimConfig`] holds the settings that used to be constants spread over the
 //! code: the time step, the speed limit, the force cap and cutoff of the pair
-//! potential, the Verlet skin and the snapshot interval of the physics thread.
+//! potential, the Verlet skin and the snapshot interval of the physics thread,
+//! and per-pair overrides of the mixed Lennard-Jones parameters (#235).
 //! Its defaults are today's values, so a run without a config file is
 //! bit-identical to a build without `SimConfig`.
 //!
@@ -35,8 +36,8 @@
 //! added as a defaulted field like the others.
 
 use crate::error::{AppError, AppResult};
-use crate::objects2d::ball_impl::DEFAULT_SKIN_FACTOR;
-use crate::objects2d::ball_impl::pair_potential::CapSettings;
+use crate::objects2d::ball_impl::pair_potential::{CapSettings, PairOverride};
+use crate::objects2d::ball_impl::{DEFAULT_SKIN_FACTOR, SpeciesTable};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::time::Duration;
@@ -69,6 +70,13 @@ pub const MIN_CUTOFF_FACTOR: f32 = 1.2;
 pub const MAX_CUTOFF_FACTOR: f32 = 10.0;
 pub const MIN_SKIN_FACTOR: f32 = 0.01;
 pub const MAX_SKIN_FACTOR: f32 = 1.0;
+/// `σ_ij` of a pair override. The built-in species span 1 to 5.3; much
+/// smaller pairs stiffen the core beyond what the time step resolves.
+pub const MIN_PAIR_SIGMA: f32 = 0.5;
+pub const MAX_PAIR_SIGMA: f32 = 8.0;
+/// `ε_ij` of a pair override. The built-in species all have `ε = 1`.
+pub const MIN_PAIR_EPSILON: f32 = 0.1;
+pub const MAX_PAIR_EPSILON: f32 = 10.0;
 /// 1 ms to 1 s between two snapshots for the window.
 pub const MIN_SNAPSHOT_INTERVAL_US: u64 = 1_000;
 pub const MAX_SNAPSHOT_INTERVAL_US: u64 = 1_000_000;
@@ -107,7 +115,8 @@ impl Default for IntegrationConfig {
     }
 }
 
-/// Force cap and cutoff of every pair potential (see [`CapSettings`]).
+/// Force cap and cutoff of every pair potential (see [`CapSettings`]), and
+/// the pairs that do not follow the mixing rule.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct PotentialConfig {
@@ -117,6 +126,11 @@ pub struct PotentialConfig {
     pub core_stiffness: f32,
     /// Cutoff of a pair as a multiple of its `σ_ij`.
     pub cutoff_factor: f32,
+    /// `[[potential.pair_override]]`: pairs whose `σ_ij` / `ε_ij` replace the
+    /// Lorentz–Berthelot values. Empty by default, and then not written, so
+    /// a save without overrides stays readable for builds without the key.
+    #[serde(rename = "pair_override", skip_serializing_if = "Vec::is_empty")]
+    pub pair_overrides: Vec<PairOverrideConfig>,
 }
 
 impl Default for PotentialConfig {
@@ -131,6 +145,7 @@ impl From<CapSettings> for PotentialConfig {
             max_force: cap.max_force,
             core_stiffness: cap.core_stiffness,
             cutoff_factor: cap.cutoff_factor,
+            pair_overrides: Vec::new(),
         }
     }
 }
@@ -142,6 +157,97 @@ impl PotentialConfig {
             core_stiffness: self.core_stiffness,
             cutoff_factor: self.cutoff_factor,
         }
+    }
+
+    /// The pair overrides with their species names looked up in `species`,
+    /// checked as in [`SimConfig::validate`].
+    pub fn resolve_pair_overrides(&self, species: &SpeciesTable) -> AppResult<Vec<PairOverride>> {
+        let mut resolved: Vec<PairOverride> = Vec::with_capacity(self.pair_overrides.len());
+        for (i, entry) in self.pair_overrides.iter().enumerate() {
+            let key = format!("potential.pair_override[{i}]");
+            let o = entry.resolve(species, &key)?;
+            if let Some(j) = resolved.iter().position(|r| r.is_for(o.a, o.b)) {
+                return Err(invalid(format!(
+                    "{key} overrides the pair {} – {} again (first in potential.pair_override[{j}])",
+                    entry.a, entry.b
+                )));
+            }
+            resolved.push(o);
+        }
+        Ok(resolved)
+    }
+}
+
+/// One `[[potential.pair_override]]` entry: species `a` and `b` (in either
+/// order) interact with this `σ_ij` and / or `ε_ij` instead of the mixed one.
+/// The pair's cutoff (`cutoff_factor · σ_ij`) and force cap follow.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PairOverrideConfig {
+    /// Name of a species (`N2`, `XS`, ...).
+    pub a: String,
+    /// Name of a species; may equal `a` (the like pair).
+    pub b: String,
+    /// `σ_ij`; missing keeps the mixed value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sigma: Option<f32>,
+    /// `ε_ij`; missing keeps the mixed value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub epsilon: Option<f32>,
+}
+
+impl PairOverrideConfig {
+    /// `o` with its species named after `species`.
+    pub fn named(o: &PairOverride, species: &SpeciesTable) -> Self {
+        Self {
+            a: species.species(o.a).name.clone(),
+            b: species.species(o.b).name.clone(),
+            sigma: o.sigma,
+            epsilon: o.epsilon,
+        }
+    }
+
+    /// Look up the species and check the values; `key` names the entry in
+    /// errors.
+    fn resolve(&self, species: &SpeciesTable, key: &str) -> AppResult<PairOverride> {
+        let lookup = |name: &str, field: &str| {
+            species.by_name(name).ok_or_else(|| {
+                let known: Vec<&str> = species.iter().map(|s| s.name.as_str()).collect();
+                invalid(format!(
+                    "{key}.{field}: unknown species \"{name}\" (known: {})",
+                    known.join(", ")
+                ))
+            })
+        };
+        let (a, b) = (lookup(&self.a, "a")?, lookup(&self.b, "b")?);
+        if self.sigma.is_none() && self.epsilon.is_none() {
+            return Err(invalid(format!(
+                "{key} ({} – {}) sets neither sigma nor epsilon",
+                self.a, self.b
+            )));
+        }
+        if let Some(sigma) = self.sigma {
+            check_range(
+                sigma,
+                MIN_PAIR_SIGMA,
+                MAX_PAIR_SIGMA,
+                &format!("{key}.sigma"),
+            )?;
+        }
+        if let Some(epsilon) = self.epsilon {
+            check_range(
+                epsilon,
+                MIN_PAIR_EPSILON,
+                MAX_PAIR_EPSILON,
+                &format!("{key}.epsilon"),
+            )?;
+        }
+        Ok(PairOverride {
+            a,
+            b,
+            sigma: self.sigma,
+            epsilon: self.epsilon,
+        })
     }
 }
 
@@ -226,8 +332,14 @@ impl SimConfig {
     }
 
     /// Check every value against its range (the `MIN_*` / `MAX_*`
-    /// constants). The defaults pass.
+    /// constants) and every pair override's species. The defaults pass.
     pub fn validate(&self) -> AppResult {
+        self.validated_pair_overrides().map(drop)
+    }
+
+    /// [`Self::validate`], returning the pair overrides with their species
+    /// resolved, ready for the physics.
+    pub fn validated_pair_overrides(&self) -> AppResult<Vec<PairOverride>> {
         let IntegrationConfig {
             time_step,
             speed_limit_factor,
@@ -249,6 +361,7 @@ impl SimConfig {
             max_force,
             core_stiffness,
             cutoff_factor,
+            pair_overrides: _, // resolved and checked below
         } = self.potential;
         check_range(
             max_force,
@@ -268,6 +381,9 @@ impl SimConfig {
             MAX_CUTOFF_FACTOR,
             "potential.cutoff_factor",
         )?;
+        let pair_overrides = self
+            .potential
+            .resolve_pair_overrides(SpeciesTable::builtin())?;
 
         check_range(
             self.neighbours.skin_factor,
@@ -280,7 +396,8 @@ impl SimConfig {
             MIN_SNAPSHOT_INTERVAL_US,
             MAX_SNAPSHOT_INTERVAL_US,
             "display.snapshot_interval_us",
-        )
+        )?;
+        Ok(pair_overrides)
     }
 
     pub fn snapshot_interval(&self) -> Duration {
