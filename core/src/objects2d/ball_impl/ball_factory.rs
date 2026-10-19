@@ -7,6 +7,7 @@ use crate::objects2d::ball_impl::ball_core::Ball2D;
 use crate::objects2d::ball_impl::species::{DEFAULT_SPECIES, SpeciesId, SpeciesTable};
 use crate::objects2d::vec_2d::Vec2D;
 use std::cell::{Cell, RefCell};
+use std::sync::Arc;
 
 use rand::rngs::{StdRng, SysRng};
 use rand::{RngExt, SeedableRng};
@@ -17,6 +18,9 @@ pub struct BallFactory {
     next_id: RefCell<usize>,
     new_ball_species: Cell<SpeciesId>,
     rng: RefCell<StdRng>,
+    /// Species table of the world the balls are made for: mass and contact
+    /// radius come from it.
+    species: RefCell<Arc<SpeciesTable>>,
 }
 
 const FIRST_BALL_ID: usize = 1;
@@ -27,6 +31,7 @@ impl Default for BallFactory {
             next_id: RefCell::new(FIRST_BALL_ID),
             new_ball_species: Cell::new(DEFAULT_SPECIES),
             rng: RefCell::new(StdRng::try_from_rng(&mut SysRng).unwrap()),
+            species: RefCell::new(SpeciesTable::builtin_shared()),
         }
     }
 }
@@ -42,17 +47,33 @@ impl BallFactory {
             next_id: RefCell::new(FIRST_BALL_ID),
             new_ball_species: Cell::new(DEFAULT_SPECIES),
             rng: RefCell::new(StdRng::seed_from_u64(seed)),
+            species: RefCell::new(SpeciesTable::builtin_shared()),
         }
     }
 
-    fn table() -> &'static SpeciesTable {
-        SpeciesTable::builtin()
+    fn table(&self) -> Arc<SpeciesTable> {
+        Arc::clone(&self.species.borrow())
+    }
+
+    /// Make balls for a world with species table `table`. New balls go back
+    /// to the default species unless `table` is the current one.
+    pub(crate) fn set_species_table(&self, table: Arc<SpeciesTable>) {
+        if *self.species.borrow() != table {
+            self.new_ball_species.set(DEFAULT_SPECIES);
+        }
+        *self.species.borrow_mut() = table;
     }
 
     /// Switch new balls to the next species.
     pub(crate) fn next_species(&self) {
         self.new_ball_species
-            .set(Self::table().next(self.new_ball_species.get()));
+            .set(self.table().next(self.new_ball_species.get()));
+    }
+
+    /// Switch new balls to `species`, which must be in the factory's table.
+    pub(crate) fn set_new_ball_species(&self, species: SpeciesId) {
+        debug_assert!(self.species.borrow().get(species).is_some());
+        self.new_ball_species.set(species);
     }
 
     /// The species of new balls.
@@ -62,7 +83,7 @@ impl BallFactory {
 
     /// Contact radius (`σ / 2`) of the species of new balls.
     pub(crate) fn get_new_ball_radius(&self) -> f32 {
-        Self::table()
+        self.table()
             .species(self.new_ball_species.get())
             .contact_radius()
     }
@@ -71,7 +92,7 @@ impl BallFactory {
     pub(crate) fn create_basic(&self, pos: impl Into<Vec2D>, species: SpeciesId) -> Ball2D {
         let id = *self.next_id.borrow();
         *self.next_id.borrow_mut() += 1;
-        Self::restore(id, species, pos.into(), Vec2D::zero())
+        self.restore(id, species, pos.into(), Vec2D::zero())
     }
 
     /// Creates a ball with specified mass and initial velocity
@@ -202,8 +223,14 @@ impl BallFactory {
 
     /// A ball with a given id (e.g. from a save): radius and mass follow from
     /// `species`. Does not touch the id counter; see [`Self::continue_after`].
-    pub(crate) fn restore(id: BallId, species: SpeciesId, pos: Vec2D, velocity: Vec2D) -> Ball2D {
-        let mut ball = Ball2D::new(id, pos, species);
+    pub(crate) fn restore(
+        &self,
+        id: BallId,
+        species: SpeciesId,
+        pos: Vec2D,
+        velocity: Vec2D,
+    ) -> Ball2D {
+        let mut ball = Ball2D::of_species(id, pos, species, self.species.borrow().species(species));
         ball.v = velocity;
         ball
     }
@@ -221,12 +248,6 @@ impl BallFactory {
     /// Get the next available ID without incrementing the counter
     pub fn peek_next_id(&self) -> usize {
         *self.next_id.borrow()
-    }
-
-    /// Make new balls of `species`.
-    #[cfg(test)]
-    pub(crate) fn set_new_ball_species(&self, species: SpeciesId) {
-        self.new_ball_species.set(species);
     }
 }
 

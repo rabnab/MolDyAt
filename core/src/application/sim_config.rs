@@ -32,12 +32,19 @@
 //! new key must not lock older builds out. Builds from before `SimConfig`
 //! ignore the whole `config` of a save and run it with the defaults (#273).
 //!
-//! The species library (#237) will be another section here (`[species]`),
-//! added as a defaulted field like the others.
+//! `[[species]]` (#237) replaces the species table: without it a world uses
+//! the built-in library (`SpeciesTable::builtin()`: `N2`, the former size
+//! classes `XS` to `XL`, `Ar`, `Ne`, `CH4`, `O2`); with it, exactly the listed
+//! species, in that order, the first being the default for new balls. Entries
+//! give literature single-site Lennard-Jones values (Å, K, u), converted into
+//! N₂ units. Pair overrides and saved balls name species of this table.
 
 use crate::error::{AppError, AppResult};
 use crate::objects2d::ball_impl::pair_potential::{CapSettings, PairOverride};
-use crate::objects2d::ball_impl::{DEFAULT_SKIN_FACTOR, SpeciesTable};
+use crate::objects2d::ball_impl::{
+    DEFAULT_SKIN_FACTOR, N2_EPSILON_KELVIN, N2_MASS_U, N2_SIGMA_ANGSTROM, Species, SpeciesSet,
+    SpeciesTable,
+};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::time::Duration;
@@ -77,6 +84,12 @@ pub const MAX_PAIR_SIGMA: f32 = 8.0;
 /// `ε_ij` of a pair override. The built-in species all have `ε = 1`.
 pub const MIN_PAIR_EPSILON: f32 = 0.1;
 pub const MAX_PAIR_EPSILON: f32 = 10.0;
+/// Mass of a `[[species]]` entry in N₂ units (about 1.4 u to 2800 u).
+pub const MIN_SPECIES_MASS: f32 = 0.05;
+pub const MAX_SPECIES_MASS: f32 = 100.0;
+/// Drawing radius of a `[[species]]` entry in N₂ units.
+pub const MIN_DISPLAY_RADIUS: f32 = 0.05;
+pub const MAX_DISPLAY_RADIUS: f32 = MAX_PAIR_SIGMA;
 /// 1 ms to 1 s between two snapshots for the window.
 pub const MIN_SNAPSHOT_INTERVAL_US: u64 = 1_000;
 pub const MAX_SNAPSHOT_INTERVAL_US: u64 = 1_000_000;
@@ -92,6 +105,132 @@ pub struct SimConfig {
     pub potential: PotentialConfig,
     pub neighbours: NeighbourConfig,
     pub display: DisplayConfig,
+    /// `[[species]]`: the species table of the run, replacing the built-in
+    /// library. Empty means the built-in library, and is then not written, so
+    /// such a save stays readable for builds without the key.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub species: Vec<SpeciesConfig>,
+}
+
+/// One `[[species]]` entry: a single-site Lennard-Jones particle type in
+/// literature units. Every key but `display_radius_angstrom` and `source` is
+/// required.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SpeciesConfig {
+    /// Unique name; saves and pair overrides refer to it.
+    pub name: String,
+    /// `σ` in Å.
+    pub sigma_angstrom: f64,
+    /// `ε / k_B` in K.
+    pub epsilon_kelvin: f64,
+    /// Molecular mass in u.
+    pub mass_u: f64,
+    /// RGB or RGBA, each in `[0, 1]`.
+    pub colour: Vec<f32>,
+    /// Drawing radius in Å; missing draws `σ / 2`. No effect on physics.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_radius_angstrom: Option<f64>,
+    /// Where the parameters come from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+}
+
+impl SpeciesConfig {
+    /// The species in N₂ units, checked against the `MIN_*` / `MAX_*` ranges;
+    /// `key` names the entry in errors.
+    fn resolve(&self, key: &str) -> AppResult<Species> {
+        if self.name.trim().is_empty() {
+            return Err(invalid(format!("{key}.name must not be empty")));
+        }
+        let colour = match self.colour[..] {
+            [r, g, b] => [r, g, b, 1.0],
+            [r, g, b, a] => [r, g, b, a],
+            _ => {
+                return Err(invalid(format!(
+                    "{key}.colour needs 3 (RGB) or 4 (RGBA) values, got {}",
+                    self.colour.len()
+                )));
+            }
+        };
+        if !colour.iter().all(|c| (0.0..=1.0).contains(c)) {
+            return Err(invalid(format!(
+                "{key}.colour values must be within 0..=1, got {:?}",
+                self.colour
+            )));
+        }
+        let species = Species::from_literature(
+            &self.name,
+            self.sigma_angstrom,
+            self.epsilon_kelvin,
+            self.mass_u,
+            self.display_radius_angstrom,
+            colour,
+        );
+        check_literature(
+            species.sigma,
+            MIN_PAIR_SIGMA,
+            MAX_PAIR_SIGMA,
+            N2_SIGMA_ANGSTROM,
+            self.sigma_angstrom,
+            &format!("{key}.sigma_angstrom"),
+        )?;
+        check_literature(
+            species.epsilon,
+            MIN_PAIR_EPSILON,
+            MAX_PAIR_EPSILON,
+            N2_EPSILON_KELVIN,
+            self.epsilon_kelvin,
+            &format!("{key}.epsilon_kelvin"),
+        )?;
+        check_literature(
+            species.mass,
+            MIN_SPECIES_MASS,
+            MAX_SPECIES_MASS,
+            N2_MASS_U,
+            self.mass_u,
+            &format!("{key}.mass_u"),
+        )?;
+        if let Some(radius) = self.display_radius_angstrom {
+            check_literature(
+                species.display_radius,
+                MIN_DISPLAY_RADIUS,
+                MAX_DISPLAY_RADIUS,
+                N2_SIGMA_ANGSTROM,
+                radius,
+                &format!("{key}.display_radius_angstrom"),
+            )?;
+        }
+        Ok(species)
+    }
+}
+
+/// A literature value whose reduced form `reduced` (`value / unit`) must lie
+/// in `min..=max`; the error gives the range in literature units.
+fn check_literature(
+    reduced: f32,
+    min: f32,
+    max: f32,
+    unit: f64,
+    value: f64,
+    key: &str,
+) -> AppResult {
+    if (min..=max).contains(&reduced) {
+        Ok(())
+    } else {
+        let (lo, hi) = (min as f64 * unit, max as f64 * unit);
+        Err(invalid(format!(
+            "{key} must be within {lo:.4}..={hi:.4}, got {value}"
+        )))
+    }
+}
+
+/// The species table of a config and its pair overrides resolved against it:
+/// what the physics of a new world is built from.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResolvedSpecies {
+    pub table: SpeciesTable,
+    pub pair_overrides: Vec<PairOverride>,
 }
 
 /// Time integration.
@@ -332,14 +471,44 @@ impl SimConfig {
     }
 
     /// Check every value against its range (the `MIN_*` / `MAX_*`
-    /// constants) and every pair override's species. The defaults pass.
+    /// constants), the species table and every pair override's species. The
+    /// defaults pass.
     pub fn validate(&self) -> AppResult {
-        self.validated_pair_overrides().map(drop)
+        self.validated_species().map(drop)
     }
 
-    /// [`Self::validate`], returning the pair overrides with their species
-    /// resolved, ready for the physics.
-    pub fn validated_pair_overrides(&self) -> AppResult<Vec<PairOverride>> {
+    /// The species table of the run: the `[[species]]` list, or the built-in
+    /// library if there is none. Checks the list (count, unique names,
+    /// ranges).
+    pub fn species_table(&self) -> AppResult<SpeciesTable> {
+        if self.species.is_empty() {
+            return Ok(SpeciesTable::builtin().clone());
+        }
+        if self.species.len() > SpeciesSet::CAPACITY {
+            return Err(invalid(format!(
+                "species lists {} species, at most {} are supported",
+                self.species.len(),
+                SpeciesSet::CAPACITY
+            )));
+        }
+        let mut list: Vec<Species> = Vec::with_capacity(self.species.len());
+        for (i, entry) in self.species.iter().enumerate() {
+            let key = format!("species[{i}]");
+            let species = entry.resolve(&key)?;
+            if let Some(j) = list.iter().position(|s| s.name == species.name) {
+                return Err(invalid(format!(
+                    "{key}.name \"{}\" is used twice (first in species[{j}])",
+                    species.name
+                )));
+            }
+            list.push(species);
+        }
+        Ok(SpeciesTable::new(list))
+    }
+
+    /// [`Self::validate`], returning the species table and the pair
+    /// overrides resolved against it, ready for the physics.
+    pub fn validated_species(&self) -> AppResult<ResolvedSpecies> {
         let IntegrationConfig {
             time_step,
             speed_limit_factor,
@@ -381,9 +550,8 @@ impl SimConfig {
             MAX_CUTOFF_FACTOR,
             "potential.cutoff_factor",
         )?;
-        let pair_overrides = self
-            .potential
-            .resolve_pair_overrides(SpeciesTable::builtin())?;
+        let table = self.species_table()?;
+        let pair_overrides = self.potential.resolve_pair_overrides(&table)?;
 
         check_range(
             self.neighbours.skin_factor,
@@ -397,7 +565,10 @@ impl SimConfig {
             MAX_SNAPSHOT_INTERVAL_US,
             "display.snapshot_interval_us",
         )?;
-        Ok(pair_overrides)
+        Ok(ResolvedSpecies {
+            table,
+            pair_overrides,
+        })
     }
 
     pub fn snapshot_interval(&self) -> Duration {

@@ -12,12 +12,22 @@ The simulation runs in reduced Lennard-Jones units with N₂ as the reference su
 - Walls reflect a ball at centre distance `σ_i / 2` (`WallLaw`, hard contact).
 - A config can override `σ_ij` and/or `ε_ij` of named species pairs (`[[potential.pair_override]]` with `a`, `b`, `sigma`, `epsilon`; see the README, #235). The override replaces the mixed value of exactly that pair, in both orders; its cutoff (`cutoff_factor · σ_ij`), `r_cap` and `U(cutoff)` follow from the overridden law, and the cell grid widens if the pair reaches further than the others present. Placement and overlap checks measure from each pair's contact distance `σ_ij` (`BallPhysics::contact_distance`, which follows the override), and an overridden like pair `σ_ii` also moves the species' wall contact to `σ_ii / 2`. Only drawing and the headless `contact_radius` field keep the species' own `σ_i / 2`.
 
-### Built-in species
+### Built-in species (species library, #237)
 
-| Species | σ* | ε* | m* | Note |
-|---|---|---|---|---|
-| N2 | 1 | 1 | 1 | default for new balls; the unit species |
-| XS, S, M, L, XL | `2·R·2^(-1/6) + 1` (1.27, 1.53, 2.07, 3.14, 5.28) | 1 | 1.0 … 6.16 | the former size classes of radius `R` = 0.15 … 2.4 |
+Without a `[[species]]` list in the config, every world uses this table (`SpeciesTable::builtin()`, in this order; the order is what the UI steps through):
+
+| Species | σ [Å] | ε/k_B [K] | m [u] | σ* | ε* | m* | Note |
+|---|---|---|---|---|---|---|---|
+| N2 | 3.698 | 95.05 | 28.0134 | 1 | 1 | 1 | default for new balls; the unit species |
+| XS, S, M, L, XL | – | – | – | `2·R·2^(-1/6) + 1` (1.27, 1.53, 2.07, 3.14, 5.28) | 1 | 1.0 … 6.16 | the former size classes of radius `R` = 0.15 … 2.4, kept for migrated saves |
+| Ar | 3.405 | 119.8 | 39.948 | 0.9208 | 1.2604 | 1.4260 | (a) |
+| Ne | 2.749 | 35.60 | 20.180 | 0.7434 | 0.3745 | 0.7204 | (a) |
+| CH4 | 3.817 | 148.2 | 16.043 | 1.0322 | 1.5592 | 0.5727 | (a) |
+| O2 | 3.58 | 117.5 | 31.999 | 0.9681 | 1.2362 | 1.1423 | (a) |
+
+- (a) `σ` and `ε/k_B`: Hirschfelder, Curtiss and Bird, *Molecular Theory of Gases and Liquids* (Wiley, 1954), table I-A, from second virial coefficients, the same source as N₂. Masses: IUPAC standard atomic weights. The library is `LIBRARY` in `core/src/objects2d/ball_impl/species.rs`, converted with the N₂ constants there (`UnitSystem::N2` uses the same ones). `builtin_table_is_pinned` pins the whole table: saves name species, so changing an entry is a format change (see the `save-format` skill); add new ones at the end.
+
+A config file's `[[species]]` list (README, "Simulation config") replaces the whole table: `name`, `sigma_angstrom`, `epsilon_kelvin`, `mass_u`, `colour` (RGB or RGBA), optional `display_radius_angstrom` and `source`. The values are converted with `σ* = σ / 3.698 Å`, `ε* = (ε/k_B) / 95.05 K`, `m* = m / 28.0134 u` and must lie in `σ* ∈ 0.5..8`, `ε* ∈ 0.1..10`, `m* ∈ 0.05..100`. The first entry is the default for new balls and source spheres. The units stay N₂'s whether or not the list contains `N2`. A save carries the list in its `config`, so it loads with the species it was saved with.
 
 Before #234 the potential acted on the edge distance (centre distance minus both radii) with `σ = 1` for every ball. With `σ_i = 2·R_i·2^(-1/6) + 1` and arithmetic mixing, every pair of former size classes keeps its old equilibrium centre distance `R_i + R_j + 2^(1/6)`, so saves migrate (format v2). The shape of the potential still changes: the larger size classes are softer and reach further (cutoff `4 σ_ij`), and they stay `σ_i / 2` from walls instead of `R_i` (e.g. `M`: 1.03 instead of 0.6).
 
@@ -62,9 +72,7 @@ Derivation: `F = −dU/dx = (ε/σ) F*` and `m a = m (σ/τ²) m* a*`. With `τ�
 
 ## Other species in N₂ units
 
-For another species, convert its single-site LJ parameters with `σ* = σ/3.698 Å`, `ε* = (ε/k_B)/95.05 K` and `m* = m/28.0134 u` (`UnitSystem::reduced_lennard_jones`). The values below other than N₂ are typical literature numbers, rounded. Check them against a cited source before relying on them.
-
-The built-in species are listed above; a species library is planned (see [refactoring-plan.md](plan/refactoring-plan.md), item I6).
+For another species, convert its single-site LJ parameters with `σ* = σ/3.698 Å`, `ε* = (ε/k_B)/95.05 K` and `m* = m/28.0134 u` (`UnitSystem::reduced_lennard_jones`). The values below other than N₂ are typical literature numbers, rounded, for scale; the built-in species and their source are listed above (Ar there uses the second-virial ε/k_B = 119.8 K). Check other values against a cited source before relying on them.
 
 | Species | σ [Å] | ε/k_B [K] | m [u] | σ* | ε* | m* | τ [ps] |
 |---|---|---|---|---|---|---|---|

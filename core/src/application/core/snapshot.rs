@@ -11,7 +11,7 @@ use crate::application::scene_layers::SceneLayers;
 use crate::application::sim_stats::NORMAL_GRAVITY;
 use crate::application::thermo_field::ThermoGrid;
 use crate::objects2d::SimThermostat;
-use crate::objects2d::ball_impl::{BallPhysics, SpeciesId, SpeciesTable};
+use crate::objects2d::ball_impl::{BallPhysics, SpeciesId};
 use std::sync::Arc;
 
 impl MainContent {
@@ -37,6 +37,7 @@ impl MainContent {
             status_text: self.status_text(0, self.step_config.get_time_step()), // FPS not available during snapshot creation
             cell_grid_bounds: self.world.cell_grid.world_rect(),
             cursor_species: self.step_config.get_ball_factory().new_ball_species(),
+            species: Arc::clone(&self.world.species),
             cursor_ring_radii: ring_radii(
                 &self.world.physics,
                 self.step_config.get_ball_factory().new_ball_species(),
@@ -103,7 +104,7 @@ impl MainContent {
     fn build_ball_render_data(&self) -> Vec<BallRenderData> {
         let ball_count = self.world.balls.len();
         let mut balls = Vec::with_capacity(ball_count);
-        let species_table = SpeciesTable::builtin();
+        let species_table = &*self.world.species;
         let physics = &self.world.physics;
         // Ring radii per species: half the like pair's equilibrium distance
         // and cutoff.

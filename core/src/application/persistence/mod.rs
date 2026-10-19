@@ -127,9 +127,9 @@ impl MainContent {
         *self.world_mut() = world;
         self.runtime_mut().next_world_generation();
         let (world, step_config) = self.world_and_step_config();
-        step_config
-            .get_ball_factory()
-            .continue_after(world.balls.iter().map(|ball| ball.get_id()));
+        let factory = step_config.get_ball_factory();
+        factory.set_species_table(std::sync::Arc::clone(&world.species));
+        factory.continue_after(world.balls.iter().map(|ball| ball.get_id()));
         self.collect_neighbours_by_cell(file.time_step);
 
         Ok(LoadedWorld {

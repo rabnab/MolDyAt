@@ -61,7 +61,7 @@ impl SimulationWorld {
 
     pub(crate) fn cycle_source_sphere_species(&mut self, sphere_id: usize) {
         if let Some(sphere) = self.source_spheres.find_mut(sphere_id) {
-            sphere.cycle_ball_species();
+            sphere.cycle_ball_species(&self.species);
         }
     }
 

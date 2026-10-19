@@ -579,3 +579,31 @@ fn test_valve_flag_accepts_a_valve_spanning_the_whole_wall() {
     assert_eq!(config.valves[0].t_start, 0.0);
     assert_eq!(config.valves[0].t_end, 1.0);
 }
+
+#[test]
+fn test_seed_species_flag() {
+    let parse = |value: &str| {
+        parse_headless_args_with_args(&headless_args(&[
+            "--seed-balls",
+            "10",
+            "--seed-species",
+            value,
+        ]))
+    };
+    let config = parse("N2:3, Ar").unwrap().unwrap();
+    assert_eq!(
+        config.seed_species,
+        [("N2".to_string(), 3), ("Ar".to_string(), 1)]
+    );
+    for bad in ["", "N2:0", "N2:-1", "N2:x", ":2", "N2,N2", "N2,,Ar"] {
+        assert!(parse(bad).is_err(), "{bad:?} must be rejected");
+    }
+    let without_balls = parse_headless_args_with_args(&headless_args(&["--seed-species", "N2"]));
+    assert!(
+        without_balls
+            .unwrap_err()
+            .message
+            .contains("needs --seed-balls")
+    );
+    assert!(parse_headless_args_with_args(&headless_args(&["--seed-species"])).is_err());
+}

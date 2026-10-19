@@ -19,7 +19,6 @@ use moldyat_core::graphics::sidebar::{
     ICON_COUNT, SIDEBAR_TOOLS, icon_display_size_for_margin, icon_spacing_for_margin,
     sidebar_ui_scale, visible_icon_count_for_margin,
 };
-use moldyat_core::objects2d::ball_impl::{SpeciesId, SpeciesTable};
 
 use crate::wgpu::MARGINS;
 use crate::wgpu::gpu::batch::{BatchDesc, GpuBatch, SceneUniforms};
@@ -114,8 +113,9 @@ pub struct SidebarPipeline {
     last_selected_icon: Option<usize>,
     /// Cached margins to detect DPI-scale changes.
     last_margin: Margins,
-    /// Cached species of new balls, to rebuild the label when it changes.
-    last_species: Option<SpeciesId>,
+    /// Cached name of the species of new balls, to rebuild the label when it
+    /// changes (by name: a loaded world may bring another species table).
+    last_species: Option<String>,
 }
 
 impl SidebarPipeline {
@@ -356,18 +356,22 @@ impl RenderPipeline for SidebarPipeline {
 
     fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
         let selected = ctx.operator_previews.selected_sidebar_icon;
-        let species = ctx.snapshot.cursor_species;
+        let name = ctx
+            .snapshot
+            .species
+            .get(ctx.snapshot.cursor_species)
+            .map_or("", |s| s.name.as_str());
         if ctx.window_size == self.last_window_size
             && selected == self.last_selected_icon
             && ctx.margin == self.last_margin
-            && Some(species) == self.last_species
+            && self.last_species.as_deref() == Some(name)
         {
             return Ok(());
         }
         self.last_window_size = ctx.window_size;
         self.last_selected_icon = selected;
         self.last_margin = ctx.margin;
-        self.last_species = Some(species);
+        self.last_species = Some(name.to_string());
 
         let (w, h) = ctx.window_size;
         let (verts, rect_params) = build_sidebar_geometry_with_margins(
@@ -381,9 +385,6 @@ impl RenderPipeline for SidebarPipeline {
             .set_uniforms(ctx.queue, SceneUniforms::ndc(rect_params.as_params()));
         self.gpu.flush(ctx.device, ctx.queue, &verts);
 
-        let name = SpeciesTable::builtin()
-            .get(species)
-            .map_or("", |s| s.name.as_str());
         let label = ball_label_vertices(name, w as f32, h as f32, ctx.margin);
         self.ball_label.upload(ctx.device, ctx.queue, &label);
         Ok(())

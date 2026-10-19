@@ -37,9 +37,11 @@ use std::collections::HashSet;
 ///
 /// Since v2 the built-in species names and their mass, `σ` and `ε` are part
 /// of the file format: a file stores only the name, the rest comes from
-/// `SpeciesTable::builtin()` when it is loaded. Changing one is a breaking
-/// change: bump this version and add a migration, or add a new species
-/// instead of changing an existing one (`builtin_table_is_pinned`).
+/// `SpeciesTable::builtin()` when it is loaded, unless the file's config has
+/// its own `[[species]]` list (#237), which then defines every species the
+/// file uses. Changing a built-in species is a breaking change: bump this
+/// version and add a migration, or add a new species instead of changing an
+/// existing one (`builtin_table_is_pinned`).
 pub const WORLD_FILE_VERSION: u32 = 2;
 
 /// Everything needed to rebuild a world. Energy plot data and simulation
@@ -72,8 +74,9 @@ pub struct WorldFile {
     pub thermostats: Vec<ThermostatData>,
 }
 
-/// A ball. `species` is the name of a built-in species; mass and `σ` follow
-/// from it and are not stored.
+/// A ball. `species` is the name of a species of the file's table (the
+/// config's `species` list, or the built-in library); mass and `σ` follow from
+/// it and are not stored.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BallData {
     pub id: usize,
@@ -158,6 +161,11 @@ impl WorldFile {
             ))
         })?;
         check_finite(&[self.gravity], "gravity")?;
+        // Saved balls and source spheres name species of the save's table.
+        let species = match &self.config {
+            Some(config) => config.species_table()?,
+            None => SpeciesTable::builtin().clone(),
+        };
         if let Some(config) = &self.config {
             config.validate()?;
             if config.integration.time_step != self.time_step {
@@ -169,7 +177,6 @@ impl WorldFile {
         }
 
         check_unique_ids(self.balls.iter().map(|b| b.id), "ball")?;
-        let species = SpeciesTable::builtin();
         for ball in &self.balls {
             if species.by_name(&ball.species).is_none() {
                 return Err(invalid(format!(

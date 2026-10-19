@@ -68,9 +68,9 @@ impl SimSourceSphere {
         self.state.is_on()
     }
 
-    /// Cycle to the next species, wrapping around.
-    pub fn cycle_ball_species(&mut self) {
-        self.ball_species = SpeciesTable::builtin().next(self.ball_species);
+    /// Cycle to the next species of `table` (the world's), wrapping around.
+    pub fn cycle_ball_species(&mut self, table: &SpeciesTable) {
+        self.ball_species = table.next(self.ball_species);
     }
 
     /// Adjust emission speed by `delta` (positive = faster), clamped.

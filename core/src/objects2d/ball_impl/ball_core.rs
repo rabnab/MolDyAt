@@ -3,7 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::objects2d::Rect;
-use crate::objects2d::ball_impl::species::{DEFAULT_SPECIES, SpeciesId, SpeciesTable};
+use crate::objects2d::ball_impl::species::{DEFAULT_SPECIES, Species, SpeciesId, SpeciesTable};
 use crate::objects2d::ball_impl::verlet::Verlet;
 use crate::objects2d::ball_impl::wall_contact::{
     NormalPosition, WallContact, resolve_normal_position,
@@ -103,7 +103,13 @@ impl Ball2D {
     /// radius. Sets pre_update_pos and last_update_hood_pos to the initial
     /// position.
     pub fn new(id: BallId, pos: Vec2D, species: SpeciesId) -> Ball2D {
-        let data = SpeciesTable::builtin().species(species);
+        Self::of_species(id, pos, species, SpeciesTable::builtin().species(species))
+    }
+
+    /// A ball of species `species` (with the data `data` of that species, from
+    /// the world's table) at rest. Sets pre_update_pos and
+    /// last_update_hood_pos to the initial position.
+    pub fn of_species(id: BallId, pos: Vec2D, species: SpeciesId, data: &Species) -> Ball2D {
         Ball2D {
             id,
             pos,

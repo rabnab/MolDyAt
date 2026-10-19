@@ -24,9 +24,10 @@
 //! - **Immutability**: Snapshots are immutable after creation, so no need for
 //!   partial field updates that might benefit from SoA.
 
-use crate::objects2d::ball_impl::{DEFAULT_SPECIES, SpeciesId};
+use crate::objects2d::ball_impl::{DEFAULT_SPECIES, SpeciesId, SpeciesTable};
 use crate::objects2d::line_segment::valve_half_width;
 use crate::objects2d::{SimLineSegment, SimSourceSphere, SimThermostat, Vec2D};
+use std::sync::Arc;
 use std::time::Instant;
 
 use crate::application::scene_layers::SceneLayers;
@@ -311,6 +312,10 @@ pub struct RendererSnapshot {
     /// Species of new balls, for the cursor preview
     pub cursor_species: SpeciesId,
 
+    /// The world's species table: names, colours and drawing radii of
+    /// `BallRenderData::species` and `cursor_species`.
+    pub species: Arc<SpeciesTable>,
+
     /// Equilibrium and cutoff ring radii of `cursor_species` (see
     /// [`BallRenderData::equilibrium_radius`]), for the cursor preview
     pub cursor_ring_radii: [f32; 2],
@@ -359,6 +364,7 @@ impl RendererSnapshot {
             status_text: None,
             cell_grid_bounds: crate::objects2d::Rect::new(0.0, 0.0, 0.0, 0.0),
             cursor_species: DEFAULT_SPECIES,
+            species: SpeciesTable::builtin_shared(),
             cursor_ring_radii: DEFAULT_RING_RADII,
             gravity_force_multiple: 0,
             created_at: Instant::now(),
@@ -394,6 +400,7 @@ impl RendererSnapshot {
             status_text: None,
             cell_grid_bounds: crate::objects2d::Rect::new(0.0, 0.0, 0.0, 0.0),
             cursor_species: DEFAULT_SPECIES,
+            species: SpeciesTable::builtin_shared(),
             cursor_ring_radii: DEFAULT_RING_RADII,
             gravity_force_multiple: 0,
             created_at: Instant::now(),

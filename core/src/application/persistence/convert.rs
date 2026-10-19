@@ -14,21 +14,27 @@
 use super::format::{BallData, SourceSphereData, ThermostatData, WORLD_FILE_VERSION, WorldFile};
 use crate::application::core::SimulationWorld;
 use crate::application::{AppResult, MainContent};
-use crate::objects2d::ball_impl::{Ball2D, BallFactory, SpeciesId, SpeciesTable};
+use crate::objects2d::ball_impl::{Ball2D, SpeciesId, SpeciesTable};
 use crate::objects2d::operator::{OperatorState, SimSourceSphere, SimThermostat};
+use std::sync::Arc;
 
 impl WorldFile {
     /// The world of `mc` in file form, with the config it runs with.
     pub(crate) fn capture(mc: &MainContent) -> Self {
         let world = mc.world();
         let config = mc.config();
+        let species = &*world.species;
         Self {
             version: WORLD_FILE_VERSION,
             world_rect: world.world_rect,
             time_step: config.integration.time_step,
             gravity: world.physics.constants.gravity,
             config: Some(config),
-            balls: world.balls.iter().map(BallData::from).collect(),
+            balls: world
+                .balls
+                .iter()
+                .map(|ball| BallData::capture(ball, species))
+                .collect(),
             line_segments: world.line_segments.segments().to_vec(),
             valves: world.valve_segments.valves().to_vec(),
             wall_chains: world.wall_chains.chains().cloned().collect(),
@@ -36,7 +42,7 @@ impl WorldFile {
                 .source_spheres
                 .spheres()
                 .iter()
-                .map(SourceSphereData::from)
+                .map(|sphere| SourceSphereData::capture(sphere, species))
                 .collect(),
             thermostats: world
                 .thermostats
@@ -58,7 +64,12 @@ impl TryFrom<&WorldFile> for SimulationWorld {
         file.validate()?;
         let mut world = SimulationWorld::with_config(file.world_rect, &file.sim_config())?;
         world.physics.constants.gravity = file.gravity;
-        world.balls = file.balls.iter().map(Ball2D::from).collect();
+        let species = Arc::clone(&world.species);
+        world.balls = file
+            .balls
+            .iter()
+            .map(|data| data.restore(&species))
+            .collect();
         world.rebuild_cell_grid();
         world.line_segments = file.line_segments.clone().into();
         world.valve_segments = file.valves.clone().into();
@@ -66,7 +77,7 @@ impl TryFrom<&WorldFile> for SimulationWorld {
         world.source_spheres = file
             .source_spheres
             .iter()
-            .map(SimSourceSphere::from)
+            .map(|data| data.restore(&species))
             .collect::<Vec<_>>()
             .into();
         world.thermostats = file
@@ -79,39 +90,36 @@ impl TryFrom<&WorldFile> for SimulationWorld {
     }
 }
 
-impl From<&Ball2D> for BallData {
-    fn from(ball: &Ball2D) -> Self {
+impl BallData {
+    /// `ball` in file form; `species` is the world's table.
+    fn capture(ball: &Ball2D, species: &SpeciesTable) -> Self {
         Self {
             id: ball.get_id(),
-            species: species_name(ball.species()),
+            species: species.species(ball.species()).name.clone(),
             pos: *ball.get_position(),
             v: ball.v,
             pre_update_pos: ball.pre_update_pos,
             accel: ball.accel,
         }
     }
-}
 
-impl From<&BallData> for Ball2D {
-    fn from(data: &BallData) -> Self {
-        let species = species_by_name(&data.species);
-        let mut ball = BallFactory::restore(data.id, species, data.pos, data.v);
-        ball.pre_update_pos = data.pre_update_pos;
-        ball.accel = data.accel;
+    /// The ball; its mass and radius come from `species`, the world's table.
+    fn restore(&self, species: &SpeciesTable) -> Ball2D {
+        let id = species_by_name(species, &self.species);
+        let mut ball = Ball2D::of_species(self.id, self.pos, id, species.species(id));
+        ball.v = self.v;
+        ball.pre_update_pos = self.pre_update_pos;
+        ball.accel = self.accel;
         ball
     }
 }
 
-/// The built-in species called `name`. `WorldFile::validate` has checked
+/// The species of `table` called `name`. `WorldFile::validate` has checked
 /// that it exists.
-fn species_by_name(name: &str) -> SpeciesId {
-    SpeciesTable::builtin()
+fn species_by_name(table: &SpeciesTable, name: &str) -> SpeciesId {
+    table
         .by_name(name)
         .expect("validate() checks species names against the species table")
-}
-
-fn species_name(id: SpeciesId) -> String {
-    SpeciesTable::builtin().species(id).name.clone()
 }
 
 fn operator_state(active: bool) -> OperatorState {
@@ -122,26 +130,26 @@ fn operator_state(active: bool) -> OperatorState {
     }
 }
 
-impl From<&SimSourceSphere> for SourceSphereData {
-    fn from(sphere: &SimSourceSphere) -> Self {
+impl SourceSphereData {
+    /// `sphere` in file form; `species` is the world's table.
+    fn capture(sphere: &SimSourceSphere, species: &SpeciesTable) -> Self {
         Self {
             id: sphere.id,
             center: sphere.center,
             active: sphere.state.is_on(),
             emit_period: sphere.emit_period,
-            ball_species: species_name(sphere.ball_species),
+            ball_species: species.species(sphere.ball_species).name.clone(),
             emission_speed: sphere.emission_speed,
         }
     }
-}
 
-impl From<&SourceSphereData> for SimSourceSphere {
-    fn from(data: &SourceSphereData) -> Self {
-        let mut sphere = SimSourceSphere::new(data.id, data.center);
-        sphere.state = operator_state(data.active);
-        sphere.emit_period = data.emit_period;
-        sphere.ball_species = species_by_name(&data.ball_species);
-        sphere.emission_speed = data.emission_speed;
+    /// The sphere; its species is looked up in `species`, the world's table.
+    fn restore(&self, species: &SpeciesTable) -> SimSourceSphere {
+        let mut sphere = SimSourceSphere::new(self.id, self.center);
+        sphere.state = operator_state(self.active);
+        sphere.emit_period = self.emit_period;
+        sphere.ball_species = species_by_name(species, &self.ball_species);
+        sphere.emission_speed = self.emission_speed;
         sphere
     }
 }
