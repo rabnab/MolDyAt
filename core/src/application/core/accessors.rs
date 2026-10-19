@@ -9,7 +9,7 @@ use crate::application::sim_config::{
     DisplayConfig, IntegrationConfig, NeighbourConfig, PairOverrideConfig, PotentialConfig,
     SimConfig,
 };
-use crate::application::sim_stats::{HIGH_GRAVITY, NORMAL_GRAVITY};
+use crate::application::sim_stats::{HIGH_GRAVITY, NORMAL_GRAVITY, is_normal_gravity};
 use crate::objects2d::Rect;
 use crate::objects2d::ball_impl::SpeciesTable;
 use crate::objects2d::operator::{is_degenerate, remap_point};
@@ -75,7 +75,7 @@ impl MainContent {
         let gravity = self.world.physics.constants.gravity;
         let new_gravity = if gravity == 0.0 {
             NORMAL_GRAVITY
-        } else if gravity == NORMAL_GRAVITY {
+        } else if is_normal_gravity(gravity) {
             HIGH_GRAVITY
         } else {
             0.0

@@ -26,6 +26,19 @@ fn test_toggle_gravity_cycles_off_normal_high_off() {
 }
 
 #[test]
+fn test_toggle_gravity_treats_argon_unit_gravity_of_old_saves_as_normal() {
+    let (mut main_content, _) = create_main_content();
+    // 1 g as saves from before #236 store it (argon units).
+    main_content.world_mut().physics.constants.gravity = 1.3157e-13;
+
+    main_content.toggle_gravity();
+    assert_eq!(main_content.world().physics.constants.gravity, HIGH_GRAVITY);
+
+    main_content.toggle_gravity();
+    assert_eq!(main_content.world().physics.constants.gravity, 0.0);
+}
+
+#[test]
 fn test_snapshot_reports_gravity_force_multiple() {
     let (mut main_content, _) = create_main_content();
 

@@ -16,6 +16,7 @@ pub mod sim_config;
 mod sim_stats;
 mod step_config;
 pub mod thermo_field;
+pub mod units;
 
 #[cfg(test)]
 mod tests;

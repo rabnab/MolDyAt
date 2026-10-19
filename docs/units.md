@@ -1,6 +1,6 @@
 # Reduced Units and Scales
 
-The simulation runs in reduced Lennard-Jones units with argon as the reference substance. SI conversions are used only for the real-units display (key `D`). The constants live in `core/src/application/sim_stats.rs`; keep this document in sync with them.
+The simulation runs in reduced Lennard-Jones units with N₂ as the reference substance (#236): the built-in species `N2` has `σ* = ε* = m* = 1`. `UnitSystem` (`core/src/application/units.rs`, `UnitSystem::N2`) holds the N₂ parameters and converts both ways: reduced results into SI or common units for the real-units display (key `D`), and literature parameters of other species into reduced values. The parameters are fitted to 3D gases, so in this 2D simulation the SI values are qualitative.
 
 ## Pair potential
 
@@ -21,22 +21,20 @@ The simulation runs in reduced Lennard-Jones units with argon as the reference s
 
 Before #234 the potential acted on the edge distance (centre distance minus both radii) with `σ = 1` for every ball. With `σ_i = 2·R_i·2^(-1/6) + 1` and arithmetic mixing, every pair of former size classes keeps its old equilibrium centre distance `R_i + R_j + 2^(1/6)`, so saves migrate (format v2). The shape of the potential still changes: the larger size classes are softer and reach further (cutoff `4 σ_ij`), and they stay `σ_i / 2` from walls instead of `R_i` (e.g. `M`: 1.03 instead of 0.6).
 
-The reduced units below still use argon for the SI display; `N2` here means only the unit species until the units move to N₂ (#236).
-
 ## Reduced units
 
-All internal quantities are reduced (marked `*`).
+All internal quantities are reduced (marked `*`). The N₂ parameters are single-site Lennard-Jones values from second virial coefficients: Hirschfelder, Curtiss and Bird, *Molecular Theory of Gases and Liquids* (Wiley, 1954), table I-A. Published single-site fits for N₂ range over about 70–100 K for `ε/k_B`, depending on the fitted property.
 
-| Reduced | Quantity | SI value (argon) |
+| Reduced | Quantity | SI value (N₂) |
 |---|---|---|
-| σ* = 1 | length | σ = 3.405E-10 m |
-| ε* = 1 | energy | ε = 122 k_B = 1.684E-21 J |
-| m* = 1 | mass | m = 39.948 u = 6.63E-26 kg |
-| k_B* = 1 | temperature | T = ε/k_B = 122 K |
+| σ* = 1 | length | σ = 3.698 Å = 3.698E-10 m |
+| ε* = 1 | energy | ε = 95.05 k_B = 1.312E-21 J |
+| m* = 1 | mass | m = 28.0134 u = 4.652E-26 kg |
+| k_B* = 1 | temperature | T = ε/k_B = 95.05 K |
 
 ## Conversion to SI
 
-`X*` is the reduced value.
+`X*` is the reduced value. The real-units display shows time in ps, the time step in fs, temperature in K, energies in J and speeds in m/s (`SimStats::get_status_text_real`).
 
 | Quantity | Formula |
 |---|---|
@@ -44,9 +42,11 @@ All internal quantities are reduced (marked `*`).
 | energy `E` [J] | `E* ε` |
 | temperature `T` [K] | `T* ε/k_B` |
 | mass `M` [kg] | `M* m` |
-| time `t` [s] | `t* τ`, with `τ = σ √(m/ε) = 2.137E-12 s` |
-| velocity `v` [m/s] | `v* σ/τ` |
+| time `t` [s] | `t* τ`, with `τ = σ √(m/ε) = 2.202E-12 s` |
+| velocity `v` [m/s] | `v* σ/τ` (`σ/τ` = 168.0 m/s) |
 | acceleration `a` [m/s²] | `a* σ/τ²` (gravity: `a* = g τ²/σ`) |
+
+Gravity (key `G`) is 1 g = 9.81 m/s², `a* = 1.2859E-13` in N₂ units, or 5 g. Before #236 the units were those of argon and 1 g was `a* = 1.3157E-13`. Saves store the reduced value, so such a save runs with its old gravity, and `G` still treats it as 1 g (`MainContent::toggle_gravity`).
 
 ## Temperature (2D)
 
@@ -60,21 +60,21 @@ There are no free constants in reduced units:
 
 Derivation: `F = −dU/dx = (ε/σ) F*` and `m a = m (σ/τ²) m* a*`. With `τ² = m σ²/ε` this gives `F* = m* a*`.
 
-## Other species in argon units
+## Other species in N₂ units
 
-For another species, convert its single-site LJ parameters with `σ* = σ/3.405 Å`, `ε* = (ε/k_B)/122 K` and `m* = m/39.948 u`. The values below are typical literature numbers, rounded. Check them against a cited source before relying on them.
+For another species, convert its single-site LJ parameters with `σ* = σ/3.698 Å`, `ε* = (ε/k_B)/95.05 K` and `m* = m/28.0134 u` (`UnitSystem::reduced_lennard_jones`). The values below other than N₂ are typical literature numbers, rounded. Check them against a cited source before relying on them.
 
-The built-in species are listed above; a species library and the N₂ unit system are planned (see [refactoring-plan.md](plan/refactoring-plan.md), items I5 and I6).
+The built-in species are listed above; a species library is planned (see [refactoring-plan.md](plan/refactoring-plan.md), item I6).
 
 | Species | σ [Å] | ε/k_B [K] | m [u] | σ* | ε* | m* | τ [ps] |
 |---|---|---|---|---|---|---|---|
-| Ar | 3.405 | 122 | 39.948 | 1.000 | 1.000 | 1.000 | 2.14 |
-| N₂ | 3.70 | 95 | 28.014 | 1.087 | 0.779 | 0.701 | 2.20 |
-| H₂ | 2.915 | 38.0 | 2.016 | 0.856 | 0.311 | 0.050 | 0.74 |
-| H₂O (a) | 3.166 | 78.2 | 18.015 | 0.930 | 0.641 | 0.451 | 1.67 |
-| Au (b) | 2.629 | 2662 | 196.967 | 0.772 | 21.82 | 4.931 | 0.78 |
+| N₂ | 3.698 | 95.05 | 28.0134 | 1.000 | 1.000 | 1.000 | 2.20 |
+| Ar | 3.405 | 122 | 39.948 | 0.921 | 1.284 | 1.426 | 2.14 |
+| H₂ | 2.915 | 38.0 | 2.016 | 0.788 | 0.400 | 0.072 | 0.74 |
+| H₂O (a) | 3.166 | 78.2 | 18.015 | 0.856 | 0.823 | 0.643 | 1.67 |
+| Au (b) | 2.629 | 2662 | 196.967 | 0.711 | 28.01 | 7.031 | 0.78 |
 
-The `τ` column is `σ √(m/ε)` of that species. In argon units the same timescale ratio is `σ* √(m*/ε*)` (N₂ 1.03, H₂ 0.35, H₂O 0.78, Au 0.37), so light or stiff species need a smaller `dt` in argon units.
+The `τ` column is `σ √(m/ε)` of that species. In N₂ units the same timescale ratio is `σ* √(m*/ε*)` (Ar 0.97, H₂ 0.33, H₂O 0.76, Au 0.36), so light or stiff species need a smaller `dt`.
 
 - (a) O-site of SPC/E water with the whole-molecule mass. LJ alone is not water: it needs charges (hydrogen bonds) and a rigid-molecule geometry.
 - (b) Heinz et al. 12-6 fit (ε = 5.29 kcal/mol, `r_m` = 2.951 Å, `σ = r_m / 2^(1/6)`). Metals are many-body (EAM-like); LJ only gives a rough cohesive/lattice model.
