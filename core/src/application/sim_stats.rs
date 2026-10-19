@@ -14,8 +14,8 @@ const PLT_STEP: usize = 100;
 
 /// Units of the real-units display (key `D`): N₂ (see `units`).
 const UNITS: UnitSystem = UnitSystem::N2;
-pub(super) const NORMAL_GRAVITY_MPS2: f32 = 9.81;
-pub(super) const HIGH_GRAVITY_MPS2: f32 = NORMAL_GRAVITY_MPS2 * 5.0;
+pub(crate) const NORMAL_GRAVITY_MPS2: f32 = 9.81;
+pub(crate) const HIGH_GRAVITY_MPS2: f32 = NORMAL_GRAVITY_MPS2 * 5.0;
 
 /// 9.81 m/s² in N₂ units (`g·τ²/σ`), as
 /// `UnitSystem::N2.from_metres_per_second2` gives it; a constant because the

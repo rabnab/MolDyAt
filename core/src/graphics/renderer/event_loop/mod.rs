@@ -3,7 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 mod action_processor;
-mod domain_command_mapping;
+pub mod command_registry;
 mod energy_window_manager;
 mod frame_orchestrator;
 mod input_handler;
@@ -25,6 +25,7 @@ mod viewport_orchestrator;
 
 // EnergyWindowManager is exposed through UnifiedRenderState accessors and must
 // remain exported so backend code can name the type.
+pub use command_registry::{COMMANDS, CommandDescriptor, CommandKind, UiAction};
 pub use energy_window_manager::EnergyWindowManager;
 pub use input_handler::{InputAction, InputHandler, KeyCode, OperatorTool};
 pub use metrics::{FrameMetrics, MetricsCollector};
@@ -54,5 +55,3 @@ pub struct FramePreviews {
     /// Object under the cursor of the active tool's kind, drawn highlighted.
     pub hovered: Option<crate::objects2d::wall_chain::ObjectRef>,
 }
-
-// action_processor::process_action_common is now internal - only used by UnifiedRenderState

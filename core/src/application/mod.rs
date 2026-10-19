@@ -26,6 +26,7 @@ pub use domain_command::{BallCommand, DomainCommand, SimControl, ViewCommand, Wo
 pub use physics_event::PhysicsEvent;
 pub(crate) use physics_thread::PhysicsThread;
 pub use sim_config::SimConfig;
+pub(crate) use sim_stats::{HIGH_GRAVITY_MPS2, NORMAL_GRAVITY_MPS2};
 pub(crate) use step_config::StepConfig;
 
 #[cfg(test)]

@@ -466,11 +466,9 @@ impl UnifiedRenderState {
 
     /// Process a user action that is common to all renderers.
     ///
-    /// Delegates to the single canonical `process_action_common` so there
-    /// is only one copy of the action→command mapping.
-    ///
-    /// Some actions (like ResetView, NextBallSize) are handled here before delegation
-    /// to avoid duplication and ensure proper state updates.
+    /// Registry commands (keys) are routed by their `CommandKind`: domain
+    /// commands go to the physics thread, UI commands are handled here (see
+    /// `command_registry`). Mouse and tool actions are handled directly.
     ///
     /// Returns `true` if the action affects the viewport (caller may still
     /// need to apply zoom/pan to `self.viewport` before the flag matters).
@@ -607,7 +605,8 @@ impl UnifiedRenderState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graphics::renderer::event_loop::action_processor::process_action_common;
+    use crate::application::SimControl;
+    use crate::graphics::renderer::event_loop::command_registry::command_by_id;
 
     // ── Helpers ──────────────────────────────────────────────────────
 
@@ -619,57 +618,51 @@ mod tests {
         ViewportTransform::new(world, (1280.0, 720.0), Margins::symmetric(50.0, 50.0))
     }
 
-    // ── process_action_common ────────────────────────────────────────
+    // ── Action dispatch ──────────────────────────────────────────────
 
-    #[test]
-    fn zoom_in_marks_view_dirty() {
-        let mut config = RendererConfig::default();
-        let physics = make_disconnected_coordinator();
-        let action = InputAction::ZoomIn {
-            center: Vec2D::zero(),
-        };
-        assert!(process_action_common(action, &physics, &mut config));
+    fn command(id: &str) -> InputAction {
+        InputAction::Command(command_by_id(id).expect("registered command"))
     }
 
     #[test]
-    fn zoom_out_marks_view_dirty() {
-        let mut config = RendererConfig::default();
-        let physics = make_disconnected_coordinator();
-        let action = InputAction::ZoomOut {
-            center: Vec2D::zero(),
-        };
-        assert!(process_action_common(action, &physics, &mut config));
-    }
-
-    #[test]
-    fn pan_update_marks_view_dirty() {
-        let mut config = RendererConfig::default();
-        let physics = make_disconnected_coordinator();
-        let action = InputAction::PanUpdate {
-            delta: Vec2D::new(5.0, 3.0),
-        };
-        assert!(process_action_common(action, &physics, &mut config));
+    fn zoom_and_pan_mark_view_dirty() {
+        let actions = [
+            InputAction::ZoomIn {
+                center: Vec2D::zero(),
+            },
+            InputAction::ZoomOut {
+                center: Vec2D::zero(),
+            },
+            InputAction::PanUpdate {
+                delta: Vec2D::new(5.0, 3.0),
+            },
+        ];
+        for action in actions {
+            let mut state = build_test_state();
+            let label = format!("{action:?}");
+            assert!(state.process_action(action, None, None), "{label}");
+            assert!(state.render.view_dirty, "{label}");
+        }
     }
 
     #[test]
     fn reset_view_marks_view_dirty() {
-        let mut config = RendererConfig::default();
-        let physics = make_disconnected_coordinator();
-        let action = InputAction::ResetView;
-        assert!(process_action_common(action, &physics, &mut config));
+        let mut state = build_test_state();
+        assert!(state.process_action(command("view.reset"), None, None));
+        assert!(state.render.view_dirty);
     }
 
     #[test]
     fn toggle_rendering_flips_flag_and_tells_the_physics_thread() {
-        let mut config = RendererConfig::default();
         let (physics, log) = PhysicsCoordinator::new_recording();
+        let mut state = build_state_with(physics);
         // Redraws at once with the new layers.
-        let affects = process_action_common(InputAction::ToggleRendering, &physics, &mut config);
+        let affects = state.process_action(command("view.toggle_rendering"), None, None);
         assert!(affects);
-        assert!(!config.render_drawing);
+        assert!(!state.render.config.render_drawing);
         // Toggle back.
-        process_action_common(InputAction::ToggleRendering, &physics, &mut config);
-        assert!(config.render_drawing);
+        state.process_action(command("view.toggle_rendering"), None, None);
+        assert!(state.render.config.render_drawing);
 
         // The physics thread builds only the layers that are drawn.
         let sent = log.lock().unwrap().clone();
@@ -689,12 +682,12 @@ mod tests {
 
     #[test]
     fn cycling_the_thermo_overlay_requests_thermo_fields_only_while_shown() {
-        let mut config = RendererConfig::default();
         let (physics, log) = PhysicsCoordinator::new_recording();
+        let mut state = build_state_with(physics);
 
         // Off -> Grid -> Temperature -> Pressure -> Off
         for _ in 0..4 {
-            process_action_common(InputAction::CycleThermoDisplay, &physics, &mut config);
+            state.process_action(command("view.cycle_thermo_overlay"), None, None);
         }
 
         let without_thermo = SceneLayers::ALL.difference(SceneLayers::THERMO);
@@ -714,22 +707,35 @@ mod tests {
     }
 
     #[test]
-    fn renderer_specific_actions_do_not_affect_view() {
-        let mut config = RendererConfig::default();
-        let physics = make_disconnected_coordinator();
-        let actions = [
-            InputAction::CyclePlotContent,
-            InputAction::ToggleEnergyWindow,
-            InputAction::ToggleCutoffRings,
-        ];
-        for action in actions {
-            let label = format!("{:?}", action);
+    fn renderer_specific_commands_do_not_affect_view() {
+        for id in [
+            "view.cycle_plot",
+            "view.toggle_energy_window",
+            "view.cycle_cutoff_rings",
+            "help.show",
+        ] {
+            let (physics, log) = PhysicsCoordinator::new_recording();
+            let mut state = build_state_with(physics);
             assert!(
-                !process_action_common(action, &physics, &mut config),
-                "action {} should not affect view",
-                label
+                !state.process_action(command(id), None, None),
+                "{id} should not affect view"
+            );
+            assert!(
+                log.lock().unwrap().is_empty(),
+                "{id} must not reach physics"
             );
         }
+    }
+
+    #[test]
+    fn domain_commands_go_to_the_physics_thread() {
+        let (physics, log) = PhysicsCoordinator::new_recording();
+        let mut state = build_state_with(physics);
+        assert!(!state.process_action(command("sim.toggle_pause"), None, None));
+        assert_eq!(
+            log.lock().unwrap().clone(),
+            [format!("{:?}", DomainCommand::Sim(SimControl::TogglePause))]
+        );
     }
 
     // ── Viewport helper tests ───────────────────────────────────────
@@ -761,10 +767,14 @@ mod tests {
     }
 
     fn build_test_state() -> UnifiedRenderState {
+        build_state_with(make_disconnected_coordinator())
+    }
+
+    fn build_state_with(physics: PhysicsCoordinator) -> UnifiedRenderState {
         let energy_data: SharedEnergyData = Arc::new(Mutex::new(EnergyData::new()));
         UnifiedRenderState {
             input: InputHandler::new(),
-            physics: make_disconnected_coordinator(),
+            physics,
             render: RenderStateData {
                 viewport: dummy_viewport(),
                 energy_manager: EnergyWindowManager::new(energy_data),

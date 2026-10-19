@@ -8,7 +8,7 @@
 //! All other actions are delegated to UnifiedRenderState.
 
 use moldyat_core::graphics::renderer::InputAction;
-use moldyat_core::graphics::renderer::event_loop::UnifiedRenderState;
+use moldyat_core::graphics::renderer::event_loop::{UiAction, UnifiedRenderState};
 
 use super::wgpu_pipelines::WgpuPipelines;
 
@@ -26,7 +26,7 @@ pub fn execute_input_action(
     main_window: &winit::window::Window,
 ) -> bool {
     // Handle ONLY actions that target a render pipeline
-    if let InputAction::ToggleCutoffRings = &action {
+    if action.ui_action() == Some(UiAction::CycleCutoffRings) {
         pipelines.cycle_ring_display_mode();
         return false; // doesn't affect view
     }

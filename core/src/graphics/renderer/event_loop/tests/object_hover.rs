@@ -10,6 +10,7 @@ use crate::application::renderer_snapshot::{
 };
 use crate::graphics::energy_plot::{EnergyData, SharedEnergyData};
 use crate::graphics::renderer::ViewportTransform;
+use crate::graphics::renderer::event_loop::command_registry::{UiAction, command_by_id};
 use crate::graphics::renderer::event_loop::energy_window_manager::EnergyWindowManager;
 use crate::graphics::renderer::event_loop::input_handler::{
     InputAction, InputHandler, KeyCode, OperatorTool,
@@ -198,15 +199,19 @@ fn frame_previews_carry_the_hovered_object() {
 #[test]
 fn delete_and_backspace_map_to_delete_hovered_once_per_press() {
     let mut input = InputHandler::new();
-    assert!(matches!(
-        input.handle_key_down(KeyCode::Delete, false),
-        Some(InputAction::DeleteHovered)
-    ));
+    assert_eq!(
+        input
+            .handle_key_down(KeyCode::Delete, false)
+            .and_then(|a| a.ui_action()),
+        Some(UiAction::DeleteHovered)
+    );
     assert!(input.handle_key_down(KeyCode::Delete, true).is_none());
-    assert!(matches!(
-        input.handle_key_down(KeyCode::Backspace, false),
-        Some(InputAction::DeleteHovered)
-    ));
+    assert_eq!(
+        input
+            .handle_key_down(KeyCode::Backspace, false)
+            .and_then(|a| a.ui_action()),
+        Some(UiAction::DeleteHovered)
+    );
 }
 
 #[test]
@@ -216,7 +221,7 @@ fn delete_hovered_sends_delete_for_the_highlighted_object() {
     state.select_operator_tool(OperatorTool::LineSegment);
     state.render.cursor_world_pos = Vec2D::new(6.0, 0.0);
 
-    InputOrchestrator::process_action(&mut state, InputAction::DeleteHovered, None, None);
+    InputOrchestrator::process_action(&mut state, delete_hovered(), None, None);
 
     let commands = log.lock().expect("command log lock");
     let deletes: Vec<&String> = commands
@@ -234,7 +239,7 @@ fn delete_hovered_does_nothing_when_nothing_is_highlighted() {
     state.select_operator_tool(OperatorTool::LineSegment);
     state.render.cursor_world_pos = Vec2D::new(0.0, 8.0);
 
-    InputOrchestrator::process_action(&mut state, InputAction::DeleteHovered, None, None);
+    InputOrchestrator::process_action(&mut state, delete_hovered(), None, None);
 
     assert!(log.lock().expect("command log lock").is_empty());
 }
@@ -303,4 +308,8 @@ fn switching_tools_mid_drag_clears_the_ghost_wall() {
         Some("Operator(SetGhostWall { ghost: None })"),
         "got: {commands:?}"
     );
+}
+
+fn delete_hovered() -> InputAction {
+    InputAction::Command(command_by_id("tools.delete_hovered").expect("registered"))
 }
