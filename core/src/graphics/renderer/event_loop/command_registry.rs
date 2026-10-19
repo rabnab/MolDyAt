@@ -514,7 +514,8 @@ impl HeldModifiers {
 /// Of the bindings for `key` that fire in `phase`, a held modifier's binding
 /// wins (Ctrl before Alt); otherwise the plain binding fires. Auto-repeat is
 /// not filtered here: the caller drops a repeated [`Trigger::PressOnce`].
-/// On a key press, `InputHandler` asks [`chord_for_key`] first.
+/// `InputHandler` decides chords with [`chord_for_key`] on the first press
+/// and looks up everything else here with no modifiers held.
 pub fn command_for_key(
     key: KeyCode,
     phase: KeyPhase,

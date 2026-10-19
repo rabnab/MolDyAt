@@ -143,7 +143,8 @@ binding for the key wins (Ctrl before Alt); otherwise the plain binding fires.
 A chord is decided when its key goes down with the modifier held
 (`chord_for_key`) and owns that key until the release: Ctrl+S fires on press,
 Alt+`=` on the release even if Alt was let go first, and neither ever runs the
-plain key's command (S, `=`). The backend handles
+plain key's command (S, `=`). A modifier pressed after the key, or during its
+auto-repeat, does not make a chord: the key stays plain. The backend handles
 `UiAction::CycleCutoffRings` itself, since the rings live in its ball pipeline.
 
 Adding a keyboard command:

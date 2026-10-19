@@ -3,7 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use super::command_registry::{
-    CommandDescriptor, HeldModifiers, KeyPhase, Trigger, UiAction, chord_for_key, command_for_key,
+    CommandDescriptor, HeldModifiers, KeyBinding, KeyPhase, Trigger, UiAction, chord_for_key,
+    command_for_key,
 };
 use crate::application::operator_command::OperatorCommand;
 use crate::objects2d::Vec2D;
@@ -102,7 +103,7 @@ pub struct InputHandler {
     // release runs (`None`: the chord fired on press). The release belongs
     // to the chord even if the modifier was let go first, so it never falls
     // through to the plain key's command (S = stepwise, = = double dt).
-    chord_keys: HashMap<KeyCode, Option<&'static CommandDescriptor>>,
+    chord_keys: HashMap<KeyCode, (&'static CommandDescriptor, KeyBinding)>,
 }
 
 impl InputHandler {
@@ -197,16 +198,23 @@ impl InputHandler {
     pub fn handle_key_down(&mut self, key: KeyCode, is_repeat: bool) -> Option<InputAction> {
         self.register_key_pressed(key);
 
-        // A chord is decided on press, while its modifier is certainly held.
-        // It owns this key until the release, whatever its trigger.
-        if let Some((command, binding)) = chord_for_key(key, self.held_modifiers()) {
-            let (now, on_release) = match binding.trigger {
-                Trigger::Press => (Some(command), None),
-                Trigger::PressOnce => ((!is_repeat).then_some(command), None),
-                Trigger::Release => (None, Some(command)),
+        // A chord is decided on the first press, while its modifier is
+        // certainly held, and owns this key until the release, whatever its
+        // trigger. An auto-repeat continues the press it repeats: a modifier
+        // pressed while a plain key is held does not turn it into a chord.
+        let chord = if is_repeat {
+            self.chord_keys.get(&key).copied()
+        } else {
+            chord_for_key(key, self.held_modifiers())
+        };
+        if let Some((command, binding)) = chord {
+            self.chord_keys.insert(key, (command, binding));
+            let fires_now = match binding.trigger {
+                Trigger::Press => true,
+                Trigger::PressOnce => !is_repeat,
+                Trigger::Release => false,
             };
-            self.chord_keys.insert(key, on_release);
-            return now.map(InputAction::Command);
+            return fires_now.then_some(InputAction::Command(command));
         }
 
         let (command, binding) = command_for_key(key, KeyPhase::Down, HeldModifiers::default())?;
@@ -221,11 +229,12 @@ impl InputHandler {
         self.register_key_released(key);
 
         // The release of a key that started a chord is part of that chord.
-        if let Some(on_release) = self.chord_keys.remove(&key) {
-            return on_release.map(InputAction::Command);
+        if let Some((command, binding)) = self.chord_keys.remove(&key) {
+            return (binding.trigger == Trigger::Release).then_some(InputAction::Command(command));
         }
 
-        command_for_key(key, KeyPhase::Up, self.held_modifiers())
+        // Otherwise the press was plain: modifiers pressed since do not count.
+        command_for_key(key, KeyPhase::Up, HeldModifiers::default())
             .map(|(command, _)| InputAction::Command(command))
     }
 

@@ -228,10 +228,12 @@ fn test_plus_and_minus_change_the_time_step() {
 fn test_alt_plus_and_minus_change_the_wait_time() {
     let mut handler = InputHandler::new();
     handler.handle_key_down(KeyCode::AltLeft, false);
+    handler.handle_key_down(KeyCode::Equal, false);
     assert_eq!(
         id(handler.handle_key_up(KeyCode::Equal)),
         Some("sim.decrease_wait_time")
     );
+    handler.handle_key_down(KeyCode::NumpadSubtract, false);
     assert_eq!(
         id(handler.handle_key_up(KeyCode::NumpadSubtract)),
         Some("sim.increase_wait_time")
@@ -314,5 +316,34 @@ fn test_alt_released_before_plus_still_decreases_wait_time() {
     assert_eq!(
         id(handler.handle_key_up(KeyCode::Equal)),
         Some("sim.double_time_step")
+    );
+}
+
+#[test]
+fn test_modifier_pressed_after_a_plain_key_does_not_make_a_chord() {
+    for repeat_in_between in [false, true] {
+        let mut handler = InputHandler::new();
+        assert!(handler.handle_key_down(KeyCode::Equal, false).is_none());
+        handler.handle_key_down(KeyCode::AltLeft, false);
+        if repeat_in_between {
+            assert!(handler.handle_key_down(KeyCode::Equal, true).is_none());
+        }
+        assert_eq!(
+            id(handler.handle_key_up(KeyCode::Equal)),
+            Some("sim.double_time_step"),
+            "repeat in between: {repeat_in_between}"
+        );
+    }
+}
+
+#[test]
+fn test_ctrl_pressed_while_s_is_held_does_not_save() {
+    let mut handler = InputHandler::new();
+    assert!(handler.handle_key_down(KeyCode::KeyS, false).is_none());
+    handler.handle_key_down(KeyCode::ControlLeft, false);
+    assert!(handler.handle_key_down(KeyCode::KeyS, true).is_none());
+    assert_eq!(
+        id(handler.handle_key_up(KeyCode::KeyS)),
+        Some("sim.toggle_stepwise")
     );
 }
