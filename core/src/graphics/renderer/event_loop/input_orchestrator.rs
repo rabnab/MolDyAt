@@ -2,10 +2,11 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use super::action_processor::process_action_common;
+use super::action_processor::run_command;
 use super::input_handler::{InputAction, OperatorTool};
 use super::operator_tool_handler::scroll_y_from_delta;
 use super::unified_render_state::UnifiedRenderState;
+use crate::application::{BallCommand, DomainCommand};
 
 /// Coordinates renderer-side input handling, tool flow, and action dispatch.
 pub(super) struct InputOrchestrator;
@@ -18,9 +19,12 @@ impl InputOrchestrator {
         main_window: Option<&winit::window::Window>,
     ) -> bool {
         match action {
-            InputAction::ResetView => {
-                state.reset_view();
-                true
+            InputAction::Command(command) => {
+                let affects_view = run_command(state, command, window_target, main_window);
+                if affects_view {
+                    state.mark_view_dirty();
+                }
+                affects_view
             }
             InputAction::NextBallSize => {
                 state.next_ball_size();
@@ -29,39 +33,31 @@ impl InputOrchestrator {
                 }
                 false
             }
-            InputAction::ToggleEnergyWindow => {
-                if let Some(target) = window_target {
-                    state.toggle_energy_window(target, main_window);
-                }
-                false
-            }
             InputAction::SelectOperatorTool(tool) => {
                 state.select_operator_tool(tool);
                 false
             }
-            InputAction::DeleteHovered => {
-                state.delete_hovered_object();
-                false
-            }
             InputAction::AddBall { position } => {
-                if !state.can_add_ball_at(position) {
-                    return false;
+                if state.can_add_ball_at(position) {
+                    state.physics.send_command(BallCommand::Add(position));
                 }
-                process_action_common(
-                    InputAction::AddBall { position },
-                    &state.physics,
-                    &mut state.render.config,
-                );
                 false
             }
-            other => {
-                let affects_view =
-                    process_action_common(other, &state.physics, &mut state.render.config);
-                if affects_view {
-                    state.mark_view_dirty();
-                }
-                affects_view
+            InputAction::OperatorAction(command) => {
+                state.physics.send_command(DomainCommand::Operator(command));
+                false
             }
+            // Viewport changes are applied by the caller.
+            InputAction::ZoomIn { .. }
+            | InputAction::ZoomOut { .. }
+            | InputAction::PanUpdate { .. } => {
+                state.mark_view_dirty();
+                true
+            }
+            // Pan start and end and the cursor are tracked by `InputHandler`.
+            InputAction::PanStart { .. }
+            | InputAction::PanEnd
+            | InputAction::UpdateCursor { .. } => false,
         }
     }
 
@@ -221,11 +217,6 @@ impl InputOrchestrator {
                 }
                 InputAction::ZoomOut { center } => {
                     state.zoom_at_point(center, 1.0 / 1.1);
-                    Self::process_action(state, action, None, None);
-                    true
-                }
-                InputAction::ResetView => {
-                    state.reset_view();
                     Self::process_action(state, action, None, None);
                     true
                 }

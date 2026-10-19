@@ -66,6 +66,7 @@ Toolchain is pinned in `rust-toolchain.toml` (nightly). Use plain `cargo`. Use `
 - Avoid `unsafe` unless necessary for performance-critical sections; document why and which invariants hold.
 - Docs layout: `docs/` describes the current code, `docs/plan/` holds open plans, `docs/done/` implemented plans kept as history. See the `docs-maintenance` skill before adding, moving or renaming a doc.
 - Line endings: Git normalizes text files to LF on commit (`.gitattributes`, `* text=auto`); no further check needed.
+- Keyboard commands: one `CommandDescriptor` per command in `COMMANDS` (`graphics/renderer/event_loop/command_registry.rs`) generates the key dispatch, the help text (`H`) and the UI-vs-domain routing; add an entry plus its handler (a `UiAction` arm or a `DomainCommand` variant), never a key `match`. Ids (`sim.toggle_pause`) are stable. A test keeps the README key table in sync. See `docs/architecture.md#keyboard-commands`.
 - Operator tools (line segment, valve, thermostat, source sphere): `SIDEBAR_TOOLS` sets the icon order, and the wgpu icon atlas must match it. See the `operator-framework` skill before adding, renaming or reordering tools.
 
 ---

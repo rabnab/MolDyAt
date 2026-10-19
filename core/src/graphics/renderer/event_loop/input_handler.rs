@@ -2,6 +2,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+use super::command_registry::{
+    CommandDescriptor, HeldModifiers, KeyPhase, Modifier, Trigger, UiAction, command_for_key,
+};
 use crate::application::operator_command::OperatorCommand;
 use crate::objects2d::Vec2D;
 use std::collections::HashSet;
@@ -27,34 +30,22 @@ pub enum OperatorTool {
     SourceSphere,
 }
 
-/// Actions that can result from user input
+/// Actions that can result from user input.
+///
+/// Keyboard commands arrive as [`InputAction::Command`], looked up in the
+/// command registry; the other variants come from the mouse and the operator
+/// tools.
 #[derive(Debug)]
 pub enum InputAction {
+    /// A registry command (see `command_registry`).
+    Command(&'static CommandDescriptor),
+
     // Ball manipulation
     AddBall {
         position: Vec2D,
     },
+    /// Cycle the species of new balls (right click).
     NextBallSize,
-    AddRandomBalls {
-        count: usize,
-    },
-    StopAllBalls,
-    ClearBalls,
-
-    // Save / load the whole world (Ctrl+S / Ctrl+O)
-    SaveWorld,
-    LoadWorld,
-
-    // Simulation control
-    TogglePause,
-    ToggleGravity,
-    ToggleStepwise,
-    RandomizeSpeeds,
-    EnableRandomBallSpeed,
-    DoubleTimeStep,
-    HalveTimeStep,
-    IncreaseWaitTime,
-    DecreaseWaitTime,
 
     // View control
     ZoomIn {
@@ -70,21 +61,6 @@ pub enum InputAction {
         delta: Vec2D,
     },
     PanEnd,
-    ResetView,
-
-    // Rendering
-    ToggleRendering,
-    CyclePlotContent,
-    CycleThermoDisplay,
-    ToggleEnergyWindow,
-    ToggleCutoffRings,
-
-    // Display/Debug
-    PrintHelp,
-    ToggleRealData,
-    ToggleTimingDisplay,
-    ToggleBallStats,
-    StartVerbosityInput,
 
     // Cursor
     UpdateCursor {
@@ -93,10 +69,23 @@ pub enum InputAction {
 
     // Operator panel
     SelectOperatorTool(OperatorTool),
-    /// Delete the object the active tool highlights under the cursor.
-    DeleteHovered,
     /// A self-contained operator command routed to the physics thread.
     OperatorAction(Box<dyn OperatorCommand>),
+}
+
+impl InputAction {
+    /// The registry command, if this is one.
+    pub fn command(&self) -> Option<&'static CommandDescriptor> {
+        match self {
+            Self::Command(command) => Some(command),
+            _ => None,
+        }
+    }
+
+    /// The renderer action of a UI registry command.
+    pub fn ui_action(&self) -> Option<UiAction> {
+        self.command().and_then(CommandDescriptor::ui_action)
+    }
 }
 
 /// Cooldown period between +/- key commands (in milliseconds)
@@ -117,9 +106,9 @@ pub struct InputHandler {
     // Debounce tracking for +/- keys (prevents rapid-fire commands)
     last_plus_minus_time: Option<Instant>,
 
-    // Keys that started a Ctrl chord (Ctrl+S / Ctrl+O). Their release is
+    // Keys that started a chord (Ctrl+S / Ctrl+O). Their release is
     // consumed even if Ctrl was let go first, so it never falls through to
-    // the plain-key action (S = stepwise).
+    // the plain-key command (S = stepwise).
     chord_keys: HashSet<KeyCode>,
 }
 
@@ -234,40 +223,31 @@ impl InputHandler {
         self.pan_start_offset
     }
 
-    /// Process keyboard input and return action if any
-    pub fn handle_key_down(&mut self, key: KeyCode, is_repeat: bool) -> Option<InputAction> {
-        self.register_key_pressed(key);
-
-        // Ctrl+S / Ctrl+O act on key press, so the chord is decided while Ctrl
-        // is certainly held; auto-repeat must not save or load again.
-        if self.is_ctrl_modifier_pressed() {
-            let action = match key {
-                KeyCode::KeyS => Some(InputAction::SaveWorld),
-                KeyCode::KeyO => Some(InputAction::LoadWorld),
-                _ => None,
-            };
-            if action.is_some() {
-                self.chord_keys.insert(key);
-                return if is_repeat { None } else { action };
-            }
-        }
-
-        match key {
-            KeyCode::Space => Some(InputAction::TogglePause),
-            KeyCode::ControlLeft | KeyCode::ControlRight => None,
-            KeyCode::Escape => Some(InputAction::ClearBalls),
-            // Backspace too: many laptop keyboards have no Delete key.
-            KeyCode::Delete | KeyCode::Backspace if !is_repeat => Some(InputAction::DeleteHovered),
-            KeyCode::ShiftLeft | KeyCode::ShiftRight => Some(InputAction::EnableRandomBallSpeed),
-            KeyCode::Minus | KeyCode::Equal => {
-                // These are handled separately for alt-key tracking
-                None
-            }
-            _ => None,
+    fn held_modifiers(&self) -> HeldModifiers {
+        HeldModifiers {
+            ctrl: self.is_ctrl_modifier_pressed(),
+            alt: self.is_alt_modifier_pressed(),
         }
     }
 
-    /// Process keyboard release and return action if any
+    /// Process a key press (or auto-repeat) and return the command it runs.
+    pub fn handle_key_down(&mut self, key: KeyCode, is_repeat: bool) -> Option<InputAction> {
+        self.register_key_pressed(key);
+
+        let (command, binding) = command_for_key(key, KeyPhase::Down, self.held_modifiers())?;
+        // A chord (Ctrl+S) fires on press, while the modifier is certainly
+        // held. Its key's release is consumed even if the modifier was let
+        // go first, so it never falls through to the plain key (S = stepwise).
+        if binding.modifier != Modifier::None {
+            self.chord_keys.insert(key);
+        }
+        if is_repeat && binding.trigger == Trigger::PressOnce {
+            return None;
+        }
+        Some(InputAction::Command(command))
+    }
+
+    /// Process a key release and return the command it runs.
     pub fn handle_key_up(&mut self, key: KeyCode) -> Option<InputAction> {
         self.register_key_released(key);
 
@@ -276,41 +256,8 @@ impl InputHandler {
             return None;
         }
 
-        match key {
-            KeyCode::Tab => Some(InputAction::ToggleEnergyWindow),
-            KeyCode::F2 => Some(InputAction::ToggleRendering),
-            KeyCode::F3 => Some(InputAction::ToggleCutoffRings),
-            KeyCode::KeyH => Some(InputAction::PrintHelp),
-            KeyCode::KeyD => Some(InputAction::ToggleRealData),
-            KeyCode::KeyG => Some(InputAction::ToggleGravity),
-            KeyCode::KeyS => Some(InputAction::ToggleStepwise),
-            KeyCode::KeyT => Some(InputAction::CycleThermoDisplay),
-            KeyCode::F4 => Some(InputAction::ToggleTimingDisplay),
-            KeyCode::KeyP => Some(InputAction::CyclePlotContent),
-            KeyCode::KeyR => Some(InputAction::RandomizeSpeeds),
-            KeyCode::KeyB => Some(InputAction::ToggleBallStats),
-            KeyCode::KeyV => Some(InputAction::StartVerbosityInput),
-            KeyCode::ControlLeft | KeyCode::ControlRight => None,
-            KeyCode::F5 => Some(InputAction::AddRandomBalls { count: 100 }),
-            KeyCode::F1 => Some(InputAction::StopAllBalls),
-            KeyCode::Digit0 | KeyCode::Numpad0 => Some(InputAction::ResetView),
-            // Time step control with +/- keys
-            KeyCode::Equal | KeyCode::NumpadAdd => {
-                if self.is_alt_modifier_pressed() {
-                    Some(InputAction::DecreaseWaitTime)
-                } else {
-                    Some(InputAction::DoubleTimeStep)
-                }
-            }
-            KeyCode::Minus | KeyCode::NumpadSubtract => {
-                if self.is_alt_modifier_pressed() {
-                    Some(InputAction::IncreaseWaitTime)
-                } else {
-                    Some(InputAction::HalveTimeStep)
-                }
-            }
-            _ => None,
-        }
+        command_for_key(key, KeyPhase::Up, self.held_modifiers())
+            .map(|(command, _)| InputAction::Command(command))
     }
 
     /// Process mouse button and return action if any

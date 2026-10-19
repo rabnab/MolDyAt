@@ -135,7 +135,7 @@ guardrails. Water (I9–I10) follows. See §5 for the model choice behind it.
 | ID | Title | Scope / acceptance | Size | Deps |
 |---|---|---|---|---|
 | C1 | Group `DomainCommand` | Split into `Sim(SimControl)`, `Balls(BallCommand)`, `World(WorldCommand)`, `Operator(Box<dyn OperatorCommand>)`. Handler delegates per group. | S | – |
-| C2 | Command registry | One table of `CommandDescriptor { id, label, category, default_binding, kind: Ui(UiAction) | Domain(fn(&Ctx)->DomainCommand) }`. Generated: key dispatch, help text (`PrintHelp`), `process_action_common`. Adding a command = one entry + handler. Unit test: no duplicate bindings, every command has help text. | M | C1 |
+| C2 | Command registry | One table of `CommandDescriptor { id, label, category, default_binding, kind: Ui(UiAction) | Domain(fn(&Ctx)->DomainCommand) }`. Generated: key dispatch, help text (`PrintHelp`), `process_action_common`. Adding a command = one entry + handler. Unit test: no duplicate bindings, every command has help text. Landed as `command_registry.rs` with `Domain(fn() -> DomainCommand)`: no key command needs a context yet (C5 adds parameters). | M | C1 |
 | C3 | Configurable key bindings | Load overrides from a TOML/JSON file (via M6); defaults from C2. | S | C2, M6 |
 | C4 | Tool registry | `ToolDescriptor { tool, icon, name }` list drives `OperatorTool`, `operator_tool_for_icon`, `selected_sidebar_icon` and the atlas order — removes the 3-file sync rule from the skill. Test: icon order == registry order. | M | – |
 | C5 | Scriptable commands for headless | Headless runner accepts a command script (`step 1000; add_random 500; toggle_gravity; …`) mapped through the same registry ids. Enables reproducible scenario tests. | M | C2, M8 |
@@ -186,7 +186,7 @@ GitHub issues:
 | Phase | Parent | Landed on `master` | Open |
 |---|---|---|---|
 | 1 | #219 | G1 #221, G2 #222, G3 #223, M1 #224, M3 #225, M4 #226, C1 #227, P1 #228, P3 #229 | – |
-| 2 | #220 | I1 #230, I2 #233, I3 #234, M6 #231, I4 #235, I5 #236 | C2 #232, I6 #237, I7 #238 |
+| 2 | #220 | I1 #230, I2 #233, I3 #234, M6 #231, I4 #235, I5 #236, C2 #232 | I6 #237, I7 #238 |
 | 5 | – | – | I12 #280 |
 
 "Landed" is taken from the commits on `master` (as of 2026-10-14), not from

@@ -2,89 +2,79 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use super::{InputAction, PhysicsCoordinator};
-use crate::application::log_util;
-use crate::application::{DomainCommand, ViewCommand};
-use crate::graphics::renderer::state_layers::RendererConfig;
-use std::convert::TryFrom;
+use super::command_registry::{CommandDescriptor, CommandKind, UiAction, help_text};
+use super::unified_render_state::UnifiedRenderState;
+use crate::application::ViewCommand;
 
-/// Shared mapping from InputAction to physics commands and renderer state flags.
-/// Returns true if the action affects the viewport (caller should refresh view).
-pub fn process_action_common(
-    action: InputAction,
-    physics: &PhysicsCoordinator,
-    config: &mut RendererConfig,
+/// Runs a registry command: a domain command goes to the physics thread, a
+/// UI command is handled here. Returns true if the view changed.
+pub(super) fn run_command(
+    state: &mut UnifiedRenderState,
+    command: &CommandDescriptor,
+    window_target: Option<&winit::event_loop::ActiveEventLoop>,
+    main_window: Option<&winit::window::Window>,
 ) -> bool {
-    let mut affects_view = false;
-
-    match DomainCommand::try_from(action) {
-        Ok(command) => {
-            physics.send_command(command);
+    match command.kind {
+        CommandKind::Domain(make) => {
+            state.physics.send_command(make());
+            false
         }
-        Err(action) => match action {
-            InputAction::ZoomIn { .. } | InputAction::ZoomOut { .. } => {
-                // Viewport changes are handled by the event loop
-                affects_view = true;
-            }
-            InputAction::PanUpdate { .. } => {
-                affects_view = true;
-            }
-            InputAction::ResetView => {
-                affects_view = true;
-            }
-            InputAction::ToggleRendering => {
-                config.toggle_rendering();
-                // The physics thread builds only the layers that are drawn.
-                physics.send_command(ViewCommand::SetSnapshotLayers(config.scene_layers()));
-                // Redraw now with the new layers (back on: from the next full
-                // snapshot; until it arrives, the light one is drawn light).
-                affects_view = true;
-            }
-            InputAction::PrintHelp => {
-                log_util::print_help_message();
-            }
-            InputAction::CyclePlotContent => {
-                config.cycle_plot_content();
-            }
-            InputAction::CycleThermoDisplay => {
-                config.cycle_thermo_display();
-                // The thermo fields are recorded only while shown.
-                physics.send_command(ViewCommand::SetSnapshotLayers(config.scene_layers()));
-                affects_view = true;
-            }
-            // Actions handled elsewhere (not in action_processor)
-            InputAction::PanStart { .. }
-            | InputAction::PanEnd
-            | InputAction::UpdateCursor { .. }
-            | InputAction::SelectOperatorTool(_)
-            | InputAction::DeleteHovered
-            | InputAction::ToggleEnergyWindow
-            | InputAction::ToggleCutoffRings => {}
-            InputAction::AddBall { .. }
-            | InputAction::NextBallSize
-            | InputAction::AddRandomBalls { .. }
-            | InputAction::StopAllBalls
-            | InputAction::ClearBalls
-            | InputAction::TogglePause
-            | InputAction::ToggleGravity
-            | InputAction::ToggleStepwise
-            | InputAction::RandomizeSpeeds
-            | InputAction::EnableRandomBallSpeed
-            | InputAction::DoubleTimeStep
-            | InputAction::HalveTimeStep
-            | InputAction::IncreaseWaitTime
-            | InputAction::DecreaseWaitTime
-            | InputAction::ToggleRealData
-            | InputAction::ToggleTimingDisplay
-            | InputAction::ToggleBallStats
-            | InputAction::StartVerbosityInput
-            | InputAction::SaveWorld
-            | InputAction::LoadWorld
-            | InputAction::OperatorAction(_) => {
-                unreachable!("domain actions must map to DomainCommand")
-            }
-        },
+        CommandKind::Ui(action) => run_ui_action(state, action, window_target, main_window),
     }
+}
 
-    affects_view
+/// Handles a renderer-side command. Returns true if the view changed.
+fn run_ui_action(
+    state: &mut UnifiedRenderState,
+    action: UiAction,
+    window_target: Option<&winit::event_loop::ActiveEventLoop>,
+    main_window: Option<&winit::window::Window>,
+) -> bool {
+    match action {
+        UiAction::PrintHelp => {
+            log::info!("{}", help_text());
+            false
+        }
+        UiAction::ResetView => {
+            state.reset_view();
+            true
+        }
+        UiAction::ToggleRendering => {
+            let config = &mut state.render.config;
+            config.toggle_rendering();
+            // The physics thread builds only the layers that are drawn.
+            state
+                .physics
+                .send_command(ViewCommand::SetSnapshotLayers(config.scene_layers()));
+            // Redraw now with the new layers (back on: from the next full
+            // snapshot; until it arrives, the light one is drawn light).
+            true
+        }
+        UiAction::CycleThermoDisplay => {
+            let config = &mut state.render.config;
+            config.cycle_thermo_display();
+            // The thermo fields are recorded only while shown.
+            state
+                .physics
+                .send_command(ViewCommand::SetSnapshotLayers(config.scene_layers()));
+            true
+        }
+        UiAction::CyclePlotContent => {
+            state.render.config.cycle_plot_content();
+            false
+        }
+        UiAction::ToggleEnergyWindow => {
+            if let Some(target) = window_target {
+                state.toggle_energy_window(target, main_window);
+            }
+            false
+        }
+        UiAction::DeleteHovered => {
+            state.delete_hovered_object();
+            false
+        }
+        // The ring display lives in the backend's ball pipeline, which
+        // handles this command before it gets here (`wgpu_input`).
+        UiAction::CycleCutoffRings => false,
+    }
 }

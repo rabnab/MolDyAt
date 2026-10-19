@@ -13,7 +13,7 @@ mod physics_thread;
 pub mod renderer_snapshot;
 pub mod scene_layers;
 pub mod sim_config;
-mod sim_stats;
+pub(crate) mod sim_stats;
 mod step_config;
 pub mod thermo_field;
 pub mod units;

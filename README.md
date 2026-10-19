@@ -268,33 +268,46 @@ cargo clippy --workspace -- -D warnings
 
 ## Controls
 
-| Key / Mouse | Action |
+Keyboard (press `H` for the same list in the log):
+
+<!-- key-table:start (generated from COMMANDS, see command_registry.rs) -->
+| Key | Action |
 |---|---|
-| `Ctrl` (hold) | Show placement crosshair |
-| `Ctrl` (release) | Place ball at cursor |
-| `Shift` (hold while placing) | Place ball with random velocity |
-| `Tab` | Toggle energy plot window |
-| `Space` | Pause / resume simulation |
-| `Escape` | Clear all balls |
-| `F1` | Stop all balls (zero velocities) |
-| `F3` | Toggle cutoff-radius rings |
-| `F5` | Add 100 random balls |
-| `+` / `=` | Double simulation time step |
-| `-` | Halve simulation time step |
-| `Alt` + `+` | Decrease wait time between steps |
-| `Alt` + `-` | Increase wait time between steps |
-| `R` | Randomize ball speeds |
-| `S` | Toggle stepwise mode |
-| `D` | Toggle real-data display (SI units, see [docs/units.md](docs/units.md)) |
-| `T` | Cycle thermo overlay (Off → Grid → Temperature → Pressure → Off) |
-| `B` | Toggle ball stats overlay |
-| `P` | Cycle plot content |
-| `F4` | Toggle step timings in the log |
-| `V` | Set a ball verbose: type its ID (or `a` for all, `0` for none) and a mode (`c` console, `m` main neighbours, `o` other neighbours, `s` speed) in the terminal |
-| `Ctrl` + `S` | Save the world (balls, walls, valves, thermostats, sources) to a new file in the save directory |
-| `Ctrl` + `O` | Load the newest save from the save directory; the loaded world starts paused in the default view |
-| `H` | Print help to log |
-| `0` | Reset viewport (zoom + pan) |
+| `SPACE` | Pause or resume the simulation. |
+| `S` | Toggle step-by-step mode. |
+| `G` | Cycle gravity: off -> 9.81 m/s^2 -> 49.05 m/s^2. |
+| `=` / `Num +` | Double the simulation time step. |
+| `-` / `Num -` | Halve the simulation time step. |
+| `Alt + =` / `Alt + Num +` | Decrease the wait time between steps. |
+| `Alt + -` / `Alt + Num -` | Increase the wait time between steps. |
+| `ESC` | Clear all balls. |
+| `F1` | Stop all balls (zero velocities). |
+| `F5` | Add 100 random balls. |
+| `R` | Randomize all ball speeds. |
+| `Shift` | Enable random ball speed. |
+| `DEL` / `BACKSPACE` | Delete the highlighted object (hover it with its sidebar tool selected). |
+| `Ctrl + S` | Save the world to a new file in the save directory (--save-dir, default ./saves). |
+| `Ctrl + O` | Load the newest save from the save directory (paused, default view). |
+| `0` / `Num 0` | Reset the viewport (1.0x zoom, centred). |
+| `F2` | Toggle rendering. |
+| `F3` | Cycle the cutoff-radius rings. |
+| `T` | Cycle the thermo overlay: Off -> Grid -> Temperature -> Pressure -> Off. |
+| `P` | Cycle the plot content. |
+| `TAB` | Toggle the energy plot window. |
+| `D` | Toggle the display of real data (SI units, see docs/units.md). |
+| `B` | Toggle the ball statistics overlay. |
+| `F4` | Toggle step timings in the log. |
+| `V` | Set a ball verbose: type its ID (or 'a' for all, '0' for none) and a mode (c console, m main neighbours, o other neighbours, s speed) in the terminal. |
+| `H` | Print this list of keys to the log. |
+<!-- key-table:end -->
+
+Mouse:
+
+| Mouse | Action |
+|---|---|
+| Left click on a sidebar icon | Select or deselect that tool |
+| Left click (ball tool) | Place a ball at the cursor |
+| Right click | Cycle the species of new balls |
 | Scroll wheel | Zoom in / out |
 | Middle-click drag | Pan viewport |
 
