@@ -3,12 +3,11 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use super::command_registry::{
-    CommandDescriptor, HeldModifiers, KeyPhase, Modifier, Trigger, UiAction, command_for_key,
+    CommandDescriptor, HeldModifiers, KeyPhase, Trigger, UiAction, chord_for_key, command_for_key,
 };
 use crate::application::operator_command::OperatorCommand;
 use crate::objects2d::Vec2D;
-use std::collections::HashSet;
-use std::time::{Duration, Instant};
+use std::collections::{HashMap, HashSet};
 use winit::event::{ElementState, MouseButton, MouseScrollDelta};
 
 pub type KeyCode = winit::keyboard::KeyCode;
@@ -88,13 +87,9 @@ impl InputAction {
     }
 }
 
-/// Cooldown period between +/- key commands (in milliseconds)
-const PLUS_MINUS_COOLDOWN_MS: u64 = 150;
-
 /// Handles keyboard and mouse input, tracking state and producing actions
 pub struct InputHandler {
     pressed_keys: HashSet<KeyCode>,
-    pressed_alt_keys: HashSet<KeyCode>,
     cursor_pos: Vec2D,
     cursor_pos_px: [f32; 2],
 
@@ -103,27 +98,23 @@ pub struct InputHandler {
     pan_start_pos_px: [f32; 2],
     pan_start_offset: Vec2D,
 
-    // Debounce tracking for +/- keys (prevents rapid-fire commands)
-    last_plus_minus_time: Option<Instant>,
-
-    // Keys that started a chord (Ctrl+S / Ctrl+O). Their release is
-    // consumed even if Ctrl was let go first, so it never falls through to
-    // the plain-key command (S = stepwise).
-    chord_keys: HashSet<KeyCode>,
+    // Keys pressed as a chord (Ctrl+S, Alt+=), with the command their
+    // release runs (`None`: the chord fired on press). The release belongs
+    // to the chord even if the modifier was let go first, so it never falls
+    // through to the plain key's command (S = stepwise, = = double dt).
+    chord_keys: HashMap<KeyCode, Option<&'static CommandDescriptor>>,
 }
 
 impl InputHandler {
     pub fn new() -> Self {
         Self {
             pressed_keys: HashSet::new(),
-            pressed_alt_keys: HashSet::new(),
             cursor_pos: Vec2D::zero(),
             cursor_pos_px: [0.0, 0.0],
             is_panning: false,
             pan_start_pos_px: [0.0, 0.0],
             pan_start_offset: Vec2D::zero(),
-            last_plus_minus_time: None,
-            chord_keys: HashSet::new(),
+            chord_keys: HashMap::new(),
         }
     }
 
@@ -141,24 +132,11 @@ impl InputHandler {
     /// and a Ctrl that stayed "held" would turn plain S / O into save / load.
     pub fn release_all_keys(&mut self) {
         self.pressed_keys.clear();
-        self.pressed_alt_keys.clear();
         self.chord_keys.clear();
-    }
-
-    pub fn register_alt_key_pressed(&mut self, key: KeyCode) {
-        self.pressed_alt_keys.insert(key);
-    }
-
-    pub fn register_alt_key_released(&mut self, key: KeyCode) {
-        self.pressed_alt_keys.remove(&key);
     }
 
     pub fn is_key_pressed(&self, key: KeyCode) -> bool {
         self.pressed_keys.contains(&key)
-    }
-
-    pub fn is_alt_key_pressed(&self, key: KeyCode) -> bool {
-        self.pressed_alt_keys.contains(&key)
     }
 
     pub fn is_alt_modifier_pressed(&self) -> bool {
@@ -169,21 +147,6 @@ impl InputHandler {
     pub fn is_ctrl_modifier_pressed(&self) -> bool {
         self.pressed_keys.contains(&KeyCode::ControlLeft)
             || self.pressed_keys.contains(&KeyCode::ControlRight)
-    }
-
-    // Debounce tracking for +/- keys with cooldown period
-    pub fn can_process_plus_minus(&self) -> bool {
-        match self.last_plus_minus_time {
-            None => true, // Never processed before
-            Some(last_time) => {
-                let elapsed = Instant::now().duration_since(last_time);
-                elapsed >= Duration::from_millis(PLUS_MINUS_COOLDOWN_MS)
-            }
-        }
-    }
-
-    pub fn mark_plus_minus_processed(&mut self) {
-        self.last_plus_minus_time = Some(Instant::now());
     }
 
     // Cursor state
@@ -234,13 +197,19 @@ impl InputHandler {
     pub fn handle_key_down(&mut self, key: KeyCode, is_repeat: bool) -> Option<InputAction> {
         self.register_key_pressed(key);
 
-        let (command, binding) = command_for_key(key, KeyPhase::Down, self.held_modifiers())?;
-        // A chord (Ctrl+S) fires on press, while the modifier is certainly
-        // held. Its key's release is consumed even if the modifier was let
-        // go first, so it never falls through to the plain key (S = stepwise).
-        if binding.modifier != Modifier::None {
-            self.chord_keys.insert(key);
+        // A chord is decided on press, while its modifier is certainly held.
+        // It owns this key until the release, whatever its trigger.
+        if let Some((command, binding)) = chord_for_key(key, self.held_modifiers()) {
+            let (now, on_release) = match binding.trigger {
+                Trigger::Press => (Some(command), None),
+                Trigger::PressOnce => ((!is_repeat).then_some(command), None),
+                Trigger::Release => (None, Some(command)),
+            };
+            self.chord_keys.insert(key, on_release);
+            return now.map(InputAction::Command);
         }
+
+        let (command, binding) = command_for_key(key, KeyPhase::Down, HeldModifiers::default())?;
         if is_repeat && binding.trigger == Trigger::PressOnce {
             return None;
         }
@@ -252,8 +221,8 @@ impl InputHandler {
         self.register_key_released(key);
 
         // The release of a key that started a chord is part of that chord.
-        if self.chord_keys.remove(&key) {
-            return None;
+        if let Some(on_release) = self.chord_keys.remove(&key) {
+            return on_release.map(InputAction::Command);
         }
 
         command_for_key(key, KeyPhase::Up, self.held_modifiers())

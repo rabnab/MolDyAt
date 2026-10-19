@@ -6,10 +6,10 @@
 //! help text and the README key table.
 
 use super::super::command_registry::{
-    COMMANDS, CommandCategory, HeldModifiers, KeyPhase, Modifier, Trigger, command_by_id,
-    command_for_key, help_text,
+    COMMANDS, CommandCategory, HeldModifiers, KeyBinding, KeyPhase, LABEL_VALUES, Modifier,
+    Trigger, command_by_id, command_for_key, help_text,
 };
-use crate::application::sim_stats::{HIGH_GRAVITY_MPS2, NORMAL_GRAVITY_MPS2};
+use super::super::input_handler::{InputHandler, KeyCode};
 use std::collections::HashSet;
 
 #[test]
@@ -80,8 +80,54 @@ fn test_every_command_has_a_label_and_a_key_with_a_name() {
     }
 }
 
+/// The ids of the commands one chord press runs: modifier down, key down,
+/// then both up, the modifier first if `modifier_up_first`.
+fn chord_press(binding: &KeyBinding, modifier_up_first: bool) -> Vec<&'static str> {
+    let modifier_key = match binding.modifier {
+        Modifier::Ctrl => KeyCode::ControlLeft,
+        Modifier::Alt => KeyCode::AltLeft,
+        Modifier::None => unreachable!("not a chord"),
+    };
+    let mut handler = InputHandler::new();
+    let mut actions = vec![handler.handle_key_down(modifier_key, false)];
+    actions.push(handler.handle_key_down(binding.key, false));
+    if modifier_up_first {
+        actions.push(handler.handle_key_up(modifier_key));
+        actions.push(handler.handle_key_up(binding.key));
+    } else {
+        actions.push(handler.handle_key_up(binding.key));
+        actions.push(handler.handle_key_up(modifier_key));
+    }
+    actions
+        .into_iter()
+        .flatten()
+        .map(|action| action.command().expect("a registry command").id)
+        .collect()
+}
+
 #[test]
-fn test_chords_fire_on_press_so_their_release_is_consumed() {
+fn test_a_chord_runs_once_and_never_its_plain_key() {
+    // Whatever the trigger, and even when the modifier is let go before the
+    // key (Alt+= must not fall through to = = double the time step).
+    for command in COMMANDS {
+        for binding in command.default_binding {
+            if binding.modifier == Modifier::None {
+                continue;
+            }
+            for modifier_up_first in [false, true] {
+                assert_eq!(
+                    chord_press(binding, modifier_up_first),
+                    [command.id],
+                    "{} (modifier released first: {modifier_up_first})",
+                    binding.display()
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn test_ctrl_chords_ignore_auto_repeat() {
     for command in COMMANDS {
         for binding in command.default_binding {
             if binding.modifier == Modifier::Ctrl {
@@ -115,15 +161,15 @@ fn test_every_command_appears_in_the_help_text() {
     let help = help_text();
     for command in COMMANDS {
         let keys = command.binding_display().join(" / ");
+        let label = command.label_text();
         let line = help
             .lines()
-            .find(|line| line.trim_start().starts_with(&keys) && line.ends_with(command.label))
+            .find(|line| line.trim_start().starts_with(&keys) && line.ends_with(&label))
             .map(str::to_owned);
         assert!(
             line.is_some(),
-            "{} ({keys}: {}) is missing from the help text:\n{help}",
+            "{} ({keys}: {label}) is missing from the help text:\n{help}",
             command.id,
-            command.label
         );
     }
     for category in CommandCategory::ALL {
@@ -137,13 +183,21 @@ fn test_every_command_appears_in_the_help_text() {
 }
 
 #[test]
-fn test_gravity_label_matches_the_gravity_constants() {
-    let label = command_by_id("sim.cycle_gravity")
-        .expect("registered")
-        .label;
-    for value in [NORMAL_GRAVITY_MPS2, HIGH_GRAVITY_MPS2] {
-        let text = format!("{value:.2} m/s^2");
-        assert!(label.contains(&text), "{label:?} lacks {text}");
+fn test_labels_name_only_known_values() {
+    for command in COMMANDS {
+        let text = command.label_text();
+        assert!(
+            !text.contains('{') && !text.contains('}'),
+            "{} names an unknown value: {text}",
+            command.id
+        );
+    }
+    // Every value is used, so none goes stale.
+    for (name, _) in LABEL_VALUES {
+        assert!(
+            COMMANDS.iter().any(|c| c.label.contains(name)),
+            "{name} is unused"
+        );
     }
 }
 
@@ -169,7 +223,11 @@ fn readme_key_rows() -> String {
                 .iter()
                 .map(|key| format!("`{key}`"))
                 .collect();
-            rows.push_str(&format!("| {} | {} |\n", keys.join(" / "), command.label));
+            rows.push_str(&format!(
+                "| {} | {} |\n",
+                keys.join(" / "),
+                command.label_text()
+            ));
         }
     }
     rows
@@ -180,8 +238,14 @@ fn test_readme_key_table_matches_the_registry() {
     const START: &str =
         "<!-- key-table:start (generated from COMMANDS, see command_registry.rs) -->\n";
     const END: &str = "<!-- key-table:end -->";
-    let readme = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../README.md"))
-        .expect("README.md is readable");
+    let root = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/.."));
+    // A packaged crate has no workspace and no README: nothing to check.
+    if !root.join("Cargo.toml").exists() {
+        return;
+    }
+    let readme = std::fs::read_to_string(root.join("README.md")).expect("README.md is readable");
+    // A Windows checkout may have CRLF line endings.
+    let readme = readme.replace("\r\n", "\n");
     let start = readme
         .find(START)
         .expect("README has the key-table start marker")

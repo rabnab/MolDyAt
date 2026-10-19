@@ -124,7 +124,7 @@ Every keyboard command is one `CommandDescriptor` in the table `COMMANDS`
 | Field | Meaning |
 |---|---|
 | `id` | Stable id `<category>.<name>`, e.g. `sim.toggle_pause`, for key-binding files and headless scripts (plan items C3, C5). Never renamed |
-| `label` | One line for the help text and the README key table |
+| `label` | One line for the help text and the README key table. It may name a value such as `{normal_gravity}` (`LABEL_VALUES`), so it never repeats a constant |
 | `category` | Help-text group; its prefix starts the id (`sim`, `balls`, `tools`, `world`, `view`, `debug`, `help`) |
 | `default_binding` | `KeyBinding`s: key, modifier (`None`, `Ctrl`, `Alt`) and trigger (`Press`, `PressOnce` ignores auto-repeat, `Release`) |
 | `kind` | `Ui(UiAction)`, handled in the renderer, or `Domain(fn() -> DomainCommand)`, sent to the physics thread |
@@ -140,8 +140,10 @@ KeyCode → InputHandler::handle_key_down / handle_key_up
 The table generates the key dispatch, the help text (`H`, `help_text()`)
 and the UI-vs-domain routing. Key lookup: while a modifier is held, its
 binding for the key wins (Ctrl before Alt); otherwise the plain binding fires.
-A key that starts a chord (Ctrl+S) fires on press, and its release is consumed
-so it never also runs the plain key's command (S). The backend handles
+A chord is decided when its key goes down with the modifier held
+(`chord_for_key`) and owns that key until the release: Ctrl+S fires on press,
+Alt+`=` on the release even if Alt was let go first, and neither ever runs the
+plain key's command (S, `=`). The backend handles
 `UiAction::CycleCutoffRings` itself, since the rings live in its ball pipeline.
 
 Adding a keyboard command:

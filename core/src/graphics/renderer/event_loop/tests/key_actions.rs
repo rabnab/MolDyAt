@@ -298,3 +298,21 @@ fn test_plain_keys_fire_while_ctrl_is_held() {
         Some("sim.cycle_gravity")
     );
 }
+
+#[test]
+fn test_alt_released_before_plus_still_decreases_wait_time() {
+    let mut handler = InputHandler::new();
+    handler.handle_key_down(KeyCode::AltLeft, false);
+    assert!(handler.handle_key_down(KeyCode::Equal, false).is_none());
+    assert!(handler.handle_key_up(KeyCode::AltLeft).is_none());
+    assert_eq!(
+        id(handler.handle_key_up(KeyCode::Equal)),
+        Some("sim.decrease_wait_time")
+    );
+    // The next plain = doubles the time step again.
+    handler.handle_key_down(KeyCode::Equal, false);
+    assert_eq!(
+        id(handler.handle_key_up(KeyCode::Equal)),
+        Some("sim.double_time_step")
+    );
+}

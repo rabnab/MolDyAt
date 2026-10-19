@@ -13,7 +13,7 @@ mod physics_thread;
 pub mod renderer_snapshot;
 pub mod scene_layers;
 pub mod sim_config;
-pub(crate) mod sim_stats;
+mod sim_stats;
 mod step_config;
 pub mod thermo_field;
 pub mod units;
@@ -26,6 +26,7 @@ pub use domain_command::{BallCommand, DomainCommand, SimControl, ViewCommand, Wo
 pub use physics_event::PhysicsEvent;
 pub(crate) use physics_thread::PhysicsThread;
 pub use sim_config::SimConfig;
+pub(crate) use sim_stats::{HIGH_GRAVITY_MPS2, NORMAL_GRAVITY_MPS2};
 pub(crate) use step_config::StepConfig;
 
 #[cfg(test)]

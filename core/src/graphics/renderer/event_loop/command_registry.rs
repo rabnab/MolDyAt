@@ -18,6 +18,7 @@
 
 use crate::application::persistence::LoadSource;
 use crate::application::{BallCommand, DomainCommand, SimControl, ViewCommand, WorldCommand};
+use crate::application::{HIGH_GRAVITY_MPS2, NORMAL_GRAVITY_MPS2};
 use Modifier::{Alt, Ctrl};
 use Trigger::{Press, PressOnce, Release};
 use winit::keyboard::KeyCode;
@@ -28,7 +29,9 @@ pub struct CommandDescriptor {
     /// Stable id (`<category>.<name>`) for key-binding files and headless
     /// scripts. Never rename one; add a new command instead.
     pub id: &'static str,
-    /// One line for the help text and the README key table.
+    /// One line for the help text and the README key table. It may name
+    /// values such as `{normal_gravity}` (see [`LABEL_VALUES`]); read it
+    /// with [`CommandDescriptor::label_text`].
     pub label: &'static str,
     pub category: CommandCategory,
     /// Keys that run the command; empty for a command without a key.
@@ -173,6 +176,19 @@ impl CommandDescriptor {
         names
     }
 
+    /// The label with its values filled in (see [`LABEL_VALUES`]).
+    pub fn label_text(&self) -> String {
+        LABEL_VALUES
+            .iter()
+            .fold(self.label.to_string(), |text, (name, value)| {
+                if text.contains(name) {
+                    text.replace(name, &value())
+                } else {
+                    text
+                }
+            })
+    }
+
     /// The command for the physics thread, if this is a domain command.
     pub fn domain_command(&self) -> Option<DomainCommand> {
         match self.kind {
@@ -189,6 +205,17 @@ impl CommandDescriptor {
         }
     }
 }
+
+/// A placeholder in a label and the function that gives its text.
+pub type LabelValue = (&'static str, fn() -> String);
+
+/// Values a label may name, so it never repeats a constant by hand.
+pub const LABEL_VALUES: &[LabelValue] = &[
+    ("{normal_gravity}", || {
+        format!("{NORMAL_GRAVITY_MPS2:.2} m/s^2")
+    }),
+    ("{high_gravity}", || format!("{HIGH_GRAVITY_MPS2:.2} m/s^2")),
+];
 
 /// Help-text name of a key.
 fn key_name(key: KeyCode) -> &'static str {
@@ -229,6 +256,10 @@ const fn key(key: KeyCode, trigger: Trigger) -> KeyBinding {
     KeyBinding::new(key, Modifier::None, trigger)
 }
 
+/// A key with a modifier. The chord is decided when the key goes down with
+/// the modifier held, and it owns that key until its release: a `Release`
+/// chord fires on that release even if the modifier was let go first, and
+/// the plain binding of the same key never fires for that press.
 const fn chord(modifier: Modifier, key: KeyCode, trigger: Trigger) -> KeyBinding {
     KeyBinding::new(key, modifier, trigger)
 }
@@ -252,9 +283,7 @@ pub static COMMANDS: &[CommandDescriptor] = &[
     },
     CommandDescriptor {
         id: "sim.cycle_gravity",
-        // The values are `NORMAL_GRAVITY_MPS2` and `HIGH_GRAVITY_MPS2`; a
-        // registry test checks they match.
-        label: "Cycle gravity: off -> 9.81 m/s^2 -> 49.05 m/s^2.",
+        label: "Cycle gravity: off -> {normal_gravity} -> {high_gravity}.",
         category: CommandCategory::Simulation,
         default_binding: &[key(KeyCode::KeyG, Release)],
         kind: CommandKind::Domain(|| SimControl::ToggleGravity.into()),
@@ -485,6 +514,7 @@ impl HeldModifiers {
 /// Of the bindings for `key` that fire in `phase`, a held modifier's binding
 /// wins (Ctrl before Alt); otherwise the plain binding fires. Auto-repeat is
 /// not filtered here: the caller drops a repeated [`Trigger::PressOnce`].
+/// On a key press, `InputHandler` asks [`chord_for_key`] first.
 pub fn command_for_key(
     key: KeyCode,
     phase: KeyPhase,
@@ -509,6 +539,26 @@ pub fn command_for_key(
         .find_map(find)
 }
 
+/// The chord a key press starts: the binding of `key` whose modifier is
+/// held (Ctrl before Alt), whatever its trigger. See [`chord`].
+pub fn chord_for_key(
+    key: KeyCode,
+    held: HeldModifiers,
+) -> Option<(&'static CommandDescriptor, KeyBinding)> {
+    [Ctrl, Alt]
+        .into_iter()
+        .filter(|&modifier| held.holds(modifier))
+        .find_map(|modifier| {
+            COMMANDS.iter().find_map(|command| {
+                command
+                    .default_binding
+                    .iter()
+                    .find(|b| b.key == key && b.modifier == modifier)
+                    .map(|b| (command, *b))
+            })
+        })
+}
+
 /// The help text (key `H`), generated from [`COMMANDS`].
 pub fn help_text() -> String {
     let mut text = String::from("HELP: Available keyboard shortcuts:");
@@ -523,7 +573,7 @@ pub fn help_text() -> String {
         text.push_str(&format!("\n{}:", category.title()));
         for command in commands {
             let keys = command.binding_display().join(" / ");
-            text.push_str(&format!("\n  {keys:<22} {}", command.label));
+            text.push_str(&format!("\n  {keys:<22} {}", command.label_text()));
         }
     }
     text
