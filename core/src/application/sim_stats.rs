@@ -23,6 +23,14 @@ pub(super) const HIGH_GRAVITY_MPS2: f32 = NORMAL_GRAVITY_MPS2 * 5.0;
 pub(super) const NORMAL_GRAVITY: f32 = 1.285_924_5e-13;
 pub(super) const HIGH_GRAVITY: f32 = NORMAL_GRAVITY * 5.0;
 
+/// Whether `gravity` is the 1 g preset: the nearest whole multiple of
+/// `NORMAL_GRAVITY` is 1, as the gravity display shows it. Saves store the
+/// reduced value, and older ones hold 1 g of their units (argon until #236:
+/// 1.3157e-13, 2.3 % stronger), so an exact match would miss them.
+pub(super) fn is_normal_gravity(gravity: f32) -> bool {
+    (gravity / NORMAL_GRAVITY).round() == 1.0
+}
+
 /// Simulation statistics updated once per physics step.
 ///
 /// Owns energy, temperature, velocity, and timing metrics that are
