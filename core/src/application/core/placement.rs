@@ -12,14 +12,15 @@
 //! exactly the same balls and draws the same random numbers.
 //!
 //! The lookup is exact only when every ball the candidate can collide with
-//! lies in those 3x3 cells: a collision needs a centre distance below
-//! `r_candidate + r_ball + margin` (the "reach"), and a ball two or more cells
-//! away along an axis is at least one cell size away along it. When the reach
+//! lies in those 3x3 cells: a collision needs a centre distance below the
+//! pair's contact distance plus the margin (the "reach";
+//! `BallPhysics::contact_distance` follows pair overrides), and a ball two or
+//! more cells away along an axis is at least one cell size away along it. When the reach
 //! does not fit in a cell, or the candidate is outside the grid, the check
 //! falls back to the full scan.
 
 use super::SimulationWorld;
-use crate::objects2d::ball_impl::Ball2D;
+use crate::objects2d::ball_impl::{Ball2D, SpeciesSet};
 
 /// Keep the reach this far below the cell size, so float rounding in the cell
 /// index can never move a reachable ball out of the 3x3 cells.
@@ -29,8 +30,8 @@ const CELL_SLACK: f32 = 1e-4;
 pub(crate) struct PlacementIndex {
     /// Balls not found in the grid cell of their position (should not happen, defensive).
     orphans: Vec<usize>,
-    /// Largest contact radius of any ball in the world.
-    max_radius: f32,
+    /// Species of the balls in the world.
+    present: SpeciesSet,
 }
 
 impl PlacementIndex {
@@ -61,22 +62,15 @@ impl PlacementIndex {
             })
             .map(|(i, _)| i)
             .collect();
-        let max_radius = world
-            .balls
-            .iter()
-            .map(Ball2D::get_contact_radius)
-            .fold(0.0, f32::max);
-        Self {
-            orphans,
-            max_radius,
-        }
+        let present = world.balls.iter().map(Ball2D::species).collect();
+        Self { orphans, present }
     }
 
     /// Record ball `ball_idx`, just added through
     /// `SimulationWorld::add_ball_and_register`.
     pub(crate) fn note_added(&mut self, world: &SimulationWorld, ball_idx: usize) {
         let ball = &world.balls[ball_idx];
-        self.max_radius = self.max_radius.max(ball.get_contact_radius());
+        self.present.insert(ball.species());
         // `add_ball_and_register` puts a ball into the cell of its position
         // when there is one; otherwise the grid does not hold it.
         if world
@@ -98,7 +92,12 @@ impl SimulationWorld {
         index: &PlacementIndex,
     ) -> bool {
         let grid = &self.cell_grid;
-        let reach = candidate.get_contact_radius() + index.max_radius + margin;
+        let reach = index
+            .present
+            .iter()
+            .map(|s| self.physics.contact_distance(candidate.species(), s))
+            .fold(0.0, f32::max)
+            + margin;
         let (num_rows, num_cols) = grid.get_grid_size();
         let (cellsize_x, cellsize_y) = grid.get_cell_size();
         // A 3x3 window spans a whole axis of at most two cells.

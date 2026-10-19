@@ -103,7 +103,11 @@ pub(super) fn min_wall_clearance(main_content: &MainContent) -> f32 {
             let p = b.get_position();
             let dx = (p.x - tl_x).min(br_x - p.x);
             let dy = (tl_y - p.y).min(p.y - br_y);
-            dx.min(dy) - b.contact_radius
+            dx.min(dy)
+                - main_content
+                    .world()
+                    .physics
+                    .wall_contact_distance(b.species())
         })
         .fold(f32::INFINITY, f32::min)
 }

@@ -332,8 +332,14 @@ impl SimConfig {
     }
 
     /// Check every value against its range (the `MIN_*` / `MAX_*`
-    /// constants). The defaults pass.
+    /// constants) and every pair override's species. The defaults pass.
     pub fn validate(&self) -> AppResult {
+        self.validated_pair_overrides().map(drop)
+    }
+
+    /// [`Self::validate`], returning the pair overrides with their species
+    /// resolved, ready for the physics.
+    pub fn validated_pair_overrides(&self) -> AppResult<Vec<PairOverride>> {
         let IntegrationConfig {
             time_step,
             speed_limit_factor,
@@ -355,7 +361,7 @@ impl SimConfig {
             max_force,
             core_stiffness,
             cutoff_factor,
-            ..
+            pair_overrides: _, // resolved and checked below
         } = self.potential;
         check_range(
             max_force,
@@ -375,7 +381,8 @@ impl SimConfig {
             MAX_CUTOFF_FACTOR,
             "potential.cutoff_factor",
         )?;
-        self.potential
+        let pair_overrides = self
+            .potential
             .resolve_pair_overrides(SpeciesTable::builtin())?;
 
         check_range(
@@ -389,7 +396,8 @@ impl SimConfig {
             MIN_SNAPSHOT_INTERVAL_US,
             MAX_SNAPSHOT_INTERVAL_US,
             "display.snapshot_interval_us",
-        )
+        )?;
+        Ok(pair_overrides)
     }
 
     pub fn snapshot_interval(&self) -> Duration {

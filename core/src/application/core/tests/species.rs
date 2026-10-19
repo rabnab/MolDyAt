@@ -226,6 +226,137 @@ fn overridden_pairs_conserve_energy() {
     assert!(max_rel_drift < 1e-3, "energy drift {max_rel_drift}");
 }
 
+fn config_with(pairs: &[(&str, &str, Option<f32>)]) -> SimConfig {
+    let mut config = SimConfig::default();
+    config.potential.pair_overrides = pairs
+        .iter()
+        .map(|&(a, b, sigma)| PairOverrideConfig {
+            a: a.into(),
+            b: b.into(),
+            sigma,
+            epsilon: None,
+        })
+        .collect();
+    config
+}
+
+/// Seed `per_species` random balls of each of `kinds` and return the world.
+fn seeded_world(config: &SimConfig, kinds: &[&str], per_species: usize) -> MainContent {
+    let rect = Rect::new(-30.0, 30.0, 60.0, -60.0);
+    let mut mc = MainContent::with_config(rect, config, Some(11)).unwrap();
+    for name in kinds {
+        mc.step_config
+            .get_ball_factory()
+            .set_new_ball_species(species(name));
+        mc.add_random_candidates(per_species);
+    }
+    mc
+}
+
+/// Every pair is at least its contact distance (`σ_ij`) apart.
+fn assert_no_pair_inside_its_contact_distance(mc: &MainContent) {
+    let world = mc.world();
+    let balls = &world.balls;
+    for i in 0..balls.len() {
+        for j in (i + 1)..balls.len() {
+            let gap = world.physics.edge_gap(&balls[i], &balls[j]);
+            assert!(gap >= 0.0, "pair {i}-{j} placed {gap} inside contact");
+        }
+    }
+}
+
+#[test]
+fn contact_distance_is_the_pair_sigma() {
+    let builtin = SpeciesTable::builtin();
+    let plain = BallPhysics::default();
+    for a in builtin.ids() {
+        for b in builtin.ids() {
+            let (ba, bb) = (
+                Ball2D::new(1, Vec2D::new(0.0, 0.0), a),
+                Ball2D::new(2, Vec2D::new(3.7, 1.1), b),
+            );
+            // Without overrides: bit for bit the gap of the contact discs.
+            assert_eq!(
+                plain.edge_gap(&ba, &bb).to_bits(),
+                ba.get_edge_distance(&bb).to_bits()
+            );
+            assert_eq!(plain.wall_contact_distance(a), ba.contact_radius);
+        }
+    }
+
+    let (n2, xs, m) = (species("N2"), species("XS"), species("M"));
+    let physics = BallPhysics::with_pair_overrides(
+        PhysicsConstants::default(),
+        builtin,
+        CapSettings::default(),
+        vec![
+            PairOverride {
+                a: xs,
+                b: n2,
+                sigma: Some(4.0),
+                epsilon: None,
+            },
+            PairOverride {
+                a: m,
+                b: m,
+                sigma: Some(3.0),
+                epsilon: None,
+            },
+            PairOverride {
+                a: xs,
+                b: xs,
+                sigma: None,
+                epsilon: Some(2.0),
+            },
+        ],
+    );
+    assert_eq!(physics.contact_distance(n2, xs), 4.0);
+    assert_eq!(physics.contact_distance(xs, n2), 4.0);
+    assert_eq!(physics.contact_distance(m, m), 3.0);
+    // An override of the like pair moves the wall contact to σ_ii / 2; an
+    // unlike or ε-only override does not.
+    assert_eq!(physics.wall_contact_distance(m), 1.5);
+    assert_eq!(
+        physics.wall_contact_distance(xs),
+        plain.wall_contact_distance(xs)
+    );
+    assert_eq!(
+        physics.wall_contact_distance(n2),
+        plain.wall_contact_distance(n2)
+    );
+    assert_eq!(
+        physics.contact_distance(n2, m),
+        plain.contact_distance(n2, m)
+    );
+}
+
+/// Review of #297: an N2–XS pair widened to σ = 8 must not be seeded at the
+/// contact distance of the species (~1.1), deep inside its core.
+#[test]
+fn placement_keeps_a_widened_pair_apart() {
+    let config = config_with(&[("N2", "XS", Some(8.0))]);
+    let mc = seeded_world(&config, &["N2", "XS"], 30);
+    assert!(mc.world().balls.len() > 30, "some XS balls were placed");
+    assert_no_pair_inside_its_contact_distance(&mc);
+}
+
+/// Review of #297: a like pair shrunk to σ = 0.5 used to give a negative
+/// placement margin, so an XS ball could land deep inside the N2–XS core.
+#[test]
+fn placement_after_shrinking_a_like_pair_starts_outside_every_core() {
+    let config = config_with(&[("XS", "XS", Some(0.5))]);
+    let mut mc = seeded_world(&config, &["N2", "XS"], 150);
+    assert!(mc.world().equilibrium_gap(species("XS")) >= 0.0);
+    assert_no_pair_inside_its_contact_distance(&mc);
+    let start = total_energy(&mc);
+    run(&mut mc, 20);
+    let after = total_energy(&mc);
+    assert!(
+        (after - start).abs() < 1e-2 * start.abs().max(1.0),
+        "energy jumped from {start} to {after}"
+    );
+}
+
 /// A ball thrown at the box wall is reflected at centre distance `σ / 2`.
 #[test]
 fn box_walls_reflect_at_half_sigma() {

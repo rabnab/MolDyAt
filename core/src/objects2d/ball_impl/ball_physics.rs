@@ -6,7 +6,9 @@ use crate::objects2d::Rect;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::ball_core::BounceInfo;
 use crate::objects2d::ball_impl::pair_potential::{CapSettings, LJ_SIG, PairOverride, Potential};
-use crate::objects2d::ball_impl::species::{DEFAULT_SPECIES, SpeciesId, SpeciesSet, SpeciesTable};
+use crate::objects2d::ball_impl::species::{
+    DEFAULT_SPECIES, Species, SpeciesId, SpeciesSet, SpeciesTable,
+};
 use crate::objects2d::ball_impl::wall_law::{HardContact, WallLaw};
 use crate::objects2d::ball_impl::{Ball2D, Named};
 
@@ -22,8 +24,10 @@ pub struct PhysicsConstants {
 /// total force vector, and total potential energy from interactions.
 #[derive(Clone, Debug)]
 pub struct ForceResult {
-    /// Smallest centre distance to a neighbour, minus that pair's `σ_ij`
-    /// (negative inside the repulsive core)
+    /// Smallest centre distance to a neighbour, minus the two contact radii
+    /// `σ_i/2 + σ_j/2` (negative inside the repulsive core). For a pair with
+    /// a `σ_ij` override this is not its [`BallPhysics::edge_gap`]; only
+    /// tests read it.
     pub min_dist: f32,
     /// Total force vector acting on the ball from all neighbors
     pub force: Vec2D,
@@ -56,6 +60,9 @@ pub struct BallPhysics {
     wall_law: HardContact,
     /// Wall contact distance of each species, from `wall_law`.
     wall_contact: Vec<f32>,
+    /// Contact distance (`σ_ij`) of each species pair, row-major.
+    contact: Vec<f32>,
+    species_count: usize,
 }
 
 impl Default for BallPhysics {
@@ -76,7 +83,9 @@ impl BallPhysics {
     }
 
     /// [`Self::new`], with the pairs in `overrides` taking their `σ_ij` /
-    /// `ε_ij` from there instead of the mixing rule.
+    /// `ε_ij` from there instead of the mixing rule. The contact distance of
+    /// an overridden pair is its `σ_ij`, and a like pair's `σ_ii` also sets
+    /// the species' wall contact.
     pub fn with_pair_overrides(
         constants: PhysicsConstants,
         species: &SpeciesTable,
@@ -84,15 +93,41 @@ impl BallPhysics {
         overrides: Vec<PairOverride>,
     ) -> Self {
         let wall_law = HardContact;
+        let sigma_override = |a: SpeciesId, b: SpeciesId| {
+            overrides
+                .iter()
+                .find(|o| o.is_for(a, b))
+                .and_then(|o| o.sigma)
+        };
+        let wall_contact = species
+            .ids()
+            .map(|id| {
+                let s = species.species(id);
+                match sigma_override(id, id) {
+                    Some(sigma) => wall_law.contact_distance(&Species { sigma, ..s.clone() }),
+                    None => wall_law.contact_distance(s),
+                }
+            })
+            .collect();
+        // Without an override, the sum of the contact radii, as
+        // `Ball2D::get_edge_distance` computes it (`σ_ij` up to rounding).
+        let contact = species
+            .ids()
+            .flat_map(|a| species.ids().map(move |b| (a, b)))
+            .map(|(a, b)| {
+                sigma_override(a, b).unwrap_or_else(|| {
+                    species.species(a).contact_radius() + species.species(b).contact_radius()
+                })
+            })
+            .collect();
         BallPhysics {
             constants,
             pair_potential: Potential::lennard_jones(species, cap, &overrides),
             pair_overrides: overrides,
             skin_factor: DEFAULT_SKIN_FACTOR,
-            wall_contact: species
-                .iter()
-                .map(|s| wall_law.contact_distance(s))
-                .collect(),
+            wall_contact,
+            contact,
+            species_count: species.len(),
             wall_law,
         }
     }
@@ -188,11 +223,19 @@ impl BallPhysics {
         self.wall_contact[species.index()]
     }
 
-    /// Gap between the contact discs of two balls (radius `σ/2` each): the
-    /// centre distance minus `σ_ij`, zero where the pair potential crosses
-    /// zero, negative if they overlap.
-    pub fn distance_of_edges(a: &Ball2D, b: &Ball2D) -> f32 {
-        a.get_edge_distance(b)
+    /// Centre distance at which the potential of species `a` and `b`
+    /// crosses zero (`σ_ij`, also for an overridden pair): where placement
+    /// and the overlap checks put contact.
+    #[inline]
+    pub fn contact_distance(&self, a: SpeciesId, b: SpeciesId) -> f32 {
+        self.contact[a.index() * self.species_count + b.index()]
+    }
+
+    /// Gap between two balls: their centre distance minus their
+    /// [`Self::contact_distance`]; negative if they overlap.
+    pub fn edge_gap(&self, a: &Ball2D, b: &Ball2D) -> f32 {
+        let center_dist = a.get_position().dist(b.get_position()).norm();
+        center_dist - self.contact_distance(a.species(), b.species())
     }
 
     /// Check if two balls are colliding within a margin.
@@ -203,9 +246,9 @@ impl BallPhysics {
     /// * `margin` - Collision margin (positive = earlier detection)
     ///
     /// # Returns
-    /// `true` if the gap between their contact discs is less than margin
+    /// `true` if their [`Self::edge_gap`] is less than margin
     pub fn is_colliding(&self, this: &Ball2D, other: &Ball2D, margin: f32) -> bool {
-        this.get_edge_distance(other) < margin
+        self.edge_gap(this, other) < margin
     }
 
     /// Update ball position using velocity-Verlet integration and handle wall bounces.

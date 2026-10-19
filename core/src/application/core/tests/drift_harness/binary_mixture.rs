@@ -36,8 +36,8 @@ const SECOND_EPSILON: f32 = 1.5;
 /// force-cap hits (0..13), so a change of the start state needs a new
 /// baseline, not just a rerun.
 const MAX_REL_ENERGY_DRIFT: f32 = 1.0e-3;
-/// f32 rounding noise: 1.8e-8 here, 1.6e-8..5.4e-8 for the nearby starts;
-/// ~2x the largest of them.
+/// f32 rounding noise (1.8e-8 here, 1.6e-8..5.4e-8 for the nearby starts):
+/// ~2x the largest of the nearby starts, the basis in docs/drift-test.md.
 const MAX_REL_MOMENTUM_DRIFT: f32 = 1.0e-7;
 const MIN_WALL_CLEARANCE: f32 = 1.0;
 
