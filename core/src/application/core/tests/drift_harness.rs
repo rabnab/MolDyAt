@@ -532,6 +532,8 @@ fn sample_step(main_content: &MainContent, step: usize) -> DriftSample {
 }
 
 #[cfg(test)]
+mod binary_mixture;
+#[cfg(test)]
 mod dense_gas;
 #[cfg(test)]
 mod neighbor_lists;

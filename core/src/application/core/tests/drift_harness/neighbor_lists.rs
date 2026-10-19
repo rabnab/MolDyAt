@@ -243,7 +243,7 @@ fn test_mixed_sizes_at_cell_borders_keep_every_pair_listed() {
 }
 
 /// Runs `f` on a dedicated Rayon pool with `threads` workers.
-fn with_threads<T: Send>(threads: usize, f: impl FnOnce() -> T + Send) -> T {
+pub(super) fn with_threads<T: Send>(threads: usize, f: impl FnOnce() -> T + Send) -> T {
     rayon::ThreadPoolBuilder::new()
         .num_threads(threads)
         .build()

@@ -91,7 +91,7 @@ fn populate_central_grid(main_content: &mut MainContent, thermal_v: f32, project
 }
 
 /// Smallest distance of any ball edge to the world boundary.
-fn min_wall_clearance(main_content: &MainContent) -> f32 {
+pub(super) fn min_wall_clearance(main_content: &MainContent) -> f32 {
     let world_rect = main_content.world().world_region();
     let (tl_x, tl_y) = world_rect.get_tl();
     let (br_x, br_y) = world_rect.get_br();
