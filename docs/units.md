@@ -10,6 +10,7 @@ The simulation runs in reduced Lennard-Jones units with argon as the reference s
 - The minimum (equilibrium distance) is at `r_m = 2^(1/6) σ_ij ≈ 1.1225 σ_ij`.
 - The code (`core/src/objects2d/ball_impl/pair_potential.rs`) separates the law (`LennardJones`, a `PairLaw`) from the force cap below `r_cap` and the cutoff at `4 σ_ij`, where `U` is shifted to zero (`CappedPotential`), one per species pair.
 - Walls reflect a ball at centre distance `σ_i / 2` (`WallLaw`, hard contact).
+- A config can override `σ_ij` and/or `ε_ij` of named species pairs (`[[potential.pair_override]]` with `a`, `b`, `sigma`, `epsilon`; see the README, #235). The override replaces the mixed value of exactly that pair, in both orders; its cutoff (`cutoff_factor · σ_ij`), `r_cap` and `U(cutoff)` follow from the overridden law, and the cell grid widens if the pair reaches further than the others present. Placement and overlap checks still use the contact discs of the species (`σ_i / 2` each), so for an overridden pair they are off by `σ_ij − (σ_i + σ_j)/2`.
 
 ### Built-in species
 
