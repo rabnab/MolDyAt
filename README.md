@@ -367,7 +367,7 @@ The defaults, as a complete file, with each key's accepted range:
 
 ```toml
 [integration]
-time_step = 0.01              # 0.000625..0.16, reduced time units; + / - change it while running
+time_step = 0.005             # 0.0003125..0.08, reduced time units; + / - change it while running
 speed_limit_factor = 0.2      # 0.01..10, speed limit as a share of the shorter world side
 
 [potential]

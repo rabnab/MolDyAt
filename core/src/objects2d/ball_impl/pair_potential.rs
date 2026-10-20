@@ -29,7 +29,9 @@ const SQRT6_OF_TWO: f32 = 1.122_462; // == 2^(1/6)
 const MAX_FORCE: f32 = 100.0; // max repulsive force to cap at
 /// Slope of the repulsion below `r_cap`: the force grows by this much per unit
 /// of extra compression, so deeper overlaps push harder than shallow ones.
-/// Stability: smallest reduced mass 0.5 gives ω·dt ≈ 0.2 at dt = 0.01.
+/// Stability: smallest reduced mass 0.5 gives ω = 20, so ω·dt ≈ 0.1 at the
+/// default dt = 0.005 and ≈ 1.6 at `MAX_TIME_STEP` (0.08), below the
+/// Verlet limit of 2.
 const CORE_STIFFNESS: f32 = 200.0;
 const CUTOFF_FACTOR: f32 = 4.0;
 

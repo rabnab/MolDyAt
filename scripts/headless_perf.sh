@@ -23,6 +23,8 @@
 #   SNAPSHOT_EVERY  snapshot cadence in steps (default 10)
 #   THREADS         rayon worker threads (default: the binary's, CPU cores - 2)
 #   SEED            RNG seed for seeding (default 1)
+#   DT              time step of seeding and runs (default 0.01, the step the
+#                   committed baseline was measured at, not the binary default)
 #   CACHE_DIR       cached seeded worlds (default target/perf-worlds)
 #   PROFILE         build profile label (default: taken from the binary path)
 #   OUT             write the report here instead of stdout
@@ -37,6 +39,7 @@ RUNS=${RUNS:-5}
 SNAPSHOT_EVERY=${SNAPSHOT_EVERY:-10}
 THREADS=${THREADS:-}
 SEED=${SEED:-1}
+DT=${DT:-0.01}
 CACHE_DIR=${CACHE_DIR:-target/perf-worlds}
 OUT=${OUT:-}
 
@@ -87,7 +90,7 @@ run_env=()
 scenario_world() {
     local name=$1 bin=$2 args key dir
     args=$(scenario_args "$name") || return 1
-    args="$args --rng-seed $SEED"
+    args="$args --rng-seed $SEED --dt $DT"
     key=$(echo "$args" | cksum | cut -d' ' -f1)
     dir="$CACHE_DIR/$name-$key"
     if ! ls "$dir"/*.json >/dev/null 2>&1; then
@@ -124,7 +127,7 @@ for name in $SCENARIOS; do
         for b in $(seq "$#"); do
             bin=${!b}
             out="$tmp/$name.$b.$round.json"
-            env ${run_env[@]+"${run_env[@]}"} "$bin" --headless --load "$world" --steps "$STEPS" \
+            env ${run_env[@]+"${run_env[@]}"} "$bin" --headless --load "$world" --dt "$DT" --steps "$STEPS" \
                 --timing-warmup "$WARMUP" --snapshot-every "$SNAPSHOT_EVERY" \
                 --timings "$out" --no-stdout --output /dev/null >/dev/null 2>&1 || {
                 echo "error: $bin failed on $name" >&2
@@ -144,8 +147,8 @@ report() {
     printf '  "date": "%s",\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     printf '  "machine": {"cpu": "%s", "cores": %s, "os": "%s"},\n' \
         "$(json_escape "$cpu")" "$cores" "$(json_escape "$(uname -sr)")"
-    printf '  "settings": {"steps": %s, "warmup": %s, "runs": %s, "snapshot_every": %s, "seed": %s},\n' \
-        "$STEPS" "$WARMUP" "$RUNS" "$SNAPSHOT_EVERY" "$SEED"
+    printf '  "settings": {"steps": %s, "warmup": %s, "runs": %s, "snapshot_every": %s, "seed": %s, "dt": %s},\n' \
+        "$STEPS" "$WARMUP" "$RUNS" "$SNAPSHOT_EVERY" "$SEED" "$DT"
     printf '  "results": [\n'
     local first=1 name b bin
     for name in $SCENARIOS; do

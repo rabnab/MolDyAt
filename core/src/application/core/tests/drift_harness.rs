@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use super::{DT_GOAL, create_main_content_for_region};
+use super::{DT_GOAL, create_main_content_for_region, test_config};
 use crate::application::MainContent;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::{BallFactory, BallId, SPECIES_M, SpeciesId};
@@ -242,7 +242,8 @@ pub fn warn_near_threshold(scenario: &str, metric: &str, value: f32, threshold: 
 pub fn create_dense_harness_with_seed(seed: u64) -> MainContent {
     let (main_content, _) = create_main_content_for_region(-50.0, 50.0);
     let world_rect = main_content.world().world_region();
-    MainContent::new_with_seed(world_rect, seed).expect("Could not create deterministic world")
+    MainContent::with_config(world_rect, &test_config(), Some(seed))
+        .expect("Could not create deterministic world")
 }
 
 /// Centre of the world region.

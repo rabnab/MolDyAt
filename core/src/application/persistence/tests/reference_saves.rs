@@ -142,6 +142,33 @@ fn read_fixture(file: &str) -> String {
     fs::read_to_string(fixtures_dir().join(file)).unwrap()
 }
 
+/// A save without a config runs with the defaults, but with the file's
+/// top-level `time_step`, not the default one.
+#[test]
+fn config_less_save_keeps_its_time_step() {
+    const TIME_STEP: f32 = 0.0025;
+    assert_ne!(TIME_STEP, SimConfig::default().integration.time_step);
+    let json = read_fixture("v2.json");
+    assert!(json.contains("\"time_step\": 0.005,") && !json.contains("\"config\""));
+    let json = json.replace(
+        "\"time_step\": 0.005,",
+        &format!("\"time_step\": {TIME_STEP},"),
+    );
+    let dir = scratch_dir("reference_time_step");
+    fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("v2_time_step.json");
+    fs::write(&path, json).unwrap();
+
+    let store = SaveStore::new(dir);
+    let mut mc = MainContent::new(Rect::new(-10.0, 10.0, 100.0, -100.0)).unwrap();
+    mc.load_world(&store, &LoadSource::Path(path), true)
+        .unwrap();
+    assert_eq!(mc.time_step(), TIME_STEP);
+    let mut config = SimConfig::default();
+    config.integration.time_step = TIME_STEP;
+    assert_eq!(mc.config(), config);
+}
+
 #[test]
 fn old_saves_load_into_a_file_type_with_new_fields() {
     for fixture in FIXTURES {
@@ -197,7 +224,9 @@ fn check_v2(mc: &MainContent) {
 fn check_world(mc: &MainContent, ball_species: [&str; 8], sphere_species: [&str; 2]) {
     let world = mc.world();
     assert_eq!(mc.time_step(), 0.005);
-    // Both predate the saved config (#231): they run with the defaults.
+    // Both predate the saved config (#231): they run with the defaults and
+    // their own time step. 0.005 is also the default now (#301);
+    // `config_less_save_keeps_its_time_step` covers a step that differs.
     let mut config = SimConfig::default();
     config.integration.time_step = 0.005;
     assert_eq!(mc.config(), config);

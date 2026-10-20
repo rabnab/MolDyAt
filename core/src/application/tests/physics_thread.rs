@@ -201,7 +201,7 @@ fn test_command_channel_speed_control() {
         s.simulation_step >= applied.simulation_step + 10
     });
     let dt = (later.time - applied.time) / (later.simulation_step - applied.simulation_step) as f32;
-    let expected = (initial_dt * 8.0).min(0.16);
+    let expected = (initial_dt * 8.0).min(crate::application::sim_config::MAX_TIME_STEP);
     assert!(
         (dt - expected).abs() <= expected * 1e-3,
         "time step after three doublings: {dt}, expected {expected}"

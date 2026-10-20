@@ -25,8 +25,11 @@ const WALL_CONTACT_MARGIN: f32 = 0.01;
 /// fixed velocities (speed ~1), so wall statistics are reproducible.
 fn seeded_gas_among_walls(balls: usize, walls: usize) -> MainContent {
     let (x0, y0) = WORLD_TOP_LEFT;
-    let mut main_content = MainContent::new_with_seed(Rect::new(x0, y0, 100.0, -100.0), 2468)
-        .expect("create seeded world");
+    let mut main_content = crate::application::core::tests::new_main_content_seeded(
+        Rect::new(x0, y0, 100.0, -100.0),
+        2468,
+    )
+    .expect("create seeded world");
     main_content.world_mut().speed_limit_override = Some(f32::INFINITY);
     for k in 0..walls {
         let cx = -45.0 + 90.0 * ((k as f32 * 0.618) % 1.0);

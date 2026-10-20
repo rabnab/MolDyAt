@@ -21,7 +21,11 @@ fn species(name: &str) -> SpeciesId {
 /// A 60 x 60 box with an 8 x 8 grid of alternating `N2` and `M` balls at
 /// spacing 3.5, with small deterministic velocities, using `physics`.
 fn mixed_world(physics: BallPhysics) -> MainContent {
-    let mut mc = MainContent::new_with_seed(Rect::new(-30.0, 30.0, 60.0, -60.0), 9).unwrap();
+    let mut mc = crate::application::core::tests::new_main_content_seeded(
+        Rect::new(-30.0, 30.0, 60.0, -60.0),
+        9,
+    )
+    .unwrap();
     mc.world_mut().physics = physics;
     mc.world_mut().speed_limit_override = Some(f32::INFINITY);
     let kinds = [species("N2"), species("M")];
@@ -127,7 +131,11 @@ fn every_pair_inside_its_cutoff_is_listed() {
 
 #[test]
 fn cell_grid_follows_the_species_present() {
-    let mut mc = MainContent::new_with_seed(Rect::new(-50.0, 50.0, 100.0, -100.0), 3).unwrap();
+    let mut mc = crate::application::core::tests::new_main_content_seeded(
+        Rect::new(-50.0, 50.0, 100.0, -100.0),
+        3,
+    )
+    .unwrap();
     let (n2, xl) = (species("N2"), species("XL"));
     let physics = BallPhysics::default();
     mc.add_candidate_to_vec(Ball2D::new(1, Vec2D::new(-6.0, 0.0), n2));
@@ -162,7 +170,7 @@ fn cell_grid_follows_the_species_present() {
 /// of the species present widens the cells for it (#235).
 #[test]
 fn cell_grid_fits_an_overridden_pair() {
-    let mut config = SimConfig::default();
+    let mut config = crate::application::core::tests::test_config();
     config.potential.pair_overrides.push(PairOverrideConfig {
         a: "XS".into(),
         b: "N2".into(),
@@ -227,7 +235,7 @@ fn overridden_pairs_conserve_energy() {
 }
 
 fn config_with(pairs: &[(&str, &str, Option<f32>)]) -> SimConfig {
-    let mut config = SimConfig::default();
+    let mut config = crate::application::core::tests::test_config();
     config.potential.pair_overrides = pairs
         .iter()
         .map(|&(a, b, sigma)| PairOverrideConfig {
@@ -361,7 +369,11 @@ fn placement_after_shrinking_a_like_pair_starts_outside_every_core() {
 #[test]
 fn box_walls_reflect_at_half_sigma() {
     for name in ["N2", "M", "XL"] {
-        let mut mc = MainContent::new_with_seed(Rect::new(-20.0, 20.0, 40.0, -40.0), 5).unwrap();
+        let mut mc = crate::application::core::tests::new_main_content_seeded(
+            Rect::new(-20.0, 20.0, 40.0, -40.0),
+            5,
+        )
+        .unwrap();
         mc.world_mut().speed_limit_override = Some(f32::INFINITY);
         let s = species(name);
         let contact = SpeciesTable::builtin().species(s).sigma / 2.0;

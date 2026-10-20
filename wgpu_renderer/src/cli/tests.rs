@@ -69,7 +69,7 @@ fn sim_config_reads_the_file_and_reports_errors_with_its_path() {
     let dir = std::env::temp_dir().join(format!("moldyat_cli_config_{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let good = dir.join("good.toml");
-    std::fs::write(&good, "[integration]\ntime_step = 0.005\n").unwrap();
+    std::fs::write(&good, "[integration]\ntime_step = 0.0025\n").unwrap();
     let bad = dir.join("bad.toml");
     std::fs::write(&bad, "[integration]\ntime_stp = 0.005\n").unwrap();
 
@@ -78,7 +78,7 @@ fn sim_config_reads_the_file_and_reports_errors_with_its_path() {
         ..CommonArgs::default()
     };
     let config = common(&good).sim_config().unwrap();
-    assert_eq!(config.integration.time_step, 0.005);
+    assert_eq!(config.integration.time_step, 0.0025);
     let error = common(&bad).sim_config().unwrap_err();
     assert!(error.message.contains("bad.toml"), "{}", error.message);
     assert!(error.message.contains("time_stp"), "{}", error.message);

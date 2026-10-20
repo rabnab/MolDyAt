@@ -41,8 +41,13 @@ How a run works:
   the same state. Seeding checks each candidate only against the balls in
   its neighbouring grid cells (#245): about 0.4 s for `dense` and 2 s for
   `large` on the machine below (before #245 it was O(n²): 18 s and about
-  5 minutes). The cache key is a hash of the seeding arguments. Delete the
-  cache when the save format or seeding changes.
+  5 minutes). The cache key is a hash of the seeding arguments, including
+  the time step. Delete the cache when the save format or seeding changes.
+- **Time step.** Seeding and every run use `--dt $DT` (default 0.01, the
+  step the committed baseline was measured at), not the binary's default
+  (0.005 since #301). The step sets how far balls move per step and so the
+  neighbour rebuilds per step; pinning it keeps binaries with different
+  defaults comparable. Recapture the baseline before changing `DT`.
 - **Timing.** Each run does `STEPS=300` steps. The first `WARMUP=50` steps
   are not counted, because the at-rest `dense` world relaxes in them. The
   binary times itself (`--timings`), so process start and loading are left

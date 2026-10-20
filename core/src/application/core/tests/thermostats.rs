@@ -12,7 +12,7 @@ use crate::objects2d::{
 };
 
 fn make_content() -> MainContent {
-    MainContent::new(Rect::new(-20.0, 20.0, 40.0, -40.0)).unwrap()
+    crate::application::core::tests::new_main_content(Rect::new(-20.0, 20.0, 40.0, -40.0)).unwrap()
 }
 
 /// Threshold below which trailing chain values are treated as effectively zero.

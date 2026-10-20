@@ -8,7 +8,8 @@ use crate::objects2d::ball_impl::{Ball2D, SPECIES_M};
 use crate::objects2d::{Rect, Vec2D};
 
 fn make_content() -> MainContent {
-    MainContent::new(Rect::new(-20.0, 20.0, 40.0, -40.0)).expect("create MainContent")
+    crate::application::core::tests::new_main_content(Rect::new(-20.0, 20.0, 40.0, -40.0))
+        .expect("create MainContent")
 }
 
 /// Wall from (-10, 0) to (10, 0): line id 0, chain id 0.

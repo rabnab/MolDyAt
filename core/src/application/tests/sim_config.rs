@@ -35,7 +35,7 @@ fn error_text(text: &str) -> String {
 /// A config with every value changed from its default.
 fn custom() -> SimConfig {
     let mut config = SimConfig::default();
-    config.integration.time_step = 0.005;
+    config.integration.time_step = 0.0015;
     config.integration.speed_limit_factor = 0.3;
     config.potential.max_force = 80.0;
     config.potential.core_stiffness = 150.0;
@@ -46,9 +46,9 @@ fn custom() -> SimConfig {
 }
 
 #[test]
-fn defaults_are_the_former_constants() {
+fn defaults_are_the_documented_values() {
     let config = SimConfig::default();
-    assert_eq!(config.integration.time_step, 0.01);
+    assert_eq!(config.integration.time_step, 0.005);
     assert_eq!(config.integration.speed_limit_factor, 0.2);
     assert_eq!(config.potential.max_force, 100.0);
     assert_eq!(config.potential.core_stiffness, 200.0);
@@ -78,7 +78,7 @@ fn main_content_runs_with_its_config() {
     let config = custom();
     let mc = MainContent::with_config(rect(), &config, Some(7)).unwrap();
     assert_eq!(mc.config(), config);
-    assert_eq!(mc.time_step(), 0.005);
+    assert_eq!(mc.time_step(), 0.0015);
     let physics = &mc.world().physics;
     assert_eq!(physics.cap_settings().max_force, 80.0);
     assert_eq!(physics.get_skin_thickness(), 0.25 * 3.5);
@@ -96,7 +96,7 @@ fn main_content_runs_with_its_config() {
 fn config_follows_the_time_step_keys() {
     let mut mc = MainContent::with_config(rect(), &custom(), None).unwrap();
     mc.double_time_step();
-    assert_eq!(mc.config().integration.time_step, 0.01);
+    assert_eq!(mc.config().integration.time_step, 0.003);
 }
 
 #[test]
@@ -127,7 +127,7 @@ fn missing_keys_keep_their_default() {
 fn every_key_is_read() {
     let config = SimConfig::from_toml(
         "[integration]\n\
-         time_step = 0.005\n\
+         time_step = 0.0015\n\
          speed_limit_factor = 0.3\n\
          [potential]\n\
          max_force = 80.0\n\
