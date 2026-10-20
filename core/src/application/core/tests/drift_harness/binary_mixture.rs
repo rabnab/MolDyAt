@@ -43,7 +43,7 @@ const MIN_WALL_CLEARANCE: f32 = 1.0;
 
 /// The run config: defaults plus the two overrides.
 fn mixture_config() -> SimConfig {
-    let mut config = SimConfig::default();
+    let mut config = super::super::test_config();
     config.potential.pair_overrides = vec![
         PairOverrideConfig {
             a: "XS".into(),

@@ -50,8 +50,10 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-/// Time step of a new world.
-pub const DEFAULT_TIME_STEP: f32 = 0.01;
+/// Time step of a new world, in reduced (N2) time units, about 11 fs.
+/// 0.01 let hot collisions (T* ≈ 3) reach deep into the steep core and
+/// drifted ~1 % over 200k steps; 0.005 is the usual Lennard-Jones step.
+pub const DEFAULT_TIME_STEP: f32 = 0.005;
 /// The speed limit is this share of the shorter world side.
 pub const DEFAULT_SPEED_LIMIT_FACTOR: f32 = 0.2;
 /// The physics thread publishes a snapshot at most this often (about 60 Hz).

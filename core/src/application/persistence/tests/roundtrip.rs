@@ -22,7 +22,7 @@ fn empty_world() -> MainContent {
 /// A config with every value changed from its default.
 fn custom_config() -> SimConfig {
     let mut config = SimConfig::default();
-    config.integration.time_step = 0.005;
+    config.integration.time_step = 0.0025;
     config.integration.speed_limit_factor = 0.3;
     config.potential.max_force = 80.0;
     config.potential.core_stiffness = 150.0;

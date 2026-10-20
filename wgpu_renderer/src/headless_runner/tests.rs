@@ -456,7 +456,7 @@ fn test_prepare_application_applies_dt_and_line_segments() {
         steps: 4,
         rng_seed: Some(12345),
         seed_balls: Some(24),
-        dt: Some(0.005),
+        dt: Some(0.0025),
         line_segments: vec![
             LineSegmentSpec {
                 start: (-20.0, 0.0),
@@ -480,7 +480,7 @@ fn test_prepare_application_applies_dt_and_line_segments() {
         None,
     )
     .expect("prepare");
-    assert_eq!(application.time_step(), 0.005);
+    assert_eq!(application.time_step(), 0.0025);
 
     let snapshot = application.create_snapshot();
     let walls = &snapshot.operators.line_segments;
@@ -505,7 +505,7 @@ fn test_prepare_application_applies_dt_and_line_segments() {
         application.simulation_step().expect("step");
     }
     let time = application.create_snapshot().time;
-    assert!((time - 4.0 * 0.005).abs() < 1e-6, "time {time}");
+    assert!((time - 4.0 * 0.0025).abs() < 1e-6, "time {time}");
 }
 
 #[test]

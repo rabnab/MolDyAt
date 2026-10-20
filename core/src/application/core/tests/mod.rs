@@ -30,11 +30,20 @@ mod valves;
 mod verbose;
 
 use crate::application::MainContent;
+use crate::application::sim_config::SimConfig;
 use crate::graphics::renderer::ViewportTransform;
 use crate::graphics::renderer::margins::Margins;
 use crate::objects2d::Rect;
 
 const DT_GOAL: f32 = 0.01;
+
+/// The default config with the time step set to `DT_GOAL`: the tests and
+/// their thresholds are written for that step, not for the default.
+fn test_config() -> SimConfig {
+    let mut config = SimConfig::default();
+    config.integration.time_step = DT_GOAL;
+    config
+}
 
 fn create_main_content_for_region(tl_x: f32, tl_y: f32) -> (MainContent, ViewportTransform) {
     let world = Rect::new(tl_x, tl_y, 100.0, -100.0);
@@ -46,7 +55,8 @@ fn create_main_content_with_world(
     transform: ViewportTransform,
 ) -> (MainContent, ViewportTransform) {
     let world_rect = transform.world_bounds();
-    let main_content = MainContent::new(world_rect).expect("Could not create main content");
+    let main_content = MainContent::with_config(world_rect, &test_config(), None)
+        .expect("Could not create main content");
 
     println!("Created main content with world rect {:?}", world_rect,);
     (main_content, transform)
