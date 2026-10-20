@@ -134,10 +134,19 @@ impl SourceSphereCollection {
         Self::default()
     }
 
-    /// Add a new source sphere, returning its assigned ID.
+    /// Add a new source sphere that emits the default species, returning
+    /// its assigned ID.
     pub fn add(&mut self, center: Vec2D) -> usize {
+        self.add_with_species(center, DEFAULT_SPECIES)
+    }
+
+    /// Add a new source sphere that emits `species`, returning its ID.
+    pub fn add_with_species(&mut self, center: Vec2D, species: SpeciesId) -> usize {
         let id = self.next_id.next_id();
-        self.spheres.push(SimSourceSphere::new(id, center));
+        self.spheres.push(SimSourceSphere {
+            ball_species: species,
+            ..SimSourceSphere::new(id, center)
+        });
         id
     }
 

@@ -227,8 +227,6 @@ fn key_name(key: KeyCode) -> &'static str {
         KeyCode::Backspace => "BACKSPACE",
         KeyCode::ShiftLeft | KeyCode::ShiftRight => "Shift",
         KeyCode::Equal => "=",
-        KeyCode::BracketLeft => "[",
-        KeyCode::BracketRight => "]",
         KeyCode::Minus => "-",
         KeyCode::NumpadAdd => "Num +",
         KeyCode::NumpadSubtract => "Num -",
@@ -243,6 +241,7 @@ fn key_name(key: KeyCode) -> &'static str {
         KeyCode::KeyD => "D",
         KeyCode::KeyG => "G",
         KeyCode::KeyH => "H",
+        KeyCode::KeyN => "N",
         KeyCode::KeyO => "O",
         KeyCode::KeyP => "P",
         KeyCode::KeyR => "R",
@@ -356,14 +355,16 @@ pub static COMMANDS: &[CommandDescriptor] = &[
         id: "balls.next_species",
         label: "New balls and new source spheres get the next species (right click too).",
         category: CommandCategory::Balls,
-        default_binding: &[key(KeyCode::BracketRight, Release)],
+        // A letter, not `]` / `[`: bindings are physical keys, and N is N on
+        // QWERTY, QWERTZ and AZERTY alike.
+        default_binding: &[key(KeyCode::KeyN, Release)],
         kind: CommandKind::Domain(|| BallCommand::NextSpecies.into()),
     },
     CommandDescriptor {
         id: "balls.previous_species",
         label: "New balls and new source spheres get the previous species.",
         category: CommandCategory::Balls,
-        default_binding: &[key(KeyCode::BracketLeft, Release)],
+        default_binding: &[chord(Alt, KeyCode::KeyN, Release)],
         kind: CommandKind::Domain(|| BallCommand::PreviousSpecies.into()),
     },
     CommandDescriptor {

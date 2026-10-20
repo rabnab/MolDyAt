@@ -136,7 +136,7 @@ an `OperatorCommand` for the physics thread. Handlers also supply the frame's
 | Wall | press–drag–release draws a wall; drags an endpoint of an existing wall; snaps to walls and endpoints | – | – | thickness of the wall under the cursor |
 | Valve | press on a wall and drag to cut a valve; click on a valve toggles open/closed | – | – | – |
 | Thermostat | click on empty space places one; click on one toggles it; drag moves it | – | target temperature | radius |
-| Source sphere | click on empty space places one, emitting the species of new balls (`[` / `]`); click on one toggles it | on a sphere: cycles the species it emits | emission speed | emission period |
+| Source sphere | click on empty space places one, emitting the species of new balls (`N` / `Alt + N`); click on one toggles it | on a sphere: cycles the species it emits | emission speed | emission period |
 
 Hover and delete: every tool reports the object of its own kind under the
 cursor (or being dragged) as an `ObjectRef`. The renderer highlights it with

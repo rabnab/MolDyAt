@@ -283,8 +283,8 @@ Keyboard (press `H` for the same list in the log):
 | `ESC` | Clear all balls. |
 | `F1` | Stop all balls (zero velocities). |
 | `F5` | Add 100 random balls. |
-| `]` | New balls and new source spheres get the next species (right click too). |
-| `[` | New balls and new source spheres get the previous species. |
+| `N` | New balls and new source spheres get the next species (right click too). |
+| `Alt + N` | New balls and new source spheres get the previous species. |
 | `R` | Randomize all ball speeds. |
 | `Shift` | Enable random ball speed. |
 | `DEL` / `BACKSPACE` | Delete the highlighted object (hover it with its sidebar tool selected). |
@@ -309,7 +309,7 @@ Mouse:
 |---|---|
 | Left click on a sidebar icon | Select or deselect that tool |
 | Left click (ball tool) | Place a ball at the cursor |
-| Right click | Next species for new balls and new source spheres (as `]`) |
+| Right click | Next species for new balls and new source spheres (as `N`) |
 | Right click on a source sphere (source tool) | Next species that sphere emits |
 | Scroll wheel | Zoom in / out |
 | Middle-click drag | Pan viewport |

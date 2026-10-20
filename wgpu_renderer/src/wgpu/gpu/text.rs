@@ -82,9 +82,19 @@ pub(crate) fn push_label_vertices(
     let top = center_y + glyph_ndc_h * 0.5;
     let bottom = center_y - glyph_ndc_h * 0.5;
     let atlas_len = atlas_chars.len() as f32;
+    // The printable-ASCII atlas is in code order: index by the code instead
+    // of searching its 95 glyphs for every character.
+    let ascii = atlas_chars == ASCII_CHARS.as_slice();
 
     for (i, ch) in label.chars().enumerate() {
-        let Some(atlas_idx) = atlas_chars.iter().position(|&glyph| glyph == ch) else {
+        let atlas_idx = if ascii {
+            (ch as usize)
+                .checked_sub(' ' as usize)
+                .filter(|&idx| idx < ASCII_CHARS.len())
+        } else {
+            atlas_chars.iter().position(|&glyph| glyph == ch)
+        };
+        let Some(atlas_idx) = atlas_idx else {
             continue;
         };
 

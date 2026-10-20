@@ -119,7 +119,7 @@ fn status_lists_the_new_ball_species_and_the_count_per_species() {
     for x in [3.0, 6.0] {
         mc.add_candidate_at_pos(Vec2D::new(x, 0.0)).unwrap();
     }
-    assert_eq!(mc.species_status(), "New: Ar\nN2: 3 | Ar: 2");
+    assert_eq!(mc.species_status(), "New: Ar\nN2: 3\nAr: 2");
     let status = mc.status_text(0, 0.01).expect("ball stats are shown");
-    assert!(status.ends_with("New: Ar\nN2: 3 | Ar: 2"), "{status}");
+    assert!(status.ends_with("\nNew: Ar\nN2: 3\nAr: 2"), "{status}");
 }
