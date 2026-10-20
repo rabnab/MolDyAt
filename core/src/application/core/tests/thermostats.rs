@@ -6,6 +6,7 @@ use super::DT_GOAL;
 use crate::application::MainContent;
 use crate::application::core::StatsAccumulator;
 use crate::application::thermo_field::LocalKineticStats;
+use crate::objects2d::ball_impl::SpeciesTable;
 use crate::objects2d::ball_impl::{BallFactory, SpeciesId};
 use crate::objects2d::{
     DEFAULT_THERMOSTAT_CHAIN_LENGTH, OperatorCollection, OperatorState, Rect, Vec2D,
@@ -33,12 +34,21 @@ fn zeroed_stats() -> StatsAccumulator {
 
 fn add_ball(mc: &mut MainContent, pos: Vec2D, velocity: Vec2D) {
     let factory = BallFactory::new();
-    mc.add_candidate_to_vec(factory.create_massive_with_velocity(pos, velocity));
+    mc.add_candidate_to_vec(factory.create_massive_with_velocity(
+        SpeciesTable::builtin(),
+        pos,
+        velocity,
+    ));
 }
 
 fn add_ball_of_species(mc: &mut MainContent, pos: Vec2D, velocity: Vec2D, species: SpeciesId) {
     let factory = BallFactory::new();
-    mc.add_candidate_to_vec(factory.create_with_species_and_velocity(pos, species, velocity));
+    mc.add_candidate_to_vec(factory.create_with_species_and_velocity(
+        SpeciesTable::builtin(),
+        pos,
+        species,
+        velocity,
+    ));
 }
 
 fn cluster_kinetic_stats(mc: &MainContent) -> LocalKineticStats {

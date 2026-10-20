@@ -6,6 +6,7 @@
 
 use super::{DT_GOAL, create_main_content_for_region};
 use crate::application::MainContent;
+use crate::objects2d::ball_impl::SpeciesTable;
 use crate::objects2d::ball_impl::{BallFactory, SPECIES_M, SpeciesId};
 use crate::objects2d::{Rect, Vec2D};
 
@@ -77,7 +78,8 @@ fn place_grid(main_content: &mut MainContent, rect: &Rect, cols: usize, rows: us
                 rect.y - offset - spacing * j as f32,
             );
             let v = Vec2D::new(((i * 7 + j) as f32).sin(), ((i + 3 * j) as f32).cos());
-            let ball = factory.create_with_species_and_velocity(pos, SPECIES, v);
+            let ball =
+                factory.create_with_species_and_velocity(SpeciesTable::builtin(), pos, SPECIES, v);
             main_content.world_mut().balls.push(ball);
         }
     }
@@ -99,7 +101,12 @@ fn test_deep_overlaps_in_a_crowded_box_separate() {
     let factory = BallFactory::new();
     for k in [3usize, 50, 101, 222, 300, 417] {
         let pos = *main_content.world().balls[k].get_position() + Vec2D::new(0.02, 0.01);
-        let ball = factory.create_with_species_and_velocity(pos, SPECIES, Vec2D::zero());
+        let ball = factory.create_with_species_and_velocity(
+            SpeciesTable::builtin(),
+            pos,
+            SPECIES,
+            Vec2D::zero(),
+        );
         main_content.world_mut().balls.push(ball);
     }
     main_content.world_mut().rebuild_cell_grid();
@@ -183,7 +190,12 @@ fn test_separating_overlaps_conserves_energy() {
     let factory = BallFactory::new();
     for k in [3usize, 50, 101, 222, 300, 417] {
         let pos = *main_content.world().balls[k].get_position() + Vec2D::new(0.3, 0.1);
-        let ball = factory.create_with_species_and_velocity(pos, SPECIES, Vec2D::zero());
+        let ball = factory.create_with_species_and_velocity(
+            SpeciesTable::builtin(),
+            pos,
+            SPECIES,
+            Vec2D::zero(),
+        );
         main_content.world_mut().balls.push(ball);
     }
     main_content.world_mut().rebuild_cell_grid();

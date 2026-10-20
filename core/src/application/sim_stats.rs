@@ -349,7 +349,7 @@ mod tests {
         // After a few simulation steps the ball bounces, and SimStats must
         // record a non-zero wall momentum transferred during the impact.
         use crate::application::MainContent;
-        use crate::objects2d::ball_impl::BallFactory;
+        use crate::objects2d::ball_impl::{BallFactory, SpeciesTable};
         use crate::objects2d::{Rect, Vec2D};
 
         // Tiny world: x in [0, 10], y in [0, -10]
@@ -358,10 +358,11 @@ mod tests {
         mc.world_mut().speed_limit_override = Some(f32::INFINITY);
 
         let factory = BallFactory::new();
-        let ball_radius = factory.get_new_ball_radius();
+        let ball_radius = factory.get_new_ball_radius(SpeciesTable::builtin());
         // Start close to the right wall (x = world_rect.x + world_rect.w = 10.0)
         // and move rightward so a bounce is guaranteed within a few steps.
         let ball = factory.create_massive_with_velocity(
+            SpeciesTable::builtin(),
             Vec2D::new(10.0 - ball_radius - 0.05, -5.0),
             Vec2D::new(10.0, 0.0),
         );

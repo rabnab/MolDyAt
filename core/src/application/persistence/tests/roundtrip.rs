@@ -396,3 +396,17 @@ fn loading_a_builtin_save_restores_the_builtin_library() {
     assert_eq!(&*snapshot.species, SpeciesTable::builtin());
     let _ = fs::remove_dir_all(store.dir());
 }
+
+/// A load with the same species table keeps the species of new balls.
+#[test]
+fn loading_with_the_same_table_keeps_the_species_of_new_balls() {
+    let store = SaveStore::new(scratch_dir("species-same"));
+    busy_world().save_world(&store).unwrap();
+    let mut target = empty_world();
+    target.next_ball_size();
+    target
+        .load_world(&store, &LoadSource::Latest, true)
+        .unwrap();
+    assert_eq!(target.create_snapshot().cursor_species, SpeciesId::new(1));
+    let _ = fs::remove_dir_all(store.dir());
+}

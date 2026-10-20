@@ -9,6 +9,7 @@ mod verlet;
 mod wall_contact;
 
 use crate::objects2d::Vec2D;
+use crate::objects2d::ball_impl::SpeciesTable;
 use crate::objects2d::ball_impl::ball_factory::BallFactory;
 use crate::objects2d::ball_impl::{validate_mass, validate_radius};
 
@@ -26,7 +27,8 @@ fn test_validation_functions() {
 #[test]
 fn test_ball_creation() {
     let factory = BallFactory::new();
-    let ball = factory.create_massive_with_velocity(Vec2D::zero(), Vec2D::zero());
+    let ball =
+        factory.create_massive_with_velocity(SpeciesTable::builtin(), Vec2D::zero(), Vec2D::zero());
     assert_eq!(*ball.get_position(), Vec2D::new(0.0, 0.0));
 }
 
@@ -34,6 +36,7 @@ fn test_ball_creation() {
 fn test_named_trait() {
     use crate::objects2d::ball_impl::Named;
     let factory = BallFactory::new();
-    let ball = factory.create_massive_with_velocity(Vec2D::zero(), Vec2D::zero());
+    let ball =
+        factory.create_massive_with_velocity(SpeciesTable::builtin(), Vec2D::zero(), Vec2D::zero());
     assert!(ball.get_name().starts_with("Ball"));
 }

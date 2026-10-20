@@ -6,11 +6,12 @@ use super::create_main_content;
 use crate::application::MainContent;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::BallFactory;
+use crate::objects2d::ball_impl::SpeciesTable;
 
 /// World with two balls; returns it with the ID of the first ball.
 fn two_ball_content() -> (MainContent, usize) {
     let (mut main_content, _win_def) = create_main_content();
-    let ball_radius = BallFactory::new().get_new_ball_radius();
+    let ball_radius = BallFactory::new().get_new_ball_radius(SpeciesTable::builtin());
     main_content.add_candidate_at_pos(Vec2D::zero()).unwrap();
     main_content
         .add_candidate_at_pos(Vec2D::new(1., 1.) * ball_radius * 2.1)

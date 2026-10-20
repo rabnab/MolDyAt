@@ -40,14 +40,9 @@ impl MainContent {
     /// An empty world run with `config` (validated first); balls are seeded
     /// from `seed` if given.
     pub fn with_config(world_rect: Rect, config: &SimConfig, seed: Option<u64>) -> AppResult<Self> {
-        let world = SimulationWorld::with_config(world_rect, config)?;
-        let step_config = StepConfig::new(config.integration.time_step, seed);
-        step_config
-            .get_ball_factory()
-            .set_species_table(Arc::clone(&world.species));
         Ok(Self {
-            world,
-            step_config,
+            world: SimulationWorld::with_config(world_rect, config)?,
+            step_config: StepConfig::new(config.integration.time_step, seed),
             runtime: super::PhysicsRuntimeState {
                 snapshot_slot: Arc::new(ArcSwapOption::from(None)),
                 wait_time: 0,

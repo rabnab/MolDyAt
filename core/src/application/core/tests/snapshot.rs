@@ -18,8 +18,11 @@ fn create_test_main_content_with_balls(ball_count: usize) -> MainContent {
 
     // Add balls
     for _ in 0..ball_count {
-        let ball =
-            factory.create_random((&Vec2D::new(0.0, 0.0), &Vec2D::new(10.0, 10.0)), (0.0, 1.0));
+        let ball = factory.create_random(
+            SpeciesTable::builtin(),
+            (&Vec2D::new(0.0, 0.0), &Vec2D::new(10.0, 10.0)),
+            (0.0, 1.0),
+        );
         main_content.world_mut().balls.push(ball);
     }
 

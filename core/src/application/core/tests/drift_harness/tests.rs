@@ -44,9 +44,13 @@ fn test_two_body_lj_baseline_drift() {
     let center = world_center(&main_content);
     let x_off = center_sep * 0.5;
 
-    let b1 = factory
-        .create_massive_with_velocity(Vec2D::new(center.x - x_off, center.y), Vec2D::new(0.2, 0.0));
+    let b1 = factory.create_massive_with_velocity(
+        SpeciesTable::builtin(),
+        Vec2D::new(center.x - x_off, center.y),
+        Vec2D::new(0.2, 0.0),
+    );
     let b2 = factory.create_massive_with_velocity(
+        SpeciesTable::builtin(),
         Vec2D::new(center.x + x_off, center.y),
         Vec2D::new(-0.2, 0.0),
     );
@@ -116,9 +120,13 @@ fn test_force_cap_transition_drift() {
     let center = world_center(&main_content);
     let x_off = center_sep * 0.5;
 
-    let b1 = factory
-        .create_massive_with_velocity(Vec2D::new(center.x - x_off, center.y), Vec2D::new(0.8, 0.0));
+    let b1 = factory.create_massive_with_velocity(
+        SpeciesTable::builtin(),
+        Vec2D::new(center.x - x_off, center.y),
+        Vec2D::new(0.8, 0.0),
+    );
     let b2 = factory.create_massive_with_velocity(
+        SpeciesTable::builtin(),
         Vec2D::new(center.x + x_off, center.y),
         Vec2D::new(-0.8, 0.0),
     );
@@ -196,10 +204,12 @@ fn test_two_body_drift_converges_with_smaller_timestep() {
         let x_off = center_sep * 0.5;
 
         let b1 = factory.create_massive_with_velocity(
+            SpeciesTable::builtin(),
             Vec2D::new(center.x - x_off, center.y),
             Vec2D::new(0.25, 0.0),
         );
         let b2 = factory.create_massive_with_velocity(
+            SpeciesTable::builtin(),
             Vec2D::new(center.x + x_off, center.y),
             Vec2D::new(-0.25, 0.0),
         );

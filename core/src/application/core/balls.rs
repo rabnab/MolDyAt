@@ -101,7 +101,9 @@ impl MainContent {
         let time_step = self.step_config.get_time_step();
         let factory_species = self.step_config.get_ball_factory().new_ball_species();
         let cur_radius = if mixture.is_empty() {
-            self.step_config.get_ball_factory().get_new_ball_radius()
+            self.step_config
+                .get_ball_factory()
+                .get_new_ball_radius(&self.world.species)
         } else {
             mixture
                 .iter()
@@ -140,10 +142,11 @@ impl MainContent {
                     .get_ball_factory()
                     .set_new_ball_species(mixture[i].0);
             }
-            let nu_ball = self
-                .step_config
-                .get_ball_factory()
-                .create_random((min_pos, max_pos), (0.0, max_speed));
+            let nu_ball = self.step_config.get_ball_factory().create_random(
+                &self.world.species,
+                (min_pos, max_pos),
+                (0.0, max_speed),
+            );
             let margin = self.world.equilibrium_gap(nu_ball.species());
             if self
                 .world
@@ -223,7 +226,7 @@ impl MainContent {
         let candidate = self
             .step_config
             .get_ball_factory()
-            .create_massive_with_velocity(pos, Vec2D::zero());
+            .create_massive_with_velocity(&self.world.species, pos, Vec2D::zero());
         self.world.add_candidate_ball(candidate, 0.)
     }
 
@@ -265,7 +268,9 @@ impl MainContent {
     }
 
     pub(crate) fn next_ball_size(&mut self) {
-        self.step_config.get_ball_factory().next_species();
+        self.step_config
+            .get_ball_factory()
+            .next_species(&self.world.species);
     }
 
     #[cfg(test)]

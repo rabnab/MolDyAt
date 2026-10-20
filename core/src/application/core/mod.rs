@@ -57,7 +57,8 @@ pub struct SimulationWorld {
     pub(crate) world_rect: Rect,
     pub(crate) physics: BallPhysics,
     /// The species balls of this world can have (`SimConfig::species_table`).
-    /// Shared with the ball factory and the snapshots.
+    /// An `Arc` because every snapshot for the render thread carries it;
+    /// the ball factory takes it per call and holds no copy.
     pub(crate) species: Arc<SpeciesTable>,
     /// The `[[species]]` list the table was built from, empty for the
     /// built-in library: what `MainContent::config` and saves write back.

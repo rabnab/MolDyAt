@@ -212,8 +212,8 @@ fn test_energy_conservation_two_balls_integration() {
     let r_cap = r_cap(&phys);
     let separation = r_cap * 0.8; // Centre distance inside the force cap
 
-    let mut ball1 = factory.create_basic(Vec2D::new(0.0, 0.0), N2);
-    let mut ball2 = factory.create_basic(Vec2D::new(separation, 0.0), N2);
+    let mut ball1 = factory.create_basic(SpeciesTable::builtin(), Vec2D::new(0.0, 0.0), N2);
+    let mut ball2 = factory.create_basic(SpeciesTable::builtin(), Vec2D::new(separation, 0.0), N2);
 
     // Give them small initial velocities to make the interaction more interesting
     ball1.v = Vec2D::new(0.1, 0.05);

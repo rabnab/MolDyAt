@@ -180,7 +180,12 @@ fn populate_cell_border_pairs(main_content: &mut MainContent) -> usize {
     let mut add = |pos: Vec2D, size: usize| {
         let i = balls.len();
         let species = SpeciesId::new(size as u16);
-        balls.push(factory.create_with_species_and_velocity(pos, species, slow(i)));
+        balls.push(factory.create_with_species_and_velocity(
+            SpeciesTable::builtin(),
+            pos,
+            species,
+            slow(i),
+        ));
     };
     // Horizontal pair across two old column borders, near the bottom.
     let ax = old_w - 0.1;
@@ -318,7 +323,7 @@ fn test_neighbor_lists_survive_balls_removed_and_added() {
             br_y + (tl_y - br_y) * (0.05 + 0.9 * t),
         );
         let vel = Vec2D::new((k as f32).sin() * HOT_V, (k as f32).cos() * HOT_V);
-        let ball = factory.create_massive_with_velocity(pos, vel);
+        let ball = factory.create_massive_with_velocity(SpeciesTable::builtin(), pos, vel);
         if main_content.add_candidate_ball(ball, 0.5).is_ok() {
             added += 1;
         }

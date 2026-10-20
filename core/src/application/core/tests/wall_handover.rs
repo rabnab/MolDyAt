@@ -14,6 +14,7 @@
 use super::create_main_content_for_region;
 use crate::application::MainContent;
 use crate::objects2d::ball_impl::BallFactory;
+use crate::objects2d::ball_impl::SpeciesTable;
 use crate::objects2d::{Rect, Vec2D};
 
 /// World spanning x, y = -50..50.
@@ -63,14 +64,18 @@ fn test_box_wall_and_line_wall_in_the_same_step() {
     let half_thickness = 0.5 * main_content.world().line_segments.segments()[0].thickness;
 
     let factory = BallFactory::new();
-    let probe = factory.create_massive_with_velocity(Vec2D::zero(), Vec2D::zero());
+    let probe =
+        factory.create_massive_with_velocity(SpeciesTable::builtin(), Vec2D::zero(), Vec2D::zero());
     let radius = probe.contact_radius;
     let wall_surface_x = WALL_X - half_thickness - radius - WALL_CONTACT_MARGIN;
     let floor_y = -50.0 + radius;
     // 0.05 from both surfaces, moving 0.1 towards each within one step.
     let velocity = Vec2D::new(10.0, -10.0);
-    let ball = factory
-        .create_massive_with_velocity(Vec2D::new(wall_surface_x - 0.05, floor_y + 0.05), velocity);
+    let ball = factory.create_massive_with_velocity(
+        SpeciesTable::builtin(),
+        Vec2D::new(wall_surface_x - 0.05, floor_y + 0.05),
+        velocity,
+    );
     main_content.world_mut().add_ball_and_register(ball);
     main_content.collect_neighbours_by_cell(super::DT_GOAL);
 

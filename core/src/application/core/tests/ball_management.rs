@@ -4,6 +4,7 @@
 
 use super::{create_main_content, create_main_content_for_region};
 use crate::objects2d::Vec2D;
+use crate::objects2d::ball_impl::SpeciesTable;
 use crate::objects2d::ball_impl::{Ball2D, BallFactory};
 use float_cmp::approx_eq;
 
@@ -11,7 +12,7 @@ use float_cmp::approx_eq;
 fn test_add_candidate() {
     let (mut main_content, _) = create_main_content();
 
-    let new_ball_size = BallFactory::new().get_new_ball_radius();
+    let new_ball_size = BallFactory::new().get_new_ball_radius(SpeciesTable::builtin());
     // Add a valid candidate
     let coord = main_content.world().world_region_inset(new_ball_size * 1.1);
     let (x, y) = coord.get_tl();
@@ -87,7 +88,7 @@ fn test_ball_collision() {
     // Add two overlapping balls
 
     let factory = BallFactory::new();
-    let ball_radius = factory.get_new_ball_radius();
+    let ball_radius = factory.get_new_ball_radius(SpeciesTable::builtin());
 
     let ball_coord = Vec2D::zero();
     main_content
@@ -98,7 +99,11 @@ fn test_ball_collision() {
         ball_coord.x + 0.5 * ball_radius,
         ball_coord.y + 0.5 * ball_radius,
     );
-    let colliding_ball = factory.create_massive_with_velocity(new_ball_coord, Vec2D::zero());
+    let colliding_ball = factory.create_massive_with_velocity(
+        SpeciesTable::builtin(),
+        new_ball_coord,
+        Vec2D::zero(),
+    );
     // main_content. coord_to_px(&new_ball_coord),
 
     println!(

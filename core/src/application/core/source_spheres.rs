@@ -99,6 +99,7 @@ impl SimulationWorld {
             );
 
             let candidate = ball_factory.create_with_species_and_velocity(
+                &self.species,
                 emit_pos,
                 params.ball_species,
                 velocity,
@@ -106,7 +107,7 @@ impl SimulationWorld {
 
             let _ = self.add_candidate_ball_among(
                 candidate,
-                ball_factory.get_new_ball_radius(),
+                ball_factory.get_new_ball_radius(&self.species),
                 &obstacles,
             );
         }

@@ -81,7 +81,7 @@ fn populate_central_grid(main_content: &mut MainContent, thermal_v: f32, project
             );
             let v = velocities[i * SIDE + j];
             let vel = Vec2D::new(v.x - mean_vx, v.y - mean_vy);
-            let ball = factory.create_massive_with_velocity(pos, vel);
+            let ball = factory.create_massive_with_velocity(SpeciesTable::builtin(), pos, vel);
             main_content.world_mut().balls.push(ball);
         }
     }
