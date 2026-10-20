@@ -207,7 +207,7 @@ mod tests {
     }
 
     #[test]
-    fn right_press_on_sphere_cycles_ball_size() {
+    fn right_press_on_sphere_cycles_its_species() {
         let sphere = test_sphere(3, 5.0, 5.0);
         let mut tool = SourceSphereToolHandler::new();
         let (snap, world) = make_ctx_data(vec![sphere]);

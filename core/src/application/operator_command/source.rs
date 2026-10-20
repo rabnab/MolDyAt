@@ -89,7 +89,7 @@ mod tests {
     }
 
     #[test]
-    fn cycle_source_sphere_ball_size_fields_round_trip() {
+    fn cycle_source_sphere_species_fields_round_trip() {
         let cmd = CycleSourceSphereSpecies { sphere_id: 5 };
         assert_eq!(cmd.sphere_id, 5);
     }

@@ -292,7 +292,8 @@ impl SpeciesTable {
 
     /// The species after `id`, wrapping around: what the UI steps through.
     pub fn next(&self, id: SpeciesId) -> SpeciesId {
-        SpeciesId::new(((id.index() + 1) % self.species.len()) as u16)
+        let len = self.species.len();
+        SpeciesId::new(((id.index() % len + 1) % len) as u16)
     }
 
     /// The species before `id`, wrapping around.
@@ -393,6 +394,9 @@ mod tests {
         assert_eq!(table.next(SpeciesId::new(9)), SpeciesId::new(0));
         assert_eq!(table.previous(SpeciesId::new(0)), SpeciesId::new(9));
         assert_eq!(table.previous(SpeciesId::new(6)), SpeciesId::new(5));
+        // An id outside the table wraps into it in both directions.
+        assert_eq!(table.next(SpeciesId::new(13)), SpeciesId::new(4));
+        assert_eq!(table.previous(SpeciesId::new(13)), SpeciesId::new(2));
     }
 
     #[test]
