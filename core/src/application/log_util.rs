@@ -9,7 +9,20 @@ impl MainContent {
     /// Generate status text with simulation statistics.
     /// Returns None if ball stats display is disabled.
     /// Uses real units (SI) if real_data flag is set, otherwise simulation units.
+    #[cfg(test)]
     pub(crate) fn status_text(&self, fps: u32, dt: f32) -> Option<String> {
+        self.status_text_with_counts(fps, dt, None)
+    }
+
+    /// [`Self::status_text`] with the ball count per species index already
+    /// known (`counts`, from the snapshot's pass over the balls); `None`
+    /// counts them here.
+    pub(crate) fn status_text_with_counts(
+        &self,
+        fps: u32,
+        dt: f32,
+        counts: Option<&SpeciesCounts>,
+    ) -> Option<String> {
         if !self.world().show_ball_stats {
             return None;
         }
@@ -23,7 +36,7 @@ impl MainContent {
                 .get_status_text(fps, num_balls, get_update_hood_call_cnt(), dt)
         };
         text.push('\n');
-        self.write_species_status(&mut text);
+        self.write_species_status(&mut text, counts);
         Some(text)
     }
 
@@ -35,31 +48,56 @@ impl MainContent {
     #[cfg(test)]
     pub(crate) fn species_status(&self) -> String {
         let mut text = String::new();
-        self.write_species_status(&mut text);
+        self.write_species_status(&mut text, None);
         text
     }
 
     /// [`Self::species_status`], appended to `text`. Runs for every snapshot
-    /// while ball stats are shown: one pass over the balls into a fixed-size
-    /// array, no allocation besides growing `text`.
-    fn write_species_status(&self, text: &mut String) {
+    /// while ball stats are shown, with the counts from the snapshot's pass
+    /// over the balls when it made one (`counts`); otherwise one pass here.
+    /// No allocation besides growing `text`.
+    fn write_species_status(&self, text: &mut String, counts: Option<&SpeciesCounts>) {
         use std::fmt::Write;
         let table = self.world().species();
-        let mut counts = [0usize; SpeciesSet::CAPACITY];
-        for ball in &self.world().balls {
-            if let Some(count) = counts.get_mut(ball.species().index()) {
-                *count += 1;
+        let own_counts;
+        let counts = match counts {
+            Some(counts) => counts,
+            None => {
+                own_counts = self.count_balls_per_species();
+                &own_counts
             }
-        }
+        };
         let new_name = table
             .get(self.new_ball_species())
             .map_or("?", |species| species.name.as_str());
         let _ = write!(text, "New: {new_name}");
-        for (species, &count) in table.iter().zip(&counts) {
+        for (species, &count) in table.iter().zip(counts) {
             if count > 0 {
                 let _ = write!(text, "\n{}: {count}", species.name);
             }
         }
+    }
+}
+
+/// Ball count per species index.
+pub(crate) type SpeciesCounts = [usize; SpeciesSet::CAPACITY];
+
+impl MainContent {
+    /// The number of balls of each species, by species index.
+    pub(crate) fn count_balls_per_species(&self) -> SpeciesCounts {
+        let mut counts = [0; SpeciesSet::CAPACITY];
+        for ball in &self.world().balls {
+            count_ball(&mut counts, ball);
+        }
+        counts
+    }
+}
+
+/// Add `ball` to `counts`.
+#[inline]
+pub(crate) fn count_ball(counts: &mut SpeciesCounts, ball: &Ball2D) {
+    if let Some(count) = counts.get_mut(ball.species().index()) {
+        *count += 1;
     }
 }
 

@@ -122,4 +122,17 @@ fn status_lists_the_new_ball_species_and_the_count_per_species() {
     assert_eq!(mc.species_status(), "New: Ar\nN2: 3\nAr: 2");
     let status = mc.status_text(0, 0.01).expect("ball stats are shown");
     assert!(status.ends_with("\nNew: Ar\nN2: 3\nAr: 2"), "{status}");
+    // The snapshot counts in its own pass over the balls (BALLS layer) and
+    // without it; both give the same lines.
+    let snapshot_status = mc.create_snapshot().status_text.expect("ball stats");
+    assert!(
+        snapshot_status.ends_with("\nNew: Ar\nN2: 3\nAr: 2"),
+        "{snapshot_status}"
+    );
+    mc.set_snapshot_layers(crate::application::scene_layers::SceneLayers::BASE);
+    let without_balls = mc.create_snapshot().status_text.expect("ball stats");
+    assert!(
+        without_balls.ends_with("\nNew: Ar\nN2: 3\nAr: 2"),
+        "{without_balls}"
+    );
 }
