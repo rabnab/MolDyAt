@@ -53,7 +53,10 @@ pub enum BallCommand {
     StopAll,
     RandomizeSpeeds,
     EnableRandomSpeed,
-    NextSize,
+    /// New balls get the next species of the world's table (wrapping).
+    NextSpecies,
+    /// New balls get the previous species of the world's table (wrapping).
+    PreviousSpecies,
 }
 
 /// Commands on the world as a whole.

@@ -39,7 +39,7 @@ pub(crate) fn wait_for_snapshot(
 /// Wait until every command sent to `physics_thread` so far has been applied
 /// and published, and return that snapshot.
 ///
-/// Sends a marker command (`NextBallSize`, visible as the snapshot's cursor
+/// Sends a marker command (`NextSpecies`, visible as the snapshot's cursor
 /// ball size) and waits for it. The thread applies commands in order, so the
 /// commands sent before the marker have been applied by then. The marker
 /// does change the next ball size; tests that use this must not depend on it.
@@ -49,7 +49,7 @@ pub(crate) fn sync_commands(
 ) -> Arc<RendererSnapshot> {
     let before = wait_for_snapshot(slot, "a first snapshot", |_| true).cursor_species;
     physics_thread
-        .send_command(BallCommand::NextSize)
+        .send_command(BallCommand::NextSpecies)
         .expect("send marker command");
     wait_for_snapshot(slot, "the marker command", |s| s.cursor_species != before)
 }

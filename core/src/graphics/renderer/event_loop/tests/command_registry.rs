@@ -261,3 +261,30 @@ fn test_readme_key_table_matches_the_registry() {
         "README key table is out of date; replace it with:\n{expected}"
     );
 }
+
+/// `]` and `[` step the species of new balls through the registry (#238).
+#[test]
+fn test_bracket_keys_step_the_species_of_new_balls() {
+    use crate::application::{BallCommand, DomainCommand};
+    for (key, id, expected) in [
+        (KeyCode::BracketRight, "balls.next_species", "NextSpecies"),
+        (
+            KeyCode::BracketLeft,
+            "balls.previous_species",
+            "PreviousSpecies",
+        ),
+    ] {
+        let (command, _) = command_for_key(key, KeyPhase::Up, HeldModifiers::default())
+            .unwrap_or_else(|| panic!("{key:?} runs a command"));
+        assert_eq!(command.id, id);
+        let domain = command.domain_command().expect("a domain command");
+        let DomainCommand::Balls(ball_command) = domain else {
+            panic!("{id} is a ball command, got {domain:?}");
+        };
+        assert_eq!(format!("{ball_command:?}"), expected);
+        assert!(matches!(
+            ball_command,
+            BallCommand::NextSpecies | BallCommand::PreviousSpecies
+        ));
+    }
+}

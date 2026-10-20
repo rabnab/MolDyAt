@@ -4,11 +4,13 @@
 
 //! Cursor readout text pipeline.
 //!
-//! Shows the cursor's world position and the gravity multiple at the
-//! bottom-right of the simulation pane, inside the bottom margin. Uses the
+//! Shows the cursor's world position, the gravity multiple and the species
+//! of new balls at the bottom-right of the simulation pane, inside the bottom
+//! margin. Uses the
 //! shared bitmap text renderer (`gpu/text.rs`).
 
 use moldyat_core::application::AppResult;
+use moldyat_core::application::renderer_snapshot::RendererSnapshot;
 use moldyat_core::graphics::renderer::margins::Margins;
 use moldyat_core::graphics::sidebar::sidebar_ui_scale;
 
@@ -41,6 +43,19 @@ impl TextPipeline {
             ),
         }
     }
+}
+
+/// The readout text: cursor position, gravity multiple and the species of
+/// new balls (from the world's table in the snapshot).
+pub(crate) fn cursor_readout(cursor: (f32, f32), snapshot: &RendererSnapshot) -> String {
+    let species = snapshot
+        .species
+        .get(snapshot.cursor_species)
+        .map_or("?", |species| species.name.as_str());
+    format!(
+        "({:.2}, {:.2})  {}g  {species}",
+        cursor.0, cursor.1, snapshot.gravity_force_multiple
+    )
 }
 
 /// Glyph quads (NDC, full window) for `text`, right-aligned to the
@@ -85,10 +100,7 @@ impl RenderPipeline for TextPipeline {
     }
 
     fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
-        let text = format!(
-            "({:.2}, {:.2})  {}g",
-            ctx.cursor_world_pos.0, ctx.cursor_world_pos.1, ctx.snapshot.gravity_force_multiple
-        );
+        let text = cursor_readout(ctx.cursor_world_pos, ctx.snapshot);
         let verts = cursor_text_vertices(&text, ctx.window_size, ctx.margin);
         self.text.upload(ctx.device, ctx.queue, &verts);
         Ok(())

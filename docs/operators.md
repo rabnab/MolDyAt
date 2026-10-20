@@ -90,6 +90,11 @@ An active source sphere emits a ball of its species at its perimeter every
 velocity update, so new balls do not enter the thermostats in the step they
 appear.
 
+A new sphere emits the species of new balls at the time it is placed;
+right-clicking it with the source tool cycles its species through the world's
+table. The emitted ball is placed only if it keeps the contact radius of its
+own species clear of other balls and walls.
+
 ## Lifecycle
 
 `core/src/objects2d/operator/mod.rs` provides the parts every operator
@@ -131,7 +136,7 @@ an `OperatorCommand` for the physics thread. Handlers also supply the frame's
 | Wall | press–drag–release draws a wall; drags an endpoint of an existing wall; snaps to walls and endpoints | – | – | thickness of the wall under the cursor |
 | Valve | press on a wall and drag to cut a valve; click on a valve toggles open/closed | – | – | – |
 | Thermostat | click on empty space places one; click on one toggles it; drag moves it | – | target temperature | radius |
-| Source sphere | click on empty space places one; click on one toggles it | cycles the emitted species | emission speed | emission period |
+| Source sphere | click on empty space places one, emitting the species of new balls (`[` / `]`); click on one toggles it | on a sphere: cycles the species it emits | emission speed | emission period |
 
 Hover and delete: every tool reports the object of its own kind under the
 cursor (or being dragged) as an `ObjectRef`. The renderer highlights it with
@@ -150,7 +155,7 @@ physics thread against `MainContent`:
 | `line` | `AddLineSegment`, `MoveLineSegmentEndpoint`, `ChangeLineThickness`, `SetGhostWall` |
 | `valve` | `AddValveSegment`, `ToggleValve` |
 | `thermostat` | `PlaceThermostat`, `ToggleThermostat`, `MoveThermostat`, `AdjustThermostatTargetTemperature`, `AdjustThermostatRadius` |
-| `source` | `PlaceSourceSphere`, `ToggleSourceSphere`, `CycleSourceSphereBallSize`, `AdjustSourceSphereSpeed`, `AdjustSourceSphereEmitPeriod` |
+| `source` | `PlaceSourceSphere`, `ToggleSourceSphere`, `CycleSourceSphereSpecies`, `AdjustSourceSphereSpeed`, `AdjustSourceSphereEmitPeriod` |
 | `delete` | `DeleteObject` (any single operator object) |
 
 Commands that refer to an id that no longer exists do nothing.
@@ -173,7 +178,7 @@ The wgpu backend draws operators with these pipelines in
 | `endpoint_pipeline` | endpoint markers of the hovered wall |
 | `highlight_pipeline` | the hovered object |
 | `line_pipeline` | snap indicators and the source-sphere speed/rate arcs |
-| `source_sphere_pipeline`, `source_label_pipeline` | source spheres; speed (`S:`) and rate (`R:`) labels |
+| `source_sphere_pipeline`, `source_label_pipeline` | source spheres; species name, speed (`S:`) and rate (`R:`) labels |
 | `thermostat_pipeline`, `thermostat_label_pipeline` | thermostat zone (pulsing while on), icon, target and local temperature |
 | `sidebar_pipeline` | the tool icons and the selected tool |
 

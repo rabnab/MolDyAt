@@ -294,6 +294,12 @@ impl SpeciesTable {
     pub fn next(&self, id: SpeciesId) -> SpeciesId {
         SpeciesId::new(((id.index() + 1) % self.species.len()) as u16)
     }
+
+    /// The species before `id`, wrapping around.
+    pub fn previous(&self, id: SpeciesId) -> SpeciesId {
+        let len = self.species.len();
+        SpeciesId::new(((id.index() % len + len - 1) % len) as u16)
+    }
 }
 
 /// A set of species ids, e.g. the species present in a world.
@@ -385,6 +391,8 @@ mod tests {
         let table = SpeciesTable::builtin();
         assert_eq!(table.next(SpeciesId::new(5)), SpeciesId::new(6));
         assert_eq!(table.next(SpeciesId::new(9)), SpeciesId::new(0));
+        assert_eq!(table.previous(SpeciesId::new(0)), SpeciesId::new(9));
+        assert_eq!(table.previous(SpeciesId::new(6)), SpeciesId::new(5));
     }
 
     #[test]

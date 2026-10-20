@@ -29,6 +29,8 @@ fn test_every_domain_command_maps_as_before() {
         ("balls.clear", "Balls(Clear)"),
         ("balls.stop_all", "Balls(StopAll)"),
         ("balls.add_random", "Balls(AddRandom(100))"),
+        ("balls.next_species", "Balls(NextSpecies)"),
+        ("balls.previous_species", "Balls(PreviousSpecies)"),
         ("balls.randomize_speeds", "Balls(RandomizeSpeeds)"),
         ("balls.enable_random_speed", "Balls(EnableRandomSpeed)"),
         ("world.save", "World(Save)"),

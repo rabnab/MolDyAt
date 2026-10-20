@@ -22,7 +22,35 @@ impl MainContent {
                 .sim
                 .get_status_text(fps, num_balls, get_update_hood_call_cnt(), dt)
         };
-        Some(return_value)
+        Some(format!("{return_value}\n{}", self.species_status()))
+    }
+
+    /// Status lines for the species (#238): the species of new balls, then
+    /// the ball count of every species present, in table order, e.g.
+    /// `New: Ar` and `N2: 120 | Ar: 80`.
+    pub(crate) fn species_status(&self) -> String {
+        let table = self.world().species();
+        let mut counts = vec![0usize; table.len()];
+        for ball in &self.world().balls {
+            if let Some(count) = counts.get_mut(ball.species().index()) {
+                *count += 1;
+            }
+        }
+        let present: Vec<String> = table
+            .iter()
+            .zip(&counts)
+            .filter(|&(_, &count)| count > 0)
+            .map(|(species, count)| format!("{}: {count}", species.name))
+            .collect();
+        let new_ball_species = self.new_ball_species();
+        let new_name = table
+            .get(new_ball_species)
+            .map_or("?", |species| species.name.as_str());
+        if present.is_empty() {
+            format!("New: {new_name}")
+        } else {
+            format!("New: {new_name}\n{}", present.join(" | "))
+        }
     }
 }
 

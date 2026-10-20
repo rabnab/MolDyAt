@@ -30,3 +30,21 @@ fn cursor_text_sits_in_the_bottom_margin_right_of_the_pane() {
         assert!(v.position[1] >= -1.0, "below the window");
     }
 }
+
+/// The cursor readout names the species of new balls (#238).
+#[test]
+fn readout_names_the_species_of_new_balls() {
+    use crate::wgpu::pipelines::text_pipeline::cursor_readout;
+    use moldyat_core::application::renderer_snapshot::RendererSnapshot;
+    let mut snapshot = RendererSnapshot::new();
+    assert_eq!(
+        cursor_readout((1.0, 2.0), &snapshot),
+        "(1.00, 2.00)  0g  N2"
+    );
+    snapshot.cursor_species = snapshot.species.by_name("Ne").unwrap();
+    snapshot.gravity_force_multiple = 1;
+    assert_eq!(
+        cursor_readout((1.0, 2.0), &snapshot),
+        "(1.00, 2.00)  1g  Ne"
+    );
+}

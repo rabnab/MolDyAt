@@ -59,6 +59,11 @@ impl MainContent {
         &mut self.runtime
     }
 
+    /// The species new balls and new source spheres get.
+    pub(crate) fn new_ball_species(&self) -> crate::objects2d::ball_impl::SpeciesId {
+        self.step_config.get_ball_factory().new_ball_species()
+    }
+
     pub(crate) fn world_and_step_config(&mut self) -> (&mut SimulationWorld, &StepConfig) {
         let Self {
             world, step_config, ..

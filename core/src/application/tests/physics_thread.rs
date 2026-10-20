@@ -473,7 +473,7 @@ fn test_snapshots_follow_changes_for_paused_and_running_by_layers() {
 
             // An edit is published also while paused, at the same step.
             physics_thread
-                .send_command(BallCommand::NextSize)
+                .send_command(BallCommand::NextSpecies)
                 .expect("send edit");
             let edited = wait_for("after the edit", &|s| {
                 s.cursor_species != after.cursor_species

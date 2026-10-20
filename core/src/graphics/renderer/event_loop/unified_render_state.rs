@@ -547,8 +547,8 @@ impl UnifiedRenderState {
     /// Sends the command to the physics thread, which owns the species of new
     /// balls; the window reads it back from the snapshot
     /// (`cursor_species`, `species`).
-    pub fn next_ball_size(&mut self) {
-        self.physics.send_command(BallCommand::NextSize);
+    pub fn next_species(&mut self) {
+        self.physics.send_command(BallCommand::NextSpecies);
     }
 
     // ── Centralized mouse event handlers ──────────────────────────────
@@ -821,11 +821,11 @@ mod tests {
     }
 
     #[test]
-    fn next_ball_size_marks_view_dirty_when_ball_tool_is_active() {
+    fn next_species_marks_view_dirty_when_ball_tool_is_active() {
         let mut state = build_test_state();
         state.render.active_tool = OperatorTool::Ball;
 
-        let affects_view = state.process_action(InputAction::NextBallSize, None, None);
+        let affects_view = state.process_action(InputAction::NextSpecies, None, None);
 
         assert!(!affects_view);
         assert!(state.render.view_dirty);

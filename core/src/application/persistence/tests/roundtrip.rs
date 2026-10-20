@@ -382,7 +382,7 @@ fn loading_a_builtin_save_restores_the_builtin_library() {
     let store = SaveStore::new(scratch_dir("species-back"));
     busy_world().save_world(&store).unwrap();
     let mut target = MainContent::with_config(world_rect(), &n2_ar_config(), None).expect("create");
-    target.next_ball_size();
+    target.next_species();
     target
         .load_world(&store, &LoadSource::Latest, true)
         .unwrap();
@@ -403,7 +403,7 @@ fn loading_with_the_same_table_keeps_the_species_of_new_balls() {
     let store = SaveStore::new(scratch_dir("species-same"));
     busy_world().save_world(&store).unwrap();
     let mut target = empty_world();
-    target.next_ball_size();
+    target.next_species();
     target
         .load_world(&store, &LoadSource::Latest, true)
         .unwrap();
