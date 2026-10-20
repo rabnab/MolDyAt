@@ -7,9 +7,14 @@ after (#221, plan item G1 in [`refactoring-plan.md`](plan/refactoring-plan.md)).
 ## One command
 
 ```bash
-cargo build --release -p moldyat_wgpu
+cargo build --profile perf -p moldyat_wgpu
 scripts/headless_perf.sh > perf.json        # all scenarios, JSON on stdout
 ```
+
+The `perf` profile (workspace `Cargo.toml`) inherits `release`, including
+`target-cpu=native`, but uses thin LTO and 16 codegen units, so it builds
+much faster than `release` (fat LTO, one codegen unit). Its absolute numbers
+differ slightly from `release`; compare only binaries of the same profile.
 
 Progress goes to stderr. The script's header lists the settings
 (`SCENARIOS`, `STEPS`, `WARMUP`, `RUNS`, `THREADS`, `OUT`, ...). It needs
@@ -75,7 +80,9 @@ Captured from commit `6b50e9e` (the binary reports it; see
 
 - **CPU:** Intel Xeon @ 2.80 GHz, 4 vCPUs (cloud container, shared host)
 - **Threads:** 2 rayon workers (default: cores - 2)
-- **Profile:** `release` (`target-cpu=native`, fat LTO)
+- **Profile:** `release` (`target-cpu=native`, fat LTO), captured before the
+  `perf` profile existed; new runs use `perf`, so their absolute numbers are
+  not directly comparable with this baseline
 - **OS:** Linux 6.18
 
 Median ms/step:
@@ -196,10 +203,10 @@ Older binaries fail at seeding (`Unknown argument: --save-setup`); for those,
 see [Pre-#221 reference](#pre-221-reference).
 
 ```bash
-git switch master && cargo build --release -p moldyat_wgpu
-cp target/release/moldyat /tmp/thermo-base
-git switch my-branch && cargo build --release -p moldyat_wgpu
-scripts/headless_perf.sh /tmp/thermo-base target/release/moldyat > perf.json
+git switch master && cargo build --profile perf -p moldyat_wgpu
+cp target/perf/moldyat /tmp/thermo-base
+git switch my-branch && cargo build --profile perf -p moldyat_wgpu
+scripts/headless_perf.sh /tmp/thermo-base target/perf/moldyat > perf.json
 ```
 
 The report then has two `results` entries per scenario, one for each

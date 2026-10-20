@@ -34,7 +34,7 @@ Use this file as the single source of truth for commands and process rules. Othe
 
 ## Quick build, test and lint commands (explicit)
 
-Toolchain is pinned in `rust-toolchain.toml` (nightly). Use plain `cargo`. Use `--release` only for performance testing.
+Toolchain is pinned in `rust-toolchain.toml` (nightly). Use plain `cargo`. Use `--profile perf` for performance comparisons (`release` with thin LTO, faster to build); use `--release` only to build the optimised binary itself.
 
 - Run a single test (name substring): `cargo test -p moldyat_core test_remove_invalid_balls`
 - Run an exact test name: `cargo test -p moldyat_core test_remove_invalid_balls -- --exact`
@@ -60,7 +60,7 @@ Toolchain is pinned in `rust-toolchain.toml` (nightly). Use plain `cargo`. Use `
 - Movement threshold: a ball rebuilds its Verlet list when its displacement since its last rebuild exceeds skin/3 (`get_min_movement_for_update_hood`). Rebuilds are per ball and asynchronous, so skin/2 is not enough; the drift suite's stale-list check (`missed_neighbor_pairs`) guards this.
 - Cell grid: cells are at least the largest list radius among the species present in the world (`SimulationWorld::species_present`, `CellGrid::list_radius`). Adding a ball of a new species marks the need; `fit_cell_grid` rebuilds the grid before the next neighbour rebuild, when every ball is in its cell. Never rebuild the grid between a position update and the grid moves.
 - Overlap and placement checks use the edge gap of a pair, its centre distance minus its contact distance `σ_ij` (`BallPhysics::edge_gap` / `contact_distance`), which is zero where the pair potential crosses zero, also for an overridden pair. Without an override it equals the gap between contact discs (`σ/2` per ball, `Ball2D::get_edge_distance`). A `σ_ii` override also sets the species' wall contact (`σ_ii / 2`). Balls with NaN positions are invalid and must be removed.
-- SIMD kernels (`simd_forces`) use portable `std::simd` (`f32x4`) without runtime dispatch or multiversioning: the instruction set is fixed at compile time (target baseline in dev, `target-cpu=native` in the release profile). Compare f32 results and drift baselines only between builds for the same target and profile.
+- SIMD kernels (`simd_forces`) use portable `std::simd` (`f32x4`) without runtime dispatch or multiversioning: the instruction set is fixed at compile time (target baseline in dev, `target-cpu=native` in the release and perf profiles). Compare f32 results and drift baselines only between builds for the same target and profile.
 - Parallel physics: Rayon `par_iter()` with read-only neighbor access. Avoid introducing shared mutable state inside force loops.
 - Viewport/coordinate rules: world-space is the canonical simulation space (see `docs/simulation.md`). Renderer flips Y for pixel-space; use `ViewportTransform` helpers.
 - Avoid `unsafe` unless necessary for performance-critical sections; document why and which invariants hold.
