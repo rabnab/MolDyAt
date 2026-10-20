@@ -71,6 +71,14 @@ pub const HEADLESS_OPTIONS: &[OptionHelp] = &[
         help: &["Seeded balls get speeds in 0..V (default 0: at rest)"],
     },
     OptionHelp {
+        names: &["--seed-species"],
+        value: Some("<NAME[:W],...>"),
+        help: &[
+            "Seed a mixture: species of the run's table with weights W",
+            "(default 1), e.g. N2:3,Ar:1; needs --seed-balls",
+        ],
+    },
+    OptionHelp {
         names: &["--dt"],
         value: Some("<SECONDS>"),
         help: &["Time step, 0.000625..=0.16 (default: the simulation default)"],
@@ -128,6 +136,10 @@ pub struct HeadlessConfig {
     /// Meant for performance runs: the net momentum is not removed, so the gas
     /// drifts as a whole.
     pub seed_speed: Option<f32>,
+    /// `--seed-species`: species names and weights of the seeded mixture;
+    /// empty seeds the default species. Checked against the run's species
+    /// table when the world is prepared.
+    pub seed_species: Vec<(String, u32)>,
     /// Time step override; `None` keeps the simulation default.
     pub dt: Option<f32>,
     /// Factor applied to the default world's width and height (around its
@@ -267,6 +279,7 @@ impl Default for HeadlessConfig {
             stdout: true,
             seed_balls: None,
             seed_speed: None,
+            seed_species: Vec::new(),
             dt: None,
             world_scale: None,
             line_segments: Vec::new(),
@@ -406,6 +419,13 @@ fn parse_headless_args_with_args(args: &[String]) -> Result<Option<HeadlessConfi
                     })?;
                 config.seed_speed = Some(speed);
             }
+            "--seed-species" => {
+                i += 1;
+                if i >= args.len() {
+                    return Err(CliError::new("--seed-species requires a value"));
+                }
+                config.seed_species = parse_seed_species(&args[i])?;
+            }
             "--dt" => {
                 i += 1;
                 if i >= args.len() {
@@ -499,6 +519,10 @@ fn parse_headless_args_with_args(args: &[String]) -> Result<Option<HeadlessConfi
         }
     }
 
+    if !config.seed_species.is_empty() && config.seed_balls.is_none() {
+        return Err(CliError::new("--seed-species needs --seed-balls"));
+    }
+
     if config.timing_warmup > 0 && config.timing_warmup >= config.steps {
         return Err(CliError::new("--timing-warmup must be less than --steps"));
     }
@@ -510,6 +534,34 @@ fn parse_headless_args_with_args(args: &[String]) -> Result<Option<HeadlessConfi
     }
 
     Ok(Some(config))
+}
+
+/// `NAME[:WEIGHT],...`: unique names, weights positive integers (default 1).
+fn parse_seed_species(value: &str) -> Result<Vec<(String, u32)>, CliError> {
+    const USAGE: &str = "--seed-species value must be NAME[:WEIGHT],... with weights above 0";
+    let mut mixture: Vec<(String, u32)> = Vec::new();
+    for part in value.split(',').map(str::trim) {
+        let (name, weight) = match part.split_once(':') {
+            Some((name, weight)) => (
+                name.trim(),
+                weight
+                    .trim()
+                    .parse::<u32>()
+                    .map_err(|_| CliError::new(USAGE))?,
+            ),
+            None => (part, 1),
+        };
+        if name.is_empty() || weight == 0 {
+            return Err(CliError::new(USAGE));
+        }
+        if mixture.iter().any(|(n, _)| n == name) {
+            return Err(CliError::new(format!(
+                "--seed-species lists {name} more than once"
+            )));
+        }
+        mixture.push((name.to_string(), weight));
+    }
+    Ok(mixture)
 }
 
 #[cfg(test)]

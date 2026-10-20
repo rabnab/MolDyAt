@@ -217,7 +217,7 @@ fn test_overridden_pairs_in_a_mixed_chunk_match_scalar_pairs() {
     ];
     let physics = BallPhysics::with_pair_overrides(
         PhysicsConstants::default(),
-        SpeciesTable::builtin(),
+        SpeciesTable::builtin_shared(),
         CapSettings::default(),
         overrides,
     );

@@ -103,7 +103,6 @@ mod tests {
                 view_dirty: false,
                 last_snapshot: None,
                 cursor_world_pos: Vec2D::zero(),
-                current_species: crate::objects2d::ball_impl::DEFAULT_SPECIES,
                 metrics: MetricsCollector::new(),
                 active_tool: OperatorTool::None,
                 tool_handler: None,

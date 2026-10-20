@@ -308,3 +308,105 @@ fn every_load_starts_a_new_world_generation() {
     assert_eq!(target.create_snapshot().world_generation, 2);
     let _ = fs::remove_dir_all(store.dir());
 }
+
+/// A config with its own species list: N2 and Ar.
+fn n2_ar_config() -> SimConfig {
+    SimConfig::from_toml(
+        "[[species]]\n\
+         name = \"N2\"\n\
+         sigma_angstrom = 3.698\n\
+         epsilon_kelvin = 95.05\n\
+         mass_u = 28.0134\n\
+         colour = [0.0, 1.0, 1.0]\n\
+         [[species]]\n\
+         name = \"Ar\"\n\
+         sigma_angstrom = 3.405\n\
+         epsilon_kelvin = 119.8\n\
+         mass_u = 39.948\n\
+         colour = [0.6, 0.45, 1.0]\n\
+         source = \"Hirschfelder, Curtiss & Bird (1954)\"\n",
+    )
+    .unwrap()
+}
+
+/// A save carries the run's species list; loading it into a world with the
+/// built-in library switches to that list, for balls, source spheres, the
+/// ball factory and the snapshot.
+#[test]
+fn species_list_survives_a_save_and_load() {
+    let store = SaveStore::new(scratch_dir("species"));
+    let mut source =
+        MainContent::with_config(world_rect(), &n2_ar_config(), Some(5)).expect("create");
+    source
+        .seed_random_mixture(30, 0.0, &[("N2".into(), 2), ("Ar".into(), 1)])
+        .unwrap();
+    source.add_source_sphere(Vec2D::new(-5.0, -5.0));
+    source.world_mut().cycle_source_sphere_species(0);
+    let path = source.save_world(&store).unwrap();
+    let text = fs::read_to_string(path).unwrap();
+    assert!(text.contains("\"species\": \"Ar\""), "balls name Ar");
+    assert!(
+        text.contains("\"ball_species\": \"Ar\""),
+        "the sphere emits Ar"
+    );
+
+    let mut target = empty_world();
+    target
+        .load_world(&store, &LoadSource::Latest, true)
+        .unwrap();
+    assert_eq!(capture(&target), capture(&source));
+    assert_eq!(target.config().species, n2_ar_config().species);
+
+    let world = target.world();
+    let names: Vec<_> = world.species().iter().map(|s| s.name.as_str()).collect();
+    assert_eq!(names, ["N2", "Ar"]);
+    let ar = world.species().by_name("Ar").unwrap();
+    let ar_mass = world.species().species(ar).mass;
+    let ars: Vec<_> = world.balls.iter().filter(|b| b.species() == ar).collect();
+    assert_eq!(ars.len(), 10);
+    assert!(ars.iter().all(|b| b.get_mass() == ar_mass));
+    assert_eq!(world.source_spheres.spheres()[0].ball_species, ar);
+    assert_eq!(target.create_snapshot().species.len(), 2);
+
+    // Cycling the sphere's species wraps within the loaded table.
+    target.world_mut().cycle_source_sphere_species(0);
+    let n2 = target.world().species().by_name("N2").unwrap();
+    assert_eq!(target.world().source_spheres.spheres()[0].ball_species, n2);
+    let _ = fs::remove_dir_all(store.dir());
+}
+
+/// Loading a world with the built-in library after one with its own list
+/// switches the ball factory back.
+#[test]
+fn loading_a_builtin_save_restores_the_builtin_library() {
+    let store = SaveStore::new(scratch_dir("species-back"));
+    busy_world().save_world(&store).unwrap();
+    let mut target = MainContent::with_config(world_rect(), &n2_ar_config(), None).expect("create");
+    target.next_ball_size();
+    target
+        .load_world(&store, &LoadSource::Latest, true)
+        .unwrap();
+    assert_eq!(&**target.world().species(), SpeciesTable::builtin());
+    let snapshot = target.create_snapshot();
+    assert_eq!(
+        snapshot.cursor_species,
+        SpeciesId::new(0),
+        "back to the default"
+    );
+    assert_eq!(&*snapshot.species, SpeciesTable::builtin());
+    let _ = fs::remove_dir_all(store.dir());
+}
+
+/// A load with the same species table keeps the species of new balls.
+#[test]
+fn loading_with_the_same_table_keeps_the_species_of_new_balls() {
+    let store = SaveStore::new(scratch_dir("species-same"));
+    busy_world().save_world(&store).unwrap();
+    let mut target = empty_world();
+    target.next_ball_size();
+    target
+        .load_world(&store, &LoadSource::Latest, true)
+        .unwrap();
+    assert_eq!(target.create_snapshot().cursor_species, SpeciesId::new(1));
+    let _ = fs::remove_dir_all(store.dir());
+}

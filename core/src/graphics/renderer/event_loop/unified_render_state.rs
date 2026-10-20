@@ -27,7 +27,6 @@ use crate::graphics::energy_plot::{EnergyData, SharedEnergyData};
 use crate::graphics::renderer::ViewportTransform;
 use crate::graphics::renderer::margins::Margins;
 use crate::graphics::renderer::state_layers::RendererConfig;
-use crate::objects2d::ball_impl::{DEFAULT_SPECIES, SpeciesId, SpeciesTable};
 use crate::objects2d::wall_chain::ObjectRef;
 use crate::objects2d::{Rect, Vec2D};
 use std::sync::{Arc, Mutex};
@@ -56,7 +55,6 @@ pub(super) struct RenderStateData {
     pub(super) view_dirty: bool,
     pub(super) last_snapshot: Option<Arc<RendererSnapshot>>,
     pub(super) cursor_world_pos: Vec2D,
-    pub(super) current_species: SpeciesId,
     pub(super) metrics: MetricsCollector,
     pub(super) active_tool: OperatorTool,
     pub(super) tool_handler: Option<Box<dyn OperatorToolHandler>>,
@@ -127,7 +125,6 @@ impl UnifiedRenderState {
                 view_dirty: true,
                 last_snapshot: None,
                 cursor_world_pos: Vec2D::zero(),
-                current_species: DEFAULT_SPECIES,
                 metrics: MetricsCollector::new(),
                 active_tool: OperatorTool::None,
                 tool_handler: None,
@@ -168,11 +165,6 @@ impl UnifiedRenderState {
 
     pub fn cursor_world_pos(&self) -> Vec2D {
         self.render.cursor_world_pos
-    }
-
-    /// Species of new balls, for the cursor preview.
-    pub fn current_species(&self) -> SpeciesId {
-        self.render.current_species
     }
 
     pub fn active_tool(&self) -> OperatorTool {
@@ -552,9 +544,10 @@ impl UnifiedRenderState {
 
     /// Cycle to the next ball species.
     ///
-    /// Updates the local species and sends command to physics thread.
+    /// Sends the command to the physics thread, which owns the species of new
+    /// balls; the window reads it back from the snapshot
+    /// (`cursor_species`, `species`).
     pub fn next_ball_size(&mut self) {
-        self.render.current_species = SpeciesTable::builtin().next(self.render.current_species);
         self.physics.send_command(BallCommand::NextSize);
     }
 
@@ -782,7 +775,6 @@ mod tests {
                 view_dirty: false,
                 last_snapshot: None,
                 cursor_world_pos: Vec2D::zero(),
-                current_species: DEFAULT_SPECIES,
                 metrics: MetricsCollector::new(),
                 active_tool: OperatorTool::None,
                 tool_handler: None,
@@ -836,7 +828,6 @@ mod tests {
         let affects_view = state.process_action(InputAction::NextBallSize, None, None);
 
         assert!(!affects_view);
-        assert_eq!(state.render.current_species, SpeciesId::new(1));
         assert!(state.render.view_dirty);
     }
 }

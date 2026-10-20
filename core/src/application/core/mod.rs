@@ -26,11 +26,14 @@ use crate::application::persistence::SaveStore;
 use crate::application::phase_timings::PhaseTimings;
 use crate::application::renderer_snapshot::RendererSnapshot;
 use crate::application::scene_layers::SceneLayers;
+use crate::application::sim_config::SpeciesConfig;
 use crate::application::sim_stats::SimStats;
 use crate::application::thermo_field::ThermoFieldHistory;
 use crate::objects2d::ball_cell::cell_grid::CellGrid;
 use crate::objects2d::ball_impl::simd_forces::KernelPoint;
-use crate::objects2d::ball_impl::{Ball2D, BallPhysics, ForceResult, SpeciesId, SpeciesSet};
+use crate::objects2d::ball_impl::{
+    Ball2D, BallPhysics, ForceResult, SpeciesId, SpeciesSet, SpeciesTable,
+};
 use crate::objects2d::wall_chain::WallChainCollection;
 use crate::objects2d::{
     LineSegmentCollection, Rect, SourceSphereCollection, ThermostatCollection, ValveCollection,
@@ -53,6 +56,9 @@ pub struct SimulationWorld {
     /// World bounds for physics simulation
     pub(crate) world_rect: Rect,
     pub(crate) physics: BallPhysics,
+    /// The `[[species]]` list the table was built from, empty for the
+    /// built-in library: what `MainContent::config` and saves write back.
+    pub(crate) species_config: Vec<SpeciesConfig>,
 
     pub(crate) sim: SimStats,
     pub(crate) balls: Vec<Ball2D>,
@@ -110,6 +116,14 @@ pub struct SimulationWorld {
 }
 
 impl SimulationWorld {
+    /// The species balls of this world can have (`SimConfig::species_table`).
+    /// Owned by the physics, so table and physics cannot diverge; an `Arc`
+    /// because the ball factory and every snapshot for the render thread
+    /// share it.
+    pub(crate) fn species(&self) -> &Arc<SpeciesTable> {
+        self.physics.species()
+    }
+
     #[inline]
     pub(crate) fn neighbor_movement_fault_scale(&self) -> f32 {
         #[cfg(test)]

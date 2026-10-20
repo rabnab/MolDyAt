@@ -61,7 +61,7 @@ impl SimulationWorld {
 
     pub(crate) fn cycle_source_sphere_species(&mut self, sphere_id: usize) {
         if let Some(sphere) = self.source_spheres.find_mut(sphere_id) {
-            sphere.cycle_ball_species();
+            sphere.cycle_ball_species(self.physics.species());
         }
     }
 
@@ -103,12 +103,11 @@ impl SimulationWorld {
                 params.ball_species,
                 velocity,
             );
+            // Margin: the contact radius of the species emitted, not of the
+            // species of new balls (the cursor's).
+            let margin = self.species().species(params.ball_species).contact_radius();
 
-            let _ = self.add_candidate_ball_among(
-                candidate,
-                ball_factory.get_new_ball_radius(),
-                &obstacles,
-            );
+            let _ = self.add_candidate_ball_among(candidate, margin, &obstacles);
         }
     }
 

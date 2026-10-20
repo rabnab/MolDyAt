@@ -14,6 +14,8 @@
 //! Conversions use f64; the simulation stores f32. The parameters are fitted
 //! to 3D gases, so in this 2D simulation the SI values are qualitative.
 
+use crate::objects2d::ball_impl::{N2_EPSILON_KELVIN, N2_MASS_U, N2_SIGMA_ANGSTROM};
+
 /// Boltzmann constant (exact, SI 2019).
 pub const BOLTZMANN_J_PER_K: f64 = 1.380_649e-23;
 /// Atomic mass constant (CODATA 2018).
@@ -41,9 +43,9 @@ impl UnitSystem {
     /// `ε / k_B`, depending on the fitted property; see `docs/units.md`.
     pub const N2: UnitSystem = UnitSystem {
         name: "N2",
-        sigma_angstrom: 3.698,
-        epsilon_kelvin: 95.05,
-        mass_u: 28.0134,
+        sigma_angstrom: N2_SIGMA_ANGSTROM,
+        epsilon_kelvin: N2_EPSILON_KELVIN,
+        mass_u: N2_MASS_U,
         source: "Hirschfelder, Curtiss & Bird (1954), second virial coefficients",
     };
 
@@ -168,10 +170,26 @@ mod tests {
     /// Argon in N₂ units, as listed in `docs/units.md`.
     #[test]
     fn literature_parameters_convert_to_reduced_units() {
-        let (sigma, epsilon, mass) = N2.reduced_lennard_jones(3.405, 122.0, 39.948);
+        let (sigma, epsilon, mass) = N2.reduced_lennard_jones(3.405, 119.8, 39.948);
         approx(sigma as f64, 0.9208, 1e-3);
-        approx(epsilon as f64, 1.2835, 1e-3);
+        approx(epsilon as f64, 1.2604, 1e-3);
         approx(mass as f64, 1.4260, 1e-3);
+    }
+
+    /// The built-in species are converted with this unit system.
+    #[test]
+    fn library_species_use_these_units() {
+        use crate::objects2d::ball_impl::{LIBRARY, SpeciesTable};
+        let table = SpeciesTable::builtin();
+        for lib in &LIBRARY {
+            let s = table.species(table.by_name(lib.name).unwrap());
+            assert_eq!(
+                (s.sigma, s.epsilon, s.mass),
+                N2.reduced_lennard_jones(lib.sigma_angstrom, lib.epsilon_kelvin, lib.mass_u),
+                "{}",
+                lib.name
+            );
+        }
     }
 
     #[test]

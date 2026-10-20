@@ -7,7 +7,6 @@ use super::wgpu_pipelines::{WgpuPipelines, compute_view_proj};
 use crate::wgpu::margins_for_scale_factor;
 use moldyat_core::application::scene_layers::SceneLayers;
 use moldyat_core::graphics::renderer::event_loop::UnifiedRenderState;
-use moldyat_core::objects2d::ball_impl::SpeciesTable;
 use std::time::{Duration, Instant};
 use winit::dpi::PhysicalSize;
 use winit::event_loop::ActiveEventLoop;
@@ -118,8 +117,11 @@ impl FrameRenderer {
                 snapshot,
                 view_proj,
                 cursor_wp,
-                SpeciesTable::builtin()
-                    .get(state.current_species())
+                // The physics thread's species of new balls, looked up in the
+                // world's table (the window's own copy may not know the table).
+                snapshot
+                    .species
+                    .get(snapshot.cursor_species)
                     .map_or(0.0, |s| s.display_radius),
                 show_ball_outline,
                 state.config().thermo_display,

@@ -4,7 +4,8 @@
 
 use crate::application::AppResult;
 use crate::application::sim_config::{MAX_TIME_STEP, MIN_TIME_STEP, check_time_step};
-use crate::objects2d::ball_impl::BallFactory;
+use crate::objects2d::ball_impl::{BallFactory, SpeciesTable};
+use std::sync::Arc;
 
 /// Per-step settings of the physics thread: time step, ball factory and
 /// neighbour update interval.
@@ -15,12 +16,12 @@ pub struct StepConfig {
 }
 
 impl StepConfig {
-    /// Starts at `time_step`; balls are seeded from `seed` if given, else
-    /// from entropy.
-    pub(crate) fn new(time_step: f32, seed: Option<u64>) -> Self {
+    /// Starts at `time_step`; balls are made of `species` (the world's
+    /// table) and seeded from `seed` if given, else from entropy.
+    pub(crate) fn new(time_step: f32, seed: Option<u64>, species: Arc<SpeciesTable>) -> Self {
         StepConfig {
             dt_goal: time_step,
-            ball_factory: seed.map_or_else(BallFactory::new, BallFactory::with_seed),
+            ball_factory: BallFactory::with_species(species, seed),
             neighbour_update_interval: 1,
         }
     }

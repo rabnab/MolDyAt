@@ -25,7 +25,7 @@ MolDyAt was formerly called ThermoSolver (releases up to v1.3.0).
 * **Lennard-Jones potential** with configurable force capping for energy conservation
 * **Verlet neighbor lists** with automatic rebuild based on movement threshold
 * **Spatial partitioning** via cell grid for O(N) neighbor lookups
-* **5 built-in particle species** (sizes XS to XL) with radius-aware interactions
+* **Species library**: N₂ (the unit), Ar, Ne, CH₄, O₂ with literature Lennard-Jones parameters, plus the former size classes XS to XL; a config file can define its own species list (see "Simulation config")
 * **Physics thread** — simulation runs independently from the render loop
 
 ### Operators
@@ -355,7 +355,7 @@ when they are loaded; a save from a newer MolDyAt is rejected with an error.
 ## Simulation config
 
 Settings that are not part of the world (time step, speed limit, force cap and
-cutoff, Verlet skin, snapshot rate) come from a TOML file passed with
+cutoff, Verlet skin, snapshot rate, species) come from a TOML file passed with
 `--config <path>`, in the window and with `--headless`. Every section and key
 is optional: missing ones keep their default, and without `--config` all
 defaults apply, so results are the same as without a config file. Unknown keys
@@ -377,8 +377,8 @@ cutoff_factor = 4.0           # 1.2..10, pair cutoff in units of sigma_ij
 ## Optional, one block per species pair: replaces the mixed sigma_ij and/or
 ## epsilon_ij of that pair (both orders); a missing value keeps the mixed one.
 # [[potential.pair_override]]
-# a = "N2"                    # species names: N2, XS, S, M, L, XL
-# b = "XS"
+# a = "N2"                    # species names of the run's table (see [[species]])
+# b = "Ar"
 # sigma = 1.1                 # 0.5..8
 # epsilon = 1.2               # 0.1..10
 
@@ -387,11 +387,33 @@ skin_factor = 0.2             # 0.01..1, Verlet skin as a share of the N2 cutoff
 
 [display]
 snapshot_interval_us = 16667  # 1000..1000000, least time between two frames sent to the window
+
+## Optional: the species of the run. Without [[species]] the built-in library
+## applies: N2, the former size classes XS, S, M, L, XL, and Ar, Ne, CH4, O2.
+## With it, exactly the listed species, in this order; the first is the
+## default for new balls. Literature single-site Lennard-Jones values; N2
+## (3.698 A, 95.05 K, 28.0134 u) is the unit.
+# [[species]]
+# name = "N2"                 # unique; saves and pair overrides use it
+# sigma_angstrom = 3.698      # 1.849..29.584
+# epsilon_kelvin = 95.05      # 9.505..950.5
+# mass_u = 28.0134            # 1.40..2801.34
+# colour = [0.0, 1.0, 1.0]    # RGB or RGBA, each 0..1
+# source = "Hirschfelder, Curtiss & Bird (1954)"   # optional
+# [[species]]
+# name = "Ar"
+# sigma_angstrom = 3.405
+# epsilon_kelvin = 119.8
+# mass_u = 39.948
+# colour = [0.6, 0.45, 1.0]
+# display_radius_angstrom = 1.7   # optional, drawing only; default sigma / 2
 ```
 
 ```bash
 cargo run -p moldyat_wgpu -- --config my-run.toml
 cargo run -p moldyat_wgpu -- --headless --config my-run.toml --dt 0.005 --steps 1000
+# N2 + Ar mixture, 1:1, from the species of my-run.toml (or the built-in library)
+cargo run -p moldyat_wgpu -- --headless --config my-run.toml --seed-balls 400 --seed-species N2,Ar --rng-seed 1
 ```
 
 A save stores the config of the run in its `config` section, and loading the
@@ -400,8 +422,9 @@ written before the config existed load with the defaults. Builds from before
 the config ignore it and run such a save with the defaults; a build that does
 not know a key in a save's `config` refuses to load it; pair overrides are
 written only when there are any, so other saves stay loadable for builds from
-before them. A `[species]`
-section for the species library will follow (#237).
+before them. The same holds for `[[species]]`: a save of a run with its own
+species list carries that list and loads with it; other saves name species of
+the built-in library.
 
 ## Releases & Versioning
 

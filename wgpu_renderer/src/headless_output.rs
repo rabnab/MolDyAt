@@ -7,7 +7,6 @@ use moldyat_core::application::renderer_snapshot::{
     OperatorSnapshot, RendererSnapshot, ThermoGridSpec,
 };
 use moldyat_core::application::thermo_field::ThermoGrid;
-use moldyat_core::objects2d::ball_impl::SpeciesTable;
 use serde_json::json;
 use std::fs::File;
 use std::io::{self, BufWriter, Write};
@@ -146,7 +145,7 @@ pub(crate) const SCHEMA_VERSION: &str = "headless.v2";
 /// Records are newline-delimited JSON objects with a `schema_version` and `record_kind`.
 /// Consumers should treat unknown `record_kind` values and unknown fields as forward-compatible.
 fn run_start_to_jsonl(config: &HeadlessConfig, snapshot: &RendererSnapshot) -> String {
-    json!({
+    let mut record = json!({
         "schema_version": SCHEMA_VERSION,
         "record_kind": "run_start",
         "config": {
@@ -194,8 +193,16 @@ fn run_start_to_jsonl(config: &HeadlessConfig, snapshot: &RendererSnapshot) -> S
             "operator_counts": operator_counts(&snapshot.operators),
             "world_rect": world_rect_to_json(&snapshot.cell_grid_bounds),
         },
-    })
-    .to_string()
+    });
+    // Only with `--seed-species`, so runs without it keep their bytes.
+    if !config.seed_species.is_empty() {
+        record["config"]["seed_species"] = config
+            .seed_species
+            .iter()
+            .map(|(name, weight)| json!({ "species": name, "weight": weight }))
+            .collect();
+    }
+    record.to_string()
 }
 
 /// World bounds, so `--line-segment` coordinates can be chosen from a run.
@@ -244,7 +251,8 @@ fn frame_to_jsonl_with_config(
             .map(|ball| {
                 json!({
                     "id": ball.id,
-                    "species": SpeciesTable::builtin()
+                    "species": snapshot
+                        .species
                         .get(ball.species)
                         .map(|s| s.name.as_str()),
                     "position": {

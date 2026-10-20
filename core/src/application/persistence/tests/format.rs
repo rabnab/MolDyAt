@@ -46,6 +46,26 @@ fn rejects_unknown_species() {
     assert!(error_text(&file).contains("unknown species"));
 }
 
+/// With a `[[species]]` list in its config, a file may only use those.
+#[test]
+fn rejects_species_missing_from_the_files_species_list() {
+    let mut file = sample_file();
+    let config = SimConfig::from_toml(
+        "[[species]]\nname = \"Ar\"\nsigma_angstrom = 3.405\nepsilon_kelvin = 119.8\n\
+         mass_u = 39.948\ncolour = [0.6, 0.45, 1.0]\n",
+    )
+    .unwrap();
+    file.config = Some(SimConfig {
+        integration: file.sim_config().integration,
+        ..config
+    });
+    file.balls[0].species = "N2".to_string();
+    assert!(error_text(&file).contains("unknown species"));
+    file.balls[0].species = "Ar".to_string();
+    file.source_spheres.clear();
+    file.validate().expect("Ar is in the list");
+}
+
 #[test]
 fn rejects_non_finite_ball_values() {
     let mut file = sample_file();

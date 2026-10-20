@@ -11,11 +11,18 @@ use crate::application::sim_config::*;
 use crate::error::AppError;
 use crate::objects2d::Rect;
 use crate::objects2d::ball_impl::pair_potential::PairOverride;
-use crate::objects2d::ball_impl::{BallPhysics, SpeciesTable};
+use crate::objects2d::ball_impl::{BallPhysics, DEFAULT_SPECIES, SpeciesTable};
 use std::time::Duration;
 
 fn rect() -> Rect {
     Rect::new(-50.0, 40.0, 100.0, -80.0)
+}
+
+/// The message of the error that rejects `text`, unescaped.
+fn error_message(text: &str) -> String {
+    let AppError::CustomError(message) =
+        SimConfig::from_toml(text).expect_err("config must be rejected");
+    message
 }
 
 fn error_text(text: &str) -> String {
@@ -379,8 +386,8 @@ fn no_pair_overrides_are_not_written() {
 fn invalid_pair_overrides_are_rejected() {
     for (pairs, expected) in [
         (
-            vec![pair("N2", "Ar", Some(1.1), None)],
-            "potential.pair_override[0].b: unknown species \"Ar\" (known: N2, XS, S, M, L, XL)",
+            vec![pair("N2", "Kr", Some(1.1), None)],
+            "potential.pair_override[0].b: unknown species \"Kr\" (known: N2, XS, S, M, L, XL, Ar, Ne, CH4, O2)",
         ),
         (
             vec![pair("n2", "N2", Some(1.1), None)],
@@ -468,4 +475,198 @@ fn readme_pair_override_example_is_valid() {
         .join("\n");
     let config = SimConfig::from_toml(&uncommented).unwrap();
     assert_eq!(config.potential.pair_overrides.len(), 1, "{uncommented}");
+    let names: Vec<_> = config.species.iter().map(|s| s.name.as_str()).collect();
+    assert_eq!(names, ["N2", "Ar"], "{uncommented}");
+}
+
+// ── [[species]] (#237) ───────────────────────────────────────────────
+
+const N2_AR: &str = "[[species]]\n\
+     name = \"N2\"\n\
+     sigma_angstrom = 3.698\n\
+     epsilon_kelvin = 95.05\n\
+     mass_u = 28.0134\n\
+     colour = [0.0, 1.0, 1.0]\n\
+     source = \"Hirschfelder, Curtiss & Bird (1954)\"\n\
+     [[species]]\n\
+     name = \"Ar\"\n\
+     sigma_angstrom = 3.405\n\
+     epsilon_kelvin = 119.8\n\
+     mass_u = 39.948\n\
+     colour = [0.6, 0.45, 1.0, 0.5]\n\
+     display_radius_angstrom = 1.849\n";
+
+#[test]
+fn species_list_replaces_the_table() {
+    let config = SimConfig::from_toml(N2_AR).unwrap();
+    let table = config.species_table().unwrap();
+    let names: Vec<_> = table.iter().map(|s| s.name.as_str()).collect();
+    assert_eq!(names, ["N2", "Ar"]);
+    let n2 = table.species(table.by_name("N2").unwrap());
+    assert_eq!(n2, SpeciesTable::builtin().species(DEFAULT_SPECIES));
+    let ar = table.species(table.by_name("Ar").unwrap());
+    let builtin_ar = SpeciesTable::builtin().by_name("Ar").unwrap();
+    let builtin_ar = SpeciesTable::builtin().species(builtin_ar);
+    assert_eq!(
+        (ar.sigma, ar.epsilon, ar.mass),
+        (builtin_ar.sigma, builtin_ar.epsilon, builtin_ar.mass),
+        "same literature values as the library"
+    );
+    assert_eq!(ar.colour, [0.6, 0.45, 1.0, 0.5]);
+    assert_eq!(ar.display_radius, 0.5, "1.849 Å is half the N2 sigma");
+    assert_eq!(n2.colour[3], 1.0, "RGB gets an opaque alpha");
+}
+
+#[test]
+fn without_species_the_builtin_library_applies() {
+    let table = SimConfig::default().species_table().unwrap();
+    assert_eq!(&*table, SpeciesTable::builtin());
+    for name in ["N2", "XS", "S", "M", "L", "XL", "Ar", "Ne", "CH4", "O2"] {
+        assert!(table.by_name(name).is_some(), "{name}");
+    }
+}
+
+/// The world, its new balls and `config()` follow the species list.
+#[test]
+fn main_content_runs_with_its_species() {
+    let config = SimConfig::from_toml(N2_AR).unwrap();
+    let mut mc = MainContent::with_config(rect(), &config, Some(3)).unwrap();
+    assert_eq!(mc.config(), config, "config() returns the list as given");
+    mc.seed_random_mixture(40, 0.0, &[("N2".into(), 1), ("Ar".into(), 1)])
+        .unwrap();
+    let snapshot = mc.create_snapshot();
+    let count = |name: &str| {
+        let id = snapshot.species.by_name(name).unwrap();
+        snapshot.balls.iter().filter(|b| b.species == id).count()
+    };
+    assert_eq!((count("N2"), count("Ar")), (20, 20));
+    let ar = config.species_table().unwrap();
+    let ar = ar.species(ar.by_name("Ar").unwrap()).clone();
+    for ball in mc.world().balls.iter().filter(|b| b.species().index() == 1) {
+        assert_eq!(ball.get_mass(), ar.mass);
+        assert_eq!(ball.get_contact_radius(), ar.contact_radius());
+    }
+    let AppError::CustomError(error) = mc
+        .seed_random_mixture(1, 0.0, &[("XS".into(), 1)])
+        .expect_err("XS is not in the list");
+    assert!(
+        error.contains("unknown species \"XS\" (known: N2, Ar)"),
+        "{error}"
+    );
+}
+
+#[test]
+fn species_entries_need_every_required_key() {
+    for key in [
+        "name",
+        "sigma_angstrom",
+        "epsilon_kelvin",
+        "mass_u",
+        "colour",
+    ] {
+        let text: String = N2_AR
+            .lines()
+            .take(7)
+            .filter(|line| !line.starts_with(&format!("{key} =")))
+            .map(|line| format!("{line}\n"))
+            .collect();
+        let error = error_message(&text);
+        assert!(
+            error.contains(&format!("missing field `{key}`")),
+            "{key}: {error}"
+        );
+    }
+}
+
+#[test]
+fn invalid_species_entries_are_rejected() {
+    let entry = |name: &str, sigma: f64, epsilon: f64, mass: f64, colour: &str| {
+        format!(
+            "[[species]]\nname = \"{name}\"\nsigma_angstrom = {sigma}\n\
+             epsilon_kelvin = {epsilon}\nmass_u = {mass}\ncolour = {colour}\n"
+        )
+    };
+    let ok = entry("N2", 3.698, 95.05, 28.0134, "[0.0, 1.0, 1.0]");
+    for (text, expected) in [
+        (
+            entry("", 3.698, 95.05, 28.0134, "[0.0, 1.0, 1.0]"),
+            "species[0].name must not be empty",
+        ),
+        (
+            format!("{ok}{ok}"),
+            "species[1].name \"N2\" is used twice (first in species[0])",
+        ),
+        (
+            entry("Tiny", 1.0, 95.05, 28.0134, "[0.0, 1.0, 1.0]"),
+            "species[0].sigma_angstrom must be within 1.8490..=29.5840, got 1",
+        ),
+        (
+            entry("Hot", 3.698, 5000.0, 28.0134, "[0.0, 1.0, 1.0]"),
+            "species[0].epsilon_kelvin must be within",
+        ),
+        (
+            entry("Light", 3.698, 95.05, 1.0, "[0.0, 1.0, 1.0]"),
+            "species[0].mass_u must be within",
+        ),
+        (
+            entry("Nan", f64::NAN, 95.05, 28.0134, "[0.0, 1.0, 1.0]").replace("NaN", "nan"),
+            "species[0].sigma_angstrom must be within",
+        ),
+        (
+            entry("Grey", 3.698, 95.05, 28.0134, "[0.5, 0.5]"),
+            "species[0].colour needs 3 (RGB) or 4 (RGBA) values, got 2",
+        ),
+        (
+            entry("Bright", 3.698, 95.05, 28.0134, "[2.0, 0.5, 0.5]"),
+            "species[0].colour values must be within 0..=1",
+        ),
+        (
+            format!("{ok}display_radius_angstrom = 0.0\n"),
+            "species[0].display_radius_angstrom must be within",
+        ),
+        (format!("{ok}radius = 1.0\n"), "unknown field `radius`"),
+    ] {
+        let error = error_message(&text);
+        assert!(error.contains(expected), "expected {expected:?} in {error}");
+    }
+}
+
+#[test]
+fn a_species_table_holds_at_most_64_species() {
+    let entry = |i: usize| {
+        format!(
+            "[[species]]\nname = \"S{i}\"\nsigma_angstrom = 3.698\n\
+             epsilon_kelvin = 95.05\nmass_u = 28.0134\ncolour = [1.0, 1.0, 1.0]\n"
+        )
+    };
+    let text = |n: usize| (0..n).map(entry).collect::<String>();
+    assert!(SimConfig::from_toml(&text(64)).is_ok());
+    assert!(error_message(&text(65)).contains("at most 64"));
+}
+
+/// Pair overrides name species of the config's own table.
+#[test]
+fn pair_overrides_resolve_against_the_species_list() {
+    let ok = format!("{N2_AR}[[potential.pair_override]]\na = \"N2\"\nb = \"Ar\"\nsigma = 1.0\n");
+    let config = SimConfig::from_toml(&ok).unwrap();
+    let resolved = config.validated_species().unwrap();
+    assert_eq!(resolved.pair_overrides.len(), 1);
+    assert_eq!(resolved.table.len(), 2);
+
+    let missing =
+        format!("{N2_AR}[[potential.pair_override]]\na = \"N2\"\nb = \"XS\"\nsigma = 1.0\n");
+    assert!(
+        error_message(&missing)
+            .contains("potential.pair_override[0].b: unknown species \"XS\" (known: N2, Ar)")
+    );
+}
+
+#[test]
+fn no_species_are_not_written() {
+    let json = serde_json::to_string(&SimConfig::default()).unwrap();
+    assert!(!json.contains("species"), "{json}");
+    let config = SimConfig::from_toml(N2_AR).unwrap();
+    let json = serde_json::to_string(&config).unwrap();
+    let back: SimConfig = serde_json::from_str(&json).unwrap();
+    assert_eq!(back, config);
 }

@@ -121,6 +121,7 @@ fn seeded_headless_output() -> String {
         dt: None,
         world_scale: None,
         seed_speed: None,
+        seed_species: Vec::new(),
         line_segments: Vec::new(),
         valves: Vec::new(),
         timings: None,
@@ -826,4 +827,96 @@ fn test_dt_flag_overrides_the_sim_config() {
     .expect("prepare");
     assert_eq!(application.time_step(), 0.005);
     assert_eq!(application.config().integration.time_step, 0.005);
+}
+
+/// The species of a `[[species]]` config, N2 + Ar.
+fn n2_ar_sim_config() -> SimConfig {
+    SimConfig::from_toml(
+        "[[species]]\n\
+         name = \"N2\"\n\
+         sigma_angstrom = 3.698\n\
+         epsilon_kelvin = 95.05\n\
+         mass_u = 28.0134\n\
+         colour = [0.0, 1.0, 1.0]\n\
+         [[species]]\n\
+         name = \"Ar\"\n\
+         sigma_angstrom = 3.405\n\
+         epsilon_kelvin = 119.8\n\
+         mass_u = 39.948\n\
+         colour = [0.6, 0.45, 1.0]\n",
+    )
+    .expect("valid config")
+}
+
+fn mixture_run() -> String {
+    let config = HeadlessConfig {
+        steps: 60,
+        snapshot_every: 30,
+        detail: DetailLevel::Balls,
+        rng_seed: Some(11),
+        seed_balls: Some(60),
+        seed_speed: Some(0.5),
+        seed_species: vec![("N2".to_string(), 1), ("Ar".to_string(), 2)],
+        ..HeadlessConfig::default()
+    };
+    let application = prepare_application(
+        &config,
+        &n2_ar_sim_config(),
+        test_world_rect(),
+        &SaveStore::new("saves"),
+        None,
+    )
+    .expect("prepare");
+    headless_output(config, application).0
+}
+
+/// An N2 + Ar mixture from a config's species list runs, keeps its 1:2
+/// split, names both species in the per-ball records and is reproducible.
+#[test]
+fn test_mixture_from_the_config_species_runs_reproducibly() {
+    let output = mixture_run();
+    assert_eq!(output, mixture_run(), "same seed, same bytes");
+    let records = parse_jsonl_records(&output);
+    let run_start = &records[0];
+    assert_eq!(
+        run_start["config"]["seed_species"],
+        serde_json::json!([
+            {"species": "N2", "weight": 1},
+            {"species": "Ar", "weight": 2},
+        ])
+    );
+    let frames: Vec<_> = records
+        .iter()
+        .filter(|r| r["record_kind"] == "frame")
+        .collect();
+    assert_eq!(frames.len(), 3);
+    for frame in frames {
+        let balls = frame["balls"].as_array().expect("balls detail");
+        let count = |name: &str| balls.iter().filter(|b| b["species"] == name).count();
+        assert_eq!(
+            (count("N2"), count("Ar")),
+            (20, 40),
+            "step {}",
+            frame["step"]
+        );
+    }
+}
+
+#[test]
+fn test_seed_species_must_be_in_the_runs_table() {
+    let config = HeadlessConfig {
+        seed_balls: Some(5),
+        seed_species: vec![("XS".to_string(), 1)],
+        ..HeadlessConfig::default()
+    };
+    let error = prepare_application(
+        &config,
+        &n2_ar_sim_config(),
+        test_world_rect(),
+        &SaveStore::new("saves"),
+        None,
+    )
+    .err()
+    .expect("XS is not in the config's species");
+    assert!(error.to_string().contains("unknown species"), "{error}");
 }

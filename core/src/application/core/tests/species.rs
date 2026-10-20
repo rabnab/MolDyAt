@@ -211,7 +211,7 @@ fn overridden_pairs_conserve_energy() {
     ];
     let physics = BallPhysics::with_pair_overrides(
         PhysicsConstants::default(),
-        SpeciesTable::builtin(),
+        SpeciesTable::builtin_shared(),
         CapSettings::default(),
         overrides,
     );
@@ -287,7 +287,7 @@ fn contact_distance_is_the_pair_sigma() {
     let (n2, xs, m) = (species("N2"), species("XS"), species("M"));
     let physics = BallPhysics::with_pair_overrides(
         PhysicsConstants::default(),
-        builtin,
+        SpeciesTable::builtin_shared(),
         CapSettings::default(),
         vec![
             PairOverride {

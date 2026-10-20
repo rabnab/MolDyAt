@@ -44,6 +44,7 @@ the last step even when the interval does not divide the step count.
 | `--rng-seed <N>` | Seed for reproducible runs |
 | `--seed-balls <N>` | Place up to N random balls before the first step |
 | `--seed-speed <V>` | Seeded balls get speeds uniform in `0..V` in random directions (default 0: at rest); net momentum is not removed |
+| `--seed-species <NAME[:W],...>` | Seed a mixture of species of the run's table (the `--config` file's `[[species]]`, or the built-in library) with integer weights `W` (default 1), e.g. `N2:3,Ar:1`; needs `--seed-balls`. Species are assigned in a fixed interleaved order (each ball gets the species furthest behind its share), so no extra random numbers are drawn |
 | `--dt <SECONDS>` | Time step, `0.000625..=0.16` (the range the `+` / `-` keys keep to; default: the simulation default, or the `--config` file's); also overrides a loaded save's |
 | `--world-scale <F>` | Scale the default world's width and height by F around its centre |
 | `--line-segment <x1,y1,x2,y2[,t]>` | Add a wall in world coordinates, thickness 1..20 (default 1); repeatable |
@@ -79,7 +80,7 @@ unchanged.
 
 | `record_kind` | When | Contents |
 |---|---|---|
-| `run_start` | once, first | `config` (steps, snapshot interval, format, detail level, RNG seed, seeding, world scale, dt, walls and valves) and `initial` (step, time, ball count, gravity, operator counts, world rectangle) |
+| `run_start` | once, first | `config` (steps, snapshot interval, format, detail level, RNG seed, seeding, world scale, dt, walls and valves; `seed_species` as `[{species, weight}]` only with `--seed-species`) and `initial` (step, time, ball count, gravity, operator counts, world rectangle) |
 | `frame` | step 0, every interval, last step | step, time, kinetic and potential energy, `delta_energy` from the step-0 frame, ball count, gravity, physics FPS, operator counts, plus the detail sections |
 | `run_end` | once, last | final step and time, number of frames written, final ball count, operator counts |
 

@@ -32,7 +32,40 @@ impl MainContent {
     /// and draws no extra random numbers, so it matches `seed_random_balls`.
     /// The centre-of-mass velocity is not removed.
     pub fn seed_random_balls_with_speed(&mut self, count: usize, max_speed: f32) {
-        self.add_random_candidates_with_speed(count, max_speed);
+        self.add_random_candidates_with_speed(count, max_speed, &[]);
+    }
+
+    /// Like [`Self::seed_random_balls_with_speed`], with a mixture of species:
+    /// `mixture` lists species names of the world's table with their relative
+    /// weights. Species are assigned in a fixed interleaved order (each new
+    /// ball gets the species furthest behind its share), so no extra random
+    /// numbers are drawn and a seeded run stays reproducible. An empty
+    /// `mixture` seeds the species of new balls.
+    pub fn seed_random_mixture(
+        &mut self,
+        count: usize,
+        max_speed: f32,
+        mixture: &[(String, u32)],
+    ) -> AppResult {
+        let mut resolved = Vec::with_capacity(mixture.len());
+        for (name, weight) in mixture {
+            let species = self.world.species();
+            let id = species.by_name(name).ok_or_else(|| {
+                let known: Vec<&str> = species.iter().map(|s| s.name.as_str()).collect();
+                AppError::CustomError(format!(
+                    "unknown species \"{name}\" (known: {})",
+                    known.join(", ")
+                ))
+            })?;
+            if *weight == 0 {
+                return Err(AppError::CustomError(format!(
+                    "species \"{name}\" needs a weight above 0"
+                )));
+            }
+            resolved.push((id, *weight));
+        }
+        self.add_random_candidates_with_speed(count, max_speed, &resolved);
+        Ok(())
     }
     /// Remove all balls from simulation and reset ID counter.
     /// Clears both balls vector and all cells in the grid.
@@ -55,12 +88,29 @@ impl MainContent {
     /// # Arguments
     /// * `count` - Target number of balls to add
     pub(crate) fn add_random_candidates(&mut self, count: usize) {
-        self.add_random_candidates_with_speed(count, 0.0);
+        self.add_random_candidates_with_speed(count, 0.0, &[]);
     }
 
-    fn add_random_candidates_with_speed(&mut self, count: usize, max_speed: f32) {
+    /// `mixture`: species and weights (see [`Self::seed_random_mixture`]);
+    /// empty seeds the species of new balls.
+    fn add_random_candidates_with_speed(
+        &mut self,
+        count: usize,
+        max_speed: f32,
+        mixture: &[(SpeciesId, u32)],
+    ) {
         let time_step = self.step_config.get_time_step();
-        let cur_radius = self.step_config.get_ball_factory().get_new_ball_radius();
+        let new_ball_species = self.step_config.get_ball_factory().new_ball_species();
+        let cur_radius = if mixture.is_empty() {
+            self.step_config.get_ball_factory().get_new_ball_radius()
+        } else {
+            mixture
+                .iter()
+                .map(|&(id, _)| self.world.species().species(id).contact_radius())
+                .fold(0.0, f32::max)
+        };
+        let total_weight: u64 = mixture.iter().map(|&(_, w)| u64::from(w)).sum();
+        let mut placed_per_species = vec![0u64; mixture.len()];
 
         let world = self.world.world_region_inset(cur_radius);
         let min_pos = &(world.get_tl().into());
@@ -74,16 +124,33 @@ impl MainContent {
         let mut balls_added = 0;
         let max_attempts = count * 4;
         for _ in 0..max_attempts {
-            let nu_ball = self
-                .step_config
-                .get_ball_factory()
-                .create_random((min_pos, max_pos), (0.0, max_speed));
+            // The species furthest behind its share of the balls placed so
+            // far (plus this one); ties go to the first listed.
+            let pick = (!mixture.is_empty()).then(|| {
+                let placed = balls_added as u64 + 1;
+                (0..mixture.len())
+                    .max_by_key(|&i| {
+                        let target = u64::from(mixture[i].1) * placed;
+                        let have = placed_per_species[i] * total_weight;
+                        (target as i128 - have as i128, std::cmp::Reverse(i))
+                    })
+                    .expect("mixture is not empty")
+            });
+            let species = pick.map_or(new_ball_species, |i| mixture[i].0);
+            let nu_ball = self.step_config.get_ball_factory().create_random(
+                species,
+                (min_pos, max_pos),
+                (0.0, max_speed),
+            );
             let margin = self.world.equilibrium_gap(nu_ball.species());
             if self
                 .world
                 .add_candidate_ball_indexed(nu_ball, margin, &obstacles, &mut index)
                 .is_ok()
             {
+                if let Some(i) = pick {
+                    placed_per_species[i] += 1;
+                }
                 balls_added += 1;
                 if balls_added >= count {
                     break;

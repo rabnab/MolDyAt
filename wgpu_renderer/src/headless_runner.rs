@@ -238,8 +238,14 @@ pub fn prepare_application(
             })?;
     }
     if let Some(seed_balls) = config.seed_balls {
-        application
-            .seed_random_balls_with_speed(seed_balls as usize, config.seed_speed.unwrap_or(0.0));
+        let speed = config.seed_speed.unwrap_or(0.0);
+        if config.seed_species.is_empty() {
+            application.seed_random_balls_with_speed(seed_balls as usize, speed);
+        } else {
+            application
+                .seed_random_mixture(seed_balls as usize, speed, &config.seed_species)
+                .map_err(|error| io::Error::other(format!("--seed-species: {error:?}")))?;
+        }
     }
     Ok(application)
 }

@@ -11,7 +11,6 @@ use crate::application::sim_config::{
 };
 use crate::application::sim_stats::{HIGH_GRAVITY, NORMAL_GRAVITY, is_normal_gravity};
 use crate::objects2d::Rect;
-use crate::objects2d::ball_impl::SpeciesTable;
 use crate::objects2d::operator::{is_degenerate, remap_point};
 use std::time::Duration;
 
@@ -198,7 +197,7 @@ impl MainContent {
                 pair_overrides: physics
                     .pair_overrides()
                     .iter()
-                    .map(|o| PairOverrideConfig::named(o, SpeciesTable::builtin()))
+                    .map(|o| PairOverrideConfig::named(o, physics.species()))
                     .collect(),
                 ..PotentialConfig::from(*physics.cap_settings())
             },
@@ -208,6 +207,7 @@ impl MainContent {
             display: DisplayConfig {
                 snapshot_interval_us: self.runtime.snapshot_interval_us,
             },
+            species: self.world.species_config.clone(),
         }
     }
 

@@ -7,13 +7,20 @@ use crate::objects2d::ball_impl::ball_core::Ball2D;
 use crate::objects2d::ball_impl::species::{DEFAULT_SPECIES, SpeciesId, SpeciesTable};
 use crate::objects2d::vec_2d::Vec2D;
 use std::cell::{Cell, RefCell};
+use std::sync::Arc;
 
 use rand::rngs::{StdRng, SysRng};
 use rand::{RngExt, SeedableRng};
 use rand_distr::{Distribution, Normal};
 
-/// Factory for creating Ball2D instances with various configurations
+/// Factory for creating Ball2D instances with various configurations.
+///
+/// It owns the species table of the world it makes balls for (injected at
+/// construction, swapped only through [`Self::use_species`]), so
+/// `new_ball_species` always indexes that table.
 pub struct BallFactory {
+    /// The world's species table: mass and contact radius of new balls.
+    species: RefCell<Arc<SpeciesTable>>,
     next_id: RefCell<usize>,
     new_ball_species: Cell<SpeciesId>,
     rng: RefCell<StdRng>,
@@ -21,38 +28,54 @@ pub struct BallFactory {
 
 const FIRST_BALL_ID: usize = 1;
 
+/// A factory for the built-in species table, seeded from entropy.
 impl Default for BallFactory {
     fn default() -> Self {
-        BallFactory {
-            next_id: RefCell::new(FIRST_BALL_ID),
-            new_ball_species: Cell::new(DEFAULT_SPECIES),
-            rng: RefCell::new(StdRng::try_from_rng(&mut SysRng).unwrap()),
-        }
+        Self::with_species(SpeciesTable::builtin_shared(), None)
     }
 }
 
 impl BallFactory {
+    /// [`Self::default`].
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Create a factory with deterministic RNG state from a fixed seed.
+    /// A factory for the built-in species table with deterministic RNG state
+    /// from a fixed seed.
     pub fn with_seed(seed: u64) -> Self {
+        Self::with_species(SpeciesTable::builtin_shared(), Some(seed))
+    }
+
+    /// A factory for balls of `species` (the world's table); its RNG is
+    /// seeded from `seed` if given, else from entropy.
+    pub fn with_species(species: Arc<SpeciesTable>, seed: Option<u64>) -> Self {
+        let rng = match seed {
+            Some(seed) => StdRng::seed_from_u64(seed),
+            None => StdRng::try_from_rng(&mut SysRng).unwrap(),
+        };
         BallFactory {
+            species: RefCell::new(species),
             next_id: RefCell::new(FIRST_BALL_ID),
             new_ball_species: Cell::new(DEFAULT_SPECIES),
-            rng: RefCell::new(StdRng::seed_from_u64(seed)),
+            rng: RefCell::new(rng),
         }
     }
 
-    fn table() -> &'static SpeciesTable {
-        SpeciesTable::builtin()
+    /// Make balls of `species` from now on (the world was loaded or
+    /// replaced). New balls go back to the default species if the table
+    /// differs, so `new_ball_species` always indexes the factory's table.
+    pub(crate) fn use_species(&self, species: Arc<SpeciesTable>) {
+        if **self.species.borrow() != *species {
+            self.new_ball_species.set(DEFAULT_SPECIES);
+        }
+        *self.species.borrow_mut() = species;
     }
 
-    /// Switch new balls to the next species.
+    /// Switch new balls to the next species of the table.
     pub(crate) fn next_species(&self) {
-        self.new_ball_species
-            .set(Self::table().next(self.new_ball_species.get()));
+        let next = self.species.borrow().next(self.new_ball_species.get());
+        self.new_ball_species.set(next);
     }
 
     /// The species of new balls.
@@ -62,7 +85,8 @@ impl BallFactory {
 
     /// Contact radius (`σ / 2`) of the species of new balls.
     pub(crate) fn get_new_ball_radius(&self) -> f32 {
-        Self::table()
+        self.species
+            .borrow()
             .species(self.new_ball_species.get())
             .contact_radius()
     }
@@ -71,7 +95,12 @@ impl BallFactory {
     pub(crate) fn create_basic(&self, pos: impl Into<Vec2D>, species: SpeciesId) -> Ball2D {
         let id = *self.next_id.borrow();
         *self.next_id.borrow_mut() += 1;
-        Self::restore(id, species, pos.into(), Vec2D::zero())
+        Ball2D::of_species(
+            id,
+            pos.into(),
+            species,
+            self.species.borrow().species(species),
+        )
     }
 
     /// Creates a ball with specified mass and initial velocity
@@ -99,12 +128,19 @@ impl BallFactory {
     /// Position is uniformly distributed, velocity has random direction.
     ///
     /// # Arguments
+    /// * `species` - Species of the ball, of the factory's table (callers
+    ///   pass it explicitly instead of changing the species of new balls)
     /// * `pos_range` - Min and max position bounds (x and y)
     /// * `velocity_range` - Speed range (min, max)
     ///
     /// # Returns
     /// New ball with random position and velocity
-    pub fn create_random(&self, pos_range: (&Vec2D, &Vec2D), velocity_range: (f32, f32)) -> Ball2D {
+    pub fn create_random(
+        &self,
+        species: SpeciesId,
+        pos_range: (&Vec2D, &Vec2D),
+        velocity_range: (f32, f32),
+    ) -> Ball2D {
         let mut rng = self.rng.borrow_mut();
 
         let min_x = f32::min(pos_range.0.x, pos_range.1.x);
@@ -125,7 +161,7 @@ impl BallFactory {
             Vec2D::zero()
         };
 
-        self.create_massive_with_velocity(pos, velocity)
+        self.create_with_species_and_velocity(pos, species, velocity)
     }
 
     /// A direction angle in `0..TAU` from the factory's RNG, so a seeded
@@ -198,14 +234,6 @@ impl BallFactory {
     /// Resets the ID counter - useful for testing or when creating new simulation
     pub fn reset_id_counter(&self) {
         *self.next_id.borrow_mut() = FIRST_BALL_ID;
-    }
-
-    /// A ball with a given id (e.g. from a save): radius and mass follow from
-    /// `species`. Does not touch the id counter; see [`Self::continue_after`].
-    pub(crate) fn restore(id: BallId, species: SpeciesId, pos: Vec2D, velocity: Vec2D) -> Ball2D {
-        let mut ball = Ball2D::new(id, pos, species);
-        ball.v = velocity;
-        ball
     }
 
     /// Continue numbering after every id in `ids` (the balls of a loaded world).
@@ -291,10 +319,47 @@ mod tests {
         let factory = BallFactory::new();
         let pos_range = (&Vec2D::new(0.0, 0.0), &Vec2D::new(10.0, 10.0));
         let velocity_range = (0.0, 5.0);
-        let ball = factory.create_random(pos_range, velocity_range);
+        let ball = factory.create_random(DEFAULT_SPECIES, pos_range, velocity_range);
 
         // Check if values are within ranges
         assert!(ball.get_position().x >= pos_range.0.x && ball.get_position().x <= pos_range.1.x);
         assert!(ball.get_position().y >= pos_range.0.y && ball.get_position().y <= pos_range.1.y);
+    }
+}
+
+#[cfg(test)]
+mod species_tests {
+    use super::*;
+    use crate::objects2d::ball_impl::Species;
+
+    fn two_species() -> Arc<SpeciesTable> {
+        Arc::new(SpeciesTable::new(vec![
+            Species::new("A", 2.0, 1.0, 1.0, [1.0; 4]),
+            Species::new("B", 3.0, 2.0, 1.0, [1.0; 4]),
+        ]))
+    }
+
+    /// Balls take mass and radius from the injected table.
+    #[test]
+    fn balls_follow_the_injected_table() {
+        let factory = BallFactory::with_species(two_species(), Some(1));
+        factory.next_species();
+        let ball = factory.create_massive_with_velocity(Vec2D::zero(), Vec2D::zero());
+        assert_eq!((ball.get_mass(), ball.get_contact_radius()), (3.0, 1.0));
+        factory.next_species();
+        assert_eq!(factory.new_ball_species(), DEFAULT_SPECIES, "wraps at 2");
+    }
+
+    /// `use_species` keeps the species of new balls for the same table and
+    /// resets it for another one.
+    #[test]
+    fn use_species_resets_the_species_of_new_balls_only_for_another_table() {
+        let factory = BallFactory::new();
+        factory.next_species();
+        factory.use_species(SpeciesTable::builtin_shared());
+        assert_eq!(factory.new_ball_species(), SpeciesId::new(1));
+        factory.use_species(two_species());
+        assert_eq!(factory.new_ball_species(), DEFAULT_SPECIES);
+        assert_eq!(factory.get_new_ball_radius(), 0.5);
     }
 }

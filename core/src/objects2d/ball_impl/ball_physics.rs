@@ -11,6 +11,7 @@ use crate::objects2d::ball_impl::species::{
 };
 use crate::objects2d::ball_impl::wall_law::{HardContact, WallLaw};
 use crate::objects2d::ball_impl::{Ball2D, Named};
+use std::sync::Arc;
 
 /// Physics settings that do not belong to the pair potential; they may change
 /// while the simulation runs. The force cap and cutoff live in the potential
@@ -52,6 +53,10 @@ pub const DEFAULT_SKIN_FACTOR: f32 = 0.2;
 #[derive(Clone)]
 pub struct BallPhysics {
     pub constants: PhysicsConstants,
+    /// The species table every per-species array below is built from. The
+    /// one owner of the world's table: the world, the ball factory and the
+    /// snapshots read it from here, so physics and table cannot diverge.
+    species: Arc<SpeciesTable>,
     pair_potential: Potential,
     /// The pairs of `pair_potential` that do not follow the mixing rule.
     pair_overrides: Vec<PairOverride>,
@@ -65,6 +70,9 @@ pub struct BallPhysics {
     species_count: usize,
 }
 
+/// The built-in species with the default caps. Test builds only: a world's
+/// physics is built from its config's table.
+#[cfg(test)]
 impl Default for BallPhysics {
     fn default() -> Self {
         BallPhysics::new(
@@ -79,7 +87,7 @@ impl BallPhysics {
     /// Lennard-Jones between every pair of `species` (Lorentz–Berthelot
     /// mixing), capped and cut off per `cap`, and hard wall contacts.
     pub fn new(constants: PhysicsConstants, species: &SpeciesTable, cap: CapSettings) -> Self {
-        Self::with_pair_overrides(constants, species, cap, Vec::new())
+        Self::with_pair_overrides(constants, Arc::new(species.clone()), cap, Vec::new())
     }
 
     /// [`Self::new`], with the pairs in `overrides` taking their `σ_ij` /
@@ -88,10 +96,11 @@ impl BallPhysics {
     /// the species' wall contact.
     pub fn with_pair_overrides(
         constants: PhysicsConstants,
-        species: &SpeciesTable,
+        species_table: Arc<SpeciesTable>,
         cap: CapSettings,
         overrides: Vec<PairOverride>,
     ) -> Self {
+        let species = &*species_table;
         let wall_law = HardContact;
         let sigma_override = |a: SpeciesId, b: SpeciesId| {
             overrides
@@ -122,6 +131,7 @@ impl BallPhysics {
             .collect();
         BallPhysics {
             constants,
+            species: Arc::clone(&species_table),
             pair_potential: Potential::lennard_jones(species, cap, &overrides),
             pair_overrides: overrides,
             skin_factor: DEFAULT_SKIN_FACTOR,
@@ -137,6 +147,11 @@ impl BallPhysics {
     pub fn with_skin_factor(mut self, skin_factor: f32) -> Self {
         self.skin_factor = skin_factor;
         self
+    }
+
+    /// The species table the physics was built from (the world's).
+    pub fn species(&self) -> &Arc<SpeciesTable> {
+        &self.species
     }
 
     pub fn skin_factor(&self) -> f32 {

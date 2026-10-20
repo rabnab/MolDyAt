@@ -7,7 +7,10 @@ pub use self::ball_physics::*;
 // Re-export core components for external use
 #[cfg(test)]
 pub(crate) use self::species::SPECIES_M;
-pub use self::species::{DEFAULT_SPECIES, Species, SpeciesId, SpeciesSet, SpeciesTable};
+pub use self::species::{
+    DEFAULT_SPECIES, LIBRARY, LibrarySpecies, N2_EPSILON_KELVIN, N2_MASS_U, N2_SIGMA_ANGSTROM,
+    Species, SpeciesId, SpeciesSet, SpeciesTable,
+};
 pub use crate::objects2d::ball_impl::ball_core::Ball2D;
 
 use std::sync::atomic::{AtomicUsize, Ordering};

@@ -6,11 +6,11 @@ use super::{BallPhysics, CellGrid, MainContent, SimStats, SimulationWorld};
 use crate::application::AppResult;
 use crate::application::StepConfig;
 use crate::application::scene_layers::SceneLayers;
-use crate::application::sim_config::SimConfig;
+use crate::application::sim_config::{ResolvedSpecies, SimConfig};
 use crate::application::thermo_field::ThermoFieldHistory;
 use crate::graphics::renderer::{Margins, ViewportTransform};
 use crate::objects2d::Rect;
-use crate::objects2d::ball_impl::{PhysicsConstants, SpeciesSet, SpeciesTable};
+use crate::objects2d::ball_impl::{PhysicsConstants, SpeciesSet};
 use arc_swap::ArcSwapOption;
 use std::sync::Arc;
 
@@ -40,9 +40,14 @@ impl MainContent {
     /// An empty world run with `config` (validated first); balls are seeded
     /// from `seed` if given.
     pub fn with_config(world_rect: Rect, config: &SimConfig, seed: Option<u64>) -> AppResult<Self> {
+        let world = SimulationWorld::with_config(world_rect, config)?;
         Ok(Self {
-            world: SimulationWorld::with_config(world_rect, config)?,
-            step_config: StepConfig::new(config.integration.time_step, seed),
+            step_config: StepConfig::new(
+                config.integration.time_step,
+                seed,
+                Arc::clone(world.species()),
+            ),
+            world,
             runtime: super::PhysicsRuntimeState {
                 snapshot_slot: Arc::new(ArcSwapOption::from(None)),
                 wait_time: 0,
@@ -59,14 +64,30 @@ impl MainContent {
 impl SimulationWorld {
     /// An empty world: no balls, no operators, physics per `config`, not
     /// paused. Fails if `config` is invalid: checking it
-    /// (`SimConfig::validated_pair_overrides`) also resolves its pair
-    /// overrides, in one pass.
+    /// (`SimConfig::validated_species`) also builds its species table and
+    /// resolves its pair overrides, in one pass.
     pub(crate) fn with_config(world_rect: Rect, config: &SimConfig) -> AppResult<Self> {
+        let resolved = config.validated_species()?;
+        Self::with_resolved(world_rect, config, resolved)
+    }
+
+    /// [`Self::with_config`] for a `config` that was already validated, with
+    /// its species table and pair overrides resolved as `resolved` (by
+    /// `SimConfig::validated_species` or `WorldFile::validate`).
+    pub(crate) fn with_resolved(
+        world_rect: Rect,
+        config: &SimConfig,
+        resolved: ResolvedSpecies,
+    ) -> AppResult<Self> {
+        let ResolvedSpecies {
+            table,
+            pair_overrides,
+        } = resolved;
         let physics = BallPhysics::with_pair_overrides(
             PhysicsConstants::default(),
-            SpeciesTable::builtin(),
+            table,
             config.potential.cap_settings(),
-            config.validated_pair_overrides()?,
+            pair_overrides,
         )
         .with_skin_factor(config.neighbours.skin_factor);
         let species_present = SpeciesSet::default();
@@ -74,6 +95,7 @@ impl SimulationWorld {
         Ok(Self {
             balls: Vec::new(),
             physics,
+            species_config: config.species.clone(),
             cell_grid,
             species_present,
             world_rect,
