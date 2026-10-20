@@ -36,7 +36,7 @@ Artifacts: `test-results` (JUnit), `headless-regression-log` (on failure), `drif
 - **`DRIFT_WARNING` annotations:** a passing metric above 70 % of its threshold. Not a failure, but the PR must explain it if the PR moved it.
 
 ## Platform and infrastructure
-- f32 results depend on the SIMD target: CI's dev profile on x86_64 uses SSE2; local `release` builds use `target-cpu=native`. Compare like with like before suspecting a regression.
+- f32 results depend on the SIMD target: CI's dev profile on x86_64 uses SSE2; local `release` and `perf` builds use `target-cpu=native`. Compare like with like before suspecting a regression.
 - Windows (MSVC) can produce different `sin`/`cos`/`exp` bits; fixture tests may fail there without a behaviour change. CI's test job runs on Linux.
 - `gpu_smoke.rs` is skipped on runners without a GPU adapter; a pipeline bug can pass CI.
 - Cache or sccache trouble, network errors installing tools, or runner cancellation: rerun with `gh run rerun <run-id> --failed`, once. If it fails the same way again, it is not infrastructure.

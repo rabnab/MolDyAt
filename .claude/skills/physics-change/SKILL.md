@@ -36,7 +36,7 @@ A change to the force or potential needs a new or updated energy test. A new phy
 ## When results change
 Intended trajectory changes (new potential, step order, summation order) move the drift baselines and the headless fixtures.
 
-1. Run `cargo ci-test-drift` on `master` and on the branch with the same target and profile, and collect the `DRIFT_SCENARIO` / `DRIFT_CONVERGENCE` lines. `simd_forces` is compiled for the build target (`dev`: baseline SSE2/NEON; `release`: `target-cpu=native`), so compare only like with like.
+1. Run `cargo ci-test-drift` on `master` and on the branch with the same target and profile, and collect the `DRIFT_SCENARIO` / `DRIFT_CONVERGENCE` lines. `simd_forces` is compiled for the build target (`dev`: baseline SSE2/NEON; `release` and `perf`: `target-cpu=native`), so compare only like with like.
 2. Thresholds change only with an intentional behaviour change. Follow `docs/drift-test.md` (Changing thresholds): margin 1.5–2x the new baseline, per scenario and metric, and the PR table with old/new thresholds and baselines.
 3. Add an entry to "Baseline history" in `docs/drift-test.md` and update the scenario table.
 4. Refresh the fixtures only after the drift suite is understood: `UPDATE_HEADLESS_FIXTURE=1 cargo ci-test-headless-regression`, then rerun without the variable. Refresh on x86_64 Linux with the dev profile, as CI does; never on Windows, where `sin`/`cos`/`exp` can give different bits. Include the fixture diff in the PR (details in the `headless-contract` skill).

@@ -179,7 +179,7 @@ cargo run -p moldyat_wgpu -- --version
 ```bash
 # Performance baseline: fixed seeded scenarios, one JSON report with ms/step
 # per phase. See docs/perf-baseline.md for scenarios and comparing branches.
-cargo build --release -p moldyat_wgpu && scripts/headless_perf.sh > perf.json
+cargo build --profile perf -p moldyat_wgpu && scripts/headless_perf.sh > perf.json
 ```
 
 ```bash

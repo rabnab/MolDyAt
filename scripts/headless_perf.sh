@@ -14,7 +14,7 @@
 #
 # Usage: scripts/headless_perf.sh [BINARY...]
 #   Compare builds by passing several binaries, e.g. a baseline and a new one.
-#   Default: target/release/moldyat (build with cargo build --release).
+#   Default: target/perf/moldyat (build with cargo build --profile perf).
 # Environment:
 #   SCENARIOS       scenarios to run (default "dilute dense walls_valves box_walls large")
 #   STEPS           steps per run, warmup included (default 300)
@@ -40,7 +40,7 @@ SEED=${SEED:-1}
 CACHE_DIR=${CACHE_DIR:-target/perf-worlds}
 OUT=${OUT:-}
 
-[ "$#" -gt 0 ] || set -- target/release/moldyat
+[ "$#" -gt 0 ] || set -- target/perf/moldyat
 
 # Seeding arguments per scenario. The default world is 112 x 62; --world-scale
 # multiplies both sides. Changing a scenario changes its cache key, but the

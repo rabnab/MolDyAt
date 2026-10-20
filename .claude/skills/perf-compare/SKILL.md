@@ -9,16 +9,16 @@ Background, scenarios and the committed baseline are in `docs/perf-baseline.md`.
 
 ## Rules
 - Compare two binaries **in one invocation** of `scripts/headless_perf.sh`; they alternate within each round, so host load hits both. Never compare runs from different days or machines, and never compare your numbers with `docs/perf-baseline.json` unless you are on the machine recorded there.
-- Both binaries must be built for the same target and profile (`--release`, which uses `target-cpu=native`) and include #221 (they need `--timings`, `--load`, `--save-setup`).
+- Both binaries must be built for the same target and profile (`--profile perf`: `release` with `target-cpu=native`, but thin LTO and 16 codegen units, so it builds much faster) and include #221 (they need `--timings`, `--load`, `--save-setup`). Never time the dev profile: overflow checks, debug assertions, no LTO and the SSE2-only SIMD path distort hot-path numbers.
 - A change is real only when it exceeds the `spread_pct` of **both** binaries. On shared or cloud hosts, treat differences below about 10 % as noise.
 - Performance work must not change results: the drift suite and headless fixtures stay green (see the `physics-change` skill if results move).
 
 ## Procedure
 ```bash
-git switch master && cargo build --release -p moldyat_wgpu
-cp target/release/moldyat "$TMPDIR/moldyat-base"
-git switch <branch> && cargo build --release -p moldyat_wgpu
-scripts/headless_perf.sh "$TMPDIR/moldyat-base" target/release/moldyat > perf.json
+git switch master && cargo build --profile perf -p moldyat_wgpu
+cp target/perf/moldyat "$TMPDIR/moldyat-base"
+git switch <branch> && cargo build --profile perf -p moldyat_wgpu
+scripts/headless_perf.sh "$TMPDIR/moldyat-base" target/perf/moldyat > perf.json
 ```
 - Progress goes to stderr; the JSON report (`headless-perf.v2`) to stdout or `OUT`.
 - Narrow or tighten a run with environment variables: `SCENARIOS` (`dilute dense walls_valves box_walls large`), `STEPS` (300), `WARMUP` (50), `RUNS` (5), `THREADS` (default cores - 2), `SNAPSHOT_EVERY` (10). For short scenarios use e.g. `SCENARIOS=dilute STEPS=1000 RUNS=9`. Pin `THREADS` when comparing on a busy machine.
