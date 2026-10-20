@@ -147,8 +147,9 @@ fn cell_border_world(cells_x: f32, cells_y: f32) -> MainContent {
     let xl = largest_species();
     let range = physics.list_radius(xl, xl);
     let (w, h) = (cells_x * range, cells_y * range);
-    let mut main_content = MainContent::new_with_seed(Rect::new(0.0, h, w, -h), 606)
-        .expect("Could not create cell-border world");
+    let mut main_content =
+        crate::application::core::tests::new_main_content_seeded(Rect::new(0.0, h, w, -h), 606)
+            .expect("Could not create cell-border world");
     main_content.world_mut().speed_limit_override = Some(f32::INFINITY);
     main_content
 }

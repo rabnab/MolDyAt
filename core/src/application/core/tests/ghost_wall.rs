@@ -14,7 +14,8 @@ use crate::objects2d::line_segment::GhostWall;
 use crate::objects2d::{Rect, Vec2D};
 
 fn make_content() -> MainContent {
-    MainContent::new(Rect::new(-20.0, 20.0, 40.0, -40.0)).expect("create MainContent")
+    crate::application::core::tests::new_main_content(Rect::new(-20.0, 20.0, 40.0, -40.0))
+        .expect("create MainContent")
 }
 
 /// Horizontal ghost along y = 0 from x = -10 to 10, thickness 1 (half 0.5).

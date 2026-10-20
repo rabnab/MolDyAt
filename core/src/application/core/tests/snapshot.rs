@@ -12,7 +12,8 @@ use crate::objects2d::ball_impl::{BallFactory, DEFAULT_SPECIES};
 
 fn create_test_main_content_with_balls(ball_count: usize) -> MainContent {
     let world_rect = crate::objects2d::Rect::new(0.0, 0.0, 100.0, 100.0);
-    let mut main_content = MainContent::new(world_rect).expect("Could not create main content");
+    let mut main_content = crate::application::core::tests::new_main_content(world_rect)
+        .expect("Could not create main content");
 
     let factory = BallFactory::new();
 
@@ -325,7 +326,8 @@ fn dropping_the_thermo_layer_stops_and_clears_the_thermo_fields() {
 
 fn seeded_gas(seed: u64, balls: usize) -> MainContent {
     let world_rect = crate::objects2d::Rect::new(-40.0, 40.0, 80.0, -80.0);
-    let mut mc = MainContent::new_with_seed(world_rect, seed).expect("main content");
+    let mut mc = crate::application::core::tests::new_main_content_seeded(world_rect, seed)
+        .expect("main content");
     mc.seed_random_balls_with_speed(balls, 3.0);
     mc.world_mut().sim.set_pause(false);
     mc

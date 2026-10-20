@@ -31,6 +31,7 @@ mod verbose;
 
 use crate::application::MainContent;
 use crate::application::sim_config::SimConfig;
+use crate::error::AppResult;
 use crate::graphics::renderer::ViewportTransform;
 use crate::graphics::renderer::margins::Margins;
 use crate::objects2d::Rect;
@@ -45,6 +46,17 @@ fn test_config() -> SimConfig {
     config
 }
 
+/// A world built with [`test_config`]. Core tests build their worlds here,
+/// not with `MainContent::new`, so they run at `DT_GOAL` whatever the default.
+fn new_main_content(world_rect: Rect) -> AppResult<MainContent> {
+    MainContent::with_config(world_rect, &test_config(), None)
+}
+
+/// [`new_main_content`] with seeded random placement.
+fn new_main_content_seeded(world_rect: Rect, seed: u64) -> AppResult<MainContent> {
+    MainContent::with_config(world_rect, &test_config(), Some(seed))
+}
+
 fn create_main_content_for_region(tl_x: f32, tl_y: f32) -> (MainContent, ViewportTransform) {
     let world = Rect::new(tl_x, tl_y, 100.0, -100.0);
     let transform = ViewportTransform::new(world, (800.0, 600.0), Margins::symmetric(50.0, 50.0));
@@ -55,8 +67,7 @@ fn create_main_content_with_world(
     transform: ViewportTransform,
 ) -> (MainContent, ViewportTransform) {
     let world_rect = transform.world_bounds();
-    let main_content = MainContent::with_config(world_rect, &test_config(), None)
-        .expect("Could not create main content");
+    let main_content = new_main_content(world_rect).expect("Could not create main content");
 
     println!("Created main content with world rect {:?}", world_rect,);
     (main_content, transform)

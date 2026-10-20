@@ -7,13 +7,17 @@ use crate::objects2d::operator::MAX_EMIT_PERIOD;
 use crate::objects2d::{OperatorCollection, OperatorState, Rect, Vec2D};
 
 fn make_content() -> MainContent {
-    MainContent::new(Rect::new(-20.0, 20.0, 40.0, -40.0)).unwrap()
+    crate::application::core::tests::new_main_content(Rect::new(-20.0, 20.0, 40.0, -40.0)).unwrap()
 }
 
 /// Positions and velocities (as bits) of the balls an emitting source sphere
 /// produced in a world seeded with `seed`.
 fn emitted_ball_state(seed: u64) -> Vec<[u32; 4]> {
-    let mut mc = MainContent::new_with_seed(Rect::new(-20.0, 20.0, 40.0, -40.0), seed).unwrap();
+    let mut mc = crate::application::core::tests::new_main_content_seeded(
+        Rect::new(-20.0, 20.0, 40.0, -40.0),
+        seed,
+    )
+    .unwrap();
     mc.add_source_sphere(Vec2D::new(0.0, 0.0));
     let id = mc.world().source_spheres.spheres()[0].id;
     mc.toggle_source_sphere(id);

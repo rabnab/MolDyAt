@@ -81,7 +81,7 @@ pub const HEADLESS_OPTIONS: &[OptionHelp] = &[
     OptionHelp {
         names: &["--dt"],
         value: Some("<SECONDS>"),
-        help: &["Time step, 0.000625..=0.16 (default: the simulation default)"],
+        help: &["Time step, 0.0003125..=0.08 (default: the simulation default)"],
     },
     OptionHelp {
         names: &["--world-scale"],

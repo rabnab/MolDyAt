@@ -45,7 +45,7 @@ the last step even when the interval does not divide the step count.
 | `--seed-balls <N>` | Place up to N random balls before the first step |
 | `--seed-speed <V>` | Seeded balls get speeds uniform in `0..V` in random directions (default 0: at rest); net momentum is not removed |
 | `--seed-species <NAME[:W],...>` | Seed a mixture of species of the run's table (the `--config` file's `[[species]]`, or the built-in library) with integer weights `W` (default 1), e.g. `N2:3,Ar:1`; needs `--seed-balls`. Species are assigned in a fixed interleaved order (each ball gets the species furthest behind its share), so no extra random numbers are drawn |
-| `--dt <SECONDS>` | Time step, `0.000625..=0.16` (the range the `+` / `-` keys keep to; default: the simulation default, or the `--config` file's); also overrides a loaded save's |
+| `--dt <SECONDS>` | Time step, `0.0003125..=0.08` (the range the `+` / `-` keys keep to; default: the simulation default, or the `--config` file's); also overrides a loaded save's |
 | `--world-scale <F>` | Scale the default world's width and height by F around its centre |
 | `--line-segment <x1,y1,x2,y2[,t]>` | Add a wall in world coordinates, thickness 1..20 (default 1); repeatable |
 | `--valve <wall,t0,t1[,open\|closed]>` | Cut a valve into `--line-segment` number `wall` (0-based) over fractions `t0..t1` of its length; one per wall, default open |

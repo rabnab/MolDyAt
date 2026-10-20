@@ -814,7 +814,7 @@ fn test_dt_flag_overrides_the_sim_config() {
     let mut sim_config = SimConfig::default();
     sim_config.integration.time_step = 0.02;
     let config = HeadlessConfig {
-        dt: Some(0.005),
+        dt: Some(0.0025),
         ..HeadlessConfig::default()
     };
     let application = prepare_application(
@@ -825,8 +825,8 @@ fn test_dt_flag_overrides_the_sim_config() {
         None,
     )
     .expect("prepare");
-    assert_eq!(application.time_step(), 0.005);
-    assert_eq!(application.config().integration.time_step, 0.005);
+    assert_eq!(application.time_step(), 0.0025);
+    assert_eq!(application.config().integration.time_step, 0.0025);
 }
 
 /// The species of a `[[species]]` config, N2 + Ar.

@@ -9,7 +9,10 @@ use crate::objects2d::ball_impl::{Ball2D, SPECIES_M};
 
 /// Helper: create a MainContent with no balls and a default world.
 fn make_content() -> MainContent {
-    MainContent::new(crate::objects2d::Rect::new(-20.0, 20.0, 40.0, -40.0)).unwrap()
+    crate::application::core::tests::new_main_content(crate::objects2d::Rect::new(
+        -20.0, 20.0, 40.0, -40.0,
+    ))
+    .unwrap()
 }
 
 #[test]

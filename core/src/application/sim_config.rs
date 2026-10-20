@@ -64,9 +64,10 @@ pub const DEFAULT_SNAPSHOT_INTERVAL_US: u64 = 16_667;
 // crawl (one huge cell, every ball rebuilding every step) or freeze the window.
 
 /// Time steps the `+` / `-` keys stay within; a config, `--dt` and a save
-/// must too. Above the maximum the sloped core (`core_stiffness`) is unstable.
-pub const MIN_TIME_STEP: f32 = 0.000_625;
-pub const MAX_TIME_STEP: f32 = 0.16;
+/// must too: the default ÷16 to ×16. Above the maximum the sloped core
+/// (`core_stiffness`) gets close to its stability limit.
+pub const MIN_TIME_STEP: f32 = 0.000_312_5;
+pub const MAX_TIME_STEP: f32 = 0.08;
 pub const MIN_SPEED_LIMIT_FACTOR: f32 = 0.01;
 pub const MAX_SPEED_LIMIT_FACTOR: f32 = 10.0;
 pub const MIN_MAX_FORCE: f32 = 1.0;
