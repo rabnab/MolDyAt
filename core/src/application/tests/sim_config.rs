@@ -520,7 +520,7 @@ fn species_list_replaces_the_table() {
 #[test]
 fn without_species_the_builtin_library_applies() {
     let table = SimConfig::default().species_table().unwrap();
-    assert_eq!(&table, SpeciesTable::builtin());
+    assert_eq!(&*table, SpeciesTable::builtin());
     for name in ["N2", "XS", "S", "M", "L", "XL", "Ar", "Ne", "CH4", "O2"] {
         assert!(table.by_name(name).is_some(), "{name}");
     }

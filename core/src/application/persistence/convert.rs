@@ -23,7 +23,7 @@ impl WorldFile {
     pub(crate) fn capture(mc: &MainContent) -> Self {
         let world = mc.world();
         let config = mc.config();
-        let species = &*world.species;
+        let species = &**world.species();
         Self {
             version: WORLD_FILE_VERSION,
             world_rect: world.world_rect,
@@ -61,10 +61,11 @@ impl TryFrom<&WorldFile> for SimulationWorld {
     /// physics of its config. Neighbour lists are not built yet; that needs
     /// the run settings (see `MainContent::load_world`).
     fn try_from(file: &WorldFile) -> AppResult<Self> {
-        file.validate()?;
-        let mut world = SimulationWorld::with_config(file.world_rect, &file.sim_config())?;
+        let resolved = file.validate()?;
+        let mut world =
+            SimulationWorld::with_resolved(file.world_rect, &file.sim_config(), resolved)?;
         world.physics.constants.gravity = file.gravity;
-        let species = Arc::clone(&world.species);
+        let species = Arc::clone(world.species());
         world.balls = file
             .balls
             .iter()

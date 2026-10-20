@@ -7,8 +7,8 @@ use std::sync::Arc;
 use crate::application::MainContent;
 use crate::application::renderer_snapshot::get_special_ball_color;
 use crate::objects2d::Vec2D;
-use crate::objects2d::ball_impl::BallFactory;
 use crate::objects2d::ball_impl::SpeciesTable;
+use crate::objects2d::ball_impl::{BallFactory, DEFAULT_SPECIES};
 
 fn create_test_main_content_with_balls(ball_count: usize) -> MainContent {
     let world_rect = crate::objects2d::Rect::new(0.0, 0.0, 100.0, 100.0);
@@ -19,7 +19,7 @@ fn create_test_main_content_with_balls(ball_count: usize) -> MainContent {
     // Add balls
     for _ in 0..ball_count {
         let ball = factory.create_random(
-            SpeciesTable::builtin(),
+            DEFAULT_SPECIES,
             (&Vec2D::new(0.0, 0.0), &Vec2D::new(10.0, 10.0)),
             (0.0, 1.0),
         );

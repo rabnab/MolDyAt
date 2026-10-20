@@ -34,12 +34,7 @@ impl XorShift {
 }
 
 fn ball(factory: &BallFactory, x: f32, y: f32, species: SpeciesId) -> Ball2D {
-    factory.create_with_species_and_velocity(
-        SpeciesTable::builtin(),
-        Vec2D::new(x, y),
-        species,
-        Vec2D::zero(),
-    )
+    factory.create_with_species_and_velocity(Vec2D::new(x, y), species, Vec2D::zero())
 }
 
 /// The medium species, for the hand-placed cases.

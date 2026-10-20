@@ -3,7 +3,9 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::objects2d::Rect;
-use crate::objects2d::ball_impl::species::{DEFAULT_SPECIES, Species, SpeciesId, SpeciesTable};
+#[cfg(test)]
+use crate::objects2d::ball_impl::species::{DEFAULT_SPECIES, SpeciesTable};
+use crate::objects2d::ball_impl::species::{Species, SpeciesId};
 use crate::objects2d::ball_impl::verlet::Verlet;
 use crate::objects2d::ball_impl::wall_contact::{
     NormalPosition, WallContact, resolve_normal_position,
@@ -74,34 +76,24 @@ pub struct Ball2D {
     pub leaving_wall: bool,
 }
 
+/// A ball of the built-in default species (`N2`) at the origin. Test builds
+/// only: a world's balls come from its species table (see
+/// [`Ball2D::of_species`]).
+#[cfg(test)]
 impl Default for Ball2D {
     fn default() -> Ball2D {
-        let species = SpeciesTable::builtin().species(DEFAULT_SPECIES);
-        Ball2D {
-            contact_radius: species.contact_radius(),
-            species: DEFAULT_SPECIES,
-            pos: Vec2D::zero(),
-            id: 0,
-            mass: species.mass,
-            v: Vec2D::zero(),
-            hood: Verlet::default(),
-            verbose: VerboseInfo::default(),
-            braking: false,
-            pre_update_pos: Vec2D::zero(),
-            accel: Vec2D::zero(),
-            last_update_hood_pos: Vec2D::new(f32::INFINITY, f32::INFINITY),
-            tail: None,
-            show_update_count: 0,
-            current_cell: None,
-            leaving_wall: false,
-        }
+        let mut ball = Ball2D::new(0, Vec2D::zero(), DEFAULT_SPECIES);
+        ball.pre_update_pos = Vec2D::zero();
+        ball.last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
+        ball
     }
 }
 
 impl Ball2D {
     /// A ball of a built-in `species` at rest, with its mass and contact
-    /// radius. Sets pre_update_pos and last_update_hood_pos to the initial
-    /// position.
+    /// radius. Test builds only: production code builds balls from the
+    /// world's table with [`Self::of_species`].
+    #[cfg(test)]
     pub fn new(id: BallId, pos: Vec2D, species: SpeciesId) -> Ball2D {
         Self::of_species(id, pos, species, SpeciesTable::builtin().species(species))
     }
@@ -111,14 +103,22 @@ impl Ball2D {
     /// last_update_hood_pos to the initial position.
     pub fn of_species(id: BallId, pos: Vec2D, species: SpeciesId, data: &Species) -> Ball2D {
         Ball2D {
-            id,
-            pos,
-            species,
             contact_radius: data.contact_radius(),
+            species,
+            pos,
+            id,
             mass: data.mass,
+            v: Vec2D::zero(),
+            hood: Verlet::default(),
+            verbose: VerboseInfo::default(),
+            braking: false,
             pre_update_pos: pos,
+            accel: Vec2D::zero(),
             last_update_hood_pos: pos,
-            ..Ball2D::default()
+            tail: None,
+            show_update_count: 0,
+            current_cell: None,
+            leaving_wall: false,
         }
     }
 

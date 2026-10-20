@@ -15,7 +15,6 @@ use super::create_main_content_for_region;
 use crate::application::MainContent;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::BallFactory;
-use crate::objects2d::ball_impl::SpeciesTable;
 
 /// Top-left corner of the 100 x 100 world: it spans y = -5..95, so every
 /// height stays small and f32 position rounding does not drift the energy.
@@ -45,8 +44,7 @@ fn dropped_ball(on_wall: bool, height: f32) -> (MainContent, f32) {
     main_content.world_mut().speed_limit_override = Some(f32::INFINITY);
     main_content.world_mut().physics.constants.gravity = GRAVITY;
     let factory = BallFactory::new();
-    let probe =
-        factory.create_massive_with_velocity(SpeciesTable::builtin(), Vec2D::zero(), Vec2D::zero());
+    let probe = factory.create_massive_with_velocity(Vec2D::zero(), Vec2D::zero());
     let radius = probe.contact_radius;
 
     let surface_y = if on_wall {
@@ -59,11 +57,8 @@ fn dropped_ball(on_wall: bool, height: f32) -> (MainContent, f32) {
         y0.min(y1) + radius
     };
 
-    let ball = factory.create_massive_with_velocity(
-        SpeciesTable::builtin(),
-        Vec2D::new(0.3, surface_y + height),
-        Vec2D::new(0.7, 0.0),
-    );
+    let ball = factory
+        .create_massive_with_velocity(Vec2D::new(0.3, surface_y + height), Vec2D::new(0.7, 0.0));
     main_content.world_mut().add_ball_and_register(ball);
     main_content.collect_neighbours_by_cell(super::DT_GOAL);
     (main_content, surface_y)
@@ -146,11 +141,7 @@ fn ball_among_walls(
     main_content.world_mut().speed_limit_override = Some(f32::INFINITY);
     main_content.world_mut().physics.constants.gravity = GRAVITY;
     add_walls(&mut main_content);
-    let ball = BallFactory::new().create_massive_with_velocity(
-        SpeciesTable::builtin(),
-        position,
-        velocity,
-    );
+    let ball = BallFactory::new().create_massive_with_velocity(position, velocity);
     main_content.world_mut().add_ball_and_register(ball);
     main_content.collect_neighbours_by_cell(super::DT_GOAL);
     main_content

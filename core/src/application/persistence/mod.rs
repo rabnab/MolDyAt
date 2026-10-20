@@ -80,7 +80,6 @@ pub use store::SaveStore;
 use crate::application::core::SimulationWorld;
 use crate::application::{AppResult, MainContent};
 use crate::objects2d::Rect;
-use crate::objects2d::ball_impl::DEFAULT_SPECIES;
 use std::path::PathBuf;
 
 /// Which save to load.
@@ -125,15 +124,11 @@ impl MainContent {
         self.runtime_mut()
             .set_snapshot_interval_us(config.display.snapshot_interval_us);
 
-        let same_table = world.species == self.world().species;
         *self.world_mut() = world;
         self.runtime_mut().next_world_generation();
         let (world, step_config) = self.world_and_step_config();
         let factory = step_config.get_ball_factory();
-        if !same_table {
-            // The species of new balls indexes the old table.
-            factory.set_new_ball_species(DEFAULT_SPECIES);
-        }
+        factory.use_species(std::sync::Arc::clone(world.species()));
         factory.continue_after(world.balls.iter().map(|ball| ball.get_id()));
         self.collect_neighbours_by_cell(file.time_step);
 

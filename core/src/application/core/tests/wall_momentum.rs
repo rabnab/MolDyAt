@@ -5,7 +5,6 @@
 use super::{DT_GOAL, create_main_content_for_region};
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::BallFactory;
-use crate::objects2d::ball_impl::SpeciesTable;
 
 #[test]
 fn test_single_ball_wall_bounce_momentum() {
@@ -30,7 +29,7 @@ fn test_single_ball_wall_bounce_momentum() {
 
     // Create a ball moving toward the right wall
     // Position it so it will hit the wall in a few steps
-    let ball_radius = factory.get_new_ball_radius(SpeciesTable::builtin());
+    let ball_radius = factory.get_new_ball_radius();
     // One unit left of the right wall (the region spans x = 100..200).
     let (right_x, _) = main_content.world().world_region().get_br();
     let (_, top_y) = main_content.world().world_region().get_tl();
@@ -42,7 +41,7 @@ fn test_single_ball_wall_bounce_momentum() {
 
     let pos = Vec2D::new(initial_x, initial_y); // Near right edge of default region
     let initial_velocity = Vec2D::new(initial_vx, initial_vy); // Fast rightward velocity
-    let ball = factory.create_massive_with_velocity(SpeciesTable::builtin(), pos, initial_velocity);
+    let ball = factory.create_massive_with_velocity(pos, initial_velocity);
     let ball_mass = ball.mass;
 
     main_content.world_mut().balls.push(ball);

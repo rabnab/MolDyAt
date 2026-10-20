@@ -40,9 +40,14 @@ impl MainContent {
     /// An empty world run with `config` (validated first); balls are seeded
     /// from `seed` if given.
     pub fn with_config(world_rect: Rect, config: &SimConfig, seed: Option<u64>) -> AppResult<Self> {
+        let world = SimulationWorld::with_config(world_rect, config)?;
         Ok(Self {
-            world: SimulationWorld::with_config(world_rect, config)?,
-            step_config: StepConfig::new(config.integration.time_step, seed),
+            step_config: StepConfig::new(
+                config.integration.time_step,
+                seed,
+                Arc::clone(world.species()),
+            ),
+            world,
             runtime: super::PhysicsRuntimeState {
                 snapshot_slot: Arc::new(ArcSwapOption::from(None)),
                 wait_time: 0,
@@ -62,13 +67,25 @@ impl SimulationWorld {
     /// (`SimConfig::validated_species`) also builds its species table and
     /// resolves its pair overrides, in one pass.
     pub(crate) fn with_config(world_rect: Rect, config: &SimConfig) -> AppResult<Self> {
+        let resolved = config.validated_species()?;
+        Self::with_resolved(world_rect, config, resolved)
+    }
+
+    /// [`Self::with_config`] for a `config` that was already validated, with
+    /// its species table and pair overrides resolved as `resolved` (by
+    /// `SimConfig::validated_species` or `WorldFile::validate`).
+    pub(crate) fn with_resolved(
+        world_rect: Rect,
+        config: &SimConfig,
+        resolved: ResolvedSpecies,
+    ) -> AppResult<Self> {
         let ResolvedSpecies {
             table,
             pair_overrides,
-        } = config.validated_species()?;
+        } = resolved;
         let physics = BallPhysics::with_pair_overrides(
             PhysicsConstants::default(),
-            &table,
+            table,
             config.potential.cap_settings(),
             pair_overrides,
         )
@@ -78,7 +95,6 @@ impl SimulationWorld {
         Ok(Self {
             balls: Vec::new(),
             physics,
-            species: Arc::new(table),
             species_config: config.species.clone(),
             cell_grid,
             species_present,

@@ -49,8 +49,9 @@ impl MainContent {
     ) -> AppResult {
         let mut resolved = Vec::with_capacity(mixture.len());
         for (name, weight) in mixture {
-            let id = self.world.species.by_name(name).ok_or_else(|| {
-                let known: Vec<&str> = self.world.species.iter().map(|s| s.name.as_str()).collect();
+            let species = self.world.species();
+            let id = species.by_name(name).ok_or_else(|| {
+                let known: Vec<&str> = species.iter().map(|s| s.name.as_str()).collect();
                 AppError::CustomError(format!(
                     "unknown species \"{name}\" (known: {})",
                     known.join(", ")
@@ -99,15 +100,13 @@ impl MainContent {
         mixture: &[(SpeciesId, u32)],
     ) {
         let time_step = self.step_config.get_time_step();
-        let factory_species = self.step_config.get_ball_factory().new_ball_species();
+        let new_ball_species = self.step_config.get_ball_factory().new_ball_species();
         let cur_radius = if mixture.is_empty() {
-            self.step_config
-                .get_ball_factory()
-                .get_new_ball_radius(&self.world.species)
+            self.step_config.get_ball_factory().get_new_ball_radius()
         } else {
             mixture
                 .iter()
-                .map(|&(id, _)| self.world.species.species(id).contact_radius())
+                .map(|&(id, _)| self.world.species().species(id).contact_radius())
                 .fold(0.0, f32::max)
         };
         let total_weight: u64 = mixture.iter().map(|&(_, w)| u64::from(w)).sum();
@@ -137,13 +136,9 @@ impl MainContent {
                     })
                     .expect("mixture is not empty")
             });
-            if let Some(i) = pick {
-                self.step_config
-                    .get_ball_factory()
-                    .set_new_ball_species(mixture[i].0);
-            }
+            let species = pick.map_or(new_ball_species, |i| mixture[i].0);
             let nu_ball = self.step_config.get_ball_factory().create_random(
-                &self.world.species,
+                species,
                 (min_pos, max_pos),
                 (0.0, max_speed),
             );
@@ -163,9 +158,6 @@ impl MainContent {
             }
         }
 
-        self.step_config
-            .get_ball_factory()
-            .set_new_ball_species(factory_species);
         self.collect_neighbours_by_cell(time_step);
 
         #[cfg(debug_assertions)]
@@ -226,7 +218,7 @@ impl MainContent {
         let candidate = self
             .step_config
             .get_ball_factory()
-            .create_massive_with_velocity(&self.world.species, pos, Vec2D::zero());
+            .create_massive_with_velocity(pos, Vec2D::zero());
         self.world.add_candidate_ball(candidate, 0.)
     }
 
@@ -268,9 +260,7 @@ impl MainContent {
     }
 
     pub(crate) fn next_ball_size(&mut self) {
-        self.step_config
-            .get_ball_factory()
-            .next_species(&self.world.species);
+        self.step_config.get_ball_factory().next_species();
     }
 
     #[cfg(test)]

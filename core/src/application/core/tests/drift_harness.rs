@@ -5,7 +5,6 @@
 use super::{DT_GOAL, create_main_content_for_region};
 use crate::application::MainContent;
 use crate::objects2d::Vec2D;
-use crate::objects2d::ball_impl::SpeciesTable;
 use crate::objects2d::ball_impl::{BallFactory, BallId, SPECIES_M, SpeciesId};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -291,7 +290,7 @@ pub fn populate_grid_balls(main_content: &mut MainContent, num_balls: usize, the
             let vx = (i as f32 * 0.617 + j as f32 * 0.271).sin() * thermal_v;
             let vy = (i as f32 * 0.314 + j as f32 * 0.159).cos() * thermal_v;
             let vel = Vec2D::new(vx, vy);
-            let ball = factory.create_massive_with_velocity(SpeciesTable::builtin(), pos, vel);
+            let ball = factory.create_massive_with_velocity(pos, vel);
             main_content.world_mut().balls.push(ball);
             balls_added += 1;
         }

@@ -267,7 +267,6 @@ mod tests {
                 view_dirty: false,
                 last_snapshot: None,
                 cursor_world_pos: Vec2D::zero(),
-                current_species: crate::objects2d::ball_impl::DEFAULT_SPECIES,
                 metrics: MetricsCollector::new(),
                 active_tool: OperatorTool::None,
                 tool_handler: None,
@@ -326,10 +325,6 @@ mod tests {
             InputOrchestrator::process_action(&mut state, InputAction::NextBallSize, None, None);
 
         assert!(!affects_view);
-        assert_eq!(
-            state.render.current_species,
-            crate::objects2d::ball_impl::SpeciesId::new(1)
-        );
         assert!(state.render.view_dirty);
     }
 

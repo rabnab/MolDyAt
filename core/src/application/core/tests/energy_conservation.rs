@@ -5,7 +5,6 @@
 use super::{DT_GOAL, create_main_content_for_region};
 use crate::application::MainContent;
 use crate::objects2d::Vec2D;
-use crate::objects2d::ball_impl::SpeciesTable;
 use crate::objects2d::ball_impl::{BallFactory, DEFAULT_SPECIES};
 
 #[test]
@@ -66,7 +65,7 @@ fn test_energy_conservation_1000_balls() {
             let vel = Vec2D::new(vx, vy);
 
             // Create ball with small random velocity
-            let ball = factory.create_massive_with_velocity(SpeciesTable::builtin(), pos, vel);
+            let ball = factory.create_massive_with_velocity(pos, vel);
             main_content.world_mut().balls.push(ball);
             balls_added += 1;
         }
@@ -279,13 +278,13 @@ fn test_cutoff_energy_loss() {
     // Ball 1 at origin
     let ball1_pos = Vec2D::new(0.0, 0.0);
     let ball1_vel = Vec2D::new(0.0, 0.0);
-    let ball1 = factory.create_massive_with_velocity(SpeciesTable::builtin(), ball1_pos, ball1_vel);
+    let ball1 = factory.create_massive_with_velocity(ball1_pos, ball1_vel);
 
     // Ball 2 just inside cutoff, moving away slowly
     let initial_separation = cutoff - 0.5; // 0.5 units inside cutoff
     let ball2_pos = Vec2D::new(initial_separation, 0.0);
     let ball2_vel = Vec2D::new(1.0, 0.0); // Faster velocity to actually move
-    let ball2 = factory.create_massive_with_velocity(SpeciesTable::builtin(), ball2_pos, ball2_vel);
+    let ball2 = factory.create_massive_with_velocity(ball2_pos, ball2_vel);
 
     main_content
         .add_candidate_ball(ball1, 0.)
@@ -550,7 +549,7 @@ fn test_neighbour_list_rebuild_does_not_change_energy() {
                 (i as f32 * 0.617 + j as f32 * 1.271).sin() * 1.5,
                 (i as f32 * 1.314 + j as f32 * 0.459).cos() * 1.5,
             );
-            let ball = factory.create_massive_with_velocity(SpeciesTable::builtin(), pos, vel);
+            let ball = factory.create_massive_with_velocity(pos, vel);
             main_content.world_mut().balls.push(ball);
         }
     }

@@ -15,9 +15,10 @@
 //! membership, tails, energy plot, `SimStats`) and the view (window size,
 //! zoom, pan) are never written.
 
-use crate::application::sim_config::{MAX_TIME_STEP, MIN_TIME_STEP, SimConfig, check_time_step};
+use crate::application::sim_config::{
+    MAX_TIME_STEP, MIN_TIME_STEP, ResolvedSpecies, SimConfig, check_time_step,
+};
 use crate::error::{AppError, AppResult};
-use crate::objects2d::ball_impl::SpeciesTable;
 use crate::objects2d::operator::{
     DEFAULT_THERMOSTAT_CHAIN_LENGTH, MAX_EMISSION_SPEED, MAX_EMIT_PERIOD, MAX_TARGET_TEMPERATURE,
     MAX_THERMOSTAT_RADIUS, MIN_EMISSION_SPEED, MIN_EMIT_PERIOD, MIN_TARGET_TEMPERATURE,
@@ -140,8 +141,9 @@ fn check_unique_ids(ids: impl Iterator<Item = usize>, what: &str) -> AppResult<H
 
 impl WorldFile {
     /// Check everything the loader relies on, so a bad file is rejected before
-    /// the running world is touched.
-    pub fn validate(&self) -> AppResult {
+    /// the running world is touched. Returns the file's species table and
+    /// pair overrides, resolved once, for the world's constructor.
+    pub fn validate(&self) -> AppResult<ResolvedSpecies> {
         if self.version != WORLD_FILE_VERSION {
             return Err(invalid(format!(
                 "version {} is not supported (expected {WORLD_FILE_VERSION})",
@@ -161,19 +163,20 @@ impl WorldFile {
             ))
         })?;
         check_finite(&[self.gravity], "gravity")?;
-        // Saved balls and source spheres name species of the save's table.
-        let species = match &self.config {
-            Some(config) => config.species_table()?,
-            None => SpeciesTable::builtin().clone(),
+        // Saved balls and source spheres name species of the save's table:
+        // the config's, or the built-in library for files without a config.
+        let resolved = match &self.config {
+            Some(config) => config.validated_species()?,
+            None => ResolvedSpecies::builtin(),
         };
-        if let Some(config) = &self.config {
-            config.validate()?;
-            if config.integration.time_step != self.time_step {
-                return Err(invalid(format!(
-                    "config.integration.time_step {} differs from time_step {}",
-                    config.integration.time_step, self.time_step
-                )));
-            }
+        let species = &*resolved.table;
+        if let Some(config) = &self.config
+            && config.integration.time_step != self.time_step
+        {
+            return Err(invalid(format!(
+                "config.integration.time_step {} differs from time_step {}",
+                config.integration.time_step, self.time_step
+            )));
         }
 
         check_unique_ids(self.balls.iter().map(|b| b.id), "ball")?;
@@ -294,7 +297,7 @@ impl WorldFile {
                 )));
             }
         }
-        Ok(())
+        Ok(resolved)
     }
 
     fn validate_chain(

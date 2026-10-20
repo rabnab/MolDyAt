@@ -47,6 +47,7 @@ use crate::objects2d::ball_impl::{
 };
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+use std::sync::Arc;
 use std::time::Duration;
 
 /// Time step of a new world.
@@ -226,11 +227,24 @@ fn check_literature(
 }
 
 /// The species table of a config and its pair overrides resolved against it:
-/// what the physics of a new world is built from.
+/// what the physics of a new world is built from. Built once by
+/// [`SimConfig::validated_species`] (or `WorldFile::validate`) and handed to
+/// the world's constructor, which does not resolve them again.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ResolvedSpecies {
-    pub table: SpeciesTable,
+    pub table: Arc<SpeciesTable>,
     pub pair_overrides: Vec<PairOverride>,
+}
+
+impl ResolvedSpecies {
+    /// The built-in library without pair overrides: a config without
+    /// `[[species]]` and `[[potential.pair_override]]`.
+    pub fn builtin() -> Self {
+        Self {
+            table: SpeciesTable::builtin_shared(),
+            pair_overrides: Vec::new(),
+        }
+    }
 }
 
 /// Time integration.
@@ -480,9 +494,9 @@ impl SimConfig {
     /// The species table of the run: the `[[species]]` list, or the built-in
     /// library if there is none. Checks the list (count, unique names,
     /// ranges).
-    pub fn species_table(&self) -> AppResult<SpeciesTable> {
+    pub fn species_table(&self) -> AppResult<Arc<SpeciesTable>> {
         if self.species.is_empty() {
-            return Ok(SpeciesTable::builtin().clone());
+            return Ok(SpeciesTable::builtin_shared());
         }
         if self.species.len() > SpeciesSet::CAPACITY {
             return Err(invalid(format!(
@@ -503,7 +517,7 @@ impl SimConfig {
             }
             list.push(species);
         }
-        Ok(SpeciesTable::new(list))
+        Ok(Arc::new(SpeciesTable::new(list)))
     }
 
     /// [`Self::validate`], returning the species table and the pair

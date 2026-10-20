@@ -197,7 +197,7 @@ impl MainContent {
                 pair_overrides: physics
                     .pair_overrides()
                     .iter()
-                    .map(|o| PairOverrideConfig::named(o, &self.world.species))
+                    .map(|o| PairOverrideConfig::named(o, physics.species()))
                     .collect(),
                 ..PotentialConfig::from(*physics.cap_settings())
             },

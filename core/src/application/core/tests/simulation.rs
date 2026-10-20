@@ -3,7 +3,6 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use super::{DT_GOAL, create_main_content, create_main_content_for_region};
-use crate::objects2d::ball_impl::SpeciesTable;
 use crate::objects2d::ball_impl::{Ball2D, BallFactory, Named};
 use crate::objects2d::{Vec2D, VerboseInfoMode};
 
@@ -13,7 +12,7 @@ fn test_global_update() {
 
     // Add some balls
 
-    let ball_radius = BallFactory::new().get_new_ball_radius(SpeciesTable::builtin());
+    let ball_radius = BallFactory::new().get_new_ball_radius();
 
     let ball_coord = Vec2D::zero();
     main_content.add_candidate_at_pos(ball_coord).unwrap();

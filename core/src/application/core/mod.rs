@@ -56,10 +56,6 @@ pub struct SimulationWorld {
     /// World bounds for physics simulation
     pub(crate) world_rect: Rect,
     pub(crate) physics: BallPhysics,
-    /// The species balls of this world can have (`SimConfig::species_table`).
-    /// An `Arc` because every snapshot for the render thread carries it;
-    /// the ball factory takes it per call and holds no copy.
-    pub(crate) species: Arc<SpeciesTable>,
     /// The `[[species]]` list the table was built from, empty for the
     /// built-in library: what `MainContent::config` and saves write back.
     pub(crate) species_config: Vec<SpeciesConfig>,
@@ -120,6 +116,14 @@ pub struct SimulationWorld {
 }
 
 impl SimulationWorld {
+    /// The species balls of this world can have (`SimConfig::species_table`).
+    /// Owned by the physics, so table and physics cannot diverge; an `Arc`
+    /// because the ball factory and every snapshot for the render thread
+    /// share it.
+    pub(crate) fn species(&self) -> &Arc<SpeciesTable> {
+        self.physics.species()
+    }
+
     #[inline]
     pub(crate) fn neighbor_movement_fault_scale(&self) -> f32 {
         #[cfg(test)]

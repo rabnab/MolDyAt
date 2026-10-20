@@ -358,10 +358,10 @@ fn species_list_survives_a_save_and_load() {
     assert_eq!(target.config().species, n2_ar_config().species);
 
     let world = target.world();
-    let names: Vec<_> = world.species.iter().map(|s| s.name.as_str()).collect();
+    let names: Vec<_> = world.species().iter().map(|s| s.name.as_str()).collect();
     assert_eq!(names, ["N2", "Ar"]);
-    let ar = world.species.by_name("Ar").unwrap();
-    let ar_mass = world.species.species(ar).mass;
+    let ar = world.species().by_name("Ar").unwrap();
+    let ar_mass = world.species().species(ar).mass;
     let ars: Vec<_> = world.balls.iter().filter(|b| b.species() == ar).collect();
     assert_eq!(ars.len(), 10);
     assert!(ars.iter().all(|b| b.get_mass() == ar_mass));
@@ -370,7 +370,7 @@ fn species_list_survives_a_save_and_load() {
 
     // Cycling the sphere's species wraps within the loaded table.
     target.world_mut().cycle_source_sphere_species(0);
-    let n2 = target.world().species.by_name("N2").unwrap();
+    let n2 = target.world().species().by_name("N2").unwrap();
     assert_eq!(target.world().source_spheres.spheres()[0].ball_species, n2);
     let _ = fs::remove_dir_all(store.dir());
 }
@@ -386,7 +386,7 @@ fn loading_a_builtin_save_restores_the_builtin_library() {
     target
         .load_world(&store, &LoadSource::Latest, true)
         .unwrap();
-    assert_eq!(&*target.world().species, SpeciesTable::builtin());
+    assert_eq!(&**target.world().species(), SpeciesTable::builtin());
     let snapshot = target.create_snapshot();
     assert_eq!(
         snapshot.cursor_species,

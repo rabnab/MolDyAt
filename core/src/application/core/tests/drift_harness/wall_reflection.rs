@@ -292,10 +292,7 @@ fn run_single_ball(
     main_content.world_mut().test_faults = faults;
     let factory = scenario_factory();
     main_content
-        .add_candidate_ball(
-            factory.create_massive_with_velocity(SpeciesTable::builtin(), start, velocity),
-            0.0,
-        )
+        .add_candidate_ball(factory.create_massive_with_velocity(start, velocity), 0.0)
         .expect("could not add reflection ball");
     main_content.world_mut().rebuild_cell_grid();
     main_content.collect_neighbours_by_cell(DT_GOAL);
