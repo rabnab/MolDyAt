@@ -440,3 +440,23 @@ fn runtime_options_survive_a_load() {
     assert_eq!(*target.options(), before);
     let _ = fs::remove_dir_all(store.dir());
 }
+
+#[test]
+fn load_during_a_resize_pause_keeps_the_loaded_world_paused() {
+    let dir = scratch_dir("load_during_resize");
+    let store = SaveStore::new(&dir);
+    empty_world().save_world(&store).unwrap();
+
+    let mut target = empty_world();
+    if target.world().sim.is_paused() {
+        target.toggle_pause();
+    }
+    target.pause_for_resize();
+    target
+        .load_world(&store, &LoadSource::Latest, true)
+        .unwrap();
+    // The resize ends after the load: it must not resume the loaded world.
+    target.unpause_after_resize();
+    assert!(target.world().sim.is_paused());
+    let _ = fs::remove_dir_all(&dir);
+}

@@ -248,9 +248,11 @@ impl PhysicsRuntimeState {
         self.world_generation
     }
 
-    /// Mark that the world was replaced.
+    /// Mark that the world was replaced. A pending resize pause belonged to
+    /// the old world, so the end of that resize must not resume the new one.
     pub(crate) fn next_world_generation(&mut self) {
         self.world_generation = self.world_generation.wrapping_add(1);
+        self.paused_for_resize = false;
     }
 
     pub(crate) fn snapshot_layers(&self) -> SceneLayers {
