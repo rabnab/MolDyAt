@@ -128,7 +128,11 @@ pub struct ChainPieceData {
 }
 
 /// What sits between two pieces of a wall chain, tagged by `kind`.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+///
+/// Read through [`RawJoint`], not serde's internally tagged enum: serde
+/// buffers such an enum's fields, so the fields this build does not know
+/// would be skipped without being reported (#273).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum JointData {
     /// The valve `valve_id`.
@@ -139,6 +143,44 @@ pub enum JointData {
     },
     /// The hole a deleted valve leaves.
     Gap { t_start: f32, t_end: f32 },
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum JointKind {
+    Valve,
+    Gap,
+}
+
+/// The fields of every [`JointData`] variant, read as a plain struct.
+#[derive(Deserialize)]
+struct RawJoint {
+    kind: JointKind,
+    valve_id: Option<usize>,
+    t_start: f32,
+    t_end: f32,
+}
+
+impl<'de> Deserialize<'de> for JointData {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        use serde::de::Error;
+        let RawJoint {
+            kind,
+            valve_id,
+            t_start,
+            t_end,
+        } = RawJoint::deserialize(deserializer)?;
+        match (kind, valve_id) {
+            (JointKind::Valve, Some(valve_id)) => Ok(Self::Valve {
+                valve_id,
+                t_start,
+                t_end,
+            }),
+            (JointKind::Valve, None) => Err(D::Error::missing_field("valve_id")),
+            (JointKind::Gap, None) => Ok(Self::Gap { t_start, t_end }),
+            (JointKind::Gap, Some(_)) => Err(D::Error::custom("a gap joint has no `valve_id`")),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -413,16 +455,26 @@ impl WorldFile {
 
     /// Parse a world file of any supported version, upgrade it to the
     /// current one (see [`migrate`](super::migrate)) and validate it.
+    /// Fields this build does not know are skipped; see
+    /// [`Self::from_json_reporting`] for their names.
     pub fn from_json(json: &str) -> AppResult<Self> {
-        let file: Self = super::migrate::parse(json).map_err(newer_build_hint)?;
+        Self::from_json_reporting(json).map(|(file, _)| file)
+    }
+
+    /// [`Self::from_json`], also returning the paths of the fields outside
+    /// `config` that this build does not know and skipped
+    /// (`balls[3].charge`, `pistons`), in file order (#273).
+    pub fn from_json_reporting(json: &str) -> AppResult<(Self, Vec<String>)> {
+        let (file, ignored): (Self, _) = super::migrate::parse(json).map_err(newer_build_hint)?;
         file.validate()?;
-        Ok(file)
+        Ok((file, ignored))
     }
 }
 
 /// Only `config` rejects unknown keys (`SimConfig` uses
-/// `deny_unknown_fields`), and a key it does not know was most likely added
-/// by a newer build that still writes the same format version. Say so.
+/// `deny_unknown_fields`; unknown fields elsewhere are skipped with a
+/// warning, #273), and a key it does not know was most likely added by a
+/// newer build that still writes the same format version. Say so.
 fn newer_build_hint(error: AppError) -> AppError {
     match error {
         AppError::CustomError(message) if message.contains("unknown field") => {

@@ -75,7 +75,7 @@ fn run_wgpu_renderer(common: cli::CommonArgs, sim_config: &SimConfig) {
     if let Some(path) = common.load {
         // Same entry point as Ctrl+O; the window then shows the loaded world.
         match application.load_world(&store, &LoadSource::Path(path.clone()), true) {
-            Ok(loaded) => log::info!("Loaded world from {} (paused)", loaded.path.display()),
+            Ok(loaded) => log::info!("{}", loaded.message(true)),
             Err(e) => {
                 eprintln!("cannot load {}: {e:?}", path.display());
                 std::process::exit(1);

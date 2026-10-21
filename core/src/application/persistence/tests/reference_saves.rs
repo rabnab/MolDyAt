@@ -173,7 +173,7 @@ fn config_less_save_keeps_its_time_step() {
 fn old_saves_load_into_a_file_type_with_new_fields() {
     for fixture in FIXTURES {
         let json = read_fixture(fixture.file);
-        let extended: ExtendedWorldFile = migrate::parse(&json)
+        let (extended, _): (ExtendedWorldFile, _) = migrate::parse(&json)
             .unwrap_or_else(|e| panic!("{} does not parse: {e:?}", fixture.file));
         extended.file.validate().unwrap();
         assert_eq!(extended.wall_restitution, 1.0, "{}", fixture.file);
@@ -193,7 +193,7 @@ fn new_fields_are_read_when_present() {
     let mut value: serde_json::Value = serde_json::from_str(&read_fixture("v2.json")).unwrap();
     value["wall_restitution"] = 0.5.into();
     value["sinks"] = serde_json::json!([{"id": 3, "center": {"x": 1.0, "y": -2.0}}]);
-    let extended: ExtendedWorldFile = migrate::parse(&value.to_string()).unwrap();
+    let (extended, _): (ExtendedWorldFile, _) = migrate::parse(&value.to_string()).unwrap();
     assert_eq!(extended.wall_restitution, 0.5);
     assert_eq!(
         extended.sinks,

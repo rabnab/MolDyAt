@@ -11,6 +11,11 @@
 //! the current [`WorldFile`](super::WorldFile). Validation follows in both
 //! cases. Saving always writes the current version.
 //!
+//! Both paths report the fields the file types do not know (#273): `serde`
+//! skips them, and [`serde_ignored`] collects their paths (`balls[3].charge`)
+//! so the load can warn about them. Unknown keys inside `config` are not
+//! skipped but rejected (`SimConfig` uses `deny_unknown_fields`).
+//!
 //! # Changing the format
 //! - An additive change (a new field with `#[serde(default)]` whose default
 //!   reproduces the old behaviour, or a new `#[serde(default)]` list) keeps
@@ -77,9 +82,13 @@ fn migrate_v1_to_v2(file: &mut Value) -> AppResult {
     Ok(())
 }
 
+/// A parsed file and the paths of the fields `T` does not know, which were
+/// skipped (`balls[3].charge`, `pistons`), in file order.
+pub(crate) type Parsed<T> = (T, Vec<String>);
+
 /// Parse a world file of any supported version into `T`, upgrading it first
 /// if it is older than [`WORLD_FILE_VERSION`].
-pub(crate) fn parse<T: DeserializeOwned>(json: &str) -> AppResult<T> {
+pub(crate) fn parse<T: DeserializeOwned>(json: &str) -> AppResult<Parsed<T>> {
     parse_with(json, MIGRATIONS, WORLD_FILE_VERSION)
 }
 
@@ -88,7 +97,7 @@ pub(crate) fn parse_with<T: DeserializeOwned>(
     json: &str,
     migrations: &[Migration],
     current: u32,
-) -> AppResult<T> {
+) -> AppResult<Parsed<T>> {
     /// Only the version; serde skips every other field without building it.
     #[derive(serde::Deserialize)]
     struct Header {
@@ -99,12 +108,43 @@ pub(crate) fn parse_with<T: DeserializeOwned>(
     if version == current {
         // Fast path: building a `Value` tree first is many times slower for
         // large saves.
-        return serde_json::from_str(json).map_err(|e| invalid(e.to_string()));
+        let mut deserializer = serde_json::Deserializer::from_str(json);
+        let parsed = deserialize_reporting(&mut deserializer)?;
+        deserializer.end().map_err(|e| invalid(e.to_string()))?;
+        return Ok(parsed);
     }
     let mut value: Value = serde_json::from_str(json).map_err(|e| invalid(e.to_string()))?;
     upgrade_with(&mut value, migrations, current)?;
     log::info!("upgraded world file from format v{version} to v{current}");
-    serde_json::from_value(value).map_err(|e| invalid(e.to_string()))
+    deserialize_reporting(value)
+}
+
+/// Deserialize `T`, collecting the path of every field it skips.
+fn deserialize_reporting<'de, T, D>(deserializer: D) -> AppResult<Parsed<T>>
+where
+    T: serde::Deserialize<'de>,
+    D: serde::Deserializer<'de>,
+{
+    let mut ignored = Vec::new();
+    let value = serde_ignored::deserialize(deserializer, |path| ignored.push(field_path(&path)))
+        .map_err(|e| invalid(e.to_string()))?;
+    Ok((value, ignored))
+}
+
+/// `balls[3].charge` for the field `charge` of the fourth ball.
+fn field_path(path: &serde_ignored::Path) -> String {
+    use serde_ignored::Path;
+    match path {
+        Path::Root => String::new(),
+        Path::Seq { parent, index } => format!("{}[{index}]", field_path(parent)),
+        Path::Map { parent, key } => match field_path(parent) {
+            parent if parent.is_empty() => key.clone(),
+            parent => format!("{parent}.{key}"),
+        },
+        Path::Some { parent }
+        | Path::NewtypeStruct { parent }
+        | Path::NewtypeVariant { parent } => field_path(parent),
+    }
 }
 
 /// Upgrade `file` in place to [`WORLD_FILE_VERSION`]; returns the version it

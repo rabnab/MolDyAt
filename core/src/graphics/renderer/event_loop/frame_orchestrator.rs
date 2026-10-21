@@ -137,6 +137,7 @@ mod tests {
         state.handle_physics_event(PhysicsEvent::WorldLoaded(LoadedWorld {
             path: "saves/world.json".into(),
             world_rect: loaded_rect,
+            ignored_fields: Vec::new(),
         }));
         assert_eq!(state.render.viewport.world_bounds(), loaded_rect);
         assert_eq!(state.render.viewport.zoom(), ViewportTransform::MIN_ZOOM);
@@ -149,6 +150,7 @@ mod tests {
         state.handle_physics_event(PhysicsEvent::WorldLoaded(LoadedWorld {
             path: "saves/world.json".into(),
             world_rect,
+            ignored_fields: Vec::new(),
         }));
     }
 

@@ -357,7 +357,7 @@ impl UnifiedRenderState {
             PhysicsEvent::WorldSaved(path) => log::info!("Saved world to {}", path.display()),
             PhysicsEvent::SaveFailed(error) => log::error!("Saving world failed: {error}"),
             PhysicsEvent::WorldLoaded(loaded) => {
-                log::info!("Loaded world from {} (paused)", loaded.path.display());
+                log::info!("{}", loaded.message(true));
                 self.reset_tool_handler();
                 self.render.viewport.set_world_bounds(loaded.world_rect);
                 self.render.viewport.reset();

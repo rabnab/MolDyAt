@@ -353,7 +353,9 @@ it another size (screen too small, maximised or tiled window), the world is
 letterboxed, never stretched or rescaled. A later window resize refits the
 world to the window as usual. A file that fails validation is rejected and the running world
 is left untouched. Results are logged. Saves from older versions are upgraded
-when they are loaded; a save from a newer MolDyAt is rejected with an error.
+when they are loaded. A save from a newer MolDyAt is rejected if it has a
+newer format version or unknown settings in its config; other fields this
+build does not know are skipped with a warning (saving again drops them).
 
 ## Simulation config
 
