@@ -13,7 +13,8 @@
 //!
 //! Where a value comes from, lowest priority first:
 //! 1. the defaults ([`SimConfig::default`]),
-//! 2. a config file (`--config <path>`, TOML, see [`SimConfig::load`]); keys
+//! 2. a config file (`--config <path>`, TOML or `.json`, see
+//!    [`SimConfig::load`]); keys
 //!    it leaves out keep their default,
 //! 3. command-line flags that set the same value (`--dt`).
 //!
@@ -474,10 +475,27 @@ pub fn check_time_step(time_step: f32) -> AppResult {
 
 impl SimConfig {
     /// Read and validate a TOML config file.
+    /// A `.json` file is read as JSON in the same layout, e.g. the
+    /// `config.sim` of a headless `run_start` record (#295); any other file
+    /// as TOML.
     pub fn load(path: &Path) -> AppResult<Self> {
         let text = std::fs::read_to_string(path)
             .map_err(|e| invalid(format!("cannot read {}: {e}", path.display())))?;
-        Self::from_toml(&text)
+        let is_json = path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("json"));
+        if is_json {
+            Self::from_json(&text)
+        } else {
+            Self::from_toml(&text)
+        }
+    }
+
+    /// Parse and validate a config in JSON, in the layout of the TOML file.
+    pub fn from_json(text: &str) -> AppResult<Self> {
+        let config: Self = serde_json::from_str(text).map_err(|e| invalid(e.to_string()))?;
+        config.validate()?;
+        Ok(config)
     }
 
     /// Parse and validate a config in TOML.

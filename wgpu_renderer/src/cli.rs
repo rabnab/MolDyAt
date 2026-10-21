@@ -62,7 +62,7 @@ pub const COMMON_OPTIONS: &[OptionHelp] = &[
         names: &["--config"],
         value: Some("<PATH>"),
         help: &[
-            "Simulation config file (TOML); flags such as --dt override it",
+            "Simulation config file (TOML, or JSON if it ends in .json); flags such as --dt override it",
             "Not with --load: a save brings its own config",
         ],
     },
@@ -120,7 +120,7 @@ pub struct CommonArgs {
     pub load: Option<PathBuf>,
     /// `--save-dir <dir>`: directory for Ctrl+S / Ctrl+O saves.
     pub save_dir: PathBuf,
-    /// `--config <path>`: simulation config file (TOML).
+    /// `--config <path>`: simulation config file (TOML, or JSON for `.json`).
     pub config: Option<PathBuf>,
 }
 

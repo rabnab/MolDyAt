@@ -1007,3 +1007,58 @@ fn test_run_start_records_the_effective_sim_config() {
     let read_back: SimConfig = serde_json::from_value(sim.clone()).unwrap();
     assert_eq!(read_back, expected);
 }
+
+#[test]
+fn test_run_start_records_a_loaded_saves_sim_config_with_dt_winning() {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock before unix epoch")
+        .as_nanos();
+    let dir =
+        std::env::temp_dir().join(format!("headless-load-sim-{}-{nanos}", std::process::id()));
+    let store = SaveStore::new(&dir);
+    let saved_config = SimConfig::from_toml(
+        "[neighbours]\nskin_factor = 0.3\n\
+         [[species]]\nname = \"Ar\"\nsigma_angstrom = 3.405\nepsilon_kelvin = 119.8\n\
+         mass_u = 39.948\ncolour = [0.6, 0.45, 1.0]\n",
+    )
+    .unwrap();
+    let saved = build_application(test_world_rect(), &saved_config, Some(5))
+        .expect("build")
+        .save_world(&store)
+        .expect("save");
+
+    // The run itself uses the default config; the save brings its own, and
+    // `--dt` beats the save's time step.
+    let config = HeadlessConfig {
+        output: Some(dir.join("run.jsonl")),
+        stdout: false,
+        dt: Some(0.002),
+        ..HeadlessConfig::default()
+    };
+    let application = prepare_application(
+        &config,
+        &SimConfig::default(),
+        test_world_rect(),
+        &store,
+        Some(saved),
+    )
+    .expect("prepare");
+    HeadlessRunner::from_config(config, application)
+        .expect("runner")
+        .run()
+        .expect("run");
+    let content = fs::read_to_string(dir.join("run.jsonl")).expect("read output");
+    let run_start = parse_jsonl_records(&content).remove(0);
+
+    let mut expected = saved_config.clone();
+    expected.integration.time_step = 0.002;
+    let sim = &run_start["config"]["sim"];
+    assert_eq!(*sim, serde_json::to_value(&expected).unwrap());
+
+    // The record is a valid `--config` as a `.json` file.
+    let reused = dir.join("run.json");
+    fs::write(&reused, sim.to_string()).unwrap();
+    assert_eq!(SimConfig::load(&reused).unwrap(), expected);
+    let _ = fs::remove_dir_all(&dir);
+}

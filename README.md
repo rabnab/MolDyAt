@@ -361,7 +361,11 @@ build does not know are skipped with a warning (saving again drops them).
 
 Settings that are not part of the world (time step, speed limit, force cap and
 cutoff, Verlet skin, snapshot rate, species) come from a TOML file passed with
-`--config <path>`, in the window and with `--headless`. Every section and key
+`--config <path>`, in the window and with `--headless`. A file ending in
+`.json` is read as JSON in the same layout, such as the `config.sim` that a
+headless run records in its `run_start` line, so a run's settings can be
+reused directly (`head -1 run.jsonl | jq .config.sim > run.json`, then
+`--config run.json`). Every section and key
 is optional: missing ones keep their default, and without `--config` all
 defaults apply, so results are the same as without a config file. Unknown keys
 are rejected, so a typo is an error, not a silent default, and so is a value
