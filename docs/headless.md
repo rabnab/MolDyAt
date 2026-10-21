@@ -80,7 +80,7 @@ unchanged.
 
 | `record_kind` | When | Contents |
 |---|---|---|
-| `run_start` | once, first | `config` (steps, snapshot interval, format, detail level, RNG seed, seeding, world scale, dt, walls and valves; `seed_species` as `[{species, weight}]` only with `--seed-species`) and `initial` (step, time, ball count, gravity, operator counts, world rectangle) |
+| `run_start` | once, first | `config` (steps, snapshot interval, format, detail level, RNG seed, seeding, world scale, dt, walls and valves; `seed_species` as `[{species, weight}]` only with `--seed-species`; `sim`, the effective `SimConfig` after `--config`, `--dt` and a loaded save, in the layout of a `--config` file: `integration`, `potential`, `neighbours`, `display`, and `species` when the run has a `[[species]]` list) and `initial` (step, time, ball count, gravity, operator counts, world rectangle) |
 | `frame` | step 0, every interval, last step | step, time, kinetic and potential energy, `delta_energy` from the step-0 frame, ball count, gravity, physics FPS, operator counts, plus the detail sections |
 | `run_end` | once, last | final step and time, number of frames written, final ball count, operator counts |
 

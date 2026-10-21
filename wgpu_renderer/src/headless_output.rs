@@ -194,6 +194,12 @@ fn run_start_to_jsonl(config: &HeadlessConfig, snapshot: &RendererSnapshot) -> S
             "world_rect": world_rect_to_json(&snapshot.cell_grid_bounds),
         },
     });
+    // The effective SimConfig (#295), in the layout of a `--config` file.
+    // serde_json writes a non-finite number as `null`, the same policy as
+    // `f32_value`.
+    if let Some(sim) = &config.sim {
+        record["config"]["sim"] = serde_json::to_value(sim).unwrap_or(serde_json::Value::Null);
+    }
     // Only with `--seed-species`, so runs without it keep their bytes.
     if !config.seed_species.is_empty() {
         record["config"]["seed_species"] = config
