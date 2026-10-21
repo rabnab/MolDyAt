@@ -32,7 +32,7 @@ use crate::objects2d::{Rect, Vec2D};
 /// actual world-space start/end whenever the chain's own endpoints move
 /// (`WallChain::retarget`), so every piece and joint stretches
 /// proportionally together.
-#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ChainPiece {
     pub line_id: usize,
     pub t_start: f32,
@@ -40,8 +40,7 @@ pub struct ChainPiece {
 }
 
 /// What sits between two adjacent pieces of a chain.
-#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Joint {
     /// A togglable valve. `valve_id` refers to a `ValveSegment` elsewhere
     /// (holding just `is_closed` -- no geometry or thickness of its own,
@@ -74,7 +73,7 @@ impl Joint {
 
 /// A user-drawn wall, possibly split into pieces by valves. See the module
 /// doc comment above for the overall design.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct WallChain {
     pub id: usize,
     /// The chain's own two endpoints. These are the ONLY draggable points;

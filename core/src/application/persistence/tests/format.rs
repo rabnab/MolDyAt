@@ -6,11 +6,11 @@ use super::sample_file;
 use crate::application::SimConfig;
 use crate::application::persistence::WorldFile;
 use crate::application::persistence::format::{
-    BallData, MAX_ID, SourceSphereData, ThermostatData, WORLD_FILE_VERSION,
+    BallData, ChainPieceData, LineSegmentData, MAX_ID, SourceSphereData, ThermostatData,
+    WORLD_FILE_VERSION, WallChainData,
 };
 use crate::application::sim_config::{MAX_TIME_STEP, MIN_TIME_STEP};
-use crate::objects2d::wall_chain::{ChainPiece, WallChain};
-use crate::objects2d::{SimLineSegment, Vec2D};
+use crate::objects2d::Vec2D;
 
 fn error_text(file: &WorldFile) -> String {
     format!("{:?}", file.validate().expect_err("file must be rejected"))
@@ -185,9 +185,12 @@ fn rejects_thermostat_with_wrong_chain_or_ranges() {
 #[test]
 fn rejects_line_segment_without_thickness() {
     let mut file = sample_file();
-    let mut segment = SimLineSegment::new(0, Vec2D::zero(), Vec2D::new(1.0, 0.0));
-    segment.thickness = 0.0;
-    file.line_segments.push(segment);
+    file.line_segments.push(LineSegmentData {
+        id: 0,
+        start: Vec2D::zero(),
+        end: Vec2D::new(1.0, 0.0),
+        thickness: 0.0,
+    });
     assert!(error_text(&file).contains("thickness"));
 }
 
@@ -199,11 +202,11 @@ fn rejects_malformed_json() {
 #[test]
 fn rejects_chain_with_missing_line_segment() {
     let mut file = sample_file();
-    file.wall_chains.push(WallChain {
+    file.wall_chains.push(WallChainData {
         id: 0,
         start: Vec2D::zero(),
         end: Vec2D::new(1.0, 0.0),
-        pieces: vec![ChainPiece {
+        pieces: vec![ChainPieceData {
             line_id: 7,
             t_start: 0.0,
             t_end: 1.0,

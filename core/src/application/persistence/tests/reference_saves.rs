@@ -387,3 +387,26 @@ fn check_world(mc: &MainContent, ball_species: [&str; 8], sphere_species: [&str;
     assert_eq!(thermostats[0].chain, vec![0.0, 0.25, -0.5, 0.0, 0.125]);
     assert_eq!(thermostats[1].position, Vec2D::new(-12.0, -3.0));
 }
+
+/// Walls, valves and wall chains have their own file types since #270; the
+/// current reference save's JSON for them comes back unchanged after a load
+/// and a save, so the layout did not move with the types.
+#[test]
+fn wall_layout_is_unchanged_by_the_file_types() {
+    let current = FIXTURES
+        .iter()
+        .find(|f| f.version == WORLD_FILE_VERSION)
+        .expect("a reference save for the current version");
+    let original: serde_json::Value = serde_json::from_str(&read_fixture(current.file)).unwrap();
+    let mc = load_fixture(current.file);
+    let written: serde_json::Value =
+        serde_json::from_str(&WorldFile::capture(&mc).to_json().unwrap()).unwrap();
+    for key in ["line_segments", "valves", "wall_chains"] {
+        assert!(
+            original[key].as_array().is_some_and(|a| !a.is_empty()),
+            "{} has {key}",
+            current.file
+        );
+        assert_eq!(written[key], original[key], "{key}");
+    }
+}

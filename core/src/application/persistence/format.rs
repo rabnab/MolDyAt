@@ -7,13 +7,16 @@
 //! written as the shortest decimal that parses back to the same bits, so a
 //! save/load round trip is exact.
 //!
-//! Types that are saved as they are (`Vec2D`, `Rect`, `SimLineSegment`,
-//! `ValveSegment`, `WallChain`) derive serde themselves, so the format follows
-//! them when they change. Only where the file differs from the simulation type
-//! (balls drop radius and mass; source spheres and thermostats drop runtime
-//! state) is there a separate type here. Runtime state (neighbour lists, cell
-//! membership, tails, energy plot, `SimStats`) and the view (window size,
-//! zoom, pan) are never written.
+//! Every saved object has its own file type here (`BallData`,
+//! `LineSegmentData`, `ValveData`, `WallChainData`, `SourceSphereData`,
+//! `ThermostatData`), converted to and from the simulation types in
+//! [`convert`](super::convert) (#270). So the format changes only when one
+//! of these types changes, never as a side effect of refactoring a
+//! simulation type, which no longer derives serde. The exceptions are the
+//! two value types `Vec2D` (`{x, y}`) and `Rect` (`{x, y, w, h}`): their
+//! layout is stable and they are written as they are. Runtime state
+//! (neighbour lists, cell membership, tails, energy plot, `SimStats`) and the
+//! view (window size, zoom, pan) are never written.
 
 use crate::application::sim_config::{
     MAX_TIME_STEP, MIN_TIME_STEP, ResolvedSpecies, SimConfig, check_time_step,
@@ -24,8 +27,7 @@ use crate::objects2d::operator::{
     MAX_THERMOSTAT_RADIUS, MIN_EMISSION_SPEED, MIN_EMIT_PERIOD, MIN_TARGET_TEMPERATURE,
     MIN_THERMOSTAT_RADIUS, THERMOSTAT_CHAIN_MAX, THERMOSTAT_CHAIN_MIN,
 };
-use crate::objects2d::wall_chain::{Joint, WallChain};
-use crate::objects2d::{Rect, SimLineSegment, ValveSegment, Vec2D};
+use crate::objects2d::{Rect, Vec2D};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -68,9 +70,9 @@ pub struct WorldFile {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub config: Option<SimConfig>,
     pub balls: Vec<BallData>,
-    pub line_segments: Vec<SimLineSegment>,
-    pub valves: Vec<ValveSegment>,
-    pub wall_chains: Vec<WallChain>,
+    pub line_segments: Vec<LineSegmentData>,
+    pub valves: Vec<ValveData>,
+    pub wall_chains: Vec<WallChainData>,
     pub source_spheres: Vec<SourceSphereData>,
     pub thermostats: Vec<ThermostatData>,
 }
@@ -86,6 +88,57 @@ pub struct BallData {
     pub v: Vec2D,
     pub pre_update_pos: Vec2D,
     pub accel: Vec2D,
+}
+
+/// A wall piece (`SimLineSegment`).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct LineSegmentData {
+    pub id: usize,
+    pub start: Vec2D,
+    pub end: Vec2D,
+    pub thickness: f32,
+}
+
+/// A valve's state (`ValveSegment`); where it sits is in its wall chain's
+/// joints.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct ValveData {
+    pub id: usize,
+    pub is_closed: bool,
+}
+
+/// A user-drawn wall (`WallChain`): its endpoints, the pieces (wall
+/// segments) and the joints between them. `pieces.len() == joints.len() + 1`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WallChainData {
+    pub id: usize,
+    pub start: Vec2D,
+    pub end: Vec2D,
+    pub pieces: Vec<ChainPieceData>,
+    pub joints: Vec<JointData>,
+}
+
+/// One piece of a wall chain: the line segment `line_id`, over the fixed
+/// fractions `t_start..t_end` of the chain.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct ChainPieceData {
+    pub line_id: usize,
+    pub t_start: f32,
+    pub t_end: f32,
+}
+
+/// What sits between two pieces of a wall chain, tagged by `kind`.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum JointData {
+    /// The valve `valve_id`.
+    Valve {
+        valve_id: usize,
+        t_start: f32,
+        t_end: f32,
+    },
+    /// The hole a deleted valve leaves.
+    Gap { t_start: f32, t_end: f32 },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -302,7 +355,7 @@ impl WorldFile {
 
     fn validate_chain(
         &self,
-        chain: &WallChain,
+        chain: &WallChainData,
         line_ids: &HashSet<usize>,
         valve_ids: &HashSet<usize>,
     ) -> AppResult {
@@ -327,7 +380,7 @@ impl WorldFile {
         }
         for joint in &chain.joints {
             match *joint {
-                Joint::Valve {
+                JointData::Valve {
                     valve_id,
                     t_start,
                     t_end,
@@ -339,7 +392,7 @@ impl WorldFile {
                         )));
                     }
                 }
-                Joint::Gap { t_start, t_end } => check_finite(&[t_start, t_end], &what)?,
+                JointData::Gap { t_start, t_end } => check_finite(&[t_start, t_end], &what)?,
             }
         }
         Ok(())
