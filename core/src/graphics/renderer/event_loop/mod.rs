@@ -12,6 +12,8 @@ mod line_segment_tool;
 pub mod metrics;
 pub mod operator_tool_handler;
 mod physics_coordinator;
+mod render_state_events;
+mod render_state_tools;
 mod sidebar_tool;
 mod source_sphere_tool;
 #[cfg(test)]

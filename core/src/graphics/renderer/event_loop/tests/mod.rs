@@ -12,4 +12,5 @@ mod object_hover;
 mod source_sphere_tool;
 mod thermostat_tool;
 mod tool_switch;
+mod unified_render_state;
 mod valve_tool;
