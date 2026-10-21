@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::application::MainContent;
+use crate::application::log_util::{SpeciesCounts, count_ball};
 use crate::application::renderer_snapshot::{
     BallRenderData, OperatorSnapshot, RendererSnapshot, ThermoGridSpec, UNKNOWN_SPECIES_COLOUR,
     WallSnapshot, get_special_ball_color,
@@ -11,7 +12,7 @@ use crate::application::scene_layers::SceneLayers;
 use crate::application::sim_stats::NORMAL_GRAVITY;
 use crate::application::thermo_field::ThermoGrid;
 use crate::objects2d::SimThermostat;
-use crate::objects2d::ball_impl::{BallPhysics, SpeciesId};
+use crate::objects2d::ball_impl::{BallPhysics, SpeciesId, SpeciesSet};
 use std::sync::Arc;
 
 impl MainContent {
@@ -20,10 +21,14 @@ impl MainContent {
     /// Uses cached force magnitudes from last physics step for neighbor line rendering.
     pub fn create_snapshot(&self) -> RendererSnapshot {
         let layers = self.runtime.snapshot_layers();
-        let balls = if layers.contains(SceneLayers::BALLS) {
-            self.build_ball_render_data()
+        // The species counts of the status lines come from the same pass
+        // over the balls when the BALLS layer makes one.
+        let mut species_counts = [0; SpeciesSet::CAPACITY];
+        let (balls, counts) = if layers.contains(SceneLayers::BALLS) {
+            let balls = self.build_ball_render_data(&mut species_counts);
+            (balls, Some(&species_counts))
         } else {
-            Vec::new()
+            (Vec::new(), None)
         };
 
         RendererSnapshot {
@@ -34,7 +39,8 @@ impl MainContent {
             kinetic_energy: self.world.sim.get_kinetic_energy(),
             potential_energy: self.world.sim.get_potential_energy(),
             time: self.world.sim.get_time(),
-            status_text: self.status_text(0, self.step_config.get_time_step()), // FPS not available during snapshot creation
+            // FPS not available during snapshot creation
+            status_text: self.status_text_with_counts(0, self.step_config.get_time_step(), counts),
             cell_grid_bounds: self.world.cell_grid.world_rect(),
             cursor_species: self.step_config.get_ball_factory().new_ball_species(),
             species: Arc::clone(self.world.species()),
@@ -101,7 +107,8 @@ impl MainContent {
 
     /// Per-ball render data (colours, tails, neighbour lines): the `BALLS`
     /// layer, which exists only for drawing.
-    fn build_ball_render_data(&self) -> Vec<BallRenderData> {
+    /// Also counts the balls per species into `species_counts`.
+    fn build_ball_render_data(&self, species_counts: &mut SpeciesCounts) -> Vec<BallRenderData> {
         let ball_count = self.world.balls.len();
         let mut balls = Vec::with_capacity(ball_count);
         let species_table = &**self.world.species();
@@ -115,6 +122,7 @@ impl MainContent {
 
         // Create BallRenderData for each ball
         for (ball_idx, ball) in self.world.balls.iter().enumerate() {
+            count_ball(species_counts, ball);
             let species = species_table.get(ball.species());
             let [equilibrium_radius, cutoff_radius] = rings
                 .get(ball.species().index())

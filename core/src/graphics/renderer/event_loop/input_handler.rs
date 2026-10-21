@@ -45,7 +45,7 @@ pub enum InputAction {
         position: Vec2D,
     },
     /// Cycle the species of new balls (right click).
-    NextBallSize,
+    NextSpecies,
 
     // View control
     ZoomIn {
@@ -251,7 +251,7 @@ impl InputHandler {
             (MouseButton::Left, ElementState::Pressed) => {
                 None // Left click doesn't do anything by default
             }
-            (MouseButton::Right, ElementState::Pressed) => Some(InputAction::NextBallSize),
+            (MouseButton::Right, ElementState::Pressed) => Some(InputAction::NextSpecies),
             (MouseButton::Middle, ElementState::Pressed) => {
                 self.start_pan(pos_px, current_pan_offset);
                 Some(InputAction::PanStart { pos_px })

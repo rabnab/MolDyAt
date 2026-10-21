@@ -241,6 +241,7 @@ fn key_name(key: KeyCode) -> &'static str {
         KeyCode::KeyD => "D",
         KeyCode::KeyG => "G",
         KeyCode::KeyH => "H",
+        KeyCode::KeyN => "N",
         KeyCode::KeyO => "O",
         KeyCode::KeyP => "P",
         KeyCode::KeyR => "R",
@@ -349,6 +350,22 @@ pub static COMMANDS: &[CommandDescriptor] = &[
         category: CommandCategory::Balls,
         default_binding: &[key(KeyCode::F5, Release)],
         kind: CommandKind::Domain(|| BallCommand::AddRandom(100).into()),
+    },
+    CommandDescriptor {
+        id: "balls.next_species",
+        label: "New balls and new source spheres get the next species (right click too).",
+        category: CommandCategory::Balls,
+        // A letter, not `]` / `[`: bindings are physical keys, and N is N on
+        // QWERTY, QWERTZ and AZERTY alike.
+        default_binding: &[key(KeyCode::KeyN, Release)],
+        kind: CommandKind::Domain(|| BallCommand::NextSpecies.into()),
+    },
+    CommandDescriptor {
+        id: "balls.previous_species",
+        label: "New balls and new source spheres get the previous species.",
+        category: CommandCategory::Balls,
+        default_binding: &[chord(Alt, KeyCode::KeyN, Release)],
+        kind: CommandKind::Domain(|| BallCommand::PreviousSpecies.into()),
     },
     CommandDescriptor {
         id: "balls.randomize_speeds",

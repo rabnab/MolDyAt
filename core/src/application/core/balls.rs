@@ -259,8 +259,12 @@ impl MainContent {
         }
     }
 
-    pub(crate) fn next_ball_size(&mut self) {
+    pub(crate) fn next_species(&mut self) {
         self.step_config.get_ball_factory().next_species();
+    }
+
+    pub(crate) fn previous_species(&mut self) {
+        self.step_config.get_ball_factory().previous_species();
     }
 
     #[cfg(test)]

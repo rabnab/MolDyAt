@@ -32,13 +32,13 @@ impl OperatorCommand for ToggleSourceSphere {
     }
 }
 
-/// Cycle the ball size emitted by a source sphere.
+/// Cycle the species a source sphere emits (the world's table, wrapping).
 #[derive(Debug)]
-pub struct CycleSourceSphereBallSize {
+pub struct CycleSourceSphereSpecies {
     pub sphere_id: usize,
 }
 
-impl OperatorCommand for CycleSourceSphereBallSize {
+impl OperatorCommand for CycleSourceSphereSpecies {
     fn execute(self: Box<Self>, content: &mut MainContent) {
         content.cycle_source_sphere_species(self.sphere_id);
     }
@@ -89,8 +89,8 @@ mod tests {
     }
 
     #[test]
-    fn cycle_source_sphere_ball_size_fields_round_trip() {
-        let cmd = CycleSourceSphereBallSize { sphere_id: 5 };
+    fn cycle_source_sphere_species_fields_round_trip() {
+        let cmd = CycleSourceSphereSpecies { sphere_id: 5 };
         assert_eq!(cmd.sphere_id, 5);
     }
 

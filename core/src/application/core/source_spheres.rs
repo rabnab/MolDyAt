@@ -21,9 +21,11 @@ struct EmissionParams {
 }
 
 impl MainContent {
-    /// Place a new source sphere at `center`.
+    /// Place a new source sphere at `center`. It emits the species new
+    /// balls get (the one selected with `N` / `Alt + N` or right click).
     pub(crate) fn add_source_sphere(&mut self, center: Vec2D) {
-        self.world.add_source_sphere(center);
+        let species = self.new_ball_species();
+        self.world.add_source_sphere(center, species);
     }
 
     /// Toggle the on/off state of an existing source sphere.
@@ -49,8 +51,10 @@ impl MainContent {
 }
 
 impl SimulationWorld {
-    pub(crate) fn add_source_sphere(&mut self, center: Vec2D) {
-        self.source_spheres.add(center);
+    /// Place a source sphere at `center` that emits `species` (of the
+    /// world's table).
+    pub(crate) fn add_source_sphere(&mut self, center: Vec2D, species: SpeciesId) {
+        self.source_spheres.add_with_species(center, species);
     }
 
     pub(crate) fn toggle_source_sphere(&mut self, sphere_id: usize) {

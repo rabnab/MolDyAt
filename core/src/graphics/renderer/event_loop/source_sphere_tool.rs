@@ -5,11 +5,12 @@
 //! Source sphere operator tool — placing, toggling, and adjusting source spheres.
 //!
 //! Defines [`SourceSphereToolHandler`] which implements [`OperatorToolHandler`]
-//! for the source-sphere interaction: click to place/toggle, right-click to
-//! cycle ball size, scroll to adjust speed/emission period.
+//! for the source-sphere interaction: click to place/toggle (a new sphere
+//! emits the species of new balls), right-click to cycle the species it
+//! emits, scroll to adjust speed/emission period.
 
 use crate::application::operator_command::source::{
-    AdjustSourceSphereEmitPeriod, AdjustSourceSphereSpeed, CycleSourceSphereBallSize,
+    AdjustSourceSphereEmitPeriod, AdjustSourceSphereSpeed, CycleSourceSphereSpecies,
     PlaceSourceSphere, ToggleSourceSphere,
 };
 use crate::objects2d::wall_chain::ObjectRef;
@@ -62,10 +63,10 @@ impl OperatorToolHandler for SourceSphereToolHandler {
                     ToolResponse::consumed_with(Box::new(PlaceSourceSphere { center: world_pos }))
                 }
             }
-            // Right press on existing sphere: cycle ball size
+            // Right press on existing sphere: cycle the species it emits
             (MouseButton::Right, ElementState::Pressed) => {
                 if let Some(sphere_id) = Self::find_source_sphere_at(world_pos, ctx) {
-                    ToolResponse::consumed_with(Box::new(CycleSourceSphereBallSize { sphere_id }))
+                    ToolResponse::consumed_with(Box::new(CycleSourceSphereSpecies { sphere_id }))
                 } else {
                     ToolResponse::default()
                 }
@@ -206,7 +207,7 @@ mod tests {
     }
 
     #[test]
-    fn right_press_on_sphere_cycles_ball_size() {
+    fn right_press_on_sphere_cycles_its_species() {
         let sphere = test_sphere(3, 5.0, 5.0);
         let mut tool = SourceSphereToolHandler::new();
         let (snap, world) = make_ctx_data(vec![sphere]);
@@ -221,7 +222,7 @@ mod tests {
         assert!(resp.consumed);
         assert!(
             resp.action.is_some(),
-            "Should emit CycleSourceSphereBallSize"
+            "Should emit CycleSourceSphereSpecies"
         );
     }
 

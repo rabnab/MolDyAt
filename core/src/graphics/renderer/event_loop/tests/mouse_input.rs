@@ -32,7 +32,7 @@ fn test_cursor_position_tracking() {
 }
 
 #[test]
-fn test_right_button_cycles_ball_size() {
+fn test_right_button_cycles_the_species_of_new_balls() {
     let mut handler = InputHandler::new();
     let action = handler.handle_mouse_button(
         winit::event::MouseButton::Right,
@@ -41,7 +41,7 @@ fn test_right_button_cycles_ball_size() {
         Vec2D::new(5.0, 10.0),
         Vec2D::zero(),
     );
-    assert!(matches!(action, Some(InputAction::NextBallSize)));
+    assert!(matches!(action, Some(InputAction::NextSpecies)));
 }
 
 #[test]

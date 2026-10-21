@@ -261,3 +261,35 @@ fn test_readme_key_table_matches_the_registry() {
         "README key table is out of date; replace it with:\n{expected}"
     );
 }
+
+/// `N` and `Alt + N` step the species of new balls through the registry
+/// (#238).
+#[test]
+fn test_n_keys_step_the_species_of_new_balls() {
+    use crate::application::{BallCommand, DomainCommand};
+    let alt = HeldModifiers {
+        alt: true,
+        ..HeldModifiers::default()
+    };
+    for (held, id, expected) in [
+        (
+            HeldModifiers::default(),
+            "balls.next_species",
+            "NextSpecies",
+        ),
+        (alt, "balls.previous_species", "PreviousSpecies"),
+    ] {
+        let (command, _) = command_for_key(KeyCode::KeyN, KeyPhase::Up, held)
+            .unwrap_or_else(|| panic!("N with {held:?} runs a command"));
+        assert_eq!(command.id, id);
+        let domain = command.domain_command().expect("a domain command");
+        let DomainCommand::Balls(ball_command) = domain else {
+            panic!("{id} is a ball command, got {domain:?}");
+        };
+        assert_eq!(format!("{ball_command:?}"), expected);
+        assert!(matches!(
+            ball_command,
+            BallCommand::NextSpecies | BallCommand::PreviousSpecies
+        ));
+    }
+}

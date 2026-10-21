@@ -25,6 +25,7 @@ mod object_deletion;
 mod snapshot;
 mod source_spheres;
 mod species;
+mod species_ui;
 mod thermostats;
 mod valves;
 mod verbose;

@@ -54,3 +54,20 @@ fn label_is_centred_on_the_anchor() {
     assert!(((min_x + max_x) * 0.5 - 0.5).abs() < 1e-6);
     assert!(((min_y + max_y) * 0.5 + 0.25).abs() < 1e-6);
 }
+
+/// The ASCII atlas is indexed by character code; the result matches a
+/// search, and characters outside the atlas are skipped.
+#[test]
+fn ascii_atlas_lookup_matches_a_search() {
+    use crate::wgpu::gpu::text::{ASCII_CHARS, push_label_vertices};
+    let mut verts = Vec::new();
+    push_label_vertices(&mut verts, &ASCII_CHARS, "A~Ü ", 0.0, 0.0, 0.1, 0.1);
+    // Six vertices per drawn glyph: 'A', '~' and ' ', not 'Ü'.
+    assert_eq!(verts.len(), 18);
+    let u0 = |glyph: usize| verts[glyph * 6].uv[0];
+    let n = ASCII_CHARS.len() as f32;
+    for (glyph, ch) in [(0, 'A'), (1, '~'), (2, ' ')] {
+        let idx = ASCII_CHARS.iter().position(|&c| c == ch).unwrap();
+        assert_eq!(u0(glyph), idx as f32 / n, "{ch}");
+    }
+}

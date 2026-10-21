@@ -26,8 +26,8 @@ impl InputOrchestrator {
                 }
                 affects_view
             }
-            InputAction::NextBallSize => {
-                state.next_ball_size();
+            InputAction::NextSpecies => {
+                state.next_species();
                 if state.is_active_tool(OperatorTool::Ball) {
                     state.mark_view_dirty();
                 }
@@ -317,12 +317,12 @@ mod tests {
     }
 
     #[test]
-    fn next_ball_size_marks_view_dirty_when_ball_tool_active() {
+    fn next_species_marks_view_dirty_when_ball_tool_active() {
         let mut state = build_test_state();
         state.render.active_tool = OperatorTool::Ball;
 
         let affects_view =
-            InputOrchestrator::process_action(&mut state, InputAction::NextBallSize, None, None);
+            InputOrchestrator::process_action(&mut state, InputAction::NextSpecies, None, None);
 
         assert!(!affects_view);
         assert!(state.render.view_dirty);

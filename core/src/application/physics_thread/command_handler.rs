@@ -119,7 +119,8 @@ impl DomainCommandHandler<'_> {
             BallCommand::StopAll => mc.stop_all_balls(),
             BallCommand::RandomizeSpeeds => mc.randomize_speeds(),
             BallCommand::EnableRandomSpeed => mc.enable_random_ball_speed(),
-            BallCommand::NextSize => mc.next_ball_size(),
+            BallCommand::NextSpecies => mc.next_species(),
+            BallCommand::PreviousSpecies => mc.previous_species(),
         }
     }
 

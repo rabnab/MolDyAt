@@ -78,6 +78,12 @@ impl BallFactory {
         self.new_ball_species.set(next);
     }
 
+    /// Switch new balls to the previous species of the table.
+    pub(crate) fn previous_species(&self) {
+        let previous = self.species.borrow().previous(self.new_ball_species.get());
+        self.new_ball_species.set(previous);
+    }
+
     /// The species of new balls.
     pub(crate) fn new_ball_species(&self) -> SpeciesId {
         self.new_ball_species.get()
