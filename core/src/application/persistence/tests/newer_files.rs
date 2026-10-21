@@ -81,6 +81,34 @@ fn load_world_reports_unknown_fields_in_the_load_message() {
 }
 
 #[test]
+fn a_field_repeated_in_a_list_is_reported_once_with_its_count() {
+    let mut file = fixture("v2.json");
+    let balls = file["balls"].as_array_mut().unwrap();
+    let count = balls.len();
+    for ball in balls.iter_mut() {
+        ball["label"] = json!("a");
+    }
+    file["balls"][2]["charge"] = json!(1.0);
+    let (_, ignored) = WorldFile::from_json_reporting(&file.to_string()).unwrap();
+    assert_eq!(
+        ignored,
+        [
+            format!("balls[*].label ({count} entries)"),
+            "balls[2].charge".to_string()
+        ]
+    );
+}
+
+#[test]
+fn the_warning_names_at_most_twenty_fields() {
+    let fields: Vec<String> = (0..25).map(|i| format!("f{i}")).collect();
+    let list = super::super::capped_list(&fields, 20);
+    assert!(list.starts_with("f0, f1,"), "{list}");
+    assert!(list.ends_with("f19 and 5 more"), "{list}");
+    assert_eq!(super::super::capped_list(&fields[..2], 20), "f0, f1");
+}
+
+#[test]
 fn newer_version_is_rejected_with_the_version_message() {
     let mut file = v2_with_unknown_fields();
     file["version"] = json!(WORLD_FILE_VERSION + 1);

@@ -82,8 +82,8 @@ fn migrate_v1_to_v2(file: &mut Value) -> AppResult {
     Ok(())
 }
 
-/// A parsed file and the paths of the fields `T` does not know, which were
-/// skipped (`balls[3].charge`, `pistons`), in file order.
+/// A parsed file and the fields `T` does not know, which were skipped, in
+/// file order of their first occurrence (see [`IgnoredFields::summary`]).
 pub(crate) type Parsed<T> = (T, Vec<String>);
 
 /// Parse a world file of any supported version into `T`, upgrading it first
@@ -125,25 +125,70 @@ where
     T: serde::Deserialize<'de>,
     D: serde::Deserializer<'de>,
 {
-    let mut ignored = Vec::new();
-    let value = serde_ignored::deserialize(deserializer, |path| ignored.push(field_path(&path)))
+    let mut ignored = IgnoredFields::default();
+    let value = serde_ignored::deserialize(deserializer, |path| ignored.add(&path))
         .map_err(|e| invalid(e.to_string()))?;
-    Ok((value, ignored))
+    Ok((value, ignored.summary()))
 }
 
-/// `balls[3].charge` for the field `charge` of the fourth ball.
-fn field_path(path: &serde_ignored::Path) -> String {
+/// The skipped fields, grouped by their path with list indices replaced by
+/// `*`, so a field on every ball is one entry, not one per ball (100k balls
+/// would otherwise make a multi-megabyte warning).
+#[derive(Default)]
+struct IgnoredFields {
+    /// Pattern, path of its first occurrence and count, in order of first
+    /// occurrence.
+    entries: Vec<(String, String, usize)>,
+    by_pattern: std::collections::HashMap<String, usize>,
+}
+
+impl IgnoredFields {
+    fn add(&mut self, path: &serde_ignored::Path) {
+        let pattern = field_path(path, true);
+        match self.by_pattern.get(&pattern) {
+            Some(&index) => self.entries[index].2 += 1,
+            None => {
+                self.by_pattern.insert(pattern.clone(), self.entries.len());
+                self.entries.push((pattern, field_path(path, false), 1));
+            }
+        }
+    }
+
+    /// One line per pattern: the full path of a field that occurs once
+    /// (`balls[3].charge`), the pattern and count otherwise
+    /// (`balls[*].label (100000 entries)`).
+    fn summary(self) -> Vec<String> {
+        self.entries
+            .into_iter()
+            .map(|(pattern, first, count)| match count {
+                1 => first,
+                n => format!("{pattern} ({n} entries)"),
+            })
+            .collect()
+    }
+}
+
+/// `balls[3].charge` for the field `charge` of the fourth ball, or
+/// `balls[*].charge` with `wildcard`.
+fn field_path(path: &serde_ignored::Path, wildcard: bool) -> String {
     use serde_ignored::Path;
     match path {
         Path::Root => String::new(),
-        Path::Seq { parent, index } => format!("{}[{index}]", field_path(parent)),
-        Path::Map { parent, key } => match field_path(parent) {
+        Path::Seq { parent, index } => {
+            let parent = field_path(parent, wildcard);
+            if wildcard {
+                format!("{parent}[*]")
+            } else {
+                format!("{parent}[{index}]")
+            }
+        }
+        Path::Map { parent, key } => match field_path(parent, wildcard) {
             parent if parent.is_empty() => key.clone(),
             parent => format!("{parent}.{key}"),
         },
         Path::Some { parent }
         | Path::NewtypeStruct { parent }
-        | Path::NewtypeVariant { parent } => field_path(parent),
+        | Path::NewtypeVariant { parent } => field_path(parent, wildcard),
     }
 }
 

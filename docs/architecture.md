@@ -273,7 +273,8 @@ A file from a newer build of the same version can hold fields this build does
 not know (#273). Unknown keys inside `config` are rejected, with a hint that
 the save is probably newer: a dropped config key would change the physics.
 Unknown fields anywhere else are skipped; `serde_ignored` collects their paths
-(`balls[3].charge`), and `load_world` logs them as one warning and counts them
+(`balls[3].charge`; a field on every ball is one `balls[*].label` entry with a
+count), and `load_world` logs them as one warning and counts them
 in the load message. So an addition that changes results bumps the version,
 even when it is additive for older files, and older builds refuse the file
 instead of running it with different physics.

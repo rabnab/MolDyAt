@@ -59,8 +59,9 @@
 //! - **A newer format version is rejected** ("version N is newer than this
 //!   build supports (up to M)").
 //! - **Unknown fields outside `config` are skipped with a warning.** The
-//!   load succeeds, a logged warning names every skipped field
-//!   (`balls[3].charge`, `pistons`), and the load message says how many
+//!   load succeeds, a logged warning names the skipped fields
+//!   (`balls[3].charge`, `pistons`; a field on every ball is one entry,
+//!   `balls[*].label (100000 entries)`), and the load message says how many
 //!   there were ([`LoadedWorld::ignored_fields`]).
 //!   Saving that world again drops them.
 //! - **Unknown keys inside `config` are rejected** (`SimConfig` uses
@@ -119,9 +120,24 @@ pub enum LoadSource {
 pub struct LoadedWorld {
     pub path: PathBuf,
     pub world_rect: Rect,
-    /// Fields outside `config` that this build does not know and skipped
-    /// (`balls[3].charge`), already logged as a warning (#273).
+    /// Fields outside `config` that this build does not know and skipped,
+    /// already logged as a warning (#273). A field that occurs once is named
+    /// by its path (`balls[3].charge`); one that repeats in a list is one
+    /// entry with `*` for the index and a count (`balls[*].label (100000
+    /// entries)`).
     pub ignored_fields: Vec<String>,
+}
+
+/// How many skipped fields the warning names before "and N more".
+const MAX_LOGGED_FIELDS: usize = 20;
+
+/// The first `max` of `items`, comma-separated, then "and N more".
+fn capped_list(items: &[String], max: usize) -> String {
+    let mut list = items[..items.len().min(max)].join(", ");
+    if items.len() > max {
+        list.push_str(&format!(" and {} more", items.len() - max));
+    }
+    list
 }
 
 impl LoadedWorld {
@@ -181,7 +197,7 @@ impl MainContent {
                  newer MolDyAt build; saving again drops them: {}",
                 path.display(),
                 ignored_fields.len(),
-                ignored_fields.join(", ")
+                capped_list(&ignored_fields, MAX_LOGGED_FIELDS)
             );
         }
         Ok(LoadedWorld {
