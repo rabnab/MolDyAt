@@ -176,7 +176,7 @@ Each item reports before/after numbers from G1 and must keep drift + energy test
 ```text
 Phase 1 (guardrails + quick wins):  G1, G2, G3, M1, M3, M4, C1, P1, P3
 Phase 2 (mixed species):            I1, I2, I3, I4, M6, I5, I6, C2, I7
-Phase 3 (crate split):              M2, #295, #270, #273, M5, C4, M7, M8, M9, P2
+Phase 3 (crate split):              M2, #295, #270, #273, #274, M5, C4, M7, M8, M9, P2
 Phase 4 (graphs + seams):           V3, V1, V2, V4, C3, C5, I8, P4, P7, V5
 Phase 5 (water + perf):             I9, I10, I12, V6, V7, P5, P6, P10, P8, I11 (if needed)
 ```
@@ -187,7 +187,7 @@ GitHub issues:
 |---|---|---|---|
 | 1 | #219 | G1 #221, G2 #222, G3 #223, M1 #224, M3 #225, M4 #226, C1 #227, P1 #228, P3 #229 | – |
 | 2 | #220 | I1 #230, I2 #233, I3 #234, M6 #231, I4 #235, I5 #236, C2 #232, I6 #237, I7 #238 | – |
-| 3 | #304 | M2 #305, #270, #273 | #295, M5 #306, C4 #307, M7 #308, M8 #309, M9 #310, P2 #311 |
+| 3 | #304 | M2 #305, #270, #273, #274 | #295, M5 #306, C4 #307, M7 #308, M8 #309, M9 #310, P2 #311 |
 | 5 | – | – | I12 #280 |
 
 "Landed" is taken from the commits on `master` (as of 2026-10-14), not from

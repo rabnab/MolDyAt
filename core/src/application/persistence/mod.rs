@@ -37,8 +37,9 @@
 //!   default that reproduces the behaviour of builds before the field
 //!   existed, e.g. `#[serde(default = "default_friction")] friction: f32`
 //!   where `default_friction()` returns the value that used to be hard-coded.
-//! - A new top-level list (e.g. a new operator kind) is
-//!   `#[serde(default)] sinks: Vec<SinkData>`: older files have none.
+//! - A new top-level list is `#[serde(default)] probes: Vec<ProbeData>`,
+//!   and a new operator kind a new variant of [`format::OperatorData`]:
+//!   older files have none.
 //! - [`WorldFile::validate`] must accept the default, so an old file that
 //!   lacks the field passes validation.
 //!
@@ -62,8 +63,9 @@
 //!   load succeeds, a logged warning names the skipped fields
 //!   (`balls[3].charge`, `pistons`; a field on every ball is one entry,
 //!   `balls[*].label (100000 entries)`), and the load message says how many
-//!   there were ([`LoadedWorld::ignored_fields`]).
-//!   Saving that world again drops them.
+//!   there were ([`LoadedWorld::ignored_fields`]). An operator of a kind
+//!   this build does not know counts as one such field
+//!   (`operators[2].probe`, #274). Saving that world again drops them.
 //! - **Unknown keys inside `config` are rejected** (`SimConfig` uses
 //!   `deny_unknown_fields`), with the hint that the save was probably
 //!   written by a newer build: a dropped config key would change the

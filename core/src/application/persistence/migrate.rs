@@ -49,10 +49,16 @@ pub(crate) struct Migration {
 
 /// Every migration, oldest first. Entry `i` upgrades version `i + 1`, so the
 /// list has `WORLD_FILE_VERSION - 1` entries.
-pub(crate) const MIGRATIONS: &[Migration] = &[Migration {
-    from: 1,
-    apply: migrate_v1_to_v2,
-}];
+pub(crate) const MIGRATIONS: &[Migration] = &[
+    Migration {
+        from: 1,
+        apply: migrate_v1_to_v2,
+    },
+    Migration {
+        from: 2,
+        apply: migrate_v2_to_v3,
+    },
+];
 
 /// v1 → v2 (#234): size classes became species. A ball's `size_idx` becomes
 /// `species` with the name of the former size class (`XS` to `XL`), whose `σ`
@@ -85,6 +91,117 @@ fn migrate_v1_to_v2(file: &mut Value) -> AppResult {
 /// A parsed file and the fields `T` does not know, which were skipped, in
 /// file order of their first occurrence (see [`IgnoredFields::summary`]).
 pub(crate) type Parsed<T> = (T, Vec<String>);
+
+/// v2 → v3 (#274): the lists `line_segments`, `valves`, `wall_chains`,
+/// `source_spheres` and `thermostats` become one `operators` list of
+/// `{"<kind>": {...}}` entries. A wall chain takes in its pieces' segments
+/// (`line_id` becomes the piece's `id`, with `start`, `end`, `thickness`)
+/// and its valves' `is_closed`. Segments and valves no chain refers to had
+/// no effect (walls are built from chains) and are dropped with a warning.
+/// A segment or valve that two chains share is an error, although v2
+/// validation only checked that it existed: the app never writes such a
+/// file, and in v3 each piece and valve belongs to exactly one chain.
+fn migrate_v2_to_v3(file: &mut Value) -> AppResult {
+    let mut segments = objects_by_id(take_field(file, "line_segments")?, "line_segments")?;
+    let mut valves = objects_by_id(take_field(file, "valves")?, "valves")?;
+    let mut operators = Vec::new();
+    for mut chain in list(take_field(file, "wall_chains")?, "wall_chains")? {
+        for piece in list_mut(&mut chain, "pieces")? {
+            let line_id = take_field(piece, "line_id")?;
+            let segment = take_by_id(&mut segments, &line_id, "line segment")?;
+            let piece = object_mut(piece, "pieces")?;
+            piece.insert("id".into(), line_id);
+            for key in ["start", "end", "thickness"] {
+                let value = segment
+                    .get(key)
+                    .ok_or_else(|| invalid(format!("line segment is missing `{key}`")))?;
+                piece.insert(key.into(), value.clone());
+            }
+        }
+        for joint in list_mut(&mut chain, "joints")? {
+            let Some(valve_id) = joint.get("valve_id").cloned() else {
+                continue; // a gap
+            };
+            let valve = take_by_id(&mut valves, &valve_id, "valve")?;
+            let is_closed = valve
+                .get("is_closed")
+                .ok_or_else(|| invalid("valve is missing `is_closed`"))?;
+            object_mut(joint, "joints")?.insert("is_closed".into(), is_closed.clone());
+        }
+        operators.push(serde_json::json!({ "wall_chain": chain }));
+    }
+    for (list_name, kind) in [
+        ("source_spheres", "source_sphere"),
+        ("thermostats", "thermostat"),
+    ] {
+        for entry in list(take_field(file, list_name)?, list_name)? {
+            operators.push(serde_json::json!({ kind: entry }));
+        }
+    }
+    if !segments.is_empty() || !valves.is_empty() {
+        log::warn!(
+            "dropped {} line segment(s) and {} valve(s) that belong to no wall chain",
+            segments.len(),
+            valves.len()
+        );
+    }
+    object_mut(file, "the world file")?.insert("operators".into(), Value::Array(operators));
+    Ok(())
+}
+
+/// The entries of the list `value` (named `name` in errors).
+fn list(value: Value, name: &str) -> AppResult<Vec<Value>> {
+    match value {
+        Value::Array(entries) => Ok(entries),
+        _ => Err(invalid(format!("`{name}` must be a list"))),
+    }
+}
+
+/// The entries of the list field `key` of `entry`.
+fn list_mut<'a>(entry: &'a mut Value, key: &str) -> AppResult<&'a mut Vec<Value>> {
+    entry
+        .get_mut(key)
+        .and_then(Value::as_array_mut)
+        .ok_or_else(|| invalid(format!("`{key}` must be a list")))
+}
+
+fn object_mut<'a>(
+    value: &'a mut Value,
+    what: &str,
+) -> AppResult<&'a mut serde_json::Map<String, Value>> {
+    value
+        .as_object_mut()
+        .ok_or_else(|| invalid(format!("entries of {what} must be objects")))
+}
+
+/// The entries of the list `value`, keyed by their `id` (as JSON text, so
+/// any id value works as a key).
+fn objects_by_id(value: Value, name: &str) -> AppResult<Vec<(String, Value)>> {
+    list(value, name)?
+        .into_iter()
+        .map(|entry| {
+            let id = entry
+                .get("id")
+                .ok_or_else(|| invalid(format!("an entry of `{name}` has no `id`")))?;
+            Ok((id.to_string(), entry))
+        })
+        .collect()
+}
+
+/// Remove and return the entry with `id`; each segment and valve belongs to
+/// one chain.
+fn take_by_id(entries: &mut Vec<(String, Value)>, id: &Value, what: &str) -> AppResult<Value> {
+    let key = id.to_string();
+    let index = entries
+        .iter()
+        .position(|(entry_id, _)| *entry_id == key)
+        .ok_or_else(|| {
+            invalid(format!(
+                "a wall chain refers to {what} {key}, which is missing or belongs to another chain"
+            ))
+        })?;
+    Ok(entries.swap_remove(index).1)
+}
 
 /// Parse a world file of any supported version into `T`, upgrading it first
 /// if it is older than [`WORLD_FILE_VERSION`].

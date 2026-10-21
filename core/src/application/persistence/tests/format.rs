@@ -6,7 +6,7 @@ use super::sample_file;
 use crate::application::SimConfig;
 use crate::application::persistence::WorldFile;
 use crate::application::persistence::format::{
-    BallData, ChainPieceData, LineSegmentData, MAX_ID, SourceSphereData, ThermostatData,
+    BallData, ChainPieceData, JointData, MAX_ID, OperatorData, SourceSphereData, ThermostatData,
     WORLD_FILE_VERSION, WallChainData,
 };
 use crate::application::sim_config::{MAX_TIME_STEP, MIN_TIME_STEP};
@@ -62,7 +62,8 @@ fn rejects_species_missing_from_the_files_species_list() {
     file.balls[0].species = "N2".to_string();
     assert!(error_text(&file).contains("unknown species"));
     file.balls[0].species = "Ar".to_string();
-    file.source_spheres.clear();
+    file.operators
+        .retain(|operator| !matches!(operator, OperatorData::SourceSphere(_)));
     file.validate().expect("Ar is in the list");
 }
 
@@ -122,11 +123,12 @@ fn rejects_source_sphere_emit_period_out_of_range() {
         let mut file = sample_file();
         let mut sphere = sample_sphere();
         sphere.emit_period = period;
-        file.source_spheres.push(sphere);
+        file.operators.push(OperatorData::SourceSphere(sphere));
         assert!(error_text(&file).contains("emit_period"), "{period}");
     }
     let mut file = sample_file();
-    file.source_spheres.push(sample_sphere());
+    file.operators
+        .push(OperatorData::SourceSphere(sample_sphere()));
     assert!(file.validate().is_ok());
 }
 
@@ -135,7 +137,7 @@ fn rejects_source_sphere_emission_speed_out_of_range() {
     let mut file = sample_file();
     let mut sphere = sample_sphere();
     sphere.emission_speed = 50.0;
-    file.source_spheres.push(sphere);
+    file.operators.push(OperatorData::SourceSphere(sphere));
     assert!(error_text(&file).contains("emission_speed"));
 }
 
@@ -151,7 +153,7 @@ fn rejects_thermostat_with_wrong_chain_or_ranges() {
         chain: vec![0.0; 5],
     };
     let mut file = sample_file();
-    file.thermostats.push(good.clone());
+    file.operators.push(OperatorData::Thermostat(good.clone()));
     assert!(file.validate().is_ok());
 
     for bad in [
@@ -177,21 +179,9 @@ fn rejects_thermostat_with_wrong_chain_or_ranges() {
         },
     ] {
         let mut file = sample_file();
-        file.thermostats.push(bad);
+        file.operators.push(OperatorData::Thermostat(bad));
         assert!(file.validate().is_err());
     }
-}
-
-#[test]
-fn rejects_line_segment_without_thickness() {
-    let mut file = sample_file();
-    file.line_segments.push(LineSegmentData {
-        id: 0,
-        start: Vec2D::zero(),
-        end: Vec2D::new(1.0, 0.0),
-        thickness: 0.0,
-    });
-    assert!(error_text(&file).contains("thickness"));
 }
 
 #[test]
@@ -199,21 +189,84 @@ fn rejects_malformed_json() {
     assert!(WorldFile::from_json("{ not json").is_err());
 }
 
-#[test]
-fn rejects_chain_with_missing_line_segment() {
-    let mut file = sample_file();
-    file.wall_chains.push(WallChainData {
-        id: 0,
+/// A wall chain `id` with one valve per entry of `valve_ids` and one more
+/// piece than valves, the pieces numbered from `piece_id`.
+fn sample_chain(id: usize, piece_id: usize, valve_ids: &[usize]) -> WallChainData {
+    let piece = |n: usize| ChainPieceData {
+        id: piece_id + n,
         start: Vec2D::zero(),
         end: Vec2D::new(1.0, 0.0),
-        pieces: vec![ChainPieceData {
-            line_id: 7,
-            t_start: 0.0,
-            t_end: 1.0,
-        }],
-        joints: vec![],
-    });
-    assert!(error_text(&file).contains("missing line segment"));
+        thickness: 1.0,
+        t_start: 0.0,
+        t_end: 1.0,
+    };
+    WallChainData {
+        id,
+        start: Vec2D::zero(),
+        end: Vec2D::new(1.0, 0.0),
+        pieces: (0..=valve_ids.len()).map(piece).collect(),
+        joints: valve_ids
+            .iter()
+            .map(|&valve_id| JointData::Valve {
+                valve_id,
+                is_closed: true,
+                t_start: 0.4,
+                t_end: 0.6,
+            })
+            .collect(),
+    }
+}
+
+#[test]
+fn accepts_wall_chains_with_their_pieces_and_valves() {
+    let mut file = sample_file();
+    file.operators
+        .push(OperatorData::WallChain(sample_chain(0, 0, &[0])));
+    file.operators
+        .push(OperatorData::WallChain(sample_chain(1, 2, &[1])));
+    file.validate().unwrap();
+}
+
+#[test]
+fn rejects_wall_piece_without_thickness() {
+    let mut file = sample_file();
+    let mut chain = sample_chain(0, 0, &[]);
+    chain.pieces[0].thickness = 0.0;
+    file.operators.push(OperatorData::WallChain(chain));
+    assert!(error_text(&file).contains("thickness"));
+}
+
+#[test]
+fn rejects_chain_with_wrong_piece_count() {
+    let mut file = sample_file();
+    let mut chain = sample_chain(0, 0, &[0]);
+    chain.pieces.pop();
+    file.operators.push(OperatorData::WallChain(chain));
+    assert!(error_text(&file).contains("one more piece than joints"));
+}
+
+#[test]
+fn piece_and_valve_ids_are_unique_across_chains() {
+    let mut file = sample_file();
+    file.operators
+        .push(OperatorData::WallChain(sample_chain(0, 0, &[])));
+    file.operators
+        .push(OperatorData::WallChain(sample_chain(1, 0, &[])));
+    assert!(error_text(&file).contains("duplicate wall piece id 0"));
+
+    let mut file = sample_file();
+    file.operators
+        .push(OperatorData::WallChain(sample_chain(0, 0, &[5])));
+    file.operators
+        .push(OperatorData::WallChain(sample_chain(1, 2, &[5])));
+    assert!(error_text(&file).contains("duplicate valve id 5"));
+
+    let mut file = sample_file();
+    file.operators
+        .push(OperatorData::WallChain(sample_chain(3, 0, &[])));
+    file.operators
+        .push(OperatorData::WallChain(sample_chain(3, 2, &[])));
+    assert!(error_text(&file).contains("duplicate wall chain id 3"));
 }
 
 #[test]
@@ -225,7 +278,7 @@ fn rejects_ids_that_would_overflow_the_id_counters() {
     let mut file = sample_file();
     let mut sphere = sample_sphere();
     sphere.id = MAX_ID + 1;
-    file.source_spheres.push(sphere);
+    file.operators.push(OperatorData::SourceSphere(sphere));
     assert!(error_text(&file).contains("source sphere id"));
 
     let mut file = sample_file();
@@ -288,10 +341,10 @@ fn rejects_time_step_outside_the_accepted_range() {
 
 #[test]
 fn joints_read_both_kinds_and_reject_mismatched_fields() {
-    use crate::application::persistence::format::JointData;
     let read = |json: &str| serde_json::from_str::<JointData>(json).map_err(|e| e.to_string());
     let valve = JointData::Valve {
         valve_id: 4,
+        is_closed: false,
         t_start: 0.25,
         t_end: 0.5,
     };
@@ -304,6 +357,8 @@ fn joints_read_both_kinds_and_reject_mismatched_fields() {
     }
     let error = read(r#"{"kind": "valve", "t_start": 0.0, "t_end": 1.0}"#).unwrap_err();
     assert!(error.contains("missing field `valve_id`"), "{error}");
+    let error = read(r#"{"kind": "valve", "valve_id": 1, "t_start": 0.0, "t_end": 1.0}"#);
+    assert!(error.unwrap_err().contains("missing field `is_closed`"));
     let error = read(r#"{"kind": "gap", "valve_id": 1, "t_start": 0.0, "t_end": 1.0}"#);
     assert!(error.unwrap_err().contains("no `valve_id`"));
     let error = read(r#"{"kind": "piston", "t_start": 0.0, "t_end": 1.0}"#).unwrap_err();

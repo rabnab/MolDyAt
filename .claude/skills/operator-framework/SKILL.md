@@ -41,7 +41,7 @@ Use this when implementing or changing operators (line segment, valve, thermosta
 A new operator type, or a new persistent field, must be added in all of these:
 - `OperatorSnapshot` (`core/src/application/renderer_snapshot.rs`) and its creation in `core/src/application/core/snapshot.rs`. Live readouts belong behind `SceneLayers::READOUTS`.
 - A render pipeline in `wgpu_renderer/src/wgpu/pipelines/`, registered in draw order in `WgpuPipelines::new` (see `docs/architecture.md`, Render pipelines).
-- The save format: `WorldFile` (`core/src/application/persistence/format.rs`) and `convert.rs`. Old saves must keep loading; bump `WORLD_FILE_VERSION` with a migration when the layout changes.
+- The save format (see the `save-format` skill): a new operator kind is a new variant of `OperatorData` (`core/src/application/persistence/format.rs`) with its own `*Data` file type, a key in `OperatorVisitor::visit_map`, an arm in `capture_operators` and the restore in `convert.rs`, and its checks in `validate()`. If it changes results (it almost always does), bump `WORLD_FILE_VERSION` with a migration that only updates the number, so older builds refuse the file instead of skipping the operator with a warning (#273, #274). Parts an operator owns (a chain's pieces and valves) are saved inside its entry, not as operators of their own. Old saves must keep loading.
 - Headless operator counts in `wgpu_renderer/src/headless_output.rs`.
 
 ## Test Requirements For Operator Changes
