@@ -482,7 +482,7 @@ core/
     │   │   └── tests/         # Topic-based test files (ball_management, energy, …)
     │   ├── operator_command/  # Valve, thermostat, source commands
     │   ├── persistence/       # Versioned JSON save / load
-    │   ├── sim_config.rs      # SimConfig: run settings, --config file
+    │   ├── sim_config/        # SimConfig: run settings, --config file
     │   └── physics_thread/    # Physics thread internals
     ├── graphics/
     │   ├── energy_plot/       # Energy plot window
