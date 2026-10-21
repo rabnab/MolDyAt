@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use super::{BallPhysics, CellGrid, MainContent, SimStats, SimulationWorld};
+use super::{BallPhysics, CellGrid, MainContent, RuntimeOptions, SimStats, SimulationWorld};
 use crate::application::AppResult;
 use crate::application::StepConfig;
 use crate::application::scene_layers::SceneLayers;
@@ -56,7 +56,9 @@ impl MainContent {
                 world_generation: 0,
                 snapshot_layers: SceneLayers::ALL,
                 snapshot_interval_us: config.display.snapshot_interval_us,
+                paused_for_resize: false,
             },
+            options: RuntimeOptions::default(),
         })
     }
 }
@@ -100,12 +102,7 @@ impl SimulationWorld {
             species_present,
             world_rect,
             sim: SimStats::default(),
-            real_data: false,
-            step_by_step: false,
             step_count: 0,
-            show_timings: false,
-            show_ball_stats: true,
-            was_paused_for_resize: false,
             speed_limit_factor: config.integration.speed_limit_factor,
             speed_limit_override: None,
             kernel_points: Vec::new(),

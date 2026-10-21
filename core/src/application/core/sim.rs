@@ -18,7 +18,7 @@ impl MainContent {
 
     /// Pause simulation when window resize is detected.
     pub(crate) fn pause_for_resize(&mut self) {
-        self.world.was_paused_for_resize = true;
+        self.runtime.paused_for_resize = true;
         self.world.sim.toggle_pause();
     }
 
@@ -27,26 +27,27 @@ impl MainContent {
     /// rebuilds it and nothing moves a ball while paused), so this only
     /// resumes the simulation.
     pub(crate) fn unpause_after_resize(&mut self) {
-        if !self.world.was_paused_for_resize {
+        if !self.runtime.paused_for_resize {
             return;
         }
 
         if self.world.sim.is_paused() {
             self.world.sim.toggle_pause();
         }
-        self.world.was_paused_for_resize = false;
+        self.runtime.paused_for_resize = false;
     }
 }
 
 impl MainContent {
     #[cfg(test)]
     pub(crate) fn update_sim(&mut self, dt: f32, bound_rect: &Rect) {
-        SimulationEngine::update_sim(self.world_mut(), dt, bound_rect);
+        let log_timings = self.options.show_timings;
+        SimulationEngine::update_sim(self.world_mut(), dt, bound_rect, log_timings);
     }
 
     pub(crate) fn collect_neighbours_by_cell(&mut self, dt: f32) {
-        let (world, step_config) = self.world_and_step_config();
-        SimulationEngine::collect_neighbours_by_cell(world, step_config, dt);
+        let (world, step_config, options) = self.step_parts();
+        SimulationEngine::collect_neighbours_by_cell(world, step_config, dt, options.show_timings);
     }
 
     /// One step with all derived data (headless runs and tests): the thermo
@@ -58,11 +59,11 @@ impl MainContent {
     }
 
     pub(crate) fn simulation_step_with_dt(&mut self, dt: f32) -> AppResult<()> {
-        let (world, step_config) = self.world_and_step_config();
+        let (world, step_config, options) = self.step_parts();
         let stepped = !world.sim.is_paused();
-        SimulationEngine::simulation_step_with_dt(world, step_config, dt)?;
+        SimulationEngine::simulation_step_with_dt(world, step_config, options, dt)?;
         if stepped {
-            SimulationEngine::record_thermo_fields_if_due(world);
+            SimulationEngine::record_thermo_fields_if_due(world, options.show_timings);
         }
         Ok(())
     }

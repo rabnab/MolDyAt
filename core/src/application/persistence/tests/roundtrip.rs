@@ -410,3 +410,53 @@ fn loading_with_the_same_table_keeps_the_species_of_new_balls() {
     assert_eq!(target.create_snapshot().cursor_species, SpeciesId::new(1));
     let _ = fs::remove_dir_all(store.dir());
 }
+
+/// Display and stepping options belong to the run, not the world (#305): a
+/// load keeps them, and saves do not carry them.
+#[test]
+fn runtime_options_survive_a_load() {
+    let store = SaveStore::new(scratch_dir("options"));
+    let path = busy_world().save_world(&store).unwrap();
+    let text = fs::read_to_string(path).unwrap();
+    for key in [
+        "real_data",
+        "step_by_step",
+        "show_timings",
+        "show_ball_stats",
+    ] {
+        assert!(!text.contains(key), "{key} must not be saved");
+    }
+
+    let mut target = empty_world();
+    target.toggle_real_data();
+    target.toggle_stepwise();
+    target.toggle_timing_display();
+    target.toggle_show_ball_stats();
+    let before = *target.options();
+    assert_ne!(before, Default::default());
+    target
+        .load_world(&store, &LoadSource::Latest, true)
+        .unwrap();
+    assert_eq!(*target.options(), before);
+    let _ = fs::remove_dir_all(store.dir());
+}
+
+#[test]
+fn load_during_a_resize_pause_keeps_the_loaded_world_paused() {
+    let dir = scratch_dir("load_during_resize");
+    let store = SaveStore::new(&dir);
+    empty_world().save_world(&store).unwrap();
+
+    let mut target = empty_world();
+    if target.world().sim.is_paused() {
+        target.toggle_pause();
+    }
+    target.pause_for_resize();
+    target
+        .load_world(&store, &LoadSource::Latest, true)
+        .unwrap();
+    // The resize ends after the load: it must not resume the loaded world.
+    target.unpause_after_resize();
+    assert!(target.world().sim.is_paused());
+    let _ = fs::remove_dir_all(&dir);
+}

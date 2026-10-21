@@ -9,6 +9,7 @@ mod line_segments;
 mod object_deletion;
 mod operators;
 mod placement;
+mod runtime_options;
 mod sim;
 mod simulation_engine;
 mod snapshot;
@@ -19,6 +20,7 @@ mod valves;
 pub use valves::valve_span_problem;
 mod verbose;
 
+pub(crate) use runtime_options::RuntimeOptions;
 pub(crate) use simulation_engine::SimulationEngine;
 
 use crate::application::StepConfig;
@@ -74,13 +76,8 @@ pub struct SimulationWorld {
     /// last ball is gone, until the next `rebuild_cell_grid`). The cell size
     /// follows the largest pair list radius among them.
     pub(crate) species_present: SpeciesSet,
-    pub(crate) real_data: bool,
-    pub(crate) step_by_step: bool,
-    pub(crate) show_timings: bool,
-    pub(crate) show_ball_stats: bool,
     pub(crate) step_count: usize,
 
-    pub(crate) was_paused_for_resize: bool,
     /// Speed limit as a share of the shorter world side (`SimConfig`).
     pub(crate) speed_limit_factor: f32,
     /// Override for speed limit (None = use default calculation, Some(f32::INFINITY) = disable)
@@ -169,6 +166,10 @@ pub struct MainContent {
 
     step_config: StepConfig,
 
+    /// Display and stepping options (keys `D`, `S`, `F4`, `B`); not part of
+    /// the world, so a load keeps them.
+    options: RuntimeOptions,
+
     runtime: PhysicsRuntimeState,
 }
 
@@ -189,6 +190,9 @@ pub(crate) struct PhysicsRuntimeState {
     /// Least time between two published snapshots, in microseconds
     /// (`SimConfig::display`).
     snapshot_interval_us: u64,
+    /// The simulation was paused because the window is being resized; it
+    /// resumes when the resize ends (`unpause_after_resize`).
+    paused_for_resize: bool,
 }
 
 pub struct StatsAccumulator {
