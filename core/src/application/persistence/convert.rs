@@ -11,11 +11,16 @@
 //! `From<Vec<_>>`). Each file type converts to and from its simulation type
 //! here, side by side, so adding a field means touching one place.
 
-use super::format::{BallData, SourceSphereData, ThermostatData, WORLD_FILE_VERSION, WorldFile};
+use super::format::{
+    BallData, ChainPieceData, JointData, LineSegmentData, SourceSphereData, ThermostatData,
+    ValveData, WORLD_FILE_VERSION, WallChainData, WorldFile,
+};
 use crate::application::core::SimulationWorld;
 use crate::application::{AppResult, MainContent};
 use crate::objects2d::ball_impl::{Ball2D, SpeciesId, SpeciesTable};
 use crate::objects2d::operator::{OperatorState, SimSourceSphere, SimThermostat};
+use crate::objects2d::wall_chain::{ChainPiece, Joint, WallChain};
+use crate::objects2d::{SimLineSegment, ValveSegment};
 use std::sync::Arc;
 
 impl WorldFile {
@@ -35,9 +40,23 @@ impl WorldFile {
                 .iter()
                 .map(|ball| BallData::capture(ball, species))
                 .collect(),
-            line_segments: world.line_segments.segments().to_vec(),
-            valves: world.valve_segments.valves().to_vec(),
-            wall_chains: world.wall_chains.chains().cloned().collect(),
+            line_segments: world
+                .line_segments
+                .segments()
+                .iter()
+                .map(LineSegmentData::from)
+                .collect(),
+            valves: world
+                .valve_segments
+                .valves()
+                .iter()
+                .map(ValveData::from)
+                .collect(),
+            wall_chains: world
+                .wall_chains
+                .chains()
+                .map(WallChainData::from)
+                .collect(),
             source_spheres: world
                 .source_spheres
                 .spheres()
@@ -72,9 +91,24 @@ impl TryFrom<&WorldFile> for SimulationWorld {
             .map(|data| data.restore(&species))
             .collect();
         world.rebuild_cell_grid();
-        world.line_segments = file.line_segments.clone().into();
-        world.valve_segments = file.valves.clone().into();
-        world.wall_chains = file.wall_chains.clone().into();
+        world.line_segments = file
+            .line_segments
+            .iter()
+            .map(SimLineSegment::from)
+            .collect::<Vec<_>>()
+            .into();
+        world.valve_segments = file
+            .valves
+            .iter()
+            .map(ValveSegment::from)
+            .collect::<Vec<_>>()
+            .into();
+        world.wall_chains = file
+            .wall_chains
+            .iter()
+            .map(WallChain::from)
+            .collect::<Vec<_>>()
+            .into();
         world.source_spheres = file
             .source_spheres
             .iter()
@@ -178,5 +212,120 @@ impl From<&ThermostatData> for SimThermostat {
         thermostat.tau = data.tau;
         thermostat.chain = data.chain.clone();
         thermostat
+    }
+}
+
+impl From<&SimLineSegment> for LineSegmentData {
+    fn from(segment: &SimLineSegment) -> Self {
+        Self {
+            id: segment.id,
+            start: segment.start,
+            end: segment.end,
+            thickness: segment.thickness,
+        }
+    }
+}
+
+impl From<&LineSegmentData> for SimLineSegment {
+    fn from(data: &LineSegmentData) -> Self {
+        Self {
+            id: data.id,
+            start: data.start,
+            end: data.end,
+            thickness: data.thickness,
+        }
+    }
+}
+
+impl From<&ValveSegment> for ValveData {
+    fn from(valve: &ValveSegment) -> Self {
+        Self {
+            id: valve.id,
+            is_closed: valve.is_closed,
+        }
+    }
+}
+
+impl From<&ValveData> for ValveSegment {
+    fn from(data: &ValveData) -> Self {
+        ValveSegment::new(data.id, data.is_closed)
+    }
+}
+
+impl From<&WallChain> for WallChainData {
+    fn from(chain: &WallChain) -> Self {
+        Self {
+            id: chain.id,
+            start: chain.start,
+            end: chain.end,
+            pieces: chain.pieces.iter().map(ChainPieceData::from).collect(),
+            joints: chain.joints.iter().map(JointData::from).collect(),
+        }
+    }
+}
+
+impl From<&WallChainData> for WallChain {
+    fn from(data: &WallChainData) -> Self {
+        Self {
+            id: data.id,
+            start: data.start,
+            end: data.end,
+            pieces: data.pieces.iter().map(ChainPiece::from).collect(),
+            joints: data.joints.iter().map(Joint::from).collect(),
+        }
+    }
+}
+
+impl From<&ChainPiece> for ChainPieceData {
+    fn from(piece: &ChainPiece) -> Self {
+        Self {
+            line_id: piece.line_id,
+            t_start: piece.t_start,
+            t_end: piece.t_end,
+        }
+    }
+}
+
+impl From<&ChainPieceData> for ChainPiece {
+    fn from(data: &ChainPieceData) -> Self {
+        Self {
+            line_id: data.line_id,
+            t_start: data.t_start,
+            t_end: data.t_end,
+        }
+    }
+}
+
+impl From<&Joint> for JointData {
+    fn from(joint: &Joint) -> Self {
+        match *joint {
+            Joint::Valve {
+                valve_id,
+                t_start,
+                t_end,
+            } => JointData::Valve {
+                valve_id,
+                t_start,
+                t_end,
+            },
+            Joint::Gap { t_start, t_end } => JointData::Gap { t_start, t_end },
+        }
+    }
+}
+
+impl From<&JointData> for Joint {
+    fn from(data: &JointData) -> Self {
+        match *data {
+            JointData::Valve {
+                valve_id,
+                t_start,
+                t_end,
+            } => Joint::Valve {
+                valve_id,
+                t_start,
+                t_end,
+            },
+            JointData::Gap { t_start, t_end } => Joint::Gap { t_start, t_end },
+        }
     }
 }

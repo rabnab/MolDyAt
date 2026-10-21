@@ -228,7 +228,11 @@ Every visual layer is one `RenderPipeline` in
 `core/src/application/persistence/` saves and loads the whole world
 (Ctrl+S / Ctrl+O, or `--load` on the command line). A `WorldFile` holds a
 format version, the world rectangle, time step, gravity, the simulation
-config, every ball, and all operators including wall chains. Loading replaces the world, increments the
+config, every ball, and all operators including wall chains, each through its
+own file type in `format.rs` (`BallData`, `LineSegmentData`, `ValveData`,
+`WallChainData`, `SourceSphereData`, `ThermostatData`); the simulation types
+do not derive serde (#270), so refactoring them cannot change the file.
+Loading replaces the world, increments the
 world generation (the step count starts again, so the renderer can tell the
 new world's snapshots apart), and
 sends `WorldLoaded` so the window can resize to fit the loaded world.
