@@ -134,12 +134,13 @@ fn migration_on_a_file_missing_a_field_is_an_error_not_a_panic() {
 #[test]
 fn current_version_file_skips_the_migration_path() {
     let chain = [Migration {
-        from: 2,
+        from: WORLD_FILE_VERSION,
         apply: must_not_run,
     }];
-    let v2_json = serde_json::to_string(&fixture("v2.json")).unwrap();
-    let (file, _): (WorldFile, _) = parse_with(&v2_json, &chain, 2).unwrap();
-    assert_eq!(file.version, 2);
+    let current = format!("v{WORLD_FILE_VERSION}.json");
+    let json = serde_json::to_string(&fixture(&current)).unwrap();
+    let (file, _): (WorldFile, _) = parse_with(&json, &chain, WORLD_FILE_VERSION).unwrap();
+    assert_eq!(file.version, WORLD_FILE_VERSION);
 }
 
 // ── v1 → v2 (#234): size classes become species ─────────────────
@@ -148,7 +149,7 @@ fn current_version_file_skips_the_migration_path() {
 fn v1_size_classes_become_species_names() {
     let mut file = v1_fixture();
     let before = file.clone();
-    assert_eq!(upgrade(&mut file).unwrap(), 1);
+    assert_eq!(upgrade_with(&mut file, MIGRATIONS, 2).unwrap(), 1);
     assert_eq!(file["version"], 2);
 
     let names = ["XS", "S", "M", "L"];
@@ -212,4 +213,111 @@ fn parse_rejects_bad_versions_before_reading_the_rest() {
         let error = error_text(parse_with::<Value>(json, TEST_CHAIN, 3));
         assert!(error.contains(expected), "{json}: {error}");
     }
+}
+
+// ── v2 → v3 (#274): one operator list, chains own pieces and valves ──
+
+fn v2_fixture() -> Value {
+    fixture("v2.json")
+}
+
+fn upgrade_v2(file: &mut Value) -> AppResult<u32> {
+    upgrade_with(file, MIGRATIONS, 3)
+}
+
+#[test]
+fn v2_upgrades_to_the_v3_reference_save() {
+    let mut file = v2_fixture();
+    assert_eq!(upgrade_v2(&mut file).unwrap(), 2);
+    assert_eq!(file, fixture("v3.json"));
+}
+
+#[test]
+fn v2_chains_take_in_their_segments_and_valves() {
+    let mut file = v2_fixture();
+    let before = file.clone();
+    upgrade_v2(&mut file).unwrap();
+    for key in [
+        "line_segments",
+        "valves",
+        "wall_chains",
+        "source_spheres",
+        "thermostats",
+    ] {
+        assert!(file.get(key).is_none(), "{key}");
+    }
+    let chain = &file["operators"][0]["wall_chain"];
+    let segment = &before["line_segments"][0];
+    assert_eq!(chain["pieces"][0]["id"], segment["id"]);
+    assert_eq!(chain["pieces"][0]["start"], segment["start"]);
+    assert_eq!(chain["pieces"][0]["thickness"], segment["thickness"]);
+    assert!(chain["pieces"][0].get("line_id").is_none());
+    assert_eq!(
+        chain["joints"][0]["is_closed"],
+        before["valves"][0]["is_closed"]
+    );
+    let kinds: Vec<&str> = file["operators"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| entry.as_object().unwrap().keys().next().unwrap().as_str())
+        .collect();
+    let chains = before["wall_chains"].as_array().unwrap().len();
+    assert_eq!(kinds[..chains], vec!["wall_chain"; chains]);
+    assert_eq!(
+        kinds[chains..],
+        ["source_sphere", "source_sphere", "thermostat", "thermostat"]
+    );
+}
+
+#[test]
+fn v2_segments_and_valves_without_a_chain_are_dropped() {
+    let mut file = v2_fixture();
+    file["line_segments"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"id": 99, "start": {"x": 0.0, "y": 0.0}, "end": {"x": 1.0, "y": 0.0}, "thickness": 1.0}));
+    file["valves"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"id": 98, "is_closed": true}));
+    upgrade_v2(&mut file).unwrap();
+    let text = file.to_string();
+    assert!(!text.contains("\"id\":99") && !text.contains("\"valve_id\":98"));
+}
+
+#[test]
+fn v2_chain_with_a_missing_or_shared_segment_is_an_error_not_a_panic() {
+    let mut file = v2_fixture();
+    file["wall_chains"][0]["pieces"][0]["line_id"] = json!(77);
+    let error = error_text(upgrade_v2(&mut file));
+    assert!(error.contains("line segment 77"), "{error}");
+
+    let mut file = v2_fixture();
+    file["wall_chains"][1]["pieces"][0]["line_id"] = json!(0);
+    let error = error_text(upgrade_v2(&mut file));
+    assert!(error.contains("belongs to another chain"), "{error}");
+
+    let mut file = v2_fixture();
+    file["wall_chains"][1]["joints"][0]["valve_id"] = json!(0);
+    let error = error_text(upgrade_v2(&mut file));
+    assert!(error.contains("valve 0"), "{error}");
+}
+
+#[test]
+fn v2_malformed_lists_are_an_error_not_a_panic() {
+    for (key, bad) in [
+        ("line_segments", json!({"not": "a list"})),
+        ("valves", json!([{"is_closed": true}])),
+        ("wall_chains", json!([{"pieces": 3}])),
+        ("thermostats", json!(null)),
+    ] {
+        let mut file = v2_fixture();
+        file[key] = bad.clone();
+        assert!(upgrade_v2(&mut file).is_err(), "{key}: {bad}");
+    }
+    let mut file = v2_fixture();
+    file.as_object_mut().unwrap().remove("valves");
+    let error = error_text(upgrade_v2(&mut file));
+    assert!(error.contains("missing field `valves`"), "{error}");
 }

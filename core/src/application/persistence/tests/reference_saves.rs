@@ -38,6 +38,11 @@ const FIXTURES: &[Fixture] = &[
         file: "v2.json",
         check: check_v2,
     },
+    Fixture {
+        version: 3,
+        file: "v3.json",
+        check: check_v2,
+    },
 ];
 
 fn fixtures_dir() -> PathBuf {
@@ -215,7 +220,9 @@ fn check_v1(mc: &MainContent) {
 }
 
 /// v2 (#234): the v1 world saved by the species build, with ball 14 and the
-/// second source sphere changed to `N2` and ball 15 to `XL`.
+/// second source sphere changed to `N2` and ball 15 to `XL`. v3 (#274) is the
+/// same world in the operator list layout, written by the build that
+/// introduced it (`v2_upgrades_to_the_v3_reference_save`).
 fn check_v2(mc: &MainContent) {
     check_world(mc, ["XS", "S", "M", "L", "N2", "XL", "M", "L"], ["M", "N2"]);
 }
@@ -224,9 +231,10 @@ fn check_v2(mc: &MainContent) {
 fn check_world(mc: &MainContent, ball_species: [&str; 8], sphere_species: [&str; 2]) {
     let world = mc.world();
     assert_eq!(mc.time_step(), 0.005);
-    // Both predate the saved config (#231): they run with the defaults and
-    // their own time step. 0.005 is also the default now (#301);
-    // `config_less_save_keeps_its_time_step` covers a step that differs.
+    // None has a saved config (#231; v1 and v2 predate it, v3 is the v2
+    // world): they run with the defaults and their own time step. 0.005 is
+    // also the default now (#301); `config_less_save_keeps_its_time_step`
+    // covers a step that differs.
     let mut config = SimConfig::default();
     config.integration.time_step = 0.005;
     assert_eq!(mc.config(), config);
@@ -388,11 +396,11 @@ fn check_world(mc: &MainContent, ball_species: [&str; 8], sphere_species: [&str;
     assert_eq!(thermostats[1].position, Vec2D::new(-12.0, -3.0));
 }
 
-/// Walls, valves and wall chains have their own file types since #270; the
-/// current reference save's JSON for them comes back unchanged after a load
-/// and a save, so the layout did not move with the types.
+/// Operators have their own file types since #270, in one list since #274.
+/// The current reference save's operator list comes back unchanged after a
+/// load and a save, so the layout does not move with the simulation types.
 #[test]
-fn wall_layout_is_unchanged_by_the_file_types() {
+fn operator_layout_is_unchanged_by_a_load_and_save() {
     let current = FIXTURES
         .iter()
         .find(|f| f.version == WORLD_FILE_VERSION)
@@ -401,12 +409,13 @@ fn wall_layout_is_unchanged_by_the_file_types() {
     let mc = load_fixture(current.file);
     let written: serde_json::Value =
         serde_json::from_str(&WorldFile::capture(&mc).to_json().unwrap()).unwrap();
-    for key in ["line_segments", "valves", "wall_chains"] {
+    let operators = original["operators"].as_array().expect("an operator list");
+    for kind in ["wall_chain", "source_sphere", "thermostat"] {
         assert!(
-            original[key].as_array().is_some_and(|a| !a.is_empty()),
-            "{} has {key}",
+            operators.iter().any(|entry| entry.get(kind).is_some()),
+            "{} has a {kind}",
             current.file
         );
-        assert_eq!(written[key], original[key], "{key}");
     }
+    assert_eq!(written["operators"], original["operators"]);
 }

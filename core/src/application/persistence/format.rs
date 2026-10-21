@@ -7,9 +7,9 @@
 //! written as the shortest decimal that parses back to the same bits, so a
 //! save/load round trip is exact.
 //!
-//! Every saved object has its own file type here (`BallData`,
-//! `LineSegmentData`, `ValveData`, `WallChainData`, `SourceSphereData`,
-//! `ThermostatData`), converted to and from the simulation types in
+//! Every saved object has its own file type here (`BallData`, and the
+//! operators in [`OperatorData`]: `WallChainData` with its pieces and valves,
+//! `SourceSphereData`, `ThermostatData`), converted to and from the simulation types in
 //! [`convert`](super::convert) (#270). So the format changes only when one
 //! of these types changes, never as a side effect of refactoring a
 //! simulation type, which no longer derives serde. The exceptions are the
@@ -37,6 +37,9 @@ use std::collections::HashSet;
 /// - v1: balls and source spheres name a size class by index (`size_idx`).
 /// - v2 (#234): they name a species of the built-in table (`species`,
 ///   `ball_species`); interaction is Lennard-Jones on the centre distance.
+/// - v3 (#274): one `operators` list instead of a list per kind; a wall
+///   chain holds its pieces (the former `line_segments`) and its valves'
+///   state (the former `valves`).
 ///
 /// Since v2 the built-in species names and their mass, `σ` and `ε` are part
 /// of the file format: a file stores only the name, the rest comes from
@@ -45,7 +48,7 @@ use std::collections::HashSet;
 /// file uses. Changing a built-in species is a breaking change: bump this
 /// version and add a migration, or add a new species instead of changing an
 /// existing one (`builtin_table_is_pinned`).
-pub const WORLD_FILE_VERSION: u32 = 2;
+pub const WORLD_FILE_VERSION: u32 = 3;
 
 /// Everything needed to rebuild a world. Energy plot data and simulation
 /// statistics are deliberately not part of it.
@@ -70,11 +73,79 @@ pub struct WorldFile {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub config: Option<SimConfig>,
     pub balls: Vec<BallData>,
-    pub line_segments: Vec<LineSegmentData>,
-    pub valves: Vec<ValveData>,
-    pub wall_chains: Vec<WallChainData>,
-    pub source_spheres: Vec<SourceSphereData>,
-    pub thermostats: Vec<ThermostatData>,
+    /// Every operator, grouped by kind in the order they were captured.
+    /// Entries of a kind this build does not know are skipped and reported
+    /// like unknown fields (#273, #274).
+    #[serde(deserialize_with = "known_operators")]
+    pub operators: Vec<OperatorData>,
+}
+
+/// An operator, written as an object whose only key is its kind:
+/// `{"wall_chain": {...}}`. A new operator kind is a new variant here (and,
+/// if it changes results, a version bump; see the
+/// [`persistence`](super) module doc).
+///
+/// Not serde's internally tagged `{"kind": ..., ...}`: serde buffers such an
+/// enum's fields, so the fields this build does not know would be skipped
+/// without being reported (#273). With the kind as the key, the entry's
+/// fields are read straight from the file, and an unknown kind is reported
+/// as the skipped field `operators[i].<kind>`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OperatorData {
+    WallChain(WallChainData),
+    SourceSphere(SourceSphereData),
+    Thermostat(ThermostatData),
+}
+
+/// One entry of `operators`; `None` for a kind this build does not know.
+struct MaybeOperator(Option<OperatorData>);
+
+impl<'de> Deserialize<'de> for MaybeOperator {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        deserializer.deserialize_map(OperatorVisitor)
+    }
+}
+
+struct OperatorVisitor;
+
+impl<'de> serde::de::Visitor<'de> for OperatorVisitor {
+    type Value = MaybeOperator;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("an operator: an object whose only key is its kind")
+    }
+
+    fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+        use serde::de::{Error, IgnoredAny};
+        let kind: String = map
+            .next_key()?
+            .ok_or_else(|| A::Error::custom("an operator needs its kind as its only key"))?;
+        let operator = match kind.as_str() {
+            "wall_chain" => Some(OperatorData::WallChain(map.next_value()?)),
+            "source_sphere" => Some(OperatorData::SourceSphere(map.next_value()?)),
+            "thermostat" => Some(OperatorData::Thermostat(map.next_value()?)),
+            // Skipping the value is what reports it as an unknown field.
+            _ => {
+                map.next_value::<IgnoredAny>()?;
+                None
+            }
+        };
+        if map.next_key::<IgnoredAny>()?.is_some() {
+            return Err(A::Error::custom(format!(
+                "operator `{kind}` must be the only key of its entry"
+            )));
+        }
+        Ok(MaybeOperator(operator))
+    }
+}
+
+/// The `operators` list without the entries of unknown kinds.
+fn known_operators<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Vec<OperatorData>, D::Error> {
+    let entries = Vec::<MaybeOperator>::deserialize(deserializer)?;
+    Ok(entries.into_iter().filter_map(|entry| entry.0).collect())
 }
 
 /// A ball. `species` is the name of a species of the file's table (the
@@ -90,25 +161,10 @@ pub struct BallData {
     pub accel: Vec2D,
 }
 
-/// A wall piece (`SimLineSegment`).
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct LineSegmentData {
-    pub id: usize,
-    pub start: Vec2D,
-    pub end: Vec2D,
-    pub thickness: f32,
-}
-
-/// A valve's state (`ValveSegment`); where it sits is in its wall chain's
-/// joints.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct ValveData {
-    pub id: usize,
-    pub is_closed: bool,
-}
-
 /// A user-drawn wall (`WallChain`): its endpoints, the pieces (wall
 /// segments) and the joints between them. `pieces.len() == joints.len() + 1`.
+/// The chain owns its pieces and valves: they are saved here, not in lists
+/// of their own (#274).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WallChainData {
     pub id: usize,
@@ -118,11 +174,14 @@ pub struct WallChainData {
     pub joints: Vec<JointData>,
 }
 
-/// One piece of a wall chain: the line segment `line_id`, over the fixed
-/// fractions `t_start..t_end` of the chain.
+/// One piece of a wall chain: the wall segment (`SimLineSegment`) with id
+/// `id`, over the fixed fractions `t_start..t_end` of the chain.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct ChainPieceData {
-    pub line_id: usize,
+    pub id: usize,
+    pub start: Vec2D,
+    pub end: Vec2D,
+    pub thickness: f32,
     pub t_start: f32,
     pub t_end: f32,
 }
@@ -135,9 +194,10 @@ pub struct ChainPieceData {
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum JointData {
-    /// The valve `valve_id`.
+    /// The valve `valve_id` (`ValveSegment`) and whether it is closed.
     Valve {
         valve_id: usize,
+        is_closed: bool,
         t_start: f32,
         t_end: f32,
     },
@@ -157,6 +217,7 @@ enum JointKind {
 struct RawJoint {
     kind: JointKind,
     valve_id: Option<usize>,
+    is_closed: Option<bool>,
     t_start: f32,
     t_end: f32,
 }
@@ -167,18 +228,23 @@ impl<'de> Deserialize<'de> for JointData {
         let RawJoint {
             kind,
             valve_id,
+            is_closed,
             t_start,
             t_end,
         } = RawJoint::deserialize(deserializer)?;
-        match (kind, valve_id) {
-            (JointKind::Valve, Some(valve_id)) => Ok(Self::Valve {
-                valve_id,
+        match kind {
+            JointKind::Valve => Ok(Self::Valve {
+                valve_id: valve_id.ok_or_else(|| D::Error::missing_field("valve_id"))?,
+                is_closed: is_closed.ok_or_else(|| D::Error::missing_field("is_closed"))?,
                 t_start,
                 t_end,
             }),
-            (JointKind::Valve, None) => Err(D::Error::missing_field("valve_id")),
-            (JointKind::Gap, None) => Ok(Self::Gap { t_start, t_end }),
-            (JointKind::Gap, Some(_)) => Err(D::Error::custom("a gap joint has no `valve_id`")),
+            JointKind::Gap if valve_id.is_none() && is_closed.is_none() => {
+                Ok(Self::Gap { t_start, t_end })
+            }
+            JointKind::Gap => Err(D::Error::custom(
+                "a gap joint has no `valve_id` or `is_closed`",
+            )),
         }
     }
 }
@@ -307,33 +373,27 @@ impl WorldFile {
             }
         }
 
-        let line_ids = check_unique_ids(self.line_segments.iter().map(|s| s.id), "line segment")?;
-        for segment in &self.line_segments {
-            check_finite(
-                &[
-                    segment.start.x,
-                    segment.start.y,
-                    segment.end.x,
-                    segment.end.y,
-                    segment.thickness,
-                ],
-                &format!("line segment {}", segment.id),
-            )?;
-            if segment.thickness <= 0.0 {
-                return Err(invalid(format!(
-                    "line segment {} needs a positive thickness",
-                    segment.id
-                )));
-            }
-        }
-        let valve_ids = check_unique_ids(self.valves.iter().map(|v| v.id), "valve")?;
-        check_unique_ids(self.wall_chains.iter().map(|c| c.id), "wall chain")?;
-        for chain in &self.wall_chains {
-            self.validate_chain(chain, &line_ids, &valve_ids)?;
+        check_unique_ids(self.wall_chains().map(|c| c.id), "wall chain")?;
+        check_unique_ids(
+            self.wall_chains()
+                .flat_map(|c| c.pieces.iter().map(|p| p.id)),
+            "wall piece",
+        )?;
+        check_unique_ids(
+            self.wall_chains().flat_map(|c| {
+                c.joints.iter().filter_map(|joint| match *joint {
+                    JointData::Valve { valve_id, .. } => Some(valve_id),
+                    JointData::Gap { .. } => None,
+                })
+            }),
+            "valve",
+        )?;
+        for chain in self.wall_chains() {
+            validate_chain(chain)?;
         }
 
-        check_unique_ids(self.source_spheres.iter().map(|s| s.id), "source sphere")?;
-        for sphere in &self.source_spheres {
+        check_unique_ids(self.source_spheres().map(|s| s.id), "source sphere")?;
+        for sphere in self.source_spheres() {
             check_finite(
                 &[sphere.center.x, sphere.center.y, sphere.emission_speed],
                 &format!("source sphere {}", sphere.id),
@@ -358,8 +418,8 @@ impl WorldFile {
             }
         }
 
-        check_unique_ids(self.thermostats.iter().map(|t| t.id), "thermostat")?;
-        for thermostat in &self.thermostats {
+        check_unique_ids(self.thermostats().map(|t| t.id), "thermostat")?;
+        for thermostat in self.thermostats() {
             let what = format!("thermostat {}", thermostat.id);
             check_finite(
                 &[
@@ -395,49 +455,28 @@ impl WorldFile {
         Ok(resolved)
     }
 
-    fn validate_chain(
-        &self,
-        chain: &WallChainData,
-        line_ids: &HashSet<usize>,
-        valve_ids: &HashSet<usize>,
-    ) -> AppResult {
-        let what = format!("wall chain {}", chain.id);
-        check_finite(
-            &[chain.start.x, chain.start.y, chain.end.x, chain.end.y],
-            &what,
-        )?;
-        if chain.pieces.is_empty() || chain.pieces.len() != chain.joints.len() + 1 {
-            return Err(invalid(format!(
-                "{what} needs exactly one more piece than joints"
-            )));
-        }
-        for piece in &chain.pieces {
-            check_finite(&[piece.t_start, piece.t_end], &what)?;
-            if !line_ids.contains(&piece.line_id) {
-                return Err(invalid(format!(
-                    "{what} refers to missing line segment {}",
-                    piece.line_id
-                )));
-            }
-        }
-        for joint in &chain.joints {
-            match *joint {
-                JointData::Valve {
-                    valve_id,
-                    t_start,
-                    t_end,
-                } => {
-                    check_finite(&[t_start, t_end], &what)?;
-                    if !valve_ids.contains(&valve_id) {
-                        return Err(invalid(format!(
-                            "{what} refers to missing valve {valve_id}"
-                        )));
-                    }
-                }
-                JointData::Gap { t_start, t_end } => check_finite(&[t_start, t_end], &what)?,
-            }
-        }
-        Ok(())
+    /// The wall chains among the operators, in file order.
+    pub fn wall_chains(&self) -> impl Iterator<Item = &WallChainData> {
+        self.operators.iter().filter_map(|operator| match operator {
+            OperatorData::WallChain(chain) => Some(chain),
+            _ => None,
+        })
+    }
+
+    /// The source spheres among the operators, in file order.
+    pub fn source_spheres(&self) -> impl Iterator<Item = &SourceSphereData> {
+        self.operators.iter().filter_map(|operator| match operator {
+            OperatorData::SourceSphere(sphere) => Some(sphere),
+            _ => None,
+        })
+    }
+
+    /// The thermostats among the operators, in file order.
+    pub fn thermostats(&self) -> impl Iterator<Item = &ThermostatData> {
+        self.operators.iter().filter_map(|operator| match operator {
+            OperatorData::Thermostat(thermostat) => Some(thermostat),
+            _ => None,
+        })
     }
 
     /// The config to run this world with: the saved one, or the default for
@@ -484,4 +523,42 @@ fn newer_build_hint(error: AppError) -> AppError {
         }
         other => other,
     }
+}
+
+fn validate_chain(chain: &WallChainData) -> AppResult {
+    let what = format!("wall chain {}", chain.id);
+    check_finite(
+        &[chain.start.x, chain.start.y, chain.end.x, chain.end.y],
+        &what,
+    )?;
+    if chain.pieces.is_empty() || chain.pieces.len() != chain.joints.len() + 1 {
+        return Err(invalid(format!(
+            "{what} needs exactly one more piece than joints"
+        )));
+    }
+    for piece in &chain.pieces {
+        check_finite(
+            &[
+                piece.start.x,
+                piece.start.y,
+                piece.end.x,
+                piece.end.y,
+                piece.thickness,
+                piece.t_start,
+                piece.t_end,
+            ],
+            &format!("{what}, piece {}", piece.id),
+        )?;
+        if piece.thickness <= 0.0 {
+            return Err(invalid(format!(
+                "{what}, piece {} needs a positive thickness",
+                piece.id
+            )));
+        }
+    }
+    for joint in &chain.joints {
+        let (JointData::Valve { t_start, t_end, .. } | JointData::Gap { t_start, t_end }) = *joint;
+        check_finite(&[t_start, t_end], &what)?;
+    }
+    Ok(())
 }

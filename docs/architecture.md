@@ -228,10 +228,12 @@ Every visual layer is one `RenderPipeline` in
 `core/src/application/persistence/` saves and loads the whole world
 (Ctrl+S / Ctrl+O, or `--load` on the command line). A `WorldFile` holds a
 format version, the world rectangle, time step, gravity, the simulation
-config, every ball, and all operators including wall chains, each through its
-own file type in `format.rs` (`BallData`, `LineSegmentData`, `ValveData`,
-`WallChainData`, `SourceSphereData`, `ThermostatData`); the simulation types
-do not derive serde (#270), so refactoring them cannot change the file.
+config, every ball, and one `operators` list, each through its own file type
+in `format.rs` (`BallData`; `OperatorData` with `WallChainData`,
+`SourceSphereData`, `ThermostatData`); the simulation types do not derive
+serde (#270), so refactoring them cannot change the file. An operator entry
+is `{"<kind>": {...}}`, and a wall chain holds its pieces and valves (#274),
+so the file has no references between operators.
 Loading replaces the world, increments the
 world generation (the step count starts again, so the renderer can tell the
 new world's snapshots apart), and
@@ -282,8 +284,8 @@ instead of running it with different physics.
 - An additive change needs no migration (and keeps the version unless it
   changes results, see above): a new field
   with `#[serde(default)]` or `#[serde(default = "…")]` whose default
-  reproduces the behaviour of older builds, or a new top-level list
-  (`#[serde(default)] Vec<…>`, e.g. a new operator kind). Older files lack
+  reproduces the behaviour of older builds, a new top-level list
+  (`#[serde(default)] Vec<…>`), or a new `OperatorData` variant. Older files lack
   the field and load with the default, which `validate()` accepts. Example:
 
   ```rust

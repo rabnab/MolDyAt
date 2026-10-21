@@ -3,8 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! Files written by a newer build (#273): a newer version and unknown
-//! `config` keys are rejected, unknown fields elsewhere are skipped and
-//! reported.
+//! `config` keys are rejected, unknown fields elsewhere and operators of
+//! unknown kinds (#274) are skipped and reported.
 
 use super::{fixture, scratch_dir};
 use crate::application::MainContent;
@@ -13,53 +13,77 @@ use crate::objects2d::Rect;
 use serde_json::{Value, json};
 use std::fs;
 
-/// The v2 reference save with fields no build knows, at every depth: top
-/// level, in a list entry, in a value type, in a tagged enum and in an
-/// optional field.
-fn v2_with_unknown_fields() -> Value {
-    let mut file = fixture("v2.json");
+/// The reference save of the current version.
+fn current() -> Value {
+    fixture(&format!("v{WORLD_FILE_VERSION}.json"))
+}
+
+/// The current reference save with fields no build knows, at every depth:
+/// top level, in a list entry, in a value type, in an operator, in a tagged
+/// joint, and an operator of an unknown kind (inserted at index 2).
+fn current_with_unknown_fields() -> Value {
+    let mut file = current();
     file["pistons"] = json!([{"id": 0}]);
     file["balls"][3]["charge"] = json!(-1.0);
     file["world_rect"]["z"] = json!(0.0);
-    file["wall_chains"][0]["joints"][0]["colour"] = json!("red");
-    file["thermostats"][0]["label"] = json!("hot");
+    file["operators"][0]["wall_chain"]["joints"][0]["colour"] = json!("red");
+    file["operators"][7]["thermostat"]["label"] = json!("hot");
+    file["operators"].as_array_mut().unwrap().insert(
+        2,
+        json!({"probe": {"id": 0, "position": {"x": 0.0, "y": 0.0}}}),
+    );
     file
 }
 
 #[test]
 fn unknown_fields_outside_config_are_skipped_and_named() {
-    let json = v2_with_unknown_fields().to_string();
-    let (file, ignored) = WorldFile::from_json_reporting(&json).unwrap();
-    assert_eq!(
-        file,
-        WorldFile::from_json(&fixture("v2.json").to_string()).unwrap()
-    );
-    let mut ignored = ignored;
+    let json = current_with_unknown_fields().to_string();
+    let (file, mut ignored) = WorldFile::from_json_reporting(&json).unwrap();
+    assert_eq!(file, WorldFile::from_json(&current().to_string()).unwrap());
     ignored.sort();
     assert_eq!(
         ignored,
         [
             "balls[3].charge",
+            "operators[0].wall_chain.joints[0].colour",
+            "operators[2].probe",
+            // The thermostat moved from 7 to 8 behind the probe.
+            "operators[8].thermostat.label",
             "pistons",
-            "thermostats[0].label",
-            "wall_chains[0].joints[0].colour",
             "world_rect.z",
         ]
     );
 }
 
 #[test]
-fn a_known_file_reports_no_unknown_fields() {
-    let (_, ignored) = WorldFile::from_json_reporting(&fixture("v2.json").to_string()).unwrap();
-    assert!(ignored.is_empty(), "{ignored:?}");
+fn reference_saves_report_no_unknown_fields() {
+    for name in ["v1.json", "v2.json", "v3.json"] {
+        let (_, ignored) = WorldFile::from_json_reporting(&fixture(name).to_string()).unwrap();
+        assert!(ignored.is_empty(), "{name}: {ignored:?}");
+    }
 }
 
 #[test]
 fn unknown_fields_of_an_upgraded_file_are_named_too() {
-    let mut file = fixture("v1.json");
+    let mut file = fixture("v2.json");
     file["balls"][0]["charge"] = json!(1.0);
+    file["thermostats"][1]["label"] = json!("cold");
     let (_, ignored) = WorldFile::from_json_reporting(&file.to_string()).unwrap();
-    assert_eq!(ignored, ["balls[0].charge"]);
+    // The path is the one in the upgraded layout.
+    assert_eq!(
+        ignored,
+        ["balls[0].charge", "operators[8].thermostat.label"]
+    );
+}
+
+#[test]
+fn an_operator_entry_needs_exactly_one_kind_key() {
+    for entry in [json!({}), json!({"thermostat": {}, "probe": {}}), json!(3)] {
+        let mut file = current();
+        file["operators"][0] = entry.clone();
+        let error = format!("{:?}", WorldFile::from_json(&file.to_string()).unwrap_err());
+        assert!(error.contains("operator"), "{entry}: {error}");
+    }
 }
 
 #[test]
@@ -67,16 +91,17 @@ fn load_world_reports_unknown_fields_in_the_load_message() {
     let dir = scratch_dir("newer_files");
     fs::create_dir_all(&dir).unwrap();
     let path = dir.join("newer.json");
-    fs::write(&path, v2_with_unknown_fields().to_string()).unwrap();
+    fs::write(&path, current_with_unknown_fields().to_string()).unwrap();
 
     let mut app = MainContent::new(Rect::new(-20.0, 20.0, 40.0, -40.0)).unwrap();
     let loaded = app
         .load_world(&SaveStore::new(&dir), &LoadSource::Path(path), true)
         .unwrap();
-    assert_eq!(loaded.ignored_fields.len(), 5);
+    assert_eq!(loaded.ignored_fields.len(), 6);
+    assert_eq!(app.world().wall_chains.chains().count(), 5);
     let message = loaded.message(true);
     assert!(message.contains("(paused)"), "{message}");
-    assert!(message.contains("skipped 5 unknown fields"), "{message}");
+    assert!(message.contains("skipped 6 unknown fields"), "{message}");
     fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -110,7 +135,7 @@ fn the_warning_names_at_most_twenty_fields() {
 
 #[test]
 fn newer_version_is_rejected_with_the_version_message() {
-    let mut file = v2_with_unknown_fields();
+    let mut file = current_with_unknown_fields();
     file["version"] = json!(WORLD_FILE_VERSION + 1);
     let error = format!("{:?}", WorldFile::from_json(&file.to_string()).unwrap_err());
     let expected = format!(
@@ -122,7 +147,7 @@ fn newer_version_is_rejected_with_the_version_message() {
 
 #[test]
 fn unknown_config_key_is_rejected_with_the_newer_build_hint() {
-    let mut file = fixture("v2.json");
+    let mut file = current();
     file["config"] = json!({"potential": {"charge_scale": 2.0}});
     let error = format!("{:?}", WorldFile::from_json(&file.to_string()).unwrap_err());
     assert!(error.contains("charge_scale"), "{error}");
