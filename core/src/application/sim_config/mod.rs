@@ -29,9 +29,10 @@
 //! key part of the save format: a key added later is unknown to this build,
 //! so this build refuses a save written by a newer build of the same format
 //! version (with a hint that the save is newer) instead of running it with
-//! settings it cannot see. That is accepted; bump `WORLD_FILE_VERSION` if a
-//! new key must not lock older builds out. Builds from before `SimConfig`
-//! ignore the whole `config` of a save and run it with the defaults (#273).
+//! settings it cannot see. A new key that changes results also bumps
+//! `WORLD_FILE_VERSION`, so older builds report a newer version instead
+//! (#273; see the `persistence` module doc). Builds from before `SimConfig`
+//! ignore the whole `config` of a save and run it with the defaults.
 //!
 //! `[[species]]` (#237) replaces the species table: without it a world uses
 //! the built-in library (`SpeciesTable::builtin()`: `N2`, the former size
