@@ -7,6 +7,7 @@ mod domain_command;
 mod energy_window_manager;
 mod key_actions;
 mod key_state;
+mod line_segment_tool;
 mod mouse_input;
 mod object_hover;
 mod source_sphere_tool;
