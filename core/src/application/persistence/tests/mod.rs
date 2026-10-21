@@ -6,6 +6,7 @@
 
 mod format;
 mod migrate;
+mod newer_files;
 mod reference_saves;
 mod roundtrip;
 mod store;
@@ -36,4 +37,12 @@ pub(super) fn scratch_dir(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("mlj_{name}_{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     dir
+}
+
+/// A reference save from `tests/fixtures/` as JSON.
+pub(super) fn fixture(name: &str) -> serde_json::Value {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("src/application/persistence/tests/fixtures")
+        .join(name);
+    serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
 }

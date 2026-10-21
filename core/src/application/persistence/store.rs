@@ -88,8 +88,14 @@ impl SaveStore {
 
     /// Read and validate the file at `path`.
     pub fn load(&self, path: &Path) -> AppResult<WorldFile> {
+        self.load_reporting(path).map(|(file, _)| file)
+    }
+
+    /// [`Self::load`], also returning the fields this build skipped (see
+    /// [`WorldFile::from_json_reporting`]).
+    pub fn load_reporting(&self, path: &Path) -> AppResult<(WorldFile, Vec<String>)> {
         let json = fs::read_to_string(path).map_err(|e| io_error("cannot read", path, e))?;
-        WorldFile::from_json(&json).map_err(|AppError::CustomError(message)| {
+        WorldFile::from_json_reporting(&json).map_err(|AppError::CustomError(message)| {
             AppError::CustomError(format!("{}: {message}", path.display()))
         })
     }

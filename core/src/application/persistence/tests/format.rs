@@ -285,3 +285,27 @@ fn rejects_time_step_outside_the_accepted_range() {
         assert!(file.validate().is_ok(), "{time_step}");
     }
 }
+
+#[test]
+fn joints_read_both_kinds_and_reject_mismatched_fields() {
+    use crate::application::persistence::format::JointData;
+    let read = |json: &str| serde_json::from_str::<JointData>(json).map_err(|e| e.to_string());
+    let valve = JointData::Valve {
+        valve_id: 4,
+        t_start: 0.25,
+        t_end: 0.5,
+    };
+    let gap = JointData::Gap {
+        t_start: 0.25,
+        t_end: 0.5,
+    };
+    for joint in [valve, gap] {
+        assert_eq!(read(&serde_json::to_string(&joint).unwrap()), Ok(joint));
+    }
+    let error = read(r#"{"kind": "valve", "t_start": 0.0, "t_end": 1.0}"#).unwrap_err();
+    assert!(error.contains("missing field `valve_id`"), "{error}");
+    let error = read(r#"{"kind": "gap", "valve_id": 1, "t_start": 0.0, "t_end": 1.0}"#);
+    assert!(error.unwrap_err().contains("no `valve_id`"));
+    let error = read(r#"{"kind": "piston", "t_start": 0.0, "t_end": 1.0}"#).unwrap_err();
+    assert!(error.contains("unknown variant `piston`"), "{error}");
+}

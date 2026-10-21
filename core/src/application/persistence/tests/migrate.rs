@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+use super::fixture;
 use crate::application::persistence::WORLD_FILE_VERSION;
 use crate::application::persistence::WorldFile;
 use crate::application::persistence::migrate::{
@@ -9,17 +10,9 @@ use crate::application::persistence::migrate::{
 };
 use crate::error::AppResult;
 use serde_json::{Value, json};
-use std::path::PathBuf;
 
 fn v1_fixture() -> Value {
     fixture("v1.json")
-}
-
-fn fixture(name: &str) -> Value {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("src/application/persistence/tests/fixtures")
-        .join(name);
-    serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
 }
 
 fn v1_json() -> String {
@@ -145,7 +138,7 @@ fn current_version_file_skips_the_migration_path() {
         apply: must_not_run,
     }];
     let v2_json = serde_json::to_string(&fixture("v2.json")).unwrap();
-    let file: WorldFile = parse_with(&v2_json, &chain, 2).unwrap();
+    let (file, _): (WorldFile, _) = parse_with(&v2_json, &chain, 2).unwrap();
     assert_eq!(file.version, 2);
 }
 
@@ -203,7 +196,7 @@ fn v1_ball_without_size_class_is_an_error_not_a_panic() {
 
 #[test]
 fn older_file_is_parsed_through_the_migrations() {
-    let file: Value = parse_with(&v1_json(), TEST_CHAIN, 3).unwrap();
+    let (file, _): (Value, _) = parse_with(&v1_json(), TEST_CHAIN, 3).unwrap();
     assert_eq!(file["version"], 3);
     assert_eq!(file["dt_ms"], json!(5.0));
 }

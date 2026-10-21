@@ -267,9 +267,20 @@ current-version file is deserialized directly. An older one is parsed into a
 JSON value, the migrations from its version up to the current one run
 (`v1 → v2 → …`), the upgrade is logged, and only then is it read into
 `WorldFile`. Both are validated. Files without a version, with version 0, or
-from a newer build are rejected with a clear error.
+with a newer version are rejected with a clear error.
 
-- An additive change keeps the version and needs no migration: a new field
+A file from a newer build of the same version can hold fields this build does
+not know (#273). Unknown keys inside `config` are rejected, with a hint that
+the save is probably newer: a dropped config key would change the physics.
+Unknown fields anywhere else are skipped; `serde_ignored` collects their paths
+(`balls[3].charge`; a field on every ball is one `balls[*].label` entry with a
+count), and `load_world` logs them as one warning and counts them
+in the load message. So an addition that changes results bumps the version,
+even when it is additive for older files, and older builds refuse the file
+instead of running it with different physics.
+
+- An additive change needs no migration (and keeps the version unless it
+  changes results, see above): a new field
   with `#[serde(default)]` or `#[serde(default = "…")]` whose default
   reproduces the behaviour of older builds, or a new top-level list
   (`#[serde(default)] Vec<…>`, e.g. a new operator kind). Older files lack

@@ -42,16 +42,40 @@
 //! - [`WorldFile::validate`] must accept the default, so an old file that
 //!   lacks the field passes validation.
 //!
+//! That keeps old files loading. Whether newer files may load in older
+//! builds is the rule under "Newer files" below: an addition that changes
+//! results (a new operator kind, a physics field) still bumps the version,
+//! with a migration that only updates the number, since the defaults already
+//! fill in the rest.
+//!
 //! Breaking, bump the version and add a migration: renaming or removing a
 //! field, changing its type, unit or meaning, or changing a default that old
 //! files rely on. A plain `#[serde(default)]` would load such a file without
 //! an error but with the wrong values.
 //!
-//! Exception: a save's `config` (`SimConfig`) rejects unknown keys, so a
-//! config key added later makes the newer saves unreadable for older builds
-//! of the same version (they report that the save is probably newer). And
-//! builds from before `config` existed ignore it: they run such a save with
-//! the default config. See #273 for the rule on newer files.
+//! # Newer files (#273)
+//!
+//! What a build does with a file written by a newer build:
+//! - **A newer format version is rejected** ("version N is newer than this
+//!   build supports (up to M)").
+//! - **Unknown fields outside `config` are skipped with a warning.** The
+//!   load succeeds, a logged warning names the skipped fields
+//!   (`balls[3].charge`, `pistons`; a field on every ball is one entry,
+//!   `balls[*].label (100000 entries)`), and the load message says how many
+//!   there were ([`LoadedWorld::ignored_fields`]).
+//!   Saving that world again drops them.
+//! - **Unknown keys inside `config` are rejected** (`SimConfig` uses
+//!   `deny_unknown_fields`), with the hint that the save was probably
+//!   written by a newer build: a dropped config key would change the
+//!   physics. Builds from before `config` existed ignore all of it and run
+//!   such a save with the default config.
+//!
+//! So **an addition that changes results bumps the format version**,
+//! whether it is a new top-level field, a new config key or a new operator
+//! kind: older builds then refuse the file clearly instead of running it with
+//! different physics. Only additions that change no results (display or
+//! metadata fields) keep the version; older builds load them with the
+//! warning.
 //!
 //! `tests/reference_saves.rs` (`old_saves_load_into_a_file_type_with_new_fields`)
 //! loads every reference save into a file type with extra defaulted fields
@@ -96,6 +120,41 @@ pub enum LoadSource {
 pub struct LoadedWorld {
     pub path: PathBuf,
     pub world_rect: Rect,
+    /// Fields outside `config` that this build does not know and skipped,
+    /// already logged as a warning (#273). A field that occurs once is named
+    /// by its path (`balls[3].charge`); one that repeats in a list is one
+    /// entry with `*` for the index and a count (`balls[*].label (100000
+    /// entries)`).
+    pub ignored_fields: Vec<String>,
+}
+
+/// How many skipped fields the warning names before "and N more".
+const MAX_LOGGED_FIELDS: usize = 20;
+
+/// The first `max` of `items`, comma-separated, then "and N more".
+fn capped_list(items: &[String], max: usize) -> String {
+    let mut list = items[..items.len().min(max)].join(", ");
+    if items.len() > max {
+        list.push_str(&format!(" and {} more", items.len() - max));
+    }
+    list
+}
+
+impl LoadedWorld {
+    /// The load message: path, whether the world starts paused, and how many
+    /// fields were skipped.
+    pub fn message(&self, paused: bool) -> String {
+        let mut message = format!("Loaded world from {}", self.path.display());
+        if paused {
+            message.push_str(" (paused)");
+        }
+        match self.ignored_fields.len() {
+            0 => {}
+            1 => message.push_str("; skipped 1 unknown field (see warning)"),
+            n => message.push_str(&format!("; skipped {n} unknown fields (see warning)")),
+        }
+        message
+    }
 }
 
 impl MainContent {
@@ -116,7 +175,7 @@ impl MainContent {
         start_paused: bool,
     ) -> AppResult<LoadedWorld> {
         let path = store.resolve(source)?;
-        let file = store.load(&path)?;
+        let (file, ignored_fields) = store.load_reporting(&path)?;
         let mut world = SimulationWorld::try_from(&file)?;
         world.sim.set_pause(start_paused);
         let config = file.sim_config();
@@ -132,9 +191,19 @@ impl MainContent {
         factory.continue_after(world.balls.iter().map(|ball| ball.get_id()));
         self.collect_neighbours_by_cell(file.time_step);
 
+        if !ignored_fields.is_empty() {
+            log::warn!(
+                "{}: skipped {} field(s) this build does not know, probably written by a \
+                 newer MolDyAt build; saving again drops them: {}",
+                path.display(),
+                ignored_fields.len(),
+                capped_list(&ignored_fields, MAX_LOGGED_FIELDS)
+            );
+        }
         Ok(LoadedWorld {
             path,
             world_rect: file.world_rect,
+            ignored_fields,
         })
     }
 }
