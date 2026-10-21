@@ -6,6 +6,7 @@ mod ascii_plot;
 pub mod energy_data;
 pub mod energy_renderer;
 pub mod energy_window;
+mod text_raster;
 
 #[cfg(test)]
 mod tests;

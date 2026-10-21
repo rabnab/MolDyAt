@@ -12,39 +12,40 @@ use winit::event_loop::ActiveEventLoop;
 use winit::monitor::MonitorHandle;
 use winit::window::{Window, WindowId};
 
-const DEFAULT_WIDTH: u32 = 1024; // Reduced by 20% from 1280
-const DEFAULT_HEIGHT: u32 = 576; // Reduced by 20% from 720
-const MIN_WINDOW_WIDTH: u32 = 320;
-const MIN_WINDOW_HEIGHT: u32 = 240;
+pub(super) const DEFAULT_WIDTH: u32 = 1024; // Reduced by 20% from 1280
+pub(super) const DEFAULT_HEIGHT: u32 = 576; // Reduced by 20% from 720
+pub(super) const MIN_WINDOW_WIDTH: u32 = 320;
+pub(super) const MIN_WINDOW_HEIGHT: u32 = 240;
 /// Keep the energy window anchored to the top while leaving room at the bottom.
-const ENERGY_WINDOW_BOTTOM_GAP_PX: u32 = 100;
+pub(super) const ENERGY_WINDOW_BOTTOM_GAP_PX: u32 = 100;
 
 // Text rendering constants
-const CHAR_WIDTH_PIX: u32 = 13; // pixel width per character (realistic value)
-const CHAR_HEIGHT_PIX: u32 = 19; // pixel height per character (realistic value)
-const MARGIN_LEFT: u32 = 10;
-const MARGIN_TOP: u32 = 8;
-const MARGIN_RIGHT: u32 = 10;
-const MARGIN_BOTTOM: u32 = 10;
+pub(super) const CHAR_WIDTH_PIX: u32 = 13; // pixel width per character (realistic value)
+pub(super) const CHAR_HEIGHT_PIX: u32 = 19; // pixel height per character (realistic value)
+pub(super) const MARGIN_LEFT: u32 = 10;
+pub(super) const MARGIN_TOP: u32 = 8;
+pub(super) const MARGIN_RIGHT: u32 = 10;
+pub(super) const MARGIN_BOTTOM: u32 = 10;
 
 // Base line count without status text
-const BASE_LINES: u32 = 41;
-const STATUS_TEXT_LINES: u32 = 10;
+pub(super) const BASE_LINES: u32 = 41;
+pub(super) const STATUS_TEXT_LINES: u32 = 10;
 
-const MIN_HEIGHT_WITHOUT_STATUS: u32 = MARGIN_TOP + BASE_LINES * CHAR_HEIGHT_PIX;
-const MIN_HEIGHT_WITH_STATUS: u32 = MARGIN_TOP + (BASE_LINES + STATUS_TEXT_LINES) * CHAR_HEIGHT_PIX;
+pub(super) const MIN_HEIGHT_WITHOUT_STATUS: u32 = MARGIN_TOP + BASE_LINES * CHAR_HEIGHT_PIX;
+pub(super) const MIN_HEIGHT_WITH_STATUS: u32 =
+    MARGIN_TOP + (BASE_LINES + STATUS_TEXT_LINES) * CHAR_HEIGHT_PIX;
 
 #[derive(Debug, Clone, Copy)]
-struct TextMetrics {
-    char_width: u32,
-    char_height: u32,
-    margin_left: u32,
-    margin_top: u32,
-    margin_right: u32,
-    margin_bottom: u32,
+pub(super) struct TextMetrics {
+    pub(super) char_width: u32,
+    pub(super) char_height: u32,
+    pub(super) margin_left: u32,
+    pub(super) margin_top: u32,
+    pub(super) margin_right: u32,
+    pub(super) margin_bottom: u32,
 }
 
-fn text_metrics(scale_factor: f64) -> TextMetrics {
+pub(super) fn text_metrics(scale_factor: f64) -> TextMetrics {
     let ui_scale = scale_factor.max(1.0) as f32;
     let scaled = |value: u32| -> u32 { ((value as f32) * ui_scale).round().max(1.0) as u32 };
 
@@ -74,7 +75,7 @@ pub fn split_screen_layout_for_monitor(monitor: &MonitorHandle) -> SplitScreenLa
     split_screen_layout(monitor.position(), monitor.size())
 }
 
-fn preferred_energy_window_size(available_size: PhysicalSize<u32>) -> PhysicalSize<u32> {
+pub(super) fn preferred_energy_window_size(available_size: PhysicalSize<u32>) -> PhysicalSize<u32> {
     let width = DEFAULT_WIDTH.min(available_size.width.max(1));
     let height = available_size
         .height
@@ -84,7 +85,7 @@ fn preferred_energy_window_size(available_size: PhysicalSize<u32>) -> PhysicalSi
     PhysicalSize::new(width, height)
 }
 
-fn split_screen_layout(
+pub(super) fn split_screen_layout(
     monitor_position: PhysicalPosition<i32>,
     monitor_size: PhysicalSize<u32>,
 ) -> SplitScreenLayout {
@@ -114,7 +115,7 @@ pub struct EnergyPlotWindow {
     surface: Option<Surface<Rc<Window>, Rc<Window>>>,
     energy_data: SharedEnergyData,
     display_mode: DisplayMode,
-    has_status_text: bool,
+    pub(super) has_status_text: bool,
     /// Version of `EnergyData` that the current pixel buffer was rendered from.
     /// Used to skip re-rasterising when the data and display settings haven't
     /// changed since the last frame.
@@ -351,276 +352,5 @@ impl EnergyPlotWindow {
             self.cached_display_mode = Some(self.display_mode);
         }
         Ok(())
-    }
-
-    /// Colored bitmap font renderer - renders text with per-character colors
-    fn render_colored_text_to_buffer(
-        buffer: &mut [u32],
-        width: usize,
-        height: usize,
-        text: &str,
-        color_map: &[Vec<u32>],
-        metrics: TextMetrics,
-    ) {
-        let left_margin = metrics.margin_left as usize;
-        let top_margin = metrics.margin_top as usize;
-        let char_width = metrics.char_width as usize;
-        let char_height = metrics.char_height as usize;
-
-        let mut y = top_margin;
-        for (line_idx, line) in text.lines().enumerate() {
-            if y + char_height >= height {
-                break;
-            }
-
-            let mut x = left_margin;
-            for (char_idx, ch) in line.chars().enumerate() {
-                if x + char_width >= width {
-                    break;
-                }
-
-                // Get color for this character from color map
-                let color = if line_idx < color_map.len() && char_idx < color_map[line_idx].len() {
-                    color_map[line_idx][char_idx]
-                } else {
-                    0xFFCCCCCC // Default text color
-                };
-
-                // Render character using bitmap font
-                Self::draw_char_scaled(buffer, width, x, y, ch, color, metrics);
-
-                x += char_width;
-            }
-
-            y += char_height;
-        }
-    }
-
-    /// Draw a character using a simple 8x8 bitmap font scaled to ~1.6x (13x19)
-    fn draw_char_scaled(
-        buffer: &mut [u32],
-        width: usize,
-        x: usize,
-        y: usize,
-        ch: char,
-        color: u32,
-        metrics: TextMetrics,
-    ) {
-        let glyph = Self::get_glyph(ch);
-
-        // Target size is 13x19, source is 8x8
-        let target_width = metrics.char_width as usize;
-        let target_height = metrics.char_height as usize;
-        const SOURCE_SIZE: usize = 8;
-
-        for ty in 0..target_height {
-            // Optimization: Calculate source Y once per row
-            let sy = (ty * SOURCE_SIZE) / target_height;
-            if sy >= SOURCE_SIZE {
-                continue;
-            }
-            for tx in 0..target_width {
-                // Map target pixel to source pixel
-                let sx = (tx * SOURCE_SIZE) / target_width;
-
-                if sy < SOURCE_SIZE && sx < SOURCE_SIZE {
-                    let row = glyph[sy];
-                    if row & (1 << (7 - sx)) != 0 {
-                        let px = x + tx;
-                        let py = y + ty;
-                        let idx = py * width + px;
-                        if idx < buffer.len() {
-                            buffer[idx] = color;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /// Get 8x8 bitmap for a character
-    fn get_glyph(ch: char) -> &'static [u8; 8] {
-        match ch {
-            ' ' => &[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
-            '!' => &[0x18, 0x18, 0x18, 0x18, 0x18, 0x00, 0x18, 0x00],
-            '"' => &[0x6C, 0x6C, 0x6C, 0x00, 0x00, 0x00, 0x00, 0x00],
-            '#' => &[0x36, 0x36, 0x7F, 0x36, 0x7F, 0x36, 0x36, 0x00],
-            '$' => &[0x0C, 0x3F, 0x68, 0x3E, 0x0B, 0x7E, 0x18, 0x00],
-            '%' => &[0x60, 0x66, 0x0C, 0x18, 0x30, 0x66, 0x06, 0x00],
-            '&' => &[0x38, 0x6C, 0x6C, 0x38, 0x6D, 0x66, 0x3B, 0x00],
-            '\'' => &[0x18, 0x18, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00],
-            '(' => &[0x0C, 0x18, 0x30, 0x30, 0x30, 0x18, 0x0C, 0x00],
-            ')' => &[0x30, 0x18, 0x0C, 0x0C, 0x0C, 0x18, 0x30, 0x00],
-            '*' => &[0x00, 0x18, 0x7E, 0x3C, 0x7E, 0x18, 0x00, 0x00],
-            '+' => &[0x00, 0x18, 0x18, 0x7E, 0x18, 0x18, 0x00, 0x00],
-            ',' => &[0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x18, 0x30],
-            '-' => &[0x00, 0x00, 0x00, 0x7E, 0x00, 0x00, 0x00, 0x00],
-            '.' => &[0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x18, 0x00],
-            '/' => &[0x00, 0x06, 0x0C, 0x18, 0x30, 0x60, 0x00, 0x00],
-            '0' => &[0x3C, 0x66, 0x6E, 0x7E, 0x76, 0x66, 0x3C, 0x00],
-            '1' => &[0x18, 0x38, 0x18, 0x18, 0x18, 0x18, 0x7E, 0x00],
-            '2' => &[0x3C, 0x66, 0x06, 0x0C, 0x18, 0x30, 0x7E, 0x00],
-            '3' => &[0x3C, 0x66, 0x06, 0x1C, 0x06, 0x66, 0x3C, 0x00],
-            '4' => &[0x0C, 0x1C, 0x3C, 0x6C, 0x7E, 0x0C, 0x0C, 0x00],
-            '5' => &[0x7E, 0x60, 0x7C, 0x06, 0x06, 0x66, 0x3C, 0x00],
-            '6' => &[0x1C, 0x30, 0x60, 0x7C, 0x66, 0x66, 0x3C, 0x00],
-            '7' => &[0x7E, 0x06, 0x0C, 0x18, 0x30, 0x30, 0x30, 0x00],
-            '8' => &[0x3C, 0x66, 0x66, 0x3C, 0x66, 0x66, 0x3C, 0x00],
-            '9' => &[0x3C, 0x66, 0x66, 0x3E, 0x06, 0x0C, 0x38, 0x00],
-            ':' => &[0x00, 0x18, 0x18, 0x00, 0x18, 0x18, 0x00, 0x00],
-            ';' => &[0x00, 0x18, 0x18, 0x00, 0x18, 0x18, 0x30, 0x00],
-            '<' => &[0x0C, 0x18, 0x30, 0x60, 0x30, 0x18, 0x0C, 0x00],
-            '=' => &[0x00, 0x00, 0x7E, 0x00, 0x7E, 0x00, 0x00, 0x00],
-            '>' => &[0x30, 0x18, 0x0C, 0x06, 0x0C, 0x18, 0x30, 0x00],
-            '?' => &[0x3C, 0x66, 0x0C, 0x18, 0x18, 0x00, 0x18, 0x00],
-            '@' => &[0x3C, 0x66, 0x6E, 0x6A, 0x6E, 0x60, 0x3C, 0x00],
-            'A' => &[0x3C, 0x66, 0x66, 0x7E, 0x66, 0x66, 0x66, 0x00],
-            'B' => &[0x7C, 0x66, 0x66, 0x7C, 0x66, 0x66, 0x7C, 0x00],
-            'C' => &[0x3C, 0x66, 0x60, 0x60, 0x60, 0x66, 0x3C, 0x00],
-            'D' => &[0x78, 0x6C, 0x66, 0x66, 0x66, 0x6C, 0x78, 0x00],
-            'E' => &[0x7E, 0x60, 0x60, 0x7C, 0x60, 0x60, 0x7E, 0x00],
-            'F' => &[0x7E, 0x60, 0x60, 0x7C, 0x60, 0x60, 0x60, 0x00],
-            'G' => &[0x3C, 0x66, 0x60, 0x6E, 0x66, 0x66, 0x3C, 0x00],
-            'H' => &[0x66, 0x66, 0x66, 0x7E, 0x66, 0x66, 0x66, 0x00],
-            'I' => &[0x7E, 0x18, 0x18, 0x18, 0x18, 0x18, 0x7E, 0x00],
-            'J' => &[0x3E, 0x0C, 0x0C, 0x0C, 0x0C, 0x6C, 0x38, 0x00],
-            'K' => &[0x66, 0x6C, 0x78, 0x70, 0x78, 0x6C, 0x66, 0x00],
-            'L' => &[0x60, 0x60, 0x60, 0x60, 0x60, 0x60, 0x7E, 0x00],
-            'M' => &[0x63, 0x77, 0x7F, 0x6B, 0x6B, 0x63, 0x63, 0x00],
-            'N' => &[0x66, 0x66, 0x76, 0x7E, 0x6E, 0x66, 0x66, 0x00],
-            'O' => &[0x3C, 0x66, 0x66, 0x66, 0x66, 0x66, 0x3C, 0x00],
-            'P' => &[0x7C, 0x66, 0x66, 0x7C, 0x60, 0x60, 0x60, 0x00],
-            'Q' => &[0x3C, 0x66, 0x66, 0x66, 0x6A, 0x6C, 0x36, 0x00],
-            'R' => &[0x7C, 0x66, 0x66, 0x7C, 0x6C, 0x66, 0x66, 0x00],
-            'S' => &[0x3C, 0x66, 0x60, 0x3C, 0x06, 0x66, 0x3C, 0x00],
-            'T' => &[0x7E, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x00],
-            'U' => &[0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x3C, 0x00],
-            'V' => &[0x66, 0x66, 0x66, 0x66, 0x66, 0x3C, 0x18, 0x00],
-            'W' => &[0x63, 0x63, 0x6B, 0x6B, 0x7F, 0x77, 0x63, 0x00],
-            'X' => &[0x66, 0x66, 0x3C, 0x18, 0x3C, 0x66, 0x66, 0x00],
-            'Y' => &[0x66, 0x66, 0x66, 0x3C, 0x18, 0x18, 0x18, 0x00],
-            'Z' => &[0x7E, 0x06, 0x0C, 0x18, 0x30, 0x60, 0x7E, 0x00],
-            '[' => &[0x3C, 0x30, 0x30, 0x30, 0x30, 0x30, 0x3C, 0x00],
-            '\\' => &[0x00, 0x60, 0x30, 0x18, 0x0C, 0x06, 0x00, 0x00],
-            ']' => &[0x3C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x3C, 0x00],
-            '^' => &[0x18, 0x3C, 0x66, 0x00, 0x00, 0x00, 0x00, 0x00],
-            '_' => &[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF],
-            '`' => &[0x30, 0x18, 0x0C, 0x00, 0x00, 0x00, 0x00, 0x00],
-            'a' => &[0x00, 0x00, 0x3C, 0x06, 0x3E, 0x66, 0x3E, 0x00],
-            'b' => &[0x60, 0x60, 0x7C, 0x66, 0x66, 0x66, 0x7C, 0x00],
-            'c' => &[0x00, 0x00, 0x3C, 0x66, 0x60, 0x66, 0x3C, 0x00],
-            'd' => &[0x06, 0x06, 0x3E, 0x66, 0x66, 0x66, 0x3E, 0x00],
-            'e' => &[0x00, 0x00, 0x3C, 0x66, 0x7E, 0x60, 0x3C, 0x00],
-            'f' => &[0x1C, 0x36, 0x30, 0x7C, 0x30, 0x30, 0x30, 0x00],
-            'g' => &[0x00, 0x00, 0x3E, 0x66, 0x66, 0x3E, 0x06, 0x3C],
-            'h' => &[0x60, 0x60, 0x7C, 0x66, 0x66, 0x66, 0x66, 0x00],
-            'i' => &[0x18, 0x00, 0x38, 0x18, 0x18, 0x18, 0x3C, 0x00],
-            'j' => &[0x0C, 0x00, 0x1C, 0x0C, 0x0C, 0x0C, 0x6C, 0x38],
-            'k' => &[0x60, 0x60, 0x66, 0x6C, 0x78, 0x6C, 0x66, 0x00],
-            'l' => &[0x38, 0x18, 0x18, 0x18, 0x18, 0x18, 0x3C, 0x00],
-            'm' => &[0x00, 0x00, 0x66, 0x7F, 0x6B, 0x6B, 0x63, 0x00],
-            'n' => &[0x00, 0x00, 0x7C, 0x66, 0x66, 0x66, 0x66, 0x00],
-            'o' => &[0x00, 0x00, 0x3C, 0x66, 0x66, 0x66, 0x3C, 0x00],
-            'p' => &[0x00, 0x00, 0x7C, 0x66, 0x66, 0x7C, 0x60, 0x60],
-            'q' => &[0x00, 0x00, 0x3E, 0x66, 0x66, 0x3E, 0x06, 0x07],
-            'r' => &[0x00, 0x00, 0x6C, 0x76, 0x60, 0x60, 0x60, 0x00],
-            's' => &[0x00, 0x00, 0x3E, 0x60, 0x3C, 0x06, 0x7C, 0x00],
-            't' => &[0x30, 0x30, 0x7C, 0x30, 0x30, 0x36, 0x1C, 0x00],
-            'u' => &[0x00, 0x00, 0x66, 0x66, 0x66, 0x66, 0x3E, 0x00],
-            'v' => &[0x00, 0x00, 0x66, 0x66, 0x66, 0x3C, 0x18, 0x00],
-            'w' => &[0x00, 0x00, 0x63, 0x6B, 0x6B, 0x7F, 0x36, 0x00],
-            'x' => &[0x00, 0x00, 0x66, 0x3C, 0x18, 0x3C, 0x66, 0x00],
-            'y' => &[0x00, 0x00, 0x66, 0x66, 0x66, 0x3E, 0x06, 0x3C],
-            'z' => &[0x00, 0x00, 0x7E, 0x0C, 0x18, 0x30, 0x7E, 0x00],
-            '{' => &[0x0E, 0x18, 0x18, 0x70, 0x18, 0x18, 0x0E, 0x00],
-            '|' => &[0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x00],
-            '}' => &[0x70, 0x18, 0x18, 0x0E, 0x18, 0x18, 0x70, 0x00],
-            '~' => &[0x31, 0x6B, 0x46, 0x00, 0x00, 0x00, 0x00, 0x00],
-            '─' => &[0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0x00],
-            '│' => &[0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18],
-            '└' => &[0x00, 0x00, 0x00, 0xFF, 0x18, 0x18, 0x18, 0x18],
-            '═' => &[0x00, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0x00, 0x00],
-            '🐾' => &[0x6C, 0xFE, 0xFE, 0x7C, 0x38, 0x10, 0x00, 0x00], // Simplified paw print
-            _ => &[0x3C, 0x42, 0x99, 0xA1, 0xA1, 0x99, 0x42, 0x3C],    // Unknown char (face)
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_height_constants_calculation() {
-        // Compute expected values from constants, not hardcoded numbers
-        let expected_without_status = MARGIN_TOP + BASE_LINES * CHAR_HEIGHT_PIX;
-        let expected_with_status = MARGIN_TOP + (BASE_LINES + STATUS_TEXT_LINES) * CHAR_HEIGHT_PIX;
-
-        assert_eq!(MIN_HEIGHT_WITHOUT_STATUS, expected_without_status);
-        assert_eq!(MIN_HEIGHT_WITH_STATUS, expected_with_status);
-
-        assert_eq!(
-            MIN_HEIGHT_WITH_STATUS - MIN_HEIGHT_WITHOUT_STATUS,
-            STATUS_TEXT_LINES * CHAR_HEIGHT_PIX
-        );
-    }
-
-    #[test]
-    fn test_energy_plot_window_new() {
-        use crate::graphics::energy_plot::EnergyData;
-        use std::sync::{Arc, Mutex};
-
-        let energy_data = Arc::new(Mutex::new(EnergyData::new()));
-        let window = EnergyPlotWindow::new(energy_data, DisplayMode::All);
-
-        assert!(!window.is_open());
-        assert!(!window.has_status_text);
-        assert_eq!(window.get_display_mode(), DisplayMode::All);
-    }
-
-    #[test]
-    fn test_split_screen_layout_divides_monitor_into_halves() {
-        let layout =
-            split_screen_layout(PhysicalPosition::new(100, 50), PhysicalSize::new(1600, 900));
-
-        assert_eq!(layout.simulation.position, PhysicalPosition::new(100, 50));
-        assert_eq!(layout.simulation.size, PhysicalSize::new(800, 900));
-        assert_eq!(layout.energy.position, PhysicalPosition::new(900, 50));
-        assert_eq!(layout.energy.size, PhysicalSize::new(800, 800));
-    }
-
-    #[test]
-    fn test_split_screen_layout_right_aligns_energy_window_for_odd_sizes() {
-        let layout = split_screen_layout(PhysicalPosition::new(0, 0), PhysicalSize::new(1365, 768));
-
-        assert_eq!(layout.simulation.size.height, 768);
-        assert_eq!(layout.energy.size, PhysicalSize::new(683, 668));
-        assert_eq!(layout.energy.position, PhysicalPosition::new(682, 0));
-    }
-
-    #[test]
-    fn test_split_screen_layout_stays_within_small_monitor_bounds() {
-        let layout =
-            split_screen_layout(PhysicalPosition::new(25, 40), PhysicalSize::new(500, 200));
-
-        assert_eq!(layout.simulation.size.height, 200);
-        assert_eq!(layout.energy.size, PhysicalSize::new(250, 100));
-        assert_eq!(layout.energy.position, PhysicalPosition::new(275, 40));
-    }
-
-    #[test]
-    fn preferred_energy_window_size_caps_height_below_monitor_height() {
-        let size = preferred_energy_window_size(PhysicalSize::new(900, 1080));
-
-        assert_eq!(size.width, 900);
-        assert_eq!(size.height, 980);
-    }
-
-    #[test]
-    fn preferred_energy_window_size_preserves_small_monitor_visibility() {
-        let size = preferred_energy_window_size(PhysicalSize::new(280, 300));
-
-        assert_eq!(size.width, 280);
-        assert_eq!(size.height, 200);
     }
 }
