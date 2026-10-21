@@ -393,7 +393,10 @@ fn check_world(mc: &MainContent, ball_species: [&str; 8], sphere_species: [&str;
 /// and a save, so the layout did not move with the types.
 #[test]
 fn wall_layout_is_unchanged_by_the_file_types() {
-    let current = FIXTURES.last().expect("a reference save");
+    let current = FIXTURES
+        .iter()
+        .find(|f| f.version == WORLD_FILE_VERSION)
+        .expect("a reference save for the current version");
     let original: serde_json::Value = serde_json::from_str(&read_fixture(current.file)).unwrap();
     let mc = load_fixture(current.file);
     let written: serde_json::Value =

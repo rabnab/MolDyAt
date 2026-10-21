@@ -12,7 +12,7 @@ Saves are pretty-printed JSON files written by `SaveStore` (`core/src/applicatio
 |---|---|
 | `format.rs` | `WorldFile`, its data structs (`BallData`, `LineSegmentData`, `ValveData`, `WallChainData` with `ChainPieceData` / `JointData`, `SourceSphereData`, `ThermostatData`), `WORLD_FILE_VERSION`, `validate()`, `to_json` / `from_json`, `sim_config()` (the saved `SimConfig`, or the defaults for older files) |
 | `migrate.rs` | `parse()` (version first, fast path for current files), the `MIGRATIONS` chain and `take_field` for writing migrations |
-| `convert.rs` | live world ⇄ file (`WorldFile::capture(world, time_step)`, `TryFrom<&WorldFile> for SimulationWorld`, `From` impls for each `*Data` struct) |
+| `convert.rs` | live world ⇄ file (`WorldFile::capture(&MainContent)`, `TryFrom<&WorldFile> for SimulationWorld`, `From` impls for each `*Data` struct) |
 | `store.rs` | save directory, file names, atomic write (temp file, then rename), `latest()` |
 | `mod.rs` | `MainContent::load_world`: resolve, read, validate, build, then swap in |
 | `tests/` | `format.rs`, `roundtrip.rs`, `store.rs`, `reference_saves.rs` (one fixture per format version in `tests/fixtures/`) |
