@@ -76,8 +76,8 @@ impl PhysicsRuntime {
 
             let was_paused = simulation.world().sim.is_paused();
             {
-                let (world, step_config) = simulation.world_and_step_config();
-                let _ = SimulationEngine::simulation_step(world, step_config);
+                let (world, step_config, options) = simulation.step_parts();
+                let _ = SimulationEngine::simulation_step(world, step_config, options);
             }
             if !was_paused {
                 physics_step_count += 1;
@@ -89,7 +89,11 @@ impl PhysicsRuntime {
                     .snapshot_layers()
                     .contains(SceneLayers::THERMO)
                 {
-                    SimulationEngine::record_thermo_fields_if_due(simulation.world_mut());
+                    let log_timings = simulation.options().show_timings;
+                    SimulationEngine::record_thermo_fields_if_due(
+                        simulation.world_mut(),
+                        log_timings,
+                    );
                 }
             }
 

@@ -23,12 +23,12 @@ impl MainContent {
         dt: f32,
         counts: Option<&SpeciesCounts>,
     ) -> Option<String> {
-        if !self.world().show_ball_stats {
+        if !self.options().show_ball_stats {
             return None;
         }
         let world = self.world();
         let num_balls = world.balls.len();
-        let mut text = if world.real_data {
+        let mut text = if self.options().real_data {
             world.sim.get_status_text_real(fps, num_balls, dt)
         } else {
             world

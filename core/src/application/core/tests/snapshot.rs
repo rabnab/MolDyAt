@@ -318,7 +318,7 @@ fn dropping_the_thermo_layer_stops_and_clears_the_thermo_fields() {
 
     // Shown again: the next recorded step starts a fresh history.
     main_content.set_snapshot_layers(SceneLayers::ALL);
-    SimulationEngine::record_thermo_fields(main_content.world_mut());
+    SimulationEngine::record_thermo_fields(main_content.world_mut(), false);
     assert!(main_content.create_snapshot().thermo_grid_spec.is_some());
 }
 

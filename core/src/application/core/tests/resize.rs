@@ -182,7 +182,7 @@ fn test_unpause_after_resize_resumes_a_simulation_the_resize_paused() {
 
     main_content.unpause_after_resize();
     assert!(!main_content.world().sim.is_paused());
-    assert!(!main_content.world().was_paused_for_resize);
+    assert!(!main_content.runtime().paused_for_resize);
 }
 
 #[test]

@@ -3,7 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use super::step_scratch::{NeighbourStats, RebuildScratch, UpdateScratch};
-use super::{SimulationWorld, StatsAccumulator, StepConfig};
+use super::{RuntimeOptions, SimulationWorld, StatsAccumulator, StepConfig};
 use crate::application::phase_timings::{Phase, PhaseClock};
 use crate::application::thermo_field::{THERMO_SAMPLE_STRIDE, compute_cell_thermo};
 use crate::application::{AppResult, log_util};
@@ -24,16 +24,18 @@ use rayon::prelude::*;
 pub(crate) struct SimulationEngine;
 
 impl SimulationEngine {
+    /// `log_timings`: log each phase's time (`RuntimeOptions::show_timings`).
     pub(crate) fn collect_neighbours_by_cell(
         world: &mut SimulationWorld,
         step_config: &StepConfig,
         dt: f32,
+        log_timings: bool,
     ) {
         if world
             .step_count
             .is_multiple_of(step_config.neighbour_update_interval())
         {
-            let mut clock = PhaseClock::start(world.show_timings);
+            let mut clock = PhaseClock::start(log_timings);
             Self::update_neighbor_hoods_for_occupied_cells(world, dt);
             Self::update_neighbor_statistics(world);
             clock.lap(&mut world.phase_timings, Phase::Neighbours);
@@ -43,32 +45,35 @@ impl SimulationEngine {
     pub(crate) fn simulation_step(
         world: &mut SimulationWorld,
         step_config: &StepConfig,
+        options: &RuntimeOptions,
     ) -> AppResult<()> {
         let dt = step_config.get_time_step();
-        Self::simulation_step_with_dt(world, step_config, dt)
+        Self::simulation_step_with_dt(world, step_config, options, dt)
     }
 
     pub(crate) fn simulation_step_with_dt(
         world: &mut SimulationWorld,
         step_config: &StepConfig,
+        options: &RuntimeOptions,
         dt: f32,
     ) -> AppResult<()> {
         if world.sim.is_paused() {
             return Ok(());
         }
-        if world.show_timings {
+        let log_timings = options.show_timings;
+        if log_timings {
             log_util::log_separator_line();
         }
-        if world.step_by_step {
+        if options.step_by_step {
             world.sim.set_pause(true);
         }
 
         let bound_rect = world.world_rect;
 
-        Self::collect_neighbours_by_cell(world, step_config, dt);
-        Self::update_sim_and_move_balls(world, step_config, dt, &bound_rect);
+        Self::collect_neighbours_by_cell(world, step_config, dt, log_timings);
+        Self::update_sim_and_move_balls(world, step_config, dt, &bound_rect, log_timings);
 
-        let mut clock = PhaseClock::start(world.show_timings);
+        let mut clock = PhaseClock::start(log_timings);
         let (sim, balls) = (&mut world.sim, &world.balls);
         sim.calculate_temperature_from_balls(balls);
         clock.lap(&mut world.phase_timings, Phase::Thermo);
@@ -81,10 +86,10 @@ impl SimulationEngine {
     /// [`Self::record_thermo_fields`] every [`THERMO_SAMPLE_STRIDE`] steps,
     /// and right away when the history is empty (just shown, cleared after a
     /// resize or load), so the heatmap appears without waiting (#229).
-    pub(crate) fn record_thermo_fields_if_due(world: &mut SimulationWorld) {
+    pub(crate) fn record_thermo_fields_if_due(world: &mut SimulationWorld, log_timings: bool) {
         if world.thermo_history.is_empty() || world.step_count.is_multiple_of(THERMO_SAMPLE_STRIDE)
         {
-            Self::record_thermo_fields(world);
+            Self::record_thermo_fields(world, log_timings);
         }
     }
 
@@ -92,11 +97,11 @@ impl SimulationEngine {
     /// thermo history. Only the heatmap overlay (and headless output) uses
     /// them, so the physics thread calls this only while they are shown
     /// (the `THERMO` layer).
-    pub(crate) fn record_thermo_fields(world: &mut SimulationWorld) {
+    pub(crate) fn record_thermo_fields(world: &mut SimulationWorld, log_timings: bool) {
         if world.balls.len() != world.cached_force_results.len() {
             return;
         }
-        let mut clock = PhaseClock::start(world.show_timings);
+        let mut clock = PhaseClock::start(log_timings);
         // The T/P overlay uses the physics cell grid's shape (see
         // docs/simulation.md, Thermodynamic Grid Space).
         let (phys_rows, phys_cols) = world.cell_grid.get_grid_size();
@@ -113,7 +118,12 @@ impl SimulationEngine {
         clock.lap_as(&mut world.phase_timings, Phase::Thermo, "thermo fields");
     }
 
-    pub(crate) fn update_sim(world: &mut SimulationWorld, dt: f32, bound_rect: &Rect) {
+    pub(crate) fn update_sim(
+        world: &mut SimulationWorld,
+        dt: f32,
+        bound_rect: &Rect,
+        log_timings: bool,
+    ) {
         let mut stats_accumulator = StatsAccumulator {
             pot: 0.,
             kin: 0.,
@@ -123,7 +133,7 @@ impl SimulationEngine {
             max_id: 0,
         };
 
-        let mut clock = PhaseClock::start(world.show_timings);
+        let mut clock = PhaseClock::start(log_timings);
         world.with_scratch(
             |s| &mut s.update,
             |world, scratch| {
@@ -176,6 +186,7 @@ impl SimulationEngine {
         step_config: &StepConfig,
         dt: f32,
         bound_rect: &Rect,
+        log_timings: bool,
     ) {
         world.with_scratch(
             |s| &mut s.old_positions,
@@ -183,8 +194,8 @@ impl SimulationEngine {
                 old_positions.clear();
                 old_positions.extend(world.balls.iter().map(|ball| *ball.get_position()));
 
-                Self::update_sim(world, dt, bound_rect);
-                let mut clock = PhaseClock::start(world.show_timings);
+                Self::update_sim(world, dt, bound_rect, log_timings);
+                let mut clock = PhaseClock::start(log_timings);
                 world.emit_from_source_spheres(step_config.get_ball_factory());
 
                 for (i, old_pos) in old_positions.iter().enumerate() {

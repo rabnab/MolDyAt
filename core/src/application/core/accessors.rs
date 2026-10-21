@@ -71,6 +71,17 @@ impl MainContent {
         (world, step_config)
     }
 
+    /// What a step needs: the world, the step settings and the options.
+    pub(crate) fn step_parts(&mut self) -> (&mut SimulationWorld, &StepConfig, &RuntimeOptions) {
+        let Self {
+            world,
+            step_config,
+            options,
+            ..
+        } = self;
+        (world, step_config, options)
+    }
+
     pub(crate) fn toggle_pause(&mut self) {
         self.world.sim.toggle_pause();
     }
@@ -94,19 +105,24 @@ impl MainContent {
     }
 
     pub(crate) fn toggle_real_data(&mut self) {
-        self.world.real_data = !self.world.real_data;
+        self.options.real_data = !self.options.real_data;
     }
 
     pub(crate) fn toggle_show_ball_stats(&mut self) {
-        self.world.show_ball_stats = !self.world.show_ball_stats;
+        self.options.show_ball_stats = !self.options.show_ball_stats;
     }
 
     pub(crate) fn toggle_stepwise(&mut self) {
-        self.world.step_by_step = !self.world.step_by_step;
+        self.options.step_by_step = !self.options.step_by_step;
     }
 
     pub(crate) fn toggle_timing_display(&mut self) {
-        self.world.show_timings = !self.world.show_timings;
+        self.options.show_timings = !self.options.show_timings;
+    }
+
+    /// Display and stepping options (keys `D`, `S`, `F4`, `B`).
+    pub(crate) fn options(&self) -> &RuntimeOptions {
+        &self.options
     }
 
     /// Resize simulation world and reconstruct cell grid.

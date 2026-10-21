@@ -22,8 +22,9 @@ fn test_simulation_engine_advances_main_content_state() {
     main_content.collect_neighbours_by_cell(DT_GOAL);
     let initial_step_count = main_content.world().step_count;
 
-    let (world, step_config) = main_content.world_and_step_config();
-    SimulationEngine::simulation_step(world, step_config).expect("simulation step should succeed");
+    let (world, step_config, options) = main_content.step_parts();
+    SimulationEngine::simulation_step(world, step_config, options)
+        .expect("simulation step should succeed");
 
     assert_eq!(main_content.world().step_count, initial_step_count + 1);
     assert!(main_content.world().sim.get_time() > 0.0);
@@ -56,8 +57,9 @@ fn test_simulation_step_applies_thermostats_before_source_emission() {
     let source_id = main_content.world().source_spheres.spheres()[0].id;
     main_content.toggle_source_sphere(source_id);
 
-    let (world, step_config) = main_content.world_and_step_config();
-    SimulationEngine::simulation_step(world, step_config).expect("simulation step should succeed");
+    let (world, step_config, options) = main_content.step_parts();
+    SimulationEngine::simulation_step(world, step_config, options)
+        .expect("simulation step should succeed");
 
     assert_eq!(
         main_content.world().balls.len(),
@@ -93,8 +95,8 @@ fn test_simulation_step_does_not_advance_when_paused() {
     let step_count_before = main_content.world().step_count;
     let time_before = main_content.world().sim.get_time();
 
-    let (world, step_config) = main_content.world_and_step_config();
-    SimulationEngine::simulation_step(world, step_config)
+    let (world, step_config, options) = main_content.step_parts();
+    SimulationEngine::simulation_step(world, step_config, options)
         .expect("simulation step should not error when paused");
 
     assert_eq!(
@@ -124,8 +126,8 @@ fn test_repeated_steps_advance_time_and_update_energy() {
 
     let n_steps = 5;
     for _ in 0..n_steps {
-        let (world, step_config) = main_content.world_and_step_config();
-        SimulationEngine::simulation_step(world, step_config)
+        let (world, step_config, options) = main_content.step_parts();
+        SimulationEngine::simulation_step(world, step_config, options)
             .expect("simulation step should succeed");
     }
 
@@ -174,8 +176,8 @@ fn test_paused_physics_state_is_unchanged_by_steps_and_snapshots() {
     let before = state(&main_content);
 
     for _ in 0..20 {
-        let (world, step_config) = main_content.world_and_step_config();
-        SimulationEngine::simulation_step(world, step_config).expect("paused step");
+        let (world, step_config, options) = main_content.step_parts();
+        SimulationEngine::simulation_step(world, step_config, options).expect("paused step");
         let _ = main_content.create_snapshot();
     }
 
@@ -203,8 +205,8 @@ fn test_simulation_step_counts_steps_and_books_phase_time() {
     main_content.reset_phase_timings();
 
     for _ in 0..3 {
-        let (world, step_config) = main_content.world_and_step_config();
-        SimulationEngine::simulation_step(world, step_config).expect("simulation step");
+        let (world, step_config, options) = main_content.step_parts();
+        SimulationEngine::simulation_step(world, step_config, options).expect("simulation step");
     }
 
     // Per-phase durations of a two-ball step can be below the clock
@@ -216,8 +218,8 @@ fn test_simulation_step_counts_steps_and_books_phase_time() {
 }
 
 fn step(main_content: &mut crate::application::MainContent) {
-    let (world, step_config) = main_content.world_and_step_config();
-    SimulationEngine::simulation_step(world, step_config).expect("simulation step");
+    let (world, step_config, options) = main_content.step_parts();
+    SimulationEngine::simulation_step(world, step_config, options).expect("simulation step");
 }
 
 fn neighbour_interval(main_content: &mut crate::application::MainContent) -> usize {
