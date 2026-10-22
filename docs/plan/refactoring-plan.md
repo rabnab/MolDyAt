@@ -159,7 +159,7 @@ Each item reports before/after numbers from G1 and must keep drift + energy test
 | ID | Title | Scope / acceptance | Size | Deps |
 |---|---|---|---|---|
 | P1 | Remove per-step allocations | Reuse scratch buffers for `old_positions`, `force_results`, `bounce_infos`, `obstacles`, rebuild candidate lists. | S | G1 |
-| P2 | Parallel force application + stats | `apply_forces_and_collect_stats` via `par_iter_mut`; stats reduced over **fixed-size chunks** combined in chunk order, so sums do not depend on thread count or scheduling (reproducibility test from G2 must pass). | M | G1, G2 |
+| P2 | Parallel force application + stats | `apply_forces_and_collect_stats` via `par_iter_mut`; per-ball stats collected in ball order and summed serially, so sums do not depend on thread count or scheduling and equal the serial loop bit for bit (reproducibility test from G2 must pass). Fixed-size chunks were the alternative; they would move the low bits of every sum, and the serial sum is cheap. | M | G1, G2 |
 | P3 | Thermo field at snapshot cadence | Bin T/P every `THERMO_SAMPLE_STRIDE` steps instead of every step; the rolling window counts samples and still spans 1000 steps. A fixed step stride (not wall-clock snapshot time) keeps headless runs deterministic. | S | G1 |
 | P4 | Flat cell grid (CSR) | `CellGrid` as counting-sort arrays (`cell_start`, `ball_idx`) rebuilt per step in parallel instead of `Vec<Vec<Cell>>` with per-cell `Vec`s. | M | P1 |
 | P5 | Spatial reordering of balls | Periodically sort `balls` by cell (Morton/row order) for cache locality; follow the index contract (clear lists, rebuild grid). | M | P4 |
@@ -187,7 +187,7 @@ GitHub issues:
 |---|---|---|---|
 | 1 | #219 | G1 #221, G2 #222, G3 #223, M1 #224, M3 #225, M4 #226, C1 #227, P1 #228, P3 #229 | – |
 | 2 | #220 | I1 #230, I2 #233, I3 #234, M6 #231, I4 #235, I5 #236, C2 #232, I6 #237, I7 #238 | – |
-| 3 | #304 | M2 #305, #295, #270, #273, #274, M5 #306, C4 #307 | M7 #308, M8 #309, M9 #310, P2 #311 |
+| 3 | #304 | M2 #305, #295, #270, #273, #274, M5 #306, C4 #307, P2 #311 | M7 #308, M8 #309, M9 #310 |
 | 5 | – | – | I12 #280 |
 
 "Landed" is taken from the commits on `master` (as of 2026-10-14), not from

@@ -75,7 +75,9 @@ names match `core/src/application/phase_timings.rs`):
 3. **forces**: pair forces from the SIMD kernel (`simd_forces`, `f32x4`).
 4. **apply**: velocity update, kinetic and potential energy, wall momentum
    bookkeeping, the overlap fallback for balls still inside a wall, and the
-   Nosé–Hoover thermostats.
+   Nosé–Hoover thermostats. The velocity update runs in parallel per ball;
+   its per-ball energies and momenta are summed serially in ball order, so
+   the sums are the same for every thread count.
 5. **cells**: source spheres emit balls, balls move between grid cells,
    invalid (NaN) balls are removed.
 6. **thermo**: global temperature.
