@@ -516,6 +516,19 @@ impl SimulationEngine {
         bound_rect: &Rect,
         stats_accumulator: &mut StatsAccumulator,
     ) -> (f32, f32) {
+        // The zips below stop at the shortest list, so a mismatch would
+        // silently skip balls; the former indexed loop panicked instead.
+        // Checked once per step, so kept in release builds too.
+        assert_eq!(
+            world.balls.len(),
+            force_results.len(),
+            "one force result per ball"
+        );
+        assert_eq!(
+            world.balls.len(),
+            bounce_infos.len(),
+            "one bounce info per ball"
+        );
         let params = ApplyParams {
             gravity: world.physics.constants.gravity,
             restitution: world.wall_restitution_fault(),
