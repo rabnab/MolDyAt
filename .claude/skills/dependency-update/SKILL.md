@@ -14,7 +14,7 @@ Dependabot (`.github/dependabot.yml`) opens monthly, grouped PRs: one for cargo 
 | `rayon` | scheduling must not affect results | `cargo test --workspace thread_count` |
 | `wgpu`, `winit` | API changes in the backend; surface, present mode and event handling | build, `cargo test -p moldyat_wgpu`, run `gpu_smoke.rs` on a machine with a GPU, start the app and resize the window |
 | `winit`, `softbuffer` | core and `wgpu_renderer` must use the same `winit` version (energy window) | versions in both `Cargo.toml`s match |
-| `serde`, `serde_json` | save file format | `cargo test -p moldyat_core persistence` |
+| `serde`, `serde_json` | save file format | `cargo test -p thermo_physics persistence` |
 | `env_logger`, `log` | log filters and targets | `RUST_LOG` targets still work |
 | any new crate | license, release build | `cargo deny check licenses`, `scripts/check_release_files.sh` |
 | nightly toolchain | `std::simd` API, new clippy lints, rustfmt changes; SIMD codegen can change f32 results | full gates below |
@@ -29,7 +29,7 @@ Dependabot (`.github/dependabot.yml`) opens monthly, grouped PRs: one for cargo 
    ```bash
    cargo fmt -- --check
    cargo clippy --workspace -- -D warnings
-   cargo clippy -p moldyat_core --all-targets --no-default-features -- -D warnings
+   cargo clippy -p thermo_physics -p moldyat_core --all-targets --no-default-features -- -D warnings
    cargo test --workspace
    cargo ci-test-headless-regression
    cargo ci-test-drift

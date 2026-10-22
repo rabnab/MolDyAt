@@ -36,9 +36,10 @@ Use this file as the single source of truth for commands and process rules. Othe
 
 Toolchain is pinned in `rust-toolchain.toml` (nightly). Use plain `cargo`. Use `--profile perf` for performance comparisons (`release` with thin LTO, faster to build); use `--release` only to build the optimised binary itself.
 
-- Run a single test (name substring): `cargo test -p moldyat_core test_remove_invalid_balls`
-- Run an exact test name: `cargo test -p moldyat_core test_remove_invalid_balls -- --exact`
-- Run a single integration test file (`tests/<name>.rs`): `cargo test -p moldyat_core --test integration_file_name`
+- Crates: `thermo_physics` (physics, world, stepping, config, saves; no windowing stack), `moldyat_core` (physics thread, commands, snapshots, UI layer; re-exports `thermo_physics` at the old paths for one release), `moldyat_wgpu` (binary). Physics tests live in `thermo_physics`.
+- Run a single test (name substring): `cargo test -p thermo_physics test_remove_invalid_balls`
+- Run an exact test name: `cargo test -p thermo_physics test_remove_invalid_balls -- --exact`
+- Run a single integration test file (`tests/<name>.rs`): `cargo test -p thermo_physics --test integration_file_name`
 - Package vs binary: the cargo package is `moldyat_wgpu` (use it with `-p`); the executable it builds is `moldyat` (`target/<profile>/moldyat`).
 - Minimal headless run: `cargo run -p moldyat_wgpu -- --headless`
 - Deterministic seeded run (reproducible): `cargo run -p moldyat_wgpu -- --headless --steps 1000 --rng-seed 12345 --no-stdout`

@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::application::MainContent;
+use crate::application::SnapshotPublisher;
 use crate::application::tests::{sync_commands, wait_for_snapshot};
 use crate::application::{BallCommand, DomainCommand, SimControl, ViewCommand, WorldCommand};
 use crate::application::{
@@ -37,6 +38,7 @@ impl<T> CommandHandler<T> for RecordingHandler<T> {
 /// Drains `commands` into `main_content` as the physics thread would and
 /// returns how many resizes were applied.
 fn drain_into(main_content: &mut MainContent, commands: Vec<DomainCommand>) -> u32 {
+    let mut publisher = SnapshotPublisher::new();
     let runtime = PhysicsRuntime;
     let (sender, receiver) = std::sync::mpsc::channel();
     let (events, _event_receiver) = std::sync::mpsc::channel();
@@ -44,7 +46,7 @@ fn drain_into(main_content: &mut MainContent, commands: Vec<DomainCommand>) -> u
         sender.send(command).expect("send should succeed");
     }
 
-    let mut handler = DomainCommandHandler::new(main_content, &events);
+    let mut handler = DomainCommandHandler::new(main_content, &mut publisher, &events);
     runtime.drain_commands(&receiver, &mut handler);
     handler.resizes_applied()
 }
@@ -91,13 +93,14 @@ fn test_shutdown_signal_ordering() {
 
 #[test]
 fn test_main_content_is_send() {
+    let publisher = SnapshotPublisher::new();
     // This test verifies that MainContent can be moved to a thread
     // If MainContent is not Send, this test will fail to compile
     let world_rect = Rect::new(0.0, 0.0, 100.0, 100.0);
     let main_content = MainContent::new(world_rect).expect("Failed to create MainContent");
 
     // Get snapshot slot before moving
-    let snapshot_slot = main_content.get_snapshot_slot();
+    let snapshot_slot = publisher.slot();
 
     // This demonstrates that MainContent is Send
     let handle = std::thread::spawn(move || {
@@ -113,12 +116,13 @@ fn test_main_content_is_send() {
 
 #[test]
 fn test_physics_thread_can_publish_snapshots() {
+    let publisher = SnapshotPublisher::new();
     // Create MainContent
     let world_rect = Rect::new(0.0, 0.0, 100.0, 100.0);
     let mut main_content = MainContent::new(world_rect).expect("Failed to create MainContent");
 
     // Get snapshot slot before moving
-    let snapshot_slot = main_content.get_snapshot_slot();
+    let snapshot_slot = publisher.slot();
 
     // Run a few simulation steps to generate snapshots
     for _ in 0..5 {
@@ -126,7 +130,7 @@ fn test_physics_thread_can_publish_snapshots() {
     }
 
     // Explicitly publish a snapshot (simulation_step doesn't always publish)
-    main_content.publish_snapshot();
+    publisher.publish(publisher.snapshot(&main_content));
 
     // Verify snapshot was published
     let snapshot = snapshot_slot.load();
@@ -142,10 +146,11 @@ fn test_physics_thread_can_publish_snapshots() {
 
 #[test]
 fn test_command_channel_toggle_pause() {
+    let publisher = SnapshotPublisher::new();
     let world_rect = Rect::new(0.0, 0.0, 100.0, 100.0);
     let main_content = MainContent::new(world_rect).expect("Failed to create MainContent");
-    let snapshot_slot = main_content.get_snapshot_slot();
-    let physics_thread = PhysicsThread::spawn(main_content, Box::new(|| {}));
+    let snapshot_slot = publisher.slot();
+    let physics_thread = PhysicsThread::spawn(main_content, publisher, Box::new(|| {}));
 
     // Running: the step count advances.
     let first = wait_for_snapshot(&snapshot_slot, "a first snapshot", |_| true);
@@ -183,11 +188,12 @@ fn test_command_channel_toggle_pause() {
 
 #[test]
 fn test_command_channel_speed_control() {
+    let publisher = SnapshotPublisher::new();
     let world_rect = Rect::new(0.0, 0.0, 1000.0, 1000.0);
     let main_content = MainContent::new(world_rect).expect("Failed to create MainContent");
     let initial_dt = main_content.time_step();
-    let snapshot_slot = main_content.get_snapshot_slot();
-    let physics_thread = PhysicsThread::spawn(main_content, Box::new(|| {}));
+    let snapshot_slot = publisher.slot();
+    let physics_thread = PhysicsThread::spawn(main_content, publisher, Box::new(|| {}));
 
     for _ in 0..3 {
         physics_thread
@@ -307,6 +313,7 @@ fn test_runtime_publishes_a_snapshot_right_after_a_resize() {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::{Duration, Instant};
 
+    let mut publisher = SnapshotPublisher::new();
     let mut main_content =
         MainContent::new(Rect::new(0.0, 0.0, 100.0, -100.0)).expect("Failed to create MainContent");
     // No regular snapshot comes within this interval (far above what a
@@ -314,7 +321,7 @@ fn test_runtime_publishes_a_snapshot_right_after_a_resize() {
     main_content
         .runtime_mut()
         .set_snapshot_interval_us(Duration::from_secs(3600).as_micros() as u64);
-    let snapshot_slot = main_content.get_snapshot_slot();
+    let snapshot_slot = publisher.slot();
     let resized = Rect::new(0.0, 0.0, 300.0, -200.0);
 
     let (sender, receiver) = std::sync::mpsc::channel();
@@ -333,6 +340,7 @@ fn test_runtime_publishes_a_snapshot_right_after_a_resize() {
     let handle = std::thread::spawn(move || {
         runtime.run(
             &mut main_content,
+            &mut publisher,
             &receiver,
             &events,
             &thread_signal,
@@ -371,7 +379,8 @@ fn test_physics_thread_shutdown_and_join_is_graceful() {
 
     let world_rect = Rect::new(0.0, 0.0, 100.0, 100.0);
     let main_content = MainContent::new(world_rect).expect("Failed to create MainContent");
-    let physics_thread = PhysicsThread::spawn(main_content, Box::new(|| {}));
+    let physics_thread =
+        PhysicsThread::spawn(main_content, SnapshotPublisher::new(), Box::new(|| {}));
 
     let start = Instant::now();
     physics_thread
@@ -407,8 +416,9 @@ fn test_snapshots_follow_changes_for_paused_and_running_by_layers() {
             main_content
                 .add_candidate_at_pos(Vec2D::new(30.0, -30.0))
                 .expect("add ball");
-            let slot = main_content.get_snapshot_slot();
-            let physics_thread = PhysicsThread::spawn(main_content, Box::new(|| {}));
+            let publisher = SnapshotPublisher::new();
+            let slot = publisher.slot();
+            let physics_thread = PhysicsThread::spawn(main_content, publisher, Box::new(|| {}));
             let latest = || slot.load_full();
             let wait_for = |what: &str, done: &dyn Fn(&RendererSnapshot) -> bool| {
                 let deadline = Instant::now() + Duration::from_secs(5);

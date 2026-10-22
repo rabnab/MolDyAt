@@ -23,9 +23,9 @@ Smallest first; all must pass before a PR.
 
 | Check | Command |
 |---|---|
-| Force/potential, cap, SIMD vs scalar | `cargo test -p moldyat_core ball_impl` |
-| Energy conservation | `cargo test -p moldyat_core energy` (covers `energy_conservation.rs`, `barrier_energy.rs`) |
-| Full core suite | `cargo test -p moldyat_core` |
+| Force/potential, cap, SIMD vs scalar | `cargo test -p thermo_physics ball_impl` |
+| Energy conservation | `cargo test -p thermo_physics energy` (covers `energy_conservation.rs`, `barrier_energy.rs`) |
+| Full physics suite | `cargo test -p thermo_physics` (physics thread and snapshots: `cargo test -p moldyat_core`) |
 | Drift suite | `cargo ci-test-drift` |
 | Headless fixtures | `cargo ci-test-headless-regression` |
 | Thread-count reproducibility | `cargo test -p moldyat_wgpu test_seeded_operators_run_does_not_depend_on_thread_count` |

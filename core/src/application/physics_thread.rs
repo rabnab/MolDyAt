@@ -11,9 +11,13 @@
 //! ARCHITECTURAL CONSTRAINT: This module must not depend on ggez.
 //! All ggez-specific code belongs in src/application/ggez/.
 
+use crate::application::CreateSnapshot;
 use crate::application::DomainCommand;
 use crate::application::MainContent;
 use crate::application::PhysicsEvent;
+use crate::application::renderer_snapshot::RendererSnapshot;
+use crate::application::scene_layers::SceneLayers;
+use arc_swap::ArcSwapOption;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -61,6 +65,60 @@ impl Default for ShutdownSignal {
 }
 
 /// Handle to the physics simulation thread
+/// Where the physics thread publishes its snapshots, and which layers they
+/// have. The renderer reads the slot lock-free (see `PhysicsCoordinator`).
+pub struct SnapshotPublisher {
+    slot: Arc<ArcSwapOption<RendererSnapshot>>,
+    /// Layers the renderer wants in its snapshots (see `SceneLayers`).
+    layers: SceneLayers,
+}
+
+impl SnapshotPublisher {
+    /// An empty slot; snapshots with every layer.
+    pub fn new() -> Self {
+        Self {
+            slot: Arc::new(ArcSwapOption::from(None)),
+            layers: SceneLayers::ALL,
+        }
+    }
+
+    /// The slot, shared with the renderer.
+    pub fn slot(&self) -> Arc<ArcSwapOption<RendererSnapshot>> {
+        Arc::clone(&self.slot)
+    }
+
+    pub fn layers(&self) -> SceneLayers {
+        self.layers
+    }
+
+    /// Build snapshots with only `layers` from now on. Without `THERMO` the
+    /// thermo fields are no longer recorded; their history is dropped, so a
+    /// heatmap shown again later never mixes in fields from before.
+    pub fn set_layers(&mut self, content: &mut MainContent, layers: SceneLayers) {
+        if !layers.contains(SceneLayers::THERMO) {
+            content.clear_thermo_history();
+        }
+        self.layers = layers;
+    }
+
+    /// A snapshot of `content` with this publisher's layers.
+    pub fn snapshot(&self, content: &MainContent) -> RendererSnapshot {
+        content.create_snapshot_with(self.layers)
+    }
+
+    /// Replace the published snapshot (an atomic `Arc` swap, so the physics
+    /// thread never waits for the renderer).
+    pub fn publish(&self, snapshot: RendererSnapshot) {
+        self.slot.store(Some(Arc::new(snapshot)));
+    }
+}
+
+impl Default for SnapshotPublisher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub struct PhysicsThread {
     thread_handle: Option<JoinHandle<()>>,
     shutdown_signal: ShutdownSignal,
@@ -73,11 +131,14 @@ impl PhysicsThread {
     ///
     /// # Arguments
     /// * `main_content` - The simulation state to run in the physics thread
+    /// * `publisher` - Where the thread publishes its snapshots; take its
+    ///   `slot()` before handing it over
     ///
     /// # Returns
     /// A `PhysicsThread` handle that can be used to control the thread
     pub fn spawn(
         mut main_content: MainContent,
+        mut publisher: SnapshotPublisher,
         wakeup_callback: Box<dyn Fn() + Send + Sync + 'static>,
     ) -> Self {
         let shutdown_signal = ShutdownSignal::new();
@@ -94,6 +155,7 @@ impl PhysicsThread {
             let runtime = runtime::PhysicsRuntime;
             runtime.run(
                 &mut main_content,
+                &mut publisher,
                 &command_receiver,
                 &event_sender,
                 &thread_signal,

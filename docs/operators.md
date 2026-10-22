@@ -17,7 +17,7 @@ tests) are in the `operator-framework` skill (`.claude/skills/`).
 | Thermostat | `OperatorTool::Thermostat` | `SimThermostat { id, position, state, target_temperature, radius, chain, tau, current_local_temp }` | on / off | Nosé–Hoover chain thermostat on the balls inside its radius |
 | Source sphere | `OperatorTool::SourceSphere` | `SimSourceSphere { id, center, state, emit_period, ball_species, emission_speed }` | on / off | Emits a ball at its perimeter every `emit_period` steps |
 
-The data models live in `core/src/objects2d/` (`line_segment.rs`,
+The data models live in `crates/thermo_physics/src/objects2d/` (`line_segment.rs`,
 `wall_chain.rs`, `operator/`). `SimulationWorld` holds one collection per
 type: `line_segments`, `valve_segments`, `wall_chains`, `source_spheres`,
 `thermostats`.
@@ -97,7 +97,7 @@ own species clear of other balls and walls.
 
 ## Lifecycle
 
-`core/src/objects2d/operator/mod.rs` provides the parts every operator
+`crates/thermo_physics/src/objects2d/operator/mod.rs` provides the parts every operator
 shares:
 
 - `OperatorState` (`On` / `Off`) for toggleable operators, with the green
@@ -188,8 +188,8 @@ The wgpu backend draws operators with these pipelines in
 
 | Layer | Location |
 |---|---|
-| Shared primitives | `core/src/objects2d/operator/` |
-| Simulation effects (collisions, energy, thermostats, sources, rescale) | `core/src/application/core/tests/` (for example `line_segments.rs`, `barrier_energy.rs`, `wall_handover.rs`) |
+| Shared primitives | `crates/thermo_physics/src/objects2d/operator/` |
+| Simulation effects (collisions, energy, thermostats, sources, rescale) | `crates/thermo_physics/src/application/core/tests/` (for example `line_segments.rs`, `barrier_energy.rs`, `wall_handover.rs`) |
 | Tools and sidebar mapping | `core/src/graphics/renderer/event_loop/tests/` and the tool modules |
 | wgpu sidebar and pipelines | `wgpu_renderer/src/wgpu/tests/` |
 | End to end | the seeded headless operator fixture (`seeded_headless_operators.jsonl`) |

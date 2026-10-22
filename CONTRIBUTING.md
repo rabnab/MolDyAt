@@ -116,9 +116,9 @@ checks via CI or WSL; never refresh fixtures there.
 
 ### Save format: reference saves
 
-`core/src/application/persistence/tests/fixtures/` holds one reference save per
+`crates/thermo_physics/src/application/persistence/tests/fixtures/` holds one reference save per
 world-file format version (`v1.json`, ...), each written by the build that
-introduced that version. `cargo test -p moldyat_core reference_saves` loads
+introduced that version. `cargo test -p thermo_physics reference_saves` loads
 every one of them through the real load path and checks its contents.
 
 - **Never edit or regenerate an existing reference save.** It stands for the
@@ -132,7 +132,7 @@ every one of them through the real load path and checks its contents.
   breaking and need a migration. See
   [Format versions and migrations](docs/architecture.md#format-versions-and-migrations).
 - Details: the `save-format` skill and the module doc of
-  `core/src/application/persistence`.
+  `crates/thermo_physics/src/application/persistence`.
 
 ### Submitting Changes
 

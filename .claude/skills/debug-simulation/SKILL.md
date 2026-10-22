@@ -42,14 +42,14 @@ Map the symptom to the step phase (`docs/architecture.md`, Simulation step) and 
 | Temperature or pressure looks wrong | COM-subtracted temperature, virial pressure (`thermo_field.rs`), sampling stride |
 | UI shows old or wrong state | snapshot layers, `world_generation`, snapshot cadence |
 
-Shrink the scenario: fewer balls, fewer steps, one wall, two balls if possible. The drift harness (`core/src/application/core/tests/drift_harness.rs`) gives per-step checks for free: missed or asymmetric neighbour pairs, deepest overlap, cap hits, energy and momentum drift.
+Shrink the scenario: fewer balls, fewer steps, one wall, two balls if possible. The drift harness (`crates/thermo_physics/src/application/core/tests/drift_harness.rs`) gives per-step checks for free: missed or asymmetric neighbour pairs, deepest overlap, cap hits, energy and momentum drift.
 
 ## 4. Pin it with a test
-- Write the smallest failing test in the matching topic file under `core/src/application/core/tests/` (or a drift scenario if it needs many steps). Build worlds centred on the origin; set positions and velocities explicitly.
+- Write the smallest failing test in the matching topic file under `crates/thermo_physics/src/application/core/tests/` (or a drift scenario if it needs many steps). Build worlds centred on the origin; set positions and velocities explicitly.
 - Confirm it fails before the fix and passes after.
 - Physics fixes then follow the `physics-change` skill (drift baselines, fixtures).
 
 ## Tools
-- `cargo test -p moldyat_core <name> -- --nocapture` to see log output of one test.
+- `cargo test -p thermo_physics <name> -- --nocapture` (`-p moldyat_core` for physics-thread and snapshot tests) to see log output of one test.
 - `cargo ci-test-drift` for the drift suite summary lines.
 - Delete `$TMPDIR` run files when done; do not commit saves or JSONL dumps.

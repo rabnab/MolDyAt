@@ -9,17 +9,14 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-# Physics & simulation
+# The simulation physics (#308).
+thermo_physics = { path = "../crates/thermo_physics", default-features = false }
+
 rand = "0.10.0"
-rand_distr = "0.6.0"
 rayon = "1.10.0"
 arc-swap = "1.7"
-
-# Save/load of the simulation world (#50)
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-# Simulation config file (`--config`, #231)
-toml = { version = "1", default-features = false, features = ["parse", "serde", "std"] }
 
 # Logging
 log = "0.4"
@@ -28,11 +25,12 @@ env_logger = "0.11"
 # Window management (energy plot uses softbuffer + winit)
 winit = "0.30.12"
 softbuffer = "0.4"
-serde_ignored = "0.1.14"
 
 [dev-dependencies]
 float-cmp = "0.10"
+thermo_physics = { path = "../crates/thermo_physics", default-features = false, features = ["test-support"] }
 
 [features]
 default = ["measure-time"]
-measure-time = []
+# The F4 step-timing log, in thermo_physics.
+measure-time = ["thermo_physics/measure-time"]

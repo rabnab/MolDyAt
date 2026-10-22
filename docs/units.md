@@ -1,6 +1,6 @@
 # Reduced Units and Scales
 
-The simulation runs in reduced Lennard-Jones units with N₂ as the reference substance (#236): the built-in species `N2` has `σ* = ε* = m* = 1`. `UnitSystem` (`core/src/application/units.rs`, `UnitSystem::N2`) holds the N₂ parameters and converts both ways: reduced results into SI or common units for the real-units display (key `D`), and literature parameters of other species into reduced values. The parameters are fitted to 3D gases, so in this 2D simulation the SI values are qualitative.
+The simulation runs in reduced Lennard-Jones units with N₂ as the reference substance (#236): the built-in species `N2` has `σ* = ε* = m* = 1`. `UnitSystem` (`crates/thermo_physics/src/application/units.rs`, `UnitSystem::N2`) holds the N₂ parameters and converts both ways: reduced results into SI or common units for the real-units display (key `D`), and literature parameters of other species into reduced values. The parameters are fitted to 3D gases, so in this 2D simulation the SI values are qualitative.
 
 ## Pair potential
 
@@ -8,7 +8,7 @@ The simulation runs in reduced Lennard-Jones units with N₂ as the reference su
 
 - σ_ij is the zero crossing of `U`; the drawing radius of a ball (`display_radius`, default `σ/2`) has no effect on the physics.
 - The minimum (equilibrium distance) is at `r_m = 2^(1/6) σ_ij ≈ 1.1225 σ_ij`.
-- The code (`core/src/objects2d/ball_impl/pair_potential.rs`) separates the law (`LennardJones`, a `PairLaw`) from the force cap below `r_cap` and the cutoff at `4 σ_ij`, where `U` is shifted to zero (`CappedPotential`), one per species pair.
+- The code (`crates/thermo_physics/src/objects2d/ball_impl/pair_potential.rs`) separates the law (`LennardJones`, a `PairLaw`) from the force cap below `r_cap` and the cutoff at `4 σ_ij`, where `U` is shifted to zero (`CappedPotential`), one per species pair.
 - Walls reflect a ball at centre distance `σ_i / 2` (`WallLaw`, hard contact).
 - A config can override `σ_ij` and/or `ε_ij` of named species pairs (`[[potential.pair_override]]` with `a`, `b`, `sigma`, `epsilon`; see the README, #235). The override replaces the mixed value of exactly that pair, in both orders; its cutoff (`cutoff_factor · σ_ij`), `r_cap` and `U(cutoff)` follow from the overridden law, and the cell grid widens if the pair reaches further than the others present. Placement and overlap checks measure from each pair's contact distance `σ_ij` (`BallPhysics::contact_distance`, which follows the override), and an overridden like pair `σ_ii` also moves the species' wall contact to `σ_ii / 2`. Only drawing and the headless `contact_radius` field keep the species' own `σ_i / 2`.
 
@@ -25,7 +25,7 @@ Without a `[[species]]` list in the config, every world uses this table (`Specie
 | CH4 | 3.817 | 148.2 | 16.043 | 1.0322 | 1.5592 | 0.5727 | (a) |
 | O2 | 3.58 | 117.5 | 31.999 | 0.9681 | 1.2362 | 1.1423 | (a) |
 
-- (a) `σ` and `ε/k_B`: Hirschfelder, Curtiss and Bird, *Molecular Theory of Gases and Liquids* (Wiley, 1954), table I-A, from second virial coefficients, the same source as N₂. Masses: IUPAC standard atomic weights. The library is `LIBRARY` in `core/src/objects2d/ball_impl/species.rs`, converted with the N₂ constants there (`UnitSystem::N2` uses the same ones). `builtin_table_is_pinned` pins the whole table: saves name species, so changing an entry is a format change (see the `save-format` skill); add new ones at the end.
+- (a) `σ` and `ε/k_B`: Hirschfelder, Curtiss and Bird, *Molecular Theory of Gases and Liquids* (Wiley, 1954), table I-A, from second virial coefficients, the same source as N₂. Masses: IUPAC standard atomic weights. The library is `LIBRARY` in `crates/thermo_physics/src/objects2d/ball_impl/species.rs`, converted with the N₂ constants there (`UnitSystem::N2` uses the same ones). `builtin_table_is_pinned` pins the whole table: saves name species, so changing an entry is a format change (see the `save-format` skill); add new ones at the end.
 
 A config file's `[[species]]` list (README, "Simulation config") replaces the whole table: `name`, `sigma_angstrom`, `epsilon_kelvin`, `mass_u`, `colour` (RGB or RGBA), optional `display_radius_angstrom` and `source`. The values are converted with `σ* = σ / 3.698 Å`, `ε* = (ε/k_B) / 95.05 K`, `m* = m / 28.0134 u` and must lie in `σ* ∈ 0.5..8`, `ε* ∈ 0.1..10`, `m* ∈ 0.05..100`. The first entry is the default for new balls and source spheres. The units stay N₂'s whether or not the list contains `N2`. A save carries the list in its `config`, so it loads with the species it was saved with.
 

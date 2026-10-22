@@ -516,3 +516,49 @@ fn test_pan_follows_the_cursor_on_a_letterboxed_world() {
     let b = transform.world_to_px(&Vec2D::new(-new_pan.x, 0.0));
     assert!(approx_eq(b[0] - a[0], 84.0, 1e-3));
 }
+
+/// The startup world of the wgpu window (formerly
+/// `MainContent::bootstrap_world_rect`).
+#[test]
+fn test_bootstrap_world_rect_matches_current_wgpu_startup_geometry() {
+    use float_cmp::approx_eq;
+    let world_rect = ViewportTransform::compute_world_bounds_from_window_size(
+        1280,
+        720,
+        Margins::new(110.0, 50.0, 50.0, 50.0),
+    );
+
+    assert!(approx_eq!(f32, world_rect.x, -56.0, epsilon = 1.0e-6));
+    assert!(approx_eq!(f32, world_rect.y, 31.0, epsilon = 1.0e-6));
+    assert!(approx_eq!(f32, world_rect.w, 112.0, epsilon = 1.0e-6));
+    assert!(approx_eq!(f32, world_rect.h, -62.0, epsilon = 1.0e-6));
+}
+
+#[test]
+fn test_coord_trafo_idempotent() {
+    use float_cmp::approx_eq;
+    // The 100 x 100 world at (500, 500) the physics tests use, in an
+    // 800 x 600 window with 50 px margins.
+    let win_def = ViewportTransform::new(
+        Rect::new(500., 500., 100., -100.),
+        (800.0, 600.0),
+        Margins::symmetric(50.0, 50.0),
+    );
+    let test_coord: [f32; 2] = [18., 234.];
+    let vec = win_def.px_to_world(&test_coord);
+
+    let res_coord = win_def.world_to_px(&vec);
+
+    assert!(
+        approx_eq!(f32, test_coord[0], res_coord[0], ulps = 2),
+        "values in x are not close: {} vs {}",
+        test_coord[0],
+        res_coord[0]
+    );
+    assert!(
+        approx_eq!(f32, test_coord[1], res_coord[1], ulps = 2),
+        "values in y are not close: {} vs {}",
+        test_coord[1],
+        res_coord[1]
+    );
+}
