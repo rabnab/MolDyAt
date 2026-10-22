@@ -25,7 +25,7 @@
 
 use super::SimulationWorld;
 use super::line_segments::{Obstacle, OverlapPass};
-use super::simulation_engine::BallApply;
+use super::simulation_engine::ApplyStats;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::ForceResult;
 use crate::objects2d::ball_impl::ball_core::BounceInfo;
@@ -65,8 +65,8 @@ pub(crate) struct UpdateScratch {
     /// `SimulationWorld::cached_force_results`, so the previous step's
     /// results become the next step's buffer.
     pub(crate) force_results: Vec<ForceResult>,
-    /// Apply-pass result of each ball, summed serially in ball order.
-    pub(crate) applied: Vec<BallApply>,
+    /// Apply-pass stats of each chunk of balls, combined in chunk order.
+    pub(crate) apply_stats: Vec<ApplyStats>,
 }
 
 #[derive(Default)]
