@@ -8,7 +8,10 @@ use crate::wgpu::gpu::textures::{
 };
 use crate::wgpu::pipelines::sidebar_pipeline::*;
 use crate::wgpu::{MARGIN_BOTTOM, MARGIN_LEFT, MARGIN_TOP, MARGINS};
-use moldyat_core::graphics::sidebar::{ICON_COUNT, ICON_DISPLAY_SIZE, ICON_SPACING};
+use moldyat_core::graphics::renderer::event_loop::OperatorTool;
+use moldyat_core::graphics::sidebar::{
+    ICON_COUNT, ICON_DISPLAY_SIZE, ICON_SPACING, TOOLS, icon_for_tool,
+};
 
 /// Background quad uses 6 vertices.
 const BG_VERTS: usize = 6;
@@ -25,12 +28,41 @@ fn rounded_rect_params_size() {
     assert_eq!(std::mem::size_of::<RoundedRectParams>(), 16);
 }
 
+/// The atlas has exactly one row per textured tool, in `TOOLS` order, and
+/// every icon index maps to its own row (#307).
 #[test]
-fn atlas_holds_one_icon_per_textured_tool() {
+fn atlas_holds_one_row_per_textured_tool_in_registry_order() {
+    let atlas = sidebar_atlas_icons();
+    let textured: Vec<_> = TOOLS
+        .iter()
+        .enumerate()
+        .filter(|(_, descriptor)| icon_image(descriptor.icon).is_some())
+        .collect();
+    assert_eq!(atlas.len(), textured.len());
+    assert_eq!(atlas.len(), ICON_COUNT - 1, "all tools but the ball");
+    for (row, (index, descriptor)) in textured.iter().enumerate() {
+        assert_eq!(
+            atlas_row_for_icon(*index),
+            Some(row as u32),
+            "{}",
+            descriptor.name
+        );
+        assert!(std::ptr::eq(
+            atlas[row],
+            icon_image(descriptor.icon).unwrap()
+        ));
+    }
+    let ball = icon_for_tool(OperatorTool::Ball).expect("ball icon");
+    assert_eq!(atlas_row_for_icon(ball), None, "the ball is procedural");
+    assert_eq!(atlas_row_for_icon(ICON_COUNT), None, "past the last icon");
+}
+
+/// The rows reproduce the order the atlas had before the registry.
+#[test]
+fn atlas_rows_keep_the_icon_order() {
     assert_eq!(
-        SIDEBAR_ATLAS_ICONS.len(),
-        ICON_COUNT - 1,
-        "all tools but the ball"
+        sidebar_atlas_icons(),
+        [ICON_WALL, ICON_VALVE, ICON_THERMO, ICON_SOURCE_OPEN]
     );
 }
 
