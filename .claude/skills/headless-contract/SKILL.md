@@ -10,7 +10,7 @@ description: Contract for changing headless mode - CLI flags, the JSONL headless
 ## Where things live
 | Concern | File | Tests |
 |---|---|---|
-| Flags, defaults, validation, `--help` table (`HEADLESS_OPTIONS`) | `wgpu_renderer/src/headless_cli.rs` | `headless_cli/tests.rs` |
+| Flags, defaults, validation, `--help` table (`HEADLESS_OPTIONS`) | `wgpu_renderer/src/headless_cli.rs` (table in `headless_cli/options.rs`, `--valve` / `--line-segment` values in `headless_cli/specs.rs`) | `headless_cli/tests.rs` |
 | Shared flags (`--load`, `--save-dir`, `--config`), `--help` (`GENERAL_OPTIONS`) | `wgpu_renderer/src/cli.rs`, `cli/usage.rs` | `cli/tests.rs` |
 | World setup order, step loop, frame cadence | `wgpu_renderer/src/headless_runner.rs` | `headless_runner/tests.rs` |
 | JSONL records, console line, non-finite policy | `wgpu_renderer/src/headless_output.rs` | `headless_output/tests.rs` |

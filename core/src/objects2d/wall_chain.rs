@@ -14,7 +14,8 @@
 //! case for the not-yet-split wall.
 //!
 //! Collision code never needs to know about chains or valve state at all:
-//! see `collect_solid_obstacles` in line_segments.rs, which flattens every
+//! see `collect_solid_obstacles` (in
+//! `application/core/line_segments/obstacles.rs`), which flattens every
 //! piece plus every CLOSED valve joint into plain capsules once, up front,
 //! instead of looking up valve openness per contact (which is where the
 //! earlier bugs kept coming from).
