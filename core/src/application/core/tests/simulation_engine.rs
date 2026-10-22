@@ -371,3 +371,51 @@ fn test_simulation_step_keeps_every_scratch_buffer_while_it_fits() {
     assert!(steps_with_rebuilds > 0, "no neighbour list was rebuilt");
     assert!(world.scratch.rebuild.rebuilds.capacity() > 0);
 }
+
+/// Energies, wall momentum and positions (as bits) after a seeded run of a
+/// gas larger than several apply-pass chunks, on a Rayon pool of `threads`.
+fn many_chunk_run_bits(threads: usize) -> (usize, Vec<u32>) {
+    let run = || {
+        let world = crate::objects2d::Rect::new(-60.0, 60.0, 120.0, -120.0);
+        let mut main_content =
+            super::new_main_content_seeded(world, 311).expect("could not create main content");
+        main_content.seed_random_balls_with_speed(3500, 6.0);
+        for _ in 0..40 {
+            let (world, step_config, options) = main_content.step_parts();
+            SimulationEngine::simulation_step(world, step_config, options)
+                .expect("simulation step should succeed");
+        }
+        let world = main_content.world();
+        let mut bits = vec![
+            world.sim.get_kinetic_energy().to_bits(),
+            world.sim.get_potential_energy().to_bits(),
+            world.sim.wall_momentum_x.to_bits(),
+            world.sim.wall_momentum_y.to_bits(),
+        ];
+        for ball in &world.balls {
+            bits.push(ball.get_position().x.to_bits());
+            bits.push(ball.get_position().y.to_bits());
+        }
+        (world.balls.len(), bits)
+    };
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(threads)
+        .build()
+        .expect("thread pool")
+        .install(run)
+}
+
+#[test]
+fn test_apply_pass_over_many_chunks_does_not_depend_on_thread_count() {
+    let (balls, one) = many_chunk_run_bits(1);
+    // More than two chunks of the apply pass (1024 balls each), so the
+    // chunk sums are combined, and some balls hit the box walls.
+    assert!(balls > 2 * 1024, "scenario invalid: only {balls} balls");
+    assert_ne!(f32::from_bits(one[2]), 0.0, "scenario invalid: no wall hit");
+    for threads in [2, 3, 4] {
+        assert!(
+            one == many_chunk_run_bits(threads).1,
+            "energy, wall momentum or position bits differ between 1 and {threads} threads"
+        );
+    }
+}

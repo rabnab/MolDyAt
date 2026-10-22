@@ -9,7 +9,7 @@ use crate::application::thermo_field::{THERMO_SAMPLE_STRIDE, compute_cell_thermo
 use crate::application::{AppResult, log_util};
 use crate::logging::log_update_hood_start;
 use crate::objects2d::ball_impl::ForceResult;
-use crate::objects2d::ball_impl::ball_core::BounceInfo;
+use crate::objects2d::ball_impl::ball_core::{Ball2D, BounceInfo};
 use crate::objects2d::ball_impl::simd_forces::{KernelPoint, force_simd};
 use crate::objects2d::ball_impl::verlet::Verlet;
 use crate::objects2d::ball_impl::wall_contact::normal_velocity_after_contact;
@@ -157,6 +157,7 @@ impl SimulationEngine {
                     world,
                     &scratch.force_results,
                     &scratch.bounce_infos,
+                    &mut scratch.apply_stats,
                     dt,
                     bound_rect,
                     &mut stats_accumulator,
@@ -429,18 +430,22 @@ impl SimulationEngine {
             .collect_into_vec(results);
     }
 
-    fn apply_single_force_and_collect_stats(
-        world: &mut SimulationWorld,
-        ball_idx: usize,
+    /// Velocity-Verlet kick of one ball, with its wall contacts, added to
+    /// `stats`. Returns the ball's squared speed and id for the maximum
+    /// speed. Reads only this ball, so the balls can be updated in parallel.
+    fn apply_single_force(
+        ball: &mut Ball2D,
         result: &ForceResult,
         bounce_info: &BounceInfo,
-        dt: f32,
-        speed_limit: f32,
-        stats_accumulator: &mut StatsAccumulator,
-    ) -> (f32, f32) {
-        let gravity = world.physics.constants.gravity;
-        let restitution = world.wall_restitution_fault();
-        let ball = &mut world.balls[ball_idx];
+        params: &ApplyParams,
+        stats: &mut ApplyStats,
+    ) -> (f32, usize) {
+        let ApplyParams {
+            gravity,
+            restitution,
+            dt,
+            speed_limit,
+        } = *params;
 
         let mut wall_px = 0.0;
         let mut wall_py = 0.0;
@@ -478,21 +483,16 @@ impl SimulationEngine {
             );
         }
 
-        let momentum = ball.moment();
         let speed_sq = ball.v.norm_sq();
-        let mass = ball.mass;
-        let ball_id = ball.get_id();
-
-        stats_accumulator.pot += result.potential_energy * 0.5;
-        stats_accumulator.v_com += momentum;
-        stats_accumulator.kin += speed_sq * mass * 0.5;
-        stats_accumulator.sum_mass += mass;
-        if stats_accumulator.max_v * stats_accumulator.max_v < speed_sq {
-            stats_accumulator.max_v = f32::sqrt(speed_sq);
-            stats_accumulator.max_id = ball_id;
-        }
-
-        (wall_px, wall_py)
+        let momentum = ball.moment();
+        stats.pot += result.potential_energy * 0.5;
+        stats.px += momentum.x;
+        stats.py += momentum.y;
+        stats.kin += speed_sq * ball.mass * 0.5;
+        stats.mass += ball.mass;
+        stats.wall_px += wall_px;
+        stats.wall_py += wall_py;
+        (speed_sq, ball.get_id())
     }
 
     /// `factor` times the shorter world side (`speed_limit_factor` of
@@ -502,34 +502,106 @@ impl SimulationEngine {
         f32::min(bound_rect.w.abs(), bound_rect.h.abs()) * factor
     }
 
+    /// Kick every ball (in parallel) and add up the step's stats and wall
+    /// momentum. Each chunk of [`APPLY_CHUNK`] balls sums its balls in
+    /// order, and the chunk sums are combined in chunk order, so the sums
+    /// do not depend on the thread count or on how Rayon splits the work
+    /// (#311).
     fn apply_forces_and_collect_stats(
         world: &mut SimulationWorld,
         force_results: &[ForceResult],
         bounce_infos: &[BounceInfo],
+        chunk_stats: &mut Vec<ApplyStats>,
         dt: f32,
         bound_rect: &Rect,
         stats_accumulator: &mut StatsAccumulator,
     ) -> (f32, f32) {
-        let speed_limit = world
-            .speed_limit_override
-            .unwrap_or_else(|| Self::default_speed_limit(bound_rect, world.speed_limit_factor));
+        // The zips below stop at the shortest list, so a mismatch would
+        // silently skip balls; the former indexed loop panicked instead.
+        // Checked once per step, so kept in release builds too.
+        assert_eq!(
+            world.balls.len(),
+            force_results.len(),
+            "one force result per ball"
+        );
+        assert_eq!(
+            world.balls.len(),
+            bounce_infos.len(),
+            "one bounce info per ball"
+        );
+        let params = ApplyParams {
+            gravity: world.physics.constants.gravity,
+            restitution: world.wall_restitution_fault(),
+            dt,
+            speed_limit: world
+                .speed_limit_override
+                .unwrap_or_else(|| Self::default_speed_limit(bound_rect, world.speed_limit_factor)),
+        };
+
+        world
+            .balls
+            .par_chunks_mut(APPLY_CHUNK)
+            .zip(force_results.par_chunks(APPLY_CHUNK))
+            .zip(bounce_infos.par_chunks(APPLY_CHUNK))
+            .map(|((balls, results), bounces)| {
+                let mut stats = ApplyStats::default();
+                for ((ball, result), bounce_info) in balls.iter_mut().zip(results).zip(bounces) {
+                    let (speed_sq, id) =
+                        Self::apply_single_force(ball, result, bounce_info, &params, &mut stats);
+                    if stats.max_v * stats.max_v < speed_sq {
+                        stats.max_v = f32::sqrt(speed_sq);
+                        stats.max_id = id;
+                    }
+                }
+                stats
+            })
+            .collect_into_vec(chunk_stats);
+
         let mut total_wall_px = 0.0;
         let mut total_wall_py = 0.0;
-
-        for (i, result) in force_results.iter().enumerate() {
-            let (wall_px, wall_py) = Self::apply_single_force_and_collect_stats(
-                world,
-                i,
-                result,
-                &bounce_infos[i],
-                dt,
-                speed_limit,
-                stats_accumulator,
-            );
-            total_wall_px += wall_px;
-            total_wall_py += wall_py;
+        for chunk in chunk_stats.iter() {
+            stats_accumulator.pot += chunk.pot;
+            stats_accumulator.v_com += Vec2D::new(chunk.px, chunk.py);
+            stats_accumulator.kin += chunk.kin;
+            stats_accumulator.sum_mass += chunk.mass;
+            if stats_accumulator.max_v < chunk.max_v {
+                stats_accumulator.max_v = chunk.max_v;
+                stats_accumulator.max_id = chunk.max_id;
+            }
+            total_wall_px += chunk.wall_px;
+            total_wall_py += chunk.wall_py;
         }
 
         (total_wall_px, total_wall_py)
     }
+}
+
+/// Balls per chunk of the apply pass. Fixed, so the sums do not depend on
+/// the thread count; large enough that Rayon's overhead per chunk is small.
+/// Changing it changes the summation order, and so the f32 results.
+const APPLY_CHUNK: usize = 1024;
+
+/// Step-wide inputs of the apply pass.
+struct ApplyParams {
+    gravity: f32,
+    restitution: f32,
+    dt: f32,
+    speed_limit: f32,
+}
+
+/// Stats of one chunk of the apply pass, summed in ball order.
+#[derive(Debug, Default, Clone, Copy)]
+pub(crate) struct ApplyStats {
+    /// Half the pair potential energy (each pair is counted by both balls).
+    pot: f32,
+    kin: f32,
+    /// Momentum of the balls.
+    px: f32,
+    py: f32,
+    mass: f32,
+    max_v: f32,
+    max_id: usize,
+    /// Momentum given to the walls the balls touched.
+    wall_px: f32,
+    wall_py: f32,
 }
