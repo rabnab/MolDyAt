@@ -48,7 +48,8 @@ impl UnifiedRenderState {
         None
     }
 
-    /// Maps a sidebar icon index to an `OperatorTool` ([`TOOLS`](crate::graphics::sidebar::TOOLS)).
+    /// Maps a sidebar icon index to an `OperatorTool`
+    /// ([`TOOLS`](crate::graphics::sidebar::TOOLS)).
     pub(super) fn operator_tool_for_icon(index: usize) -> OperatorTool {
         crate::graphics::sidebar::tool_for_icon(index)
     }

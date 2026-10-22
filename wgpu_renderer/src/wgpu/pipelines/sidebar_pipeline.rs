@@ -7,9 +7,10 @@
 //! Draws the tool icons in the left margin of the window on a rounded-rect
 //! background, plus a highlight frame behind the selected tool. Icons are
 //! arranged vertically from top to bottom in the order of core's tool list
-//! (`TOOLS`: ball, drawn procedurally, then the atlas icons). The name of the species new balls get is written
-//! centred on the ball icon. Geometry is built in NDC and only rebuilt when
-//! the window size, margins, selection or species change. See `sidebar.wgsl`.
+//! (`TOOLS`: ball, drawn procedurally, then the atlas icons). The name of
+//! the species new balls get is written centred on the ball icon. Geometry
+//! is built in NDC and only rebuilt when the window size, margins, selection
+//! or species change. See `sidebar.wgsl`.
 
 use bytemuck::{Pod, Zeroable};
 use moldyat_core::application::AppResult;

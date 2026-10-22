@@ -44,8 +44,8 @@ pub enum ToolIcon {
     SourceSphere,
 }
 
-/// One operator tool of the sidebar: the tool, its icon and a short name
-/// for logs and test messages.
+/// One operator tool of the sidebar: the tool, its icon and a short
+/// human-readable name, which the tests use to name a failing entry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ToolDescriptor {
     pub tool: OperatorTool,
