@@ -64,7 +64,6 @@ impl Default for ShutdownSignal {
     }
 }
 
-/// Handle to the physics simulation thread
 /// Where the physics thread publishes its snapshots, and which layers they
 /// have. The renderer reads the slot lock-free (see `PhysicsCoordinator`).
 pub struct SnapshotPublisher {
@@ -119,6 +118,7 @@ impl Default for SnapshotPublisher {
     }
 }
 
+/// Handle to the physics simulation thread
 pub struct PhysicsThread {
     thread_handle: Option<JoinHandle<()>>,
     shutdown_signal: ShutdownSignal,
