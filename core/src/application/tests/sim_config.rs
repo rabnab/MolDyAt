@@ -670,3 +670,35 @@ fn no_species_are_not_written() {
     let back: SimConfig = serde_json::from_str(&json).unwrap();
     assert_eq!(back, config);
 }
+
+#[test]
+fn json_config_reads_like_the_toml_file() {
+    let toml = SimConfig::from_toml(
+        "[potential]\nmax_force = 80.0\n[neighbours]\nskin_factor = 0.3\n\
+         [[species]]\nname = \"Ar\"\nsigma_angstrom = 3.405\nepsilon_kelvin = 119.8\n\
+         mass_u = 39.948\ncolour = [0.6, 0.45, 1.0]\n",
+    )
+    .unwrap();
+    let json = serde_json::to_string(&toml).unwrap();
+    assert_eq!(SimConfig::from_json(&json).unwrap(), toml);
+    // Unknown keys and out-of-range values are rejected as in TOML.
+    assert!(SimConfig::from_json(r#"{"potential": {"max_forc": 80.0}}"#).is_err());
+    assert!(SimConfig::from_json(r#"{"neighbours": {"skin_factor": 99.0}}"#).is_err());
+}
+
+#[test]
+fn load_reads_json_by_extension_and_toml_otherwise() {
+    let dir = std::env::temp_dir().join(format!("moldyat_sim_config_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let json = dir.join("run.JSON");
+    let toml = dir.join("run.toml");
+    std::fs::write(&json, r#"{"potential": {"max_force": 80.0}}"#).unwrap();
+    std::fs::write(&toml, "[potential]\nmax_force = 80.0\n").unwrap();
+    let from_json = SimConfig::load(&json).unwrap();
+    assert_eq!(from_json.potential.max_force, 80.0);
+    assert_eq!(from_json, SimConfig::load(&toml).unwrap());
+    // TOML text in a `.json` file is a JSON error, not silently read.
+    std::fs::write(&json, "[potential]\nmax_force = 80.0\n").unwrap();
+    assert!(SimConfig::load(&json).is_err());
+    std::fs::remove_dir_all(&dir).unwrap();
+}

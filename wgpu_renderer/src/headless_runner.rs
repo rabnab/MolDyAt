@@ -98,8 +98,10 @@ impl HeadlessRunner {
     }
 
     pub fn from_config(mut config: HeadlessConfig, application: MainContent) -> io::Result<Self> {
-        // Record the effective time step in run_start, also when it is the default.
+        // Record the effective time step and run settings in run_start, also
+        // when they are the defaults.
         config.dt = Some(application.time_step());
+        config.sim = Some(application.config());
         let sink = HeadlessWriter::builder()
             .stdout(config.stdout)
             .output(config.output.clone())

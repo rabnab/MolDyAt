@@ -54,7 +54,7 @@ the last step even when the interval does not divide the step count.
 | `--timing-warmup <N>` | Steps before `--timings` starts measuring (default 0) |
 | `--load <PATH>` | Start from a saved world (shared with the window mode) |
 | `--save-dir <DIR>` | Directory for saves (shared with the window mode) |
-| `--config <PATH>` | Simulation config file, TOML (shared with the window mode; see the README, "Simulation config"); not with `--load` |
+| `--config <PATH>` | Simulation config file, TOML, or JSON if the name ends in `.json` (shared with the window mode; see the README, "Simulation config"); not with `--load` |
 
 `moldyat --help` prints the same list from the option tables in
 `headless_cli.rs` and `cli.rs`.
@@ -80,7 +80,7 @@ unchanged.
 
 | `record_kind` | When | Contents |
 |---|---|---|
-| `run_start` | once, first | `config` (steps, snapshot interval, format, detail level, RNG seed, seeding, world scale, dt, walls and valves; `seed_species` as `[{species, weight}]` only with `--seed-species`) and `initial` (step, time, ball count, gravity, operator counts, world rectangle) |
+| `run_start` | once, first | `config` (steps, snapshot interval, format, detail level, RNG seed, seeding, world scale, dt, walls and valves; `seed_species` as `[{species, weight}]` only with `--seed-species`; `sim`, the effective `SimConfig` after `--config`, `--dt` and a loaded save, in the layout of a `--config` file: `integration`, `potential`, `neighbours`, `display`, and `species` when the run has a `[[species]]` list; written to a `.json` file it is a valid `--config`, e.g. `head -1 run.jsonl | jq .config.sim > run.json`) and `initial` (step, time, ball count, gravity, operator counts, world rectangle) |
 | `frame` | step 0, every interval, last step | step, time, kinetic and potential energy, `delta_energy` from the step-0 frame, ball count, gravity, physics FPS, operator counts, plus the detail sections |
 | `run_end` | once, last | final step and time, number of frames written, final ball count, operator counts |
 

@@ -127,6 +127,7 @@ fn seeded_headless_output() -> String {
         timings: None,
         timing_warmup: 0,
         save_setup: false,
+        sim: None,
     };
 
     let mut application = build_application(world_rect, &SimConfig::default(), config.rng_seed)
@@ -919,4 +920,145 @@ fn test_seed_species_must_be_in_the_runs_table() {
     .err()
     .expect("XS is not in the config's species");
     assert!(error.to_string().contains("unknown species"), "{error}");
+}
+
+/// Runs `config` with `sim_config` and returns its `run_start` record.
+fn run_start_record(
+    config: HeadlessConfig,
+    sim_config: &SimConfig,
+    name: &str,
+) -> serde_json::Value {
+    let output_path = std::env::temp_dir().join(format!(
+        "moldyat_run_start_{name}_{}.jsonl",
+        std::process::id()
+    ));
+    let config = HeadlessConfig {
+        output: Some(output_path.clone()),
+        stdout: false,
+        ..config
+    };
+    let application = prepare_application(
+        &config,
+        sim_config,
+        test_world_rect(),
+        &SaveStore::new("saves"),
+        None,
+    )
+    .expect("prepare");
+    HeadlessRunner::from_config(config, application)
+        .expect("runner")
+        .run()
+        .expect("run");
+    let content = fs::read_to_string(&output_path).expect("read output");
+    let _ = fs::remove_file(&output_path);
+    parse_jsonl_records(&content).remove(0)
+}
+
+#[test]
+fn test_run_start_records_the_default_sim_config() {
+    let run_start = run_start_record(HeadlessConfig::default(), &SimConfig::default(), "default");
+    let sim = &run_start["config"]["sim"];
+    assert_eq!(*sim, serde_json::to_value(SimConfig::default()).unwrap());
+    for section in ["integration", "potential", "neighbours", "display"] {
+        assert!(sim[section].is_object(), "{section}: {sim}");
+    }
+    assert!(sim.get("species").is_none(), "built-in library: {sim}");
+}
+
+#[test]
+fn test_run_start_records_the_effective_sim_config() {
+    let sim_config = SimConfig::from_toml(
+        "[integration]\n\
+         speed_limit_factor = 0.25\n\
+         [potential]\n\
+         max_force = 80.0\n\
+         [neighbours]\n\
+         skin_factor = 0.3\n\
+         [[species]]\n\
+         name = \"Ar\"\n\
+         sigma_angstrom = 3.405\n\
+         epsilon_kelvin = 119.8\n\
+         mass_u = 39.948\n\
+         colour = [0.6, 0.45, 1.0]\n",
+    )
+    .unwrap();
+    // `--dt` beats the config's time step, and the record shows the result.
+    let config = HeadlessConfig {
+        dt: Some(0.002),
+        ..HeadlessConfig::default()
+    };
+    let run_start = run_start_record(config, &sim_config, "custom");
+    let sim = &run_start["config"]["sim"];
+    let expected = SimConfig {
+        integration: moldyat_core::application::sim_config::IntegrationConfig {
+            time_step: 0.002,
+            ..sim_config.integration.clone()
+        },
+        ..sim_config.clone()
+    };
+    assert_eq!(*sim, serde_json::to_value(&expected).unwrap());
+    assert_eq!(
+        sim["integration"]["time_step"].as_f64(),
+        Some(0.002_f32 as f64)
+    );
+    assert_eq!(sim["potential"]["max_force"], 80.0);
+    assert_eq!(sim["species"][0]["name"], "Ar");
+    // The record reads back into the same config.
+    let read_back: SimConfig = serde_json::from_value(sim.clone()).unwrap();
+    assert_eq!(read_back, expected);
+}
+
+#[test]
+fn test_run_start_records_a_loaded_saves_sim_config_with_dt_winning() {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock before unix epoch")
+        .as_nanos();
+    let dir =
+        std::env::temp_dir().join(format!("headless-load-sim-{}-{nanos}", std::process::id()));
+    let store = SaveStore::new(&dir);
+    let saved_config = SimConfig::from_toml(
+        "[neighbours]\nskin_factor = 0.3\n\
+         [[species]]\nname = \"Ar\"\nsigma_angstrom = 3.405\nepsilon_kelvin = 119.8\n\
+         mass_u = 39.948\ncolour = [0.6, 0.45, 1.0]\n",
+    )
+    .unwrap();
+    let saved = build_application(test_world_rect(), &saved_config, Some(5))
+        .expect("build")
+        .save_world(&store)
+        .expect("save");
+
+    // The run itself uses the default config; the save brings its own, and
+    // `--dt` beats the save's time step.
+    let config = HeadlessConfig {
+        output: Some(dir.join("run.jsonl")),
+        stdout: false,
+        dt: Some(0.002),
+        ..HeadlessConfig::default()
+    };
+    let application = prepare_application(
+        &config,
+        &SimConfig::default(),
+        test_world_rect(),
+        &store,
+        Some(saved),
+    )
+    .expect("prepare");
+    HeadlessRunner::from_config(config, application)
+        .expect("runner")
+        .run()
+        .expect("run");
+    let content = fs::read_to_string(dir.join("run.jsonl")).expect("read output");
+    let run_start = parse_jsonl_records(&content).remove(0);
+
+    let mut expected = saved_config.clone();
+    expected.integration.time_step = 0.002;
+    let sim = &run_start["config"]["sim"];
+    assert_eq!(*sim, serde_json::to_value(&expected).unwrap());
+
+    // The record is a valid `--config` as a `.json` file.
+    let reused = dir.join("run.json");
+    fs::write(&reused, sim.to_string()).unwrap();
+    assert_eq!(SimConfig::load(&reused).unwrap(), expected);
+    let _ = fs::remove_dir_all(&dir);
 }

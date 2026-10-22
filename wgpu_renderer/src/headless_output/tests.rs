@@ -55,6 +55,7 @@ fn test_run_start_record_contains_config_and_operator_counts() {
         timings: None,
         timing_warmup: 0,
         save_setup: false,
+        sim: None,
     };
 
     let line = run_start_to_jsonl(&config, &snapshot);
@@ -366,6 +367,7 @@ fn test_runs_with_same_seed_and_config_emit_identical_jsonl() {
         timings: None,
         timing_warmup: 0,
         save_setup: false,
+        sim: None,
     };
     let config_b = HeadlessConfig {
         output: Some(output_path_b.clone()),
@@ -414,4 +416,27 @@ fn test_runs_with_same_seed_and_config_emit_identical_jsonl() {
         serde_json::from_str::<serde_json::Value>(lines_a[5]).expect("run_end json")["record_kind"],
         "run_end"
     );
+}
+
+#[test]
+fn test_run_start_sim_config_writes_non_finite_numbers_as_null() {
+    let mut sim = SimConfig::default();
+    sim.potential.max_force = f32::NAN;
+    sim.neighbours.skin_factor = f32::INFINITY;
+    let config = HeadlessConfig {
+        sim: Some(sim),
+        ..HeadlessConfig::default()
+    };
+    let line = run_start_to_jsonl(&config, &RendererSnapshot::new());
+    let value: serde_json::Value = serde_json::from_str(&line).expect("valid json");
+    assert!(value["config"]["sim"]["potential"]["max_force"].is_null());
+    assert!(value["config"]["sim"]["neighbours"]["skin_factor"].is_null());
+    assert_eq!(value["config"]["sim"]["potential"]["cutoff_factor"], 4.0);
+}
+
+#[test]
+fn test_run_start_without_a_prepared_config_has_no_sim_key() {
+    let line = run_start_to_jsonl(&HeadlessConfig::default(), &RendererSnapshot::new());
+    let value: serde_json::Value = serde_json::from_str(&line).expect("valid json");
+    assert!(value["config"].get("sim").is_none());
 }

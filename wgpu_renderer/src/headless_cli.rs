@@ -7,7 +7,7 @@
 /// This module handles parsing command-line arguments for headless execution mode
 /// and storing the parsed configuration for use by the headless simulation loop.
 use crate::cli::OptionHelp;
-use moldyat_core::application::sim_config::{MAX_TIME_STEP, MIN_TIME_STEP};
+use moldyat_core::application::sim_config::{MAX_TIME_STEP, MIN_TIME_STEP, SimConfig};
 use moldyat_core::application::valve_span_problem;
 use moldyat_core::objects2d::line_segment::{DEFAULT_THICKNESS, MAX_THICKNESS, MIN_THICKNESS};
 use std::path::PathBuf;
@@ -157,6 +157,10 @@ pub struct HeadlessConfig {
     /// valves, seeded balls), before the first step. Perf runs seed a large
     /// world once and `--load` it for every run.
     pub save_setup: bool,
+    /// The effective run settings (`--config`, then `--dt`, or a loaded
+    /// save's config), set once the application is prepared and recorded in
+    /// `run_start` (#295). `None` until then.
+    pub sim: Option<SimConfig>,
 }
 
 /// One `--valve wall,t_start,t_end[,open|closed]` valve: `wall` is the index
@@ -287,6 +291,7 @@ impl Default for HeadlessConfig {
             timings: None,
             timing_warmup: 0,
             save_setup: false,
+            sim: None,
         }
     }
 }
