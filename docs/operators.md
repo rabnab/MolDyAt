@@ -117,11 +117,13 @@ all operators and wall chains.
 
 ## Input and tools
 
-The sidebar order is `SIDEBAR_TOOLS` in `core/src/graphics/sidebar.rs`:
-ball, wall, valve, thermostat, source sphere. Hit-testing
-(`sidebar_tool.rs`) and the wgpu icon atlas (`sidebar_pipeline.rs`) both
-derive their order from it; the ball icon is drawn procedurally, the others
-come from the atlas.
+The sidebar tools are one list, `TOOLS` in `core/src/graphics/sidebar.rs`
+(#307): ball, wall, valve, thermostat, source sphere, each a
+`ToolDescriptor { tool, icon, name }`. Hit-testing (`sidebar_tool.rs`), the
+selected icon and the wgpu icon atlas (`sidebar_pipeline.rs`) all derive from
+it. The ball icon is drawn procedurally; the renderer maps every other
+`ToolIcon` to its image (`icon_image`) and builds the atlas rows from the list
+in icon order.
 
 Selecting a tool installs its `OperatorToolHandler`
 (`core/src/graphics/renderer/event_loop/`). The previous handler is reset

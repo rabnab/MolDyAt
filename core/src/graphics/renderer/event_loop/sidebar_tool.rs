@@ -48,25 +48,15 @@ impl UnifiedRenderState {
         None
     }
 
-    /// Maps a sidebar icon index to an `OperatorTool`.
-    ///
-    /// Derived from [`SIDEBAR_TOOLS`](crate::graphics::sidebar::SIDEBAR_TOOLS).
+    /// Maps a sidebar icon index to an `OperatorTool` ([`TOOLS`](crate::graphics::sidebar::TOOLS)).
     pub(super) fn operator_tool_for_icon(index: usize) -> OperatorTool {
-        use crate::graphics::sidebar::SIDEBAR_TOOLS;
-        SIDEBAR_TOOLS
-            .get(index)
-            .copied()
-            .unwrap_or(OperatorTool::None)
+        crate::graphics::sidebar::tool_for_icon(index)
     }
 
-    /// Returns the sidebar icon index of the currently active tool, if any.
-    ///
-    /// Derived from [`SIDEBAR_TOOLS`](crate::graphics::sidebar::SIDEBAR_TOOLS).
+    /// Returns the sidebar icon index of the currently active tool, if any
+    /// ([`TOOLS`](crate::graphics::sidebar::TOOLS)).
     pub fn selected_sidebar_icon(&self) -> Option<usize> {
-        use crate::graphics::sidebar::SIDEBAR_TOOLS;
-        SIDEBAR_TOOLS
-            .iter()
-            .position(|&t| t == self.render.active_tool)
+        crate::graphics::sidebar::icon_for_tool(self.render.active_tool)
     }
 }
 
@@ -202,5 +192,31 @@ mod tests {
     fn visible_icon_count_none_fit() {
         use crate::graphics::sidebar::visible_icon_count;
         assert_eq!(visible_icon_count(100.0, 50.0, 50.0), 0);
+    }
+
+    /// Every tool appears once, and icon index and tool map to each other
+    /// through the one list (#307).
+    #[test]
+    fn tool_list_maps_icons_and_tools_both_ways() {
+        use crate::graphics::sidebar::{ICON_COUNT, TOOLS, icon_for_tool, tool_for_icon};
+        for (index, descriptor) in TOOLS.iter().enumerate() {
+            assert_eq!(tool_for_icon(index), descriptor.tool, "{}", descriptor.name);
+            assert_eq!(
+                icon_for_tool(descriptor.tool),
+                Some(index),
+                "{}",
+                descriptor.name
+            );
+            assert_eq!(
+                UnifiedRenderState::operator_tool_for_icon(index),
+                descriptor.tool
+            );
+        }
+        assert_eq!(tool_for_icon(ICON_COUNT), OperatorTool::None);
+        assert_eq!(icon_for_tool(OperatorTool::None), None);
+        let mut names: Vec<_> = TOOLS.iter().map(|descriptor| descriptor.name).collect();
+        names.sort_unstable();
+        names.dedup();
+        assert_eq!(names.len(), ICON_COUNT, "tool names are unique");
     }
 }

@@ -6,8 +6,8 @@
 //!
 //! Draws the tool icons in the left margin of the window on a rounded-rect
 //! background, plus a highlight frame behind the selected tool. Icons are
-//! arranged vertically from top to bottom: ball (procedural), wall, valve,
-//! thermo, sourceOpen. The name of the species new balls get is written
+//! arranged vertically from top to bottom in the order of core's tool list
+//! (`TOOLS`: ball, drawn procedurally, then the atlas icons). The name of the species new balls get is written
 //! centred on the ball icon. Geometry is built in NDC and only rebuilt when
 //! the window size, margins, selection or species change. See `sidebar.wgsl`.
 
@@ -16,8 +16,8 @@ use moldyat_core::application::AppResult;
 use moldyat_core::graphics::renderer::Margins;
 use moldyat_core::graphics::renderer::event_loop::OperatorTool;
 use moldyat_core::graphics::sidebar::{
-    ICON_COUNT, SIDEBAR_TOOLS, icon_display_size_for_margin, icon_spacing_for_margin,
-    sidebar_ui_scale, visible_icon_count_for_margin,
+    ICON_COUNT, TOOLS, ToolIcon, icon_display_size_for_margin, icon_for_tool,
+    icon_spacing_for_margin, sidebar_ui_scale, visible_icon_count_for_margin,
 };
 
 use crate::wgpu::MARGINS;
@@ -33,13 +33,39 @@ use crate::wgpu::gpu::textures::{
 };
 use crate::wgpu::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
 
-/// Texture-backed sidebar icons, in atlas row order. Must match
-/// [`atlas_row_for_tool`] and `SIDEBAR_TOOLS` in core/src/graphics/sidebar.rs.
-pub(crate) const SIDEBAR_ATLAS_ICONS: [&[u8]; 4] =
-    [ICON_WALL, ICON_VALVE, ICON_THERMO, ICON_SOURCE_OPEN];
+/// The image of a sidebar icon, or `None` for the procedural ball. The atlas
+/// and its row lookup are both derived from this match and core's tool list
+/// (`TOOLS`), so they cannot drift apart (#307).
+pub(crate) fn icon_image(icon: ToolIcon) -> Option<&'static [u8]> {
+    match icon {
+        ToolIcon::Ball => None,
+        ToolIcon::Wall => Some(ICON_WALL),
+        ToolIcon::Valve => Some(ICON_VALVE),
+        ToolIcon::Thermostat => Some(ICON_THERMO),
+        ToolIcon::SourceSphere => Some(ICON_SOURCE_OPEN),
+    }
+}
 
-/// Number of texture-backed sidebar icons in the atlas.
-const TEXTURE_ICON_COUNT: u32 = SIDEBAR_ATLAS_ICONS.len() as u32;
+/// The images of the textured icons, in atlas row order: the tools of
+/// `TOOLS` that have one, in icon order.
+pub(crate) fn sidebar_atlas_icons() -> Vec<&'static [u8]> {
+    TOOLS
+        .iter()
+        .filter_map(|descriptor| icon_image(descriptor.icon))
+        .collect()
+}
+
+/// The atlas row of sidebar icon `index`, or `None` for a procedural icon:
+/// the number of textured icons before it.
+pub(crate) fn atlas_row_for_icon(index: usize) -> Option<u32> {
+    let descriptor = TOOLS.get(index)?;
+    icon_image(descriptor.icon)?;
+    let row = TOOLS[..index]
+        .iter()
+        .filter(|earlier| icon_image(earlier.icon).is_some())
+        .count();
+    Some(row as u32)
+}
 
 /// Texture resolution per atlas icon.
 const ATLAS_CELL: u32 = 64;
@@ -124,7 +150,7 @@ impl SidebarPipeline {
             device,
             queue,
             "Sidebar Icon Atlas",
-            &SIDEBAR_ATLAS_ICONS,
+            &sidebar_atlas_icons(),
             ATLAS_CELL,
         );
         Self {
@@ -152,16 +178,6 @@ impl SidebarPipeline {
             last_margin: MARGINS,
             last_species: None,
         }
-    }
-}
-
-fn atlas_row_for_tool(tool: OperatorTool) -> Option<u32> {
-    match tool {
-        OperatorTool::LineSegment => Some(0),
-        OperatorTool::ValveSegment => Some(1),
-        OperatorTool::Thermostat => Some(2),
-        OperatorTool::SourceSphere => Some(3),
-        OperatorTool::Ball | OperatorTool::None => None,
     }
 }
 
@@ -219,7 +235,7 @@ pub(crate) fn ball_label_vertices(
     margin: Margins,
 ) -> Vec<TextVertex> {
     let mut verts = Vec::new();
-    let Some(ball_idx) = SIDEBAR_TOOLS.iter().position(|&t| t == OperatorTool::Ball) else {
+    let Some(ball_idx) = icon_for_tool(OperatorTool::Ball) else {
         return verts;
     };
     let visible = visible_icon_count_for_margin(win_h, margin.top, margin.bottom, margin.left);
@@ -331,7 +347,7 @@ pub(crate) fn build_sidebar_geometry_with_margins(
     // ── Icon quads ─────────────────────────────────────────────────
     let rows = icon_count.max(1) as f32;
     for i in 0..visible_count {
-        let (mode, v_range) = match atlas_row_for_tool(SIDEBAR_TOOLS[i as usize]) {
+        let (mode, v_range) = match atlas_row_for_icon(i as usize) {
             Some(row) => (
                 MODE_ATLAS_ICON,
                 (row as f32 / rows, (row + 1) as f32 / rows),
@@ -375,7 +391,7 @@ impl RenderPipeline for SidebarPipeline {
 
         let (w, h) = ctx.window_size;
         let (verts, rect_params) = build_sidebar_geometry_with_margins(
-            TEXTURE_ICON_COUNT,
+            sidebar_atlas_icons().len() as u32,
             w as f32,
             h as f32,
             ctx.margin,

@@ -9,11 +9,8 @@ Use this when implementing or changing operators (line segment, valve, thermosta
 `docs/operators.md` describes how operators work today; this file lists the rules for changing them.
 
 ## Sidebar And Tool Order
-- `SIDEBAR_TOOLS` in `core/src/graphics/sidebar.rs` is the single source of the icon order (ball, wall, valve, thermostat, source sphere). `ICON_COUNT` and the hit-test mapping (`operator_tool_for_icon()`, `selected_sidebar_icon()` in `sidebar_tool.rs`) derive from it; do not hard-code indices anywhere else.
-- The wgpu atlas is separate and must match by hand, in the same change:
-  - `OperatorTool` enum in `core/src/graphics/renderer/event_loop/input_handler.rs`
-  - `SIDEBAR_ATLAS_ICONS` and `atlas_row_for_tool()` in `wgpu_renderer/src/wgpu/pipelines/sidebar_pipeline.rs` (the ball icon is procedural and has no atlas row)
-  - icon bytes in `wgpu_renderer/src/wgpu/gpu/textures.rs` (PNG in `wgpu_renderer/src/wgpu/icons/`)
+- `TOOLS` in `core/src/graphics/sidebar.rs` is the one tool table (#307): a `ToolDescriptor { tool, icon, name }` per sidebar tool, in icon order (ball, wall, valve, thermostat, source sphere). `ICON_COUNT`, `tool_for_icon()` / `icon_for_tool()` (used by `operator_tool_for_icon()` and `selected_sidebar_icon()` in `sidebar_tool.rs`) and the wgpu atlas (`sidebar_atlas_icons()`, `atlas_row_for_icon()` in `wgpu_renderer/src/wgpu/pipelines/sidebar_pipeline.rs`) derive from it; do not hard-code indices anywhere else.
+- Reordering or renaming a tool: edit `TOOLS` only. Adding a tool: its `OperatorTool` variant (`core/src/graphics/renderer/event_loop/input_handler.rs`), its `TOOLS` entry, its handler arm in `UnifiedRenderState::handler_for_tool()`, and for a new picture a `ToolIcon` variant with its image in `icon_image()` (`sidebar_pipeline.rs`; PNG bytes in `wgpu_renderer/src/wgpu/gpu/textures.rs`, files in `wgpu_renderer/src/wgpu/icons/`). Both matches are exhaustive, so the compiler names what is missing. The ball icon is procedural (`icon_image` returns `None`) and has no atlas row.
 - Keep icon size and spacing constants in `sidebar.rs`, shared by hit-testing and rendering. Visible icons are clamped by both vertical space and `ICON_COUNT` (`visible_icon_count_for_margin`); selected-icon semantics stay `Option<usize>`.
 
 ## Tools And Commands
@@ -47,7 +44,7 @@ A new operator type, or a new persistent field, must be added in all of these:
 ## Test Requirements For Operator Changes
 - Place tests in topic files under `tests/` directories (no large inline test modules).
 - Minimum coverage:
-  - Selection/mapping: icon index ↔ tool, atlas row count (`atlas_holds_one_icon_per_textured_tool`)
+  - Selection/mapping: icon index ↔ tool, atlas row count (`atlas_holds_one_row_per_textured_tool_in_registry_order`, `tool_list_maps_icons_and_tools_both_ways`)
   - Tool interaction: place, toggle, drag, scroll, reset on tool switch
   - Collision behaviour: reflect / moving away / no collision; energy of bouncing and resting contacts (`test_ball_*_keeps_energy` in `barrier_energy.rs`); box-wall/line-wall handover (`wall_handover.rs`)
   - Rescale invariants (relative position preserved, degenerate-rect guard), clear resets ids

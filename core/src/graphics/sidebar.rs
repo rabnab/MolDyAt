@@ -4,9 +4,9 @@
 
 //! Shared sidebar layout constants.
 //!
-//! These constants define the icon geometry and tool ordering used by
-//! both the renderer (WGPU sidebar pipeline) and the hit-testing logic
-//! in `UnifiedRenderState`.  Keeping them in one place prevents drift.
+//! These constants define the icon geometry and the tool list ([`TOOLS`])
+//! used by both the renderer (WGPU sidebar pipeline) and the hit-testing
+//! logic in `UnifiedRenderState`. Keeping them in one place prevents drift.
 
 use crate::graphics::renderer::event_loop::OperatorTool;
 
@@ -31,19 +31,75 @@ pub fn icon_spacing_for_margin(margin_left: f32) -> f32 {
     ICON_SPACING * sidebar_ui_scale(margin_left)
 }
 
-/// Sidebar icon order — single source of truth for icon index ↔ tool.
-///
-/// The WGPU sidebar pipeline's icon atlas **must** match this order.
-pub const SIDEBAR_TOOLS: [OperatorTool; 5] = [
-    OperatorTool::Ball,         // 0 — standard-sized ball icon
-    OperatorTool::LineSegment,  // 1 — wall icon
-    OperatorTool::ValveSegment, // 2 — gate icon
-    OperatorTool::Thermostat,   // 3 — temperature icon
-    OperatorTool::SourceSphere, // 4 — emitter icon
+/// The picture on a tool's sidebar icon. The renderer maps each one to its
+/// drawing: `Ball` is drawn procedurally, the others are images in the icon
+/// atlas (`icon_image` in the wgpu sidebar pipeline, an exhaustive match, so
+/// a new icon cannot be left without one).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ToolIcon {
+    Ball,
+    Wall,
+    Valve,
+    Thermostat,
+    SourceSphere,
+}
+
+/// One operator tool of the sidebar: the tool, its icon and a short name
+/// for logs and test messages.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ToolDescriptor {
+    pub tool: OperatorTool,
+    pub icon: ToolIcon,
+    pub name: &'static str,
+}
+
+/// Every sidebar tool, in icon order: the single table for the icon index,
+/// the tool it selects and the icon atlas the renderer builds (#307).
+/// Adding, renaming or reordering a tool means editing this list only (plus
+/// the tool's `OperatorTool` variant, handler and, for a new picture, its
+/// `ToolIcon` and image).
+pub const TOOLS: &[ToolDescriptor] = &[
+    ToolDescriptor {
+        tool: OperatorTool::Ball,
+        icon: ToolIcon::Ball,
+        name: "ball",
+    },
+    ToolDescriptor {
+        tool: OperatorTool::LineSegment,
+        icon: ToolIcon::Wall,
+        name: "wall",
+    },
+    ToolDescriptor {
+        tool: OperatorTool::ValveSegment,
+        icon: ToolIcon::Valve,
+        name: "valve",
+    },
+    ToolDescriptor {
+        tool: OperatorTool::Thermostat,
+        icon: ToolIcon::Thermostat,
+        name: "thermostat",
+    },
+    ToolDescriptor {
+        tool: OperatorTool::SourceSphere,
+        icon: ToolIcon::SourceSphere,
+        name: "source sphere",
+    },
 ];
 
-/// Number of icons in the sidebar (derived from [`SIDEBAR_TOOLS`]).
-pub const ICON_COUNT: usize = SIDEBAR_TOOLS.len();
+/// Number of icons in the sidebar (derived from [`TOOLS`]).
+pub const ICON_COUNT: usize = TOOLS.len();
+
+/// The tool of sidebar icon `index`, or [`OperatorTool::None`] past the end.
+pub fn tool_for_icon(index: usize) -> OperatorTool {
+    TOOLS
+        .get(index)
+        .map_or(OperatorTool::None, |descriptor| descriptor.tool)
+}
+
+/// The sidebar icon index of `tool`, or `None` for a tool without an icon.
+pub fn icon_for_tool(tool: OperatorTool) -> Option<usize> {
+    TOOLS.iter().position(|descriptor| descriptor.tool == tool)
+}
 
 /// Compute how many sidebar icons are visible given window height and margins.
 ///
