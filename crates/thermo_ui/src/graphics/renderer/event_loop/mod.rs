@@ -29,7 +29,7 @@ mod viewport_orchestrator;
 // remain exported so backend code can name the type.
 pub use command_registry::{COMMANDS, CommandDescriptor, CommandKind, UiAction};
 pub use energy_window_manager::EnergyWindowManager;
-pub use input_handler::{InputAction, InputHandler, KeyCode, OperatorTool};
+pub use input_handler::{InputAction, InputHandler, KeyCode, OperatorTool, key_input};
 pub use metrics::{FrameMetrics, MetricsCollector};
 pub use operator_tool_handler::{OperatorToolHandler, ToolContext, ToolPreview, ToolResponse};
 pub use physics_coordinator::PhysicsCoordinator;

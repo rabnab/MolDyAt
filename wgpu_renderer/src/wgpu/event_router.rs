@@ -7,11 +7,10 @@ use super::wgpu_context::WgpuContext;
 use super::wgpu_input::execute_input_action;
 use super::wgpu_pipelines::WgpuPipelines;
 use crate::wgpu::margins_for_scale_factor;
-use thermo_ui::graphics::renderer::event_loop::UnifiedRenderState;
+use thermo_ui::graphics::renderer::event_loop::{UnifiedRenderState, key_input};
 use winit::{
     event::{DeviceEvent, ElementState, WindowEvent},
     event_loop::ActiveEventLoop,
-    keyboard::PhysicalKey,
     window::{Window, WindowId},
 };
 
@@ -160,7 +159,7 @@ impl EventRouter {
                 Self::view_changed(state, main_window, dirty);
             }
             WindowEvent::KeyboardInput { event, .. } => {
-                let PhysicalKey::Code(key) = event.physical_key else {
+                let Some(key) = key_input(&event) else {
                     return;
                 };
 

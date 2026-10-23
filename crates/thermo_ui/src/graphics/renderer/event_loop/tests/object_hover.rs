@@ -200,14 +200,18 @@ fn delete_and_backspace_map_to_delete_hovered_once_per_press() {
     let mut input = InputHandler::new();
     assert_eq!(
         input
-            .handle_key_down(KeyCode::Delete, false)
+            .handle_key_down(super::us(KeyCode::Delete), false)
             .and_then(|a| a.ui_action()),
         Some(UiAction::DeleteHovered)
     );
-    assert!(input.handle_key_down(KeyCode::Delete, true).is_none());
+    assert!(
+        input
+            .handle_key_down(super::us(KeyCode::Delete), true)
+            .is_none()
+    );
     assert_eq!(
         input
-            .handle_key_down(KeyCode::Backspace, false)
+            .handle_key_down(super::us(KeyCode::Backspace), false)
             .and_then(|a| a.ui_action()),
         Some(UiAction::DeleteHovered)
     );

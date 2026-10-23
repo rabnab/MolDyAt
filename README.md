@@ -276,10 +276,10 @@ Keyboard (press `H` for the same list in the log):
 | `SPACE` | Pause or resume the simulation. |
 | `S` | Toggle step-by-step mode. |
 | `G` | Cycle gravity: off -> 9.81 m/s^2 -> 49.05 m/s^2. |
-| `=` / `Num +` | Double the simulation time step. |
-| `-` / `Num -` | Halve the simulation time step. |
-| `Alt + =` / `Alt + Num +` | Decrease the wait time between steps. |
-| `Alt + -` / `Alt + Num -` | Increase the wait time between steps. |
+| `+` | Double the simulation time step. |
+| `-` | Halve the simulation time step. |
+| `Alt + +` | Decrease the wait time between steps. |
+| `Alt + -` | Increase the wait time between steps. |
 | `ESC` | Clear all balls. |
 | `F1` | Stop all balls (zero velocities). |
 | `F5` | Add 100 random balls. |
@@ -290,7 +290,7 @@ Keyboard (press `H` for the same list in the log):
 | `DEL` / `BACKSPACE` | Delete the highlighted object (hover it with its sidebar tool selected). |
 | `Ctrl + S` | Save the world to a new file in the save directory (--save-dir, default ./saves). |
 | `Ctrl + O` | Load the newest save from the save directory (paused, default view). |
-| `0` / `Num 0` | Reset the viewport (1.0x zoom, centred). |
+| `0` | Reset the viewport (1.0x zoom, centred). |
 | `F2` | Toggle rendering. |
 | `F3` | Cycle the cutoff-radius rings. |
 | `T` | Cycle the thermo overlay: Off -> Grid -> Temperature -> Pressure -> Off. |

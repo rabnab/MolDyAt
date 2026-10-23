@@ -3,13 +3,14 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use super::command_registry::{
-    CommandDescriptor, HeldModifiers, KeyBinding, KeyPhase, Trigger, UiAction, chord_for_key,
-    command_for_key,
+    CommandDescriptor, HeldModifiers, KeyBinding, KeyInput, KeyPhase, Trigger, UiAction,
+    chord_for_key, command_for_key,
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use thermo_physics::objects2d::Vec2D;
 use thermo_runtime::application::operator_command::OperatorCommand;
-use winit::event::{ElementState, MouseButton, MouseScrollDelta};
+use winit::event::{ElementState, KeyEvent, MouseButton, MouseScrollDelta};
+use winit::keyboard::{Key, PhysicalKey};
 
 pub type KeyCode = winit::keyboard::KeyCode;
 
@@ -90,7 +91,8 @@ impl InputAction {
 
 /// Handles keyboard and mouse input, tracking state and producing actions
 pub struct InputHandler {
-    pressed_keys: HashSet<KeyCode>,
+    // Every key held down, with what its first press decided.
+    held_keys: HashMap<KeyCode, HeldKey>,
     cursor_pos: Vec2D,
     cursor_pos_px: [f32; 2],
 
@@ -98,56 +100,125 @@ pub struct InputHandler {
     is_panning: bool,
     pan_start_pos_px: [f32; 2],
     pan_start_offset: Vec2D,
+}
 
-    // Keys pressed as a chord (Ctrl+S, Alt+=), with the command their
-    // release runs (`None`: the chord fired on press). The release belongs
-    // to the chord even if the modifier was let go first, so it never falls
-    // through to the plain key's command (S = stepwise, = = double dt).
-    chord_keys: HashMap<KeyCode, (&'static CommandDescriptor, KeyBinding)>,
+/// What the first press of a held key decided; its release and auto-repeats
+/// use this, not what the layout reports later.
+#[derive(Debug, Clone, Copy, Default)]
+struct HeldKey {
+    /// The key event of the first press (`None` if only its state is known,
+    /// see [`InputHandler::register_key_pressed`]). A release runs the
+    /// command of these characters, even if the layout changed meanwhile.
+    input: Option<KeyInput>,
+    /// The chord the press started (Ctrl+S, Alt+=). The release belongs to
+    /// the chord even if the modifier was let go first, so it never falls
+    /// through to the plain key's command (S = stepwise, = = double dt).
+    chord: Option<(&'static CommandDescriptor, KeyBinding)>,
+}
+
+/// The key of a winit key event for the command registry, or `None` for a
+/// key without a known physical code.
+///
+/// `symbol` is the character the key types in the current layout with no
+/// modifiers held, so Alt / Option, Shift or a dead-key setting do not
+/// change it (#327); `typed` is the one it types with the modifiers held,
+/// for symbols that need Shift on some layouts (Swiss `+` is Shift + 1).
+/// Platforms without the unmodified character (web, iOS, Android) use the
+/// typed one for both, so there a modifier can change `symbol` too.
+pub fn key_input(event: &KeyEvent) -> Option<KeyInput> {
+    let PhysicalKey::Code(code) = event.physical_key else {
+        return None;
+    };
+    let typed = key_symbol(&event.logical_key);
+    Some(KeyInput::new(code, key_symbol(&unmodified_key(event))).with_typed(typed))
+}
+
+/// Defines `$item` for the platforms where winit reports the unmodified
+/// key (`KeyEventExtModifierSupplement`), `$fallback` for the others. The
+/// predicate mirrors winit's own `cfg` for that trait and is written once.
+macro_rules! by_modifier_supplement {
+    (@split ($($predicate:tt)*) $item:item $fallback:item) => {
+        #[cfg($($predicate)*)]
+        $item
+        #[cfg(not($($predicate)*))]
+        $fallback
+    };
+    ($item:item else $fallback:item) => {
+        by_modifier_supplement!(@split (any(
+            target_os = "windows",
+            target_os = "macos",
+            all(
+                unix,
+                not(target_vendor = "apple"),
+                not(target_os = "android"),
+                not(target_os = "emscripten"),
+                not(target_os = "redox")
+            )
+        )) $item $fallback);
+    };
+}
+
+by_modifier_supplement! {
+    fn unmodified_key(event: &KeyEvent) -> Key {
+        use winit::platform::modifier_supplement::KeyEventExtModifierSupplement;
+        event.key_without_modifiers()
+    }
+    else
+    fn unmodified_key(event: &KeyEvent) -> Key {
+        event.logical_key.clone()
+    }
+}
+
+/// The character a key types, if it types exactly one.
+pub(crate) fn key_symbol(key: &Key) -> Option<char> {
+    let Key::Character(text) = key else {
+        return None;
+    };
+    let mut chars = text.chars();
+    match (chars.next(), chars.next()) {
+        (Some(symbol), None) => Some(symbol),
+        _ => None,
+    }
 }
 
 impl InputHandler {
     pub fn new() -> Self {
         Self {
-            pressed_keys: HashSet::new(),
+            held_keys: HashMap::new(),
             cursor_pos: Vec2D::zero(),
             cursor_pos_px: [0.0, 0.0],
             is_panning: false,
             pan_start_pos_px: [0.0, 0.0],
             pan_start_offset: Vec2D::zero(),
-            chord_keys: HashMap::new(),
         }
     }
 
     // Key state tracking
     pub fn register_key_pressed(&mut self, key: KeyCode) {
-        self.pressed_keys.insert(key);
+        self.held_keys.entry(key).or_default();
     }
 
     pub fn register_key_released(&mut self, key: KeyCode) {
-        self.pressed_keys.remove(&key);
+        self.held_keys.remove(&key);
     }
 
     /// Forget every held key. Called when the window loses focus: keys
     /// released while another window has focus never send a release here,
     /// and a Ctrl that stayed "held" would turn plain S / O into save / load.
     pub fn release_all_keys(&mut self) {
-        self.pressed_keys.clear();
-        self.chord_keys.clear();
+        self.held_keys.clear();
     }
 
     pub fn is_key_pressed(&self, key: KeyCode) -> bool {
-        self.pressed_keys.contains(&key)
+        self.held_keys.contains_key(&key)
     }
 
     pub fn is_alt_modifier_pressed(&self) -> bool {
-        self.pressed_keys.contains(&KeyCode::AltLeft)
-            || self.pressed_keys.contains(&KeyCode::AltRight)
+        self.is_key_pressed(KeyCode::AltLeft) || self.is_key_pressed(KeyCode::AltRight)
     }
 
     pub fn is_ctrl_modifier_pressed(&self) -> bool {
-        self.pressed_keys.contains(&KeyCode::ControlLeft)
-            || self.pressed_keys.contains(&KeyCode::ControlRight)
+        self.is_key_pressed(KeyCode::ControlLeft) || self.is_key_pressed(KeyCode::ControlRight)
     }
 
     // Cursor state
@@ -195,20 +266,34 @@ impl InputHandler {
     }
 
     /// Process a key press (or auto-repeat) and return the command it runs.
-    pub fn handle_key_down(&mut self, key: KeyCode, is_repeat: bool) -> Option<InputAction> {
-        self.register_key_pressed(key);
+    pub fn handle_key_down(
+        &mut self,
+        input: impl Into<KeyInput>,
+        is_repeat: bool,
+    ) -> Option<InputAction> {
+        let input = input.into();
+        let key = input.code;
 
         // A chord is decided on the first press, while its modifier is
         // certainly held, and owns this key until the release, whatever its
         // trigger. An auto-repeat continues the press it repeats: a modifier
-        // pressed while a plain key is held does not turn it into a chord.
-        let chord = if is_repeat {
-            self.chord_keys.get(&key).copied()
+        // pressed while a plain key is held does not turn it into a chord,
+        // and the characters of the first press stay (a repeat after a
+        // layout switch reports others).
+        let held = self.held_keys.get(&key).copied().unwrap_or_default();
+        let (input, chord) = if is_repeat {
+            (held.input.unwrap_or(input), held.chord)
         } else {
-            chord_for_key(key, self.held_modifiers())
+            (input, chord_for_key(input, self.held_modifiers()))
         };
+        self.held_keys.insert(
+            key,
+            HeldKey {
+                input: Some(input),
+                chord,
+            },
+        );
         if let Some((command, binding)) = chord {
-            self.chord_keys.insert(key, (command, binding));
             let fires_now = match binding.trigger {
                 Trigger::Press => true,
                 Trigger::PressOnce => !is_repeat,
@@ -217,7 +302,7 @@ impl InputHandler {
             return fires_now.then_some(InputAction::Command(command));
         }
 
-        let (command, binding) = command_for_key(key, KeyPhase::Down, HeldModifiers::default())?;
+        let (command, binding) = command_for_key(input, KeyPhase::Down, HeldModifiers::default())?;
         if is_repeat && binding.trigger == Trigger::PressOnce {
             return None;
         }
@@ -225,17 +310,23 @@ impl InputHandler {
     }
 
     /// Process a key release and return the command it runs.
-    pub fn handle_key_up(&mut self, key: KeyCode) -> Option<InputAction> {
-        self.register_key_released(key);
+    pub fn handle_key_up(&mut self, input: impl Into<KeyInput>) -> Option<InputAction> {
+        let input = input.into();
+        let held = self.held_keys.remove(&input.code).unwrap_or_default();
 
         // The release of a key that started a chord is part of that chord.
-        if let Some((command, binding)) = self.chord_keys.remove(&key) {
+        if let Some((command, binding)) = held.chord {
             return (binding.trigger == Trigger::Release).then_some(InputAction::Command(command));
         }
 
-        // Otherwise the press was plain: modifiers pressed since do not count.
-        command_for_key(key, KeyPhase::Up, HeldModifiers::default())
-            .map(|(command, _)| InputAction::Command(command))
+        // Otherwise the press was plain: modifiers pressed since do not
+        // count, and the characters are those of the press.
+        command_for_key(
+            held.input.unwrap_or(input),
+            KeyPhase::Up,
+            HeldModifiers::default(),
+        )
+        .map(|(command, _)| InputAction::Command(command))
     }
 
     /// Process mouse button and return action if any

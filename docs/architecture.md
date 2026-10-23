@@ -171,11 +171,12 @@ Every keyboard command is one `CommandDescriptor` in the table `COMMANDS`
 | `id` | Stable id `<category>.<name>`, e.g. `sim.toggle_pause`, for key-binding files and headless scripts (plan items C3, C5). Never renamed |
 | `label` | One line for the help text and the README key table. It may name a value such as `{normal_gravity}` (`LABEL_VALUES`), so it never repeats a constant |
 | `category` | Help-text group; its prefix starts the id (`sim`, `balls`, `tools`, `world`, `view`, `debug`, `help`) |
-| `default_binding` | `KeyBinding`s: key, modifier (`None`, `Ctrl`, `Alt`) and trigger (`Press`, `PressOnce` ignores auto-repeat, `Release`) |
+| `default_binding` | `KeyBinding`s: key (`BindKey`), modifier (`None`, `Ctrl`, `Alt`) and trigger (`Press`, `PressOnce` ignores auto-repeat, `Release`). A key is a `Symbol(char)`, the character the key types, wherever the layout puts it: every key that types one is bound so (letters, digits, `+`, `-`, the numpad), so shortcuts sit where they are printed (#327; decision on #354). Only keys that type no character (SPACE, ESC, TAB, DEL, BACKSPACE, Shift, F1–F12) are a physical `Code(KeyCode)` |
 | `kind` | `Ui(UiAction)`, handled in the renderer, or `Domain(fn() -> DomainCommand)`, sent to the physics thread |
 
 ```text
-KeyCode → InputHandler::handle_key_down / handle_key_up
+KeyEvent → key_input (physical KeyCode + character typed without modifiers)
+        → InputHandler::handle_key_down / handle_key_up (KeyInput)
         → command_for_key(key, phase, held modifiers) → InputAction::Command(&CommandDescriptor)
         → InputOrchestrator::process_action → action_processor::run_command
               ├─ Domain(make) → PhysicsCoordinator::send_command(make())
@@ -185,8 +186,22 @@ KeyCode → InputHandler::handle_key_down / handle_key_up
 The table generates the key dispatch, the help text (`H`, `help_text()`)
 and the UI-vs-domain routing. Key lookup: while a modifier is held, its
 binding for the key wins (Ctrl before Alt); otherwise the plain binding fires.
+Within one modifier, a key's physical binding comes first (only keys that
+type no character have one), then the binding of the character it types
+without modifiers (`key_without_modifiers`: Shift, Alt / Option and dead
+keys do not change it), then of the character it types with the modifiers
+held, for layouts where a character needs Shift (Swiss `+` is Shift + 1,
+AZERTY digits need Shift). Letters are matched in lower case, as a key
+types them without Shift, and shown in upper case. Layouts without Latin
+letters (e.g. Russian) are not supported: no key types `s`, so the letter
+shortcuts have no key there (decided on #354). On platforms where
+winit has no unmodified character (web, iOS, Android) both are the typed
+character, so there a modifier can change it. A release and every
+auto-repeat use the characters of the first press. `=` is a hidden alias
+of `+` (the same key on US keyboards): it works but the help shows `+`.
 A chord is decided when its key goes down with the modifier held
-(`chord_for_key`) and owns that key until the release: Ctrl+S fires on press,
+(`chord_for_key`) and owns that key until the release: Ctrl+S (the key that
+types `s`) fires on press,
 Alt+`=` on the release even if Alt was let go first, and neither ever runs the
 plain key's command (S, `=`). A modifier pressed after the key, or during its
 auto-repeat, does not make a chord: the key stays plain. The backend handles

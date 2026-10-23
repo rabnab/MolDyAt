@@ -6,8 +6,8 @@
 //! help text and the README key table.
 
 use super::super::command_registry::{
-    COMMANDS, CommandCategory, HeldModifiers, KeyBinding, KeyPhase, LABEL_VALUES, Modifier,
-    Trigger, command_by_id, command_for_key, help_text,
+    BindKey, COMMANDS, CommandCategory, HeldModifiers, KeyBinding, KeyInput, KeyPhase,
+    LABEL_VALUES, Modifier, Trigger, command_by_id, command_for_key, help_text,
 };
 use super::super::input_handler::{InputHandler, KeyCode};
 use std::collections::HashSet;
@@ -80,6 +80,72 @@ fn test_every_command_has_a_label_and_a_key_with_a_name() {
     }
 }
 
+/// A key event for `key`. A symbol is typed on a key that has no binding
+/// of its own (`IntlBackslash`), as on a layout that moves the symbol.
+fn input_for(key: BindKey) -> KeyInput {
+    match key {
+        BindKey::Code(code) => super::us(code),
+        BindKey::Symbol(symbol) => KeyInput::new(KeyCode::IntlBackslash, Some(symbol)),
+    }
+}
+
+#[test]
+fn test_symbol_test_key_has_no_binding() {
+    for command in COMMANDS {
+        for binding in command.default_binding {
+            assert_ne!(binding.key, BindKey::Code(KeyCode::IntlBackslash));
+        }
+    }
+}
+
+/// Shortcuts follow the character a key types, not its place: letters,
+/// digits and symbols sit where they are printed on every layout (#354
+/// decision). Keys that type no character stay physical.
+#[test]
+fn test_shortcuts_follow_the_character_typed() {
+    let up = |key| {
+        command_for_key(key, KeyPhase::Up, HeldModifiers::default()).map(|(command, _)| command.id)
+    };
+    // AZERTY: the US `Q` key types `a`, the US `A` key types `q`; `G`
+    // cycles gravity from the key that types `g`, wherever it is.
+    assert_eq!(up(KeyInput::new(KeyCode::KeyQ, Some('a'))), None);
+    assert_eq!(
+        up(KeyInput::new(KeyCode::KeyG, Some('g'))),
+        Some("sim.cycle_gravity")
+    );
+    // A layout whose US `0` key types `-` halves dt with it.
+    assert_eq!(
+        up(KeyInput::new(KeyCode::Digit0, Some('-'))),
+        Some("sim.halve_time_step")
+    );
+    // AZERTY types `0` with Shift on that key (`à` without): reset view.
+    assert_eq!(
+        up(KeyInput::new(KeyCode::Digit0, Some('à')).with_typed(Some('0'))),
+        Some("view.reset")
+    );
+    // The numpad types the same characters as the main row.
+    assert_eq!(
+        up(KeyInput::new(KeyCode::Numpad0, Some('0'))),
+        Some("view.reset")
+    );
+    // TAB types no character and stays physical.
+    assert_eq!(up(KeyCode::Tab.into()), Some("view.toggle_energy_window"));
+}
+
+/// `=` is a hidden alias of `+`: it dispatches, but the help shows `+`.
+#[test]
+fn test_hidden_alias_dispatches_but_is_not_shown() {
+    let double = command_by_id("sim.double_time_step").expect("command");
+    assert_eq!(double.binding_display(), ["+"]);
+    let (found, _) = command_for_key(
+        KeyInput::new(KeyCode::Equal, Some('=')),
+        KeyPhase::Up,
+        HeldModifiers::default(),
+    )
+    .expect("= dispatches");
+    assert_eq!(found.id, "sim.double_time_step");
+}
+
 /// The ids of the commands one chord press runs: modifier down, key down,
 /// then both up, the modifier first if `modifier_up_first`.
 fn chord_press(binding: &KeyBinding, modifier_up_first: bool) -> Vec<&'static str> {
@@ -90,12 +156,13 @@ fn chord_press(binding: &KeyBinding, modifier_up_first: bool) -> Vec<&'static st
     };
     let mut handler = InputHandler::new();
     let mut actions = vec![handler.handle_key_down(modifier_key, false)];
-    actions.push(handler.handle_key_down(binding.key, false));
+    let key = input_for(binding.key);
+    actions.push(handler.handle_key_down(key, false));
     if modifier_up_first {
         actions.push(handler.handle_key_up(modifier_key));
-        actions.push(handler.handle_key_up(binding.key));
+        actions.push(handler.handle_key_up(key));
     } else {
-        actions.push(handler.handle_key_up(binding.key));
+        actions.push(handler.handle_key_up(key));
         actions.push(handler.handle_key_up(modifier_key));
     }
     actions
@@ -149,7 +216,7 @@ fn test_every_binding_dispatches_to_its_command() {
                 ctrl: binding.modifier == Modifier::Ctrl,
                 alt: binding.modifier == Modifier::Alt,
             };
-            let (found, _) = command_for_key(binding.key, phase, held)
+            let (found, _) = command_for_key(input_for(binding.key), phase, held)
                 .unwrap_or_else(|| panic!("{} does not dispatch", binding.display()));
             assert_eq!(found.id, command.id, "{}", binding.display());
         }
@@ -286,7 +353,7 @@ fn test_n_keys_step_the_species_of_new_balls() {
         ),
         (alt, "balls.previous_species", "PreviousSpecies"),
     ] {
-        let (command, _) = command_for_key(KeyCode::KeyN, KeyPhase::Up, held)
+        let (command, _) = command_for_key(super::us(KeyCode::KeyN), KeyPhase::Up, held)
             .unwrap_or_else(|| panic!("N with {held:?} runs a command"));
         assert_eq!(command.id, id);
         let domain = command.domain_command().expect("a domain command");
