@@ -2,7 +2,8 @@
 
 Status: accepted direction, decisions recorded 2026-10-04 (see §6). Phases
 1–3 have landed, and with M9 the crate split; the remaining work was
-regrouped into Phases 4–8 on 2026-10-23 (see §4). Successor to the runtime refactor in
+regrouped into Phases 4–8 on 2026-10-23, with every work item and open
+issue assigned to a phase (see §4). Successor to the runtime refactor in
 [refactor_architecture.md](../done/refactor_architecture.md) (#137, landed). The current
 structure is described in [architecture.md](../architecture.md).
 
@@ -113,7 +114,7 @@ Size: **S** ≤ 1 day, **M** 2–4 days, **L** ≥ 1 week. "Deps" are hard prere
 | M7 | Crate split: `thermo_physics` | Move `objects2d`, `application/core` (world, engine), persistence into a crate without winit/softbuffer/scirs2. Keep `moldyat_core` as a re-export shim for one release. | L | M1, M2 |
 | M8 | Crate split: `thermo_runtime` + headless | Physics thread, `DomainCommand`, snapshot, headless runner/output move out of the GPU crate into `crates/thermo_runtime`, which builds without a windowing stack. Tighten the `thermo_physics` API that M7 widened (about 100 former `pub(crate)` items made `pub`, among them `SimulationWorld` fields): keep `pub` only what the runtime and UI use, behind accessors or narrow methods instead of public fields. Done (#309): the physics thread, commands, snapshots and headless runs are in `thermo_runtime`; `SimulationWorld` has accessors instead of public fields, and `thermo_physics` exposes only what the other crates use (831 → 505 public items, see `docs/architecture.md`). | L | M7 |
 | M9 | Crate split: `thermo_ui` | After M8 `moldyat_core` holds only the UI layer (event loop, tools, viewport, sidebar model, energy window) and the logger setup. Move it to `crates/thermo_ui`, rename the package, and remove the re-exports kept for one release by #308 and #309 (callers use `thermo_physics` / `thermo_runtime` directly). The energy window moves as it is; it becomes a wgpu window and `softbuffer` is dropped in V4a. Done (#310): `crates/thermo_ui`, no re-exports between the crates. | S | M8 |
-| M10 | Docs refresh | Update `architecture.md`, move finished plans to `docs/done/` (done for `refactor_architecture.md`, `headless-renderer-plan.md`, `nose-hoover.md`, `operator-handling-review.md`), update the `operator-framework` skill. | S | after each epic |
+| M10 | Docs refresh | Update `architecture.md`, move finished plans to `docs/done/` (done for `refactor_architecture.md`, `headless-renderer-plan.md`, `nose-hoover.md`, `operator-handling-review.md`), update the `operator-framework` skill. Recurring: the last item of every phase (§4) checks the docs and skills that phase touched, and updates this plan's status and issue table. | S | end of each phase |
 
 ### Epic I – Interaction types and mixed species
 
@@ -185,35 +186,50 @@ Each item reports before/after numbers from G1 and must keep drift + energy test
 Phase 1 (guardrails + quick wins):  G1, G2, G3, M1, M3, M4, C1, P1, P3
 Phase 2 (mixed species):            I1, I2, I3, I4, M6, I5, I6, C2, I7
 Phase 3 (crate split):              M2, #295, #270, #273, #274, M5, C4, M7, M8, P2
-Phase 4 (finish the split):         M9, I8a, C3
-Phase 5 (metrics + plots):          V3, V7, V4a, V4b, C5
-Phase 6 (visuals + tools):          V2, #290, V5, V6, #303, #203
-Phase 7 (performance):              P8a, P4, #250, P6, P8b
-Phase 8 (walls + water):            I12, I8b, I9 + I10 (once §7 is decided), I11 (if needed)
+Phase 4 (finish the split):         M9, I8a, #327, C3, M10
+Phase 5 (metrics + plots):          V3, V7, V4a, V4b, C5, M10
+Phase 6 (visuals + tools):          V2, #290, V5, V6, #303, #203, M10
+Phase 7 (performance):              P8a, P4, #250, P6, P8b, M10
+Phase 8 (walls + water):            I12, I8b, I9 + I10 (once §7 is decided), I11 (if needed), M10
 ```
 
-GitHub issues:
+Every ID of §3 is in this order, except these, which need no work of their own:
+
+| ID | Status |
+|---|---|
+| V1 | Folded into V2 (Phase 6). |
+| P5 | Folded into P4 (Phase 7). |
+| P7 | Folded into V2 (Phase 6). |
+| P9 | Dropped (reproducibility, decision 4). |
+| P10 | Done. |
+
+GitHub issues (every open issue is in a phase, as of 2026-10-23):
 
 | Phase | Parent | Landed on `master` | Open |
 |---|---|---|---|
 | 1 | #219 | G1 #221, G2 #222, G3 #223, M1 #224, M3 #225, M4 #226, C1 #227, P1 #228, P3 #229 | – |
 | 2 | #220 | I1 #230, I2 #233, I3 #234, M6 #231, I4 #235, I5 #236, C2 #232, I6 #237, I7 #238 | – |
 | 3 | #304 | M2 #305, #295, #270, #273, #274, M5 #306, C4 #307, P2 #311, M7 #308, M8 #309 | – |
-| 4 | – | M9 #310 | I8a, C3 |
-| 6 | – | – | #290, #303, #203 |
-| 7 | – | – | P8a/P8b #213, #250 |
-| 8 | – | – | I12 #280 |
+| 4 | – | M9 #310 | I8a, #327, C3, M10 |
+| 5 | – | – | V3, V7, V4a, V4b, C5, M10 |
+| 6 | – | – | V2, #290, V5, V6, #303, #203, M10 |
+| 7 | – | – | P8a/P8b #213, P4, #250, P6, M10 |
+| 8 | – | – | I12 #280, I8b, I9, I10, I11, M10 |
 
 "Landed" is taken from the commits on `master` (as of 2026-10-23), not from
 the issue states. Items without an issue number get one when their phase
-starts.
+starts. A new issue goes into the phase whose items it depends on or
+touches; add it to both lists above.
 
 Phases 4–8 replace the former Phases 4 and 5 (2026-10-23), which mixed
 crate work, graphs, visuals, performance and water in two long lists:
 
 - **Phase 4** finished the crate split. After M8 `moldyat_core` held only
   the UI, so M9 moved and renamed it to `thermo_ui`. I8a fixes the total
-  energy shown with gravity on; C3 needs nothing else.
+  energy shown with gravity on; C3 needs nothing else. #327 (`+` / `-` do
+  nothing on non-US layouts) comes right before C3: it decides whether
+  bindings match physical or logical keys, which is the type C3 loads
+  from the bindings file.
 - **Phase 5** builds the metrics store first; export (V7), the wgpu plot
   window (V4a/V4b, which drops `softbuffer`) and headless command scripts
   (C5) build on it and on the runtime crate.
@@ -225,6 +241,8 @@ crate work, graphs, visuals, performance and water in two long lists:
 - **Phase 8** holds the physics extensions. I12 has no open prerequisites
   and can be pulled forward; I9 and I10 wait for the water-model decision
   (§7).
+- **M10** closes every phase: docs, skills and this plan follow the code
+  of that phase before the next one starts.
 
 Mixed species (Phase 2) lands before the crate split because it is needed soon and
 touches the hot kernel; it is easiest to verify against unchanged baselines. The
