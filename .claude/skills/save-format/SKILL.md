@@ -1,11 +1,11 @@
 ---
 name: save-format
-description: Contract for changing what is saved and loaded - the WorldFile JSON format, its validation and version, conversion between the live world and the file, and migrating old saves. Use before editing core/src/application/persistence/, adding persistent state to SimulationWorld or an operator, or changing the fields of a file type (`*Data` in persistence/format.rs) or of the two value types written as they are (Rect, Vec2D).
+description: Contract for changing what is saved and loaded - the WorldFile JSON format, its validation and version, conversion between the live world and the file, and migrating old saves. Use before editing crates/thermo_physics/src/application/persistence/, adding persistent state to SimulationWorld or an operator, or changing the fields of a file type (`*Data` in persistence/format.rs) or of the two value types written as they are (Rect, Vec2D).
 ---
 
 # Save Format Contract
 
-Saves are pretty-printed JSON files written by `SaveStore` (`core/src/application/persistence/`): Ctrl+S writes `world_YYYYMMDD_HHMMSS.json` into the save directory (`--save-dir`, default `saves/`), Ctrl+O and `--load` read them, `--save-setup` writes the prepared world of a headless run. Plan decision: **old saves keep loading** (`docs/plan/refactoring-plan.md` §6).
+Saves are pretty-printed JSON files written by `SaveStore` (`crates/thermo_physics/src/application/persistence/`): Ctrl+S writes `world_YYYYMMDD_HHMMSS.json` into the save directory (`--save-dir`, default `saves/`), Ctrl+O and `--load` read them, `--save-setup` writes the prepared world of a headless run. Plan decision: **old saves keep loading** (`docs/plan/refactoring-plan.md` §6).
 
 ## Files
 | File | Role |
@@ -47,7 +47,7 @@ So **an addition that changes results bumps the version**, even when it is addit
 ## Tests and checks
 - Round trip: save, load, compare (`world_survives_a_save_and_load`); add the new state to `busy_world()` in `tests/roundtrip.rs` so it is covered.
 - Validation: one test per rejected case (non-finite, out of range, duplicate id, dangling reference).
-- Every reference save loads: `cargo test -p moldyat_core reference_saves` (#269).
-- `cargo test -p moldyat_core persistence`, then `cargo fmt` and `cargo clippy --workspace -- -D warnings`.
+- Every reference save loads: `cargo test -p thermo_physics reference_saves` (#269).
+- `cargo test -p thermo_physics persistence`, then `cargo fmt` and `cargo clippy --workspace -- -D warnings`.
 - `scripts/headless_perf.sh` caches worlds saved with `--save-setup` in `target/perf-worlds/`; after a format change, delete that cache.
 - Update `README.md` (save/load section) if user-visible behaviour changes.

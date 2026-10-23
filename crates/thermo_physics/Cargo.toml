@@ -1,0 +1,36 @@
+[package]
+name = "thermo_physics"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "MolDyAt simulation physics: particles, species, pair potentials, walls and operators, the world and its stepping, and saves. No windowing or GPU dependencies."
+
+[lints]
+workspace = true
+
+[dependencies]
+# Physics & simulation
+rand = "0.10.0"
+rand_distr = "0.6.0"
+rayon = "1.10.0"
+
+# Save/load of the simulation world (#50)
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_ignored = "0.1.14"
+# Simulation config file (`--config`, #231)
+toml = { version = "1", default-features = false, features = ["parse", "serde", "std"] }
+
+# Logging
+log = "0.4"
+
+[dev-dependencies]
+float-cmp = "0.10"
+
+[features]
+default = ["measure-time"]
+measure-time = []
+# Test builders and fault-injection knobs for the tests of dependent crates
+# (enabled by their dev-dependencies only, never in a normal build).
+test-support = []

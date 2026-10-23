@@ -23,8 +23,8 @@ same `moldyat` binary runs both modes.
    balls never start inside a wall.
 3. It steps the simulation directly on the main thread with
    `MainContent::simulation_step()`; there is no physics thread.
-4. Snapshots come from `MainContent::create_snapshot()` and are mapped to
-   the export records in `headless_output.rs`. The renderer snapshot itself
+4. Snapshots come from `CreateSnapshot::create_snapshot()` (`moldyat_core`)
+   and are mapped to the export records in `headless_output.rs`. The renderer snapshot itself
    is not the export format, so it can change without breaking consumers.
 
 Frames are written at step 0, at every `--snapshot-every` boundary, and at

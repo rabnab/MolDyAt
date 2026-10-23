@@ -13,13 +13,26 @@ are in [refactoring-plan.md](plan/refactoring-plan.md).
 
 | Crate | Package | Contents |
 |---|---|---|
-| `core` | `moldyat_core` | Physics (`objects2d`, `application/core`), the physics thread, commands, snapshots, persistence, and the backend-independent UI layer (`graphics`: event loop, tools, viewport, sidebar model, energy plot window) |
+| `crates/thermo_physics` | `thermo_physics` | The physics: particles and species, pair potentials and the SIMD force kernel, cell grid and Verlet lists, walls and operators (`objects2d`); the world, `MainContent` and its stepping (`application/core`); run settings (`sim_config`), units, stats, thermo fields and saves (`persistence`). Dependencies: rayon, serde, rand, toml, log; no windowing or GPU stack |
+| `core` | `moldyat_core` | The physics thread and its snapshot publisher, `DomainCommand` and its handler, `OperatorCommand`s, `RendererSnapshot` and its builder (`application/snapshot.rs`), and the backend-independent UI layer (`graphics`: event loop, tools, viewport, sidebar model, energy plot window) |
 | `wgpu_renderer` | `moldyat_wgpu` | The `moldyat` binary: CLI, the wgpu window and render pipelines, and the headless runner |
 
-`moldyat_wgpu` depends on `moldyat_core`, never the reverse. Inside
-`moldyat_core`, `application` and `objects2d` do not depend on `graphics`;
-the one exception is `MainContent::bootstrap_world_rect`, which uses the
-viewport margins to size the initial world.
+Dependencies point one way: `moldyat_wgpu` → `moldyat_core` →
+`thermo_physics`. `thermo_physics` has no UI types: snapshots, scene layers
+and the viewport stay in `moldyat_core`.
+
+`moldyat_core` re-exports the moved modules at their old paths
+(`moldyat_core::objects2d`, `moldyat_core::application::{core, persistence,
+sim_config, …}`, `MainContent`, `SimConfig`) for one release (#308), so code
+written against them still compiles. New code uses `thermo_physics`
+directly. The next steps of the split (`thermo_runtime`, `thermo_ui`) are in
+[refactoring-plan.md](plan/refactoring-plan.md) (M8, M9).
+
+Tests of the physics crate run without a window: `cargo test -p
+thermo_physics`. Its test world builders (`thermo_physics::test_support`) and
+a few test-only helpers are also compiled for the tests of `moldyat_core`,
+through the `test-support` feature of its dev-dependency; normal builds never
+enable it.
 
 ## Threads
 
@@ -31,14 +44,15 @@ WgpuWindow / EventRouter                  PhysicsRuntime loop
 UnifiedRenderState + orchestrators           │
    │  DomainCommand  ── mpsc channel ──►  DomainCommandHandler → MainContent
    │                                         │   SimulationEngine::simulation_step
-   │  RendererSnapshot ◄── ArcSwap slot ──  MainContent::create_snapshot
+   │  RendererSnapshot ◄── ArcSwap slot ──  SnapshotPublisher (CreateSnapshot)
    │  PhysicsEvent     ◄── mpsc channel ──  (save / load results)
 FrameRenderer → RenderGraph → GPU
 ```
 
 - **Main thread.** Owns the window, input handling, the viewport, the active
   operator tool and all GPU resources. It never touches simulation state.
-- **Physics thread.** Owns `MainContent` exclusively. Each loop iteration
+- **Physics thread.** Owns `MainContent` and its `SnapshotPublisher`
+  (the snapshot slot and the layers the renderer asked for) exclusively. Each loop iteration
   drains all queued commands, runs one simulation step (unless paused),
   and publishes a snapshot when the world changed.
 - **Rayon pool.** The physics step parallelises neighbour-list rebuilds,
@@ -53,19 +67,20 @@ FrameRenderer → RenderGraph → GPU
 |---|---|---|---|
 | Command boundary | `DomainCommand` | `core/src/application/domain_command.rs` | Every change the UI asks of the simulation |
 | Physics runtime | `PhysicsRuntime`, `DomainCommandHandler` | `core/src/application/physics_thread/` | The thread loop: draining commands, sleep cadence, snapshot cadence, wakeups, shutdown, steps/s reporting |
-| Physics-thread owner | `MainContent` | `core/src/application/core/mod.rs` | The world plus `StepConfig` (time step, ball factory), `RuntimeOptions` (step-by-step, timing log, ball-stats display, real-units display; kept across loads, never saved) and `PhysicsRuntimeState` (wait time, snapshot slot, snapshot interval, physics FPS, save store, world generation, requested snapshot layers, pause during a window resize) |
-| Run settings | `SimConfig` | `core/src/application/sim_config/` | Time step, speed limit, force cap and cutoff, Verlet skin, snapshot interval; built from defaults, a `--config` TOML file and CLI flags, stored in saves (see below) |
-| World state | `SimulationWorld` | `core/src/application/core/mod.rs` | Balls, `BallPhysics` constants, cell grid, stats, operator collections (line segments, valves, wall chains, source spheres, thermostats), the ghost wall and thermo field history; physical state only, no UI flags (#305) |
-| Stepping | `SimulationEngine` | `core/src/application/core/simulation_engine.rs` | One simulation step over a `SimulationWorld` (see below); holds no state |
+| Physics-thread owner | `MainContent` | `crates/thermo_physics/src/application/core/mod.rs` | The world plus `StepConfig` (time step, ball factory), `RuntimeOptions` (step-by-step, timing log, ball-stats display, real-units display; kept across loads, never saved) and `PhysicsRuntimeState` (wait time, snapshot interval, physics FPS, save store, world generation, pause during a window resize) |
+| Snapshots | `SnapshotPublisher`, `CreateSnapshot` | `core/src/application/physics_thread.rs`, `core/src/application/snapshot.rs` | The slot shared with the renderer and the requested layers; building a `RendererSnapshot` from a `MainContent` |
+| Run settings | `SimConfig` | `crates/thermo_physics/src/application/sim_config/` | Time step, speed limit, force cap and cutoff, Verlet skin, snapshot interval; built from defaults, a `--config` TOML file and CLI flags, stored in saves (see below) |
+| World state | `SimulationWorld` | `crates/thermo_physics/src/application/core/mod.rs` | Balls, `BallPhysics` constants, cell grid, stats, operator collections (line segments, valves, wall chains, source spheres, thermostats), the ghost wall and thermo field history; physical state only, no UI flags (#305) |
+| Stepping | `SimulationEngine` | `crates/thermo_physics/src/application/core/simulation_engine.rs` | One simulation step over a `SimulationWorld` (see below); holds no state |
 | Operator mutations | `OperatorCommand` structs | `core/src/application/operator_command/` | Placing, changing and deleting operators |
-| Physics primitives | `Ball2D`, `SpeciesTable`, `BallPhysics`, `CellGrid`, operators | `core/src/objects2d/` | Ball data, particle species, pair potential and SIMD force kernel, Verlet lists, wall contact, operator data models |
+| Physics primitives | `Ball2D`, `SpeciesTable`, `BallPhysics`, `CellGrid`, operators | `crates/thermo_physics/src/objects2d/` | Ball data, particle species, pair potential and SIMD force kernel, Verlet lists, wall contact, operator data models |
 | Renderer state | `UnifiedRenderState` | `core/src/graphics/renderer/event_loop/` | Input handler, physics bridge, and `RenderStateData` (viewport, energy window, renderer config, cursor and tool state, last snapshot, frame metrics) |
 | Backend | `WgpuWindow` and friends | `wgpu_renderer/src/wgpu/` | Window, GPU context, event routing, frame submission, render pipelines |
 
 ### Simulation step
 
 `SimulationEngine::simulation_step` runs these phases in order (the phase
-names match `core/src/application/phase_timings.rs`):
+names match `crates/thermo_physics/src/application/phase_timings.rs`):
 
 1. **neighbours**: balls whose displacement since their last rebuild exceeds
    skin/3 rebuild their Verlet lists from the 3x3 surrounding cells.
@@ -190,7 +205,8 @@ back as `PhysicsEvent`s on a second channel.
 ## Snapshot flow
 
 1. After a step or a handled command, the physics thread builds a
-   `RendererSnapshot` (`MainContent::create_snapshot`) and stores it in an
+   `RendererSnapshot` (`CreateSnapshot::create_snapshot_with` for the
+   requested layers) and its `SnapshotPublisher` stores it in an
    `ArcSwapOption` slot. It publishes at most once per snapshot interval
    (16.7 ms), and immediately after a resize. A paused, untouched world
    publishes nothing.
@@ -228,7 +244,7 @@ Every visual layer is one `RenderPipeline` in
 
 ## Persistence
 
-`core/src/application/persistence/` saves and loads the whole world
+`crates/thermo_physics/src/application/persistence/` saves and loads the whole world
 (Ctrl+S / Ctrl+O, or `--load` on the command line). A `WorldFile` holds a
 format version, the world rectangle, time step, gravity, the simulation
 config, every ball, and one `operators` list, each through its own file type

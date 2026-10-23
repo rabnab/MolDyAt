@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+use super::SnapshotPublisher;
 use super::runtime::CommandHandler;
 use crate::application::MainContent;
 use crate::application::PhysicsEvent;
@@ -12,6 +13,7 @@ use std::sync::mpsc::Sender;
 
 pub(crate) struct DomainCommandHandler<'a> {
     main_content: &'a mut MainContent,
+    publisher: &'a mut SnapshotPublisher,
     events: &'a Sender<PhysicsEvent>,
     /// The latest `Resize` not applied yet. Applying one costs O(balls) and a
     /// window drag queues one per mouse step, so a run of them is held back
@@ -22,9 +24,14 @@ pub(crate) struct DomainCommandHandler<'a> {
 }
 
 impl<'a> DomainCommandHandler<'a> {
-    pub(crate) fn new(main_content: &'a mut MainContent, events: &'a Sender<PhysicsEvent>) -> Self {
+    pub(crate) fn new(
+        main_content: &'a mut MainContent,
+        publisher: &'a mut SnapshotPublisher,
+        events: &'a Sender<PhysicsEvent>,
+    ) -> Self {
         Self {
             main_content,
+            publisher,
             events,
             pending_resize: None,
             resizes_applied: 0,
@@ -148,7 +155,7 @@ impl DomainCommandHandler<'_> {
             ViewCommand::ToggleTimingDisplay => mc.toggle_timing_display(),
             ViewCommand::ToggleBallStats => mc.toggle_show_ball_stats(),
             ViewCommand::StartVerbosityInput => mc.start_handling_verbosity_input(),
-            ViewCommand::SetSnapshotLayers(layers) => mc.set_snapshot_layers(layers),
+            ViewCommand::SetSnapshotLayers(layers) => self.publisher.set_layers(mc, layers),
         }
     }
 }

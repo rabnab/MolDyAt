@@ -106,7 +106,7 @@ Size: **S** ≤ 1 day, **M** 2–4 days, **L** ≥ 1 week. "Deps" are hard prere
 | M5 | Split oversized modules | `core/line_segments.rs` (obstacles, sweep, overlap fallback), `unified_render_state.rs`, `line_segment_tool.rs`, `energy_renderer.rs`. Target < 400 lines per file; tests follow the topic-file rule. | M | – |
 | M6 | Central `SimConfig` | Collect `DT_GOAL`, `FPS_GOAL`, LJ defaults, skin, speed limit factor, snapshot interval into one serde struct; CLI and save files read/override it. | M | M1 |
 | M7 | Crate split: `thermo_physics` | Move `objects2d`, `application/core` (world, engine), persistence into a crate without winit/softbuffer/scirs2. Keep `moldyat_core` as a re-export shim for one release. | L | M1, M2 |
-| M8 | Crate split: `thermo_runtime` + headless | Physics thread, `DomainCommand`, snapshot, headless runner/output move out of the GPU crate. `cargo test -p thermo_physics` builds without a windowing stack. | L | M7 |
+| M8 | Crate split: `thermo_runtime` + headless | Physics thread, `DomainCommand`, snapshot, headless runner/output move out of the GPU crate. `cargo test -p thermo_physics` builds without a windowing stack. Tighten the `thermo_physics` API that M7 widened (about 100 former `pub(crate)` items made `pub`, among them `SimulationWorld` fields): keep `pub` only what the runtime and UI use, behind accessors or narrow methods instead of public fields. | L | M7 |
 | M9 | Crate split: `thermo_ui` | `graphics/renderer/event_loop`, viewport, sidebar model, interpolation. Energy window leaves the UI crate and becomes a wgpu window in `thermo_wgpu` (V4); `softbuffer` is dropped. | M | M8 |
 | M10 | Docs refresh | Update `architecture.md`, move finished plans to `docs/done/` (done for `refactor_architecture.md`, `headless-renderer-plan.md`, `nose-hoover.md`, `operator-handling-review.md`), update the `operator-framework` skill. | S | after each epic |
 
@@ -187,7 +187,7 @@ GitHub issues:
 |---|---|---|---|
 | 1 | #219 | G1 #221, G2 #222, G3 #223, M1 #224, M3 #225, M4 #226, C1 #227, P1 #228, P3 #229 | – |
 | 2 | #220 | I1 #230, I2 #233, I3 #234, M6 #231, I4 #235, I5 #236, C2 #232, I6 #237, I7 #238 | – |
-| 3 | #304 | M2 #305, #295, #270, #273, #274, M5 #306, C4 #307, P2 #311 | M7 #308, M8 #309, M9 #310 |
+| 3 | #304 | M2 #305, #295, #270, #273, #274, M5 #306, C4 #307, P2 #311, M7 #308 | M8 #309, M9 #310 |
 | 5 | – | – | I12 #280 |
 
 "Landed" is taken from the commits on `master` (as of 2026-10-14), not from

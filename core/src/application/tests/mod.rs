@@ -2,9 +2,11 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+mod main_content_thread;
+mod operator_commands;
 mod physics_thread;
-mod sim_config;
-mod thermo_field;
+mod save_load_thread;
+mod snapshot;
 
 use crate::application::renderer_snapshot::RendererSnapshot;
 use crate::application::{BallCommand, PhysicsThread};

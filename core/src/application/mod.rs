@@ -2,38 +2,34 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-mod core;
+// The simulation world, its stepping, run settings and saves moved to
+// `thermo_physics` (#308); re-exported here so the old paths keep working.
+pub use thermo_physics::application::{
+    core, log_util, persistence, phase_timings, sim_config, sim_stats, step_config, thermo_field,
+    units,
+};
+
 mod domain_command;
-pub(crate) mod log_util;
 pub mod operator_command;
-pub mod persistence;
-pub mod phase_timings;
 mod physics_event;
 mod physics_thread;
 pub mod renderer_snapshot;
 pub mod scene_layers;
-pub mod sim_config;
-mod sim_stats;
-mod step_config;
-pub mod thermo_field;
-pub mod units;
+mod snapshot;
 
 #[cfg(test)]
 mod tests;
 
-pub use core::{MainContent, valve_span_problem};
 pub use domain_command::{BallCommand, DomainCommand, SimControl, ViewCommand, WorldCommand};
 pub use physics_event::PhysicsEvent;
-pub(crate) use physics_thread::PhysicsThread;
-pub use sim_config::SimConfig;
-pub(crate) use sim_stats::{HIGH_GRAVITY_MPS2, NORMAL_GRAVITY_MPS2};
-pub(crate) use step_config::StepConfig;
+pub(crate) use physics_thread::{PhysicsThread, SnapshotPublisher};
+pub use snapshot::{CreateSnapshot, valve_spans};
+pub use thermo_physics::application::{
+    AppError, AppResult, HIGH_GRAVITY_MPS2, MainContent, NORMAL_GRAVITY_MPS2, SimConfig,
+    StepConfig, valve_span_problem,
+};
 
 #[cfg(test)]
 pub(crate) use physics_thread::{
     CommandHandler, DomainCommandHandler, PhysicsRuntime, ShutdownSignal,
 };
-
-// Re-export error types so existing `crate::application::AppResult` paths still work
-pub use crate::error::AppError;
-pub use crate::error::AppResult;

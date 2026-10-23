@@ -474,24 +474,29 @@ If you use MolDyAt in scientific work, please cite it; see
 ## Project Structure
 
 ```
-Cargo.toml                     # Workspace root (members: core, wgpu_renderer)
-core/
+Cargo.toml                     # Workspace root (members: core, crates/thermo_physics, wgpu_renderer)
+crates/thermo_physics/         # The physics; no windowing or GPU dependencies
 └── src/
-    ├── application/           # Simulation controller, physics thread, stats
-    │   ├── core/              # Ball management, simulation stepping, operators
+    ├── application/
+    │   ├── core/              # World, MainContent, stepping, operators
     │   │   └── tests/         # Topic-based test files (ball_management, energy, …)
-    │   ├── operator_command/  # Valve, thermostat, source commands
     │   ├── persistence/       # Versioned JSON save / load
-    │   ├── sim_config/        # SimConfig: run settings, --config file
+    │   └── sim_config/        # SimConfig: run settings, --config file
+    ├── objects2d/             # Ball physics, SIMD forces, Verlet lists, cell grid,
+    │                          #   line segments, wall chains, operators
+    └── logging/               # Log targets and helpers
+core/                          # moldyat_core: physics thread and UI layer
+└── src/
+    ├── application/           # Physics thread, commands, snapshots; re-exports
+    │   │                      #   the thermo_physics modules at their old paths
+    │   ├── operator_command/  # Valve, thermostat, source commands
     │   └── physics_thread/    # Physics thread internals
     ├── graphics/
     │   ├── energy_plot/       # Energy plot window
     │   └── renderer/          # Renderer trait, viewport, batch renderer
     │       ├── event_loop/    # InputHandler, PhysicsCoordinator, Metrics, …
     │       └── viewport/      # ViewportTransform, coordinate mapping
-    ├── objects2d/             # Ball physics, SIMD forces, Verlet lists, cell grid,
-    │                          #   line segments, wall chains, operators
-    └── logging/               # env_logger initialisation
+    └── logging.rs             # env_logger initialisation
 wgpu_renderer/
 └── src/
     ├── main.rs                # Entry point, Rayon init, window creation

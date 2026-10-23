@@ -59,7 +59,7 @@ How a run works:
 
 ## Phases
 
-The phases are timed in `core/src/application/phase_timings.rs`, and the
+The phases are timed in `crates/thermo_physics/src/application/phase_timings.rs`, and the
 runner adds `snapshot`, `output` and `total`:
 
 | Phase | What it times |

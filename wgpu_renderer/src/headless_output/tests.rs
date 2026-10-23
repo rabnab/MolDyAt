@@ -343,11 +343,12 @@ fn test_runs_with_same_seed_and_config_emit_identical_jsonl() {
         path: output_path_b.clone(),
     };
 
-    let world_rect = moldyat_core::application::MainContent::bootstrap_world_rect(
-        1280,
-        720,
-        moldyat_core::graphics::renderer::margins::Margins::new(110.0, 50.0, 50.0, 50.0),
-    );
+    let world_rect =
+        moldyat_core::graphics::renderer::ViewportTransform::compute_world_bounds_from_window_size(
+            1280,
+            720,
+            moldyat_core::graphics::renderer::margins::Margins::new(110.0, 50.0, 50.0, 50.0),
+        );
 
     let config_a = HeadlessConfig {
         steps: 6,

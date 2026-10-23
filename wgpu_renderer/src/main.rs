@@ -12,6 +12,7 @@ mod wgpu;
 use crate::wgpu::{DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH, MARGINS};
 use moldyat_core::application::persistence::{LoadSource, SaveStore};
 use moldyat_core::application::{MainContent, SimConfig};
+use moldyat_core::graphics::renderer::ViewportTransform;
 
 /// Initialize Rayon thread pool for parallel physics computations.
 ///
@@ -63,7 +64,7 @@ fn run_wgpu_renderer(common: cli::CommonArgs, sim_config: &SimConfig) {
 
     log::info!("Renderer: wgpu");
 
-    let world_rect = MainContent::bootstrap_world_rect(
+    let world_rect = ViewportTransform::compute_world_bounds_from_window_size(
         DEFAULT_WINDOW_WIDTH as u32,
         DEFAULT_WINDOW_HEIGHT as u32,
         MARGINS,
@@ -95,7 +96,7 @@ fn run_headless_renderer(
 ) -> std::io::Result<()> {
     log::info!("Renderer: headless");
 
-    let world_rect = MainContent::bootstrap_world_rect(
+    let world_rect = ViewportTransform::compute_world_bounds_from_window_size(
         DEFAULT_WINDOW_WIDTH as u32,
         DEFAULT_WINDOW_HEIGHT as u32,
         MARGINS,

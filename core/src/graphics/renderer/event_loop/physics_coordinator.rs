@@ -3,7 +3,9 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::application::renderer_snapshot::RendererSnapshot;
-use crate::application::{DomainCommand, MainContent, PhysicsEvent, PhysicsThread};
+use crate::application::{
+    DomainCommand, MainContent, PhysicsEvent, PhysicsThread, SnapshotPublisher,
+};
 use arc_swap::ArcSwapOption;
 use std::sync::Arc;
 
@@ -40,11 +42,9 @@ impl PhysicsCoordinator {
         application: MainContent,
         wakeup_callback: Box<dyn Fn() + Send + Sync + 'static>,
     ) -> Self {
-        // Get snapshot slot before moving MainContent
-        let snapshot_slot = application.get_snapshot_slot();
-
-        // Spawn physics thread
-        let physics_thread = PhysicsThread::spawn(application, wakeup_callback);
+        let publisher = SnapshotPublisher::new();
+        let snapshot_slot = publisher.slot();
+        let physics_thread = PhysicsThread::spawn(application, publisher, wakeup_callback);
         Self {
             physics_thread: Some(physics_thread),
             snapshot_slot: Some(snapshot_slot),

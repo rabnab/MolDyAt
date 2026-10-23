@@ -51,11 +51,12 @@ fn runner_with_snapshot_steps(
     steps: u32,
     snapshot_every: u32,
 ) -> (HeadlessRunner, Rc<RefCell<Vec<u64>>>) {
-    let world_rect = moldyat_core::application::MainContent::bootstrap_world_rect(
-        1280,
-        720,
-        moldyat_core::graphics::renderer::margins::Margins::new(110.0, 50.0, 50.0, 50.0),
-    );
+    let world_rect =
+        moldyat_core::graphics::renderer::ViewportTransform::compute_world_bounds_from_window_size(
+            1280,
+            720,
+            moldyat_core::graphics::renderer::margins::Margins::new(110.0, 50.0, 50.0, 50.0),
+        );
     let application =
         build_application(world_rect, &SimConfig::default(), None).expect("application");
     let recorded = Rc::new(RefCell::new(Vec::new()));
@@ -103,11 +104,12 @@ fn headless_output(mut config: HeadlessConfig, application: MainContent) -> (Str
 }
 
 fn seeded_headless_output() -> String {
-    let world_rect = moldyat_core::application::MainContent::bootstrap_world_rect(
-        1280,
-        720,
-        moldyat_core::graphics::renderer::margins::Margins::new(110.0, 50.0, 50.0, 50.0),
-    );
+    let world_rect =
+        moldyat_core::graphics::renderer::ViewportTransform::compute_world_bounds_from_window_size(
+            1280,
+            720,
+            moldyat_core::graphics::renderer::margins::Margins::new(110.0, 50.0, 50.0, 50.0),
+        );
 
     let config = HeadlessConfig {
         steps: 6,
@@ -444,7 +446,7 @@ fn test_seeded_operators_run_does_not_depend_on_thread_count() {
 }
 
 fn test_world_rect() -> moldyat_core::objects2d::Rect {
-    moldyat_core::application::MainContent::bootstrap_world_rect(
+    moldyat_core::graphics::renderer::ViewportTransform::compute_world_bounds_from_window_size(
         1280,
         720,
         moldyat_core::graphics::renderer::margins::Margins::new(110.0, 50.0, 50.0, 50.0),

@@ -10,12 +10,12 @@ summary line, so a CI failure can be diagnosed without rendering.
 ## Running
 
 ```bash
-cargo ci-test-drift   # = cargo test -p moldyat_core -- --ignored --nocapture
+cargo ci-test-drift   # = cargo test -p thermo_physics -- --ignored --nocapture
 ```
 
 All scenarios are `#[ignore = "suite:drift"]`, so a plain `cargo test` skips
 them. CI runs the alias in a step of the `test` job, after the unit tests and
-reusing their build. The alias runs every ignored test of `moldyat_core`, so
+reusing their build. The alias runs every ignored test of `thermo_physics`, so
 it also runs the two `#[ignore = "suite:physics (slow)"]` tests
 (`test_overlap_fallback_stays_rare_in_a_gas_with_walls`,
 `test_virial_pressure_2d_matches_wall_pressure`); they are not drift
@@ -26,8 +26,8 @@ Commands follow the
 
 ## Harness
 
-The harness is `core/src/application/core/tests/drift_harness.rs`; the
-scenarios are in `core/src/application/core/tests/drift_harness/`
+The harness is `crates/thermo_physics/src/application/core/tests/drift_harness.rs`; the
+scenarios are in `crates/thermo_physics/src/application/core/tests/drift_harness/`
 (`dense_gas.rs`, `binary_mixture.rs`, `neighbor_lists.rs`, `wall_reflection.rs`,
 `tests.rs`).
 
@@ -143,7 +143,7 @@ Threshold updates are allowed only when behavior changed intentionally (for exam
 
 1. Run drift scenarios locally with deterministic inputs:
    ```bash
-   cargo ci-test-drift   # = cargo test -p moldyat_core -- --ignored --nocapture
+   cargo ci-test-drift   # = cargo test -p thermo_physics -- --ignored --nocapture
    ```
 2. Collect the `DRIFT_SCENARIO` lines from:
    - current `master` (before change),

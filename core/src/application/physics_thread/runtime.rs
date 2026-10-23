@@ -2,8 +2,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use super::ShutdownSignal;
 use super::command_handler::DomainCommandHandler;
+use super::{ShutdownSignal, SnapshotPublisher};
 use crate::application::DomainCommand;
 use crate::application::MainContent;
 use crate::application::PhysicsEvent;
@@ -40,6 +40,7 @@ impl PhysicsRuntime {
     pub(crate) fn run(
         &self,
         simulation: &mut MainContent,
+        publisher: &mut SnapshotPublisher,
         receiver: &Receiver<DomainCommand>,
         events: &Sender<PhysicsEvent>,
         shutdown_signal: &ShutdownSignal,
@@ -63,7 +64,7 @@ impl PhysicsRuntime {
 
         while !shutdown_signal.should_shutdown() {
             let world_resized = {
-                let mut handler = DomainCommandHandler::new(simulation, events);
+                let mut handler = DomainCommandHandler::new(simulation, publisher, events);
                 self.drain_commands(receiver, &mut handler);
                 changed |= handler.commands_handled() > 0;
                 handler.resizes_applied() > 0
@@ -84,11 +85,7 @@ impl PhysicsRuntime {
                 changed = true;
                 // The heatmap's fields, only while the heatmap is shown, and
                 // sampled every few steps (see `record_thermo_fields_if_due`).
-                if simulation
-                    .runtime()
-                    .snapshot_layers()
-                    .contains(SceneLayers::THERMO)
-                {
+                if publisher.layers().contains(SceneLayers::THERMO) {
                     let log_timings = simulation.options().show_timings;
                     SimulationEngine::record_thermo_fields_if_due(
                         simulation.world_mut(),
@@ -107,8 +104,7 @@ impl PhysicsRuntime {
                         >= simulation.runtime().snapshot_interval())
             {
                 let snapshot_start = Instant::now();
-                let snapshot = simulation.create_snapshot();
-                simulation.runtime().publish_snapshot(snapshot);
+                publisher.publish(publisher.snapshot(simulation));
                 wakeup();
 
                 snapshot_time_total += snapshot_start.elapsed();
