@@ -314,7 +314,6 @@ fn snapshot_without_heavy_layers_skips_ball_render_data_and_thermo_grids() {
 
 #[test]
 fn dropping_the_thermo_layer_stops_and_clears_the_thermo_fields() {
-    use crate::application::core::SimulationEngine;
     use crate::application::scene_layers::SceneLayers;
 
     let mut publisher = SnapshotPublisher::new();
@@ -331,9 +330,10 @@ fn dropping_the_thermo_layer_stops_and_clears_the_thermo_fields() {
     );
     assert!(main_content.world().thermo_history().average().is_none());
 
-    // Shown again: the next recorded step starts a fresh history.
+    // Shown again: the next recorded step starts a fresh history (an empty
+    // history is recorded at once, see `record_thermo_fields_if_due`).
     publisher.set_layers(&mut main_content, SceneLayers::ALL);
-    SimulationEngine::record_thermo_fields(main_content.world_mut(), false);
+    main_content.step_recording_thermo_fields(true).unwrap();
     assert!(publisher.snapshot(&main_content).thermo_grid_spec.is_some());
 }
 

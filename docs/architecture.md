@@ -13,26 +13,45 @@ are in [refactoring-plan.md](plan/refactoring-plan.md).
 
 | Crate | Package | Contents |
 |---|---|---|
-| `crates/thermo_physics` | `thermo_physics` | The physics: particles and species, pair potentials and the SIMD force kernel, cell grid and Verlet lists, walls and operators (`objects2d`); the world, `MainContent` and its stepping (`application/core`); run settings (`sim_config`), units, stats, thermo fields and saves (`persistence`). Dependencies: rayon, serde, rand, toml, log; no windowing or GPU stack |
-| `core` | `moldyat_core` | The physics thread and its snapshot publisher, `DomainCommand` and its handler, `OperatorCommand`s, `RendererSnapshot` and its builder (`application/snapshot.rs`), and the backend-independent UI layer (`graphics`: event loop, tools, viewport, sidebar model, energy plot window) |
-| `wgpu_renderer` | `moldyat_wgpu` | The `moldyat` binary: CLI, the wgpu window and render pipelines, and the headless runner |
+| `crates/thermo_physics` | `thermo_physics` | The physics: particles and species, pair potentials and the SIMD force kernel, cell grid and Verlet lists, walls and operators (`objects2d`); the world, `MainContent` and its stepping (`application/core`); run settings (`sim_config`), units, stats, thermo fields and saves (`persistence`). Dependencies: rayon, serde, rand, toml, log |
+| `crates/thermo_runtime` | `thermo_runtime` | Running a simulation without a window: the physics thread and its `SnapshotPublisher`, `DomainCommand` and its handler, `OperatorCommand`s, `PhysicsEvent`, `RendererSnapshot` and its builder (`CreateSnapshot`), scene layers, and headless runs (`headless_cli`, `headless_runner`, `headless_output`, `headless_timings`). Dependencies: `thermo_physics`, arc-swap, serde_json, rayon, log |
+| `core` | `moldyat_core` | The backend-independent UI layer (`graphics`: event loop, tools, viewport, sidebar model, energy plot window) and the logger setup |
+| `wgpu_renderer` | `moldyat_wgpu` | The `moldyat` binary: command line, the wgpu window and render pipelines. For `--headless` it computes the default world from its window size and calls `thermo_runtime`, handing it the git commit it was built from (`HeadlessRunner::commit`) |
 
 Dependencies point one way: `moldyat_wgpu` → `moldyat_core` →
-`thermo_physics`. `thermo_physics` has no UI types: snapshots, scene layers
-and the viewport stay in `moldyat_core`.
+`thermo_runtime` → `thermo_physics`. `thermo_physics` and `thermo_runtime`
+build and test without a windowing or GPU stack: `cargo test -p
+thermo_physics`, `cargo test -p thermo_runtime`.
 
 `moldyat_core` re-exports the moved modules at their old paths
 (`moldyat_core::objects2d`, `moldyat_core::application::{core, persistence,
-sim_config, …}`, `MainContent`, `SimConfig`) for one release (#308), so code
-written against them still compiles. New code uses `thermo_physics`
-directly. The next steps of the split (`thermo_runtime`, `thermo_ui`) are in
-[refactoring-plan.md](plan/refactoring-plan.md) (M8, M9).
+operator_command, renderer_snapshot, …}`, `MainContent`, `DomainCommand`,
+…) for one release (#308, #309), so code written against them still
+compiles. New code uses `thermo_physics` and `thermo_runtime` directly. The
+last step of the split (`thermo_ui`, M9) is in
+[refactoring-plan.md](plan/refactoring-plan.md).
 
-Tests of the physics crate run without a window: `cargo test -p
-thermo_physics`. Its test world builders (`thermo_physics::test_support`) and
-a few test-only helpers are also compiled for the tests of `moldyat_core`,
-through the `test-support` feature of its dev-dependency; normal builds never
-enable it.
+### The `thermo_physics` API
+
+Only what `thermo_runtime` and the UI use is public (#309); everything
+else is crate-private, so the physics can change its internals without
+touching the other crates.
+
+- `SimulationWorld` has no public fields. Its state is read through
+  accessors (`balls()`, `sim()`, `physics()`, `cell_grid()`,
+  `wall_chains()`, `valve_segments()`, `thermostats()`, …); it changes only
+  through `MainContent` methods, so the runtime cannot break invariants
+  such as the index contract.
+- The physics thread steps with `MainContent::step_recording_thermo_fields`
+  (thermo fields only while the heatmap is shown); headless runs use
+  `MainContent::simulation_step`. `SimulationEngine` and
+  `MainContent::step_parts` are internal.
+- The feature `test-support` adds what the tests of dependent crates need:
+  the world builders in `thermo_physics::test_support`, a few test helpers
+  (`Ball2D::new`, `SPECIES_M`, `resolve_line_segment_collisions`, …) and
+  mutable access (`MainContent::world_mut`, `SimulationWorld::balls_mut`,
+  `sim_mut`, `physics_mut`, `thermostats_mut`, `set_step_count`). Only
+  dev-dependencies enable it; normal builds never contain these.
 
 ## Threads
 
@@ -65,14 +84,14 @@ FrameRenderer → RenderGraph → GPU
 
 | Layer | Type | Lives in | Owns |
 |---|---|---|---|
-| Command boundary | `DomainCommand` | `core/src/application/domain_command.rs` | Every change the UI asks of the simulation |
-| Physics runtime | `PhysicsRuntime`, `DomainCommandHandler` | `core/src/application/physics_thread/` | The thread loop: draining commands, sleep cadence, snapshot cadence, wakeups, shutdown, steps/s reporting |
+| Command boundary | `DomainCommand` | `crates/thermo_runtime/src/application/domain_command.rs` | Every change the UI asks of the simulation |
+| Physics runtime | `PhysicsRuntime`, `DomainCommandHandler` | `crates/thermo_runtime/src/application/physics_thread/` | The thread loop: draining commands, sleep cadence, snapshot cadence, wakeups, shutdown, steps/s reporting |
 | Physics-thread owner | `MainContent` | `crates/thermo_physics/src/application/core/mod.rs` | The world plus `StepConfig` (time step, ball factory), `RuntimeOptions` (step-by-step, timing log, ball-stats display, real-units display; kept across loads, never saved) and `PhysicsRuntimeState` (wait time, snapshot interval, physics FPS, save store, world generation, pause during a window resize) |
-| Snapshots | `SnapshotPublisher`, `CreateSnapshot` | `core/src/application/physics_thread.rs`, `core/src/application/snapshot.rs` | The slot shared with the renderer and the requested layers; building a `RendererSnapshot` from a `MainContent` |
+| Snapshots | `SnapshotPublisher`, `CreateSnapshot` | `crates/thermo_runtime/src/application/physics_thread.rs`, `crates/thermo_runtime/src/application/snapshot.rs` | The slot shared with the renderer and the requested layers; building a `RendererSnapshot` from a `MainContent` |
 | Run settings | `SimConfig` | `crates/thermo_physics/src/application/sim_config/` | Time step, speed limit, force cap and cutoff, Verlet skin, snapshot interval; built from defaults, a `--config` TOML file and CLI flags, stored in saves (see below) |
 | World state | `SimulationWorld` | `crates/thermo_physics/src/application/core/mod.rs` | Balls, `BallPhysics` constants, cell grid, stats, operator collections (line segments, valves, wall chains, source spheres, thermostats), the ghost wall and thermo field history; physical state only, no UI flags (#305) |
 | Stepping | `SimulationEngine` | `crates/thermo_physics/src/application/core/simulation_engine.rs` | One simulation step over a `SimulationWorld` (see below); holds no state |
-| Operator mutations | `OperatorCommand` structs | `core/src/application/operator_command/` | Placing, changing and deleting operators |
+| Operator mutations | `OperatorCommand` structs | `crates/thermo_runtime/src/application/operator_command/` | Placing, changing and deleting operators |
 | Physics primitives | `Ball2D`, `SpeciesTable`, `BallPhysics`, `CellGrid`, operators | `crates/thermo_physics/src/objects2d/` | Ball data, particle species, pair potential and SIMD force kernel, Verlet lists, wall contact, operator data models |
 | Renderer state | `UnifiedRenderState` | `core/src/graphics/renderer/event_loop/` | Input handler, physics bridge, and `RenderStateData` (viewport, energy window, renderer config, cursor and tool state, last snapshot, frame metrics) |
 | Backend | `WgpuWindow` and friends | `wgpu_renderer/src/wgpu/` | Window, GPU context, event routing, frame submission, render pipelines |
@@ -326,7 +345,7 @@ instead of running it with different physics.
 ## Headless mode
 
 `moldyat --headless` runs the same `MainContent` without a window
-(`wgpu_renderer/src/headless_runner.rs`). It steps the simulation directly on
+(`crates/thermo_runtime/src/headless_runner.rs`). It steps the simulation directly on
 the main thread and writes snapshots as versioned JSON Lines
 (`headless.v2`: `run_start`, `frame`, `run_end` records) to stdout or a file.
 Seeded runs are deterministic; they back the headless regression fixtures

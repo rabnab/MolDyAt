@@ -1,8 +1,8 @@
 # Refactoring Plan: Maintainability, Extensibility, Performance
 
-Status: accepted direction, decisions recorded 2026-10-04 (see §6). Phases 1
-and 2 have landed, Phase 3 except M8 (in review) and M9; the remaining work
-was regrouped into Phases 4–8 on 2026-10-23 (see §4). Successor to the runtime refactor in
+Status: accepted direction, decisions recorded 2026-10-04 (see §6). Phases
+1–3 have landed; the remaining work was regrouped into Phases 4–8 on
+2026-10-23 (see §4). Successor to the runtime refactor in
 [refactor_architecture.md](../done/refactor_architecture.md) (#137, landed). The current
 structure is described in [architecture.md](../architecture.md).
 
@@ -57,9 +57,9 @@ lock-free snapshot slot, documented index contracts.
 
 ## 2. Target architecture
 
-`thermo_physics` exists since M7 (#308) and `thermo_runtime` comes with M8
-(#309); after M8, `moldyat_core` holds only the UI layer and becomes
-`thermo_ui` in M9.
+`thermo_physics` exists since M7 (#308) and `thermo_runtime` since M8
+(#309); `moldyat_core` now holds only the UI layer and becomes `thermo_ui`
+in M9.
 
 ```text
 crates/
@@ -111,7 +111,7 @@ Size: **S** ≤ 1 day, **M** 2–4 days, **L** ≥ 1 week. "Deps" are hard prere
 | M5 | Split oversized modules | `core/line_segments.rs` (obstacles, sweep, overlap fallback), `unified_render_state.rs`, `line_segment_tool.rs`, `energy_renderer.rs`. Target < 400 lines per file; tests follow the topic-file rule. | M | – |
 | M6 | Central `SimConfig` | Collect `DT_GOAL`, `FPS_GOAL`, LJ defaults, skin, speed limit factor, snapshot interval into one serde struct; CLI and save files read/override it. | M | M1 |
 | M7 | Crate split: `thermo_physics` | Move `objects2d`, `application/core` (world, engine), persistence into a crate without winit/softbuffer/scirs2. Keep `moldyat_core` as a re-export shim for one release. | L | M1, M2 |
-| M8 | Crate split: `thermo_runtime` + headless | Physics thread, `DomainCommand`, snapshot, headless runner/output move out of the GPU crate into `crates/thermo_runtime`, which builds without a windowing stack. Tighten the `thermo_physics` API that M7 widened (about 100 former `pub(crate)` items made `pub`, among them `SimulationWorld` fields): keep `pub` only what the runtime and UI use, behind accessors or narrow methods instead of public fields. In review on `feature/master/309-thermo-runtime`. | L | M7 |
+| M8 | Crate split: `thermo_runtime` + headless | Physics thread, `DomainCommand`, snapshot, headless runner/output move out of the GPU crate into `crates/thermo_runtime`, which builds without a windowing stack. Tighten the `thermo_physics` API that M7 widened (about 100 former `pub(crate)` items made `pub`, among them `SimulationWorld` fields): keep `pub` only what the runtime and UI use, behind accessors or narrow methods instead of public fields. Done (#309): the physics thread, commands, snapshots and headless runs are in `thermo_runtime`; `SimulationWorld` has accessors instead of public fields, and `thermo_physics` exposes only what the other crates use (831 → 505 public items, see `docs/architecture.md`). | L | M7 |
 | M9 | Crate split: `thermo_ui` | After M8 `moldyat_core` holds only the UI layer (event loop, tools, viewport, sidebar model, energy window) and the logger setup. Move it to `crates/thermo_ui`, rename the package, and remove the re-exports kept for one release by #308 and #309 (callers use `thermo_physics` / `thermo_runtime` directly). The energy window moves as it is; it becomes a wgpu window and `softbuffer` is dropped in V4a. | S | M8 |
 | M10 | Docs refresh | Update `architecture.md`, move finished plans to `docs/done/` (done for `refactor_architecture.md`, `headless-renderer-plan.md`, `nose-hoover.md`, `operator-handling-review.md`), update the `operator-framework` skill. | S | after each epic |
 
@@ -198,7 +198,7 @@ GitHub issues:
 |---|---|---|---|
 | 1 | #219 | G1 #221, G2 #222, G3 #223, M1 #224, M3 #225, M4 #226, C1 #227, P1 #228, P3 #229 | – |
 | 2 | #220 | I1 #230, I2 #233, I3 #234, M6 #231, I4 #235, I5 #236, C2 #232, I6 #237, I7 #238 | – |
-| 3 | #304 | M2 #305, #295, #270, #273, #274, M5 #306, C4 #307, P2 #311, M7 #308 | M8 #309 (in review) |
+| 3 | #304 | M2 #305, #295, #270, #273, #274, M5 #306, C4 #307, P2 #311, M7 #308, M8 #309 | – |
 | 4 | – | – | M9 #310 |
 | 6 | – | – | #290, #303, #203 |
 | 7 | – | – | P8a/P8b #213, #250 |

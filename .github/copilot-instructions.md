@@ -36,7 +36,7 @@ Use this file as the single source of truth for commands and process rules. Othe
 
 Toolchain is pinned in `rust-toolchain.toml` (nightly). Use plain `cargo`. Use `--profile perf` for performance comparisons (`release` with thin LTO, faster to build); use `--release` only to build the optimised binary itself.
 
-- Crates: `thermo_physics` (physics, world, stepping, config, saves; no windowing stack), `moldyat_core` (physics thread, commands, snapshots, UI layer; re-exports `thermo_physics` at the old paths for one release), `moldyat_wgpu` (binary). Physics tests live in `thermo_physics`.
+- Crates: `thermo_physics` (physics, world, stepping, config, saves), `thermo_runtime` (physics thread, commands, snapshots, headless runs), both without a windowing stack; `moldyat_core` (UI layer; re-exports both at the old paths for one release); `moldyat_wgpu` (binary). Physics tests live in `thermo_physics`, physics-thread, snapshot and headless tests in `thermo_runtime`. `thermo_physics` exposes only what the other crates use: `SimulationWorld` has accessors, no public fields (see `docs/architecture.md#the-thermo_physics-api`).
 - Run a single test (name substring): `cargo test -p thermo_physics test_remove_invalid_balls`
 - Run an exact test name: `cargo test -p thermo_physics test_remove_invalid_balls -- --exact`
 - Run a single integration test file (`tests/<name>.rs`): `cargo test -p thermo_physics --test integration_file_name`

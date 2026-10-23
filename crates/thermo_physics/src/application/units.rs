@@ -5,10 +5,10 @@
 //! Physical units (#236, plan item I5).
 //!
 //! The simulation runs in reduced Lennard-Jones units: `σ = ε = m = k_B = 1`.
-//! A [`UnitSystem`] says which substance those units stand for and converts
+//! A `UnitSystem` says which substance those units stand for and converts
 //! both ways: literature parameters (Å, K, u) into reduced values for new
 //! species, and reduced results (temperature, time, energy, speed) into SI or
-//! common units for display. The reference is N₂ ([`UnitSystem::N2`]), the
+//! common units for display. The reference is N₂ (`UnitSystem::N2`), the
 //! built-in species `N2` with `σ* = ε* = m* = 1`.
 //!
 //! Conversions use f64; the simulation stores f32. The parameters are fitted

@@ -20,7 +20,7 @@ pub use valves::valve_span_problem;
 mod verbose;
 
 pub(crate) use runtime_options::RuntimeOptions;
-pub use simulation_engine::SimulationEngine;
+pub(crate) use simulation_engine::SimulationEngine;
 
 use crate::application::StepConfig;
 use crate::application::persistence::SaveStore;
@@ -48,7 +48,7 @@ use step_scratch::StepScratch;
 /// thermostats). This is the single source of truth for the physical
 /// state of the simulation world.
 ///
-/// Stepping and update orchestration live in [`SimulationEngine`];
+/// Stepping and update orchestration live in `SimulationEngine`;
 /// this struct is a pure state holder.
 pub struct SimulationWorld {
     /// World bounds for physics simulation

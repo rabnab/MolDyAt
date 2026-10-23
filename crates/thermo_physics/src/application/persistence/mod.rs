@@ -4,10 +4,10 @@
 
 //! Saving and loading the simulation world (issue #50).
 //!
-//! - [`format`]: the file layout ([`WorldFile`]) and its validation.
+//! - [`format`]: the file layout (`WorldFile`) and its validation.
 //! - `convert`: live world ⇄ file.
 //! - `migrate`: upgrading files of older format versions before they are read.
-//! - [`store`]: where files live ([`SaveStore`]).
+//! - `store`: where files live ([`SaveStore`]).
 //!
 //! [`MainContent::save_world`] and [`MainContent::load_world`] are the only
 //! entry points: Ctrl+S / Ctrl+O reach them on the physics thread through
@@ -22,13 +22,13 @@
 //! `tests/reference_saves.rs` loads each one through [`MainContent::load_world`]
 //! and checks its contents. An existing fixture is never edited or
 //! regenerated: it stands for the files users already have. A change that
-//! bumps [`WORLD_FILE_VERSION`] adds a new fixture, and every older one must
+//! bumps `WORLD_FILE_VERSION` adds a new fixture, and every older one must
 //! keep loading.
 //!
 //! # Additive and breaking changes (#271)
 //!
-//! A change to a file type ([`WorldFile`] and the types saved in it) is either
-//! additive, which keeps [`WORLD_FILE_VERSION`], or breaking, which bumps it
+//! A change to a file type (`WorldFile` and the types saved in it) is either
+//! additive, which keeps `WORLD_FILE_VERSION`, or breaking, which bumps it
 //! and adds a migration (see `migrate`).
 //!
 //! Additive, no version bump: older files simply lack the new data, and serde
@@ -38,9 +38,9 @@
 //!   existed, e.g. `#[serde(default = "default_friction")] friction: f32`
 //!   where `default_friction()` returns the value that used to be hard-coded.
 //! - A new top-level list is `#[serde(default)] probes: Vec<ProbeData>`,
-//!   and a new operator kind a new variant of [`format::OperatorData`]:
+//!   and a new operator kind a new variant of `format::OperatorData`:
 //!   older files have none.
-//! - [`WorldFile::validate`] must accept the default, so an old file that
+//! - `WorldFile::validate` must accept the default, so an old file that
 //!   lacks the field passes validation.
 //!
 //! That keeps old files loading. Whether newer files may load in older
@@ -88,7 +88,7 @@
 //! A file names each ball's species; mass, `σ` and `ε` come from the built-in
 //! species table when the file is loaded. So the built-in names and their
 //! mass, `σ` and `ε` are part of the file format: changing one is a breaking
-//! change (bump [`WORLD_FILE_VERSION`] and add a migration), or add a new
+//! change (bump `WORLD_FILE_VERSION` and add a migration), or add a new
 //! species instead of changing an existing one. `builtin_table_is_pinned`
 //! (in `objects2d/ball_impl/species.rs`) fails on any such change.
 

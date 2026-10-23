@@ -15,7 +15,7 @@ use rand::{RngExt, SeedableRng};
 /// Factory for creating Ball2D instances with various configurations.
 ///
 /// It owns the species table of the world it makes balls for (injected at
-/// construction, swapped only through [`Self::use_species`]), so
+/// construction, swapped only through `Self::use_species`), so
 /// `new_ball_species` always indexes that table.
 pub struct BallFactory {
     /// The world's species table: mass and contact radius of new balls.

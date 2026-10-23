@@ -33,7 +33,7 @@ impl Default for IntegrationConfig {
     }
 }
 
-/// Force cap and cutoff of every pair potential (see [`CapSettings`]), and
+/// Force cap and cutoff of every pair potential (see `CapSettings`), and
 /// the pairs that do not follow the mixing rule.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]

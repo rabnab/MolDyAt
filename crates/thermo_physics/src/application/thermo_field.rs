@@ -220,7 +220,7 @@ pub(crate) fn compute_viz_grid_dims(
 ///
 /// `grid_rows` and `grid_cols` specify the desired grid dimensions (e.g. from the
 /// physics `CellGrid`).  When either is zero the function falls back to
-/// [`compute_viz_grid_dims`] so behaviour is unchanged during start-up before the
+/// `compute_viz_grid_dims` so behaviour is unchanged during start-up before the
 /// cell grid is fully initialised.
 ///
 /// Returns `(temperature, pressure)` as flat row-major `ThermoGrid`s.

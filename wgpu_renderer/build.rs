@@ -34,12 +34,16 @@ fn git_path(name: &str) -> Option<PathBuf> {
 }
 
 fn main() {
-    // The sources this binary is built from (the workspace's two crates).
+    // The sources this binary is built from (every crate of the workspace).
     for source in [
         "src",
         "Cargo.toml",
         "../core/src",
         "../core/Cargo.toml",
+        "../crates/thermo_physics/src",
+        "../crates/thermo_physics/Cargo.toml",
+        "../crates/thermo_runtime/src",
+        "../crates/thermo_runtime/Cargo.toml",
         "../Cargo.toml",
     ] {
         watch(source);

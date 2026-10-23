@@ -11,9 +11,12 @@ The design history is in
 
 ## How a run works
 
-The headless code lives in `wgpu_renderer/src/` (`headless_cli.rs`,
-`headless_runner.rs`, `headless_output.rs`, `headless_timings.rs`), so the
-same `moldyat` binary runs both modes.
+The headless code lives in `crates/thermo_runtime/src/` (`headless_cli.rs`,
+`headless_runner.rs`, `headless_output.rs`, `headless_timings.rs`), a crate
+without a windowing or GPU stack. The same `moldyat` binary runs both
+modes: it parses the command line, computes the default world from its
+window size and, for `--headless`, hands both to the runner, together with
+the git commit it was built from (the `commit` of the timings report).
 
 1. `parse_headless_args` reads the flags below; without `--headless` the
    window starts as usual.
@@ -23,9 +26,10 @@ same `moldyat` binary runs both modes.
    balls never start inside a wall.
 3. It steps the simulation directly on the main thread with
    `MainContent::simulation_step()`; there is no physics thread.
-4. Snapshots come from `CreateSnapshot::create_snapshot()` (`moldyat_core`)
-   and are mapped to the export records in `headless_output.rs`. The renderer snapshot itself
-   is not the export format, so it can change without breaking consumers.
+4. Snapshots come from `CreateSnapshot::create_snapshot()` and are mapped
+   to the export records in `headless_output.rs`. The renderer snapshot
+   itself is not the export format, so it can change without breaking
+   consumers.
 
 Frames are written at step 0, at every `--snapshot-every` boundary, and at
 the last step even when the interval does not divide the step count.
@@ -99,7 +103,7 @@ position, including the thermo grids.
 
 A run with the same `--rng-seed`, flags and build (same target and profile)
 produces byte-identical output. Three tests in
-`wgpu_renderer/src/headless_runner/tests.rs` rely on this:
+`crates/thermo_runtime/src/headless_runner/tests.rs` rely on this:
 
 | Test | Scenario | Fixture |
 |---|---|---|

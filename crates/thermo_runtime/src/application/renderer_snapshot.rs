@@ -140,7 +140,7 @@ impl OperatorSnapshot {
     /// Returns `true` when `pos` is close to any placed operator.
     ///
     /// Checked operators: line segments, valve midpoints, and source sphere
-    /// centres.  The threshold is [`OPERATOR_PROXIMITY_THRESHOLD`] world
+    /// centres.  The threshold is `OPERATOR_PROXIMITY_THRESHOLD` world
     /// units so that a Ctrl-release ball placement does not interfere with
     /// operator interaction zones.
     pub fn is_near_any_operator(&self, pos: Vec2D) -> bool {

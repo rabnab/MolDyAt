@@ -10,11 +10,11 @@ description: Contract for changing headless mode - CLI flags, the JSONL headless
 ## Where things live
 | Concern | File | Tests |
 |---|---|---|
-| Flags, defaults, validation, `--help` table (`HEADLESS_OPTIONS`) | `wgpu_renderer/src/headless_cli.rs` (table in `headless_cli/options.rs`, `--valve` / `--line-segment` values in `headless_cli/specs.rs`) | `headless_cli/tests.rs` |
+| Flags, defaults, validation, `--help` table (`HEADLESS_OPTIONS`) | `crates/thermo_runtime/src/headless_cli.rs` (table in `headless_cli/options.rs`, `--valve` / `--line-segment` values in `headless_cli/specs.rs`) | `headless_cli/tests.rs` |
 | Shared flags (`--load`, `--save-dir`, `--config`), `--help` (`GENERAL_OPTIONS`) | `wgpu_renderer/src/cli.rs`, `cli/usage.rs` | `cli/tests.rs` |
-| World setup order, step loop, frame cadence | `wgpu_renderer/src/headless_runner.rs` | `headless_runner/tests.rs` |
-| JSONL records, console line, non-finite policy | `wgpu_renderer/src/headless_output.rs` | `headless_output/tests.rs` |
-| `--timings` report (`headless-timings.v1`) | `wgpu_renderer/src/headless_timings.rs` | read by `scripts/headless_perf.sh` |
+| World setup order, step loop, frame cadence | `crates/thermo_runtime/src/headless_runner.rs` | `headless_runner/tests.rs` |
+| JSONL records, console line, non-finite policy | `crates/thermo_runtime/src/headless_output.rs` | `headless_output/tests.rs` |
+| `--timings` report (`headless-timings.v1`) | `crates/thermo_runtime/src/headless_timings.rs` | read by `scripts/headless_perf.sh` |
 
 ## Rules
 - **Export model, not renderer model.** Records are built in `headless_output.rs` from `RendererSnapshot`. Do not serialize `RendererSnapshot` directly, and do not export UI fields such as `status_text`. If headless needs data the snapshot lacks, add an explicit field or accessor in core.
@@ -43,5 +43,5 @@ A refactor must leave the fixtures untouched. If a fixture changes, the PR chang
 
 ## Checklist for a headless change
 - Tests: CLI parsing (defaults, errors), record serialization (fields, schema version, non-finite values), sequencing, detail levels, stdout vs file.
-- `cargo test -p moldyat_wgpu`, `cargo ci-test-headless-regression`, `cargo fmt`, `cargo clippy --workspace -- -D warnings`.
+- `cargo test -p thermo_runtime` (headless runner, output, timings, CLI options), `cargo test -p moldyat_wgpu` (the binary's command line), `cargo ci-test-headless-regression`, `cargo fmt`, `cargo clippy --workspace -- -D warnings`.
 - Update `docs/headless.md` (flags table, record table, console line). If `scripts/headless_perf.sh` uses the changed flag, run it once.

@@ -14,7 +14,7 @@ impl MainContent {
         self.status_text_with_counts(fps, dt, None)
     }
 
-    /// [`Self::status_text`] with the ball count per species index already
+    /// `Self::status_text` with the ball count per species index already
     /// known (`counts`, from the snapshot's pass over the balls); `None`
     /// counts them here.
     pub fn status_text_with_counts(

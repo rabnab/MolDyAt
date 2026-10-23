@@ -5,15 +5,15 @@
 //! Wall-clock time spent in each phase of the physics step (#221).
 //!
 //! Always on: a step takes milliseconds and the timers cost one
-//! `Instant::now()` per [`PhaseClock::lap`] plus one per
-//! [`PhaseClock::start`], so there is no feature gate. Headless
+//! `Instant::now()` per `PhaseClock::lap` plus one per
+//! `PhaseClock::start`, so there is no feature gate. Headless
 //! perf runs (`--timings`, `scripts/headless_perf.sh`) read and reset them;
 //! nothing in the simulation depends on them.
 //!
-//! [`PhaseClock`] is the only timer of the step: each phase boundary is one
-//! [`PhaseClock::lap`], which books the time to [`PhaseTimings`] and, with
+//! `PhaseClock` is the only timer of the step: each phase boundary is one
+//! `PhaseClock::lap`, which books the time to [`PhaseTimings`] and, with
 //! the `measure-time` feature and the timing display (`F4`) on, also logs it
-//! on [`crate::logging::TIMING_TARGET`].
+//! on `crate::logging::TIMING_TARGET`.
 
 use std::time::{Duration, Instant};
 
@@ -53,7 +53,7 @@ impl Phase {
     }
 }
 
-/// Time summed over all steps since the last [`PhaseTimings::reset`].
+/// Time summed over all steps since the last `PhaseTimings::reset`.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct PhaseTimings {
     /// Steps that ran (paused steps do not count).

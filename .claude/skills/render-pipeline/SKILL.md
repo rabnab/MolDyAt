@@ -31,7 +31,7 @@ pub trait RenderPipeline: Any {
 - World-space pipelines use `ViewportMode::Inset` and `ctx.view_proj`. Screen-space layers (sidebar, text, labels, frame) build NDC positions and use `SceneUniforms::ndc(...)` with the identity `view_proj`.
 - Sizes that should look the same at every zoom are derived from the world extent (`gpu/geometry.rs`), not hard-coded in world units.
 - Return the right `layer()`: `BALLS`, `THERMO`, `READOUTS` or `BASE`. Pipelines outside the frame's layers are skipped; a pipeline that mixes layers checks `ctx.layers` for its own parts. Operators, previews, sidebar and text are `BASE` and must always draw (#216).
-- Data comes only from `PrepareContext` (`snapshot`, `operator_previews`, `cursor_world_pos`, margins, `thermo_display`). New simulation data goes into `RendererSnapshot` (built in `core/src/application/snapshot.rs`) and, if it is costly, behind a `SceneLayers` flag so the physics thread builds it only when drawn.
+- Data comes only from `PrepareContext` (`snapshot`, `operator_previews`, `cursor_world_pos`, margins, `thermo_display`). New simulation data goes into `RendererSnapshot` (built in `crates/thermo_runtime/src/application/snapshot.rs`) and, if it is costly, behind a `SceneLayers` flag so the physics thread builds it only when drawn.
 
 ## Registration and draw order
 - Register in `WgpuPipelines::new` (`wgpu_pipelines.rs`). Registration order is draw order: background (sidebar, frame, grid, thermo) → walls and operators → balls → cursor and labels → text. Store a handle in `PipelineHandles` only if other code must reach the pipeline (for example a key that changes its mode, handled in `wgpu_input.rs`).

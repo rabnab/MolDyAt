@@ -21,7 +21,7 @@ use rayon::prelude::*;
 /// `MainContent` still owns runtime-only bookkeeping and high-level step
 /// orchestration, while the world-only update path here now operates on
 /// [`SimulationWorld`] directly.
-pub struct SimulationEngine;
+pub(crate) struct SimulationEngine;
 
 impl SimulationEngine {
     /// `log_timings`: log each phase's time (`RuntimeOptions::show_timings`).
@@ -98,7 +98,7 @@ impl SimulationEngine {
     /// thermo history. Only the heatmap overlay (and headless output) uses
     /// them, so the physics thread calls this only while they are shown
     /// (the `THERMO` layer).
-    pub fn record_thermo_fields(world: &mut SimulationWorld, log_timings: bool) {
+    pub(crate) fn record_thermo_fields(world: &mut SimulationWorld, log_timings: bool) {
         if world.balls.len() != world.cached_force_results.len() {
             return;
         }

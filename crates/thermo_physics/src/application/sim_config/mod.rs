@@ -23,7 +23,7 @@
 //! Saves written before the config existed load with the defaults.
 //!
 //! Every key has an accepted range (the `MIN_*` / `MAX_*` constants), checked
-//! by [`SimConfig::validate`] for a config file, `--dt` and a save.
+//! by `SimConfig::validate` for a config file, `--dt` and a save.
 //!
 //! Unknown keys are rejected, here and in a save's `config`. That makes every
 //! key part of the save format: a key added later is unknown to this build,

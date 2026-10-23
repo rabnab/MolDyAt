@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 /// Physics settings that do not belong to the pair potential; they may change
 /// while the simulation runs. The force cap and cutoff live in the potential
-/// ([`CapSettings`]).
+/// (`CapSettings`).
 #[derive(Clone, Default)]
 pub struct PhysicsConstants {
     pub gravity: f32,
@@ -27,7 +27,7 @@ pub struct PhysicsConstants {
 pub struct ForceResult {
     /// Smallest centre distance to a neighbour, minus the two contact radii
     /// `σ_i/2 + σ_j/2` (negative inside the repulsive core). For a pair with
-    /// a `σ_ij` override this is not its [`BallPhysics::edge_gap`]; only
+    /// a `σ_ij` override this is not its `BallPhysics::edge_gap`; only
     /// tests read it.
     pub min_dist: f32,
     /// Total force vector acting on the ball from all neighbors
