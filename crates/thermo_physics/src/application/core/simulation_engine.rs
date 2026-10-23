@@ -42,7 +42,8 @@ impl SimulationEngine {
         }
     }
 
-    pub fn simulation_step(
+    #[cfg(test)]
+    pub(crate) fn simulation_step(
         world: &mut SimulationWorld,
         step_config: &StepConfig,
         options: &RuntimeOptions,
@@ -86,7 +87,7 @@ impl SimulationEngine {
     /// [`Self::record_thermo_fields`] every [`THERMO_SAMPLE_STRIDE`] steps,
     /// and right away when the history is empty (just shown, cleared after a
     /// resize or load), so the heatmap appears without waiting (#229).
-    pub fn record_thermo_fields_if_due(world: &mut SimulationWorld, log_timings: bool) {
+    pub(crate) fn record_thermo_fields_if_due(world: &mut SimulationWorld, log_timings: bool) {
         if world.thermo_history.is_empty() || world.step_count.is_multiple_of(THERMO_SAMPLE_STRIDE)
         {
             Self::record_thermo_fields(world, log_timings);

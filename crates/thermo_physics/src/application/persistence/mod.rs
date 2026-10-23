@@ -93,14 +93,16 @@
 //! (in `objects2d/ball_impl/species.rs`) fails on any such change.
 
 mod convert;
-pub mod format;
+pub(crate) mod format;
 mod migrate;
-pub mod store;
+pub(crate) mod store;
 
 #[cfg(test)]
 mod tests;
 
-pub use format::{WORLD_FILE_VERSION, WorldFile};
+#[cfg(test)]
+pub(crate) use format::WORLD_FILE_VERSION;
+pub(crate) use format::WorldFile;
 pub use store::SaveStore;
 
 use crate::application::core::SimulationWorld;

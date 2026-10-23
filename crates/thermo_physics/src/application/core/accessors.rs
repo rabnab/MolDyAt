@@ -49,7 +49,15 @@ impl MainContent {
         self.world.thermo_history.clear();
     }
 
+    /// Mutable access to the world, inside this crate and for the tests of
+    /// dependent crates (feature `test-support`).
+    #[cfg(any(test, feature = "test-support"))]
     pub fn world_mut(&mut self) -> &mut SimulationWorld {
+        &mut self.world
+    }
+
+    #[cfg(not(any(test, feature = "test-support")))]
+    pub(crate) fn world_mut(&mut self) -> &mut SimulationWorld {
         &mut self.world
     }
 
@@ -74,7 +82,7 @@ impl MainContent {
     }
 
     /// What a step needs: the world, the step settings and the options.
-    pub fn step_parts(&mut self) -> (&mut SimulationWorld, &StepConfig, &RuntimeOptions) {
+    pub(crate) fn step_parts(&mut self) -> (&mut SimulationWorld, &StepConfig, &RuntimeOptions) {
         let Self {
             world,
             step_config,
@@ -123,7 +131,7 @@ impl MainContent {
     }
 
     /// Display and stepping options (keys `D`, `S`, `F4`, `B`).
-    pub fn options(&self) -> &RuntimeOptions {
+    pub(crate) fn options(&self) -> &RuntimeOptions {
         &self.options
     }
 
@@ -194,7 +202,7 @@ impl SimulationWorld {
 
     /// Get world boundary rectangle with inset margin.
     /// Useful for preventing balls from spawning too close to walls.
-    pub fn world_region_inset(&self, inner_margin: f32) -> Rect {
+    pub(crate) fn world_region_inset(&self, inner_margin: f32) -> Rect {
         let world_region = self.world_region();
         let tl = world_region.get_tl();
         Rect::new(

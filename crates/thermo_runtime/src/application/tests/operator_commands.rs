@@ -33,7 +33,7 @@ fn ghost() -> GhostWall {
 fn push_ball(mc: &mut MainContent, pos: Vec2D, v: Vec2D) {
     let mut ball = Ball2D::new(1, pos, SPECIES_M);
     ball.v = v;
-    mc.world_mut().balls.push(ball);
+    mc.world_mut().balls_mut().push(ball);
 }
 
 #[test]
@@ -45,7 +45,7 @@ fn clearing_the_ghost_stops_collisions() {
 
     let _ = mc.resolve_line_segment_collisions();
 
-    assert!(mc.world().balls[0].v.y < 0.0);
+    assert!(mc.world().balls()[0].v.y < 0.0);
 }
 
 // ── Deletion (from thermo_physics core/tests/object_deletion.rs) ──
@@ -57,7 +57,7 @@ fn make_two_walls_one_valve() -> (MainContent, usize) {
     mc.add_line_segment(Vec2D::new(-10.0, 0.0), Vec2D::new(10.0, 0.0));
     mc.add_valve_segment(0, 0.25, 0.75, true);
     mc.add_line_segment(Vec2D::new(-10.0, 5.0), Vec2D::new(10.0, 5.0));
-    let valve_id = mc.world().valve_segments.valves()[0].id;
+    let valve_id = mc.world().valve_segments().valves()[0].id;
     (mc, valve_id)
 }
 
@@ -70,6 +70,6 @@ fn delete_object_command_deletes_its_target() {
     })
     .execute(&mut mc);
 
-    assert!(mc.world().wall_chains.find(1).is_none());
-    assert_eq!(mc.world().line_segments.segments().len(), 2);
+    assert!(mc.world().wall_chains().find(1).is_none());
+    assert_eq!(mc.world().line_segments().segments().len(), 2);
 }

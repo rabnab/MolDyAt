@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 
 /// A phase of the physics step, as reported in [`PhaseTimings`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Phase {
+pub(crate) enum Phase {
     Neighbours,
     Positions,
     Forces,
@@ -30,7 +30,8 @@ pub enum Phase {
 
 impl Phase {
     /// Every phase, in step order.
-    pub const ALL: [Phase; 6] = [
+    #[cfg(test)]
+    pub(crate) const ALL: [Phase; 6] = [
         Phase::Neighbours,
         Phase::Positions,
         Phase::Forces,
@@ -40,7 +41,7 @@ impl Phase {
     ];
 
     /// Name in the timing log.
-    pub const fn label(self) -> &'static str {
+    pub(crate) const fn label(self) -> &'static str {
         match self {
             Phase::Neighbours => "neighbours",
             Phase::Positions => "positions",
@@ -73,12 +74,13 @@ pub struct PhaseTimings {
 }
 
 impl PhaseTimings {
-    pub fn reset(&mut self) {
+    pub(crate) fn reset(&mut self) {
         *self = Self::default();
     }
 
     /// Time booked to `phase`.
-    pub fn get(&self, phase: Phase) -> Duration {
+    #[cfg(test)]
+    pub(crate) fn get(&self, phase: Phase) -> Duration {
         match phase {
             Phase::Neighbours => self.neighbours,
             Phase::Positions => self.positions,
@@ -90,7 +92,7 @@ impl PhaseTimings {
     }
 
     /// Book `elapsed` to `phase`.
-    pub fn add(&mut self, phase: Phase, elapsed: Duration) {
+    pub(crate) fn add(&mut self, phase: Phase, elapsed: Duration) {
         let slot = match phase {
             Phase::Neighbours => &mut self.neighbours,
             Phase::Positions => &mut self.positions,

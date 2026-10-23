@@ -39,7 +39,7 @@ impl CellGrid {
     /// Create a new CellGrid covering the specified world rectangle with cells
     /// at least `list_radius` wide: the largest centre distance at which two
     /// balls are neighbours (pair cutoff plus skin).
-    pub fn new(world_rect: Rect, list_radius: f32) -> AppResult<Self> {
+    pub(crate) fn new(world_rect: Rect, list_radius: f32) -> AppResult<Self> {
         let sim_width = world_rect.w;
         let sim_height = world_rect.h;
         let (top_left_x, top_left_y) = world_rect.get_tl();
@@ -66,7 +66,7 @@ impl CellGrid {
                     max_y: top_left_y - (row + 1) as f32 * cell_size_y,
                 };
 
-                cell_row.push(Cell::new(bounds, row, col, grid_width));
+                cell_row.push(Cell::new(bounds));
             }
             cells.push(cell_row);
         }
@@ -102,7 +102,7 @@ impl CellGrid {
 
     /// Given a position in world coordinates, return the corresponding cell indices (row, column).
     /// Returns None if the position is outside the grid bounds.
-    pub fn get_cell_indices(&self, position: &Vec2D) -> Option<(usize, usize)> {
+    pub(crate) fn get_cell_indices(&self, position: &Vec2D) -> Option<(usize, usize)> {
         let col = ((position.x - self.grid_origin.0) / self.cell_size_x) as usize;
         let row = ((self.grid_origin.1 - position.y) / self.cell_size_y) as usize;
 
@@ -113,17 +113,17 @@ impl CellGrid {
         }
     }
 
-    pub fn get_cell_mut(&mut self, row: usize, col: usize) -> Option<&mut Cell> {
+    pub(crate) fn get_cell_mut(&mut self, row: usize, col: usize) -> Option<&mut Cell> {
         self.cells.get_mut(row)?.get_mut(col)
     }
 
-    pub fn get_cell(&self, row: usize, col: usize) -> Option<&Cell> {
+    pub(crate) fn get_cell(&self, row: usize, col: usize) -> Option<&Cell> {
         self.cells.get(row)?.get(col)
     }
 
     /// Move a ball from its old position to a new position, updating the cells accordingly.
     /// Returns Some((old_cell, new_cell)) if the ball changed cells, None otherwise.
-    pub fn move_ball(
+    pub(crate) fn move_ball(
         &mut self,
         ball_idx: usize,
         balls: &mut [Ball2D],
@@ -154,7 +154,7 @@ impl CellGrid {
     }
 
     /// Add a ball to the appropriate cell based on its current position.
-    pub fn add_ball(&mut self, ball_idx: usize, balls: &mut [Ball2D]) {
+    pub(crate) fn add_ball(&mut self, ball_idx: usize, balls: &mut [Ball2D]) {
         let position = *balls[ball_idx].get_position();
         if let Some((row, col)) = self.get_cell_indices(&position)
             && let Some(cell) = self.get_cell_mut(row, col)
@@ -165,7 +165,7 @@ impl CellGrid {
         }
     }
 
-    pub fn clear_all_cells(&mut self) {
+    pub(crate) fn clear_all_cells(&mut self) {
         for row in &mut self.cells {
             for cell in row {
                 cell.clear();
@@ -183,7 +183,7 @@ impl CellGrid {
     /// * `row` - Row index of center cell
     /// * `col` - Column index of center cell
     /// * `f` - Closure called for each neighbor cell
-    pub fn for_each_neighbor<F>(&self, row: usize, col: usize, mut f: F)
+    pub(crate) fn for_each_neighbor<F>(&self, row: usize, col: usize, mut f: F)
     where
         F: FnMut(&Cell),
     {

@@ -31,7 +31,7 @@ fn create_test_main_content_with_balls(ball_count: usize) -> MainContent {
             (&Vec2D::new(0.0, 0.0), &Vec2D::new(10.0, 10.0)),
             (0.0, 1.0),
         );
-        main_content.world_mut().balls.push(ball);
+        main_content.world_mut().balls_mut().push(ball);
     }
 
     // Add balls to cell grid
@@ -124,7 +124,7 @@ fn test_snapshot_updates_on_republish() {
     let mut main_content = create_test_main_content_with_balls(5);
 
     // Publish first snapshot
-    main_content.world_mut().step_count = 100;
+    main_content.world_mut().set_step_count(100);
     publisher.publish(publisher.snapshot(&main_content));
 
     let slot = publisher.slot();
@@ -132,7 +132,7 @@ fn test_snapshot_updates_on_republish() {
     assert_eq!(snapshot1.as_ref().unwrap().simulation_step, 100);
 
     // Update step count and republish
-    main_content.world_mut().step_count = 200;
+    main_content.world_mut().set_step_count(200);
     publisher.publish(publisher.snapshot(&main_content));
 
     let snapshot2 = slot.load();
@@ -319,7 +319,7 @@ fn dropping_the_thermo_layer_stops_and_clears_the_thermo_fields() {
 
     let mut publisher = SnapshotPublisher::new();
     let mut main_content = create_test_main_content_with_balls(20);
-    main_content.world_mut().sim.set_pause(false);
+    main_content.world_mut().sim_mut().set_pause(false);
     main_content.simulation_step().unwrap();
     assert!(publisher.snapshot(&main_content).thermo_grid_spec.is_some());
 
@@ -329,7 +329,7 @@ fn dropping_the_thermo_layer_stops_and_clears_the_thermo_fields() {
         &mut main_content,
         SceneLayers::ALL.difference(SceneLayers::THERMO),
     );
-    assert!(main_content.world().thermo_history.average().is_none());
+    assert!(main_content.world().thermo_history().average().is_none());
 
     // Shown again: the next recorded step starts a fresh history.
     publisher.set_layers(&mut main_content, SceneLayers::ALL);
@@ -344,7 +344,7 @@ fn seeded_gas(seed: u64, balls: usize) -> MainContent {
     let mut mc = thermo_physics::test_support::new_main_content_seeded(world_rect, seed)
         .expect("main content");
     mc.seed_random_balls_with_speed(balls, 3.0);
-    mc.world_mut().sim.set_pause(false);
+    mc.world_mut().sim_mut().set_pause(false);
     mc
 }
 
@@ -353,7 +353,7 @@ fn test_thermo_fields_are_sampled_every_stride_steps() {
     use crate::application::thermo_field::THERMO_SAMPLE_STRIDE;
 
     let mut mc = seeded_gas(229, 40);
-    let start = mc.world().step_count;
+    let start = mc.world().step_count();
     let steps = 3 * THERMO_SAMPLE_STRIDE + 2;
     for _ in 0..steps {
         mc.simulation_step().unwrap();
@@ -364,7 +364,7 @@ fn test_thermo_fields_are_sampled_every_stride_steps() {
     let strided = (start + 2..=end)
         .filter(|n| n.is_multiple_of(THERMO_SAMPLE_STRIDE))
         .count();
-    assert_eq!(mc.world().thermo_history.len(), 1 + strided);
+    assert_eq!(mc.world().thermo_history().len(), 1 + strided);
 }
 
 #[test]
@@ -385,12 +385,12 @@ fn test_strided_thermo_average_matches_per_step_average() {
     for step in 1..=THERMO_WINDOW_STEPS {
         mc.simulation_step().unwrap();
         let world = mc.world();
-        let (rows, cols) = world.cell_grid.get_grid_size();
+        let (rows, cols) = world.cell_grid().get_grid_size();
         let fields = || {
             compute_cell_thermo(
-                &world.balls,
-                &world.cached_force_results,
-                &world.world_rect,
+                world.balls(),
+                world.cached_force_results(),
+                &world.world_rect(),
                 rows.max(1),
                 cols.max(1),
             )

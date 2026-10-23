@@ -48,7 +48,7 @@ pub struct ForceResult {
 
 /// Default Verlet skin as a share of the reference cutoff (see
 /// [`BallPhysics::get_skin_thickness`]).
-pub const DEFAULT_SKIN_FACTOR: f32 = 0.2;
+pub(crate) const DEFAULT_SKIN_FACTOR: f32 = 0.2;
 
 #[derive(Clone)]
 pub struct BallPhysics {
@@ -62,7 +62,6 @@ pub struct BallPhysics {
     pair_overrides: Vec<PairOverride>,
     /// Skin as a share of the reference cutoff.
     skin_factor: f32,
-    wall_law: HardContact,
     /// Wall contact distance of each species, from `wall_law`.
     wall_contact: Vec<f32>,
     /// Contact distance (`σ_ij`) of each species pair, row-major.
@@ -86,7 +85,12 @@ impl Default for BallPhysics {
 impl BallPhysics {
     /// Lennard-Jones between every pair of `species` (Lorentz–Berthelot
     /// mixing), capped and cut off per `cap`, and hard wall contacts.
-    pub fn new(constants: PhysicsConstants, species: &SpeciesTable, cap: CapSettings) -> Self {
+    #[cfg(test)]
+    pub(crate) fn new(
+        constants: PhysicsConstants,
+        species: &SpeciesTable,
+        cap: CapSettings,
+    ) -> Self {
         Self::with_pair_overrides(constants, Arc::new(species.clone()), cap, Vec::new())
     }
 
@@ -94,7 +98,7 @@ impl BallPhysics {
     /// `ε_ij` from there instead of the mixing rule. The contact distance of
     /// an overridden pair is its `σ_ij`, and a like pair's `σ_ii` also sets
     /// the species' wall contact.
-    pub fn with_pair_overrides(
+    pub(crate) fn with_pair_overrides(
         constants: PhysicsConstants,
         species_table: Arc<SpeciesTable>,
         cap: CapSettings,
@@ -138,34 +142,33 @@ impl BallPhysics {
             wall_contact,
             contact,
             species_count: species.len(),
-            wall_law,
         }
     }
 
     /// The same physics with a Verlet skin of `skin_factor` times the
     /// reference cutoff.
-    pub fn with_skin_factor(mut self, skin_factor: f32) -> Self {
+    pub(crate) fn with_skin_factor(mut self, skin_factor: f32) -> Self {
         self.skin_factor = skin_factor;
         self
     }
 
     /// The species table the physics was built from (the world's).
-    pub fn species(&self) -> &Arc<SpeciesTable> {
+    pub(crate) fn species(&self) -> &Arc<SpeciesTable> {
         &self.species
     }
 
-    pub fn skin_factor(&self) -> f32 {
+    pub(crate) fn skin_factor(&self) -> f32 {
         self.skin_factor
     }
 
     /// Force cap and cutoff settings of the pair potential.
-    pub fn cap_settings(&self) -> &CapSettings {
+    pub(crate) fn cap_settings(&self) -> &CapSettings {
         self.pair_potential.cap_settings()
     }
 
     /// The species pairs whose `σ_ij` / `ε_ij` do not come from the mixing
     /// rule.
-    pub fn pair_overrides(&self) -> &[PairOverride] {
+    pub(crate) fn pair_overrides(&self) -> &[PairOverride] {
         &self.pair_overrides
     }
 
@@ -177,20 +180,20 @@ impl BallPhysics {
     /// Verlet skin: a fixed share (`skin_factor`) of the reference cutoff
     /// (`N2`), the same for every pair, so the rebuild threshold does not
     /// depend on the species.
-    pub fn get_skin_thickness(&self) -> f32 {
+    pub(crate) fn get_skin_thickness(&self) -> f32 {
         self.skin_factor * self.cap_settings().cutoff_factor * LJ_SIG
     }
 
     /// Centre distance below which a pair of `a` and `b` is listed as
     /// neighbours: its cutoff plus the skin.
-    pub fn list_radius(&self, a: SpeciesId, b: SpeciesId) -> f32 {
+    pub(crate) fn list_radius(&self, a: SpeciesId, b: SpeciesId) -> f32 {
         self.cutoff(a, b) + self.get_skin_thickness()
     }
 
     /// Largest [`Self::list_radius`] over the pairs of `present`; the cell
     /// grid needs cells at least this wide. For an empty set, that of the
     /// default species.
-    pub fn max_list_radius(&self, present: SpeciesSet) -> f32 {
+    pub(crate) fn max_list_radius(&self, present: SpeciesSet) -> f32 {
         if present.is_empty() {
             return self.list_radius(DEFAULT_SPECIES, DEFAULT_SPECIES);
         }
@@ -212,7 +215,7 @@ impl BallPhysics {
     ///
     /// # Returns
     /// Movement threshold in world units (skin_thickness / 3)
-    pub fn get_min_movement_for_update_hood(&self) -> f32 {
+    pub(crate) fn get_min_movement_for_update_hood(&self) -> f32 {
         self.get_skin_thickness() / 3.0
     }
 
@@ -226,15 +229,10 @@ impl BallPhysics {
         &self.pair_potential
     }
 
-    /// The law that decides how balls meet walls.
-    pub fn wall_law(&self) -> &impl WallLaw {
-        &self.wall_law
-    }
-
     /// Centre distance from a wall surface at which a ball of `species` is
     /// reflected (see [`WallLaw::contact_distance`]).
     #[inline]
-    pub fn wall_contact_distance(&self, species: SpeciesId) -> f32 {
+    pub(crate) fn wall_contact_distance(&self, species: SpeciesId) -> f32 {
         self.wall_contact[species.index()]
     }
 
@@ -242,13 +240,13 @@ impl BallPhysics {
     /// crosses zero (`σ_ij`, also for an overridden pair): where placement
     /// and the overlap checks put contact.
     #[inline]
-    pub fn contact_distance(&self, a: SpeciesId, b: SpeciesId) -> f32 {
+    pub(crate) fn contact_distance(&self, a: SpeciesId, b: SpeciesId) -> f32 {
         self.contact[a.index() * self.species_count + b.index()]
     }
 
     /// Gap between two balls: their centre distance minus their
     /// [`Self::contact_distance`]; negative if they overlap.
-    pub fn edge_gap(&self, a: &Ball2D, b: &Ball2D) -> f32 {
+    pub(crate) fn edge_gap(&self, a: &Ball2D, b: &Ball2D) -> f32 {
         let center_dist = a.get_position().dist(b.get_position()).norm();
         center_dist - self.contact_distance(a.species(), b.species())
     }
@@ -262,7 +260,7 @@ impl BallPhysics {
     ///
     /// # Returns
     /// `true` if their [`Self::edge_gap`] is less than margin
-    pub fn is_colliding(&self, this: &Ball2D, other: &Ball2D, margin: f32) -> bool {
+    pub(crate) fn is_colliding(&self, this: &Ball2D, other: &Ball2D, margin: f32) -> bool {
         self.edge_gap(this, other) < margin
     }
 
@@ -276,7 +274,7 @@ impl BallPhysics {
     ///
     /// # Returns
     /// Information about wall bounces that occurred
-    pub fn update_positions(
+    pub(crate) fn update_positions(
         &self,
         ball: &mut Ball2D,
         dt: f32,

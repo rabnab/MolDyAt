@@ -59,13 +59,13 @@ pub enum Joint {
 }
 
 impl Joint {
-    pub fn t_start(&self) -> f32 {
+    pub(crate) fn t_start(&self) -> f32 {
         match self {
             Joint::Valve { t_start, .. } | Joint::Gap { t_start, .. } => *t_start,
         }
     }
 
-    pub fn t_end(&self) -> f32 {
+    pub(crate) fn t_end(&self) -> f32 {
         match self {
             Joint::Valve { t_end, .. } | Joint::Gap { t_end, .. } => *t_end,
         }
@@ -92,7 +92,7 @@ pub struct WallChain {
 
 impl WallChain {
     /// A brand-new, unsplit wall: one piece spanning the whole chain.
-    pub fn new(id: usize, start: Vec2D, end: Vec2D, line_id: usize) -> Self {
+    pub(crate) fn new(id: usize, start: Vec2D, end: Vec2D, line_id: usize) -> Self {
         Self {
             id,
             start,
@@ -125,7 +125,7 @@ impl WallChain {
     }
 
     /// True if `line_id` is one of this chain's pieces.
-    pub fn contains_piece(&self, line_id: usize) -> bool {
+    pub(crate) fn contains_piece(&self, line_id: usize) -> bool {
         self.pieces.iter().any(|p| p.line_id == line_id)
     }
 }
@@ -140,12 +140,8 @@ pub struct WallChainCollection {
 }
 
 impl WallChainCollection {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     /// Register a brand-new, unsplit chain for a freshly-created wall piece.
-    pub fn add(&mut self, start: Vec2D, end: Vec2D, line_id: usize) -> usize {
+    pub(crate) fn add(&mut self, start: Vec2D, end: Vec2D, line_id: usize) -> usize {
         let id = self.next_id.next_id();
         self.chains.push(WallChain::new(id, start, end, line_id));
         id
@@ -155,23 +151,22 @@ impl WallChainCollection {
         self.chains.iter().find(|c| c.id == id)
     }
 
-    pub fn find_mut(&mut self, id: usize) -> Option<&mut WallChain> {
-        self.chains.iter_mut().find(|c| c.id == id)
-    }
-
     pub fn chains(&self) -> impl Iterator<Item = &WallChain> {
         self.chains.iter()
     }
 
     /// Remove chain `id`, returning it so the caller can drop its pieces and
     /// valves from their own collections.
-    pub fn remove(&mut self, id: usize) -> Option<WallChain> {
+    pub(crate) fn remove(&mut self, id: usize) -> Option<WallChain> {
         let index = self.chains.iter().position(|c| c.id == id)?;
         Some(self.chains.remove(index))
     }
 
     /// Mutable twin of `find_valve_joint`.
-    pub fn find_valve_joint_mut(&mut self, valve_id: usize) -> Option<(&mut WallChain, usize)> {
+    pub(crate) fn find_valve_joint_mut(
+        &mut self,
+        valve_id: usize,
+    ) -> Option<(&mut WallChain, usize)> {
         self.chains.iter_mut().find_map(|chain| {
             chain
                 .joints
@@ -186,18 +181,18 @@ impl WallChainCollection {
     /// Find the chain that owns piece `line_id`, if any. Every piece should
     /// belong to exactly one chain; `None` means the id is stale or this
     /// piece predates the chain model (shouldn't happen once fully wired up).
-    pub fn find_containing_piece(&self, line_id: usize) -> Option<&WallChain> {
+    pub(crate) fn find_containing_piece(&self, line_id: usize) -> Option<&WallChain> {
         self.chains.iter().find(|c| c.contains_piece(line_id))
     }
 
-    pub fn find_containing_piece_mut(&mut self, line_id: usize) -> Option<&mut WallChain> {
+    pub(crate) fn find_containing_piece_mut(&mut self, line_id: usize) -> Option<&mut WallChain> {
         self.chains.iter_mut().find(|c| c.contains_piece(line_id))
     }
 
     /// The chain holding valve `valve_id` and the index of its joint, so
     /// the flanking pieces are `pieces[index]` and `pieces[index + 1]`.
     /// `None` if no chain has a `Joint::Valve` with that id.
-    pub fn find_valve_joint(&self, valve_id: usize) -> Option<(&WallChain, usize)> {
+    pub(crate) fn find_valve_joint(&self, valve_id: usize) -> Option<(&WallChain, usize)> {
         self.chains.iter().find_map(|chain| {
             chain
                 .joints
@@ -211,7 +206,7 @@ impl WallChainCollection {
 
     /// World-space endpoints of valve `valve_id`, derived from its owning
     /// chain. `None` if no chain has a `Joint::Valve` with that id.
-    pub fn valve_span(&self, valve_id: usize) -> Option<(Vec2D, Vec2D)> {
+    pub(crate) fn valve_span(&self, valve_id: usize) -> Option<(Vec2D, Vec2D)> {
         let (chain, index) = self.find_valve_joint(valve_id)?;
         let joint = &chain.joints[index];
         Some((

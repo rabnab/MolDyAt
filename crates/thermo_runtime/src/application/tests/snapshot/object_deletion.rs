@@ -16,7 +16,7 @@ fn make_two_walls_one_valve_for_deletion() -> (MainContent, usize) {
     mc.add_line_segment(Vec2D::new(-10.0, 0.0), Vec2D::new(10.0, 0.0));
     mc.add_valve_segment(0, 0.25, 0.75, true);
     mc.add_line_segment(Vec2D::new(-10.0, 5.0), Vec2D::new(10.0, 5.0));
-    let valve_id = mc.world().valve_segments.valves()[0].id;
+    let valve_id = mc.world().valve_segments().valves()[0].id;
     (mc, valve_id)
 }
 
@@ -32,8 +32,8 @@ fn deleting_valve_leaves_a_gap_and_keeps_the_pieces() {
     mc.delete_object(ObjectRef::Valve(valve_id));
 
     let world = mc.world();
-    assert!(world.valve_segments.find(valve_id).is_none());
-    let chain = world.wall_chains.find(0).expect("wall stays");
+    assert!(world.valve_segments().find(valve_id).is_none());
+    let chain = world.wall_chains().find(0).expect("wall stays");
     assert_eq!(chain.pieces.len(), 2);
     assert!(matches!(
         chain.joints[0],

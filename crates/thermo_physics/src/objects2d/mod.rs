@@ -2,13 +2,13 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-pub mod ball_cell;
+pub(crate) mod ball_cell;
 pub mod ball_impl;
 pub mod line_segment;
-pub mod operator;
+pub(crate) mod operator;
 mod rect_2d;
 mod vec_2d;
-pub mod verbose_info;
+pub(crate) mod verbose_info;
 pub mod wall_chain;
 
 pub use line_segment::{SimLineSegment, ValveSegment};
@@ -21,4 +21,4 @@ pub use operator::{
 };
 pub use rect_2d::Rect;
 pub use vec_2d::Vec2D;
-pub use verbose_info::VerboseInfoMode;
+pub(crate) use verbose_info::VerboseInfoMode;

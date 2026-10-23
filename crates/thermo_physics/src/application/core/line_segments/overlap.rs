@@ -205,7 +205,7 @@ impl SimulationWorld {
     /// [`Self::resolve_wall_overlaps_with`] against the current solid
     /// obstacles, with a fresh buffer.
     #[cfg(any(test, feature = "test-support"))]
-    pub fn resolve_line_segment_collisions(&mut self) -> (f32, f32) {
+    pub(crate) fn resolve_line_segment_collisions(&mut self) -> (f32, f32) {
         let obstacles = self.collect_solid_obstacles();
         self.resolve_wall_overlaps(&obstacles)
     }

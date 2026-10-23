@@ -15,12 +15,8 @@ pub struct LineSegmentCollection {
 }
 
 impl LineSegmentCollection {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     /// Add a new line segment, returning its assigned ID.
-    pub fn add(&mut self, start: Vec2D, end: Vec2D) -> usize {
+    pub(crate) fn add(&mut self, start: Vec2D, end: Vec2D) -> usize {
         let id = self.next_id.next_id();
         self.segments.push(SimLineSegment::new(id, start, end));
         id
@@ -31,23 +27,18 @@ impl LineSegmentCollection {
         &self.segments
     }
 
-    /// Mutable access to all line segments.
-    pub fn segments_mut(&mut self) -> &mut Vec<SimLineSegment> {
-        &mut self.segments
-    }
-
     /// Find a segment by ID (immutable).
-    pub fn find(&self, id: usize) -> Option<&SimLineSegment> {
+    pub(crate) fn find(&self, id: usize) -> Option<&SimLineSegment> {
         self.segments.iter().find(|s| s.id == id)
     }
 
     /// Find a segment by ID (mutable).
-    pub fn find_mut(&mut self, id: usize) -> Option<&mut SimLineSegment> {
+    pub(crate) fn find_mut(&mut self, id: usize) -> Option<&mut SimLineSegment> {
         self.segments.iter_mut().find(|s| s.id == id)
     }
 
     /// Remove the line segment with `id`. Returns `false` if there was none.
-    pub fn remove(&mut self, id: usize) -> bool {
+    pub(crate) fn remove(&mut self, id: usize) -> bool {
         remove_by_id(&mut self.segments, id, |item| item.id)
     }
 }

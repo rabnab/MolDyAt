@@ -13,7 +13,7 @@
 
 pub mod application;
 pub mod error;
-pub mod logging;
+pub(crate) mod logging;
 pub mod objects2d;
 
 #[cfg(any(test, feature = "test-support"))]

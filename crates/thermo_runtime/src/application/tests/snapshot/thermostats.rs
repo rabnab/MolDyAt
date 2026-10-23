@@ -23,7 +23,7 @@ fn add_ball(mc: &mut MainContent, pos: Vec2D, velocity: Vec2D) {
 fn snapshot_includes_thermostats() {
     let mut mc = make_content();
     mc.add_thermostat(Vec2D::new(3.0, 4.0));
-    mc.toggle_thermostat(mc.world().thermostats.thermostats()[0].id);
+    mc.toggle_thermostat(mc.world().thermostats().thermostats()[0].id);
 
     let snapshot = mc.create_snapshot();
     assert_eq!(snapshot.operators.thermostats.len(), 1);
@@ -42,7 +42,7 @@ fn snapshot_reading(mc: &MainContent) -> f32 {
 fn deactivated_thermostat_snapshot_reading_is_live_and_read_only() {
     let mut mc = make_content();
     mc.add_thermostat(Vec2D::new(0.0, 0.0));
-    assert!(!mc.world().thermostats.thermostats()[0].is_active());
+    assert!(!mc.world().thermostats().thermostats()[0].is_active());
 
     add_ball(&mut mc, Vec2D::new(-0.5, 0.0), Vec2D::new(1.0, 0.0));
     add_ball(&mut mc, Vec2D::new(0.5, 0.0), Vec2D::new(-1.0, 0.0));
@@ -53,28 +53,28 @@ fn deactivated_thermostat_snapshot_reading_is_live_and_read_only() {
     assert!(first.is_finite() && first > 0.0);
 
     // Faster balls (an edit while paused, no step): the reading follows.
-    mc.world_mut().balls[0].v = Vec2D::new(3.0, 0.0);
-    mc.world_mut().balls[1].v = Vec2D::new(-3.0, 0.0);
+    mc.world_mut().balls_mut()[0].v = Vec2D::new(3.0, 0.0);
+    mc.world_mut().balls_mut()[1].v = Vec2D::new(-3.0, 0.0);
     let second = snapshot_reading(&mc);
     assert!(second > first);
 
     // Measuring changes nothing: an inactive thermostat never regulates.
-    assert_eq!(mc.world().balls[0].v, Vec2D::new(3.0, 0.0));
+    assert_eq!(mc.world().balls()[0].v, Vec2D::new(3.0, 0.0));
 }
 
 #[test]
 fn active_thermostat_snapshot_reading_follows_edits_while_paused() {
     let mut mc = make_content();
     mc.add_thermostat(Vec2D::new(0.0, 0.0));
-    let thermostat_id = mc.world().thermostats.thermostats()[0].id;
+    let thermostat_id = mc.world().thermostats().thermostats()[0].id;
     mc.toggle_thermostat(thermostat_id);
     add_ball(&mut mc, Vec2D::new(-0.5, 0.0), Vec2D::new(1.0, 0.0));
     add_ball(&mut mc, Vec2D::new(0.5, 0.0), Vec2D::new(-1.0, 0.0));
-    mc.world_mut().sim.set_pause(true);
+    mc.world_mut().sim_mut().set_pause(true);
 
     let first = snapshot_reading(&mc);
     assert!(first.is_finite() && first > 0.0);
-    mc.world_mut().balls[0].v = Vec2D::new(4.0, 0.0);
+    mc.world_mut().balls_mut()[0].v = Vec2D::new(4.0, 0.0);
     assert!(snapshot_reading(&mc) > first);
 
     // Moved away from its balls: no reading.
@@ -89,7 +89,7 @@ fn snapshot_reading_of_active_thermostats_uses_step_ownership() {
     let mut mc = make_content();
     mc.add_thermostat(Vec2D::new(-1.0, 0.0));
     mc.add_thermostat(Vec2D::new(1.0, 0.0));
-    for thermostat_id in [0, 1].map(|i| mc.world().thermostats.thermostats()[i].id) {
+    for thermostat_id in [0, 1].map(|i| mc.world().thermostats().thermostats()[i].id) {
         mc.toggle_thermostat(thermostat_id);
     }
     add_ball(&mut mc, Vec2D::new(-1.2, 0.0), Vec2D::new(1.0, 0.0));
@@ -116,7 +116,7 @@ fn rendering_off_measures_no_thermostat_readings() {
     // F2 off: labels are not drawn, so nothing is measured; the snapshot
     // keeps the thermostat's stored value.
     publisher.set_layers(&mut mc, SceneLayers::ALL.difference(SceneLayers::HEAVY));
-    let stored = mc.world().thermostats.thermostats()[0].current_local_temp;
+    let stored = mc.world().thermostats().thermostats()[0].current_local_temp;
     let reading = publisher.snapshot(&mc).operators.thermostats[0].current_local_temp;
     assert_eq!(reading.to_bits(), stored.to_bits());
 }

@@ -18,7 +18,7 @@ use crate::objects2d::Vec2D;
 
 /// One wall contact during a step, as needed by the velocity update.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct WallContact {
+pub(crate) struct WallContact {
     /// Unit wall normal, pointing away from the wall into the free region.
     pub normal: Vec2D,
     /// Fraction of the step before the first contact, in `[0, 1]`.
@@ -33,7 +33,7 @@ pub struct WallContact {
 
 /// Normal-direction outcome of the position update.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct NormalPosition {
+pub(crate) struct NormalPosition {
     /// Distance from the wall at the end of the step (`>= 0`).
     pub distance: f32,
     pub contact_fraction: f32,
@@ -44,7 +44,7 @@ pub struct NormalPosition {
 /// normal velocity `velocity` with normal acceleration `accel` (both positive
 /// away from the wall). Returns `None` if the ball does not reach the wall
 /// during the step. A ball already inside the wall is treated as touching it.
-pub fn resolve_normal_position(
+pub(crate) fn resolve_normal_position(
     distance: f32,
     velocity: f32,
     accel: f32,
@@ -94,7 +94,7 @@ pub fn resolve_normal_position(
 /// velocity-Verlet kick along the normal, `½·(a_old + a_new)·dt`. The kick is
 /// spread evenly over the step, so without bounces in between this is the
 /// usual split update: `-(v + kick·t_c) + kick·(1 - t_c)`.
-pub fn normal_velocity_after_contact(
+pub(crate) fn normal_velocity_after_contact(
     velocity: f32,
     kick: f32,
     contact: &WallContact,

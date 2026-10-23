@@ -20,7 +20,7 @@ pub const THICKNESS_TO_WORLD: f32 = 1.0;
 
 /// Extra half-width of a valve's rectangle beyond its wall, as a fraction of
 /// the world extent, so thin valves stay visible and clickable.
-pub const VALVE_PAD_FRAC: f32 = 0.008;
+pub(crate) const VALVE_PAD_FRAC: f32 = 0.008;
 
 /// Half-width (world units) of the rectangle a valve is drawn and hit-tested
 /// as, for a wall of `thickness` in a world whose larger side is `world_extent`.
@@ -68,7 +68,7 @@ pub struct ValveSegment {
 
 impl ValveSegment {
     /// Create a new valve.
-    pub fn new(id: usize, is_closed: bool) -> Self {
+    pub(crate) fn new(id: usize, is_closed: bool) -> Self {
         Self { id, is_closed }
     }
 }
@@ -85,13 +85,8 @@ impl SimLineSegment {
     }
 
     /// Direction vector from start to end.
-    pub fn direction(&self) -> Vec2D {
+    pub(crate) fn direction(&self) -> Vec2D {
         self.start.dist(&self.end)
-    }
-
-    /// Squared length of the segment.
-    pub fn length_sq(&self) -> f32 {
-        self.direction().norm_sq()
     }
 
     /// Closest point on this segment to `point`.
@@ -129,7 +124,8 @@ impl SimLineSegment {
     /// Outward normal toward `point`.
     ///
     /// Returns the unit normal of the segment that faces `point`.
-    pub fn normal_toward(&self, point: &Vec2D) -> Vec2D {
+    #[cfg(test)]
+    pub(crate) fn normal_toward(&self, point: &Vec2D) -> Vec2D {
         let d = self.direction();
         // Perpendicular candidates: (-dy, dx) and (dy, -dx)
         let n = Vec2D::new(-d.y, d.x);
@@ -155,7 +151,7 @@ impl SimLineSegment {
 /// Snap `pos` to the nearest simulation wall if within `threshold`.
 ///
 /// Wall snap takes priority over endpoint snap (per issue spec).
-pub fn snap_to_walls(pos: Vec2D, world_rect: &super::Rect, threshold: f32) -> Vec2D {
+pub(crate) fn snap_to_walls(pos: Vec2D, world_rect: &super::Rect, threshold: f32) -> Vec2D {
     let (x0, y0) = world_rect.get_tl();
     let (x1, y1) = world_rect.get_br();
     let min_x = f32::min(x0, x1);
@@ -180,7 +176,7 @@ pub fn snap_to_walls(pos: Vec2D, world_rect: &super::Rect, threshold: f32) -> Ve
 /// Snap `pos` to the nearest existing segment endpoint if within `threshold`.
 ///
 /// Returns the snapped position (unchanged if nothing is close enough).
-pub fn snap_to_endpoints(pos: Vec2D, segments: &[SimLineSegment], threshold: f32) -> Vec2D {
+pub(crate) fn snap_to_endpoints(pos: Vec2D, segments: &[SimLineSegment], threshold: f32) -> Vec2D {
     let threshold_sq = threshold * threshold;
     let mut best_dist_sq = threshold_sq;
     let mut best = pos;

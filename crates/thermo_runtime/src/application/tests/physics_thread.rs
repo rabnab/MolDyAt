@@ -300,7 +300,7 @@ fn test_resize_keeps_its_place_among_other_commands() {
     );
 
     assert_eq!(applied, 2);
-    assert_eq!(main_content.world().balls.len(), 1);
+    assert_eq!(main_content.world().balls().len(), 1);
     assert_eq!(
         main_content.world().world_region(),
         Rect::new(0.0, 0.0, 320.0, -320.0)

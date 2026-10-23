@@ -10,7 +10,7 @@ pub struct VerboseInfo {
     speed: bool,
 }
 
-pub enum VerboseInfoMode {
+pub(crate) enum VerboseInfoMode {
     Console,
     Main,
     Other,

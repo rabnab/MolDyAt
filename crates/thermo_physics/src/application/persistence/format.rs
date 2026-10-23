@@ -48,7 +48,7 @@ use std::collections::HashSet;
 /// file uses. Changing a built-in species is a breaking change: bump this
 /// version and add a migration, or add a new species instead of changing an
 /// existing one (`builtin_table_is_pinned`).
-pub const WORLD_FILE_VERSION: u32 = 3;
+pub(crate) const WORLD_FILE_VERSION: u32 = 3;
 
 /// Everything needed to rebuild a world. Energy plot data and simulation
 /// statistics are deliberately not part of it.
@@ -59,7 +59,7 @@ pub const WORLD_FILE_VERSION: u32 = 3;
 /// older files keep loading without a version bump. See the
 /// [`persistence`](super) module doc for what is additive and what is breaking.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct WorldFile {
+pub(crate) struct WorldFile {
     pub version: u32,
     /// World rectangle (`x`, `y` is the top-left corner, `h` is negative).
     pub world_rect: Rect,
@@ -92,7 +92,7 @@ pub struct WorldFile {
 /// as the skipped field `operators[i].<kind>`.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum OperatorData {
+pub(crate) enum OperatorData {
     WallChain(WallChainData),
     SourceSphere(SourceSphereData),
     Thermostat(ThermostatData),
@@ -152,7 +152,7 @@ fn known_operators<'de, D: serde::Deserializer<'de>>(
 /// config's `species` list, or the built-in library); mass and `σ` follow from
 /// it and are not stored.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct BallData {
+pub(crate) struct BallData {
     pub id: usize,
     pub species: String,
     pub pos: Vec2D,
@@ -166,7 +166,7 @@ pub struct BallData {
 /// The chain owns its pieces and valves: they are saved here, not in lists
 /// of their own (#274).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct WallChainData {
+pub(crate) struct WallChainData {
     pub id: usize,
     pub start: Vec2D,
     pub end: Vec2D,
@@ -177,7 +177,7 @@ pub struct WallChainData {
 /// One piece of a wall chain: the wall segment (`SimLineSegment`) with id
 /// `id`, over the fixed fractions `t_start..t_end` of the chain.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct ChainPieceData {
+pub(crate) struct ChainPieceData {
     pub id: usize,
     pub start: Vec2D,
     pub end: Vec2D,
@@ -193,7 +193,7 @@ pub struct ChainPieceData {
 /// would be skipped without being reported (#273).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
-pub enum JointData {
+pub(crate) enum JointData {
     /// The valve `valve_id` (`ValveSegment`) and whether it is closed.
     Valve {
         valve_id: usize,
@@ -250,7 +250,7 @@ impl<'de> Deserialize<'de> for JointData {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SourceSphereData {
+pub(crate) struct SourceSphereData {
     pub id: usize,
     pub center: Vec2D,
     pub active: bool,
@@ -261,7 +261,7 @@ pub struct SourceSphereData {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ThermostatData {
+pub(crate) struct ThermostatData {
     pub id: usize,
     pub position: Vec2D,
     pub active: bool,
@@ -285,7 +285,7 @@ fn check_finite(values: &[f32], what: &str) -> AppResult {
 
 /// Largest id a file may use. Id counters continue at `id + 1`, so ids near
 /// `usize::MAX` would overflow and hand out ids that are already taken.
-pub const MAX_ID: usize = u32::MAX as usize;
+pub(crate) const MAX_ID: usize = u32::MAX as usize;
 
 fn check_unique_ids(ids: impl Iterator<Item = usize>, what: &str) -> AppResult<HashSet<usize>> {
     let mut seen = HashSet::new();
@@ -304,7 +304,7 @@ impl WorldFile {
     /// Check everything the loader relies on, so a bad file is rejected before
     /// the running world is touched. Returns the file's species table and
     /// pair overrides, resolved once, for the world's constructor.
-    pub fn validate(&self) -> AppResult<ResolvedSpecies> {
+    pub(crate) fn validate(&self) -> AppResult<ResolvedSpecies> {
         if self.version != WORLD_FILE_VERSION {
             return Err(invalid(format!(
                 "version {} is not supported (expected {WORLD_FILE_VERSION})",
@@ -456,7 +456,7 @@ impl WorldFile {
     }
 
     /// The wall chains among the operators, in file order.
-    pub fn wall_chains(&self) -> impl Iterator<Item = &WallChainData> {
+    pub(crate) fn wall_chains(&self) -> impl Iterator<Item = &WallChainData> {
         self.operators.iter().filter_map(|operator| match operator {
             OperatorData::WallChain(chain) => Some(chain),
             _ => None,
@@ -464,7 +464,7 @@ impl WorldFile {
     }
 
     /// The source spheres among the operators, in file order.
-    pub fn source_spheres(&self) -> impl Iterator<Item = &SourceSphereData> {
+    pub(crate) fn source_spheres(&self) -> impl Iterator<Item = &SourceSphereData> {
         self.operators.iter().filter_map(|operator| match operator {
             OperatorData::SourceSphere(sphere) => Some(sphere),
             _ => None,
@@ -472,7 +472,7 @@ impl WorldFile {
     }
 
     /// The thermostats among the operators, in file order.
-    pub fn thermostats(&self) -> impl Iterator<Item = &ThermostatData> {
+    pub(crate) fn thermostats(&self) -> impl Iterator<Item = &ThermostatData> {
         self.operators.iter().filter_map(|operator| match operator {
             OperatorData::Thermostat(thermostat) => Some(thermostat),
             _ => None,
@@ -487,7 +487,7 @@ impl WorldFile {
         config
     }
 
-    pub fn to_json(&self) -> AppResult<String> {
+    pub(crate) fn to_json(&self) -> AppResult<String> {
         serde_json::to_string_pretty(self)
             .map_err(|e| AppError::CustomError(format!("cannot serialize world: {e}")))
     }
@@ -496,14 +496,15 @@ impl WorldFile {
     /// current one (see [`migrate`](super::migrate)) and validate it.
     /// Fields this build does not know are skipped; see
     /// [`Self::from_json_reporting`] for their names.
-    pub fn from_json(json: &str) -> AppResult<Self> {
+    #[cfg(test)]
+    pub(crate) fn from_json(json: &str) -> AppResult<Self> {
         Self::from_json_reporting(json).map(|(file, _)| file)
     }
 
     /// [`Self::from_json`], also returning the paths of the fields outside
     /// `config` that this build does not know and skipped
     /// (`balls[3].charge`, `pistons`), in file order (#273).
-    pub fn from_json_reporting(json: &str) -> AppResult<(Self, Vec<String>)> {
+    pub(crate) fn from_json_reporting(json: &str) -> AppResult<(Self, Vec<String>)> {
         let (file, ignored): (Self, _) = super::migrate::parse(json).map_err(newer_build_hint)?;
         file.validate()?;
         Ok((file, ignored))

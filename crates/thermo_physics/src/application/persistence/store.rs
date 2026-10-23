@@ -45,7 +45,7 @@ impl SaveStore {
     ///
     /// The data goes to a temporary file first and is renamed into place, so a
     /// crash cannot leave a truncated save behind.
-    pub fn save(&self, file: &WorldFile) -> AppResult<PathBuf> {
+    pub(crate) fn save(&self, file: &WorldFile) -> AppResult<PathBuf> {
         let json = file.to_json()?;
         fs::create_dir_all(&self.dir).map_err(|e| io_error("cannot create", &self.dir, e))?;
 
@@ -72,7 +72,7 @@ impl SaveStore {
     /// Only files named like [`Self::save`] names them count, ordered by
     /// timestamp and then by suffix; hand-named files (`world_backup.json`)
     /// are never picked.
-    pub fn latest(&self) -> Option<PathBuf> {
+    pub(crate) fn latest(&self) -> Option<PathBuf> {
         fs::read_dir(&self.dir)
             .ok()?
             .filter_map(Result::ok)
@@ -87,13 +87,14 @@ impl SaveStore {
     }
 
     /// Read and validate the file at `path`.
-    pub fn load(&self, path: &Path) -> AppResult<WorldFile> {
+    #[cfg(test)]
+    pub(crate) fn load(&self, path: &Path) -> AppResult<WorldFile> {
         self.load_reporting(path).map(|(file, _)| file)
     }
 
     /// [`Self::load`], also returning the fields this build skipped (see
     /// [`WorldFile::from_json_reporting`]).
-    pub fn load_reporting(&self, path: &Path) -> AppResult<(WorldFile, Vec<String>)> {
+    pub(crate) fn load_reporting(&self, path: &Path) -> AppResult<(WorldFile, Vec<String>)> {
         let json = fs::read_to_string(path).map_err(|e| io_error("cannot read", path, e))?;
         WorldFile::from_json_reporting(&json).map_err(|AppError::CustomError(message)| {
             AppError::CustomError(format!("{}: {message}", path.display()))
@@ -101,7 +102,7 @@ impl SaveStore {
     }
 
     /// The file `source` refers to.
-    pub fn resolve(&self, source: &LoadSource) -> AppResult<PathBuf> {
+    pub(crate) fn resolve(&self, source: &LoadSource) -> AppResult<PathBuf> {
         match source {
             LoadSource::Path(path) => Ok(path.clone()),
             LoadSource::Latest => self.latest().ok_or_else(|| {

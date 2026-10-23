@@ -19,7 +19,7 @@ mod valves;
 pub use valves::valve_span_problem;
 mod verbose;
 
-pub use runtime_options::RuntimeOptions;
+pub(crate) use runtime_options::RuntimeOptions;
 pub use simulation_engine::SimulationEngine;
 
 use crate::application::StepConfig;
@@ -52,14 +52,14 @@ use step_scratch::StepScratch;
 /// this struct is a pure state holder.
 pub struct SimulationWorld {
     /// World bounds for physics simulation
-    pub world_rect: Rect,
-    pub physics: BallPhysics,
+    pub(crate) world_rect: Rect,
+    pub(crate) physics: BallPhysics,
     /// The `[[species]]` list the table was built from, empty for the
     /// built-in library: what `MainContent::config` and saves write back.
     pub(crate) species_config: Vec<SpeciesConfig>,
 
-    pub sim: SimStats,
-    pub balls: Vec<Ball2D>,
+    pub(crate) sim: SimStats,
+    pub(crate) balls: Vec<Ball2D>,
     /// Per-ball position and species for the force kernel, refilled every step
     /// (same indices as `balls`). Scratch data: valid only inside `update_sim`,
     /// from `update_old_positions` to `compute_forces`. Balls are removed and
@@ -67,27 +67,27 @@ pub struct SimulationWorld {
     pub(crate) kernel_points: Vec<KernelPoint>,
     /// Buffers the step reuses instead of allocating (see `StepScratch`).
     pub(crate) scratch: StepScratch,
-    pub cell_grid: CellGrid,
+    pub(crate) cell_grid: CellGrid,
     /// Species of the balls in the world (it may also hold species whose
     /// last ball is gone, until the next `rebuild_cell_grid`). The cell size
     /// follows the largest pair list radius among them.
     pub(crate) species_present: SpeciesSet,
-    pub step_count: usize,
+    pub(crate) step_count: usize,
 
     /// Speed limit as a share of the shorter world side (`SimConfig`).
     pub(crate) speed_limit_factor: f32,
     /// Override for speed limit (None = use default calculation, Some(f32::INFINITY) = disable)
     pub(crate) speed_limit_override: Option<f32>,
     /// Cached force results from last physics step for reuse in rendering
-    pub cached_force_results: Vec<ForceResult>,
+    pub(crate) cached_force_results: Vec<ForceResult>,
     /// Rolling-window averager for per-cell T/P fields
-    pub thermo_history: ThermoFieldHistory,
+    pub(crate) thermo_history: ThermoFieldHistory,
     /// Time per step phase, for headless perf runs (#221).
     pub(crate) phase_timings: PhaseTimings,
     /// Line segment barriers placed by the operator panel
-    pub line_segments: LineSegmentCollection,
+    pub(crate) line_segments: LineSegmentCollection,
     /// Valve regions placed on top of line segments.
-    pub valve_segments: ValveCollection,
+    pub(crate) valve_segments: ValveCollection,
     /// Ties `line_segments` pieces and `valve_segments` valves together into
     /// user-drawn walls that may be split by valves. See
     /// `objects2d::wall_chain` for the full model. `line_segments` and
@@ -95,17 +95,112 @@ pub struct SimulationWorld {
     /// start/end/thickness; a valve's own is_closed/thickness); this is the
     /// structural layer that says which pieces and valves belong to the same
     /// wall, and in what order.
-    pub wall_chains: WallChainCollection,
+    pub(crate) wall_chains: WallChainCollection,
     /// Source spheres that emit balls into the simulation.
-    pub source_spheres: SourceSphereCollection,
+    pub(crate) source_spheres: SourceSphereCollection,
     /// Nosé-Hoover thermostats that control local regions.
-    pub thermostats: ThermostatCollection,
+    pub(crate) thermostats: ThermostatCollection,
     /// Wall being drawn or dragged right now; collides like a real wall.
     pub(crate) ghost_wall: Option<crate::objects2d::line_segment::GhostWall>,
     /// Deliberate physics faults so drift tests can prove they catch real
     /// regressions end to end. Test builds only.
     #[cfg(test)]
     pub(crate) test_faults: TestFaults,
+}
+
+/// Mutable access for the tests of dependent crates (feature
+/// `test-support`); never compiled into a normal build.
+#[cfg(any(test, feature = "test-support"))]
+impl SimulationWorld {
+    pub fn balls_mut(&mut self) -> &mut Vec<Ball2D> {
+        &mut self.balls
+    }
+
+    pub fn sim_mut(&mut self) -> &mut SimStats {
+        &mut self.sim
+    }
+
+    pub fn physics_mut(&mut self) -> &mut BallPhysics {
+        &mut self.physics
+    }
+
+    pub fn thermostats_mut(&mut self) -> &mut ThermostatCollection {
+        &mut self.thermostats
+    }
+
+    pub fn set_step_count(&mut self, step_count: usize) {
+        self.step_count = step_count;
+    }
+}
+
+/// Read-only views of the world for the runtime and the UI (#309): the
+/// fields stay private to `thermo_physics`, so only its own code can break
+/// invariants such as the index contract.
+impl SimulationWorld {
+    /// World bounds of the physics.
+    pub fn world_rect(&self) -> Rect {
+        self.world_rect
+    }
+
+    /// Pair potentials, species and run constants.
+    pub fn physics(&self) -> &BallPhysics {
+        &self.physics
+    }
+
+    /// Energies, temperature, wall momentum and other step statistics.
+    pub fn sim(&self) -> &SimStats {
+        &self.sim
+    }
+
+    /// The balls; cell and neighbour lists index into this vector.
+    pub fn balls(&self) -> &[Ball2D] {
+        &self.balls
+    }
+
+    /// The physics cell grid.
+    pub fn cell_grid(&self) -> &CellGrid {
+        &self.cell_grid
+    }
+
+    /// Steps run so far.
+    pub fn step_count(&self) -> usize {
+        self.step_count
+    }
+
+    /// The last step's force results, in ball order (empty before the first step).
+    pub fn cached_force_results(&self) -> &[ForceResult] {
+        &self.cached_force_results
+    }
+
+    /// Rolling window of the per-cell temperature and pressure fields.
+    pub fn thermo_history(&self) -> &ThermoFieldHistory {
+        &self.thermo_history
+    }
+
+    /// Wall pieces.
+    pub fn line_segments(&self) -> &LineSegmentCollection {
+        &self.line_segments
+    }
+
+    /// Valves.
+    pub fn valve_segments(&self) -> &ValveCollection {
+        &self.valve_segments
+    }
+
+    /// Walls, each a chain of pieces and valves.
+    pub fn wall_chains(&self) -> &WallChainCollection {
+        &self.wall_chains
+    }
+
+    /// Source spheres.
+    pub fn source_spheres(&self) -> &SourceSphereCollection {
+        &self.source_spheres
+    }
+
+    /// Thermostats.
+    pub fn thermostats(&self) -> &ThermostatCollection {
+        &self.thermostats
+    }
 }
 
 impl SimulationWorld {
@@ -187,7 +282,7 @@ pub struct PhysicsRuntimeState {
     paused_for_resize: bool,
 }
 
-pub struct StatsAccumulator {
+pub(crate) struct StatsAccumulator {
     pub(crate) pot: f32,
     pub(crate) kin: f32,
     pub(crate) v_com: Vec2D,

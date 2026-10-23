@@ -9,7 +9,7 @@
 
 /// Display and stepping options, toggled by keys.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RuntimeOptions {
+pub(crate) struct RuntimeOptions {
     /// Status text in SI units instead of reduced units (key `D`).
     pub(crate) real_data: bool,
     /// Pause after every step (key `S`).

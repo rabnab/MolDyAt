@@ -51,29 +51,31 @@ impl CreateSnapshot for MainContent {
 
         RendererSnapshot {
             balls,
-            simulation_step: world.step_count as u64,
+            simulation_step: world.step_count() as u64,
             world_generation: self.runtime().world_generation(),
             layers,
-            kinetic_energy: world.sim.get_kinetic_energy(),
-            potential_energy: world.sim.get_potential_energy(),
-            time: world.sim.get_time(),
+            kinetic_energy: world.sim().get_kinetic_energy(),
+            potential_energy: world.sim().get_potential_energy(),
+            time: world.sim().get_time(),
             // FPS not available during snapshot creation
             status_text: self.status_text_with_counts(0, step_config.get_time_step(), counts),
-            cell_grid_bounds: world.cell_grid.world_rect(),
+            cell_grid_bounds: world.cell_grid().world_rect(),
             cursor_species: step_config.get_ball_factory().new_ball_species(),
             species: Arc::clone(world.species()),
             cursor_ring_radii: ring_radii(
-                &world.physics,
+                world.physics(),
                 step_config.get_ball_factory().new_ball_species(),
             ),
-            gravity_force_multiple: current_gravity_force_multiple(world.physics.constants.gravity),
+            gravity_force_multiple: current_gravity_force_multiple(
+                world.physics().constants.gravity,
+            ),
             created_at: std::time::Instant::now(),
             // Create lightweight grid spec instead of cloning the full CellGrid
             // This avoids cloning the cell vector while providing all info needed for rendering
             grid_spec: {
-                let (rows, cols) = world.cell_grid.get_grid_size();
-                let (cell_width, cell_height) = world.cell_grid.get_cell_size();
-                let world_rect = world.cell_grid.world_rect();
+                let (rows, cols) = world.cell_grid().get_grid_size();
+                let (cell_width, cell_height) = world.cell_grid().get_cell_size();
+                let world_rect = world.cell_grid().world_rect();
                 crate::application::renderer_snapshot::CellGridSpec {
                     rows,
                     cols,
@@ -85,9 +87,9 @@ impl CreateSnapshot for MainContent {
             },
             physics_fps: self.runtime().physics_fps(),
             operators: OperatorSnapshot {
-                line_segments: world.line_segments.segments().to_vec(),
+                line_segments: world.line_segments().segments().to_vec(),
                 walls: world
-                    .wall_chains
+                    .wall_chains()
                     .chains()
                     .map(|c| WallSnapshot {
                         chain_id: c.id,
@@ -98,11 +100,11 @@ impl CreateSnapshot for MainContent {
                     })
                     .collect(),
                 valve_spans: valve_spans(world),
-                source_spheres: world.source_spheres.spheres().to_vec(),
+                source_spheres: world.source_spheres().spheres().to_vec(),
                 thermostats: if layers.contains(SceneLayers::READOUTS) {
                     thermostat_snapshot(world)
                 } else {
-                    world.thermostats.thermostats().to_vec()
+                    world.thermostats().thermostats().to_vec()
                 },
             },
             ..if layers.contains(SceneLayers::THERMO) {
@@ -128,10 +130,10 @@ fn build_ball_render_data(
     world: &SimulationWorld,
     species_counts: &mut SpeciesCounts,
 ) -> Vec<BallRenderData> {
-    let ball_count = world.balls.len();
+    let ball_count = world.balls().len();
     let mut balls = Vec::with_capacity(ball_count);
     let species_table = &**world.species();
-    let physics = &world.physics;
+    let physics = world.physics();
     // Ring radii per species: half the like pair's equilibrium distance
     // and cutoff.
     let rings: Vec<[f32; 2]> = species_table
@@ -140,7 +142,7 @@ fn build_ball_render_data(
         .collect();
 
     // Create BallRenderData for each ball
-    for (ball_idx, ball) in world.balls.iter().enumerate() {
+    for (ball_idx, ball) in world.balls().iter().enumerate() {
         count_ball(species_counts, ball);
         let species = species_table.get(ball.species());
         let [equilibrium_radius, cutoff_radius] = rings
@@ -160,9 +162,11 @@ fn build_ball_render_data(
 
         // Only clone expensive data if it will actually be used
         let neighbors: Vec<(usize, f32)> =
-            if show_neighbor_lines && ball_idx < world.cached_force_results.len() {
+            if show_neighbor_lines && ball_idx < world.cached_force_results().len() {
                 // Use cached force magnitudes from last physics step only if needed
-                world.cached_force_results[ball_idx].neighbor_forces.clone()
+                world.cached_force_results()[ball_idx]
+                    .neighbor_forces
+                    .clone()
             } else {
                 // Skip cloning if neighbor lines won't be drawn
                 Vec::new()
@@ -199,7 +203,7 @@ fn build_ball_render_data(
 /// read-only, for active and inactive thermostats alike, so a paused
 /// world or a deactivated thermostat still shows live values.
 fn thermostat_snapshot(world: &SimulationWorld) -> Vec<SimThermostat> {
-    let mut thermostats = world.thermostats.thermostats().to_vec();
+    let mut thermostats = world.thermostats().thermostats().to_vec();
     for (thermostat, reading) in thermostats.iter_mut().zip(world.thermostat_readings()) {
         thermostat.current_local_temp = reading;
     }
@@ -217,7 +221,7 @@ fn build_thermo_snapshot_fields(
     let ww = region.w.abs();
     let wh = region.h.abs();
 
-    match world.thermo_history.average() {
+    match world.thermo_history().average() {
         Some((avg_t, avg_p)) => {
             let (rows, cols) = avg_t.shape();
             let cell_width = ww / cols as f32;
@@ -250,7 +254,7 @@ fn build_thermo_snapshot_fields(
 /// the chain math.
 pub fn valve_spans(world: &SimulationWorld) -> Vec<ValveSpan> {
     let mut spans = Vec::new();
-    for chain in world.wall_chains.chains() {
+    for chain in world.wall_chains().chains() {
         for (index, joint) in chain.joints.iter().enumerate() {
             let Joint::Valve {
                 valve_id,
@@ -260,7 +264,7 @@ pub fn valve_spans(world: &SimulationWorld) -> Vec<ValveSpan> {
             else {
                 continue;
             };
-            let Some(valve) = world.valve_segments.find(*valve_id) else {
+            let Some(valve) = world.valve_segments().find(*valve_id) else {
                 continue;
             };
             spans.push(ValveSpan {

@@ -8,7 +8,7 @@ use std::collections::VecDeque;
 
 /// Center-of-mass-subtracted kinetic statistics for a local region.
 #[derive(Clone, Debug)]
-pub struct LocalKineticStats {
+pub(crate) struct LocalKineticStats {
     count: usize,
     sum_m: f32,
     sum_mv: Vec2D,
@@ -16,12 +16,12 @@ pub struct LocalKineticStats {
 }
 
 impl LocalKineticStats {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
     /// Add one ball to the local kinetic accumulator.
-    pub fn add_ball(&mut self, ball: &Ball2D) {
+    pub(crate) fn add_ball(&mut self, ball: &Ball2D) {
         let mass = ball.mass;
         self.count += 1;
         self.sum_m += mass;
@@ -30,7 +30,7 @@ impl LocalKineticStats {
         self.sum_mv2 += mass * ball.v.norm_sq();
     }
 
-    pub fn count(&self) -> usize {
+    pub(crate) fn count(&self) -> usize {
         self.count
     }
 
@@ -39,7 +39,7 @@ impl LocalKineticStats {
     /// The thermostat measures temperature in the local COM frame, so callers
     /// that later modify velocities should use this velocity to isolate the
     /// peculiar component `v - v_com` instead of damping the full drift motion.
-    pub fn center_of_mass_velocity(&self) -> Option<Vec2D> {
+    pub(crate) fn center_of_mass_velocity(&self) -> Option<Vec2D> {
         if self.count < 2 || self.sum_m <= f32::EPSILON {
             return None;
         }
@@ -48,7 +48,7 @@ impl LocalKineticStats {
     }
 
     /// Local temperature in the center-of-mass frame.
-    pub fn temperature(&self) -> Option<f32> {
+    pub(crate) fn temperature(&self) -> Option<f32> {
         if self.count < 2 || self.sum_m <= f32::EPSILON {
             return None;
         }
@@ -102,11 +102,6 @@ impl ThermoGrid {
         }
     }
 
-    /// Create a grid filled with NaN.
-    pub fn nan(rows: usize, cols: usize) -> Self {
-        Self::filled(rows, cols, f32::NAN)
-    }
-
     /// Read the value at `(r, c)`. Panics on out-of-bounds (standard Rust indexing).
     #[inline]
     pub fn get(&self, r: usize, c: usize) -> f32 {
@@ -124,11 +119,13 @@ impl ThermoGrid {
         (self.rows, self.cols)
     }
 
-    pub fn rows(&self) -> usize {
+    #[cfg(test)]
+    pub(crate) fn rows(&self) -> usize {
         self.rows
     }
 
-    pub fn cols(&self) -> usize {
+    #[cfg(test)]
+    pub(crate) fn cols(&self) -> usize {
         self.cols
     }
 
@@ -182,7 +179,12 @@ impl CellStats {
 /// * `pair_virial` - `Σ_pairs r_ij · F_ij` with each pair counted once,
 ///   positive for repulsion.
 /// * `area` - region area.
-pub fn virial_pressure_2d(n_balls: usize, temperature: f32, pair_virial: f32, area: f32) -> f32 {
+pub(crate) fn virial_pressure_2d(
+    n_balls: usize,
+    temperature: f32,
+    pair_virial: f32,
+    area: f32,
+) -> f32 {
     const INV_DIMENSION: f32 = 0.5;
     let kinetic_term = (n_balls as f32 - 1.0) * temperature;
     (kinetic_term + INV_DIMENSION * pair_virial) / area
@@ -198,7 +200,7 @@ pub fn virial_pressure_2d(n_balls: usize, temperature: f32, pair_virial: f32, ar
 /// where `Rect.h` may be negative.
 ///
 /// Returns `(rows, cols)` with both >= 1.
-pub fn compute_viz_grid_dims(
+pub(crate) fn compute_viz_grid_dims(
     n_balls: usize,
     world_width: f32,
     world_height: f32,
@@ -325,7 +327,7 @@ impl Default for ThermoFieldHistory {
 }
 
 impl ThermoFieldHistory {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::with_window(THERMO_WINDOW)
     }
 
@@ -355,7 +357,7 @@ impl ThermoFieldHistory {
     }
 
     /// Discard all buffered grids so the next `push` starts fresh.
-    pub fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         self.t_buffer.clear();
         self.p_buffer.clear();
         self.shape = (0, 0);
