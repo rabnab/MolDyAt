@@ -2,10 +2,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Logging: the log targets and helpers of `thermo_physics::logging`, plus
-//! the logger setup of the binary.
-
-pub use thermo_physics::logging::*;
+//! The logger setup of the binary. The log targets (`moldyat::verbose`,
+//! `moldyat::timing`) are used inside `thermo_physics`.
 
 /// Initialise the global logger via [`env_logger`].
 ///

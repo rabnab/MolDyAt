@@ -52,7 +52,7 @@ impl Verlet {
     ///
     /// # Returns
     /// Slice of indices into the main ball vector
-    pub fn get_neighbour_indices(&self) -> &[usize] {
+    pub(crate) fn get_neighbour_indices(&self) -> &[usize] {
         &self.neighbours
     }
 
@@ -67,7 +67,7 @@ impl Verlet {
     ///
     /// # Returns
     /// `true` if ball was already a neighbor, `false` if newly added
-    pub fn add_neighbour(&mut self, neighbour_idx: usize) -> bool {
+    pub(crate) fn add_neighbour(&mut self, neighbour_idx: usize) -> bool {
         match self.neighbours.binary_search(&neighbour_idx) {
             Ok(_) => true,
             Err(pos) => {
@@ -77,7 +77,7 @@ impl Verlet {
         }
     }
 
-    pub fn clear_neighbours(&mut self) {
+    pub(crate) fn clear_neighbours(&mut self) {
         self.neighbours.clear();
         self.num_neighbours = 0;
     }
@@ -89,7 +89,7 @@ impl Verlet {
     ///
     /// # Returns
     /// `true` if ball was removed, `false` if not in list
-    pub fn remove(&mut self, remove_idx: usize) -> bool {
+    pub(crate) fn remove(&mut self, remove_idx: usize) -> bool {
         match self.neighbours.binary_search(&remove_idx) {
             Ok(pos) => {
                 self.neighbours.remove(pos);
@@ -108,7 +108,11 @@ impl Verlet {
     ///
     /// # Returns
     /// `true` if ball moved beyond threshold since last update
-    pub fn has_ball_moved_enough(ball: &Ball2D, dt: f32, min_movement_threshold: f32) -> bool {
+    pub(crate) fn has_ball_moved_enough(
+        ball: &Ball2D,
+        dt: f32,
+        min_movement_threshold: f32,
+    ) -> bool {
         let travel_since_last_upd_sq = ball
             .get_position()
             .add_scaled(&ball.v, dt)
@@ -127,7 +131,12 @@ impl Verlet {
     ///
     /// # Returns
     /// `true` if neighbor list should be rebuilt
-    pub fn needs_update_hood(&self, ball: &Ball2D, dt: f32, min_movement_threshold: f32) -> bool {
+    pub(crate) fn needs_update_hood(
+        &self,
+        ball: &Ball2D,
+        dt: f32,
+        min_movement_threshold: f32,
+    ) -> bool {
         if self.updates_since_refresh >= self.updates_frequency {
             return true;
         }
@@ -251,7 +260,7 @@ impl Verlet {
 
     /// Compute neighbor statistics from a list of indices and ball positions.
     /// Returns (num_neighbours, nearest, farthest) as a tuple.
-    pub fn compute_neighbor_stats(
+    pub(crate) fn compute_neighbor_stats(
         ball_pos: &Vec2D,
         neighbour_indices: &[usize],
         balls: &[Ball2D],
@@ -280,7 +289,7 @@ impl Verlet {
     }
 
     #[cfg(test)]
-    pub fn update_closeness_stats(&mut self, ball_pos: &Vec2D, balls: &[Ball2D]) {
+    pub(crate) fn update_closeness_stats(&mut self, ball_pos: &Vec2D, balls: &[Ball2D]) {
         let (num_neighbours, nearest, farthest) =
             Self::compute_neighbor_stats(ball_pos, &self.neighbours, balls);
 
@@ -291,13 +300,13 @@ impl Verlet {
 
     /// Creates a new Verlet integration system with default parameters
     #[cfg(test)]
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
     /// Retrieve the names of all valid neighbours from the ball vector.
     #[cfg(test)]
-    pub fn get_neighbour_names(&self, balls: &[Ball2D]) -> Vec<String> {
+    pub(crate) fn get_neighbour_names(&self, balls: &[Ball2D]) -> Vec<String> {
         self.neighbours
             .iter()
             .filter_map(|&idx| balls.get(idx))
@@ -313,7 +322,7 @@ impl Verlet {
     /// # Returns
     /// `true` if ball is a neighbor
     #[cfg(test)]
-    pub fn is_a_neighbour_idx(&self, idx: usize) -> bool {
+    pub(crate) fn is_a_neighbour_idx(&self, idx: usize) -> bool {
         self.neighbours.binary_search(&idx).is_ok()
     }
 
@@ -322,7 +331,7 @@ impl Verlet {
     /// (`SimulationEngine::update_neighbor_hoods_for_occupied_cells`); this
     /// serial form is kept for single-ball callers and tests.
     #[cfg(test)]
-    pub fn update_hood(
+    pub(crate) fn update_hood(
         ball_idx: usize,
         dt: f32,
         candidates: &[usize],

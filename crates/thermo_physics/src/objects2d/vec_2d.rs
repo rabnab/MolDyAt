@@ -32,7 +32,8 @@ impl Vec2D {
     }
 
     /// Check if both components are finite (not NaN or infinite).
-    pub fn is_finite(&self) -> bool {
+    #[cfg(test)]
+    pub(crate) fn is_finite(&self) -> bool {
         self.x.is_finite() && self.y.is_finite()
     }
 
@@ -42,13 +43,14 @@ impl Vec2D {
     }
 
     /// Dot product.
-    pub fn dot(&self, other: &Vec2D) -> f32 {
+    pub(crate) fn dot(&self, other: &Vec2D) -> f32 {
         self.x * other.x + self.y * other.y
     }
 
     /// Returns the unit vector (normalized).
     /// Returns zero vector if magnitude is zero.
-    pub fn normalize(&self) -> Vec2D {
+    #[cfg(test)]
+    pub(crate) fn normalize(&self) -> Vec2D {
         let norm = self.norm();
         if norm > 0.0 {
             self.scaled(1.0 / norm)
@@ -73,7 +75,7 @@ impl Vec2D {
     /// # Arguments
     /// * `pt` - Vector to add
     /// * `scale` - Scale factor for pt
-    pub fn add_scaled(&self, pt: &Vec2D, scale: f32) -> Vec2D {
+    pub(crate) fn add_scaled(&self, pt: &Vec2D, scale: f32) -> Vec2D {
         let scaled_pt = pt.scaled(scale);
         Vec2D::new(self.x + scaled_pt.x, self.y + scaled_pt.y)
     }

@@ -7,7 +7,6 @@ use super::{ShutdownSignal, SnapshotPublisher};
 use crate::application::DomainCommand;
 use crate::application::MainContent;
 use crate::application::PhysicsEvent;
-use crate::application::core::SimulationEngine;
 use crate::application::scene_layers::SceneLayers;
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender};
@@ -75,23 +74,14 @@ impl PhysicsRuntime {
                 std::thread::sleep(Duration::from_millis(wait_time_ms));
             }
 
-            let was_paused = simulation.world().sim.is_paused();
-            {
-                let (world, step_config, options) = simulation.step_parts();
-                let _ = SimulationEngine::simulation_step(world, step_config, options);
-            }
+            let was_paused = simulation.world().sim().is_paused();
+            // The heatmap's fields, only while the heatmap is shown, and
+            // sampled every few steps (see `record_thermo_fields_if_due`).
+            let heatmap_shown = publisher.layers().contains(SceneLayers::THERMO);
+            let _ = simulation.step_recording_thermo_fields(heatmap_shown);
             if !was_paused {
                 physics_step_count += 1;
                 changed = true;
-                // The heatmap's fields, only while the heatmap is shown, and
-                // sampled every few steps (see `record_thermo_fields_if_due`).
-                if publisher.layers().contains(SceneLayers::THERMO) {
-                    let log_timings = simulation.options().show_timings;
-                    SimulationEngine::record_thermo_fields_if_due(
-                        simulation.world_mut(),
-                        log_timings,
-                    );
-                }
             }
 
             let now = Instant::now();

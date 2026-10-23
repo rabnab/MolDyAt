@@ -2,11 +2,22 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use moldyat_core::application::sim_config::{MAX_TIME_STEP, MIN_TIME_STEP, SimConfig};
 use std::path::PathBuf;
+use thermo_physics::application::sim_config::{MAX_TIME_STEP, MIN_TIME_STEP, SimConfig};
 
 mod options;
 mod specs;
+
+/// One option in the `--help` text (see `HEADLESS_OPTIONS`; the binary
+/// builds the whole text from such tables).
+pub struct OptionHelp {
+    /// Spellings, e.g. `&["-h", "--help"]`.
+    pub names: &'static [&'static str],
+    /// Placeholder for the value, e.g. `Some("<N>")`; `None` for a switch.
+    pub value: Option<&'static str>,
+    /// One line per entry; later lines are indented under the first.
+    pub help: &'static [&'static str],
+}
 
 pub use options::HEADLESS_OPTIONS;
 pub use specs::{LineSegmentSpec, ValveSpec};

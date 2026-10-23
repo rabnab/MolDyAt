@@ -5,7 +5,7 @@
 use super::{MainContent, SimulationWorld};
 
 /// Narrowest valve, as a fraction of its piece.
-pub const MIN_VALVE_SPAN: f32 = 1e-4;
+pub(crate) const MIN_VALVE_SPAN: f32 = 1e-4;
 
 /// Why a valve spanning the piece-local fractions `t_start..t_end`
 /// (`t_start <= t_end`) cannot be placed, or `None` if it can.

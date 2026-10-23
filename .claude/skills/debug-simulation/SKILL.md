@@ -50,6 +50,6 @@ Shrink the scenario: fewer balls, fewer steps, one wall, two balls if possible. 
 - Physics fixes then follow the `physics-change` skill (drift baselines, fixtures).
 
 ## Tools
-- `cargo test -p thermo_physics <name> -- --nocapture` (`-p moldyat_core` for physics-thread and snapshot tests) to see log output of one test.
+- `cargo test -p thermo_physics <name> -- --nocapture` (`-p thermo_runtime` for physics-thread, snapshot and headless tests) to see log output of one test.
 - `cargo ci-test-drift` for the drift suite summary lines.
 - Delete `$TMPDIR` run files when done; do not commit saves or JSONL dumps.

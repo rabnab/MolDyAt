@@ -2,36 +2,16 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use crate::objects2d::Vec2D;
 use std::fmt::Debug;
 
 #[derive(Clone)]
-pub struct Cell {
+pub(crate) struct Cell {
     pub balls: Vec<usize>,
     pub bounds: CellBounds,
-    pub id: CellId,
-}
-#[derive(Clone, Copy)]
-pub struct CellId {
-    pub row: usize,
-    pub col: usize,
-    pub id: usize,
-}
-
-impl Debug for CellId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({}x{})", self.row, self.col)
-    }
-}
-
-impl CellId {
-    pub fn new(row: usize, col: usize, id: usize) -> Self {
-        Self { row, col, id }
-    }
 }
 
 #[derive(Clone, Copy)]
-pub struct CellBounds {
+pub(crate) struct CellBounds {
     pub min_x: f32,
     pub max_x: f32,
     pub min_y: f32,
@@ -55,20 +35,11 @@ impl Debug for Cell {
 }
 
 impl Cell {
-    /// Create new cell with spatial bounds and grid position.
-    ///
-    /// # Arguments
-    /// * `bounds` - Spatial boundaries of the cell
-    /// * `row` - Row index in grid
-    /// * `column` - Column index in grid
-    /// * `num_column` - Total number of columns (for ID calculation)
-    pub fn new(bounds: CellBounds, row: usize, column: usize, num_column: usize) -> Self {
-        let id = CellId::new(row, column, row * num_column + column);
-
+    /// An empty cell with spatial bounds `bounds`.
+    pub(crate) fn new(bounds: CellBounds) -> Self {
         Self {
             balls: Vec::new(),
             bounds,
-            id,
         }
     }
 
@@ -76,7 +47,7 @@ impl Cell {
     ///
     /// # Arguments
     /// * `ball_idx` - Index into main balls vector
-    pub fn add_ball(&mut self, ball_idx: usize) {
+    pub(crate) fn add_ball(&mut self, ball_idx: usize) {
         self.balls.push(ball_idx);
     }
 
@@ -85,41 +56,15 @@ impl Cell {
     ///
     /// # Arguments
     /// * `ball_id` - Index to remove
-    pub fn remove_ball(&mut self, ball_id: usize) {
+    pub(crate) fn remove_ball(&mut self, ball_id: usize) {
         self.balls.retain(|&idx| idx != ball_id);
     }
 
-    pub fn get_ball_indices(&self) -> &[usize] {
+    pub(crate) fn get_ball_indices(&self) -> &[usize] {
         &self.balls
     }
 
-    /// Remove and return all ball indices from this cell.
-    /// Cell's ball list will be empty after this call.
-    ///
-    /// # Returns
-    /// Vector of all ball indices that were in the cell
-    pub fn drain_balls(&mut self) -> Vec<usize> {
-        std::mem::take(&mut self.balls)
-    }
-
-    pub fn get_top_left(&self) -> Vec2D {
-        Vec2D::new(self.bounds.min_x, self.bounds.min_y)
-    }
-
-    pub fn get_bottom_right(&self) -> Vec2D {
-        Vec2D::new(self.bounds.max_x, self.bounds.max_y)
-    }
-
-    pub fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         self.balls.clear();
-    }
-    /// Clone cell structure without ball indices.
-    /// Useful for creating grid templates.
-    pub fn empty_clone(&self) -> Self {
-        Cell {
-            balls: Vec::new(),
-            bounds: self.bounds,
-            id: self.id,
-        }
     }
 }

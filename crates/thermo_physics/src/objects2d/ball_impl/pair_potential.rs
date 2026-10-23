@@ -37,7 +37,7 @@ const CUTOFF_FACTOR: f32 = 4.0;
 
 /// Force cap and cutoff settings of a [`CappedPotential`], fixed when it is built.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct CapSettings {
+pub(crate) struct CapSettings {
     /// Force at `r_cap`, where the sloped core starts.
     pub max_force: f32,
     /// Force slope below `r_cap`.
@@ -59,10 +59,12 @@ impl Default for CapSettings {
 /// A pair interaction as the force kernel sees it: force magnitude (positive =
 /// repulsive) and potential energy at centre distance `r`, zero at and beyond
 /// [`Self::cutoff`].
-pub trait PairPotential {
+pub(crate) trait PairPotential {
     fn force(&self, r: f32) -> f32;
     fn potential(&self, r: f32) -> f32;
+    #[cfg(test)]
     fn force_simd(&self, r: f32x4) -> f32x4;
+    #[cfg(test)]
     fn potential_simd(&self, r: f32x4) -> f32x4;
     fn cutoff(&self) -> f32;
 }
@@ -71,7 +73,7 @@ pub trait PairPotential {
 ///
 /// `force` must equal `-dU/dr` of `potential`, and fall monotonically across
 /// [`Self::cap_search_range`], so that the cap distance is unique and inside it.
-pub trait PairLaw: Copy {
+pub(crate) trait PairLaw: Copy {
     /// The law for four pairs at once, one per SIMD lane.
     type Lanes: LawLanes;
 
@@ -92,30 +94,22 @@ pub trait PairLaw: Copy {
     fn cap_search_range(&self) -> (f32, f32) {
         (0.1 * self.length_scale(), self.equilibrium_distance())
     }
-
-    /// [`Self::force`] for four distances, with this law in every lane.
-    fn force_simd(&self, r: f32x4) -> f32x4 {
-        Self::lanes([self; 4]).force(r)
-    }
-
-    /// [`Self::potential`] for four distances, with this law in every lane.
-    fn potential_simd(&self, r: f32x4) -> f32x4 {
-        Self::lanes([self; 4]).potential(r)
-    }
 }
 
 /// A [`PairLaw`] for four pairs, one per lane. Lane `i` must give the same bits
 /// as the scalar law of pair `i`.
-pub trait LawLanes: Copy {
+pub(crate) trait LawLanes: Copy {
     fn force(&self, r: f32x4) -> f32x4;
     fn potential(&self, r: f32x4) -> f32x4;
 }
 
 /// Lanes that evaluate the scalar law one lane at a time: correct for any law,
 /// for laws without a vectorised form.
+#[cfg(test)]
 #[derive(Clone, Copy)]
-pub struct ScalarLanes<L>(pub [L; 4]);
+pub(crate) struct ScalarLanes<L>(pub [L; 4]);
 
+#[cfg(test)]
 impl<L: PairLaw> LawLanes for ScalarLanes<L> {
     fn force(&self, r: f32x4) -> f32x4 {
         let r = r.to_array();
@@ -130,7 +124,7 @@ impl<L: PairLaw> LawLanes for ScalarLanes<L> {
 
 /// Lennard-Jones: U(r) = 4·ε·[(σ/r)^12 - (σ/r)^6], minimum -ε at 2^(1/6)·σ.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct LennardJones {
+pub(crate) struct LennardJones {
     pub sigma: f32,
     pub epsilon: f32,
 }
@@ -146,7 +140,7 @@ impl Default for LennardJones {
 
 impl LennardJones {
     /// Lorentz–Berthelot mixing: `σ_ij = (σ_i + σ_j) / 2`, `ε_ij = √(ε_i·ε_j)`.
-    pub fn mixed(a: &Species, b: &Species) -> Self {
+    pub(crate) fn mixed(a: &Species, b: &Species) -> Self {
         LennardJones {
             sigma: 0.5 * (a.sigma + b.sigma),
             epsilon: (a.epsilon * b.epsilon).sqrt(),
@@ -154,7 +148,7 @@ impl LennardJones {
     }
 
     /// This law with the `σ` and `ε` that `o` sets.
-    pub fn overridden(self, o: &PairOverride) -> Self {
+    pub(crate) fn overridden(self, o: &PairOverride) -> Self {
         LennardJones {
             sigma: o.sigma.unwrap_or(self.sigma),
             epsilon: o.epsilon.unwrap_or(self.epsilon),
@@ -167,7 +161,7 @@ impl LennardJones {
 /// law. `σ` and `ε` must be finite and positive (`SimConfig::validate`
 /// checks the configured ones).
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct PairOverride {
+pub(crate) struct PairOverride {
     pub a: SpeciesId,
     pub b: SpeciesId,
     /// `σ_ij`; `None` keeps the mixed value.
@@ -178,14 +172,14 @@ pub struct PairOverride {
 
 impl PairOverride {
     /// Whether this override is for the pair `(a, b)`, in either order.
-    pub fn is_for(&self, a: SpeciesId, b: SpeciesId) -> bool {
+    pub(crate) fn is_for(&self, a: SpeciesId, b: SpeciesId) -> bool {
         (self.a, self.b) == (a, b) || (self.a, self.b) == (b, a)
     }
 }
 
 /// [`LennardJones`] with one `σ`, `ε` per lane.
 #[derive(Clone, Copy, Debug)]
-pub struct LennardJonesLanes {
+pub(crate) struct LennardJonesLanes {
     sigma: f32x4,
     epsilon: f32x4,
 }
@@ -261,7 +255,7 @@ impl LawLanes for LennardJonesLanes {
 /// - At and beyond `cutoff` force and potential are zero; inside, the potential
 ///   is shifted by `U(cutoff)`, so a pair crossing the cutoff changes no energy.
 #[derive(Clone, Debug)]
-pub struct CappedPotential<L> {
+pub(crate) struct CappedPotential<L> {
     law: L,
     settings: CapSettings,
     cutoff: f32,
@@ -271,7 +265,7 @@ pub struct CappedPotential<L> {
 }
 
 impl<L: PairLaw> CappedPotential<L> {
-    pub fn new(law: L, settings: CapSettings) -> Self {
+    pub(crate) fn new(law: L, settings: CapSettings) -> Self {
         let r_cap = force_cap_distance(&law, settings.max_force);
         let cutoff = settings.cutoff_factor * law.length_scale();
         CappedPotential {
@@ -284,16 +278,13 @@ impl<L: PairLaw> CappedPotential<L> {
         }
     }
 
-    pub fn law(&self) -> &L {
+    pub(crate) fn law(&self) -> &L {
         &self.law
     }
 
-    pub fn settings(&self) -> &CapSettings {
-        &self.settings
-    }
-
     /// Distance below which the force follows the sloped core.
-    pub fn r_cap(&self) -> f32 {
+    #[cfg(test)]
+    pub(crate) fn r_cap(&self) -> f32 {
         self.r_cap
     }
 }
@@ -323,11 +314,13 @@ impl<L: PairLaw> PairPotential for CappedPotential<L> {
         potential - self.pot_at_cutoff
     }
 
+    #[cfg(test)]
     #[inline]
     fn force_simd(&self, r: f32x4) -> f32x4 {
         CappedLanes::gather([self; 4]).force(r)
     }
 
+    #[cfg(test)]
     #[inline]
     fn potential_simd(&self, r: f32x4) -> f32x4 {
         CappedLanes::gather([self; 4]).potential(r)
@@ -341,7 +334,7 @@ impl<L: PairLaw> PairPotential for CappedPotential<L> {
 
 /// Four [`CappedPotential`]s, one per lane, for the SIMD force kernel.
 #[derive(Clone, Copy)]
-pub struct CappedLanes<LL> {
+pub(crate) struct CappedLanes<LL> {
     law: LL,
     cutoff: f32x4,
     r_cap: f32x4,
@@ -354,7 +347,7 @@ pub struct CappedLanes<LL> {
 impl<LL: LawLanes> CappedLanes<LL> {
     /// Load four pair potentials into one lane each.
     #[inline]
-    pub fn gather<L: PairLaw<Lanes = LL>>(pairs: [&CappedPotential<L>; 4]) -> Self {
+    pub(crate) fn gather<L: PairLaw<Lanes = LL>>(pairs: [&CappedPotential<L>; 4]) -> Self {
         CappedLanes {
             law: L::lanes(pairs.map(|p| &p.law)),
             cutoff: f32x4::from_array(pairs.map(|p| p.cutoff)),
@@ -374,7 +367,7 @@ impl<LL: LawLanes> CappedLanes<LL> {
     /// Force of each lane's pair at its distance in `r`; see
     /// [`CappedPotential`].
     #[inline]
-    pub fn force(&self, r: f32x4) -> f32x4 {
+    pub(crate) fn force(&self, r: f32x4) -> f32x4 {
         // The law is evaluated at max(r, r_cap) only, so it stays finite in the core.
         let r_outer = r.simd_max(self.r_cap);
         let compression = (r_outer - r).simd_max(f32x4::splat(0.));
@@ -384,7 +377,7 @@ impl<LL: LawLanes> CappedLanes<LL> {
 
     /// Potential of each lane's pair at its distance in `r`.
     #[inline]
-    pub fn potential(&self, r: f32x4) -> f32x4 {
+    pub(crate) fn potential(&self, r: f32x4) -> f32x4 {
         let potential_outer = self.law.potential(r.simd_max(self.r_cap));
         let compression = self.r_cap - r;
         let potential_core = self.pot_at_cap
@@ -450,7 +443,7 @@ pub(crate) fn bisect_cap_distance<L: PairLaw>(law: &L, max_force: f32) -> f32 {
 /// One [`CappedPotential`] per ordered pair of species, built once from the
 /// species table. Symmetric: the potential of `(a, b)` equals that of `(b, a)`.
 #[derive(Clone, Debug)]
-pub struct PairTable<L> {
+pub(crate) struct PairTable<L> {
     species_count: usize,
     settings: CapSettings,
     /// Row-major: pair `(a, b)` at `a * species_count + b`.
@@ -460,7 +453,7 @@ pub struct PairTable<L> {
 impl<L: PairLaw> PairTable<L> {
     /// The table for `species`, with each pair's law from `law_for`, which
     /// must be symmetric (`law_for(a, b) == law_for(b, a)`).
-    pub fn new(
+    pub(crate) fn new(
         species: &SpeciesTable,
         settings: CapSettings,
         law_for: impl Fn(SpeciesId, SpeciesId) -> L,
@@ -477,23 +470,19 @@ impl<L: PairLaw> PairTable<L> {
         }
     }
 
-    pub fn species_count(&self) -> usize {
-        self.species_count
-    }
-
-    pub fn settings(&self) -> &CapSettings {
+    pub(crate) fn settings(&self) -> &CapSettings {
         &self.settings
     }
 
     #[inline]
-    pub fn pair(&self, a: SpeciesId, b: SpeciesId) -> &CappedPotential<L> {
+    pub(crate) fn pair(&self, a: SpeciesId, b: SpeciesId) -> &CappedPotential<L> {
         &self.pairs[a.index() * self.species_count + b.index()]
     }
 
     /// The potentials of species `a` with every species, indexed by the other
     /// species: what the force kernel reads for one ball.
     #[inline]
-    pub fn row(&self, a: SpeciesId) -> &[CappedPotential<L>] {
+    pub(crate) fn row(&self, a: SpeciesId) -> &[CappedPotential<L>] {
         let start = a.index() * self.species_count;
         &self.pairs[start..start + self.species_count]
     }
@@ -502,14 +491,14 @@ impl<L: PairLaw> PairTable<L> {
 /// The interaction laws the simulation can use, each as a table over the
 /// species pairs.
 #[derive(Clone, Debug)]
-pub enum Potential {
+pub(crate) enum Potential {
     LennardJones(PairTable<LennardJones>),
 }
 
 impl Potential {
     /// Lennard-Jones between all species, mixed by Lorentz–Berthelot, except
     /// for the pairs in `overrides` (the first override of a pair wins).
-    pub fn lennard_jones(
+    pub(crate) fn lennard_jones(
         species: &SpeciesTable,
         settings: CapSettings,
         overrides: &[PairOverride],
@@ -523,44 +512,41 @@ impl Potential {
         }))
     }
 
-    pub fn cap_settings(&self) -> &CapSettings {
+    pub(crate) fn cap_settings(&self) -> &CapSettings {
         match self {
             Potential::LennardJones(t) => t.settings(),
         }
     }
 
-    pub fn species_count(&self) -> usize {
-        match self {
-            Potential::LennardJones(t) => t.species_count(),
-        }
-    }
-
-    pub fn r_cap(&self, a: SpeciesId, b: SpeciesId) -> f32 {
+    #[cfg(test)]
+    pub(crate) fn r_cap(&self, a: SpeciesId, b: SpeciesId) -> f32 {
         match self {
             Potential::LennardJones(t) => t.pair(a, b).r_cap(),
         }
     }
 
-    pub fn cutoff(&self, a: SpeciesId, b: SpeciesId) -> f32 {
+    pub(crate) fn cutoff(&self, a: SpeciesId, b: SpeciesId) -> f32 {
         match self {
             Potential::LennardJones(t) => t.pair(a, b).cutoff(),
         }
     }
 
     /// Centre distance of the potential minimum of the pair.
-    pub fn equilibrium_distance(&self, a: SpeciesId, b: SpeciesId) -> f32 {
+    pub(crate) fn equilibrium_distance(&self, a: SpeciesId, b: SpeciesId) -> f32 {
         match self {
             Potential::LennardJones(t) => t.pair(a, b).law().equilibrium_distance(),
         }
     }
 
-    pub fn force(&self, a: SpeciesId, b: SpeciesId, r: f32) -> f32 {
+    #[cfg(test)]
+    pub(crate) fn force(&self, a: SpeciesId, b: SpeciesId, r: f32) -> f32 {
         match self {
             Potential::LennardJones(t) => t.pair(a, b).force(r),
         }
     }
 
-    pub fn potential(&self, a: SpeciesId, b: SpeciesId, r: f32) -> f32 {
+    #[cfg(test)]
+    pub(crate) fn potential(&self, a: SpeciesId, b: SpeciesId, r: f32) -> f32 {
         match self {
             Potential::LennardJones(t) => t.pair(a, b).potential(r),
         }

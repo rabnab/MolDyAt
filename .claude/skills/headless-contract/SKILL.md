@@ -10,11 +10,11 @@ description: Contract for changing headless mode - CLI flags, the JSONL headless
 ## Where things live
 | Concern | File | Tests |
 |---|---|---|
-| Flags, defaults, validation, `--help` table (`HEADLESS_OPTIONS`) | `wgpu_renderer/src/headless_cli.rs` (table in `headless_cli/options.rs`, `--valve` / `--line-segment` values in `headless_cli/specs.rs`) | `headless_cli/tests.rs` |
+| Flags, defaults, validation, `--help` table (`HEADLESS_OPTIONS`) | `crates/thermo_runtime/src/headless_cli.rs` (table in `headless_cli/options.rs`, `--valve` / `--line-segment` values in `headless_cli/specs.rs`) | `headless_cli/tests.rs` |
 | Shared flags (`--load`, `--save-dir`, `--config`), `--help` (`GENERAL_OPTIONS`) | `wgpu_renderer/src/cli.rs`, `cli/usage.rs` | `cli/tests.rs` |
-| World setup order, step loop, frame cadence | `wgpu_renderer/src/headless_runner.rs` | `headless_runner/tests.rs` |
-| JSONL records, console line, non-finite policy | `wgpu_renderer/src/headless_output.rs` | `headless_output/tests.rs` |
-| `--timings` report (`headless-timings.v1`) | `wgpu_renderer/src/headless_timings.rs` | read by `scripts/headless_perf.sh` |
+| World setup order, step loop, frame cadence | `crates/thermo_runtime/src/headless_runner.rs` | `headless_runner/tests.rs` |
+| JSONL records, console line, non-finite policy | `crates/thermo_runtime/src/headless_output.rs` | `headless_output/tests.rs` |
+| `--timings` report (`headless-timings.v1`) | `crates/thermo_runtime/src/headless_timings.rs` | read by `scripts/headless_perf.sh` |
 
 ## Rules
 - **Export model, not renderer model.** Records are built in `headless_output.rs` from `RendererSnapshot`. Do not serialize `RendererSnapshot` directly, and do not export UI fields such as `status_text`. If headless needs data the snapshot lacks, add an explicit field or accessor in core.
@@ -22,7 +22,7 @@ description: Contract for changing headless mode - CLI flags, the JSONL headless
 - **Record sequence.** `run_start`, then a `frame` at step 0, at every `snapshot_every` boundary and at the last step (even if the interval does not divide it), then `run_end`. Runner tests treat this as contract.
 - **Non-finite numbers.** Every exported `f32` goes through `f32_value`, so `NaN` and `±Inf` become `null`, including thermo grids and summary fields.
 - **Payload size.** `summary` stays the default; per-ball and thermo data stay opt-in through `--detail`.
-- **Flags.** Every flag that `parse_headless_args` accepts has an `OptionHelp` entry (`every_parsed_flag_is_documented` in `cli/tests.rs` checks it) and a row in `docs/headless.md`. Parse with `std::env::args()`; add a CLI crate only if the option surface grows a lot. The default (windowed) start must not change.
+- **Flags.** Every flag that `parse_headless_args` accepts has an `OptionHelp` entry (`every_parsed_flag_is_documented` in `thermo_runtime` `headless_cli/tests.rs` checks it; the binary's own flags are checked in `cli/tests.rs`) and a row in `docs/headless.md`. Parse with `std::env::args()`; add a CLI crate only if the option surface grows a lot. The default (windowed) start must not change.
 - **Config.** `prepare_application` builds the world from the `SimConfig` (`--config` or defaults) with `--dt` overriding its time step, and `--dt` also beats a loaded save's time step. Without `--config` the run must stay byte-identical to the fixtures. `run_start` records the effective `dt` and, as `config.sim`, the effective `SimConfig` (#295; `HeadlessConfig::sim`, set in `HeadlessRunner::from_config` from `MainContent::config()`), so the output alone can reproduce the run. A new `SimConfig` key therefore appears in `run_start` and changes both fixtures: refresh them in the same PR.
 - **Setup order.** Time step, then walls and valves, then seeded balls, so seeded balls never start inside a wall. Seeding is deterministic for a given `--rng-seed`.
 - **Determinism.** The same seed, flags and build give byte-identical output, independent of the Rayon thread count. Do not add wall-clock values or unordered collections to records (`physics_fps` is always 0 in headless runs, which have no physics thread).
@@ -43,5 +43,5 @@ A refactor must leave the fixtures untouched. If a fixture changes, the PR chang
 
 ## Checklist for a headless change
 - Tests: CLI parsing (defaults, errors), record serialization (fields, schema version, non-finite values), sequencing, detail levels, stdout vs file.
-- `cargo test -p moldyat_wgpu`, `cargo ci-test-headless-regression`, `cargo fmt`, `cargo clippy --workspace -- -D warnings`.
+- `cargo test -p thermo_runtime` (headless runner, output, timings, CLI options), `cargo test -p moldyat_wgpu` (the binary's command line), `cargo ci-test-headless-regression`, `cargo fmt`, `cargo clippy --workspace -- -D warnings`.
 - Update `docs/headless.md` (flags table, record table, console line). If `scripts/headless_perf.sh` uses the changed flag, run it once.

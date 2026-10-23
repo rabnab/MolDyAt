@@ -45,7 +45,7 @@ use std::simd::{StdFloat, f32x4};
 /// `KernelPoint::from`, so it never holds indices that could go stale.
 #[derive(Debug, Clone, Copy, Default)]
 #[repr(C, align(16))]
-pub struct KernelPoint {
+pub(crate) struct KernelPoint {
     pub x: f32,
     pub y: f32,
     /// Index of the ball's species.
@@ -93,7 +93,7 @@ pub(crate) fn kernel_points(balls: &[Ball2D]) -> Vec<KernelPoint> {
 ///
 /// # Returns
 /// ForceResult containing total force vector, potential energy, minimum distance, and optional neighbor forces
-pub fn force_simd(
+pub(crate) fn force_simd(
     physics: &BallPhysics,
     ball_idx: usize,
     balls: &[Ball2D],

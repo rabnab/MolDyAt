@@ -17,7 +17,7 @@ impl Rect {
     }
 
     /// Create a Rect from top-left and bottom-right coordinates
-    pub fn from_tl_br(tl: (f32, f32), br: (f32, f32)) -> Self {
+    pub(crate) fn from_tl_br(tl: (f32, f32), br: (f32, f32)) -> Self {
         let (x1, y1) = tl;
         let (x2, y2) = br;
         Self {

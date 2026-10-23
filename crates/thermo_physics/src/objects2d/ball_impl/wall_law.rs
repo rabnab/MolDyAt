@@ -14,7 +14,7 @@
 use crate::objects2d::ball_impl::species::Species;
 
 /// The interaction of balls with walls.
-pub trait WallLaw {
+pub(crate) trait WallLaw {
     /// Centre distance from a wall surface at which a ball of `species`
     /// touches the wall and is reflected.
     fn contact_distance(&self, species: &Species) -> f32;
@@ -22,7 +22,7 @@ pub trait WallLaw {
 
 /// Elastic (or damped, by the restitution) reflection at `σ_i / 2`.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct HardContact;
+pub(crate) struct HardContact;
 
 impl WallLaw for HardContact {
     fn contact_distance(&self, species: &Species) -> f32 {

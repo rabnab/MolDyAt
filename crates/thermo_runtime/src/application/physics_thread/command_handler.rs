@@ -93,12 +93,12 @@ impl DomainCommandHandler<'_> {
         let mc = &mut *self.main_content;
         match command {
             SimControl::Pause => {
-                if !mc.world().sim.is_paused() {
+                if !mc.world().sim().is_paused() {
                     mc.toggle_pause();
                 }
             }
             SimControl::Resume => {
-                if mc.world().sim.is_paused() {
+                if mc.world().sim().is_paused() {
                     mc.toggle_pause();
                 }
             }

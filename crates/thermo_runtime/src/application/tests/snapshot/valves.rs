@@ -51,7 +51,7 @@ fn snapshot_includes_valve_spans() {
 fn valve_thickness_is_thicker_flanking_piece() {
     let mut mc = make_content_with_wall();
     mc.add_valve_segment(0, 0.25, 0.75, true);
-    let id = mc.world().valve_segments.valves()[0].id;
+    let id = mc.world().valve_segments().valves()[0].id;
     assert_close(
         mc.world().valve_thickness(id).expect("valve thickness"),
         1.0,

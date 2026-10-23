@@ -15,12 +15,8 @@ pub struct ValveCollection {
 }
 
 impl ValveCollection {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     /// Add a new valve, returning its assigned ID.
-    pub fn add(&mut self, is_closed: bool) -> usize {
+    pub(crate) fn add(&mut self, is_closed: bool) -> usize {
         let id = self.next_id.next_id();
         self.valves.push(ValveSegment::new(id, is_closed));
         id
@@ -36,28 +32,23 @@ impl ValveCollection {
         self.valves.iter().find(|v| v.id == id)
     }
 
-    /// Find a valve by ID (mutable).
-    pub fn find_mut(&mut self, id: usize) -> Option<&mut ValveSegment> {
-        self.valves.iter_mut().find(|v| v.id == id)
-    }
-
     /// Remove the valve with `id`. Returns `false` if there was none.
-    pub fn remove(&mut self, id: usize) -> bool {
+    pub(crate) fn remove(&mut self, id: usize) -> bool {
         remove_by_id(&mut self.valves, id, |item| item.id)
     }
 
     /// Index of a valve by ID (for indexed access after lookup).
-    pub fn position(&self, id: usize) -> Option<usize> {
+    pub(crate) fn position(&self, id: usize) -> Option<usize> {
         self.valves.iter().position(|v| v.id == id)
     }
 
     /// Direct indexed access (immutable).
-    pub fn get(&self, idx: usize) -> &ValveSegment {
+    pub(crate) fn get(&self, idx: usize) -> &ValveSegment {
         &self.valves[idx]
     }
 
     /// Direct indexed access (mutable).
-    pub fn get_mut(&mut self, idx: usize) -> &mut ValveSegment {
+    pub(crate) fn get_mut(&mut self, idx: usize) -> &mut ValveSegment {
         &mut self.valves[idx]
     }
 }

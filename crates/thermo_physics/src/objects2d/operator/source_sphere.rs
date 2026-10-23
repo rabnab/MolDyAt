@@ -64,23 +64,23 @@ impl SimSourceSphere {
     }
 
     /// Whether this sphere is currently emitting.
-    pub fn is_emitting(&self) -> bool {
+    pub(crate) fn is_emitting(&self) -> bool {
         self.state.is_on()
     }
 
     /// Cycle to the next species of `table` (the world's), wrapping around.
-    pub fn cycle_ball_species(&mut self, table: &SpeciesTable) {
+    pub(crate) fn cycle_ball_species(&mut self, table: &SpeciesTable) {
         self.ball_species = table.next(self.ball_species);
     }
 
     /// Adjust emission speed by `delta` (positive = faster), clamped.
-    pub fn adjust_emission_speed(&mut self, delta: f32) {
+    pub(crate) fn adjust_emission_speed(&mut self, delta: f32) {
         self.emission_speed =
             (self.emission_speed + delta).clamp(MIN_EMISSION_SPEED, MAX_EMISSION_SPEED);
     }
 
     /// Adjust emission period by `delta_steps` (positive = slower), clamped.
-    pub fn adjust_emit_period(&mut self, delta_steps: i32) {
+    pub(crate) fn adjust_emit_period(&mut self, delta_steps: i32) {
         let new_period = (self.emit_period as i32 + delta_steps)
             .clamp(MIN_EMIT_PERIOD as i32, MAX_EMIT_PERIOD as i32);
         self.emit_period = new_period as usize;
@@ -130,18 +130,8 @@ pub struct SourceSphereCollection {
 }
 
 impl SourceSphereCollection {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Add a new source sphere that emits the default species, returning
-    /// its assigned ID.
-    pub fn add(&mut self, center: Vec2D) -> usize {
-        self.add_with_species(center, DEFAULT_SPECIES)
-    }
-
     /// Add a new source sphere that emits `species`, returning its ID.
-    pub fn add_with_species(&mut self, center: Vec2D, species: SpeciesId) -> usize {
+    pub(crate) fn add_with_species(&mut self, center: Vec2D, species: SpeciesId) -> usize {
         let id = self.next_id.next_id();
         self.spheres.push(SimSourceSphere {
             ball_species: species,
@@ -156,17 +146,18 @@ impl SourceSphereCollection {
     }
 
     /// Find a sphere by ID (immutable).
-    pub fn find(&self, id: usize) -> Option<&SimSourceSphere> {
+    #[cfg(test)]
+    pub(crate) fn find(&self, id: usize) -> Option<&SimSourceSphere> {
         self.spheres.iter().find(|s| s.id == id)
     }
 
     /// Find a sphere by ID (mutable).
-    pub fn find_mut(&mut self, id: usize) -> Option<&mut SimSourceSphere> {
+    pub(crate) fn find_mut(&mut self, id: usize) -> Option<&mut SimSourceSphere> {
         self.spheres.iter_mut().find(|s| s.id == id)
     }
 
     /// Remove the source sphere with `id`. Returns `false` if there was none.
-    pub fn remove(&mut self, id: usize) -> bool {
+    pub(crate) fn remove(&mut self, id: usize) -> bool {
         remove_by_id(&mut self.spheres, id, |item| item.id)
     }
 }

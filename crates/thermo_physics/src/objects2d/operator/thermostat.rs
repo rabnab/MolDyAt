@@ -76,20 +76,20 @@ impl SimThermostat {
     }
 
     /// Ensure the thermostat chain has exactly `len` entries.
-    pub fn ensure_chain_len(&mut self, len: usize) {
+    pub(crate) fn ensure_chain_len(&mut self, len: usize) {
         if self.chain.len() != len {
             self.chain.resize(len, 0.0);
         }
     }
 
     /// Adjust the target temperature by `delta`, clamped.
-    pub fn adjust_target_temperature(&mut self, delta: f32) {
+    pub(crate) fn adjust_target_temperature(&mut self, delta: f32) {
         self.target_temperature =
             (self.target_temperature + delta).clamp(MIN_TARGET_TEMPERATURE, MAX_TARGET_TEMPERATURE);
     }
 
     /// Adjust the thermostat radius by `delta`, clamped.
-    pub fn adjust_radius(&mut self, delta: f32) {
+    pub(crate) fn adjust_radius(&mut self, delta: f32) {
         self.radius = (self.radius + delta).clamp(MIN_THERMOSTAT_RADIUS, MAX_THERMOSTAT_RADIUS);
     }
 }
@@ -102,12 +102,8 @@ pub struct ThermostatCollection {
 }
 
 impl ThermostatCollection {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     /// Add a new thermostat, returning its assigned ID.
-    pub fn add(&mut self, position: Vec2D) -> usize {
+    pub(crate) fn add(&mut self, position: Vec2D) -> usize {
         let id = self.next_id.next_id();
         self.thermostats.push(SimThermostat::new(id, position));
         id
@@ -119,7 +115,7 @@ impl ThermostatCollection {
     }
 
     /// Find a thermostat by ID (immutable).
-    pub fn find(&self, id: usize) -> Option<&SimThermostat> {
+    pub(crate) fn find(&self, id: usize) -> Option<&SimThermostat> {
         self.thermostats
             .iter()
             .find(|thermostat| thermostat.id == id)
@@ -133,7 +129,7 @@ impl ThermostatCollection {
     }
 
     /// Remove the thermostat with `id`. Returns `false` if there was none.
-    pub fn remove(&mut self, id: usize) -> bool {
+    pub(crate) fn remove(&mut self, id: usize) -> bool {
         remove_by_id(&mut self.thermostats, id, |item| item.id)
     }
 }

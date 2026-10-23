@@ -5,10 +5,10 @@
 //! Physical units (#236, plan item I5).
 //!
 //! The simulation runs in reduced Lennard-Jones units: `σ = ε = m = k_B = 1`.
-//! A [`UnitSystem`] says which substance those units stand for and converts
+//! A `UnitSystem` says which substance those units stand for and converts
 //! both ways: literature parameters (Å, K, u) into reduced values for new
 //! species, and reduced results (temperature, time, energy, speed) into SI or
-//! common units for display. The reference is N₂ ([`UnitSystem::N2`]), the
+//! common units for display. The reference is N₂ (`UnitSystem::N2`), the
 //! built-in species `N2` with `σ* = ε* = m* = 1`.
 //!
 //! Conversions use f64; the simulation stores f32. The parameters are fitted
@@ -17,14 +17,14 @@
 use crate::objects2d::ball_impl::{N2_EPSILON_KELVIN, N2_MASS_U, N2_SIGMA_ANGSTROM};
 
 /// Boltzmann constant (exact, SI 2019).
-pub const BOLTZMANN_J_PER_K: f64 = 1.380_649e-23;
+pub(crate) const BOLTZMANN_J_PER_K: f64 = 1.380_649e-23;
 /// Atomic mass constant (CODATA 2018).
-pub const ATOMIC_MASS_KG: f64 = 1.660_539_066_60e-27;
+pub(crate) const ATOMIC_MASS_KG: f64 = 1.660_539_066_60e-27;
 
 /// The substance whose single-site Lennard-Jones parameters define the
 /// reduced units.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct UnitSystem {
+pub(crate) struct UnitSystem {
     pub name: &'static str,
     /// `σ` in Å: the reduced unit of length.
     pub sigma_angstrom: f64,
@@ -36,12 +36,14 @@ pub struct UnitSystem {
     pub source: &'static str,
 }
 
+// `from_*` convert a physical value into this unit system, so they need it.
+#[allow(clippy::wrong_self_convention)]
 impl UnitSystem {
     /// N₂, from second virial coefficients: Hirschfelder, Curtiss and Bird,
     /// *Molecular Theory of Gases and Liquids* (Wiley, 1954), table I-A.
     /// Published single-site fits for N₂ range over about 70–100 K for
     /// `ε / k_B`, depending on the fitted property; see `docs/units.md`.
-    pub const N2: UnitSystem = UnitSystem {
+    pub(crate) const N2: UnitSystem = UnitSystem {
         name: "N2",
         sigma_angstrom: N2_SIGMA_ANGSTROM,
         epsilon_kelvin: N2_EPSILON_KELVIN,
@@ -50,83 +52,89 @@ impl UnitSystem {
     };
 
     /// Unit of length in m.
-    pub fn length_m(&self) -> f64 {
+    pub(crate) fn length_m(&self) -> f64 {
         self.sigma_angstrom * 1e-10
     }
 
     /// Unit of energy in J.
-    pub fn energy_j(&self) -> f64 {
+    pub(crate) fn energy_j(&self) -> f64 {
         self.epsilon_kelvin * BOLTZMANN_J_PER_K
     }
 
     /// Unit of mass in kg.
-    pub fn mass_kg(&self) -> f64 {
+    pub(crate) fn mass_kg(&self) -> f64 {
         self.mass_u * ATOMIC_MASS_KG
     }
 
     /// Unit of time `τ = σ·√(m/ε)` in s.
-    pub fn time_s(&self) -> f64 {
+    pub(crate) fn time_s(&self) -> f64 {
         self.length_m() * (self.mass_kg() / self.energy_j()).sqrt()
     }
 
     // ── reduced → physical ─────────────────────────────────────────
 
     /// Reduced temperature (or energy per `k_B`) in K.
-    pub fn to_kelvin(&self, reduced: f32) -> f64 {
+    pub(crate) fn to_kelvin(self, reduced: f32) -> f64 {
         reduced as f64 * self.epsilon_kelvin
     }
 
     /// Reduced time in ps.
-    pub fn to_picoseconds(&self, reduced: f32) -> f64 {
+    pub(crate) fn to_picoseconds(self, reduced: f32) -> f64 {
         reduced as f64 * self.time_s() * 1e12
     }
 
     /// Reduced time in fs.
-    pub fn to_femtoseconds(&self, reduced: f32) -> f64 {
+    pub(crate) fn to_femtoseconds(self, reduced: f32) -> f64 {
         reduced as f64 * self.time_s() * 1e15
     }
 
     /// Reduced length in Å.
-    pub fn to_angstrom(&self, reduced: f32) -> f64 {
+    #[cfg(test)]
+    pub(crate) fn to_angstrom(self, reduced: f32) -> f64 {
         reduced as f64 * self.sigma_angstrom
     }
 
     /// Reduced energy in J.
-    pub fn to_joules(&self, reduced: f32) -> f64 {
+    pub(crate) fn to_joules(self, reduced: f32) -> f64 {
         reduced as f64 * self.energy_j()
     }
 
     /// Reduced speed in m/s.
-    pub fn to_metres_per_second(&self, reduced: f32) -> f64 {
+    pub(crate) fn to_metres_per_second(self, reduced: f32) -> f64 {
         reduced as f64 * self.length_m() / self.time_s()
     }
 
     // ── physical → reduced ─────────────────────────────────────────
 
     /// A length in Å (e.g. a literature `σ`) in reduced units.
-    pub fn from_angstrom(&self, angstrom: f64) -> f32 {
+    #[cfg(test)]
+    pub(crate) fn from_angstrom(&self, angstrom: f64) -> f32 {
         (angstrom / self.sigma_angstrom) as f32
     }
 
     /// A temperature in K (or a literature `ε / k_B`) in reduced units.
-    pub fn from_kelvin(&self, kelvin: f64) -> f32 {
+    #[cfg(test)]
+    pub(crate) fn from_kelvin(&self, kelvin: f64) -> f32 {
         (kelvin / self.epsilon_kelvin) as f32
     }
 
     /// A mass in u in reduced units.
-    pub fn from_atomic_mass(&self, mass_u: f64) -> f32 {
+    #[cfg(test)]
+    pub(crate) fn from_atomic_mass(&self, mass_u: f64) -> f32 {
         (mass_u / self.mass_u) as f32
     }
 
     /// An acceleration in m/s² (e.g. gravity) in reduced units:
     /// `a* = a·τ² / σ`.
-    pub fn from_metres_per_second2(&self, accel: f64) -> f32 {
+    #[cfg(test)]
+    pub(crate) fn from_metres_per_second2(&self, accel: f64) -> f32 {
         (accel * self.time_s() * self.time_s() / self.length_m()) as f32
     }
 
     /// Reduced `(σ*, ε*, m*)` of a species from its literature single-site
     /// Lennard-Jones parameters.
-    pub fn reduced_lennard_jones(
+    #[cfg(test)]
+    pub(crate) fn reduced_lennard_jones(
         &self,
         sigma_angstrom: f64,
         epsilon_kelvin: f64,

@@ -17,11 +17,6 @@ impl MainContent {
         Self::with_config(world_rect, &SimConfig::default(), None)
     }
 
-    /// [`Self::new`], with balls seeded from `seed` for reproducible runs.
-    pub fn new_with_seed(world_rect: Rect, seed: u64) -> AppResult<Self> {
-        Self::with_config(world_rect, &SimConfig::default(), Some(seed))
-    }
-
     /// An empty world run with `config` (validated first); balls are seeded
     /// from `seed` if given.
     pub fn with_config(world_rect: Rect, config: &SimConfig, seed: Option<u64>) -> AppResult<Self> {

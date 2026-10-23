@@ -6,12 +6,12 @@
 //!
 //! One JSON object per run, read by `scripts/headless_perf.sh`. All times are
 //! milliseconds per measured step; the warmup steps are not counted.
-use moldyat_core::application::phase_timings::PhaseTimings;
-use moldyat_core::application::renderer_snapshot::RendererSnapshot;
+use crate::application::renderer_snapshot::RendererSnapshot;
 use serde_json::json;
 use std::io;
 use std::path::Path;
 use std::time::{Duration, Instant};
+use thermo_physics::application::phase_timings::PhaseTimings;
 
 /// Time the runner spends outside the physics step, from the first measured step.
 pub struct RunClock {
@@ -39,7 +39,10 @@ impl RunClock {
     }
 }
 
+/// `commit` is the git commit of the binary that ran (see
+/// `HeadlessRunnerBuilder::commit`, `HeadlessRunner::from_config`).
 pub fn timings_to_json(
+    commit: &str,
     clock: &RunClock,
     wall: Duration,
     phases: &PhaseTimings,
@@ -53,7 +56,7 @@ pub fn timings_to_json(
     json!({
         "schema_version": "headless-timings.v1",
         "version": env!("CARGO_PKG_VERSION"),
-        "commit": env!("GIT_COMMIT"),
+        "commit": commit,
         "balls": snapshot.balls.len(),
         "wall_pieces": snapshot.operators.line_segments.len(),
         "valves": snapshot.operators.valve_spans.len(),
@@ -79,6 +82,7 @@ pub fn timings_to_json(
 
 pub fn write_timings(
     path: &Path,
+    commit: &str,
     clock: &RunClock,
     wall: Duration,
     phases: &PhaseTimings,
@@ -92,6 +96,6 @@ pub fn write_timings(
             phases.steps, clock.steps
         )));
     }
-    let value = timings_to_json(clock, wall, phases, snapshot);
+    let value = timings_to_json(commit, clock, wall, phases, snapshot);
     std::fs::write(path, format!("{value}\n"))
 }

@@ -11,12 +11,11 @@ use std::sync::Arc;
 
 use rand::rngs::{StdRng, SysRng};
 use rand::{RngExt, SeedableRng};
-use rand_distr::{Distribution, Normal};
 
 /// Factory for creating Ball2D instances with various configurations.
 ///
 /// It owns the species table of the world it makes balls for (injected at
-/// construction, swapped only through [`Self::use_species`]), so
+/// construction, swapped only through `Self::use_species`), so
 /// `new_ball_species` always indexes that table.
 pub struct BallFactory {
     /// The world's species table: mass and contact radius of new balls.
@@ -43,13 +42,14 @@ impl BallFactory {
 
     /// A factory for the built-in species table with deterministic RNG state
     /// from a fixed seed.
-    pub fn with_seed(seed: u64) -> Self {
+    #[cfg(test)]
+    pub(crate) fn with_seed(seed: u64) -> Self {
         Self::with_species(SpeciesTable::builtin_shared(), Some(seed))
     }
 
     /// A factory for balls of `species` (the world's table); its RNG is
     /// seeded from `seed` if given, else from entropy.
-    pub fn with_species(species: Arc<SpeciesTable>, seed: Option<u64>) -> Self {
+    pub(crate) fn with_species(species: Arc<SpeciesTable>, seed: Option<u64>) -> Self {
         let rng = match seed {
             Some(seed) => StdRng::seed_from_u64(seed),
             None => StdRng::try_from_rng(&mut SysRng).unwrap(),
@@ -119,7 +119,7 @@ impl BallFactory {
     }
 
     /// Creates a ball of a given species with an initial velocity.
-    pub fn create_with_species_and_velocity(
+    pub(crate) fn create_with_species_and_velocity(
         &self,
         pos: impl Into<Vec2D>,
         species: SpeciesId,
@@ -178,35 +178,9 @@ impl BallFactory {
             .random_range(0.0..std::f32::consts::TAU)
     }
 
-    /// Creates a collection of balls with normally distributed positions (Gaussian cluster).
-    ///
-    /// # Arguments
-    /// * `count` - Number of balls to create
-    /// * `center_pos` - Mean position (cluster center)
-    /// * `pos_std_dev` - Standard deviation for position distribution
-    ///
-    /// # Returns
-    /// Vector of balls with zero initial velocity
-    pub fn create_normal_distribution(
-        &self,
-        count: usize,
-        center_pos: Vec2D,
-        pos_std_dev: f32,
-    ) -> Vec<Ball2D> {
-        let mut rng = self.rng.borrow_mut();
-        let pos_dist = Normal::new(center_pos.x, pos_std_dev).unwrap();
-        let pos_dist_y = Normal::new(center_pos.y, pos_std_dev).unwrap();
-
-        (0..count)
-            .map(|_| {
-                let pos = Vec2D::new(pos_dist.sample(&mut *rng), pos_dist_y.sample(&mut *rng));
-                self.create_massive_with_velocity(pos, Vec2D::zero())
-            })
-            .collect()
-    }
-
     /// Creates a ball with specified properties and validation
-    pub fn create_validated(
+    #[cfg(test)]
+    pub(crate) fn create_validated(
         &self,
         pos: impl Into<Vec2D>,
         velocity: Vec2D,
@@ -218,27 +192,8 @@ impl BallFactory {
         Ok(self.create_massive_with_velocity(pos_vec, velocity))
     }
 
-    /// Creates a static ball (zero initial velocity and high mass)
-    pub fn create_static(&self, pos: impl Into<Vec2D>) -> Ball2D {
-        self.create_massive_with_velocity(pos, Vec2D::zero())
-    }
-
-    /// Creates a lightweight ball with high velocity (projectile).
-    ///
-    /// # Arguments
-    /// * `pos` - Initial position
-    /// * `direction` - Direction vector (will be normalized)
-    /// * `speed` - Magnitude of velocity
-    ///
-    /// # Returns
-    /// New ball moving in specified direction at given speed
-    pub fn create_projectile(&self, pos: impl Into<Vec2D>, direction: Vec2D, speed: f32) -> Ball2D {
-        let velocity = direction.normalize() * speed;
-        self.create_massive_with_velocity(pos, velocity)
-    }
-
     /// Resets the ID counter - useful for testing or when creating new simulation
-    pub fn reset_id_counter(&self) {
+    pub(crate) fn reset_id_counter(&self) {
         *self.next_id.borrow_mut() = FIRST_BALL_ID;
     }
 
@@ -250,11 +205,6 @@ impl BallFactory {
             .max()
             .unwrap_or(FIRST_BALL_ID);
         *self.next_id.borrow_mut() = next.max(FIRST_BALL_ID);
-    }
-
-    /// Get the next available ID without incrementing the counter
-    pub fn peek_next_id(&self) -> usize {
-        *self.next_id.borrow()
     }
 
     /// Make new balls of `species`.

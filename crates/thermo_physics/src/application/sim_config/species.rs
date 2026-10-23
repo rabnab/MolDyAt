@@ -132,7 +132,7 @@ fn check_literature(
 /// [`SimConfig::validated_species`] (or `WorldFile::validate`) and handed to
 /// the world's constructor, which does not resolve them again.
 #[derive(Debug, Clone, PartialEq)]
-pub struct ResolvedSpecies {
+pub(crate) struct ResolvedSpecies {
     pub table: Arc<SpeciesTable>,
     pub pair_overrides: Vec<PairOverride>,
 }
@@ -140,7 +140,7 @@ pub struct ResolvedSpecies {
 impl ResolvedSpecies {
     /// The built-in library without pair overrides: a config without
     /// `[[species]]` and `[[potential.pair_override]]`.
-    pub fn builtin() -> Self {
+    pub(crate) fn builtin() -> Self {
         Self {
             table: SpeciesTable::builtin_shared(),
             pair_overrides: Vec::new(),

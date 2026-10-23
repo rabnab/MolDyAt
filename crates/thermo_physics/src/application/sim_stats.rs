@@ -21,7 +21,7 @@ pub const HIGH_GRAVITY_MPS2: f32 = NORMAL_GRAVITY_MPS2 * 5.0;
 /// `UnitSystem::N2.from_metres_per_second2` gives it; a constant because the
 /// gravity presets are compared with `==` (`test_gravity_in_reduced_units`).
 pub const NORMAL_GRAVITY: f32 = 1.285_924_5e-13;
-pub const HIGH_GRAVITY: f32 = NORMAL_GRAVITY * 5.0;
+pub(crate) const HIGH_GRAVITY: f32 = NORMAL_GRAVITY * 5.0;
 
 /// Whether `gravity` is the 1 g preset: the nearest whole multiple of
 /// `NORMAL_GRAVITY` is 1, as the gravity display shows it. Saves store the
@@ -89,14 +89,14 @@ impl SimStats {
         self.pause
     }
 
-    pub fn clear_energy(&mut self) {
+    pub(crate) fn clear_energy(&mut self) {
         self.v_kin.clear();
         self.v_pot.clear();
     }
 
     /// Status text in physical units of N₂: time in ps, the time step in fs,
     /// temperature in K, energies in J, speeds in m/s.
-    pub fn get_status_text_real(&self, fps: u32, num_balls: usize, dt: f32) -> String {
+    pub(crate) fn get_status_text_real(&self, fps: u32, num_balls: usize, dt: f32) -> String {
         format!(
             "fps {} | time: {:.1}ps | dt: {:.1}fs\n\
              #Balls: {} | maxNeig: {}\n\
@@ -151,7 +151,7 @@ impl SimStats {
     /// # Arguments
     /// * `dt` - Time step
     /// * `stats_acumulator` - Accumulated physics statistics (kinetic, potential energy, velocities)
-    pub fn update(&mut self, dt: f32, stats_acumulator: StatsAccumulator) {
+    pub(crate) fn update(&mut self, dt: f32, stats_acumulator: StatsAccumulator) {
         self.energy_kin = stats_acumulator.kin;
         self.energy_pot = stats_acumulator.pot;
         if self.step.is_multiple_of(PLT_STEP) {
@@ -207,7 +207,7 @@ impl SimStats {
     }
 
     #[cfg(test)]
-    pub fn len_v_energy(&self) -> usize {
+    pub(crate) fn len_v_energy(&self) -> usize {
         self.v_kin.len().max(self.v_pot.len())
     }
 }

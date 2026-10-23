@@ -55,7 +55,7 @@ pub struct Species {
 
 impl Species {
     /// A species drawn at its default size, `σ / 2`.
-    pub fn new(name: &str, mass: f32, sigma: f32, epsilon: f32, colour: [f32; 4]) -> Self {
+    pub(crate) fn new(name: &str, mass: f32, sigma: f32, epsilon: f32, colour: [f32; 4]) -> Self {
         Species {
             name: name.to_string(),
             mass,
@@ -69,7 +69,7 @@ impl Species {
     /// A species from its literature single-site Lennard-Jones parameters
     /// (`σ` in Å, `ε / k_B` in K, mass in u), in N₂ units. `display_radius`
     /// in Å; `None` draws it at `σ / 2`.
-    pub fn from_literature(
+    pub(crate) fn from_literature(
         name: &str,
         sigma_angstrom: f64,
         epsilon_kelvin: f64,
@@ -94,7 +94,7 @@ impl Species {
     /// Half of `σ`: the size of a ball for contact and overlap checks. Two
     /// balls touch (zero pair potential) when their centres are the sum of
     /// their contact radii apart, `σ_ij` under arithmetic mixing.
-    pub fn contact_radius(&self) -> f32 {
+    pub(crate) fn contact_radius(&self) -> f32 {
         0.5 * self.sigma
     }
 }
@@ -228,7 +228,7 @@ fn size_class_mass(radius: f32) -> f32 {
 
 impl SpeciesTable {
     /// Panics if `species` is empty or longer than [`SpeciesSet::CAPACITY`].
-    pub fn new(species: Vec<Species>) -> Self {
+    pub(crate) fn new(species: Vec<Species>) -> Self {
         assert!(
             !species.is_empty() && species.len() <= SpeciesSet::CAPACITY,
             "a species table holds 1 to {} species, not {}",
@@ -278,7 +278,7 @@ impl SpeciesTable {
         (0..self.species.len()).map(|index| SpeciesId::new(index as u16))
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &Species> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &Species> {
         self.species.iter()
     }
 
@@ -286,18 +286,19 @@ impl SpeciesTable {
         self.species.len()
     }
 
+    /// Never true for a valid table (it holds at least the default species).
     pub fn is_empty(&self) -> bool {
         self.species.is_empty()
     }
 
     /// The species after `id`, wrapping around: what the UI steps through.
-    pub fn next(&self, id: SpeciesId) -> SpeciesId {
+    pub(crate) fn next(&self, id: SpeciesId) -> SpeciesId {
         let len = self.species.len();
         SpeciesId::new(((id.index() % len + 1) % len) as u16)
     }
 
     /// The species before `id`, wrapping around.
-    pub fn previous(&self, id: SpeciesId) -> SpeciesId {
+    pub(crate) fn previous(&self, id: SpeciesId) -> SpeciesId {
         let len = self.species.len();
         SpeciesId::new(((id.index() % len + len - 1) % len) as u16)
     }
@@ -311,20 +312,21 @@ impl SpeciesSet {
     /// Largest number of species a table may hold.
     pub const CAPACITY: usize = 64;
 
-    pub fn insert(&mut self, id: SpeciesId) {
+    pub(crate) fn insert(&mut self, id: SpeciesId) {
         self.0 |= 1 << id.index();
     }
 
-    pub fn contains(&self, id: SpeciesId) -> bool {
+    #[cfg(test)]
+    pub(crate) fn contains(&self, id: SpeciesId) -> bool {
         self.0 & (1 << id.index()) != 0
     }
 
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.0 == 0
     }
 
     /// The ids in the set, ascending.
-    pub fn iter(&self) -> impl Iterator<Item = SpeciesId> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = SpeciesId> {
         let bits = self.0;
         (0..Self::CAPACITY as u16)
             .filter(move |&i| bits & (1 << i) != 0)

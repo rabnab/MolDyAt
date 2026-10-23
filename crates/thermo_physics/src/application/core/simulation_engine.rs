@@ -21,7 +21,7 @@ use rayon::prelude::*;
 /// `MainContent` still owns runtime-only bookkeeping and high-level step
 /// orchestration, while the world-only update path here now operates on
 /// [`SimulationWorld`] directly.
-pub struct SimulationEngine;
+pub(crate) struct SimulationEngine;
 
 impl SimulationEngine {
     /// `log_timings`: log each phase's time (`RuntimeOptions::show_timings`).
@@ -42,7 +42,8 @@ impl SimulationEngine {
         }
     }
 
-    pub fn simulation_step(
+    #[cfg(test)]
+    pub(crate) fn simulation_step(
         world: &mut SimulationWorld,
         step_config: &StepConfig,
         options: &RuntimeOptions,
@@ -86,7 +87,7 @@ impl SimulationEngine {
     /// [`Self::record_thermo_fields`] every [`THERMO_SAMPLE_STRIDE`] steps,
     /// and right away when the history is empty (just shown, cleared after a
     /// resize or load), so the heatmap appears without waiting (#229).
-    pub fn record_thermo_fields_if_due(world: &mut SimulationWorld, log_timings: bool) {
+    pub(crate) fn record_thermo_fields_if_due(world: &mut SimulationWorld, log_timings: bool) {
         if world.thermo_history.is_empty() || world.step_count.is_multiple_of(THERMO_SAMPLE_STRIDE)
         {
             Self::record_thermo_fields(world, log_timings);
@@ -97,7 +98,7 @@ impl SimulationEngine {
     /// thermo history. Only the heatmap overlay (and headless output) uses
     /// them, so the physics thread calls this only while they are shown
     /// (the `THERMO` layer).
-    pub fn record_thermo_fields(world: &mut SimulationWorld, log_timings: bool) {
+    pub(crate) fn record_thermo_fields(world: &mut SimulationWorld, log_timings: bool) {
         if world.balls.len() != world.cached_force_results.len() {
             return;
         }

@@ -16,42 +16,41 @@ pub use crate::objects2d::ball_impl::ball_core::Ball2D;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 // Module declarations
-pub mod ball_core;
+pub(crate) mod ball_core;
 mod ball_factory;
-pub mod ball_physics;
-pub mod pair_potential;
-pub mod simd_forces;
+pub(crate) mod ball_physics;
+pub(crate) mod pair_potential;
+pub(crate) mod simd_forces;
 pub(crate) mod species;
-pub mod verlet;
-pub mod wall_contact;
-pub mod wall_law;
+pub(crate) mod verlet;
+pub(crate) mod wall_contact;
+pub(crate) mod wall_law;
 
 /// Neighbour-list rebuilds so far; rebuild checks run in parallel.
 static UPDATE_HOOD_CNT: AtomicUsize = AtomicUsize::new(0);
 
 /// get the count of how often update_hood was actually collecting the neighbors
-pub fn get_update_hood_call_cnt() -> usize {
+pub(crate) fn get_update_hood_call_cnt() -> usize {
     UPDATE_HOOD_CNT.load(Ordering::Relaxed)
 }
 
 // Type definitions and constants that are common across ball modules
-pub type BallId = usize;
+pub(crate) type BallId = usize;
 
 /// Common trait for ball identification
-pub trait Named {
+pub(crate) trait Named {
     fn get_name(&self) -> String;
 }
 
 /// Result type for ball-related operations
-pub type BallResult<T> = Result<T, BallError>;
+#[cfg(test)]
+pub(crate) type BallResult<T> = Result<T, BallError>;
 
 /// Error types for ball-related operations
 #[derive(Debug, PartialEq)]
-pub enum BallError {
-    DistanceUnderflow,
-    PhysicsError,
+#[cfg(test)]
+pub(crate) enum BallError {
     InvalidParameter,
-    // Add other error types as needed
 }
 
 // Common validation functions if needed

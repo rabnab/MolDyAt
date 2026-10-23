@@ -58,7 +58,7 @@ impl OperatorState {
     }
 
     /// Whether the operator is currently active.
-    pub fn is_on(self) -> bool {
+    pub(crate) fn is_on(self) -> bool {
         self == Self::On
     }
 
@@ -66,7 +66,8 @@ impl OperatorState {
     ///
     /// - **On** → green circle
     /// - **Off** → red cross
-    pub fn indicator_color(self) -> [f32; 4] {
+    #[cfg(test)]
+    pub(crate) fn indicator_color(self) -> [f32; 4] {
         match self {
             Self::On => [0.0, 1.0, 0.0, 1.0],  // green
             Self::Off => [1.0, 0.0, 0.0, 1.0], // red
@@ -81,7 +82,7 @@ impl OperatorState {
 ///
 /// This is the shared rescaling formula used by every operator when the
 /// simulation region is resized.
-pub fn remap_point(p: Vec2D, old: &Rect, new: &Rect) -> Vec2D {
+pub(crate) fn remap_point(p: Vec2D, old: &Rect, new: &Rect) -> Vec2D {
     let frac_x = (p.x - old.x) / old.w;
     let frac_y = (p.y - old.y) / old.h;
     Vec2D::new(new.x + frac_x * new.w, new.y + frac_y * new.h)
@@ -89,7 +90,7 @@ pub fn remap_point(p: Vec2D, old: &Rect, new: &Rect) -> Vec2D {
 
 /// Check whether a rect is degenerate (zero-area), used to guard
 /// against division-by-zero in [`remap_point`].
-pub fn is_degenerate(rect: &Rect) -> bool {
+pub(crate) fn is_degenerate(rect: &Rect) -> bool {
     rect.w.abs() < 1e-12 || rect.h.abs() < 1e-12
 }
 
@@ -105,26 +106,27 @@ pub struct OperatorIdCounter {
 }
 
 impl OperatorIdCounter {
-    pub fn new() -> Self {
+    #[cfg(test)]
+    pub(crate) fn new() -> Self {
         Self { next: 0 }
     }
 
     /// Counter whose next id lies after every id in `ids` (for restored collections).
-    pub fn after(ids: impl IntoIterator<Item = usize>) -> Self {
+    pub(crate) fn after(ids: impl IntoIterator<Item = usize>) -> Self {
         Self {
             next: ids.into_iter().map(|id| id + 1).max().unwrap_or(0),
         }
     }
 
     /// Allocate the next ID and advance the counter.
-    pub fn next_id(&mut self) -> usize {
+    pub(crate) fn next_id(&mut self) -> usize {
         let id = self.next;
         self.next += 1;
         id
     }
 
     /// Reset the counter to zero (called on simulation clear).
-    pub fn reset(&mut self) {
+    pub(crate) fn reset(&mut self) {
         self.next = 0;
     }
 }

@@ -15,7 +15,7 @@ Use this when implementing or changing operators (line segment, valve, thermosta
 
 ## Tools And Commands
 - Each tool is an `OperatorToolHandler` (`core/src/graphics/renderer/event_loop/operator_tool_handler.rs`), created in `UnifiedRenderState::handler_for_tool()`. All input methods return `ToolResponse`; `reset()` runs when the tool is switched.
-- Tools never mutate simulation state. They return an `OperatorCommand` (`core/src/application/operator_command/<type>.rs`) inside the `ToolResponse`; it is sent as `DomainCommand::Operator` and executed on the physics thread. A new mutation is a new command struct; `DomainCommand`, `InputAction` and the action processor stay unchanged.
+- Tools never mutate simulation state. They return an `OperatorCommand` (`crates/thermo_runtime/src/application/operator_command/<type>.rs`) inside the `ToolResponse`; it is sent as `DomainCommand::Operator` and executed on the physics thread. A new mutation is a new command struct; `DomainCommand`, `InputAction` and the action processor stay unchanged.
 - Tools read operators only from the last snapshot (`ToolContext`), and supply `preview()`, `snap_indicators()` and `hovered()`.
 - Hover and delete: `hovered()` returns an `ObjectRef` (`crates/thermo_physics/src/objects2d/wall_chain.rs`). A new operator type adds an `ObjectRef` variant, a `delete_object` arm (`crates/thermo_physics/src/application/core/object_deletion.rs`) and a `highlight_capsule` arm (`wgpu_renderer/src/wgpu/pipelines/highlight_pipeline.rs`).
 
@@ -36,10 +36,10 @@ Use this when implementing or changing operators (line segment, valve, thermosta
 
 ## Snapshot, Persistence And Headless Output
 A new operator type, or a new persistent field, must be added in all of these:
-- `OperatorSnapshot` (`core/src/application/renderer_snapshot.rs`) and its creation in `core/src/application/snapshot.rs`. Live readouts belong behind `SceneLayers::READOUTS`.
+- `OperatorSnapshot` (`crates/thermo_runtime/src/application/renderer_snapshot.rs`) and its creation in `crates/thermo_runtime/src/application/snapshot.rs`. Live readouts belong behind `SceneLayers::READOUTS`.
 - A render pipeline in `wgpu_renderer/src/wgpu/pipelines/`, registered in draw order in `WgpuPipelines::new` (see `docs/architecture.md`, Render pipelines).
 - The save format (see the `save-format` skill): a new operator kind is a new variant of `OperatorData` (`crates/thermo_physics/src/application/persistence/format.rs`) with its own `*Data` file type, a key in `OperatorVisitor::visit_map`, an arm in `capture_operators` and the restore in `convert.rs`, and its checks in `validate()`. If it changes results (it almost always does), bump `WORLD_FILE_VERSION` with a migration that only updates the number, so older builds refuse the file instead of skipping the operator with a warning (#273, #274). Parts an operator owns (a chain's pieces and valves) are saved inside its entry, not as operators of their own. Old saves must keep loading.
-- Headless operator counts in `wgpu_renderer/src/headless_output.rs`.
+- Headless operator counts in `crates/thermo_runtime/src/headless_output.rs`.
 
 ## Test Requirements For Operator Changes
 - Place tests in topic files under `tests/` directories (no large inline test modules).
@@ -56,4 +56,4 @@ A new operator type, or a new persistent field, must be added in all of these:
   - Simulation effects: `crates/thermo_physics/src/application/core/tests/`
   - Tools, sidebar mapping, hover: `core/src/graphics/renderer/event_loop/tests/`
   - WGPU sidebar and pipelines: `wgpu_renderer/src/wgpu/tests/`
-- The seeded operator fixture (`wgpu_renderer/src/headless_runner/fixtures/seeded_headless_operators.jsonl`) must match. Refresh it only for intended changes: `UPDATE_HEADLESS_FIXTURE=1 cargo ci-test-headless-regression`, rerun without the variable, and include the fixture diff in the PR.
+- The seeded operator fixture (`crates/thermo_runtime/src/headless_runner/fixtures/seeded_headless_operators.jsonl`) must match. Refresh it only for intended changes: `UPDATE_HEADLESS_FIXTURE=1 cargo ci-test-headless-regression`, rerun without the variable, and include the fixture diff in the PR.

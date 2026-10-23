@@ -29,7 +29,7 @@ const TAIL_RESOLUTION_DELTA_SQ: f32 = 1. * 1.; // minimum squared distance to ad
 /// in a step without a box contact (`line_wall` is `None` whenever a box
 /// field is set).
 #[derive(Debug, Clone, Copy, Default)]
-pub struct BounceInfo {
+pub(crate) struct BounceInfo {
     /// Contact with the left or right box wall.
     pub box_x: Option<WallContact>,
     /// Contact with the top or bottom box wall.
@@ -40,11 +40,11 @@ pub struct BounceInfo {
 
 impl BounceInfo {
     /// Whether the ball touched a box wall this step.
-    pub fn touched_box(&self) -> bool {
+    pub(crate) fn touched_box(&self) -> bool {
         self.box_x.is_some() || self.box_y.is_some()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &WallContact> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &WallContact> {
         [&self.box_x, &self.box_y, &self.line_wall]
             .into_iter()
             .flatten()
@@ -103,7 +103,7 @@ impl Ball2D {
     /// A ball of species `species` (with the data `data` of that species, from
     /// the world's table) at rest. Sets pre_update_pos and
     /// last_update_hood_pos to the initial position.
-    pub fn of_species(id: BallId, pos: Vec2D, species: SpeciesId, data: &Species) -> Ball2D {
+    pub(crate) fn of_species(id: BallId, pos: Vec2D, species: SpeciesId, data: &Species) -> Ball2D {
         Ball2D {
             contact_radius: data.contact_radius(),
             species,
@@ -163,7 +163,8 @@ impl Ball2D {
     ///
     /// # Returns
     /// Gap between the contact discs (negative if overlapping)
-    pub fn get_edge_distance(&self, other: &Ball2D) -> f32 {
+    #[cfg(test)]
+    pub(crate) fn get_edge_distance(&self, other: &Ball2D) -> f32 {
         let center_dist = self.get_position().dist(other.get_position()).norm();
         center_dist - (self.contact_radius + other.contact_radius)
     }
@@ -179,14 +180,14 @@ impl Ball2D {
     /// movement **since the last neighborhood update**, not the full history.
     /// Callers relying on long-lived trajectory visuals should be aware that
     /// invoking this method will drop the existing tail points.
-    pub fn reset_update_counter(&mut self) {
+    pub(crate) fn reset_update_counter(&mut self) {
         self.show_update_count = 200;
         if let Some(tail) = self.tail.as_mut() {
             tail.clear();
         }
     }
 
-    pub fn decrement_update_counter(&mut self) {
+    pub(crate) fn decrement_update_counter(&mut self) {
         if self.show_update_count > 0 {
             self.show_update_count -= 1;
         }
@@ -200,7 +201,7 @@ impl Ball2D {
     ///
     /// # Returns
     /// Momentum vector
-    pub fn moment(&self) -> Vec2D {
+    pub(crate) fn moment(&self) -> Vec2D {
         self.v.scaled(self.mass)
     }
 
@@ -244,7 +245,7 @@ impl Ball2D {
     /// Save current position before physics update.
     /// Used to restore position or calculate displacement.
     /// Note: Despite the name, this stores the "current" position, not the "old" one.
-    pub fn update_old_pos(&mut self) {
+    pub(crate) fn update_old_pos(&mut self) {
         self.pre_update_pos = self.pos;
     }
 
@@ -340,7 +341,7 @@ impl Ball2D {
     ///
     /// # Arguments
     /// * `new_pos` - New position to set
-    pub fn set_position_and_update_tail(&mut self, new_pos: Vec2D) {
+    pub(crate) fn set_position_and_update_tail(&mut self, new_pos: Vec2D) {
         if self.verbose.any() {
             let tail = self.tail.get_or_insert_with(Default::default);
             let far_enough = tail
@@ -359,12 +360,12 @@ impl Ball2D {
     }
 
     #[cfg(test)]
-    pub fn get_neighbour_names(&self, balls: &[Ball2D]) -> Vec<String> {
+    pub(crate) fn get_neighbour_names(&self, balls: &[Ball2D]) -> Vec<String> {
         self.hood.get_neighbour_names(balls)
     }
 
     #[cfg(test)]
-    pub fn set_accel(&mut self, accel: Vec2D) {
+    pub(crate) fn set_accel(&mut self, accel: Vec2D) {
         self.accel = accel;
     }
 }

@@ -23,7 +23,7 @@
 //! Saves written before the config existed load with the defaults.
 //!
 //! Every key has an accepted range (the `MIN_*` / `MAX_*` constants), checked
-//! by [`SimConfig::validate`] for a config file, `--dt` and a save.
+//! by `SimConfig::validate` for a config file, `--dt` and a save.
 //!
 //! Unknown keys are rejected, here and in a save's `config`. That makes every
 //! key part of the save format: a key added later is unknown to this build,
@@ -47,23 +47,24 @@ mod species;
 pub use sections::{
     DisplayConfig, IntegrationConfig, NeighbourConfig, PairOverrideConfig, PotentialConfig,
 };
-pub use species::{ResolvedSpecies, SpeciesConfig};
+pub(crate) use species::{ResolvedSpecies, SpeciesConfig};
 
 use crate::error::{AppError, AppResult};
 use crate::objects2d::ball_impl::{Species, SpeciesSet, SpeciesTable};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::Arc;
+#[cfg(test)]
 use std::time::Duration;
 
 /// Time step of a new world, in reduced (N2) time units, about 11 fs.
 /// 0.01 let hot collisions (T* ≈ 3) reach deep into the steep core and
 /// drifted ~1 % over 200k steps; 0.005 is the usual Lennard-Jones step.
-pub const DEFAULT_TIME_STEP: f32 = 0.005;
+pub(crate) const DEFAULT_TIME_STEP: f32 = 0.005;
 /// The speed limit is this share of the shorter world side.
-pub const DEFAULT_SPEED_LIMIT_FACTOR: f32 = 0.2;
+pub(crate) const DEFAULT_SPEED_LIMIT_FACTOR: f32 = 0.2;
 /// The physics thread publishes a snapshot at most this often (about 60 Hz).
-pub const DEFAULT_SNAPSHOT_INTERVAL_US: u64 = 16_667;
+pub(crate) const DEFAULT_SNAPSHOT_INTERVAL_US: u64 = 16_667;
 
 // Accepted ranges (inclusive). A config file is written by hand, so a value
 // far outside them is a typo, not a setting: it would make the run unstable,
@@ -74,35 +75,35 @@ pub const DEFAULT_SNAPSHOT_INTERVAL_US: u64 = 16_667;
 /// (`core_stiffness`) gets close to its stability limit.
 pub const MIN_TIME_STEP: f32 = 0.000_312_5;
 pub const MAX_TIME_STEP: f32 = 0.08;
-pub const MIN_SPEED_LIMIT_FACTOR: f32 = 0.01;
-pub const MAX_SPEED_LIMIT_FACTOR: f32 = 10.0;
-pub const MIN_MAX_FORCE: f32 = 1.0;
-pub const MAX_MAX_FORCE: f32 = 10_000.0;
+pub(crate) const MIN_SPEED_LIMIT_FACTOR: f32 = 0.01;
+pub(crate) const MAX_SPEED_LIMIT_FACTOR: f32 = 10.0;
+pub(crate) const MIN_MAX_FORCE: f32 = 1.0;
+pub(crate) const MAX_MAX_FORCE: f32 = 10_000.0;
 /// 0 is a flat core (no slope below `r_cap`).
-pub const MIN_CORE_STIFFNESS: f32 = 0.0;
-pub const MAX_CORE_STIFFNESS: f32 = 10_000.0;
+pub(crate) const MIN_CORE_STIFFNESS: f32 = 0.0;
+pub(crate) const MAX_CORE_STIFFNESS: f32 = 10_000.0;
 /// Above the Lennard-Jones minimum (`2^(1/6) ≈ 1.12`), so the attractive well
 /// is not cut away.
-pub const MIN_CUTOFF_FACTOR: f32 = 1.2;
-pub const MAX_CUTOFF_FACTOR: f32 = 10.0;
-pub const MIN_SKIN_FACTOR: f32 = 0.01;
-pub const MAX_SKIN_FACTOR: f32 = 1.0;
+pub(crate) const MIN_CUTOFF_FACTOR: f32 = 1.2;
+pub(crate) const MAX_CUTOFF_FACTOR: f32 = 10.0;
+pub(crate) const MIN_SKIN_FACTOR: f32 = 0.01;
+pub(crate) const MAX_SKIN_FACTOR: f32 = 1.0;
 /// `σ_ij` of a pair override. The built-in species span 1 to 5.3; much
 /// smaller pairs stiffen the core beyond what the time step resolves.
-pub const MIN_PAIR_SIGMA: f32 = 0.5;
-pub const MAX_PAIR_SIGMA: f32 = 8.0;
+pub(crate) const MIN_PAIR_SIGMA: f32 = 0.5;
+pub(crate) const MAX_PAIR_SIGMA: f32 = 8.0;
 /// `ε_ij` of a pair override. The built-in species all have `ε = 1`.
-pub const MIN_PAIR_EPSILON: f32 = 0.1;
-pub const MAX_PAIR_EPSILON: f32 = 10.0;
+pub(crate) const MIN_PAIR_EPSILON: f32 = 0.1;
+pub(crate) const MAX_PAIR_EPSILON: f32 = 10.0;
 /// Mass of a `[[species]]` entry in N₂ units (about 1.4 u to 2800 u).
-pub const MIN_SPECIES_MASS: f32 = 0.05;
-pub const MAX_SPECIES_MASS: f32 = 100.0;
+pub(crate) const MIN_SPECIES_MASS: f32 = 0.05;
+pub(crate) const MAX_SPECIES_MASS: f32 = 100.0;
 /// Drawing radius of a `[[species]]` entry in N₂ units.
-pub const MIN_DISPLAY_RADIUS: f32 = 0.05;
-pub const MAX_DISPLAY_RADIUS: f32 = MAX_PAIR_SIGMA;
+pub(crate) const MIN_DISPLAY_RADIUS: f32 = 0.05;
+pub(crate) const MAX_DISPLAY_RADIUS: f32 = MAX_PAIR_SIGMA;
 /// 1 ms to 1 s between two snapshots for the window.
-pub const MIN_SNAPSHOT_INTERVAL_US: u64 = 1_000;
-pub const MAX_SNAPSHOT_INTERVAL_US: u64 = 1_000_000;
+pub(crate) const MIN_SNAPSHOT_INTERVAL_US: u64 = 1_000;
+pub(crate) const MAX_SNAPSHOT_INTERVAL_US: u64 = 1_000_000;
 
 /// Every setting of a run that is not part of the world itself. Each section
 /// and key is optional in a config file or save; missing ones keep their
@@ -143,7 +144,7 @@ fn check_range<T: PartialOrd + Copy + std::fmt::Display>(
 }
 
 /// Check a time step against [`MIN_TIME_STEP`]`..=`[`MAX_TIME_STEP`].
-pub fn check_time_step(time_step: f32) -> AppResult {
+pub(crate) fn check_time_step(time_step: f32) -> AppResult {
     if (MIN_TIME_STEP..=MAX_TIME_STEP).contains(&time_step) {
         Ok(())
     } else {
@@ -172,7 +173,7 @@ impl SimConfig {
     }
 
     /// Parse and validate a config in JSON, in the layout of the TOML file.
-    pub fn from_json(text: &str) -> AppResult<Self> {
+    pub(crate) fn from_json(text: &str) -> AppResult<Self> {
         let config: Self = serde_json::from_str(text).map_err(|e| invalid(e.to_string()))?;
         config.validate()?;
         Ok(config)
@@ -188,14 +189,14 @@ impl SimConfig {
     /// Check every value against its range (the `MIN_*` / `MAX_*`
     /// constants), the species table and every pair override's species. The
     /// defaults pass.
-    pub fn validate(&self) -> AppResult {
+    pub(crate) fn validate(&self) -> AppResult {
         self.validated_species().map(drop)
     }
 
     /// The species table of the run: the `[[species]]` list, or the built-in
     /// library if there is none. Checks the list (count, unique names,
     /// ranges).
-    pub fn species_table(&self) -> AppResult<Arc<SpeciesTable>> {
+    pub(crate) fn species_table(&self) -> AppResult<Arc<SpeciesTable>> {
         if self.species.is_empty() {
             return Ok(SpeciesTable::builtin_shared());
         }
@@ -223,7 +224,7 @@ impl SimConfig {
 
     /// [`Self::validate`], returning the species table and the pair
     /// overrides resolved against it, ready for the physics.
-    pub fn validated_species(&self) -> AppResult<ResolvedSpecies> {
+    pub(crate) fn validated_species(&self) -> AppResult<ResolvedSpecies> {
         let IntegrationConfig {
             time_step,
             speed_limit_factor,
@@ -286,7 +287,8 @@ impl SimConfig {
         })
     }
 
-    pub fn snapshot_interval(&self) -> Duration {
+    #[cfg(test)]
+    pub(crate) fn snapshot_interval(&self) -> Duration {
         Duration::from_micros(self.display.snapshot_interval_us)
     }
 }

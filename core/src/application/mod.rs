@@ -4,32 +4,20 @@
 
 // The simulation world, its stepping, run settings and saves moved to
 // `thermo_physics` (#308); re-exported here so the old paths keep working.
-pub use thermo_physics::application::{
-    core, log_util, persistence, phase_timings, sim_config, sim_stats, step_config, thermo_field,
-    units,
-};
 
-mod domain_command;
-pub mod operator_command;
-mod physics_event;
-mod physics_thread;
-pub mod renderer_snapshot;
-pub mod scene_layers;
-mod snapshot;
-
-#[cfg(test)]
-mod tests;
-
-pub use domain_command::{BallCommand, DomainCommand, SimControl, ViewCommand, WorldCommand};
-pub use physics_event::PhysicsEvent;
-pub(crate) use physics_thread::{PhysicsThread, SnapshotPublisher};
-pub use snapshot::{CreateSnapshot, valve_spans};
+// The physics thread, commands and snapshots moved to `thermo_runtime`
+// (#309), the physics to `thermo_physics` (#308); re-exported here so the
+// old paths keep working for one release.
 pub use thermo_physics::application::{
     AppError, AppResult, HIGH_GRAVITY_MPS2, MainContent, NORMAL_GRAVITY_MPS2, SimConfig,
     StepConfig, valve_span_problem,
 };
-
-#[cfg(test)]
-pub(crate) use physics_thread::{
-    CommandHandler, DomainCommandHandler, PhysicsRuntime, ShutdownSignal,
+pub use thermo_physics::application::{
+    core, log_util, persistence, phase_timings, sim_config, sim_stats, step_config, thermo_field,
+    units,
+};
+pub use thermo_runtime::application::{
+    BallCommand, CreateSnapshot, DomainCommand, PhysicsEvent, PhysicsThread, SimControl,
+    SnapshotPublisher, ViewCommand, WorldCommand, operator_command, renderer_snapshot,
+    scene_layers, valve_spans,
 };

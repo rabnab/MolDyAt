@@ -148,7 +148,7 @@ wall. Delete or Backspace sends `DeleteObject { target }` for that object.
 ## Commands
 
 Every operator change is a struct that implements `OperatorCommand`
-(`core/src/application/operator_command/`), sent as
+(`crates/thermo_runtime/src/application/operator_command/`), sent as
 `DomainCommand::Operator(Box<dyn OperatorCommand>)` and executed on the
 physics thread against `MainContent`:
 

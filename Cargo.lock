@@ -1142,12 +1142,9 @@ dependencies = [
  "env_logger",
  "float-cmp",
  "log",
- "rand",
- "rayon",
- "serde",
- "serde_json",
  "softbuffer",
  "thermo_physics",
+ "thermo_runtime",
  "winit",
 ]
 
@@ -1163,7 +1160,7 @@ dependencies = [
  "num_cpus",
  "pollster",
  "rayon",
- "serde_json",
+ "thermo_runtime",
  "wgpu",
  "winit",
 ]
@@ -2255,6 +2252,17 @@ dependencies = [
  "serde_ignored",
  "serde_json",
  "toml",
+]
+
+[[package]]
+name = "thermo_runtime"
+version = "0.2.0"
+dependencies = [
+ "arc-swap",
+ "log",
+ "rayon",
+ "serde_json",
+ "thermo_physics",
 ]
 
 [[package]]

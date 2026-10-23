@@ -2,15 +2,16 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+use crate::application::CreateSnapshot;
 use crate::headless_cli::HeadlessConfig;
 use crate::headless_output::{HeadlessSnapshotSink, HeadlessWriter};
 use crate::headless_timings::{RunClock, write_timings};
-use moldyat_core::application::persistence::{LoadSource, SaveStore};
-use moldyat_core::application::{CreateSnapshot, MainContent, SimConfig};
-use moldyat_core::objects2d::{Rect, Vec2D};
 use std::io;
 use std::path::PathBuf;
 use std::time::Instant;
+use thermo_physics::application::persistence::{LoadSource, SaveStore};
+use thermo_physics::application::{MainContent, SimConfig};
+use thermo_physics::objects2d::{Rect, Vec2D};
 
 pub struct HeadlessRunner {
     application: MainContent,
@@ -19,6 +20,8 @@ pub struct HeadlessRunner {
     snapshot_every: u32,
     timings: Option<PathBuf>,
     timing_warmup: u32,
+    /// Git commit of the binary, for the timings report (`--timings`).
+    commit: &'static str,
 }
 
 pub struct HeadlessRunnerBuilder {
@@ -28,17 +31,18 @@ pub struct HeadlessRunnerBuilder {
     snapshot_every: u32,
     timings: Option<PathBuf>,
     timing_warmup: u32,
+    commit: &'static str,
 }
 
 pub struct HeadlessRunReport {
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "only tests read the report; the binary writes the count to run_end itself"
-        )
-    )]
+    /// Snapshots written (the binary writes the count to `run_end` itself).
     pub snapshots_emitted: u32,
+}
+
+impl Default for HeadlessRunnerBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl HeadlessRunnerBuilder {
@@ -50,6 +54,7 @@ impl HeadlessRunnerBuilder {
             snapshot_every: 0,
             timings: None,
             timing_warmup: 0,
+            commit: UNKNOWN_COMMIT,
         }
     }
 
@@ -80,6 +85,14 @@ impl HeadlessRunnerBuilder {
         self
     }
 
+    /// The git commit of the binary that runs, named in the timings report
+    /// (`--timings`, read by `scripts/headless_perf.sh`). The binary bakes it
+    /// in at build time; without this call the report says `unknown`.
+    pub fn commit(mut self, commit: &'static str) -> Self {
+        self.commit = commit;
+        self
+    }
+
     pub fn build(self) -> HeadlessRunner {
         HeadlessRunner {
             application: self.application.expect("application is required"),
@@ -88,6 +101,7 @@ impl HeadlessRunnerBuilder {
             snapshot_every: self.snapshot_every,
             timings: self.timings,
             timing_warmup: self.timing_warmup,
+            commit: self.commit,
         }
     }
 }
@@ -97,7 +111,13 @@ impl HeadlessRunner {
         HeadlessRunnerBuilder::new()
     }
 
-    pub fn from_config(mut config: HeadlessConfig, application: MainContent) -> io::Result<Self> {
+    /// The run `config` asks for, of `application`, by the binary built from
+    /// git commit `commit` (named in the timings report).
+    pub fn from_config(
+        mut config: HeadlessConfig,
+        application: MainContent,
+        commit: &'static str,
+    ) -> io::Result<Self> {
         // Record the effective time step and run settings in run_start, also
         // when they are the defaults.
         config.dt = Some(application.time_step());
@@ -112,6 +132,7 @@ impl HeadlessRunner {
             .steps(config.steps)
             .snapshot_every(config.snapshot_every)
             .timings(config.timings.clone(), config.timing_warmup)
+            .commit(commit)
             .build())
     }
 
@@ -160,6 +181,7 @@ impl HeadlessRunner {
         if let Some(path) = &self.timings {
             write_timings(
                 path,
+                self.commit,
                 &clock,
                 wall,
                 self.application.phase_timings(),
@@ -169,6 +191,9 @@ impl HeadlessRunner {
         Ok(HeadlessRunReport { snapshots_emitted })
     }
 }
+
+/// Commit named in the timings report when the binary sets none.
+pub const UNKNOWN_COMMIT: &str = "unknown";
 
 /// The world `rect` with width and height multiplied by `scale`, around its centre.
 pub fn scale_world_rect(rect: Rect, scale: f32) -> Rect {

@@ -33,7 +33,7 @@ impl Default for IntegrationConfig {
     }
 }
 
-/// Force cap and cutoff of every pair potential (see [`CapSettings`]), and
+/// Force cap and cutoff of every pair potential (see `CapSettings`), and
 /// the pairs that do not follow the mixing rule.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -69,7 +69,7 @@ impl From<CapSettings> for PotentialConfig {
 }
 
 impl PotentialConfig {
-    pub fn cap_settings(&self) -> CapSettings {
+    pub(crate) fn cap_settings(&self) -> CapSettings {
         CapSettings {
             max_force: self.max_force,
             core_stiffness: self.core_stiffness,
@@ -79,7 +79,10 @@ impl PotentialConfig {
 
     /// The pair overrides with their species names looked up in `species`,
     /// checked as in [`SimConfig::validate`].
-    pub fn resolve_pair_overrides(&self, species: &SpeciesTable) -> AppResult<Vec<PairOverride>> {
+    pub(crate) fn resolve_pair_overrides(
+        &self,
+        species: &SpeciesTable,
+    ) -> AppResult<Vec<PairOverride>> {
         let mut resolved: Vec<PairOverride> = Vec::with_capacity(self.pair_overrides.len());
         for (i, entry) in self.pair_overrides.iter().enumerate() {
             let key = format!("potential.pair_override[{i}]");
@@ -116,7 +119,7 @@ pub struct PairOverrideConfig {
 
 impl PairOverrideConfig {
     /// `o` with its species named after `species`.
-    pub fn named(o: &PairOverride, species: &SpeciesTable) -> Self {
+    pub(crate) fn named(o: &PairOverride, species: &SpeciesTable) -> Self {
         Self {
             a: species.species(o.a).name.clone(),
             b: species.species(o.b).name.clone(),

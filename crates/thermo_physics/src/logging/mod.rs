@@ -9,14 +9,14 @@
 
 /// Log target of the per-step output of balls in console verbose mode
 /// (key `V`, mode `c`), at `debug` level: `RUST_LOG=moldyat::verbose=debug`.
-pub const VERBOSE_TARGET: &str = "moldyat::verbose";
+pub(crate) const VERBOSE_TARGET: &str = "moldyat::verbose";
 
 /// Log target of the step timings shown while the timing display (key
 /// `F4`) is on, at `info` level.
-pub const TIMING_TARGET: &str = "moldyat::timing";
+pub(crate) const TIMING_TARGET: &str = "moldyat::timing";
 
 /// True if the verbose-ball output is shown with the current log filter.
-pub fn verbose_enabled() -> bool {
+pub(crate) fn verbose_enabled() -> bool {
     log::log_enabled!(target: VERBOSE_TARGET, log::Level::Debug)
 }
 
@@ -24,11 +24,11 @@ pub fn verbose_enabled() -> bool {
 
 use crate::objects2d::ball_impl::{Ball2D, Named};
 
-pub fn log_update_hood_start(ball: &Ball2D, skin: f32) {
+pub(crate) fn log_update_hood_start(ball: &Ball2D, skin: f32) {
     log::debug!("update_hood: {:?} skin: {}", ball, skin);
 }
 
-pub fn log_neighbour_add(ball: &Ball2D, cur_ref: &Ball2D, dist_sq: f32, dist_limit_sq: f32) {
+pub(crate) fn log_neighbour_add(ball: &Ball2D, cur_ref: &Ball2D, dist_sq: f32, dist_limit_sq: f32) {
     if ball.verbose.console {
         log::debug!(
             target: VERBOSE_TARGET,

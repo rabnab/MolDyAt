@@ -235,8 +235,8 @@ UPDATE_HEADLESS_FIXTURE=1 cargo ci-test-headless-regression
 
 Fixture files:
 
-- `wgpu_renderer/src/headless_runner/fixtures/seeded_headless_regression.jsonl`: free gas, summary records
-- `wgpu_renderer/src/headless_runner/fixtures/seeded_headless_operators.jsonl`: walls, a valve, a thermostat and a source sphere, with per-ball state
+- `crates/thermo_runtime/src/headless_runner/fixtures/seeded_headless_regression.jsonl`: free gas, summary records
+- `crates/thermo_runtime/src/headless_runner/fixtures/seeded_headless_operators.jsonl`: walls, a valve, a thermostat and a source sphere, with per-ball state
 - Regenerate only when changes to headless output are intentional and reviewed.
 
 ### Testing
@@ -474,7 +474,7 @@ If you use MolDyAt in scientific work, please cite it; see
 ## Project Structure
 
 ```
-Cargo.toml                     # Workspace root (members: core, crates/thermo_physics, wgpu_renderer)
+Cargo.toml                     # Workspace root (members: core, crates/thermo_physics, crates/thermo_runtime, wgpu_renderer)
 crates/thermo_physics/         # The physics; no windowing or GPU dependencies
 └── src/
     ├── application/
@@ -485,12 +485,16 @@ crates/thermo_physics/         # The physics; no windowing or GPU dependencies
     ├── objects2d/             # Ball physics, SIMD forces, Verlet lists, cell grid,
     │                          #   line segments, wall chains, operators
     └── logging/               # Log targets and helpers
-core/                          # moldyat_core: physics thread and UI layer
+crates/thermo_runtime/         # Running without a window; no windowing or GPU dependencies
 └── src/
-    ├── application/           # Physics thread, commands, snapshots; re-exports
-    │   │                      #   the thermo_physics modules at their old paths
+    ├── application/           # Physics thread, commands, renderer snapshots
     │   ├── operator_command/  # Valve, thermostat, source commands
     │   └── physics_thread/    # Physics thread internals
+    ├── headless_cli/          # Headless option parsing
+    ├── headless_runner/       # Headless simulation driver + regression fixtures
+    └── headless_output/       # JSONL record writer
+core/                          # moldyat_core: the UI layer; re-exports both crates
+└── src/                       #   at their old paths for one release
     ├── graphics/
     │   ├── energy_plot/       # Energy plot window
     │   └── renderer/          # Renderer trait, viewport, batch renderer
@@ -501,9 +505,6 @@ wgpu_renderer/
 └── src/
     ├── main.rs                # Entry point, Rayon init, window creation
     ├── cli/                   # Command-line parsing
-    ├── headless_cli/          # Headless option parsing
-    ├── headless_runner/       # Headless simulation driver + regression fixtures
-    ├── headless_output/       # JSONL record writer
     └── wgpu/
         ├── wgpu_context.rs    # Device / queue / surface setup, backend choice
         ├── wgpu_window.rs     # winit event loop, frame submission

@@ -5,19 +5,13 @@
 //! The `--help` text, built from option tables.
 //!
 //! Each parser owns the table for the flags it parses (`GENERAL_OPTIONS`,
-//! `COMMON_OPTIONS` in `cli.rs`, `HEADLESS_OPTIONS` in `headless_cli.rs`). To
+//! `COMMON_OPTIONS` in `cli.rs`, `HEADLESS_OPTIONS` in `thermo_runtime::headless_cli`). To
 //! add a flag, parse it and add one [`OptionHelp`] to its parser's table; the
 //! test `every_parsed_flag_is_documented` fails if a flag is parsed but missing.
 
-/// One option in the help text.
-pub struct OptionHelp {
-    /// Spellings, e.g. `&["-h", "--help"]`.
-    pub names: &'static [&'static str],
-    /// Placeholder for the value, e.g. `Some("<N>")`; `None` for a switch.
-    pub value: Option<&'static str>,
-    /// One line per entry; later lines are indented under the first.
-    pub help: &'static [&'static str],
-}
+/// One option in the help text (defined with the headless options, which
+/// list theirs in `HEADLESS_OPTIONS`).
+pub use thermo_runtime::headless_cli::OptionHelp;
 
 /// A titled block of options.
 pub struct OptionGroup {

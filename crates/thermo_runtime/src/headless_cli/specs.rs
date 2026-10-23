@@ -5,8 +5,8 @@
 //! The values of `--valve` and `--line-segment`.
 
 use super::*;
-use moldyat_core::application::valve_span_problem;
-use moldyat_core::objects2d::line_segment::{DEFAULT_THICKNESS, MAX_THICKNESS, MIN_THICKNESS};
+use thermo_physics::application::valve_span_problem;
+use thermo_physics::objects2d::line_segment::{DEFAULT_THICKNESS, MAX_THICKNESS, MIN_THICKNESS};
 
 /// One `--valve wall,t_start,t_end[,open|closed]` valve: `wall` is the index
 /// of a `--line-segment` (0-based, in order given), `t_start`/`t_end` are

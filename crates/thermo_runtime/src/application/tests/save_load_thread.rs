@@ -52,8 +52,8 @@ fn busy_world() -> MainContent {
     mc.add_source_sphere(Vec2D::new(-5.0, -5.0));
     mc.toggle_source_sphere(0);
     mc.add_thermostat(Vec2D::new(5.0, -5.0));
-    mc.world_mut().thermostats.find_mut(0).unwrap().chain[1] = 0.25;
-    mc.world_mut().physics.constants.gravity = 0.5;
+    mc.world_mut().thermostats_mut().find_mut(0).unwrap().chain[1] = 0.25;
+    mc.world_mut().physics_mut().constants.gravity = 0.5;
 
     for (i, x) in [-6.0, -2.0, 2.0, 6.0].into_iter().enumerate() {
         let mut ball = Ball2D::new(10 + i, Vec2D::new(x, 0.0), SpeciesId::new((i % 3) as u16));

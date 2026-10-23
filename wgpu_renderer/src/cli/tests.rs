@@ -153,17 +153,14 @@ fn usage_lists_every_option_group() {
     );
 }
 
-/// Every flag a parser matches on (`"--flag" =>` arms) must have a help entry.
+/// Every flag `cli.rs` matches on (`"--flag" =>` arms) must have a help entry.
+/// The headless flags are checked in `thermo_runtime` (`headless_cli/tests.rs`).
 #[test]
 fn every_parsed_flag_is_documented() {
-    let sources = [
-        include_str!("../cli.rs"),
-        include_str!("../headless_cli.rs"),
-    ];
+    let sources = [include_str!("../cli.rs")];
     let documented: Vec<&str> = GENERAL_OPTIONS
         .iter()
         .chain(COMMON_OPTIONS)
-        .chain(HEADLESS_OPTIONS)
         .flat_map(|option| option.names.iter().copied())
         .collect();
     let mut parsed = 0;
@@ -188,7 +185,7 @@ fn every_parsed_flag_is_documented() {
         }
     }
     assert!(
-        parsed >= 20,
+        parsed >= 3,
         "found only {parsed} parsed flags; did the parser layout change?"
     );
 }

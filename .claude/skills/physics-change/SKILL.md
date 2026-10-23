@@ -25,10 +25,10 @@ Smallest first; all must pass before a PR.
 |---|---|
 | Force/potential, cap, SIMD vs scalar | `cargo test -p thermo_physics ball_impl` |
 | Energy conservation | `cargo test -p thermo_physics energy` (covers `energy_conservation.rs`, `barrier_energy.rs`) |
-| Full physics suite | `cargo test -p thermo_physics` (physics thread and snapshots: `cargo test -p moldyat_core`) |
+| Full physics suite | `cargo test -p thermo_physics` (physics thread, snapshots and headless: `cargo test -p thermo_runtime`) |
 | Drift suite | `cargo ci-test-drift` |
 | Headless fixtures | `cargo ci-test-headless-regression` |
-| Thread-count reproducibility | `cargo test -p moldyat_wgpu test_seeded_operators_run_does_not_depend_on_thread_count` |
+| Thread-count reproducibility | `cargo test -p thermo_runtime test_seeded_operators_run_does_not_depend_on_thread_count` |
 | Lint | `cargo fmt` and `cargo clippy --workspace -- -D warnings` |
 
 A change to the force or potential needs a new or updated energy test. A new physics effect needs a test that fails without it.

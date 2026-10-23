@@ -3,16 +3,13 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 mod cli;
-mod headless_cli;
-mod headless_output;
-mod headless_runner;
-mod headless_timings;
 mod wgpu;
 
 use crate::wgpu::{DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH, MARGINS};
 use moldyat_core::application::persistence::{LoadSource, SaveStore};
 use moldyat_core::application::{MainContent, SimConfig};
 use moldyat_core::graphics::renderer::ViewportTransform;
+use thermo_runtime::{headless_cli, headless_runner};
 
 /// Initialize Rayon thread pool for parallel physics computations.
 ///
@@ -114,7 +111,7 @@ fn run_headless_renderer(
             .map_err(|error| std::io::Error::other(format!("{error:?}")))?;
         eprintln!("saved world: {}", path.display());
     }
-    headless_runner::HeadlessRunner::from_config(config, application)?.run()?;
+    headless_runner::HeadlessRunner::from_config(config, application, env!("GIT_COMMIT"))?.run()?;
     Ok(())
 }
 

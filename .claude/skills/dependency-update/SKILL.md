@@ -29,7 +29,7 @@ Dependabot (`.github/dependabot.yml`) opens monthly, grouped PRs: one for cargo 
    ```bash
    cargo fmt -- --check
    cargo clippy --workspace -- -D warnings
-   cargo clippy -p thermo_physics -p moldyat_core --all-targets --no-default-features -- -D warnings
+   cargo clippy -p thermo_physics -p thermo_runtime -p moldyat_core --all-targets --no-default-features -- -D warnings
    cargo test --workspace
    cargo ci-test-headless-regression
    cargo ci-test-drift

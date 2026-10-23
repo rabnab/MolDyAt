@@ -96,8 +96,8 @@ that restructures code without an intended behavior change must pass these
 gates unchanged; CI runs all of them in the `test` job:
 
 1. **Seeded headless fixtures**: `cargo ci-test-headless-regression`
-   - `wgpu_renderer/src/headless_runner/fixtures/seeded_headless_regression.jsonl`: free gas, summary records.
-   - `wgpu_renderer/src/headless_runner/fixtures/seeded_headless_operators.jsonl`: walls, a valve, a thermostat and a source sphere, with every ball's position and velocity.
+   - `crates/thermo_runtime/src/headless_runner/fixtures/seeded_headless_regression.jsonl`: free gas, summary records.
+   - `crates/thermo_runtime/src/headless_runner/fixtures/seeded_headless_operators.jsonl`: walls, a valve, a thermostat and a source sphere, with every ball's position and velocity.
 2. **Drift suite**: `cargo ci-test-drift` (see [docs/drift-test.md](docs/drift-test.md)).
 3. **Thread-count reproducibility**: `cargo test --workspace thread_count`.
    The same seed must give bit-identical energies, wall momentum and ball

@@ -79,7 +79,17 @@ jobs:
       # The step timing has one code path; this keeps the build without the
       # `measure-time` log compiling and warning-free (#225).
       - name: Run clippy without measure-time
-        run: cargo clippy -p thermo_physics -p moldyat_core --all-targets --no-default-features -- -D warnings
+        run: cargo clippy -p thermo_physics -p thermo_runtime -p moldyat_core --all-targets --no-default-features -- -D warnings
+
+      # Every step above builds tests, which turn on thermo_physics'
+      # `test-support` feature for the whole build (cargo merges features).
+      # Lint the binary and the crates it uses without tests, warnings as
+      # errors: non-test code that calls a test-only item fails to compile,
+      # and code only tests use shows up as dead code (#309).
+      - name: Lint the binary without test features
+        run: |
+          cargo clippy -p moldyat_wgpu -- -D warnings
+          cargo clippy -p moldyat_wgpu --no-default-features -- -D warnings
 
       # only in public repo or for organisations
       #- name: Upload clippy SARIF
@@ -182,8 +192,8 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          cargo test -p thermo_physics -p moldyat_core --no-default-features
-          cargo test -p moldyat_wgpu --no-default-features -- --ignored | tee -a headless-regression.log
+          cargo test -p thermo_physics -p thermo_runtime -p moldyat_core --no-default-features
+          cargo test -p thermo_runtime --no-default-features -- --ignored | tee -a headless-regression.log
 
       - name: Upload headless regression log
         if: failure()

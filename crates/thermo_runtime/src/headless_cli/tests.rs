@@ -607,3 +607,43 @@ fn test_seed_species_flag() {
     );
     assert!(parse_headless_args_with_args(&headless_args(&["--seed-species"])).is_err());
 }
+
+/// Every flag `parse_headless_args` matches on (`"--flag" =>` arms) must have
+/// an entry in `HEADLESS_OPTIONS`, the table the binary's `--help` shows.
+#[test]
+fn every_parsed_flag_is_documented() {
+    let sources = [
+        include_str!("../headless_cli.rs"),
+        include_str!("options.rs"),
+        include_str!("specs.rs"),
+    ];
+    let documented: Vec<&str> = HEADLESS_OPTIONS
+        .iter()
+        .flat_map(|option| option.names.iter().copied())
+        .collect();
+    let mut parsed = 0;
+    for source in sources {
+        for line in source.lines() {
+            let line = line.trim_start();
+            let Some(rest) = line.strip_prefix("\"--") else {
+                continue;
+            };
+            let Some((flag, tail)) = rest.split_once('"') else {
+                continue;
+            };
+            if !tail.trim_start().starts_with("=>") {
+                continue;
+            }
+            let flag = format!("--{flag}");
+            parsed += 1;
+            assert!(
+                documented.contains(&flag.as_str()),
+                "{flag} is parsed but has no OptionHelp entry"
+            );
+        }
+    }
+    assert!(
+        parsed >= 15,
+        "found only {parsed} parsed flags; did the parser layout change?"
+    );
+}
