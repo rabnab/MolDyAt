@@ -2,14 +2,12 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+use crate::application::renderer_snapshot::{OperatorSnapshot, RendererSnapshot, ThermoGridSpec};
 use crate::headless_cli::{DetailLevel, HeadlessConfig, OutputFormat};
-use moldyat_core::application::renderer_snapshot::{
-    OperatorSnapshot, RendererSnapshot, ThermoGridSpec,
-};
-use moldyat_core::application::thermo_field::ThermoGrid;
 use serde_json::json;
 use std::fs::File;
 use std::io::{self, BufWriter, Write};
+use thermo_physics::application::thermo_field::ThermoGrid;
 
 pub trait HeadlessSnapshotSink {
     fn write_run_start(&mut self, snapshot: &RendererSnapshot) -> io::Result<()>;
@@ -212,7 +210,7 @@ fn run_start_to_jsonl(config: &HeadlessConfig, snapshot: &RendererSnapshot) -> S
 }
 
 /// World bounds, so `--line-segment` coordinates can be chosen from a run.
-fn world_rect_to_json(rect: &moldyat_core::objects2d::Rect) -> serde_json::Value {
+fn world_rect_to_json(rect: &thermo_physics::objects2d::Rect) -> serde_json::Value {
     let (left, top) = rect.get_tl();
     let (right, bottom) = rect.get_br();
     json!({

@@ -1,0 +1,29 @@
+[package]
+name = "thermo_runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "MolDyAt runtime without a window: the physics thread, commands, renderer snapshots, and headless runs. No windowing or GPU dependencies."
+
+[lints]
+workspace = true
+
+[dependencies]
+thermo_physics = { path = "../thermo_physics", default-features = false }
+
+# Lock-free snapshot slot shared with the renderer
+arc-swap = "1.7"
+# Headless JSONL records and timings
+serde_json = "1"
+log = "0.4"
+rayon = "1.10.0"
+
+[dev-dependencies]
+float-cmp = "0.10"
+thermo_physics = { path = "../thermo_physics", default-features = false, features = ["test-support"] }
+
+[features]
+default = ["measure-time"]
+# The F4 step-timing log, in thermo_physics.
+measure-time = ["thermo_physics/measure-time"]

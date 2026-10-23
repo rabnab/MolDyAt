@@ -3,12 +3,19 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use super::*;
-use moldyat_core::application::SimConfig;
-use moldyat_core::application::renderer_snapshot::RendererSnapshot;
-use moldyat_core::objects2d::ball_impl::SpeciesId;
+use crate::application::renderer_snapshot::RendererSnapshot;
 use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
+use thermo_physics::application::SimConfig;
+use thermo_physics::objects2d::ball_impl::SpeciesId;
+
+/// The world of a 1280 x 720 window with margins 110/50/50/50, as the
+/// binary computes it (`ViewportTransform::compute_world_bounds_from_window_size`
+/// in `moldyat_core`; its test pins the same numbers).
+fn window_world_rect() -> thermo_physics::objects2d::Rect {
+    thermo_physics::objects2d::Rect::new(-56.0, 31.0, 112.0, -62.0)
+}
 
 #[test]
 fn test_frame_record_contains_v1_schema_and_summary_fields() {
@@ -153,12 +160,13 @@ fn test_summary_frame_excludes_large_ball_payload() {
 #[test]
 fn test_detail_balls_includes_ball_fields() {
     let mut snapshot = RendererSnapshot::new();
-    snapshot.balls.push(
-        moldyat_core::application::renderer_snapshot::BallRenderData {
+    snapshot
+        .balls
+        .push(crate::application::renderer_snapshot::BallRenderData {
             id: 9,
             species: SpeciesId::new(2),
-            position: moldyat_core::objects2d::Vec2D::new(1.5, -2.5),
-            velocity: moldyat_core::objects2d::Vec2D::new(0.25, -0.5),
+            position: thermo_physics::objects2d::Vec2D::new(1.5, -2.5),
+            velocity: thermo_physics::objects2d::Vec2D::new(0.25, -0.5),
             mass: 3.75,
             color: [1.0, 0.0, 0.0, 1.0],
             contact_radius: 0.7,
@@ -170,14 +178,14 @@ fn test_detail_balls_includes_ball_fields() {
             neighbors: Vec::new(),
             update_counter: 0,
             tail: Vec::new(),
-        },
-    );
-    snapshot.balls.push(
-        moldyat_core::application::renderer_snapshot::BallRenderData {
+        });
+    snapshot
+        .balls
+        .push(crate::application::renderer_snapshot::BallRenderData {
             id: 3,
             species: SpeciesId::new(1),
-            position: moldyat_core::objects2d::Vec2D::new(-0.5, 0.5),
-            velocity: moldyat_core::objects2d::Vec2D::new(-0.1, 0.2),
+            position: thermo_physics::objects2d::Vec2D::new(-0.5, 0.5),
+            velocity: thermo_physics::objects2d::Vec2D::new(-0.1, 0.2),
             mass: 1.5,
             color: [0.0, 1.0, 0.0, 1.0],
             contact_radius: 0.5,
@@ -189,8 +197,7 @@ fn test_detail_balls_includes_ball_fields() {
             neighbors: Vec::new(),
             update_counter: 1,
             tail: Vec::new(),
-        },
-    );
+        });
 
     let config = HeadlessConfig {
         detail: DetailLevel::Balls,
@@ -235,20 +242,19 @@ fn test_thermo_detail_serializes_grids_and_non_finite_values_as_null() {
     let mut snapshot = RendererSnapshot::new();
     snapshot.simulation_step = 7;
     snapshot.cell_temperature =
-        moldyat_core::application::thermo_field::ThermoGrid::filled(1, 3, 1.0);
+        thermo_physics::application::thermo_field::ThermoGrid::filled(1, 3, 1.0);
     snapshot.cell_temperature.set(0, 1, f32::NAN);
-    snapshot.cell_pressure = moldyat_core::application::thermo_field::ThermoGrid::filled(1, 3, 2.0);
+    snapshot.cell_pressure =
+        thermo_physics::application::thermo_field::ThermoGrid::filled(1, 3, 2.0);
     snapshot.cell_pressure.set(0, 2, f32::INFINITY);
-    snapshot.thermo_grid_spec = Some(
-        moldyat_core::application::renderer_snapshot::ThermoGridSpec {
-            rows: 1,
-            cols: 3,
-            cell_width: 4.0,
-            cell_height: 5.0,
-            origin_x: -1.5,
-            origin_y: 2.5,
-        },
-    );
+    snapshot.thermo_grid_spec = Some(crate::application::renderer_snapshot::ThermoGridSpec {
+        rows: 1,
+        cols: 3,
+        cell_width: 4.0,
+        cell_height: 5.0,
+        origin_x: -1.5,
+        origin_y: 2.5,
+    });
 
     let config = HeadlessConfig {
         detail: DetailLevel::Thermo,
@@ -343,12 +349,7 @@ fn test_runs_with_same_seed_and_config_emit_identical_jsonl() {
         path: output_path_b.clone(),
     };
 
-    let world_rect =
-        moldyat_core::graphics::renderer::ViewportTransform::compute_world_bounds_from_window_size(
-            1280,
-            720,
-            moldyat_core::graphics::renderer::margins::Margins::new(110.0, 50.0, 50.0, 50.0),
-        );
+    let world_rect = window_world_rect();
 
     let config_a = HeadlessConfig {
         steps: 6,

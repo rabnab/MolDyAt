@@ -158,7 +158,7 @@ fn usage_lists_every_option_group() {
 fn every_parsed_flag_is_documented() {
     let sources = [
         include_str!("../cli.rs"),
-        include_str!("../headless_cli.rs"),
+        include_str!("../../../crates/thermo_runtime/src/headless_cli.rs"),
     ];
     let documented: Vec<&str> = GENERAL_OPTIONS
         .iter()

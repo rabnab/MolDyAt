@@ -3,19 +3,26 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use super::*;
-use crate::headless_cli::{DetailLevel, LineSegmentSpec, OutputFormat, ValveSpec};
-use crate::headless_output::HeadlessSnapshotSink;
-use moldyat_core::application::operator_command::OperatorCommand;
-use moldyat_core::application::operator_command::source::{
+use crate::application::operator_command::OperatorCommand;
+use crate::application::operator_command::source::{
     AdjustSourceSphereEmitPeriod, AdjustSourceSphereSpeed, PlaceSourceSphere, ToggleSourceSphere,
 };
-use moldyat_core::application::operator_command::thermostat::{PlaceThermostat, ToggleThermostat};
-use moldyat_core::application::renderer_snapshot::RendererSnapshot;
+use crate::application::operator_command::thermostat::{PlaceThermostat, ToggleThermostat};
+use crate::application::renderer_snapshot::RendererSnapshot;
+use crate::headless_cli::{DetailLevel, LineSegmentSpec, OutputFormat, ValveSpec};
+use crate::headless_output::HeadlessSnapshotSink;
 use std::cell::RefCell;
 use std::fs;
 use std::io;
 use std::rc::Rc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+/// The world of a 1280 x 720 window with margins 110/50/50/50, as the
+/// binary computes it (`ViewportTransform::compute_world_bounds_from_window_size`
+/// in `moldyat_core`; its test pins the same numbers).
+fn window_world_rect() -> thermo_physics::objects2d::Rect {
+    thermo_physics::objects2d::Rect::new(-56.0, 31.0, 112.0, -62.0)
+}
 
 const SEEDED_HEADLESS_FIXTURE_PATH: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -51,12 +58,7 @@ fn runner_with_snapshot_steps(
     steps: u32,
     snapshot_every: u32,
 ) -> (HeadlessRunner, Rc<RefCell<Vec<u64>>>) {
-    let world_rect =
-        moldyat_core::graphics::renderer::ViewportTransform::compute_world_bounds_from_window_size(
-            1280,
-            720,
-            moldyat_core::graphics::renderer::margins::Margins::new(110.0, 50.0, 50.0, 50.0),
-        );
+    let world_rect = window_world_rect();
     let application =
         build_application(world_rect, &SimConfig::default(), None).expect("application");
     let recorded = Rc::new(RefCell::new(Vec::new()));
@@ -104,12 +106,7 @@ fn headless_output(mut config: HeadlessConfig, application: MainContent) -> (Str
 }
 
 fn seeded_headless_output() -> String {
-    let world_rect =
-        moldyat_core::graphics::renderer::ViewportTransform::compute_world_bounds_from_window_size(
-            1280,
-            720,
-            moldyat_core::graphics::renderer::margins::Margins::new(110.0, 50.0, 50.0, 50.0),
-        );
+    let world_rect = window_world_rect();
 
     let config = HeadlessConfig {
         steps: 6,
@@ -445,12 +442,8 @@ fn test_seeded_operators_run_does_not_depend_on_thread_count() {
     }
 }
 
-fn test_world_rect() -> moldyat_core::objects2d::Rect {
-    moldyat_core::graphics::renderer::ViewportTransform::compute_world_bounds_from_window_size(
-        1280,
-        720,
-        moldyat_core::graphics::renderer::margins::Margins::new(110.0, 50.0, 50.0, 50.0),
-    )
+fn test_world_rect() -> thermo_physics::objects2d::Rect {
+    window_world_rect()
 }
 
 #[test]
@@ -698,6 +691,7 @@ fn test_run_writes_timings_for_steps_after_warmup() {
         .snapshot_every(config.snapshot_every)
         .timings(config.timings.clone(), config.timing_warmup)
         .build()
+        .commit("abc1234")
         .run()
         .expect("run");
     let content = fs::read_to_string(&timings_path).expect("read timings");
@@ -706,6 +700,7 @@ fn test_run_writes_timings_for_steps_after_warmup() {
     let value: serde_json::Value = serde_json::from_str(&content).expect("valid json");
     assert_eq!(value["schema_version"], "headless-timings.v1");
     assert_eq!(value["version"], env!("CARGO_PKG_VERSION"));
+    assert_eq!(value["commit"], "abc1234", "the commit the binary set");
     assert_eq!(value["warmup_steps"], 2);
     assert_eq!(value["steps"], 10);
     // Snapshots after steps 4, 8 and 12; all after the warmup.
@@ -738,7 +733,7 @@ fn test_run_writes_timings_for_steps_after_warmup() {
 
 #[test]
 fn test_write_timings_rejects_runs_with_paused_steps() {
-    use moldyat_core::application::phase_timings::PhaseTimings;
+    use thermo_physics::application::phase_timings::PhaseTimings;
 
     let application =
         build_application(test_world_rect(), &SimConfig::default(), Some(1)).expect("build");
@@ -753,7 +748,14 @@ fn test_write_timings_rejects_runs_with_paused_steps() {
         "headless-timings-paused-{}.json",
         std::process::id()
     ));
-    let result = write_timings(&path, &clock, Duration::from_millis(5), &phases, &snapshot);
+    let result = write_timings(
+        &path,
+        "abc1234",
+        &clock,
+        Duration::from_millis(5),
+        &phases,
+        &snapshot,
+    );
     assert!(
         result.is_err(),
         "a run with paused steps must not be reported"
@@ -992,7 +994,7 @@ fn test_run_start_records_the_effective_sim_config() {
     let run_start = run_start_record(config, &sim_config, "custom");
     let sim = &run_start["config"]["sim"];
     let expected = SimConfig {
-        integration: moldyat_core::application::sim_config::IntegrationConfig {
+        integration: thermo_physics::application::sim_config::IntegrationConfig {
             time_step: 0.002,
             ..sim_config.integration.clone()
         },
