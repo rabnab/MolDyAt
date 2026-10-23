@@ -41,7 +41,7 @@ cff_license=$(sed -n 's/^license: *\(.*[^ ]\) *$/\1/p' CITATION.cff)
   || err "CITATION.cff license '$cff_license' != Cargo.toml license '$license'"
 
 # 4. Every crate inherits the workspace license.
-for toml in core/Cargo.toml wgpu_renderer/Cargo.toml; do
+for toml in crates/*/Cargo.toml wgpu_renderer/Cargo.toml; do
   grep -q '^license\.workspace *= *true' "$toml" \
     || err "$toml must contain 'license.workspace = true'"
 done

@@ -9,10 +9,10 @@
 //! behind it so it stays readable on top of the thermostat zone, balls and
 //! walls (see `gpu/label_background.rs`).
 
-use moldyat_core::application::AppResult;
-use moldyat_core::application::scene_layers::SceneLayers;
-use moldyat_core::objects2d::SimThermostat;
 use std::time::Instant;
+use thermo_physics::application::AppResult;
+use thermo_physics::objects2d::SimThermostat;
+use thermo_runtime::application::scene_layers::SceneLayers;
 
 use crate::wgpu::gpu::geometry::apply_view_proj;
 use crate::wgpu::gpu::label_background::{CapsuleInstance, LabelBackground, capsule_for_label};

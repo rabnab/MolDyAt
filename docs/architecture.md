@@ -15,23 +15,18 @@ are in [refactoring-plan.md](plan/refactoring-plan.md).
 |---|---|---|
 | `crates/thermo_physics` | `thermo_physics` | The physics: particles and species, pair potentials and the SIMD force kernel, cell grid and Verlet lists, walls and operators (`objects2d`); the world, `MainContent` and its stepping (`application/core`); run settings (`sim_config`), units, stats, thermo fields and saves (`persistence`). Dependencies: rayon, serde, rand, toml, log |
 | `crates/thermo_runtime` | `thermo_runtime` | Running a simulation without a window: the physics thread and its `SnapshotPublisher`, `DomainCommand` and its handler, `OperatorCommand`s, `PhysicsEvent`, `RendererSnapshot` and its builder (`CreateSnapshot`), scene layers, and headless runs (`headless_cli`, `headless_runner`, `headless_output`, `headless_timings`). Dependencies: `thermo_physics`, arc-swap, serde_json, rayon, log |
-| `core` | `moldyat_core` | The backend-independent UI layer (`graphics`: event loop, tools, viewport, sidebar model, energy plot window) and the logger setup |
+| `crates/thermo_ui` | `thermo_ui` | The UI without a GPU backend (`graphics`): event loop and input handling, the keyboard command registry, operator tools, viewport, sidebar model, and the energy plot window (still winit + softbuffer until V4a); plus the logger setup. Dependencies: `thermo_runtime`, `thermo_physics`, winit, softbuffer, arc-swap, log, env_logger |
 | `wgpu_renderer` | `moldyat_wgpu` | The `moldyat` binary: command line, the wgpu window and render pipelines. For `--headless` it computes the default world from its window size and calls `thermo_runtime`, handing it the git commit it was built from (`HeadlessRunner::from_config`) |
 
-Dependencies point one way: `moldyat_wgpu` → `moldyat_core` →
+Dependencies point one way: `moldyat_wgpu` → `thermo_ui` →
 `thermo_runtime` → `thermo_physics`. `thermo_physics` and `thermo_runtime`
 build and test without a windowing or GPU stack: `cargo test -p
 thermo_physics`, `cargo test -p thermo_runtime`.
 
-`moldyat_core` re-exports the moved modules at their old paths
-(`moldyat_core::objects2d`, `moldyat_core::application::{core, persistence,
-operator_command, renderer_snapshot, …}`, `MainContent`, `DomainCommand`,
-…) for one release (#308, #309), so code written against them still
-compiles. One exception: the log targets and helpers of
-`moldyat_core::logging` are internal to `thermo_physics` now (#309);
-`moldyat_core::logging::init`, the logger setup, stays. New code uses `thermo_physics` and `thermo_runtime` directly. The
-last step of the split (`thermo_ui`, M9) is in
-[refactoring-plan.md](plan/refactoring-plan.md).
+Each crate is used under its own name: there are no re-exports of one
+crate's modules in another. The former `moldyat_core` (`core/`), which
+re-exported the physics and the runtime at their old paths for one release
+(#308, #309), became `thermo_ui` (#310).
 
 ### The `thermo_physics` API
 
@@ -95,7 +90,7 @@ FrameRenderer → RenderGraph → GPU
 | Stepping | `SimulationEngine` | `crates/thermo_physics/src/application/core/simulation_engine.rs` | One simulation step over a `SimulationWorld` (see below); holds no state |
 | Operator mutations | `OperatorCommand` structs | `crates/thermo_runtime/src/application/operator_command/` | Placing, changing and deleting operators |
 | Physics primitives | `Ball2D`, `SpeciesTable`, `BallPhysics`, `CellGrid`, operators | `crates/thermo_physics/src/objects2d/` | Ball data, particle species, pair potential and SIMD force kernel, Verlet lists, wall contact, operator data models |
-| Renderer state | `UnifiedRenderState` | `core/src/graphics/renderer/event_loop/` | Input handler, physics bridge, and `RenderStateData` (viewport, energy window, renderer config, cursor and tool state, last snapshot, frame metrics) |
+| Renderer state | `UnifiedRenderState` | `crates/thermo_ui/src/graphics/renderer/event_loop/` | Input handler, physics bridge, and `RenderStateData` (viewport, energy window, renderer config, cursor and tool state, last snapshot, frame metrics) |
 | Backend | `WgpuWindow` and friends | `wgpu_renderer/src/wgpu/` | Window, GPU context, event routing, frame submission, render pipelines |
 
 ### Simulation step
@@ -161,7 +156,7 @@ split into stateless orchestrators that operate on `RenderStateData`:
 ### Keyboard commands
 
 Every keyboard command is one `CommandDescriptor` in the table `COMMANDS`
-(`core/src/graphics/renderer/event_loop/command_registry.rs`):
+(`crates/thermo_ui/src/graphics/renderer/event_loop/command_registry.rs`):
 
 | Field | Meaning |
 |---|---|

@@ -56,6 +56,6 @@ EOF
 
 ## Gotchas
 - Math: write `\lt` / `\gt` instead of `<` / `>` inside `$$ … $$`. `\sum_{i<j}` is read as an HTML tag by many Markdown renderers and breaks the formula.
-- The JetBrains IDE may rewrite path-like text in a moved Markdown file (e.g. `core/src/...` becomes `../core/src/...`) or revert a file right after `git mv`. Check `git diff` after every move.
-- Repo-root paths in backticks (`core/src/...`) are not links and must not get `../` prefixes.
+- The JetBrains IDE may rewrite path-like text in a moved Markdown file (e.g. `crates/thermo_ui/src/...` becomes `../crates/thermo_ui/src/...`) or revert a file right after `git mv`. Check `git diff` after every move.
+- Repo-root paths in backticks (`crates/thermo_ui/src/...`) are not links and must not get `../` prefixes.
 - Changing a `.rs` doc comment is a `.rs` change: run `cargo fmt` and `cargo clippy --workspace -- -D warnings`.

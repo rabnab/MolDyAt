@@ -9,9 +9,9 @@
 //! See `ball.wgsl`.
 
 use bytemuck::{Pod, Zeroable};
-use moldyat_core::application::AppResult;
-use moldyat_core::application::renderer_snapshot::BallRenderData;
-use moldyat_core::application::scene_layers::SceneLayers;
+use thermo_physics::application::AppResult;
+use thermo_runtime::application::renderer_snapshot::BallRenderData;
+use thermo_runtime::application::scene_layers::SceneLayers;
 
 use crate::wgpu::gpu::batch::{BatchDesc, GpuBatch, SceneUniforms};
 use crate::wgpu::gpu::shaders;

@@ -35,7 +35,7 @@ fn cursor_text_sits_in_the_bottom_margin_right_of_the_pane() {
 #[test]
 fn readout_names_the_species_of_new_balls() {
     use crate::wgpu::pipelines::text_pipeline::cursor_readout;
-    use moldyat_core::application::renderer_snapshot::RendererSnapshot;
+    use thermo_runtime::application::renderer_snapshot::RendererSnapshot;
     let mut snapshot = RendererSnapshot::new();
     assert_eq!(
         cursor_readout((1.0, 2.0), &snapshot),

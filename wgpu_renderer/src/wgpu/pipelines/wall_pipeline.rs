@@ -8,8 +8,8 @@
 //! capsules using instanced quads. See `wall.wgsl`.
 
 use bytemuck::{Pod, Zeroable};
-use moldyat_core::application::AppResult;
-use moldyat_core::objects2d::line_segment::THICKNESS_TO_WORLD;
+use thermo_physics::application::AppResult;
+use thermo_physics::objects2d::line_segment::THICKNESS_TO_WORLD;
 
 use crate::wgpu::gpu::batch::{BatchDesc, GpuBatch, SceneUniforms};
 use crate::wgpu::gpu::shaders;

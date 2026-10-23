@@ -24,5 +24,5 @@ thermo_physics = { path = "../thermo_physics", default-features = false, feature
 
 [features]
 default = ["measure-time"]
-# The F4 step-timing log, in thermo_physics.
+# The F4 step-timing log of thermo_physics. No code in this crate uses it.
 measure-time = ["thermo_physics/measure-time"]

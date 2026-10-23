@@ -19,13 +19,13 @@
 //! all-NaN field simply isn't drawn.
 
 use bytemuck::{Pod, Zeroable};
-use moldyat_core::application::AppResult;
-use moldyat_core::application::renderer_snapshot::ThermoGridSpec;
-use moldyat_core::application::scene_layers::SceneLayers;
-use moldyat_core::application::thermo_field::ThermoGrid;
-use moldyat_core::graphics::renderer::interpolation::fill_nans_with_neighbour_mean;
-use moldyat_core::graphics::renderer::state_layers::ThermoDisplayMode;
 use std::time::Instant;
+use thermo_physics::application::AppResult;
+use thermo_physics::application::thermo_field::ThermoGrid;
+use thermo_runtime::application::renderer_snapshot::ThermoGridSpec;
+use thermo_runtime::application::scene_layers::SceneLayers;
+use thermo_ui::graphics::renderer::interpolation::fill_nans_with_neighbour_mean;
+use thermo_ui::graphics::renderer::state_layers::ThermoDisplayMode;
 
 use crate::wgpu::gpu::batch::{BatchDesc, GpuBatch, SceneUniforms};
 use crate::wgpu::gpu::shaders;

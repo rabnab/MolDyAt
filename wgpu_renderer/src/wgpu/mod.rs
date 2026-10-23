@@ -40,7 +40,7 @@ mod tests;
 
 pub use wgpu_window::WgpuWindow;
 
-use moldyat_core::graphics::renderer::margins::Margins;
+use thermo_ui::graphics::renderer::margins::Margins;
 
 pub const DEFAULT_WINDOW_WIDTH: f64 = 1280.0;
 pub const DEFAULT_WINDOW_HEIGHT: f64 = 720.0;

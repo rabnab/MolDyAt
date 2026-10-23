@@ -10,7 +10,7 @@ Releases are built by `.github/workflows/release.yml` when a `v*` tag is pushed 
 Tagging and pushing are outward-facing: confirm the version and the commit with the user before creating or pushing a tag.
 
 ## 1. Choose the version
-SemVer on the workspace version (`[workspace.package] version` in the root `Cargo.toml`, inherited by both crates):
+SemVer on the workspace version (`[workspace.package] version` in the root `Cargo.toml`, inherited by every crate):
 - patch: fixes only, no change to save files or headless output;
 - minor: new features, compatible save files (old saves load) and `headless.v1` output;
 - major (after 1.0): incompatible changes. Before 1.0, incompatible changes bump the minor version.

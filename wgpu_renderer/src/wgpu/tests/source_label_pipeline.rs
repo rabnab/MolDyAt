@@ -3,8 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::wgpu::pipelines::source_label_pipeline::label_texts;
-use moldyat_core::objects2d::ball_impl::{SpeciesId, SpeciesTable};
-use moldyat_core::objects2d::{SimSourceSphere, Vec2D};
+use thermo_physics::objects2d::ball_impl::{SpeciesId, SpeciesTable};
+use thermo_physics::objects2d::{SimSourceSphere, Vec2D};
 
 /// A sphere is labelled with the name of the species it emits, from the
 /// world's table (#238).

@@ -9,14 +9,14 @@
 //! See `line.wgsl`.
 
 use bytemuck::{Pod, Zeroable};
-use moldyat_core::application::AppResult;
-use moldyat_core::application::scene_layers::SceneLayers;
-use moldyat_core::graphics::renderer::batch_renderer::{
+use std::f32::consts::{FRAC_PI_2, TAU};
+use thermo_physics::application::AppResult;
+use thermo_physics::objects2d::SimSourceSphere;
+use thermo_runtime::application::scene_layers::SceneLayers;
+use thermo_ui::graphics::renderer::batch_renderer::{
     BatchRenderer, LineSegment, collect_neighbor_lines,
 };
-use moldyat_core::graphics::renderer::event_loop::DEFAULT_SOURCE_RADIUS;
-use moldyat_core::objects2d::SimSourceSphere;
-use std::f32::consts::{FRAC_PI_2, TAU};
+use thermo_ui::graphics::renderer::event_loop::DEFAULT_SOURCE_RADIUS;
 
 use crate::wgpu::gpu::batch::{BatchDesc, GpuBatch, SceneUniforms};
 use crate::wgpu::gpu::geometry::world_extent;

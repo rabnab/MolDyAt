@@ -8,8 +8,8 @@ use crate::wgpu::gpu::textures::{
 };
 use crate::wgpu::pipelines::sidebar_pipeline::*;
 use crate::wgpu::{MARGIN_BOTTOM, MARGIN_LEFT, MARGIN_TOP, MARGINS};
-use moldyat_core::graphics::renderer::event_loop::OperatorTool;
-use moldyat_core::graphics::sidebar::{
+use thermo_ui::graphics::renderer::event_loop::OperatorTool;
+use thermo_ui::graphics::sidebar::{
     ICON_COUNT, ICON_DISPLAY_SIZE, ICON_SPACING, TOOLS, icon_for_tool,
 };
 

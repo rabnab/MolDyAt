@@ -28,12 +28,12 @@ use crate::wgpu::pipelines::valve_pipeline::ValvePipeline;
 use crate::wgpu::pipelines::wall_pipeline::WallPipeline;
 use crate::wgpu::render_graph::{PipelineHandle, PrepareContext, RenderGraph, RenderPipeline};
 use crate::wgpu::wgpu_context::WgpuContext;
-use moldyat_core::application::AppResult;
-use moldyat_core::application::renderer_snapshot::{CellGridSpec, RendererSnapshot};
-use moldyat_core::application::scene_layers::SceneLayers;
-use moldyat_core::graphics::renderer::Margins;
-use moldyat_core::graphics::renderer::event_loop::FramePreviews;
-use moldyat_core::graphics::renderer::state_layers::ThermoDisplayMode;
+use thermo_physics::application::AppResult;
+use thermo_runtime::application::renderer_snapshot::{CellGridSpec, RendererSnapshot};
+use thermo_runtime::application::scene_layers::SceneLayers;
+use thermo_ui::graphics::renderer::Margins;
+use thermo_ui::graphics::renderer::event_loop::FramePreviews;
+use thermo_ui::graphics::renderer::state_layers::ThermoDisplayMode;
 
 /// Collection of all rendering pipelines, backed by a [`RenderGraph`].
 ///

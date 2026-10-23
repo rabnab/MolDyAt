@@ -25,14 +25,14 @@
 //! draws only the pipelines of its layers, so with rendering off (F2) the
 //! ball and thermo pipelines do no work at all.
 
-use moldyat_core::application::AppResult;
-use moldyat_core::application::renderer_snapshot::RendererSnapshot;
-use moldyat_core::application::scene_layers::SceneLayers;
-use moldyat_core::graphics::renderer::event_loop::FramePreviews;
-use moldyat_core::graphics::renderer::margins::Margins;
-use moldyat_core::graphics::renderer::state_layers::ThermoDisplayMode;
 use std::any::Any;
 use std::collections::HashSet;
+use thermo_physics::application::AppResult;
+use thermo_runtime::application::renderer_snapshot::RendererSnapshot;
+use thermo_runtime::application::scene_layers::SceneLayers;
+use thermo_ui::graphics::renderer::event_loop::FramePreviews;
+use thermo_ui::graphics::renderer::margins::Margins;
+use thermo_ui::graphics::renderer::state_layers::ThermoDisplayMode;
 
 // ── Viewport mode ──────────────────────────────────────────────────
 

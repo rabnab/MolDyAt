@@ -10,9 +10,9 @@
 //! 2. the `thermo.png` icon at its position -- see `thermostat_icon.wgsl`.
 
 use bytemuck::{Pod, Zeroable};
-use moldyat_core::application::AppResult;
-use moldyat_core::objects2d::OperatorState;
 use std::time::Instant;
+use thermo_physics::application::AppResult;
+use thermo_physics::objects2d::OperatorState;
 
 use crate::wgpu::gpu::batch::{BatchDesc, GpuBatch, SceneUniforms};
 use crate::wgpu::gpu::geometry::world_extent;

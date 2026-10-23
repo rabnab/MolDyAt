@@ -6,8 +6,8 @@
 //! before the headless options.
 
 use crate::headless_cli::{CliError, HEADLESS_OPTIONS};
-use moldyat_core::application::SimConfig;
 use std::path::PathBuf;
+use thermo_physics::application::SimConfig;
 
 mod usage;
 pub use usage::{OptionGroup, OptionHelp};

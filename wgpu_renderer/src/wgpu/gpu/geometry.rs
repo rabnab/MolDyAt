@@ -6,7 +6,7 @@
 //!
 //! Matrices are column-major `[[f32; 4]; 4]`, as uploaded to WGSL `mat4x4<f32>`.
 
-use moldyat_core::application::renderer_snapshot::RendererSnapshot;
+use thermo_runtime::application::renderer_snapshot::RendererSnapshot;
 
 pub const IDENTITY: [[f32; 4]; 4] = [
     [1.0, 0.0, 0.0, 0.0],
