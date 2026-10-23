@@ -118,9 +118,60 @@ impl CommandCategory {
 /// A key, the modifier that must be held with it, and when it fires.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct KeyBinding {
-    pub key: KeyCode,
+    pub key: BindKey,
     pub modifier: Modifier,
     pub trigger: Trigger,
+    /// Not shown in the help text: an alias of a shown binding (`=` for
+    /// `+`, the same key on US keyboards).
+    pub hidden: bool,
+}
+
+/// What a binding matches.
+///
+/// Every key that types a character (letters, digits, symbols such as `+`
+/// and `-`, the numpad) matches that character in the current layout, so a
+/// shortcut sits where its character is printed on every layout: German `+`
+/// is US `]`, AZERTY `A` is US `Q` (#327). Only keys that type no
+/// character (SPACE, ESC, TAB, DEL, BACKSPACE, Shift, F1–F12) are physical
+/// keys ([`KeyCode`], named after their place on a US keyboard).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BindKey {
+    Code(KeyCode),
+    Symbol(char),
+}
+
+/// A key event as the registry sees it: the physical key, the character it
+/// types in the current layout without modifiers (`symbol`), and the one it
+/// types with the modifiers held (`typed`; Swiss `+` is Shift + 1). Both
+/// are `None` for keys that type nothing, such as Shift or F1.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct KeyInput {
+    pub code: KeyCode,
+    pub symbol: Option<char>,
+    pub typed: Option<char>,
+}
+
+impl KeyInput {
+    /// A key typing `symbol`, with no modifier changing it.
+    pub fn new(code: KeyCode, symbol: Option<char>) -> Self {
+        Self {
+            code,
+            symbol,
+            typed: symbol,
+        }
+    }
+
+    /// The same key, typing `typed` with the modifiers held.
+    pub fn with_typed(self, typed: Option<char>) -> Self {
+        Self { typed, ..self }
+    }
+}
+
+/// A key without a known character, e.g. in tests.
+impl From<KeyCode> for KeyInput {
+    fn from(code: KeyCode) -> Self {
+        Self::new(code, None)
+    }
 }
 
 /// Modifier held with a key. A binding with a modifier wins over the plain
@@ -145,19 +196,32 @@ pub enum Trigger {
 }
 
 impl KeyBinding {
-    const fn new(key: KeyCode, modifier: Modifier, trigger: Trigger) -> Self {
+    const fn new(key: BindKey, modifier: Modifier, trigger: Trigger) -> Self {
         Self {
             key,
             modifier,
             trigger,
+            hidden: false,
+        }
+    }
+
+    /// The same binding, left out of the help text.
+    const fn hidden(self) -> Self {
+        Self {
+            hidden: true,
+            ..self
         }
     }
 
     /// The key as the help text shows it, e.g. `Ctrl + S`.
     pub fn display(&self) -> String {
-        let key = key_name(self.key);
+        let key = match self.key {
+            BindKey::Code(code) => key_name(code).to_string(),
+            // Letters as printed on the keys.
+            BindKey::Symbol(symbol) => symbol.to_uppercase().to_string(),
+        };
         match self.modifier {
-            Modifier::None => key.to_string(),
+            Modifier::None => key,
             Modifier::Ctrl => format!("Ctrl + {key}"),
             Modifier::Alt => format!("Alt + {key}"),
         }
@@ -166,10 +230,11 @@ impl KeyBinding {
 
 impl CommandDescriptor {
     /// The bindings as the help text shows them, e.g. `DEL / BACKSPACE`.
-    /// Keys with the same name (left and right Shift) are listed once.
+    /// Keys with the same name (left and right Shift) are listed once;
+    /// hidden aliases are left out.
     pub fn binding_display(&self) -> Vec<String> {
         let mut names: Vec<String> = Vec::new();
-        for binding in self.default_binding {
+        for binding in self.default_binding.iter().filter(|b| !b.hidden) {
             let name = binding.display();
             if !names.contains(&name) {
                 names.push(name);
@@ -228,43 +293,32 @@ fn key_name(key: KeyCode) -> &'static str {
         KeyCode::Delete => "DEL",
         KeyCode::Backspace => "BACKSPACE",
         KeyCode::ShiftLeft | KeyCode::ShiftRight => "Shift",
-        KeyCode::Equal => "=",
-        KeyCode::Minus => "-",
-        KeyCode::NumpadAdd => "Num +",
-        KeyCode::NumpadSubtract => "Num -",
-        KeyCode::Digit0 => "0",
-        KeyCode::Numpad0 => "Num 0",
         KeyCode::F1 => "F1",
         KeyCode::F2 => "F2",
         KeyCode::F3 => "F3",
         KeyCode::F4 => "F4",
         KeyCode::F5 => "F5",
-        KeyCode::KeyB => "B",
-        KeyCode::KeyD => "D",
-        KeyCode::KeyG => "G",
-        KeyCode::KeyH => "H",
-        KeyCode::KeyN => "N",
-        KeyCode::KeyO => "O",
-        KeyCode::KeyP => "P",
-        KeyCode::KeyR => "R",
-        KeyCode::KeyS => "S",
-        KeyCode::KeyT => "T",
-        KeyCode::KeyV => "V",
         // A new binding needs a name here; the registry tests catch a gap.
         _ => "?",
     }
 }
 
 const fn key(key: KeyCode, trigger: Trigger) -> KeyBinding {
-    KeyBinding::new(key, Modifier::None, trigger)
+    KeyBinding::new(BindKey::Code(key), Modifier::None, trigger)
 }
 
-/// A key with a modifier. The chord is decided when the key goes down with
+/// A key by the character it types (see [`BindKey`]).
+const fn symbol(symbol: char, trigger: Trigger) -> KeyBinding {
+    KeyBinding::new(BindKey::Symbol(symbol), Modifier::None, trigger)
+}
+
+/// A key, given by the character it types (see [`BindKey`]), with a
+/// modifier. The chord is decided when the key goes down with
 /// the modifier held, and it owns that key until its release: a `Release`
 /// chord fires on that release even if the modifier was let go first, and
 /// the plain binding of the same key never fires for that press.
-const fn chord(modifier: Modifier, key: KeyCode, trigger: Trigger) -> KeyBinding {
-    KeyBinding::new(key, modifier, trigger)
+const fn symbol_chord(modifier: Modifier, symbol: char, trigger: Trigger) -> KeyBinding {
+    KeyBinding::new(BindKey::Symbol(symbol), modifier, trigger)
 }
 
 /// Every keyboard command, in help-text order within each category.
@@ -281,34 +335,28 @@ pub static COMMANDS: &[CommandDescriptor] = &[
         id: "sim.toggle_stepwise",
         label: "Toggle step-by-step mode.",
         category: CommandCategory::Simulation,
-        default_binding: &[key(KeyCode::KeyS, Release)],
+        default_binding: &[symbol('s', Release)],
         kind: CommandKind::Domain(|| SimControl::ToggleStepwise.into()),
     },
     CommandDescriptor {
         id: "sim.cycle_gravity",
         label: "Cycle gravity: off -> {normal_gravity} -> {high_gravity}.",
         category: CommandCategory::Simulation,
-        default_binding: &[key(KeyCode::KeyG, Release)],
+        default_binding: &[symbol('g', Release)],
         kind: CommandKind::Domain(|| SimControl::ToggleGravity.into()),
     },
     CommandDescriptor {
         id: "sim.double_time_step",
         label: "Double the simulation time step.",
         category: CommandCategory::Simulation,
-        default_binding: &[
-            key(KeyCode::Equal, Release),
-            key(KeyCode::NumpadAdd, Release),
-        ],
+        default_binding: &[symbol('+', Release), symbol('=', Release).hidden()],
         kind: CommandKind::Domain(|| SimControl::DoubleTimeStep.into()),
     },
     CommandDescriptor {
         id: "sim.halve_time_step",
         label: "Halve the simulation time step.",
         category: CommandCategory::Simulation,
-        default_binding: &[
-            key(KeyCode::Minus, Release),
-            key(KeyCode::NumpadSubtract, Release),
-        ],
+        default_binding: &[symbol('-', Release)],
         kind: CommandKind::Domain(|| SimControl::HalveTimeStep.into()),
     },
     CommandDescriptor {
@@ -316,8 +364,8 @@ pub static COMMANDS: &[CommandDescriptor] = &[
         label: "Decrease the wait time between steps.",
         category: CommandCategory::Simulation,
         default_binding: &[
-            chord(Alt, KeyCode::Equal, Release),
-            chord(Alt, KeyCode::NumpadAdd, Release),
+            symbol_chord(Alt, '+', Release),
+            symbol_chord(Alt, '=', Release).hidden(),
         ],
         kind: CommandKind::Domain(|| SimControl::DecreaseWaitTime.into()),
     },
@@ -325,10 +373,7 @@ pub static COMMANDS: &[CommandDescriptor] = &[
         id: "sim.increase_wait_time",
         label: "Increase the wait time between steps.",
         category: CommandCategory::Simulation,
-        default_binding: &[
-            chord(Alt, KeyCode::Minus, Release),
-            chord(Alt, KeyCode::NumpadSubtract, Release),
-        ],
+        default_binding: &[symbol_chord(Alt, '-', Release)],
         kind: CommandKind::Domain(|| SimControl::IncreaseWaitTime.into()),
     },
     // ── Balls ───────────────────────────────────────────────────────
@@ -359,21 +404,21 @@ pub static COMMANDS: &[CommandDescriptor] = &[
         category: CommandCategory::Balls,
         // A letter, not `]` / `[`: bindings are physical keys, and N is N on
         // QWERTY, QWERTZ and AZERTY alike.
-        default_binding: &[key(KeyCode::KeyN, Release)],
+        default_binding: &[symbol('n', Release)],
         kind: CommandKind::Domain(|| BallCommand::NextSpecies.into()),
     },
     CommandDescriptor {
         id: "balls.previous_species",
         label: "New balls and new source spheres get the previous species.",
         category: CommandCategory::Balls,
-        default_binding: &[chord(Alt, KeyCode::KeyN, Release)],
+        default_binding: &[symbol_chord(Alt, 'n', Release)],
         kind: CommandKind::Domain(|| BallCommand::PreviousSpecies.into()),
     },
     CommandDescriptor {
         id: "balls.randomize_speeds",
         label: "Randomize all ball speeds.",
         category: CommandCategory::Balls,
-        default_binding: &[key(KeyCode::KeyR, Release)],
+        default_binding: &[symbol('r', Release)],
         kind: CommandKind::Domain(|| BallCommand::RandomizeSpeeds.into()),
     },
     CommandDescriptor {
@@ -403,14 +448,14 @@ pub static COMMANDS: &[CommandDescriptor] = &[
         id: "world.save",
         label: "Save the world to a new file in the save directory (--save-dir, default ./saves).",
         category: CommandCategory::World,
-        default_binding: &[chord(Ctrl, KeyCode::KeyS, PressOnce)],
+        default_binding: &[symbol_chord(Ctrl, 's', PressOnce)],
         kind: CommandKind::Domain(|| WorldCommand::Save.into()),
     },
     CommandDescriptor {
         id: "world.load_latest",
         label: "Load the newest save from the save directory (paused, default view).",
         category: CommandCategory::World,
-        default_binding: &[chord(Ctrl, KeyCode::KeyO, PressOnce)],
+        default_binding: &[symbol_chord(Ctrl, 'o', PressOnce)],
         kind: CommandKind::Domain(|| WorldCommand::Load(LoadSource::Latest).into()),
     },
     // ── View ────────────────────────────────────────────────────────
@@ -418,10 +463,7 @@ pub static COMMANDS: &[CommandDescriptor] = &[
         id: "view.reset",
         label: "Reset the viewport (1.0x zoom, centred).",
         category: CommandCategory::View,
-        default_binding: &[
-            key(KeyCode::Digit0, Release),
-            key(KeyCode::Numpad0, Release),
-        ],
+        default_binding: &[symbol('0', Release)],
         kind: CommandKind::Ui(UiAction::ResetView),
     },
     CommandDescriptor {
@@ -442,14 +484,14 @@ pub static COMMANDS: &[CommandDescriptor] = &[
         id: "view.cycle_thermo_overlay",
         label: "Cycle the thermo overlay: Off -> Grid -> Temperature -> Pressure -> Off.",
         category: CommandCategory::View,
-        default_binding: &[key(KeyCode::KeyT, Release)],
+        default_binding: &[symbol('t', Release)],
         kind: CommandKind::Ui(UiAction::CycleThermoDisplay),
     },
     CommandDescriptor {
         id: "view.cycle_plot",
         label: "Cycle the plot content.",
         category: CommandCategory::View,
-        default_binding: &[key(KeyCode::KeyP, Release)],
+        default_binding: &[symbol('p', Release)],
         kind: CommandKind::Ui(UiAction::CyclePlotContent),
     },
     CommandDescriptor {
@@ -463,14 +505,14 @@ pub static COMMANDS: &[CommandDescriptor] = &[
         id: "view.toggle_real_data",
         label: "Toggle the display of real data (SI units, see docs/units.md).",
         category: CommandCategory::View,
-        default_binding: &[key(KeyCode::KeyD, Release)],
+        default_binding: &[symbol('d', Release)],
         kind: CommandKind::Domain(|| ViewCommand::ToggleRealData.into()),
     },
     CommandDescriptor {
         id: "view.toggle_ball_stats",
         label: "Toggle the ball statistics overlay.",
         category: CommandCategory::View,
-        default_binding: &[key(KeyCode::KeyB, Release)],
+        default_binding: &[symbol('b', Release)],
         kind: CommandKind::Domain(|| ViewCommand::ToggleBallStats.into()),
     },
     // ── Diagnostics ─────────────────────────────────────────────────
@@ -486,7 +528,7 @@ pub static COMMANDS: &[CommandDescriptor] = &[
         label: "Set a ball verbose: type its ID (or 'a' for all, '0' for none) and a mode \
                 (c console, m main neighbours, o other neighbours, s speed) in the terminal.",
         category: CommandCategory::Diagnostics,
-        default_binding: &[key(KeyCode::KeyV, Release)],
+        default_binding: &[symbol('v', Release)],
         kind: CommandKind::Domain(|| ViewCommand::StartVerbosityInput.into()),
     },
     // ── Help ────────────────────────────────────────────────────────
@@ -494,7 +536,7 @@ pub static COMMANDS: &[CommandDescriptor] = &[
         id: "help.show",
         label: "Print this list of keys to the log.",
         category: CommandCategory::Help,
-        default_binding: &[key(KeyCode::KeyH, Release)],
+        default_binding: &[symbol('h', Release)],
         kind: CommandKind::Ui(UiAction::PrintHelp),
     },
 ];
@@ -536,7 +578,7 @@ impl HeldModifiers {
 /// `InputHandler` decides chords with [`chord_for_key`] on the first press
 /// and looks up everything else here with no modifiers held.
 pub fn command_for_key(
-    key: KeyCode,
+    key: KeyInput,
     phase: KeyPhase,
     held: HeldModifiers,
 ) -> Option<(&'static CommandDescriptor, KeyBinding)> {
@@ -544,39 +586,51 @@ pub fn command_for_key(
         KeyPhase::Down => trigger != Release,
         KeyPhase::Up => trigger == Release,
     };
-    let find = |modifier: Modifier| {
+    [Ctrl, Alt, Modifier::None]
+        .into_iter()
+        .filter(|&modifier| held.holds(modifier))
+        .find_map(|modifier| {
+            find_binding(key, |b| b.modifier == modifier && fires_in_phase(b.trigger))
+        })
+}
+
+/// The first binding of `key` that passes `accept`: of the physical key
+/// (only keys that type no character are bound physically), then of the
+/// character it types without modifiers, then of the one typed with them,
+/// for layouts where a character needs Shift (Swiss `+` is Shift + 1, an
+/// AZERTY `0` is Shift + `à`).
+fn find_binding(
+    key: KeyInput,
+    accept: impl Fn(&KeyBinding) -> bool,
+) -> Option<(&'static CommandDescriptor, KeyBinding)> {
+    [
+        Some(BindKey::Code(key.code)),
+        key.symbol.map(BindKey::Symbol),
+        key.typed.map(BindKey::Symbol),
+    ]
+    .into_iter()
+    .flatten()
+    .find_map(|wanted| {
         COMMANDS.iter().find_map(|command| {
             command
                 .default_binding
                 .iter()
-                .find(|b| b.key == key && b.modifier == modifier && fires_in_phase(b.trigger))
+                .find(|b| b.key == wanted && accept(b))
                 .map(|b| (command, *b))
         })
-    };
-    [Ctrl, Alt, Modifier::None]
-        .into_iter()
-        .filter(|&modifier| held.holds(modifier))
-        .find_map(find)
+    })
 }
 
 /// The chord a key press starts: the binding of `key` whose modifier is
 /// held (Ctrl before Alt), whatever its trigger. See [`chord`].
 pub fn chord_for_key(
-    key: KeyCode,
+    key: KeyInput,
     held: HeldModifiers,
 ) -> Option<(&'static CommandDescriptor, KeyBinding)> {
     [Ctrl, Alt]
         .into_iter()
         .filter(|&modifier| held.holds(modifier))
-        .find_map(|modifier| {
-            COMMANDS.iter().find_map(|command| {
-                command
-                    .default_binding
-                    .iter()
-                    .find(|b| b.key == key && b.modifier == modifier)
-                    .map(|b| (command, *b))
-            })
-        })
+        .find_map(|modifier| find_binding(key, |b| b.modifier == modifier))
 }
 
 /// The help text (key `H`), generated from [`COMMANDS`].
