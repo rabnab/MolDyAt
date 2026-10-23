@@ -111,6 +111,48 @@ fn assert_energy_kept(on_wall: bool, height: f32, max_drift: f32) {
     );
 }
 
+/// Total energy as the stats report it (kinetic + potential).
+fn reported_energy(main_content: &MainContent) -> f32 {
+    let sim = &main_content.world().sim;
+    sim.get_kinetic_energy() + sim.get_potential_energy()
+}
+
+/// The reported potential energy includes `m·g·y`, so the reported total
+/// energy of a ball bouncing under gravity is conserved (#334).
+#[test]
+fn test_reported_energy_includes_gravity_and_is_conserved() {
+    let (mut main_content, _) = dropped_ball(false, 10.0);
+    main_content.simulation_step().unwrap();
+    let reference = (mechanical_energy(&main_content) - mechanical_energy_floor(&main_content))
+        .abs()
+        .max(1e-3);
+
+    let reported0 = reported_energy(&main_content);
+    let mechanical0 = mechanical_energy(&main_content);
+    assert!(
+        ((reported0 - mechanical0) / reference).abs() < 1e-5,
+        "reported {reported0} vs kinetic + m·g·y {mechanical0}"
+    );
+
+    for _ in 0..STEPS {
+        main_content.simulation_step().unwrap();
+    }
+    let drift = (reported_energy(&main_content) - reported0) / reference;
+    assert!(
+        drift.abs() < MAX_BOUNCING_DRIFT,
+        "reported total energy changed by {drift:e} (limit {MAX_BOUNCING_DRIFT:e})"
+    );
+}
+
+/// Without gravity the reported potential energy is the pair energy only.
+#[test]
+fn test_reported_potential_energy_has_no_gravity_term_without_gravity() {
+    let (mut main_content, _) = dropped_ball(false, 10.0);
+    main_content.world_mut().physics.constants.gravity = 0.0;
+    main_content.simulation_step().unwrap();
+    assert_eq!(main_content.world().sim.get_potential_energy(), 0.0);
+}
+
 #[test]
 fn test_ball_bouncing_on_line_segment_keeps_energy() {
     assert_energy_kept(true, 5.0, MAX_BOUNCING_DRIFT);

@@ -107,7 +107,7 @@ headless runs; both step with the configured time step.
    walls and with line-segment walls are resolved along the wall normal
    (`ball_impl::wall_contact`).
 3. **forces**: pair forces from the SIMD kernel (`simd_forces`, `f32x4`).
-4. **apply**: velocity update, kinetic and potential energy, wall momentum
+4. **apply**: velocity update, kinetic and potential energy (pair energy plus `m·g·y` with gravity on), wall momentum
    bookkeeping, the overlap fallback for balls still inside a wall, and the
    Nosé–Hoover thermostats. The velocity update runs in parallel over
    fixed chunks of 1024 balls; each chunk sums its energies and momenta in

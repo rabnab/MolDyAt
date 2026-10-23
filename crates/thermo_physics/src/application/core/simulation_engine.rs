@@ -487,6 +487,12 @@ impl SimulationEngine {
         let speed_sq = ball.v.norm_sq();
         let momentum = ball.moment();
         stats.pot += result.potential_energy * 0.5;
+        // Gravity accelerates by -gravity along y, so its potential is
+        // m·g·y (zero at y = 0). Skipped without gravity, so those sums
+        // stay bit-identical (#334).
+        if gravity != 0.0 {
+            stats.pot += ball.mass * gravity * ball.get_position().y;
+        }
         stats.px += momentum.x;
         stats.py += momentum.y;
         stats.kin += speed_sq * ball.mass * 0.5;
@@ -593,7 +599,8 @@ struct ApplyParams {
 /// Stats of one chunk of the apply pass, summed in ball order.
 #[derive(Debug, Default, Clone, Copy)]
 pub(crate) struct ApplyStats {
-    /// Half the pair potential energy (each pair is counted by both balls).
+    /// Half the pair potential energy (each pair is counted by both balls)
+    /// plus the gravitational potential energy `m·g·y`.
     pot: f32,
     kin: f32,
     /// Momentum of the balls.
