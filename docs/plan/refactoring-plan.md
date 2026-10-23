@@ -1,7 +1,8 @@
 # Refactoring Plan: Maintainability, Extensibility, Performance
 
-Status: accepted direction, decisions recorded 2026-10-04 (see §6). Phase 1 has
-landed (2026-10-14, see §4). Successor to the runtime refactor in
+Status: accepted direction, decisions recorded 2026-10-04 (see §6). Phases 1
+and 2 have landed, Phase 3 except M8 (in review) and M9; the remaining work
+was regrouped into Phases 4–8 on 2026-10-23 (see §4). Successor to the runtime refactor in
 [refactor_architecture.md](../done/refactor_architecture.md) (#137, landed). The current
 structure is described in [architecture.md](../architecture.md).
 
@@ -46,7 +47,7 @@ current status.
 | Graphs | `graphics/energy_plot/` | Single-purpose energy plot drawn as coloured characters into a separate softbuffer window. Data comes from `EnergyData` only; no generic time-series store; headless output has its own formatting. |
 | Snapshot | `core/snapshot.rs` | Fresh `Vec<BallRenderData>` (≈120 B/ball incl. two `Vec` headers) every publish; status text formatted every publish. |
 | Hygiene | both crates | `#![allow(dead_code)]` at both crate roots; 13 `println!` in non-test core code; several 600–800 line files (`core/line_segments.rs`, `unified_render_state.rs`, `line_segment_tool.rs`, `energy_renderer.rs`, `energy_window.rs`). |
-| Open bugs touching the plan | #213 (f32 precision in large worlds), #216 (operators/mouse must always render), #217 (resize lag) | Addressed by P8, V4 and V1 respectively, or at least made easier. |
+| Open bugs touching the plan | #213 (f32 precision in large worlds), #216 (operators/mouse must always render), #217 (resize lag) | Addressed by P8, V4 and V1 respectively, or at least made easier (#216 and #217 are closed; P8 is now P8a/P8b). |
 
 Strengths to keep: drift harness and energy tests, seeded headless regression
 fixture, `OperatorCommand` / `OperatorToolHandler` traits, `GpuBatch` pattern,
@@ -55,6 +56,10 @@ lock-free snapshot slot, documented index contracts.
 ---
 
 ## 2. Target architecture
+
+`thermo_physics` exists since M7 (#308) and `thermo_runtime` comes with M8
+(#309); after M8, `moldyat_core` holds only the UI layer and becomes
+`thermo_ui` in M9.
 
 ```text
 crates/
@@ -106,8 +111,8 @@ Size: **S** ≤ 1 day, **M** 2–4 days, **L** ≥ 1 week. "Deps" are hard prere
 | M5 | Split oversized modules | `core/line_segments.rs` (obstacles, sweep, overlap fallback), `unified_render_state.rs`, `line_segment_tool.rs`, `energy_renderer.rs`. Target < 400 lines per file; tests follow the topic-file rule. | M | – |
 | M6 | Central `SimConfig` | Collect `DT_GOAL`, `FPS_GOAL`, LJ defaults, skin, speed limit factor, snapshot interval into one serde struct; CLI and save files read/override it. | M | M1 |
 | M7 | Crate split: `thermo_physics` | Move `objects2d`, `application/core` (world, engine), persistence into a crate without winit/softbuffer/scirs2. Keep `moldyat_core` as a re-export shim for one release. | L | M1, M2 |
-| M8 | Crate split: `thermo_runtime` + headless | Physics thread, `DomainCommand`, snapshot, headless runner/output move out of the GPU crate. `cargo test -p thermo_physics` builds without a windowing stack. Tighten the `thermo_physics` API that M7 widened (about 100 former `pub(crate)` items made `pub`, among them `SimulationWorld` fields): keep `pub` only what the runtime and UI use, behind accessors or narrow methods instead of public fields. | L | M7 |
-| M9 | Crate split: `thermo_ui` | `graphics/renderer/event_loop`, viewport, sidebar model, interpolation. Energy window leaves the UI crate and becomes a wgpu window in `thermo_wgpu` (V4); `softbuffer` is dropped. | M | M8 |
+| M8 | Crate split: `thermo_runtime` + headless | Physics thread, `DomainCommand`, snapshot, headless runner/output move out of the GPU crate into `crates/thermo_runtime`, which builds without a windowing stack. Tighten the `thermo_physics` API that M7 widened (about 100 former `pub(crate)` items made `pub`, among them `SimulationWorld` fields): keep `pub` only what the runtime and UI use, behind accessors or narrow methods instead of public fields. In review on `feature/master/309-thermo-runtime`. | L | M7 |
+| M9 | Crate split: `thermo_ui` | After M8 `moldyat_core` holds only the UI layer (event loop, tools, viewport, sidebar model, energy window) and the logger setup. Move it to `crates/thermo_ui`, rename the package, and remove the re-exports kept for one release by #308 and #309 (callers use `thermo_physics` / `thermo_runtime` directly). The energy window moves as it is; it becomes a wgpu window and `softbuffer` is dropped in V4a. | S | M8 |
 | M10 | Docs refresh | Update `architecture.md`, move finished plans to `docs/done/` (done for `refactor_architecture.md`, `headless-renderer-plan.md`, `nose-hoover.md`, `operator-handling-review.md`), update the `operator-framework` skill. | S | after each epic |
 
 ### Epic I – Interaction types and mixed species
@@ -123,9 +128,10 @@ guardrails. Water (I9–I10) follows. See §5 for the model choice behind it.
 | I4 | Interaction table and mixing rules | The table core landed with I3 (decision 9): `PairTable` (N×N `CappedPotential`) built with Lorentz–Berthelot (`σ_ij = (σ_i+σ_j)/2`, `ε_ij = √(ε_i ε_j)`), per-pair cutoff, `r_cap` and `U(cutoff)` cached, per-pair list radius, SIMD gather per chunk, scalar ↔ SIMD parity with mixed species in one chunk. The rest landed with #235: per-pair overrides of `σ_ij` / `ε_ij` from the config (`[[potential.pair_override]]`), binary-mixture drift scenario (energy). | S | I3, M6 |
 | I5 | Unit system with N₂ as reference | Reduced units stay internal with N₂ as the unit: `σ_N₂ = 1`, `ε_N₂ = 1`, `m_N₂ = 1` (28.01 amu). With σ ≈ 3.7 Å and ε/k_B ≈ 95 K the time unit is τ = σ·√(m/ε) ≈ 2.2 ps and the temperature unit 95 K (final values from one cited source, recorded in `docs/units.md`). `UnitSystem` converts literature parameters of other species and display values (T in K, time in ps, length in Å). Current default balls (σ = 1, ε = 1) become N₂ directly. Done (#236): `UnitSystem::N2` in `application/units.rs`, Hirschfelder, Curtiss & Bird (1954); the real-units display uses it. | M | I3, M6 |
 | I6 | Species library | Species defined in the config file (M6): N₂, Ar, Ne, CH₄, O₂ (single-site LJ) plus the `legacy` preset. Done (#237): the built-in table is the library (`N2`, the size classes `XS`–`XL` as the legacy species, then `Ar`, `Ne`, `CH4`, `O2` from Hirschfelder, Curtiss & Bird 1954); a config's `[[species]]` list (Å, K, u) replaces the whole table and travels with saves; headless `--seed-species` seeds mixtures. | S | I4, I5 |
-| I7 | Mixed-species UI and metrics | Species picker (sidebar or keys via C2), colour per species, source spheres emit a chosen species, per-species count / temperature as metric series (V3). Done (#238): `N` / `Alt + N` (`balls.next_species` / `balls.previous_species`) and right click pick the species of new balls and new source spheres; it is shown on the sidebar ball icon, in the cursor readout and in the status lines with the ball count per species; each source sphere is labelled with its species. Per-species time series wait for the metrics store (V3, phase 4). | M | I3, C2 |
-| I8 | `ExternalField` abstraction | Gravity becomes `UniformField`; enables traps or other fields; applied in the kick with potential-energy accounting. | M | I1 |
-| I9 | Orientational degrees of freedom | Optional per-species orientation θ, angular velocity ω, moment of inertia; rotational velocity-Verlet step; rotational kinetic energy in stats, temperature and the Nosé–Hoover thermostat. Prerequisite for water. Deterministic (no new reductions). | L | I3 |
+| I7 | Mixed-species UI and metrics | Species picker (sidebar or keys via C2), colour per species, source spheres emit a chosen species, per-species count / temperature as metric series (V3). Done (#238): `N` / `Alt + N` (`balls.next_species` / `balls.previous_species`) and right click pick the species of new balls and new source spheres; it is shown on the sidebar ball icon, in the cursor readout and in the status lines with the ball count per species; each source sphere is labelled with its species. Per-species time series wait for the metrics store (V3, Phase 5). | M | I3, C2 |
+| I8a | Gravitational potential energy in the stats | The reported potential energy holds only the pair energy (`ForceResult::potential_energy`), so with gravity on the shown total energy is not conserved; only the tests in `barrier_energy.rs` add `m·g·y`. Add the gravity term to the potential energy (or as its own series for V3) and an energy-conservation test with gravity. Gravity defaults to 0, so default runs and fixtures are unchanged; outputs of runs with gravity change (document in the PR). | S | – |
+| I8b | `ExternalField` abstraction | Gravity becomes `UniformField`; enables traps or other fields; applied in the kick with the potential-energy accounting from I8a. | M | I1, I8a |
+| I9 | Orientational degrees of freedom | Optional per-species orientation θ, angular velocity ω, moment of inertia; rotational velocity-Verlet step; rotational kinetic energy in stats, temperature and the Nosé–Hoover thermostat. Prerequisite for water. Deterministic (no new reductions). One track with I10: start only once the water model is decided (§7). | L | I3 |
 | I10 | 2D water: Mercedes-Benz model (pending decision) | LJ core + three hydrogen-bond arms (Gaussian in distance and arm alignment), parameters from Silverstein, Haymet & Dill (1998). Torques from the same potential. Tests: energy conservation, force/torque vs finite differences, smoke test for the density maximum. Water–N₂ via the LJ part only (mixing rules). | L | I9, I4 |
 | I11 | Multi-site molecules (only if needed later) | Rigid two-site N₂ or atomistic water (SPC/E, TIP4P) need molecules, constraints (SHAKE/RATTLE) and electrostatics (damped shifted force). Not needed for mixed species or MB water. | L | I9 |
 | I12 | Soft wall potential with hard-contact backstop | `WallLaw` gets a soft variant `U_w(z)` (z = distance from the wall): WCA-type by default, optional attraction `ε_w` (adsorption, wetting). The wall is a pseudo-species in the I4 table (`σ_iw`, `ε_iw` by mixing or override). Signed distance for box walls and closed chains, so the force points inward after an overshoot. The existing hard contact (`wall_contact`) stays as a **backstop** at a deeper distance (e.g. `z ≈ 0.3·σ_i`, where `U_w ≫ k_B T`): a soft wall alone does not stop crossing (finite barrier with the force cap, discrete steps, two-sided segments flip the force), so thin segments and valves rely on it. Backstop hits are counted like cap hits; the drift suite expects none in normal scenarios. Wall pressure from the force sum; no energy bumps at chain joints; walls in the cell grid. Restitution < 1 stays hard-wall only or gets a documented damping term. Tests: energy conservation (new drift scenario), no ball behind a wall in a hot-gas scenario or with injected fast balls, continuity across joints, thread-count reproducibility. | L | I3, I4 |
@@ -136,20 +142,21 @@ guardrails. Water (I9–I10) follows. See §5 for the model choice behind it.
 |---|---|---|---|---|
 | C1 | Group `DomainCommand` | Split into `Sim(SimControl)`, `Balls(BallCommand)`, `World(WorldCommand)`, `Operator(Box<dyn OperatorCommand>)`. Handler delegates per group. | S | – |
 | C2 | Command registry | One table of `CommandDescriptor { id, label, category, default_binding, kind: Ui(UiAction) | Domain(fn(&Ctx)->DomainCommand) }`. Generated: key dispatch, help text (`PrintHelp`), `process_action_common`. Adding a command = one entry + handler. Unit test: no duplicate bindings, every command has help text. Landed as `command_registry.rs` with `Domain(fn() -> DomainCommand)`: no key command needs a context yet (C5 adds parameters). | M | C1 |
-| C3 | Configurable key bindings | Load overrides from a TOML/JSON file (via M6); defaults from C2. | S | C2, M6 |
+| C3 | Configurable key bindings | Load overrides from a TOML file; defaults from C2. Bindings are a UI setting: a UI settings file read by the UI crate, not a `SimConfig` key (`SimConfig` lives in `thermo_physics` and travels with saves). | S | C2 |
 | C4 | Tool registry | `ToolDescriptor { tool, icon, name }` list drives `OperatorTool`, `operator_tool_for_icon`, `selected_sidebar_icon` and the atlas order — removes the 3-file sync rule from the skill. Test: icon order == registry order. | M | – |
-| C5 | Scriptable commands for headless | Headless runner accepts a command script (`step 1000; add_random 500; toggle_gravity; …`) mapped through the same registry ids. Enables reproducible scenario tests. | M | C2, M8 |
+| C5 | Scriptable commands for headless | Headless runner accepts a command script (`step 1000; add_random 500; toggle_gravity; …`) mapped through the same registry ids. Enables reproducible scenario tests. The registry (`command_registry.rs`) is in the UI crate, while headless runs are in `thermo_runtime`: the domain half (command id → `DomainCommand`) moves into `thermo_runtime`, and the UI registry refers to it by id. | M | C2, M8 |
 
 ### Epic V – Visuals and graphs
 
 | ID | Title | Scope / acceptance | Size | Deps |
 |---|---|---|---|---|
-| V1 | Layer registry | Replace hard-coded registration + `PipelineHandles` in `WgpuPipelines::new` with `LayerDescriptor { id, draw_order, viewport, default_visible, toggle_command }`. Pipelines look up their own state; layer toggles become commands (C2). Addresses #216 (cursor/operator layers always prepared). | M | C2 |
-| V2 | Split `PrepareContext` / snapshot into sections | `RendererSnapshot` → `{ frame: FrameInfo, balls: BallBuffer, operators: OperatorSnapshot, fields: FieldSnapshot, debug: Option<DebugSnapshot> }`; pipelines read only their section. New visual = new section or derived data, no new top-level fields. | M | V1 |
-| V3 | Metrics/time-series store | `MetricsRegistry` in runtime: named series (E_kin, E_pot, E_tot, T, P, wall momentum, neighbour count, step time, per-species values, …) in ring buffers, sampled at snapshot cadence. `EnergyData` becomes one consumer. Headless JSONL output reads the same store. | M | M8 |
-| V4 | Plot window (wgpu) | Separate OS window rendered with wgpu (shared device, own surface) replacing the softbuffer character plot: generic line-plot pipeline (axes, ticks, legend, autoscale), any selected series from V3, several plots per window. Window placement keeps the current split-screen layout. | L | V2, V3, M9 |
-| V5 | Field visualisations | Generalise thermo heatmap to any scalar per-cell field (T, P, density, velocity magnitude) and add a vector field (velocity arrows). Field selection cycles through registry. | M | V2 |
-| V6 | Distribution graphs | Speed histogram vs. Maxwell–Boltzmann, radial distribution function g(r) — computed off the hot path at snapshot cadence. | M | V3, V4 |
+| V1 | ~~Layer registry~~ | Folded into V2. Mostly done another way: `PipelineHandles` is gone, `WgpuPipelines::new` is one list in draw order, and `SceneLayers` selects which layers are built and drawn; #216 and #217 are closed. | – | – |
+| V2 | Split `PrepareContext` / snapshot into sections, snapshot reuse | `RendererSnapshot` → `{ frame: FrameInfo, balls: BallBuffer, operators: OperatorSnapshot, fields: FieldSnapshot, debug: Option<DebugSnapshot> }` (`OperatorSnapshot` exists already); pipelines read only their section. New visual = new section or derived data, no new top-level fields. Includes the rest of V1 (a descriptor per layer, layer toggles as commands via C2) and P7 (reused snapshot allocations, debug data only for verbose balls, status text built in the UI from numbers). | M | C2 |
+| V3 | Metrics/time-series store | `MetricsRegistry` in runtime: named series (E_kin, E_pot, E_tot, T, P, wall momentum, neighbour count, step time, per-species values, …) in ring buffers, sampled at snapshot cadence. `EnergyData` becomes one consumer. Headless JSONL output reads the same store. Unblocks the per-species series of I7. | M | M8 |
+| V4a | Plot window (wgpu) | Separate OS window rendered with wgpu (shared device, own surface) replacing the softbuffer character plot: a line-plot pipeline with axes and ticks for the E_kin / E_pot / E_tot series of V3. `softbuffer` is dropped. Window placement keeps the current split-screen layout. | M | V3, M9 |
+| V4b | Plot selection and layout | Any selected series from V3, several plots per window, legend, autoscale. | M | V4a |
+| V5 | Field visualisations | Generalise thermo heatmap to any scalar per-cell field (T, P, density, velocity magnitude) and add a vector field (velocity arrows). Field selection cycles through registry. Builds on the thermo grid of its own from #290, so the field resolution does not change with the species present. | M | V2, #290 |
+| V6 | Distribution graphs | Speed histogram vs. Maxwell–Boltzmann, radial distribution function g(r) — computed off the hot path at snapshot cadence. Headless output and export (V7) first; the plot needs V4b. | M | V3, V7 (V4b for the plot) |
 | V7 | Data export | CSV/JSONL export of selected series and a snapshot dump from the UI (command) and headless. | S | V3 |
 
 ### Epic P – Performance
@@ -161,13 +168,14 @@ Each item reports before/after numbers from G1 and must keep drift + energy test
 | P1 | Remove per-step allocations | Reuse scratch buffers for `old_positions`, `force_results`, `bounce_infos`, `obstacles`, rebuild candidate lists. | S | G1 |
 | P2 | Parallel force application + stats | `apply_forces_and_collect_stats` via `par_iter_mut`; stats reduced over **fixed-size chunks** combined in chunk order, so sums do not depend on thread count or scheduling (reproducibility test from G2 must pass). | M | G1, G2 |
 | P3 | Thermo field at snapshot cadence | Bin T/P every `THERMO_SAMPLE_STRIDE` steps instead of every step; the rolling window counts samples and still spans 1000 steps. A fixed step stride (not wall-clock snapshot time) keeps headless runs deterministic. | S | G1 |
-| P4 | Flat cell grid (CSR) | `CellGrid` as counting-sort arrays (`cell_start`, `ball_idx`) rebuilt per step in parallel instead of `Vec<Vec<Cell>>` with per-cell `Vec`s. | M | P1 |
-| P5 | Spatial reordering of balls | Periodically sort `balls` by cell (Morton/row order) for cache locality; follow the index contract (clear lists, rebuild grid). | M | P4 |
-| P6 | Hot/cold split of `Ball2D` | Hot SoA arrays (pos, v, accel, radius, mass, species) vs cold per-ball data (verbose, tail, counters). Large mechanical change — do after M7 to limit churn. | L | M7, P4 |
-| P7 | Snapshot reuse | Double-buffered snapshot with reused allocations; debug data (neighbour lines, tails) only for verbose balls in a separate small vec; status text built in UI from numbers. | M | V2 |
-| P8 | Precision in large worlds (#213) | Cell-relative coordinates or f64 positions with f32 kernel offsets; evaluate after P6. | L | P6 |
+| P4 | Flat cell grid (CSR) and spatial reordering | `CellGrid` as counting-sort arrays (`cell_start`, `ball_idx`) rebuilt per step in parallel instead of `Vec<Vec<Cell>>` with per-cell `Vec`s. Includes P5: the counting sort gives the cell order, so periodically sort `balls` by it for cache locality, following the index contract (clear lists, rebuild grid). | M | P1 |
+| P5 | ~~Spatial reordering of balls~~ | Folded into P4. | – | – |
+| P6 | Hot/cold split of `Ball2D` | Hot SoA arrays (pos, v, accel, mass, species) vs cold per-ball data (verbose, tail, counters). Large mechanical change, after the crate split to limit churn. | L | M7, P4 |
+| P7 | ~~Snapshot reuse~~ | Folded into V2. The snapshot phase is about 1 % of a step even at 200k balls (`docs/perf-baseline.md`), too little for its own item. | – | – |
+| P8a | Measure precision loss in large worlds (#213) | A test or headless scenario that shows how far f32 positions and drift degrade with world size and distance from the origin, so P8b is sized by numbers. | S | – |
+| P8b | Precision in large worlds (#213) | Cell-relative coordinates or f64 positions with f32 kernel offsets, as P8a shows is needed. | L | P6, P8a |
 | P9 | ~~Half neighbour lists~~ | Dropped: the force reduction it needs makes results depend on thread scheduling, and reproducibility is required. | – | – |
-| P10 | GPU-side ball buffer | Upload only positions/colours per frame to a persistent instance buffer; instanced draw already exists — verify no per-frame reallocation. | S | V2 |
+| P10 | ~~GPU-side ball buffer~~ | Done: `GpuBatch::flush` writes into a persistent buffer and reallocates only when the element count outgrows it (to the next power of two). | – | – |
 
 ---
 
@@ -176,9 +184,12 @@ Each item reports before/after numbers from G1 and must keep drift + energy test
 ```text
 Phase 1 (guardrails + quick wins):  G1, G2, G3, M1, M3, M4, C1, P1, P3
 Phase 2 (mixed species):            I1, I2, I3, I4, M6, I5, I6, C2, I7
-Phase 3 (crate split):              M2, #295, #270, #273, #274, M5, C4, M7, M8, M9, P2
-Phase 4 (graphs + seams):           V3, V1, V2, V4, C3, C5, I8, P4, P7, V5
-Phase 5 (water + perf):             I9, I10, I12, V6, V7, P5, P6, P10, P8, I11 (if needed)
+Phase 3 (crate split):              M2, #295, #270, #273, #274, M5, C4, M7, M8, P2
+Phase 4 (finish the split):         M9, I8a, C3
+Phase 5 (metrics + plots):          V3, V7, V4a, V4b, C5
+Phase 6 (visuals + tools):          V2, #290, V5, V6, #303, #203
+Phase 7 (performance):              P8a, P4, #250, P6, P8b
+Phase 8 (walls + water):            I12, I8b, I9 + I10 (once §7 is decided), I11 (if needed)
 ```
 
 GitHub issues:
@@ -187,11 +198,33 @@ GitHub issues:
 |---|---|---|---|
 | 1 | #219 | G1 #221, G2 #222, G3 #223, M1 #224, M3 #225, M4 #226, C1 #227, P1 #228, P3 #229 | – |
 | 2 | #220 | I1 #230, I2 #233, I3 #234, M6 #231, I4 #235, I5 #236, C2 #232, I6 #237, I7 #238 | – |
-| 3 | #304 | M2 #305, #295, #270, #273, #274, M5 #306, C4 #307, P2 #311, M7 #308 | M8 #309, M9 #310 |
-| 5 | – | – | I12 #280 |
+| 3 | #304 | M2 #305, #295, #270, #273, #274, M5 #306, C4 #307, P2 #311, M7 #308 | M8 #309 (in review) |
+| 4 | – | – | M9 #310 |
+| 6 | – | – | #290, #303, #203 |
+| 7 | – | – | P8a/P8b #213, #250 |
+| 8 | – | – | I12 #280 |
 
-"Landed" is taken from the commits on `master` (as of 2026-10-14), not from
-the issue states.
+"Landed" is taken from the commits on `master` (as of 2026-10-23), not from
+the issue states. Items without an issue number get one when their phase
+starts.
+
+Phases 4–8 replace the former Phases 4 and 5 (2026-10-23), which mixed
+crate work, graphs, visuals, performance and water in two long lists:
+
+- **Phase 4** finishes the crate split. After M8 `moldyat_core` holds only
+  the UI, so M9 is a move and rename. I8a fixes the total energy shown with
+  gravity on; C3 needs nothing else.
+- **Phase 5** builds the metrics store first; export (V7), the wgpu plot
+  window (V4a/V4b, which drops `softbuffer`) and headless command scripts
+  (C5) build on it and on the runtime crate.
+- **Phase 6** reshapes the snapshot (V2 with the rest of V1 and P7) before
+  new visuals; #290 gives the heatmap its own grid before V5 generalises it.
+- **Phase 7** measures the f32 precision loss (P8a) before the large
+  changes; the flat cell grid (P4, with P5) comes before the hot/cold split
+  (P6), and P8b only if P8a shows it is needed.
+- **Phase 8** holds the physics extensions. I12 has no open prerequisites
+  and can be pulled forward; I9 and I10 wait for the water-model decision
+  (§7).
 
 Mixed species (Phase 2) lands before the crate split because it is needed soon and
 touches the hot kernel; it is easiest to verify against unchanged baselines. The
@@ -231,7 +264,7 @@ Decisions (2026-10-04):
 
 1. Split into four crates (M7–M9).
 2. Particle types (species) replace size classes; old saves migrate (I3).
-3. Plots move to a separate wgpu window (V4).
+3. Plots move to a separate wgpu window (V4, now V4a/V4b).
 4. Seeded runs must stay reproducible, including across thread counts (G2, P2; P9 dropped).
 5. Mixed-species simulation has priority (Phase 2); N₂ and water models per §5.
 6. N₂ defines the reduced units (I5).
