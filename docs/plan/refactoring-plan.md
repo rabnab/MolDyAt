@@ -210,16 +210,17 @@ GitHub issues (every open issue is in a phase, as of 2026-10-23):
 | 1 | #219 | G1 #221, G2 #222, G3 #223, M1 #224, M3 #225, M4 #226, C1 #227, P1 #228, P3 #229 | – |
 | 2 | #220 | I1 #230, I2 #233, I3 #234, M6 #231, I4 #235, I5 #236, C2 #232, I6 #237, I7 #238 | – |
 | 3 | #304 | M2 #305, #295, #270, #273, #274, M5 #306, C4 #307, P2 #311, M7 #308, M8 #309 | – |
-| 4 | – | M9 #310 | I8a, #327, C3, M10 |
-| 5 | – | – | V3, V7, V4a, V4b, C5, M10 |
-| 6 | – | – | V2, #290, V5, V6, #303, #203, M10 |
-| 7 | – | – | P8a/P8b #213, P4, #250, P6, M10 |
-| 8 | – | – | I12 #280, I8b, I9, I10, I11, M10 |
+| 4 | #329 | M9 #310 | I8a #334, #327, C3 #335, M10 |
+| 5 | #330 | – | V3 #336, V7 #337, V4a #338, V4b #339, C5 #340, M10 |
+| 6 | #331 | – | V2 #341, #290, V5 #342, V6 #343, #303, #203, M10 |
+| 7 | #332 | – | P8a #344, P4 #345, #250, P6 #346, P8b #213, M10 |
+| 8 | #333 | – | I12 #280, I8b #347, I9 #348, I10 #349, I11 #350, M10 |
 
 "Landed" is taken from the commits on `master` (as of 2026-10-23), not from
-the issue states. Items without an issue number get one when their phase
-starts. A new issue goes into the phase whose items it depends on or
-touches; add it to both lists above.
+the issue states. Every item has an issue; M10 is a checklist in each
+phase's parent issue instead of an issue of its own. A new issue goes into
+the phase whose items it depends on or touches; add it to both lists above
+and as a sub-issue of that phase's parent.
 
 Phases 4–8 replace the former Phases 4 and 5 (2026-10-23), which mixed
 crate work, graphs, visuals, performance and water in two long lists:
