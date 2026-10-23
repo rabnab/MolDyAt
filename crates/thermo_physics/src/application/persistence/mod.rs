@@ -4,7 +4,7 @@
 
 //! Saving and loading the simulation world (issue #50).
 //!
-//! - [`format`]: the file layout (`WorldFile`) and its validation.
+//! - `format`: the file layout (`WorldFile`) and its validation.
 //! - `convert`: live world ⇄ file.
 //! - `migrate`: upgrading files of older format versions before they are read.
 //! - `store`: where files live ([`SaveStore`]).

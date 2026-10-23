@@ -64,7 +64,7 @@ WgpuWindow / EventRouter                  PhysicsRuntime loop
    │                                         │
 UnifiedRenderState + orchestrators           │
    │  DomainCommand  ── mpsc channel ──►  DomainCommandHandler → MainContent
-   │                                         │   SimulationEngine::simulation_step
+   │                                         │   MainContent::step_recording_thermo_fields
    │  RendererSnapshot ◄── ArcSwap slot ──  SnapshotPublisher (CreateSnapshot)
    │  PhysicsEvent     ◄── mpsc channel ──  (save / load results)
 FrameRenderer → RenderGraph → GPU
@@ -100,8 +100,11 @@ FrameRenderer → RenderGraph → GPU
 
 ### Simulation step
 
-`SimulationEngine::simulation_step` runs these phases in order (the phase
-names match `crates/thermo_physics/src/application/phase_timings.rs`):
+`SimulationEngine::simulation_step_with_dt` runs these phases in order (the
+phase names match `crates/thermo_physics/src/application/phase_timings.rs`).
+Outside `thermo_physics` a step goes through `MainContent`:
+`step_recording_thermo_fields` on the physics thread, `simulation_step` in
+headless runs; both step with the configured time step.
 
 1. **neighbours**: balls whose displacement since their last rebuild exceeds
    skin/3 rebuild their Verlet lists from the 3x3 surrounding cells.

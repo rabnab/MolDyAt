@@ -83,12 +83,13 @@ jobs:
 
       # Every step above builds tests, which turn on thermo_physics'
       # `test-support` feature for the whole build (cargo merges features).
-      # Build the binary on its own too, so non-test code that calls a
-      # test-only item fails here, not only in release.yml (#309).
-      - name: Check the binary without test features
+      # Lint the binary and the crates it uses without tests, warnings as
+      # errors: non-test code that calls a test-only item fails to compile,
+      # and code only tests use shows up as dead code (#309).
+      - name: Lint the binary without test features
         run: |
-          cargo check -p moldyat_wgpu
-          cargo check -p moldyat_wgpu --no-default-features
+          cargo clippy -p moldyat_wgpu -- -D warnings
+          cargo clippy -p moldyat_wgpu --no-default-features -- -D warnings
 
       # only in public repo or for organisations
       #- name: Upload clippy SARIF
