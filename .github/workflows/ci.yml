@@ -77,9 +77,10 @@ jobs:
           cargo ci-clippy | clippy-sarif | tee clippy-results.sarif | sarif-fmt
 
       # The step timing has one code path; this keeps the build without the
-      # `measure-time` log compiling and warning-free (#225).
+      # `measure-time` log compiling and warning-free (#225). Its code is in
+      # thermo_physics; thermo_runtime and thermo_ui only pass the feature on.
       - name: Run clippy without measure-time
-        run: cargo clippy -p thermo_physics -p thermo_runtime -p thermo_ui --all-targets --no-default-features -- -D warnings
+        run: cargo clippy -p thermo_physics --all-targets --no-default-features -- -D warnings
 
       # Every step above builds tests, which turn on thermo_physics'
       # `test-support` feature for the whole build (cargo merges features).
@@ -186,13 +187,15 @@ jobs:
           cargo ci-test-headless-regression | tee headless-regression.log
 
       # #225: the step timing has one code path, so results must not depend
-      # on the `measure-time` feature (it only gates the F4 log).
-      - name: Run core tests and headless fixtures without measure-time
+      # on the `measure-time` feature (it only gates the F4 log in
+      # thermo_physics). The headless fixtures run the whole step through
+      # thermo_runtime, which passes the feature on.
+      - name: Run physics tests and headless fixtures without measure-time
         if: ${{ !cancelled() }}
         shell: bash
         run: |
           set -o pipefail
-          cargo test -p thermo_physics -p thermo_runtime -p thermo_ui --no-default-features
+          cargo test -p thermo_physics --no-default-features
           cargo test -p thermo_runtime --no-default-features -- --ignored | tee -a headless-regression.log
 
       - name: Upload headless regression log

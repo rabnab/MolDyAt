@@ -32,7 +32,7 @@ current status.
 
 | Area | Where | Observation |
 |---|---|---|
-| Crate layout | `core` (`moldyat_core`) | Holds physics **and** renderer-agnostic UI (event loop, viewport, tools, sidebar) **and** a winit/softbuffer energy window, plus `scirs2-interpolate`/`ndarray`. Headless runs and physics tests pull in winit and heavy deps. |
+| Crate layout | `core` (`moldyat_core`, split into `thermo_physics`, `thermo_runtime` and `thermo_ui` by M7–M9) | Held physics **and** renderer-agnostic UI (event loop, viewport, tools, sidebar) **and** a winit/softbuffer energy window, plus `scirs2-interpolate`/`ndarray`. Headless runs and physics tests pulled in winit and heavy deps. |
 | Crate layout | `wgpu_renderer` | Backend + CLI + headless runner. Headless runner lives in the GPU crate. |
 | Physics model | `ball_impl/ball_physics.rs`, `simd_forces.rs` | Lennard-Jones is hard-wired: `PhysicsConstants { lj_sig, lj_eps, lj_cutoff, … }`, scalar + `f32x4` kernels, Newton solve for `r_cap`. One potential for all pairs; no notion of species. Gravity is a constant inside the velocity kick. |
 | Step | `core/simulation_engine.rs` | Clear step order, but per-step allocations (`old_positions`, `force_results`, `obstacles`, `checked`), serial force application loop, T/P field binned every step, duplicated `#[cfg(feature = "measure-time")]` branches. |
@@ -211,9 +211,9 @@ starts.
 Phases 4–8 replace the former Phases 4 and 5 (2026-10-23), which mixed
 crate work, graphs, visuals, performance and water in two long lists:
 
-- **Phase 4** finishes the crate split. After M8 `moldyat_core` holds only
-  the UI, so M9 is a move and rename. I8a fixes the total energy shown with
-  gravity on; C3 needs nothing else.
+- **Phase 4** finished the crate split. After M8 `moldyat_core` held only
+  the UI, so M9 moved and renamed it to `thermo_ui`. I8a fixes the total
+  energy shown with gravity on; C3 needs nothing else.
 - **Phase 5** builds the metrics store first; export (V7), the wgpu plot
   window (V4a/V4b, which drops `softbuffer`) and headless command scripts
   (C5) build on it and on the runtime crate.

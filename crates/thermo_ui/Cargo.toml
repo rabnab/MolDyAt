@@ -29,5 +29,6 @@ float-cmp = "0.10"
 
 [features]
 default = ["measure-time"]
-# The F4 step-timing log, in thermo_physics.
-measure-time = ["thermo_physics/measure-time", "thermo_runtime/measure-time"]
+# The F4 step-timing log of thermo_physics, passed on through thermo_runtime.
+# No code in this crate uses it.
+measure-time = ["thermo_runtime/measure-time"]

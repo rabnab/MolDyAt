@@ -39,6 +39,7 @@ num_cpus = "1.16"
 
 [features]
 default = ["measure-time"]
-# Forwards to the crates: the F4 step-timing log. Off, the simulation results are
-# identical (CI runs the headless fixtures both ways).
-measure-time = ["thermo_ui/measure-time", "thermo_runtime/measure-time", "thermo_physics/measure-time"]
+# The F4 step-timing log of thermo_physics, passed on through thermo_ui and
+# thermo_runtime. Off, the simulation results are identical (CI runs the
+# headless fixtures both ways).
+measure-time = ["thermo_ui/measure-time"]

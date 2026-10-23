@@ -239,11 +239,17 @@ fn test_readme_key_table_matches_the_registry() {
         "<!-- key-table:start (generated from COMMANDS, see command_registry.rs) -->\n";
     const END: &str = "<!-- key-table:end -->";
     // The workspace root, two levels above this crate (`crates/thermo_ui`).
+    // The crates are not published, so it always exists. Fail if it is not
+    // where expected: a silent pass is how moving the crate switched this
+    // test off once (#310).
     let root = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
-    // A packaged crate has no workspace and no README: nothing to check.
-    if !root.join("Cargo.toml").exists() {
-        return;
-    }
+    let workspace = std::fs::read_to_string(root.join("Cargo.toml"))
+        .expect("the workspace Cargo.toml is two levels above this crate");
+    assert!(
+        workspace.contains("[workspace]"),
+        "{} is not the workspace root",
+        root.display()
+    );
     let readme = std::fs::read_to_string(root.join("README.md")).expect("README.md is readable");
     // A Windows checkout may have CRLF line endings.
     let readme = readme.replace("\r\n", "\n");
