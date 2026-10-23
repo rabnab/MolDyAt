@@ -12,7 +12,7 @@ pub struct Rect {
 
 impl Rect {
     /// Create a new Rect from top-left coordinates, width and height
-    pub fn new(x: f32, y: f32, w: f32, h: f32) -> Self {
+    pub const fn new(x: f32, y: f32, w: f32, h: f32) -> Self {
         Self { x, y, w, h }
     }
 
@@ -49,5 +49,34 @@ impl Rect {
     /// keep their look when the world is resized.
     pub fn extent(&self) -> f32 {
         self.w.abs().max(self.h.abs()).max(1.0)
+    }
+
+    /// This rect with width and height multiplied by `scale`, around its
+    /// centre. A scale of 1 returns it unchanged, bit for bit.
+    pub fn scaled_about_centre(&self, scale: f32) -> Self {
+        let (w, h) = (self.w * scale, self.h * scale);
+        Self::new(
+            self.x + (self.w - w) / 2.0,
+            self.y + (self.h - h) / 2.0,
+            w,
+            h,
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Rect;
+
+    #[test]
+    fn scaled_about_centre_keeps_the_centre() {
+        let rect = Rect::new(-56.0, 31.0, 112.0, -62.0);
+        let scaled = rect.scaled_about_centre(5.0);
+        assert_eq!((scaled.w, scaled.h), (560.0, -310.0));
+        assert_eq!(
+            (scaled.x + scaled.w / 2.0, scaled.y + scaled.h / 2.0),
+            (0.0, 0.0)
+        );
+        assert_eq!(rect.scaled_about_centre(1.0), rect);
     }
 }

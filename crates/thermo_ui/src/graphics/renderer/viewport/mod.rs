@@ -97,11 +97,24 @@ impl ViewportTransform {
         window_height: u32,
         margin: Margins,
     ) -> Rect {
+        Self::compute_world_bounds_at_density(window_width, window_height, margin, Self::LEN_TO_PX)
+    }
+
+    /// Like [`Self::compute_world_bounds_from_window_size`], at
+    /// `world_per_px` world units per pixel instead of [`Self::LEN_TO_PX`].
+    /// A resize passes the current [`Self::world_per_px`], so the world keeps
+    /// the scale it is shown at (a `--world-scale` start, a loaded save).
+    pub fn compute_world_bounds_at_density(
+        window_width: u32,
+        window_height: u32,
+        margin: Margins,
+        world_per_px: f32,
+    ) -> Rect {
         let viewport_width = (window_width as f32 - margin.horizontal()).max(1.0);
         let viewport_height = (window_height as f32 - margin.vertical()).max(1.0);
 
-        let world_width = viewport_width * Self::LEN_TO_PX;
-        let world_height = viewport_height * Self::LEN_TO_PX;
+        let world_width = viewport_width * world_per_px;
+        let world_height = viewport_height * world_per_px;
 
         // Center at origin with top-left coordinate system
         Rect::new(

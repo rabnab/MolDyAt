@@ -195,17 +195,6 @@ impl HeadlessRunner {
 /// Commit named in the timings report when the binary sets none.
 pub const UNKNOWN_COMMIT: &str = "unknown";
 
-/// The world `rect` with width and height multiplied by `scale`, around its centre.
-pub fn scale_world_rect(rect: Rect, scale: f32) -> Rect {
-    let (w, h) = (rect.w * scale, rect.h * scale);
-    Rect::new(
-        rect.x + (rect.w - w) / 2.0,
-        rect.y + (rect.h - h) / 2.0,
-        w,
-        h,
-    )
-}
-
 pub fn build_application(
     world_rect: Rect,
     sim_config: &SimConfig,
@@ -215,13 +204,13 @@ pub fn build_application(
         .map_err(|error| io::Error::other(format!("{error:?}")))
 }
 
-/// Build the application for a headless run from `sim_config` (or the
-/// loaded save's config), with `--dt` overriding either: time step, then
-/// walls, then seeded balls (so seeding never places a ball inside a wall).
+/// Build the application for a headless run from `sim_config` (its
+/// `world.rect()` is the world box), or from the loaded save and its config,
+/// with `--dt` overriding either: time step, then walls, then seeded balls
+/// (so seeding never places a ball inside a wall).
 pub fn prepare_application(
     config: &HeadlessConfig,
     sim_config: &SimConfig,
-    world_rect: Rect,
     store: &SaveStore,
     load: Option<PathBuf>,
 ) -> io::Result<MainContent> {
@@ -229,7 +218,7 @@ pub fn prepare_application(
     if let Some(dt) = config.dt {
         sim_config.integration.time_step = dt;
     }
-    let mut application = build_application(world_rect, &sim_config, config.rng_seed)?;
+    let mut application = build_application(sim_config.world.rect(), &sim_config, config.rng_seed)?;
     if let Some(path) = load {
         // Same entry point as Ctrl+O, but running: a headless run has no
         // one to look at a paused world.

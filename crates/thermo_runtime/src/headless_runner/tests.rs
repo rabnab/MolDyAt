@@ -17,11 +17,12 @@ use std::io;
 use std::rc::Rc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-/// The world of a 1280 x 720 window with margins 110/50/50/50, as the
-/// binary computes it (`ViewportTransform::compute_world_bounds_from_window_size`
-/// in `thermo_ui`; its test pins the same numbers).
+/// The default world (`DEFAULT_WORLD_RECT`, `world.scale = 1`), pinned here
+/// so a change to it shows up in these tests.
 fn window_world_rect() -> thermo_physics::objects2d::Rect {
-    thermo_physics::objects2d::Rect::new(-56.0, 31.0, 112.0, -62.0)
+    let rect = thermo_physics::objects2d::Rect::new(-56.0, 31.0, 112.0, -62.0);
+    assert_eq!(rect, SimConfig::default().world.rect());
+    rect
 }
 
 const SEEDED_HEADLESS_FIXTURE_PATH: &str = concat!(
@@ -118,7 +119,6 @@ fn seeded_headless_output() -> String {
         stdout: false,
         seed_balls: Some(24),
         dt: None,
-        world_scale: None,
         seed_speed: None,
         seed_species: Vec::new(),
         line_segments: Vec::new(),
@@ -151,7 +151,6 @@ fn operators_config(steps: u32, snapshot_every: u32) -> HeadlessConfig {
         rng_seed: Some(222),
         seed_balls: Some(OPERATORS_SEED_BALLS),
         seed_speed: Some(3.0),
-        world_scale: Some(0.25),
         line_segments: vec![
             LineSegmentSpec {
                 start: (-2.0, -7.0),
@@ -174,16 +173,21 @@ fn operators_config(steps: u32, snapshot_every: u32) -> HeadlessConfig {
     }
 }
 
+/// The operator scenario runs in a quarter-size world (`--world-scale 0.25`).
+fn operators_sim_config() -> SimConfig {
+    let mut sim = SimConfig::default();
+    sim.world.scale = 0.25;
+    sim
+}
+
 /// The operator scenario's world: `config` plus an active thermostat left of
 /// the valve wall and an emitting source sphere right of it. Thermostats and
 /// source spheres have no headless flags, so they go through the same
 /// operator commands as the UI tools.
 fn operators_application(config: &HeadlessConfig) -> MainContent {
-    let world_rect = scale_world_rect(test_world_rect(), config.world_scale.expect("scale"));
     let mut application = prepare_application(
         config,
-        &SimConfig::default(),
-        world_rect,
+        &operators_sim_config(),
         &SaveStore::new("saves"),
         None,
     )
@@ -471,7 +475,6 @@ fn test_prepare_application_applies_dt_and_line_segments() {
     let mut application = prepare_application(
         &config,
         &SimConfig::default(),
-        test_world_rect(),
         &SaveStore::new("saves"),
         None,
     )
@@ -519,7 +522,6 @@ fn test_run_start_records_effective_dt_segments_and_world_rect() {
         stdout: false,
         rng_seed: Some(1),
         seed_speed: Some(2.5),
-        world_scale: Some(1.5),
         line_segments: vec![LineSegmentSpec {
             start: (-10.0, 5.0),
             end: (10.0, 5.0),
@@ -527,14 +529,10 @@ fn test_run_start_records_effective_dt_segments_and_world_rect() {
         }],
         ..HeadlessConfig::default()
     };
-    let application = prepare_application(
-        &config,
-        &SimConfig::default(),
-        test_world_rect(),
-        &SaveStore::new("saves"),
-        None,
-    )
-    .expect("prepare");
+    let mut sim = SimConfig::default();
+    sim.world.scale = 1.5;
+    let application =
+        prepare_application(&config, &sim, &SaveStore::new("saves"), None).expect("prepare");
     let default_dt = application.time_step();
     HeadlessRunner::from_config(config, application, UNKNOWN_COMMIT)
         .expect("runner")
@@ -548,26 +546,54 @@ fn test_run_start_records_effective_dt_segments_and_world_rect() {
     assert_eq!(run_start["config"]["dt"].as_f64(), Some(default_dt as f64));
     assert_eq!(run_start["config"]["seed_speed"].as_f64(), Some(2.5));
     assert_eq!(run_start["config"]["world_scale"].as_f64(), Some(1.5));
+    assert_eq!(
+        run_start["config"]["sim"]["world"]["scale"].as_f64(),
+        Some(1.5)
+    );
     let segment = &run_start["config"]["line_segments"][0];
     assert_eq!(segment["start"], serde_json::json!([-10.0, 5.0]));
     assert_eq!(segment["end"], serde_json::json!([10.0, 5.0]));
     assert_eq!(segment["thickness"], 2.0);
     assert_eq!(run_start["initial"]["operator_counts"]["line_segments"], 1);
     let world = &run_start["initial"]["world_rect"];
+    assert_eq!(world["left"].as_f64(), Some(-84.0));
+    assert_eq!(world["top"].as_f64(), Some(46.5));
     assert!(world["left"].as_f64() < world["right"].as_f64());
     assert!(world["bottom"].as_f64() < world["top"].as_f64());
 }
 
+/// A default world records `world_scale: null` and no `sim.world` section,
+/// as before the key moved into `SimConfig` (#351).
 #[test]
-fn test_scale_world_rect_keeps_centre() {
-    let rect = Rect::new(-56.0, -31.0, 112.0, 62.0);
-    let scaled = scale_world_rect(rect, 5.0);
-    assert_eq!((scaled.w, scaled.h), (560.0, 310.0));
-    assert_eq!(
-        (scaled.x + scaled.w / 2.0, scaled.y + scaled.h / 2.0),
-        (0.0, 0.0)
-    );
-    assert_eq!(scale_world_rect(rect, 1.0), rect);
+fn test_run_start_of_the_default_world_has_no_world_scale() {
+    let output_path = std::env::temp_dir().join(format!(
+        "headless-default-world-{}.jsonl",
+        std::process::id()
+    ));
+    let config = HeadlessConfig {
+        output: Some(output_path.clone()),
+        stdout: false,
+        steps: 1,
+        ..HeadlessConfig::default()
+    };
+    let application = prepare_application(
+        &config,
+        &SimConfig::default(),
+        &SaveStore::new("saves"),
+        None,
+    )
+    .expect("prepare");
+    assert_eq!(application.world().world_region(), window_world_rect());
+    HeadlessRunner::from_config(config, application, UNKNOWN_COMMIT)
+        .expect("runner")
+        .run()
+        .expect("run");
+    let content = fs::read_to_string(&output_path).expect("read output");
+    let _ = fs::remove_file(&output_path);
+
+    let run_start = &parse_jsonl_records(&content)[0];
+    assert!(run_start["config"]["world_scale"].is_null());
+    assert!(run_start["config"]["sim"].get("world").is_none());
 }
 
 #[test]
@@ -582,7 +608,6 @@ fn test_prepare_application_seeds_moving_balls() {
         let app = prepare_application(
             &config(seed_speed),
             &SimConfig::default(),
-            test_world_rect(),
             &SaveStore::new("saves"),
             None,
         )
@@ -636,7 +661,6 @@ fn test_prepare_application_places_valves_on_their_walls() {
     let application = prepare_application(
         &config,
         &SimConfig::default(),
-        test_world_rect(),
         &SaveStore::new("saves"),
         None,
     )
@@ -679,7 +703,6 @@ fn test_run_writes_timings_for_steps_after_warmup() {
     let application = prepare_application(
         &config,
         &SimConfig::default(),
-        test_world_rect(),
         &SaveStore::new("saves"),
         None,
     )
@@ -803,14 +826,8 @@ fn test_prepare_application_runs_with_the_sim_config() {
     sim_config.integration.time_step = 0.02;
     sim_config.potential.cutoff_factor = 3.0;
     let config = HeadlessConfig::default();
-    let application = prepare_application(
-        &config,
-        &sim_config,
-        test_world_rect(),
-        &SaveStore::new("saves"),
-        None,
-    )
-    .expect("prepare");
+    let application =
+        prepare_application(&config, &sim_config, &SaveStore::new("saves"), None).expect("prepare");
     assert_eq!(application.config(), sim_config);
 }
 
@@ -822,14 +839,8 @@ fn test_dt_flag_overrides_the_sim_config() {
         dt: Some(0.0025),
         ..HeadlessConfig::default()
     };
-    let application = prepare_application(
-        &config,
-        &sim_config,
-        test_world_rect(),
-        &SaveStore::new("saves"),
-        None,
-    )
-    .expect("prepare");
+    let application =
+        prepare_application(&config, &sim_config, &SaveStore::new("saves"), None).expect("prepare");
     assert_eq!(application.time_step(), 0.0025);
     assert_eq!(application.config().integration.time_step, 0.0025);
 }
@@ -864,14 +875,9 @@ fn mixture_run() -> String {
         seed_species: vec![("N2".to_string(), 1), ("Ar".to_string(), 2)],
         ..HeadlessConfig::default()
     };
-    let application = prepare_application(
-        &config,
-        &n2_ar_sim_config(),
-        test_world_rect(),
-        &SaveStore::new("saves"),
-        None,
-    )
-    .expect("prepare");
+    let application =
+        prepare_application(&config, &n2_ar_sim_config(), &SaveStore::new("saves"), None)
+            .expect("prepare");
     headless_output(config, application).0
 }
 
@@ -914,15 +920,9 @@ fn test_seed_species_must_be_in_the_runs_table() {
         seed_species: vec![("XS".to_string(), 1)],
         ..HeadlessConfig::default()
     };
-    let error = prepare_application(
-        &config,
-        &n2_ar_sim_config(),
-        test_world_rect(),
-        &SaveStore::new("saves"),
-        None,
-    )
-    .err()
-    .expect("XS is not in the config's species");
+    let error = prepare_application(&config, &n2_ar_sim_config(), &SaveStore::new("saves"), None)
+        .err()
+        .expect("XS is not in the config's species");
     assert!(error.to_string().contains("unknown species"), "{error}");
 }
 
@@ -941,14 +941,8 @@ fn run_start_record(
         stdout: false,
         ..config
     };
-    let application = prepare_application(
-        &config,
-        sim_config,
-        test_world_rect(),
-        &SaveStore::new("saves"),
-        None,
-    )
-    .expect("prepare");
+    let application =
+        prepare_application(&config, sim_config, &SaveStore::new("saves"), None).expect("prepare");
     HeadlessRunner::from_config(config, application, UNKNOWN_COMMIT)
         .expect("runner")
         .run()
@@ -1040,14 +1034,8 @@ fn test_run_start_records_a_loaded_saves_sim_config_with_dt_winning() {
         dt: Some(0.002),
         ..HeadlessConfig::default()
     };
-    let application = prepare_application(
-        &config,
-        &SimConfig::default(),
-        test_world_rect(),
-        &store,
-        Some(saved),
-    )
-    .expect("prepare");
+    let application =
+        prepare_application(&config, &SimConfig::default(), &store, Some(saved)).expect("prepare");
     HeadlessRunner::from_config(config, application, UNKNOWN_COMMIT)
         .expect("runner")
         .run()

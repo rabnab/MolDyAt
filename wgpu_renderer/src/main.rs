@@ -5,11 +5,9 @@
 mod cli;
 mod wgpu;
 
-use crate::wgpu::{DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH, MARGINS};
 use thermo_physics::application::persistence::{LoadSource, SaveStore};
 use thermo_physics::application::{MainContent, SimConfig};
 use thermo_runtime::{headless_cli, headless_runner};
-use thermo_ui::graphics::renderer::ViewportTransform;
 
 /// Initialize Rayon thread pool for parallel physics computations.
 ///
@@ -65,14 +63,8 @@ fn run_wgpu_renderer(
 
     log::info!("Renderer: wgpu");
 
-    let world_rect = ViewportTransform::compute_world_bounds_from_window_size(
-        DEFAULT_WINDOW_WIDTH as u32,
-        DEFAULT_WINDOW_HEIGHT as u32,
-        MARGINS,
-    );
-
     let store = SaveStore::new(&common.save_dir);
-    let mut application = MainContent::with_config(world_rect, sim_config, None)
+    let mut application = MainContent::with_config(sim_config.world.rect(), sim_config, None)
         .expect("Failed to create MainContent");
     if let Some(path) = common.load {
         // Same entry point as Ctrl+O; the window then shows the loaded world.
@@ -97,18 +89,9 @@ fn run_headless_renderer(
 ) -> std::io::Result<()> {
     log::info!("Renderer: headless");
 
-    let world_rect = ViewportTransform::compute_world_bounds_from_window_size(
-        DEFAULT_WINDOW_WIDTH as u32,
-        DEFAULT_WINDOW_HEIGHT as u32,
-        MARGINS,
-    );
-    let world_rect = match config.world_scale {
-        Some(scale) => headless_runner::scale_world_rect(world_rect, scale),
-        None => world_rect,
-    };
     let store = SaveStore::new(&common.save_dir);
     let application =
-        headless_runner::prepare_application(&config, sim_config, world_rect, &store, common.load)?;
+        headless_runner::prepare_application(&config, sim_config, &store, common.load)?;
     if config.save_setup {
         let path = application
             .save_world(&store)

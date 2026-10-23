@@ -7,6 +7,7 @@ use crate::headless_cli::{DetailLevel, HeadlessConfig, OutputFormat};
 use serde_json::json;
 use std::fs::File;
 use std::io::{self, BufWriter, Write};
+use thermo_physics::application::sim_config::{SimConfig, WorldConfig};
 use thermo_physics::application::thermo_field::ThermoGrid;
 
 pub trait HeadlessSnapshotSink {
@@ -154,7 +155,7 @@ fn run_start_to_jsonl(config: &HeadlessConfig, snapshot: &RendererSnapshot) -> S
             "rng_seed": config.rng_seed,
             "seed_balls": config.seed_balls,
             "seed_speed": config.seed_speed.map_or(serde_json::Value::Null, f32_value),
-            "world_scale": config.world_scale.map_or(serde_json::Value::Null, f32_value),
+            "world_scale": world_scale_value(config.sim.as_ref()),
             "seeded_constructor": config.rng_seed.is_some(),
             "stdout": config.stdout,
             "has_output_file": config.output.is_some(),
@@ -207,6 +208,16 @@ fn run_start_to_jsonl(config: &HeadlessConfig, snapshot: &RendererSnapshot) -> S
             .collect();
     }
     record.to_string()
+}
+
+/// `run_start.config.world_scale`: the run's `world.scale`, or `null` for the
+/// default world (as before the key moved into `SimConfig`, #351).
+fn world_scale_value(sim: Option<&SimConfig>) -> serde_json::Value {
+    let default = WorldConfig::default();
+    match sim.map(|sim| &sim.world) {
+        Some(world) if *world != default => f32_value(world.scale),
+        _ => serde_json::Value::Null,
+    }
 }
 
 /// World bounds, so `--line-segment` coordinates can be chosen from a run.

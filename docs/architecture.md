@@ -319,12 +319,17 @@ sends `WorldLoaded` so the window can resize to fit the loaded world.
 
 ### Simulation config
 
-`SimConfig` gathers the run settings that are not part of the world: the time
+`SimConfig` gathers the run settings that are not part of the world: the
+size of a new world (`[world]`, `WorldConfig::rect()`: `DEFAULT_WORLD_RECT`
+scaled by `scale`, #351; a loaded save keeps its `world_rect`), the time
 step and speed limit factor (`[integration]`), the force cap and cutoff of the
 pair potential (`[potential]`, turned into `CapSettings`), the Verlet skin
 factor (`[neighbours]`) and the snapshot interval of the physics thread
 (`[display]`). Its defaults are the values the code used before it existed.
-`MainContent::with_config` builds the world from it: `BallPhysics` takes the
+Both modes build a new world in `world.rect()`. The window's default size
+shows that box exactly, and a window resize keeps the world units per pixel
+the world is shown at (`ViewportTransform::world_per_px`), so a scaled or
+loaded world keeps its scale. `MainContent::with_config` builds the world from it: `BallPhysics` takes the
 cap settings and skin factor, `SimulationWorld` the speed limit factor,
 `StepConfig` the time step and `PhysicsRuntimeState` the snapshot interval.
 `MainContent::config()` reads them back, with the current time step, so it is

@@ -35,6 +35,7 @@ fn error_text(text: &str) -> String {
 /// A config with every value changed from its default.
 fn custom() -> SimConfig {
     let mut config = SimConfig::default();
+    config.world.scale = 2.0;
     config.integration.time_step = 0.0015;
     config.integration.speed_limit_factor = 0.3;
     config.potential.max_force = 80.0;
@@ -48,6 +49,8 @@ fn custom() -> SimConfig {
 #[test]
 fn defaults_are_the_documented_values() {
     let config = SimConfig::default();
+    assert_eq!(config.world.scale, 1.0);
+    assert_eq!(config.world.rect(), Rect::new(-56.0, 31.0, 112.0, -62.0));
     assert_eq!(config.integration.time_step, 0.005);
     assert_eq!(config.integration.speed_limit_factor, 0.2);
     assert_eq!(config.potential.max_force, 100.0);
@@ -126,7 +129,9 @@ fn missing_keys_keep_their_default() {
 #[test]
 fn every_key_is_read() {
     let config = SimConfig::from_toml(
-        "[integration]\n\
+        "[world]\n\
+         scale = 2.0\n\
+         [integration]\n\
          time_step = 0.0015\n\
          speed_limit_factor = 0.3\n\
          [potential]\n\
@@ -184,7 +189,13 @@ fn wrong_types_are_rejected() {
 #[test]
 fn every_key_has_a_range() {
     type Set = fn(&mut SimConfig, f64);
-    let keys: [(&str, f64, f64, Set); 7] = [
+    let keys: [(&str, f64, f64, Set); 8] = [
+        (
+            "world.scale",
+            MIN_WORLD_SCALE.into(),
+            MAX_WORLD_SCALE.into(),
+            |c, v| c.world.scale = v as f32,
+        ),
         (
             "integration.time_step",
             MIN_TIME_STEP.into(),
@@ -270,6 +281,8 @@ fn extreme_values_are_rejected() {
 #[test]
 fn values_out_of_range_are_rejected() {
     for (text, key) in [
+        ("[world]\nscale = 0.0", "world.scale"),
+        ("[world]\nscale = -2.0", "world.scale"),
         ("[integration]\ntime_step = 0.0", "time_step"),
         ("[integration]\ntime_step = nan", "time_step"),
         (
@@ -378,6 +391,27 @@ fn main_content_runs_with_its_pair_overrides() {
         ]
     );
     assert_eq!(mc.world().physics.cutoff(id("N2"), id("XS")), 4.0 * 1.1);
+}
+
+/// `world.scale` scales the default world around its centre (#351).
+#[test]
+fn world_scale_scales_the_default_world() {
+    let mut config = SimConfig::default();
+    config.world.scale = 0.25;
+    assert_eq!(config.world.rect(), Rect::new(-14.0, 7.75, 28.0, -15.5));
+    config.world.scale = 2.0;
+    assert_eq!(config.world.rect(), Rect::new(-112.0, 62.0, 224.0, -124.0));
+}
+
+/// The default `[world]` is left out, so saves of default-size runs stay
+/// readable for builds without the key.
+#[test]
+fn default_world_is_not_written() {
+    let json = serde_json::to_string(&SimConfig::default()).unwrap();
+    assert!(!json.contains("world"), "{json}");
+    let json = serde_json::to_string(&custom()).unwrap();
+    assert!(json.contains("\"world\":{\"scale\":2.0}"), "{json}");
+    assert_eq!(SimConfig::from_json(&json).unwrap(), custom());
 }
 
 #[test]

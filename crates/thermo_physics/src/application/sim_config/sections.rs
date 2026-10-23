@@ -2,15 +2,43 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! The `[integration]`, `[potential]`, `[neighbours]` and `[display]`
-//! sections of a [`SimConfig`].
+//! The `[world]`, `[integration]`, `[potential]`, `[neighbours]` and
+//! `[display]` sections of a [`SimConfig`].
 
 use super::*;
 
 use crate::error::AppResult;
+use crate::objects2d::Rect;
 use crate::objects2d::ball_impl::pair_potential::{CapSettings, PairOverride};
 use crate::objects2d::ball_impl::{DEFAULT_SKIN_FACTOR, SpeciesTable};
 use serde::{Deserialize, Serialize};
+
+/// The world box of a new run. A loaded save keeps its own `world_rect`; its
+/// `world.scale` only records what the world was created with.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct WorldConfig {
+    /// Factor on the width and height of [`DEFAULT_WORLD_RECT`], around its
+    /// centre (`--world-scale` overrides it).
+    pub scale: f32,
+}
+
+impl Default for WorldConfig {
+    fn default() -> Self {
+        Self { scale: 1.0 }
+    }
+}
+
+impl WorldConfig {
+    /// The box of a new world: [`DEFAULT_WORLD_RECT`] scaled by `scale`.
+    pub fn rect(&self) -> Rect {
+        DEFAULT_WORLD_RECT.scaled_about_centre(self.scale)
+    }
+
+    pub(super) fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
 
 /// Time integration.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

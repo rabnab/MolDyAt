@@ -43,6 +43,26 @@ fn takes_config_in_both_modes() {
 }
 
 #[test]
+fn takes_world_scale_in_both_modes() {
+    let (common, rest) =
+        split_common_args(&args(&["program", "--world-scale", "2", "--headless"])).unwrap();
+    assert_eq!(common.world_scale, Some(2.0));
+    assert_eq!(rest, args(&["program", "--headless"]));
+    let (common, rest) = split_common_args(&args(&["program", "--world-scale", "0.5"])).unwrap();
+    assert_eq!(common.world_scale, Some(0.5));
+    assert_eq!(rest, args(&["program"]));
+}
+
+#[test]
+fn world_scale_rejects_bad_values() {
+    for bad in ["0", "-2", "0.01", "101", "nan", "inf", "x"] {
+        let result = split_common_args(&args(&["program", "--world-scale", bad]));
+        assert!(result.is_err(), "{bad} must be rejected");
+    }
+    assert!(split_common_args(&args(&["program", "--world-scale"])).is_err());
+}
+
+#[test]
 fn config_and_load_cannot_be_combined() {
     let error = split_common_args(&args(&[
         "program",
@@ -54,6 +74,47 @@ fn config_and_load_cannot_be_combined() {
     .unwrap_err();
     assert!(error.message.contains("--config"), "{}", error.message);
     assert!(error.message.contains("--load"), "{}", error.message);
+}
+
+#[test]
+fn world_scale_and_load_cannot_be_combined() {
+    let error = split_common_args(&args(&[
+        "program",
+        "--world-scale",
+        "2",
+        "--load",
+        "saves/a.json",
+    ]))
+    .unwrap_err();
+    assert!(error.message.contains("--world-scale"), "{}", error.message);
+    assert!(error.message.contains("--load"), "{}", error.message);
+}
+
+#[test]
+fn world_scale_sets_the_config() {
+    let (common, _) = split_common_args(&args(&["program", "--world-scale", "2"])).unwrap();
+    let config = common.sim_config().unwrap();
+    assert_eq!(config.world.scale, 2.0);
+    assert_eq!(config.world.rect().w, 224.0);
+}
+
+#[test]
+fn world_scale_overrides_the_config_file() {
+    let dir = std::env::temp_dir().join(format!("moldyat_cli_world_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("world.toml");
+    std::fs::write(&path, "[world]\nscale = 4.0\n").unwrap();
+    let from_file = CommonArgs {
+        config: Some(path.clone()),
+        ..CommonArgs::default()
+    };
+    assert_eq!(from_file.sim_config().unwrap().world.scale, 4.0);
+    let overridden = CommonArgs {
+        world_scale: Some(0.5),
+        ..from_file
+    };
+    assert_eq!(overridden.sim_config().unwrap().world.scale, 0.5);
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
