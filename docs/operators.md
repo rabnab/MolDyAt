@@ -117,7 +117,7 @@ all operators and wall chains.
 
 ## Input and tools
 
-The sidebar tools are one list, `TOOLS` in `core/src/graphics/sidebar.rs`
+The sidebar tools are one list, `TOOLS` in `crates/thermo_ui/src/graphics/sidebar.rs`
 (#307): ball, wall, valve, thermostat, source sphere, each a
 `ToolDescriptor { tool, icon, name }`. Hit-testing (`sidebar_tool.rs`), the
 selected icon and the wgpu icon atlas (`sidebar_pipeline.rs`) all derive from
@@ -126,7 +126,7 @@ it. The ball icon is drawn procedurally; the renderer maps every other
 in icon order.
 
 Selecting a tool installs its `OperatorToolHandler`
-(`core/src/graphics/renderer/event_loop/`). The previous handler is reset
+(`crates/thermo_ui/src/graphics/renderer/event_loop/`). The previous handler is reset
 first, so a half-drawn wall is dropped. Each handler receives mouse button,
 cursor and scroll events with a `ToolContext` (cursor position and the
 operators of the last snapshot) and returns a `ToolResponse`, which may carry
@@ -190,6 +190,6 @@ The wgpu backend draws operators with these pipelines in
 |---|---|
 | Shared primitives | `crates/thermo_physics/src/objects2d/operator/` |
 | Simulation effects (collisions, energy, thermostats, sources, rescale) | `crates/thermo_physics/src/application/core/tests/` (for example `line_segments.rs`, `barrier_energy.rs`, `wall_handover.rs`) |
-| Tools and sidebar mapping | `core/src/graphics/renderer/event_loop/tests/` and the tool modules |
+| Tools and sidebar mapping | `crates/thermo_ui/src/graphics/renderer/event_loop/tests/` and the tool modules |
 | wgpu sidebar and pipelines | `wgpu_renderer/src/wgpu/tests/` |
 | End to end | the seeded headless operator fixture (`seeded_headless_operators.jsonl`) |

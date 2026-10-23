@@ -493,8 +493,8 @@ crates/thermo_runtime/         # Running without a window; no windowing or GPU d
     ├── headless_cli/          # Headless option parsing
     ├── headless_runner/       # Headless simulation driver + regression fixtures
     └── headless_output/       # JSONL record writer
-core/                          # moldyat_core: the UI layer; re-exports both crates
-└── src/                       #   at their old paths for one release
+crates/thermo_ui/              # The UI without a GPU backend
+└── src/
     ├── graphics/
     │   ├── energy_plot/       # Energy plot window
     │   └── renderer/          # Renderer trait, viewport, batch renderer

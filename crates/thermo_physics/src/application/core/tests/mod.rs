@@ -27,7 +27,7 @@ mod thermostats;
 mod valves;
 mod verbose;
 
-// The world builders are shared with the tests of `moldyat_core` (feature
+// The world builders are shared with the tests of `thermo_runtime` (feature
 // `test-support`).
 pub(crate) use crate::test_support::{
     DT_GOAL, create_main_content, create_main_content_for_region, new_main_content,

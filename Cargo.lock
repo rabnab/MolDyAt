@@ -1135,20 +1135,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "moldyat_core"
-version = "0.2.0"
-dependencies = [
- "arc-swap",
- "env_logger",
- "float-cmp",
- "log",
- "softbuffer",
- "thermo_physics",
- "thermo_runtime",
- "winit",
-]
-
-[[package]]
 name = "moldyat_wgpu"
 version = "0.2.0"
 dependencies = [
@@ -1156,11 +1142,12 @@ dependencies = [
  "font8x8",
  "image",
  "log",
- "moldyat_core",
  "num_cpus",
  "pollster",
  "rayon",
+ "thermo_physics",
  "thermo_runtime",
+ "thermo_ui",
  "wgpu",
  "winit",
 ]
@@ -2263,6 +2250,20 @@ dependencies = [
  "rayon",
  "serde_json",
  "thermo_physics",
+]
+
+[[package]]
+name = "thermo_ui"
+version = "0.2.0"
+dependencies = [
+ "arc-swap",
+ "env_logger",
+ "float-cmp",
+ "log",
+ "softbuffer",
+ "thermo_physics",
+ "thermo_runtime",
+ "winit",
 ]
 
 [[package]]

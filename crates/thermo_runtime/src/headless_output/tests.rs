@@ -12,7 +12,7 @@ use thermo_physics::objects2d::ball_impl::SpeciesId;
 
 /// The world of a 1280 x 720 window with margins 110/50/50/50, as the
 /// binary computes it (`ViewportTransform::compute_world_bounds_from_window_size`
-/// in `moldyat_core`; its test pins the same numbers).
+/// in `thermo_ui`; its test pins the same numbers).
 fn window_world_rect() -> thermo_physics::objects2d::Rect {
     thermo_physics::objects2d::Rect::new(-56.0, 31.0, 112.0, -62.0)
 }

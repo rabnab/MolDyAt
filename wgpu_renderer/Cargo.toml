@@ -13,7 +13,8 @@ path = "src/main.rs"
 workspace = true
 
 [dependencies]
-moldyat_core = { path = "../core", default-features = false }
+thermo_ui = { path = "../crates/thermo_ui", default-features = false }
+thermo_physics = { path = "../crates/thermo_physics", default-features = false }
 # Headless runs (#309)
 thermo_runtime = { path = "../crates/thermo_runtime", default-features = false }
 
@@ -23,7 +24,7 @@ pollster = "1"
 bytemuck = { version = "1.14", features = ["derive"] }
 font8x8 = "0.3"
 
-# Window management (same version as core for energy window compat)
+# Window management (same version as thermo_ui for energy window compat)
 winit = "0.30.12"
 
 # PNG icon loading
@@ -38,6 +39,6 @@ num_cpus = "1.16"
 
 [features]
 default = ["measure-time"]
-# Forwards to core: the F4 step-timing log. Off, the simulation results are
+# Forwards to the crates: the F4 step-timing log. Off, the simulation results are
 # identical (CI runs the headless fixtures both ways).
-measure-time = ["moldyat_core/measure-time", "thermo_runtime/measure-time"]
+measure-time = ["thermo_ui/measure-time", "thermo_runtime/measure-time", "thermo_physics/measure-time"]

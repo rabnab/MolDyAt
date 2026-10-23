@@ -5,7 +5,7 @@
 //! Centralised logging infrastructure.
 //!
 //! Log targets and domain-specific log helpers. The logger itself is
-//! installed by the binary (`moldyat_core::logging::init`).
+//! installed by the binary (`thermo_ui::logging::init`).
 
 /// Log target of the per-step output of balls in console verbose mode
 /// (key `V`, mode `c`), at `debug` level: `RUST_LOG=moldyat::verbose=debug`.

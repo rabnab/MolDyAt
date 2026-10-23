@@ -11,7 +11,7 @@ description: Procedure for diagnosing a failed or warning CI run - finding the f
 | Job | Checks | Typical failure |
 |---|---|---|
 | `fmt` | `cargo fmt -- --check` | run `cargo fmt` |
-| `clippy` | `cargo clippy` on the workspace with `-D warnings`, and `-p thermo_physics -p thermo_runtime -p moldyat_core --all-targets --no-default-features` | warnings, or code that only compiles with `measure-time` |
+| `clippy` | `cargo clippy` on the workspace with `-D warnings`, and `-p thermo_physics -p thermo_runtime -p thermo_ui --all-targets --no-default-features` | warnings, or code that only compiles with `measure-time` |
 | `licenses` | `cargo deny check licenses`, `scripts/check_release_files.sh` | new dependency with a license missing from `deny.toml`/`about.toml`, `.rs`/`.wgsl` file without the MPL-2.0 header, stale `Cargo.lock`, `CITATION.cff` version mismatch |
 | `test` | `cargo nextest run --workspace --profile ci`, then `cargo ci-test-headless-regression`, the core tests and fixtures with `--no-default-features`, then `cargo ci-test-drift` | see below |
 

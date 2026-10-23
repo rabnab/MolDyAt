@@ -14,8 +14,8 @@
 //! See `source_sphere.wgsl`.
 
 use bytemuck::{Pod, Zeroable};
-use moldyat_core::application::AppResult;
-use moldyat_core::objects2d::{OperatorState, SOURCE_SPHERE_RADIUS};
+use thermo_physics::application::AppResult;
+use thermo_physics::objects2d::{OperatorState, SOURCE_SPHERE_RADIUS};
 
 use crate::wgpu::gpu::batch::{BatchDesc, GpuBatch, SceneUniforms};
 use crate::wgpu::gpu::shaders;

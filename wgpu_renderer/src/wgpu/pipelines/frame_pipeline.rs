@@ -6,8 +6,8 @@
 //! viewport, drawn in NDC over the full window. See `frame.wgsl`.
 
 use bytemuck::{Pod, Zeroable};
-use moldyat_core::application::AppResult;
-use moldyat_core::graphics::renderer::margins::Margins;
+use thermo_physics::application::AppResult;
+use thermo_ui::graphics::renderer::margins::Margins;
 
 use crate::wgpu::gpu::batch::{BatchDesc, GpuBatch};
 use crate::wgpu::gpu::geometry::px_to_ndc;

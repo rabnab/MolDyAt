@@ -38,8 +38,8 @@ fn main() {
     for source in [
         "src",
         "Cargo.toml",
-        "../core/src",
-        "../core/Cargo.toml",
+        "../crates/thermo_ui/src",
+        "../crates/thermo_ui/Cargo.toml",
         "../crates/thermo_physics/src",
         "../crates/thermo_physics/Cargo.toml",
         "../crates/thermo_runtime/src",

@@ -6,10 +6,10 @@ mod cli;
 mod wgpu;
 
 use crate::wgpu::{DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH, MARGINS};
-use moldyat_core::application::persistence::{LoadSource, SaveStore};
-use moldyat_core::application::{MainContent, SimConfig};
-use moldyat_core::graphics::renderer::ViewportTransform;
+use thermo_physics::application::persistence::{LoadSource, SaveStore};
+use thermo_physics::application::{MainContent, SimConfig};
 use thermo_runtime::{headless_cli, headless_runner};
+use thermo_ui::graphics::renderer::ViewportTransform;
 
 /// Initialize Rayon thread pool for parallel physics computations.
 ///
@@ -47,7 +47,7 @@ fn init_rayon() {
 
 /// Print startup diagnostics about parallelization and SIMD features.
 fn print_diagnostics() {
-    moldyat_core::logging::init();
+    thermo_ui::logging::init();
     log::info!("{} {}", cli::PROGRAM, cli::VERSION);
     log::info!(
         "Parallel: enabled | SIMD: enabled | CPU cores: {}",

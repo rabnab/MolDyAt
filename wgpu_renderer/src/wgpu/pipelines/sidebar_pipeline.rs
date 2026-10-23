@@ -13,10 +13,10 @@
 //! or species change. See `sidebar.wgsl`.
 
 use bytemuck::{Pod, Zeroable};
-use moldyat_core::application::AppResult;
-use moldyat_core::graphics::renderer::Margins;
-use moldyat_core::graphics::renderer::event_loop::OperatorTool;
-use moldyat_core::graphics::sidebar::{
+use thermo_physics::application::AppResult;
+use thermo_ui::graphics::renderer::Margins;
+use thermo_ui::graphics::renderer::event_loop::OperatorTool;
+use thermo_ui::graphics::sidebar::{
     ICON_COUNT, TOOLS, ToolIcon, icon_display_size_for_margin, icon_for_tool,
     icon_spacing_for_margin, sidebar_ui_scale, visible_icon_count_for_margin,
 };

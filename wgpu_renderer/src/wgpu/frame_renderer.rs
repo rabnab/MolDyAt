@@ -5,9 +5,9 @@
 use super::wgpu_context::WgpuContext;
 use super::wgpu_pipelines::{WgpuPipelines, compute_view_proj};
 use crate::wgpu::margins_for_scale_factor;
-use moldyat_core::application::scene_layers::SceneLayers;
-use moldyat_core::graphics::renderer::event_loop::UnifiedRenderState;
 use std::time::{Duration, Instant};
+use thermo_runtime::application::scene_layers::SceneLayers;
+use thermo_ui::graphics::renderer::event_loop::UnifiedRenderState;
 use winit::dpi::PhysicalSize;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId};
@@ -100,7 +100,7 @@ impl FrameRenderer {
             let view_proj = compute_view_proj(&snapshot.grid_spec, pan.x, pan.y, zoom);
 
             let show_ball_outline = state.active_tool()
-                == moldyat_core::graphics::renderer::event_loop::OperatorTool::Ball;
+                == thermo_ui::graphics::renderer::event_loop::OperatorTool::Ball;
             let cursor_world_pos = state.cursor_world_pos();
             let cursor_wp = (cursor_world_pos.x, cursor_world_pos.y);
             // Rendering off (F2) draws only the base layer: no ball or thermo
@@ -211,7 +211,7 @@ impl FrameRenderer {
     fn render_frame(
         ctx: &WgpuContext,
         pipelines: &WgpuPipelines,
-        inset: moldyat_core::graphics::renderer::Margins,
+        inset: thermo_ui::graphics::renderer::Margins,
         layers: SceneLayers,
     ) -> Result<FrameTimings, wgpu::CurrentSurfaceTexture> {
         let acquire_start = Instant::now();

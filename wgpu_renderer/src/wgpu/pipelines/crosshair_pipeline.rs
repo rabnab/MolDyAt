@@ -10,7 +10,7 @@
 //! margins. See `solid_rect.wgsl` and `placement_rings.wgsl`.
 
 use bytemuck::{Pod, Zeroable};
-use moldyat_core::application::AppResult;
+use thermo_physics::application::AppResult;
 
 use crate::wgpu::gpu::batch::{BatchDesc, GpuBatch, SceneUniforms};
 use crate::wgpu::gpu::geometry::mat4_mul;

@@ -5,8 +5,9 @@
 //! MolDyAt simulation physics: particles and species, pair potentials,
 //! walls and operators, the simulation world and its stepping, run
 //! settings and saves. Builds without a windowing or GPU stack; the
-//! renderer, the physics thread and the snapshots live in `moldyat_core`
-//! and `moldyat_wgpu` (see `docs/architecture.md`).
+//! physics thread, the snapshots and headless runs live in `thermo_runtime`,
+//! the UI in `thermo_ui` and the wgpu backend in `moldyat_wgpu` (see
+//! `docs/architecture.md`).
 
 #![feature(portable_simd)]
 #![cfg_attr(not(test), warn(clippy::print_stdout))]

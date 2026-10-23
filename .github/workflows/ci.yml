@@ -79,7 +79,7 @@ jobs:
       # The step timing has one code path; this keeps the build without the
       # `measure-time` log compiling and warning-free (#225).
       - name: Run clippy without measure-time
-        run: cargo clippy -p thermo_physics -p thermo_runtime -p moldyat_core --all-targets --no-default-features -- -D warnings
+        run: cargo clippy -p thermo_physics -p thermo_runtime -p thermo_ui --all-targets --no-default-features -- -D warnings
 
       # Every step above builds tests, which turn on thermo_physics'
       # `test-support` feature for the whole build (cargo merges features).
@@ -192,7 +192,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          cargo test -p thermo_physics -p thermo_runtime -p moldyat_core --no-default-features
+          cargo test -p thermo_physics -p thermo_runtime -p thermo_ui --no-default-features
           cargo test -p thermo_runtime --no-default-features -- --ignored | tee -a headless-regression.log
 
       - name: Upload headless regression log

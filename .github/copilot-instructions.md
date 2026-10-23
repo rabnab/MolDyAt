@@ -36,7 +36,7 @@ Use this file as the single source of truth for commands and process rules. Othe
 
 Toolchain is pinned in `rust-toolchain.toml` (nightly). Use plain `cargo`. Use `--profile perf` for performance comparisons (`release` with thin LTO, faster to build); use `--release` only to build the optimised binary itself.
 
-- Crates: `thermo_physics` (physics, world, stepping, config, saves), `thermo_runtime` (physics thread, commands, snapshots, headless runs), both without a windowing stack; `moldyat_core` (UI layer; re-exports both at the old paths for one release); `moldyat_wgpu` (binary). Physics tests live in `thermo_physics`, physics-thread, snapshot and headless tests in `thermo_runtime`. `thermo_physics` exposes only what the other crates use: `SimulationWorld` has accessors, no public fields (see `docs/architecture.md#the-thermo_physics-api`).
+- Crates: `thermo_physics` (physics, world, stepping, config, saves), `thermo_runtime` (physics thread, commands, snapshots, headless runs), both without a windowing stack; `thermo_ui` (UI layer: event loop, tools, viewport, sidebar, energy window); `moldyat_wgpu` (binary). Each crate is used under its own name; there are no re-exports between them. Physics tests live in `thermo_physics`, physics-thread, snapshot and headless tests in `thermo_runtime`. `thermo_physics` exposes only what the other crates use: `SimulationWorld` has accessors, no public fields (see `docs/architecture.md#the-thermo_physics-api`).
 - Run a single test (name substring): `cargo test -p thermo_physics test_remove_invalid_balls`
 - Run an exact test name: `cargo test -p thermo_physics test_remove_invalid_balls -- --exact`
 - Run a single integration test file (`tests/<name>.rs`): `cargo test -p thermo_physics --test integration_file_name`
@@ -68,7 +68,7 @@ Toolchain is pinned in `rust-toolchain.toml` (nightly). Use plain `cargo`. Use `
 - Docs layout: `docs/` describes the current code, `docs/plan/` holds open plans, `docs/done/` implemented plans kept as history. See the `docs-maintenance` skill before adding, moving or renaming a doc.
 - Line endings: Git normalizes text files to LF on commit (`.gitattributes`, `* text=auto`); no further check needed.
 - Keyboard commands: one `CommandDescriptor` per command in `COMMANDS` (`graphics/renderer/event_loop/command_registry.rs`) generates the key dispatch, the help text (`H`) and the UI-vs-domain routing; add an entry plus its handler (a `UiAction` arm or a `DomainCommand` variant), never a key `match`. Ids (`sim.toggle_pause`) are stable. A test keeps the README key table in sync. See `docs/architecture.md#keyboard-commands`.
-- Operator tools (line segment, valve, thermostat, source sphere): one `TOOLS` list (`core/src/graphics/sidebar.rs`) sets the icon order and drives the hit-testing and the wgpu icon atlas. See the `operator-framework` skill before adding, renaming or reordering tools.
+- Operator tools (line segment, valve, thermostat, source sphere): one `TOOLS` list (`crates/thermo_ui/src/graphics/sidebar.rs`) sets the icon order and drives the hit-testing and the wgpu icon atlas. See the `operator-framework` skill before adding, renaming or reordering tools.
 
 ---
 

@@ -10,9 +10,9 @@
 //! white capsule (see `gpu/label_background.rs`). Mirrors
 //! `ThermostatLabelPipeline`.
 
-use moldyat_core::application::AppResult;
-use moldyat_core::objects2d::ball_impl::SpeciesTable;
-use moldyat_core::objects2d::{SOURCE_SPHERE_RADIUS, SimSourceSphere};
+use thermo_physics::application::AppResult;
+use thermo_physics::objects2d::ball_impl::SpeciesTable;
+use thermo_physics::objects2d::{SOURCE_SPHERE_RADIUS, SimSourceSphere};
 
 use crate::wgpu::gpu::geometry::apply_view_proj;
 use crate::wgpu::gpu::label_background::{CapsuleInstance, LabelBackground, capsule_for_label};

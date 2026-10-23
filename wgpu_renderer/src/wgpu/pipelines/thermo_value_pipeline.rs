@@ -8,11 +8,11 @@
 //! cell that holds a finite T/P value. Hidden unless a thermo display mode
 //! (temperature / pressure) is active.
 
-use moldyat_core::application::AppResult;
-use moldyat_core::application::renderer_snapshot::ThermoGridSpec;
-use moldyat_core::application::scene_layers::SceneLayers;
-use moldyat_core::application::thermo_field::ThermoGrid;
-use moldyat_core::graphics::renderer::state_layers::ThermoDisplayMode;
+use thermo_physics::application::AppResult;
+use thermo_physics::application::thermo_field::ThermoGrid;
+use thermo_runtime::application::renderer_snapshot::ThermoGridSpec;
+use thermo_runtime::application::scene_layers::SceneLayers;
+use thermo_ui::graphics::renderer::state_layers::ThermoDisplayMode;
 
 use crate::wgpu::gpu::geometry::apply_view_proj;
 use crate::wgpu::gpu::text::{

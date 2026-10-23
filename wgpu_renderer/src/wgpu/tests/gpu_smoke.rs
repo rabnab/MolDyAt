@@ -10,17 +10,17 @@
 
 use std::sync::{Arc, Mutex};
 
-use moldyat_core::application::renderer_snapshot::{
-    BallRenderData, CellGridSpec, RendererSnapshot, ThermoGridSpec, ValveSpan, WallSnapshot,
-};
-use moldyat_core::application::scene_layers::SceneLayers;
-use moldyat_core::application::thermo_field::ThermoGrid;
-use moldyat_core::graphics::renderer::event_loop::FramePreviews;
-use moldyat_core::graphics::renderer::state_layers::ThermoDisplayMode;
-use moldyat_core::objects2d::wall_chain::ObjectRef;
-use moldyat_core::objects2d::{
+use thermo_physics::application::thermo_field::ThermoGrid;
+use thermo_physics::objects2d::wall_chain::ObjectRef;
+use thermo_physics::objects2d::{
     OperatorState, Rect, SimLineSegment, SimSourceSphere, SimThermostat, Vec2D,
 };
+use thermo_runtime::application::renderer_snapshot::{
+    BallRenderData, CellGridSpec, RendererSnapshot, ThermoGridSpec, ValveSpan, WallSnapshot,
+};
+use thermo_runtime::application::scene_layers::SceneLayers;
+use thermo_ui::graphics::renderer::event_loop::FramePreviews;
+use thermo_ui::graphics::renderer::state_layers::ThermoDisplayMode;
 
 use crate::wgpu::MARGINS;
 use crate::wgpu::gpu::geometry::build_view_proj_matrix;

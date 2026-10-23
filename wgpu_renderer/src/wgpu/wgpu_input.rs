@@ -7,8 +7,8 @@
 //! Handles actions that target a render pipeline (ring display mode).
 //! All other actions are delegated to UnifiedRenderState.
 
-use moldyat_core::graphics::renderer::InputAction;
-use moldyat_core::graphics::renderer::event_loop::{UiAction, UnifiedRenderState};
+use thermo_ui::graphics::renderer::InputAction;
+use thermo_ui::graphics::renderer::event_loop::{UiAction, UnifiedRenderState};
 
 use super::wgpu_pipelines::WgpuPipelines;
 

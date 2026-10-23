@@ -9,8 +9,8 @@
 //! passable (open) = dark green outline, no fill. See `valve.wgsl`.
 
 use bytemuck::{Pod, Zeroable};
-use moldyat_core::application::AppResult;
-use moldyat_core::objects2d::line_segment::valve_half_width;
+use thermo_physics::application::AppResult;
+use thermo_physics::objects2d::line_segment::valve_half_width;
 
 use crate::wgpu::gpu::batch::{BatchDesc, GpuBatch, SceneUniforms};
 use crate::wgpu::gpu::geometry::world_extent;

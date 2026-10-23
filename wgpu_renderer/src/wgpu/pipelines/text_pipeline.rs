@@ -9,10 +9,10 @@
 //! margin. Uses the
 //! shared bitmap text renderer (`gpu/text.rs`).
 
-use moldyat_core::application::AppResult;
-use moldyat_core::application::renderer_snapshot::RendererSnapshot;
-use moldyat_core::graphics::renderer::margins::Margins;
-use moldyat_core::graphics::sidebar::sidebar_ui_scale;
+use thermo_physics::application::AppResult;
+use thermo_runtime::application::renderer_snapshot::RendererSnapshot;
+use thermo_ui::graphics::renderer::margins::Margins;
+use thermo_ui::graphics::sidebar::sidebar_ui_scale;
 
 use crate::wgpu::gpu::geometry::px_to_ndc;
 use crate::wgpu::gpu::text::{
