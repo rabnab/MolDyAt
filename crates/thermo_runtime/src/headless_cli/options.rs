@@ -76,11 +76,6 @@ pub const HEADLESS_OPTIONS: &[OptionHelp] = &[
         help: &["Time step, 0.0003125..=0.08 (default: the simulation default)"],
     },
     OptionHelp {
-        names: &["--world-scale"],
-        value: Some("<F>"),
-        help: &["Scale the default world's width and height by F"],
-    },
-    OptionHelp {
         names: &["--line-segment"],
         value: Some("<x1,y1,x2,y2[,t]>"),
         help: &[

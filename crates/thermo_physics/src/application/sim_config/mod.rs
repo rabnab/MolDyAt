@@ -5,7 +5,7 @@
 //! Central simulation configuration (#231, plan item M6).
 //!
 //! [`SimConfig`] holds the settings that used to be constants spread over the
-//! code: the time step, the speed limit, the force cap and cutoff of the pair
+//! code: the size of a new world (#351), the time step, the speed limit, the force cap and cutoff of the pair
 //! potential, the Verlet skin and the snapshot interval of the physics thread,
 //! and per-pair overrides of the mixed Lennard-Jones parameters (#235).
 //! Its defaults are today's values, so a run without a config file is
@@ -16,14 +16,15 @@
 //! 2. a config file (`--config <path>`, TOML or `.json`, see
 //!    [`SimConfig::load`]); keys
 //!    it leaves out keep their default,
-//! 3. command-line flags that set the same value (`--dt`).
+//! 3. command-line flags that set the same value (`--dt`, `--world-scale`).
 //!
 //! A save stores the config of the run (`WorldFile::config`), and loading it
 //! restores that config, so a loaded world runs as it did when it was saved.
 //! Saves written before the config existed load with the defaults.
 //!
 //! Every key has an accepted range (the `MIN_*` / `MAX_*` constants), checked
-//! by `SimConfig::validate` for a config file, `--dt` and a save.
+//! by `SimConfig::validate` for a config file, `--dt`, `--world-scale` and a
+//! save.
 //!
 //! Unknown keys are rejected, here and in a save's `config`. That makes every
 //! key part of the save format: a key added later is unknown to this build,
@@ -46,10 +47,12 @@ mod species;
 
 pub use sections::{
     DisplayConfig, IntegrationConfig, NeighbourConfig, PairOverrideConfig, PotentialConfig,
+    WorldConfig,
 };
 pub(crate) use species::{ResolvedSpecies, SpeciesConfig};
 
 use crate::error::{AppError, AppResult};
+use crate::objects2d::Rect;
 use crate::objects2d::ball_impl::{Species, SpeciesSet, SpeciesTable};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -57,6 +60,12 @@ use std::sync::Arc;
 #[cfg(test)]
 use std::time::Duration;
 
+/// The box of a new world at `world.scale = 1`: 112 x 62 centred on the
+/// origin (top-left corner, negative height). At display scale factor 1 the
+/// window's default size (1280 x 720 pixels less its margins, 10 pixels per
+/// length unit) shows it exactly; on a HiDPI display the window has more
+/// physical pixels and draws the same world at fewer world units per pixel.
+pub const DEFAULT_WORLD_RECT: Rect = Rect::new(-56.0, 31.0, 112.0, -62.0);
 /// Time step of a new world, in reduced (N2) time units, about 11 fs.
 /// 0.01 let hot collisions (T* ≈ 3) reach deep into the steep core and
 /// drifted ~1 % over 200k steps; 0.005 is the usual Lennard-Jones step.
@@ -70,6 +79,10 @@ pub(crate) const DEFAULT_SNAPSHOT_INTERVAL_US: u64 = 16_667;
 // far outside them is a typo, not a setting: it would make the run unstable,
 // crawl (one huge cell, every ball rebuilding every step) or freeze the window.
 
+/// `world.scale`: from a 5.6 x 3.1 box, a few balls across, to 11200 x 6200,
+/// where f32 positions lose precision (`docs/drift-test.md`).
+pub const MIN_WORLD_SCALE: f32 = 0.05;
+pub const MAX_WORLD_SCALE: f32 = 100.0;
 /// Time steps the `+` / `-` keys stay within; a config, `--dt` and a save
 /// must too: the default ÷16 to ×16. Above the maximum the sloped core
 /// (`core_stiffness`) gets close to its stability limit.
@@ -112,6 +125,12 @@ pub(crate) const MAX_SNAPSHOT_INTERVAL_US: u64 = 1_000_000;
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct SimConfig {
+    /// `[world]`: the box of a new run. Not written at its default, so such
+    /// a save stays readable for builds without the key; it changes no
+    /// results of a loaded save (its `world_rect` wins), so it keeps the
+    /// format version.
+    #[serde(skip_serializing_if = "WorldConfig::is_default")]
+    pub world: WorldConfig,
     pub integration: IntegrationConfig,
     pub potential: PotentialConfig,
     pub neighbours: NeighbourConfig,
@@ -141,6 +160,11 @@ fn check_range<T: PartialOrd + Copy + std::fmt::Display>(
             "{key} must be within {min}..={max}, got {value}"
         )))
     }
+}
+
+/// Check a world scale against [`MIN_WORLD_SCALE`]`..=`[`MAX_WORLD_SCALE`].
+fn check_world_scale(scale: f32) -> AppResult {
+    check_range(scale, MIN_WORLD_SCALE, MAX_WORLD_SCALE, "world.scale")
 }
 
 /// Check a time step against [`MIN_TIME_STEP`]`..=`[`MAX_TIME_STEP`].
@@ -225,6 +249,7 @@ impl SimConfig {
     /// [`Self::validate`], returning the species table and the pair
     /// overrides resolved against it, ready for the physics.
     pub(crate) fn validated_species(&self) -> AppResult<ResolvedSpecies> {
+        check_world_scale(self.world.scale)?;
         let IntegrationConfig {
             time_step,
             speed_limit_factor,

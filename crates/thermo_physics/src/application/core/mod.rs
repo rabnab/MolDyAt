@@ -25,7 +25,7 @@ pub(crate) use simulation_engine::SimulationEngine;
 use crate::application::StepConfig;
 use crate::application::persistence::SaveStore;
 use crate::application::phase_timings::PhaseTimings;
-use crate::application::sim_config::SpeciesConfig;
+use crate::application::sim_config::{SpeciesConfig, WorldConfig};
 use crate::application::sim_stats::SimStats;
 use crate::application::thermo_field::ThermoFieldHistory;
 use crate::objects2d::ball_cell::cell_grid::CellGrid;
@@ -57,6 +57,10 @@ pub struct SimulationWorld {
     /// The `[[species]]` list the table was built from, empty for the
     /// built-in library: what `MainContent::config` and saves write back.
     pub(crate) species_config: Vec<SpeciesConfig>,
+    /// The `[world]` section the world was created with (a loaded save's
+    /// own). Only recorded: the box is `world_rect`, which a window resize
+    /// changes.
+    pub(crate) world_config: WorldConfig,
 
     pub(crate) sim: SimStats,
     pub(crate) balls: Vec<Ball2D>,

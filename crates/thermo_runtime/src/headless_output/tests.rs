@@ -10,9 +10,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use thermo_physics::application::SimConfig;
 use thermo_physics::objects2d::ball_impl::SpeciesId;
 
-/// The world of a 1280 x 720 window with margins 110/50/50/50, as the
-/// binary computes it (`ViewportTransform::compute_world_bounds_from_window_size`
-/// in `thermo_ui`; its test pins the same numbers).
+/// The default world (`DEFAULT_WORLD_RECT`, `world.scale = 1`).
 fn window_world_rect() -> thermo_physics::objects2d::Rect {
     thermo_physics::objects2d::Rect::new(-56.0, 31.0, 112.0, -62.0)
 }
@@ -54,7 +52,6 @@ fn test_run_start_record_contains_config_and_operator_counts() {
         stdout: true,
         seed_balls: Some(50),
         dt: None,
-        world_scale: None,
         seed_speed: None,
         seed_species: Vec::new(),
         line_segments: Vec::new(),
@@ -361,7 +358,6 @@ fn test_runs_with_same_seed_and_config_emit_identical_jsonl() {
         stdout: false,
         seed_balls: Some(24),
         dt: None,
-        world_scale: None,
         seed_speed: None,
         seed_species: Vec::new(),
         line_segments: Vec::new(),

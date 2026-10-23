@@ -43,9 +43,6 @@ pub struct HeadlessConfig {
     pub seed_species: Vec<(String, u32)>,
     /// Time step override; `None` keeps the simulation default.
     pub dt: Option<f32>,
-    /// Factor applied to the default world's width and height (around its
-    /// centre); `None` keeps the default world.
-    pub world_scale: Option<f32>,
     /// Walls placed before any balls are seeded, in world coordinates.
     pub line_segments: Vec<LineSegmentSpec>,
     /// Valves cut into those walls, at most one per wall.
@@ -58,8 +55,8 @@ pub struct HeadlessConfig {
     /// valves, seeded balls), before the first step. Perf runs seed a large
     /// world once and `--load` it for every run.
     pub save_setup: bool,
-    /// The effective run settings (`--config`, then `--dt`, or a loaded
-    /// save's config), set once the application is prepared and recorded in
+    /// The effective run settings (`--config` with `--world-scale`, then
+    /// `--dt`, or a loaded save's config), set once the application is prepared and recorded in
     /// `run_start` (#295). `None` until then.
     pub sim: Option<SimConfig>,
 }
@@ -101,7 +98,6 @@ impl Default for HeadlessConfig {
             seed_speed: None,
             seed_species: Vec::new(),
             dt: None,
-            world_scale: None,
             line_segments: Vec::new(),
             valves: Vec::new(),
             timings: None,
@@ -262,20 +258,6 @@ fn parse_headless_args_with_args(args: &[String]) -> Result<Option<HeadlessConfi
                         ))
                     })?;
                 config.dt = Some(dt);
-            }
-            "--world-scale" => {
-                i += 1;
-                if i >= args.len() {
-                    return Err(CliError::new("--world-scale requires a value"));
-                }
-                let scale = args[i]
-                    .parse::<f32>()
-                    .ok()
-                    .filter(|scale| scale.is_finite() && *scale > 0.0)
-                    .ok_or_else(|| {
-                        CliError::new("--world-scale value must be a positive number")
-                    })?;
-                config.world_scale = Some(scale);
             }
             "--line-segment" => {
                 i += 1;

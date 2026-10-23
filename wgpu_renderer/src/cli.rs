@@ -8,6 +8,7 @@
 use crate::headless_cli::{CliError, HEADLESS_OPTIONS};
 use std::path::PathBuf;
 use thermo_physics::application::SimConfig;
+use thermo_physics::application::sim_config::{MAX_WORLD_SCALE, MIN_WORLD_SCALE};
 
 mod usage;
 pub use usage::{OptionGroup, OptionHelp};
@@ -64,6 +65,14 @@ pub const COMMON_OPTIONS: &[OptionHelp] = &[
         help: &[
             "Simulation config file (TOML, or JSON if it ends in .json); flags such as --dt override it",
             "Not with --load: a save brings its own config",
+        ],
+    },
+    OptionHelp {
+        names: &["--world-scale"],
+        value: Some("<F>"),
+        help: &[
+            "Scale the default world's width and height by F around its centre (0.05..=100)",
+            "Overrides world.scale of --config; not with --load: a save keeps its size",
         ],
     },
     OptionHelp {
@@ -144,7 +153,7 @@ pub fn usage_text() -> String {
 /// working directory).
 pub const DEFAULT_SAVE_DIR: &str = "saves";
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CommonArgs {
     /// `--load <path>`: start from this save.
     pub load: Option<PathBuf>,
@@ -152,6 +161,9 @@ pub struct CommonArgs {
     pub save_dir: PathBuf,
     /// `--config <path>`: simulation config file (TOML, or JSON for `.json`).
     pub config: Option<PathBuf>,
+    /// `--world-scale <F>`: overrides `world.scale` of the config (the
+    /// default world's width and height, around its centre).
+    pub world_scale: Option<f32>,
 }
 
 impl Default for CommonArgs {
@@ -160,6 +172,7 @@ impl Default for CommonArgs {
             load: None,
             save_dir: PathBuf::from(DEFAULT_SAVE_DIR),
             config: None,
+            world_scale: None,
         }
     }
 }
@@ -175,6 +188,19 @@ pub fn split_common_args(args: &[String]) -> Result<(CommonArgs, Vec<String>), C
             "--load" => common.load = Some(PathBuf::from(value_of(&mut iter, "--load")?)),
             "--save-dir" => common.save_dir = PathBuf::from(value_of(&mut iter, "--save-dir")?),
             "--config" => common.config = Some(PathBuf::from(value_of(&mut iter, "--config")?)),
+            "--world-scale" => {
+                let scale = value_of(&mut iter, "--world-scale")?
+                    .parse::<f32>()
+                    .ok()
+                    .filter(|scale| (MIN_WORLD_SCALE..=MAX_WORLD_SCALE).contains(scale))
+                    .ok_or_else(|| {
+                        CliError::new(format!(
+                            "--world-scale value must be a number within \
+                             {MIN_WORLD_SCALE}..={MAX_WORLD_SCALE}"
+                        ))
+                    })?;
+                common.world_scale = Some(scale);
+            }
             _ => rest.push(arg.clone()),
         }
     }
@@ -186,17 +212,29 @@ pub fn split_common_args(args: &[String]) -> Result<(CommonArgs, Vec<String>), C
              (edit its `config` section instead)",
         ));
     }
+    // A loaded world keeps its saved size; the factor would do nothing.
+    if common.world_scale.is_some() && common.load.is_some() {
+        return Err(CliError::new(
+            "--world-scale cannot be combined with --load: a save keeps its own world size",
+        ));
+    }
     Ok((common, rest))
 }
 
 impl CommonArgs {
-    /// The simulation config: the `--config` file, or the defaults without one.
+    /// The simulation config: the `--config` file, or the defaults without
+    /// one, with `--world-scale` overriding its `world.scale`.
     pub fn sim_config(&self) -> Result<SimConfig, CliError> {
-        match &self.config {
-            None => Ok(SimConfig::default()),
-            Some(path) => SimConfig::load(path)
-                .map_err(|error| CliError::new(format!("--config {}: {error:?}", path.display()))),
+        let mut config = match &self.config {
+            None => SimConfig::default(),
+            Some(path) => SimConfig::load(path).map_err(|error| {
+                CliError::new(format!("--config {}: {error:?}", path.display()))
+            })?,
+        };
+        if let Some(scale) = self.world_scale {
+            config.world.scale = scale;
         }
+        Ok(config)
     }
 }
 
@@ -206,7 +244,7 @@ fn value_of<'a>(
 ) -> Result<&'a String, CliError> {
     iter.next()
         .filter(|value| !value.starts_with("--"))
-        .ok_or_else(|| CliError::new(format!("{flag} requires a path")))
+        .ok_or_else(|| CliError::new(format!("{flag} requires a value")))
 }
 
 #[cfg(test)]

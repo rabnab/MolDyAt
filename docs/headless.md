@@ -14,14 +14,17 @@ The design history is in
 The headless code lives in `crates/thermo_runtime/src/` (`headless_cli.rs`,
 `headless_runner.rs`, `headless_output.rs`, `headless_timings.rs`), a crate
 without a windowing or GPU stack. The same `moldyat` binary runs both
-modes: it parses the command line, computes the default world from its
-window size and, for `--headless`, hands both to the runner, together with
+modes: it parses the command line and the shared options (`--load`,
+`--config`, `--world-scale`, `--save-dir`) and, for `--headless`, hands the
+effective `SimConfig` to the runner, together with
 the git commit it was built from (the `commit` of the timings report).
 
-1. `parse_headless_args` reads the flags below; without `--headless` the
+1. `split_common_args` (binary) takes the shared options and
+   `parse_headless_args` the headless ones below; without `--headless` the
    window starts as usual.
-2. The runner builds a `MainContent` with the same default world as the
-   window (optionally scaled by `--world-scale`, or loaded with `--load`),
+2. The runner builds a `MainContent` in the config's `world.rect()`, the
+   same default world as the window (scaled by `world.scale` or
+   `--world-scale`), or loads one with `--load`,
    sets the time step, adds walls and valves, then seeds balls, so seeded
    balls never start inside a wall.
 3. It steps the simulation directly on the main thread with
@@ -50,7 +53,6 @@ the last step even when the interval does not divide the step count.
 | `--seed-speed <V>` | Seeded balls get speeds uniform in `0..V` in random directions (default 0: at rest); net momentum is not removed |
 | `--seed-species <NAME[:W],...>` | Seed a mixture of species of the run's table (the `--config` file's `[[species]]`, or the built-in library) with integer weights `W` (default 1), e.g. `N2:3,Ar:1`; needs `--seed-balls`. Species are assigned in a fixed interleaved order (each ball gets the species furthest behind its share), so no extra random numbers are drawn |
 | `--dt <SECONDS>` | Time step, `0.0003125..=0.08` (the range the `+` / `-` keys keep to; default: the simulation default, or the `--config` file's); also overrides a loaded save's |
-| `--world-scale <F>` | Scale the default world's width and height by F around its centre |
 | `--line-segment <x1,y1,x2,y2[,t]>` | Add a wall in world coordinates, thickness 1..20 (default 1); repeatable |
 | `--valve <wall,t0,t1[,open\|closed]>` | Cut a valve into `--line-segment` number `wall` (0-based) over fractions `t0..t1` of its length; one per wall, default open |
 | `--save-setup` | Save the prepared world to `--save-dir` before the first step |
@@ -58,6 +60,7 @@ the last step even when the interval does not divide the step count.
 | `--timing-warmup <N>` | Steps before `--timings` starts measuring (default 0) |
 | `--load <PATH>` | Start from a saved world (shared with the window mode) |
 | `--save-dir <DIR>` | Directory for saves (shared with the window mode) |
+| `--world-scale <F>` | Scale the default world's width and height by F around its centre, 0.05..=100; overrides `world.scale` of `--config`; not with `--load` (shared with the window mode, parsed by the binary) |
 | `--config <PATH>` | Simulation config file, TOML, or JSON if the name ends in `.json` (shared with the window mode; see the README, "Simulation config"); not with `--load` |
 
 `moldyat --help` prints the same list from the option tables in
@@ -84,7 +87,7 @@ unchanged.
 
 | `record_kind` | When | Contents |
 |---|---|---|
-| `run_start` | once, first | `config` (steps, snapshot interval, format, detail level, RNG seed, seeding, world scale, dt, walls and valves; `seed_species` as `[{species, weight}]` only with `--seed-species`; `sim`, the effective `SimConfig` after `--config`, `--dt` and a loaded save, in the layout of a `--config` file: `integration`, `potential`, `neighbours`, `display`, and `species` when the run has a `[[species]]` list; written to a `.json` file it is a valid `--config`, e.g. `head -1 run.jsonl | jq .config.sim > run.json`) and `initial` (step, time, ball count, gravity, operator counts, world rectangle) |
+| `run_start` | once, first | `config` (steps, snapshot interval, format, detail level, RNG seed, seeding, `world_scale` (the run's `world.scale`, `null` for the default world), dt, walls and valves; `seed_species` as `[{species, weight}]` only with `--seed-species`; `sim`, the effective `SimConfig` after `--config`, `--world-scale`, `--dt` and a loaded save, in the layout of a `--config` file: `world` when not the default, `integration`, `potential`, `neighbours`, `display`, and `species` when the run has a `[[species]]` list; written to a `.json` file it is a valid `--config`, e.g. `head -1 run.jsonl | jq .config.sim > run.json`) and `initial` (step, time, ball count, gravity, operator counts, world rectangle) |
 | `frame` | step 0, every interval, last step | step, time, kinetic and potential energy (with gravity on, the potential energy includes `m·g·h`, `h` the height above the bottom wall, #334), `delta_energy` from the step-0 frame (drift only while gravity and the ball count stay fixed: changing gravity or adding balls shifts it), ball count, gravity, physics FPS, operator counts, plus the detail sections |
 | `run_end` | once, last | final step and time, number of frames written, final ball count, operator counts |
 

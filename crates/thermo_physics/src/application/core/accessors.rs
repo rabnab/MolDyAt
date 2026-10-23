@@ -221,6 +221,7 @@ impl MainContent {
     pub fn config(&self) -> SimConfig {
         let physics = &self.world.physics;
         SimConfig {
+            world: self.world.world_config.clone(),
             integration: IntegrationConfig {
                 time_step: self.time_step(),
                 speed_limit_factor: self.world.speed_limit_factor,

@@ -76,6 +76,7 @@ impl SimulationWorld {
             balls: Vec::new(),
             physics,
             species_config: config.species.clone(),
+            world_config: config.world.clone(),
             cell_grid,
             species_present,
             world_rect,

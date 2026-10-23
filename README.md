@@ -152,8 +152,8 @@ cargo run -p moldyat_wgpu -- --headless --steps 20000 --snapshot-every 100 --rng
 
 ```bash
 # Large, hot world for performance runs: --world-scale multiplies the default
-# world's width and height, --seed-speed gives seeded balls speeds in 0..max.
-# run_start records both.
+# world's width and height (also in the window, as world.scale of the config),
+# --seed-speed gives seeded balls speeds in 0..max. run_start records both.
 cargo run --release -p moldyat_wgpu -- --headless --steps 300 --rng-seed 1 --seed-balls 12000 --world-scale 8 --seed-speed 6 --stdout
 ```
 
@@ -393,11 +393,14 @@ is optional: missing ones keep their default, and without `--config` all
 defaults apply, so results are the same as without a config file. Unknown keys
 are rejected, so a typo is an error, not a silent default, and so is a value
 outside its range (given after the default below). Flags that set the same
-value, such as `--dt`, override the file.
+value, such as `--dt` and `--world-scale`, override the file.
 
 The defaults, as a complete file, with each key's accepted range:
 
 ```toml
+[world]
+scale = 1.0                   # 0.05..100, factor on the default 112 x 62 world (--world-scale); a loaded save keeps its size
+
 [integration]
 time_step = 0.005             # 0.0003125..0.08, reduced time units; + / - change it while running
 speed_limit_factor = 0.2      # 0.01..10, speed limit as a share of the shorter world side

@@ -39,6 +39,12 @@ impl ViewportOrchestrator {
             // rescaling the world would only add rounding drift.
             return;
         }
+        if new_width <= margin_px.horizontal() || new_height <= margin_px.vertical() {
+            // No drawing area (Windows sends 0 x 0 on minimize): keep the
+            // viewport and the world as they are, so the density, the only
+            // record of the world's scale, survives until the restore.
+            return;
+        }
         if let Some(request) = state.render.pending_window_request.take()
             && Self::is_answer_to(&request, new_width, new_height)
         {
@@ -56,11 +62,16 @@ impl ViewportOrchestrator {
             state.render.view_dirty = true;
             return;
         }
+        // Keep the scale the world is shown at, read before the margins
+        // change: the new box fills the new window at the same world units
+        // per pixel (#351).
+        let world_per_px = state.render.viewport.world_per_px();
         state.render.viewport.set_margins(margin_px);
-        let world_rect = ViewportTransform::compute_world_bounds_from_window_size(
+        let world_rect = ViewportTransform::compute_world_bounds_at_density(
             new_width as u32,
             new_height as u32,
             margin_px,
+            world_per_px,
         );
         Self::handle_resize_with_world_rect(state, new_width, new_height, world_rect);
     }
@@ -222,6 +233,62 @@ mod tests {
         );
     }
 
+    /// A resize keeps the world units per pixel the world is shown at, so a
+    /// scaled start (`--world-scale`) stays scaled (#351).
+    #[test]
+    fn handle_resize_keeps_the_world_units_per_pixel() {
+        let mut state = build_test_state();
+        let before = state.render.viewport.world_per_px();
+        assert!((before - ViewportTransform::LEN_TO_PX).abs() > 1e-3);
+
+        ViewportOrchestrator::handle_resize(
+            &mut state,
+            1024.0,
+            768.0,
+            Margins::symmetric(50.0, 50.0),
+        );
+
+        let world = state.render.viewport.world_bounds();
+        assert!((world.w - 924.0 * before).abs() < 1e-3, "{world:?}");
+        assert!((world.h + 668.0 * before).abs() < 1e-3, "{world:?}");
+        assert!((state.render.viewport.world_per_px() - before).abs() < 1e-6);
+    }
+
+    /// A minimize (Windows sends a 0 x 0 resize) and restore keeps the
+    /// world and its density, and tells the physics nothing (#353 review).
+    #[test]
+    fn minimize_and_restore_keeps_the_world_units_per_pixel() {
+        let (mut state, log) = build_test_state_recording();
+        let margins = Margins::symmetric(50.0, 50.0);
+        let world = state.render.viewport.world_bounds();
+        let before = state.render.viewport.world_per_px();
+
+        ViewportOrchestrator::handle_resize(&mut state, 0.0, 0.0, margins);
+        assert!(log.lock().unwrap().is_empty(), "a minimize resizes nothing");
+        assert_eq!(state.render.viewport.world_bounds(), world);
+
+        ViewportOrchestrator::handle_resize(&mut state, 1280.0, 720.0, margins);
+        assert!((state.render.viewport.world_per_px() - before).abs() < 1e-6);
+        assert_eq!(state.render.viewport.world_bounds(), world);
+    }
+
+    /// A world at the default density resizes as before: the box derived
+    /// from the window size.
+    #[test]
+    fn handle_resize_at_the_default_density_matches_the_window_size_rect() {
+        let mut state = build_test_state();
+        let margins = Margins::symmetric(50.0, 50.0);
+        let start = ViewportTransform::compute_world_bounds_from_window_size(1280, 720, margins);
+        state.render.viewport.set_world_bounds(start);
+
+        ViewportOrchestrator::handle_resize(&mut state, 1024.0, 768.0, margins);
+
+        assert_eq!(
+            state.render.viewport.world_bounds(),
+            ViewportTransform::compute_world_bounds_from_window_size(1024, 768, margins)
+        );
+    }
+
     #[test]
     fn handle_resize_with_unchanged_size_leaves_physics_alone() {
         let (mut state, log) = build_test_state_recording();
@@ -260,7 +327,9 @@ mod tests {
         assert!(state.render.pending_window_request.is_none());
         assert!(state.render.view_dirty);
 
-        // A later (user) resize refits the world to the window as before.
+        // A later (user) resize refits the world to the window, at the
+        // loaded world's scale.
+        let world_per_px = state.render.viewport.world_per_px();
         ViewportOrchestrator::handle_resize(
             &mut state,
             1000.0,
@@ -273,6 +342,8 @@ mod tests {
                 .iter()
                 .any(|c| c.starts_with("World(Resize {"))
         );
+        let world = state.render.viewport.world_bounds();
+        assert!((world.w - 900.0 * world_per_px).abs() < 1e-3, "{world:?}");
     }
 
     #[test]
