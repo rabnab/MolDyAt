@@ -10,8 +10,8 @@
 *.userosscache
 *.sln.docstates
 *.jsonl
-!wgpu_renderer/src/headless_runner/fixtures/seeded_headless_regression.jsonl
-!wgpu_renderer/src/headless_runner/fixtures/seeded_headless_operators.jsonl
+!crates/thermo_runtime/src/headless_runner/fixtures/seeded_headless_operators.jsonl
+!crates/thermo_runtime/src/headless_runner/fixtures/seeded_headless_regression.jsonl
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
