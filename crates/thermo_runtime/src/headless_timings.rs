@@ -40,7 +40,7 @@ impl RunClock {
 }
 
 /// `commit` is the git commit of the binary that ran (see
-/// `HeadlessRunner::commit`).
+/// `HeadlessRunnerBuilder::commit`, `HeadlessRunner::from_config`).
 pub fn timings_to_json(
     commit: &str,
     clock: &RunClock,

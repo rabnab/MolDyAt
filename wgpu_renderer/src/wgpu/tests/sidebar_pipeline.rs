@@ -47,10 +47,14 @@ fn atlas_holds_one_row_per_textured_tool_in_registry_order() {
             "{}",
             descriptor.name
         );
-        assert!(std::ptr::eq(
+        // Compared by content: two uses of a `const` need not share an
+        // address, so `ptr::eq` depends on code generation.
+        assert_eq!(
             atlas[row],
-            icon_image(descriptor.icon).unwrap()
-        ));
+            icon_image(descriptor.icon).unwrap(),
+            "{}",
+            descriptor.name
+        );
     }
     let ball = icon_for_tool(OperatorTool::Ball).expect("ball icon");
     assert_eq!(atlas_row_for_icon(ball), None, "the ball is procedural");

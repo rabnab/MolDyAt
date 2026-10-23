@@ -383,8 +383,12 @@ fn test_runs_with_same_seed_and_config_emit_identical_jsonl() {
     )
     .expect("build app a");
     app_a.seed_random_balls(config_a.seed_balls.expect("seed ball count") as usize);
-    let runner_a = super::super::headless_runner::HeadlessRunner::from_config(config_a, app_a)
-        .expect("runner a");
+    let runner_a = super::super::headless_runner::HeadlessRunner::from_config(
+        config_a,
+        app_a,
+        super::super::headless_runner::UNKNOWN_COMMIT,
+    )
+    .expect("runner a");
     let report_a = runner_a.run().expect("run a");
     assert_eq!(report_a.snapshots_emitted, 4);
 
@@ -395,8 +399,12 @@ fn test_runs_with_same_seed_and_config_emit_identical_jsonl() {
     )
     .expect("build app b");
     app_b.seed_random_balls(config_b.seed_balls.expect("seed ball count") as usize);
-    let runner_b = super::super::headless_runner::HeadlessRunner::from_config(config_b, app_b)
-        .expect("runner b");
+    let runner_b = super::super::headless_runner::HeadlessRunner::from_config(
+        config_b,
+        app_b,
+        super::super::headless_runner::UNKNOWN_COMMIT,
+    )
+    .expect("runner b");
     let report_b = runner_b.run().expect("run b");
     assert_eq!(report_b.snapshots_emitted, 4);
 

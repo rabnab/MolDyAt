@@ -2259,7 +2259,6 @@ name = "thermo_runtime"
 version = "0.2.0"
 dependencies = [
  "arc-swap",
- "float-cmp",
  "log",
  "rayon",
  "serde_json",

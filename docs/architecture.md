@@ -16,7 +16,7 @@ are in [refactoring-plan.md](plan/refactoring-plan.md).
 | `crates/thermo_physics` | `thermo_physics` | The physics: particles and species, pair potentials and the SIMD force kernel, cell grid and Verlet lists, walls and operators (`objects2d`); the world, `MainContent` and its stepping (`application/core`); run settings (`sim_config`), units, stats, thermo fields and saves (`persistence`). Dependencies: rayon, serde, rand, toml, log |
 | `crates/thermo_runtime` | `thermo_runtime` | Running a simulation without a window: the physics thread and its `SnapshotPublisher`, `DomainCommand` and its handler, `OperatorCommand`s, `PhysicsEvent`, `RendererSnapshot` and its builder (`CreateSnapshot`), scene layers, and headless runs (`headless_cli`, `headless_runner`, `headless_output`, `headless_timings`). Dependencies: `thermo_physics`, arc-swap, serde_json, rayon, log |
 | `core` | `moldyat_core` | The backend-independent UI layer (`graphics`: event loop, tools, viewport, sidebar model, energy plot window) and the logger setup |
-| `wgpu_renderer` | `moldyat_wgpu` | The `moldyat` binary: command line, the wgpu window and render pipelines. For `--headless` it computes the default world from its window size and calls `thermo_runtime`, handing it the git commit it was built from (`HeadlessRunner::commit`) |
+| `wgpu_renderer` | `moldyat_wgpu` | The `moldyat` binary: command line, the wgpu window and render pipelines. For `--headless` it computes the default world from its window size and calls `thermo_runtime`, handing it the git commit it was built from (`HeadlessRunner::from_config`) |
 
 Dependencies point one way: `moldyat_wgpu` → `moldyat_core` →
 `thermo_runtime` → `thermo_physics`. `thermo_physics` and `thermo_runtime`
@@ -27,7 +27,9 @@ thermo_physics`, `cargo test -p thermo_runtime`.
 (`moldyat_core::objects2d`, `moldyat_core::application::{core, persistence,
 operator_command, renderer_snapshot, …}`, `MainContent`, `DomainCommand`,
 …) for one release (#308, #309), so code written against them still
-compiles. New code uses `thermo_physics` and `thermo_runtime` directly. The
+compiles. One exception: the log targets and helpers of
+`moldyat_core::logging` are internal to `thermo_physics` now (#309);
+`moldyat_core::logging::init`, the logger setup, stays. New code uses `thermo_physics` and `thermo_runtime` directly. The
 last step of the split (`thermo_ui`, M9) is in
 [refactoring-plan.md](plan/refactoring-plan.md).
 

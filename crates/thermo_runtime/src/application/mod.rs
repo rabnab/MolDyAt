@@ -4,11 +4,12 @@
 
 // The physics under the paths the moved code uses (`crate::application::X`).
 // Private: users of this crate take them from `thermo_physics`.
-#[allow(unused_imports)]
 use thermo_physics::application::{
-    AppError, AppResult, MainContent, SimConfig, core, log_util, persistence, phase_timings,
-    sim_config, sim_stats, thermo_field,
+    MainContent, core, log_util, persistence, sim_stats, thermo_field,
 };
+// Only the tests use these through `crate::application::`.
+#[cfg(test)]
+use thermo_physics::application::{SimConfig, sim_config};
 
 mod domain_command;
 pub mod operator_command;

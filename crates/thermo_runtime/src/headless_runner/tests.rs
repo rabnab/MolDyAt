@@ -97,7 +97,7 @@ fn headless_output(mut config: HeadlessConfig, application: MainContent) -> (Str
     config.output = Some(output_path.clone());
     config.stdout = false;
 
-    let report = HeadlessRunner::from_config(config, application)
+    let report = HeadlessRunner::from_config(config, application, UNKNOWN_COMMIT)
         .expect("runner")
         .run()
         .expect("run");
@@ -536,7 +536,7 @@ fn test_run_start_records_effective_dt_segments_and_world_rect() {
     )
     .expect("prepare");
     let default_dt = application.time_step();
-    HeadlessRunner::from_config(config, application)
+    HeadlessRunner::from_config(config, application, UNKNOWN_COMMIT)
         .expect("runner")
         .run()
         .expect("run");
@@ -690,8 +690,8 @@ fn test_run_writes_timings_for_steps_after_warmup() {
         .steps(config.steps)
         .snapshot_every(config.snapshot_every)
         .timings(config.timings.clone(), config.timing_warmup)
-        .build()
         .commit("abc1234")
+        .build()
         .run()
         .expect("run");
     let content = fs::read_to_string(&timings_path).expect("read timings");
@@ -949,7 +949,7 @@ fn run_start_record(
         None,
     )
     .expect("prepare");
-    HeadlessRunner::from_config(config, application)
+    HeadlessRunner::from_config(config, application, UNKNOWN_COMMIT)
         .expect("runner")
         .run()
         .expect("run");
@@ -1048,7 +1048,7 @@ fn test_run_start_records_a_loaded_saves_sim_config_with_dt_winning() {
         Some(saved),
     )
     .expect("prepare");
-    HeadlessRunner::from_config(config, application)
+    HeadlessRunner::from_config(config, application, UNKNOWN_COMMIT)
         .expect("runner")
         .run()
         .expect("run");

@@ -31,6 +31,7 @@ pub struct HeadlessRunnerBuilder {
     snapshot_every: u32,
     timings: Option<PathBuf>,
     timing_warmup: u32,
+    commit: &'static str,
 }
 
 pub struct HeadlessRunReport {
@@ -53,6 +54,7 @@ impl HeadlessRunnerBuilder {
             snapshot_every: 0,
             timings: None,
             timing_warmup: 0,
+            commit: UNKNOWN_COMMIT,
         }
     }
 
@@ -83,6 +85,14 @@ impl HeadlessRunnerBuilder {
         self
     }
 
+    /// The git commit of the binary that runs, named in the timings report
+    /// (`--timings`, read by `scripts/headless_perf.sh`). The binary bakes it
+    /// in at build time; without this call the report says `unknown`.
+    pub fn commit(mut self, commit: &'static str) -> Self {
+        self.commit = commit;
+        self
+    }
+
     pub fn build(self) -> HeadlessRunner {
         HeadlessRunner {
             application: self.application.expect("application is required"),
@@ -91,7 +101,7 @@ impl HeadlessRunnerBuilder {
             snapshot_every: self.snapshot_every,
             timings: self.timings,
             timing_warmup: self.timing_warmup,
-            commit: UNKNOWN_COMMIT,
+            commit: self.commit,
         }
     }
 }
@@ -101,15 +111,13 @@ impl HeadlessRunner {
         HeadlessRunnerBuilder::new()
     }
 
-    /// The git commit of the binary that runs, named in the timings report
-    /// (`--timings`, read by `scripts/headless_perf.sh`). The binary bakes it
-    /// in at build time; without this call the report says `unknown`.
-    pub fn commit(mut self, commit: &'static str) -> Self {
-        self.commit = commit;
-        self
-    }
-
-    pub fn from_config(mut config: HeadlessConfig, application: MainContent) -> io::Result<Self> {
+    /// The run `config` asks for, of `application`, by the binary built from
+    /// git commit `commit` (named in the timings report).
+    pub fn from_config(
+        mut config: HeadlessConfig,
+        application: MainContent,
+        commit: &'static str,
+    ) -> io::Result<Self> {
         // Record the effective time step and run settings in run_start, also
         // when they are the defaults.
         config.dt = Some(application.time_step());
@@ -124,6 +132,7 @@ impl HeadlessRunner {
             .steps(config.steps)
             .snapshot_every(config.snapshot_every)
             .timings(config.timings.clone(), config.timing_warmup)
+            .commit(commit)
             .build())
     }
 

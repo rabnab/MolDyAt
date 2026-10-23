@@ -111,6 +111,40 @@ fn test_simulation_step_does_not_advance_when_paused() {
     );
 }
 
+/// The physics thread steps a paused world in every loop iteration. With the
+/// heatmap shown (`record_thermo_fields`), such a step must not record the
+/// thermo fields: an empty history would record at once, and every paused
+/// iteration would add a sample of the unchanged world (#309).
+#[test]
+fn test_paused_step_records_no_thermo_fields_even_when_asked() {
+    let (mut main_content, _) = create_main_content();
+    main_content
+        .add_candidate_at_pos(Vec2D::new(0.0, 0.0))
+        .expect("failed to add ball");
+    // One running step first: recording needs the force results of a step.
+    main_content.world_mut().sim.set_pause(false);
+    main_content.simulation_step().expect("running step");
+    main_content.world_mut().sim.set_pause(true);
+    main_content.clear_thermo_history();
+
+    for _ in 0..5 {
+        main_content
+            .step_recording_thermo_fields(true)
+            .expect("paused step");
+    }
+    assert!(
+        main_content.world().thermo_history.is_empty(),
+        "a paused step recorded thermo fields"
+    );
+
+    // Running, the same call records (an empty history at once).
+    main_content.world_mut().sim.set_pause(false);
+    main_content
+        .step_recording_thermo_fields(true)
+        .expect("running step");
+    assert!(!main_content.world().thermo_history.is_empty());
+}
+
 /// Confirm that repeated simulation steps advance time proportionally
 /// and that energy statistics are updated each step without stale leftovers.
 #[test]

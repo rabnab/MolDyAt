@@ -81,6 +81,15 @@ jobs:
       - name: Run clippy without measure-time
         run: cargo clippy -p thermo_physics -p thermo_runtime -p moldyat_core --all-targets --no-default-features -- -D warnings
 
+      # Every step above builds tests, which turn on thermo_physics'
+      # `test-support` feature for the whole build (cargo merges features).
+      # Build the binary on its own too, so non-test code that calls a
+      # test-only item fails here, not only in release.yml (#309).
+      - name: Check the binary without test features
+        run: |
+          cargo check -p moldyat_wgpu
+          cargo check -p moldyat_wgpu --no-default-features
+
       # only in public repo or for organisations
       #- name: Upload clippy SARIF
       #  if: always()
