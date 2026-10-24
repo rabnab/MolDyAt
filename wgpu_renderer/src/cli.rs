@@ -76,16 +76,42 @@ pub const COMMON_OPTIONS: &[OptionHelp] = &[
     },
 ];
 
-/// The window takes only the shared options: anything left in `args` (program
-/// name first, shared options already taken out) is an error, so a headless
-/// flag without `--headless` is not silently ignored.
-pub fn reject_window_args(args: &[String]) -> Result<(), CliError> {
-    match args.get(1) {
-        None => Ok(()),
-        Some(arg) => Err(CliError::new(format!(
-            "Unknown argument: {arg} (headless options need --headless)"
-        ))),
+/// Flags parsed by [`parse_window_args`], valid only without `--headless`.
+pub const WINDOW_OPTIONS: &[OptionHelp] = &[OptionHelp {
+    names: &["--ui-config"],
+    value: Some("<PATH>"),
+    help: &[
+        "UI settings file (TOML) with the key bindings",
+        "Default: ui.toml in the working directory, if it exists",
+    ],
+}];
+
+/// Options of the windowed run.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct WindowArgs {
+    /// `--ui-config <path>`: UI settings file (key bindings).
+    pub ui_config: Option<PathBuf>,
+}
+
+/// The window's own options from `args` (program name first, shared
+/// options already taken out). Anything else is an error, so a headless flag
+/// without `--headless` is not silently ignored.
+pub fn parse_window_args(args: &[String]) -> Result<WindowArgs, CliError> {
+    let mut window = WindowArgs::default();
+    let mut iter = args.iter().skip(1);
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--ui-config" => {
+                window.ui_config = Some(PathBuf::from(value_of(&mut iter, "--ui-config")?));
+            }
+            _ => {
+                return Err(CliError::new(format!(
+                    "Unknown argument: {arg} (headless options need --headless)"
+                )));
+            }
+        }
     }
+    Ok(window)
 }
 
 /// The `--help` text: every option table, in the order the flags are parsed.
@@ -101,6 +127,10 @@ pub fn usage_text() -> String {
             OptionGroup {
                 title: "Both modes",
                 options: COMMON_OPTIONS,
+            },
+            OptionGroup {
+                title: "Window (without --headless)",
+                options: WINDOW_OPTIONS,
             },
             OptionGroup {
                 title: "Headless (need --headless)",

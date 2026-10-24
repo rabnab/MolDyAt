@@ -210,3 +210,60 @@ fn handle_redraw_then_request_redraw_after_interval_is_allowed() {
     );
     // The important assertion: no panic, no regression in control flow.
 }
+
+mod keys {
+    use crate::graphics::renderer::event_loop::KeyCode;
+    use crate::graphics::renderer::event_loop::command_registry::KeyInput;
+    use crate::graphics::renderer::event_loop::energy_window_manager::{
+        EnergyWindowKey, energy_window_key,
+    };
+    use crate::graphics::renderer::event_loop::key_map::{KeyMap, KeyPhase};
+
+    fn key(code: KeyCode) -> KeyInput {
+        crate::graphics::renderer::event_loop::tests::us(code)
+    }
+
+    #[test]
+    fn test_default_keys_of_the_energy_window() {
+        let key_map = KeyMap::default();
+        for code in [KeyCode::KeyP, KeyCode::Tab] {
+            assert_eq!(
+                energy_window_key(&key_map, key(code), KeyPhase::Up),
+                Some(EnergyWindowKey::CycleDisplay),
+                "{code:?}"
+            );
+        }
+        assert_eq!(
+            energy_window_key(&key_map, key(KeyCode::Escape), KeyPhase::Down),
+            Some(EnergyWindowKey::Close)
+        );
+        // Keys of other commands do nothing there.
+        assert_eq!(
+            energy_window_key(&key_map, key(KeyCode::KeyG), KeyPhase::Up),
+            None
+        );
+    }
+
+    /// The energy window follows the key map (#355 review).
+    #[test]
+    fn test_energy_window_keys_follow_overrides() {
+        let x = ["X".to_string()];
+        let none: [String; 0] = [];
+        let (key_map, warnings) = KeyMap::with_overrides([
+            ("view.cycle_plot", x.as_slice()),
+            ("view.toggle_energy_window", none.as_slice()),
+        ]);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        for code in [KeyCode::KeyP, KeyCode::Tab] {
+            assert_eq!(
+                energy_window_key(&key_map, key(code), KeyPhase::Up),
+                None,
+                "{code:?}"
+            );
+        }
+        assert_eq!(
+            energy_window_key(&key_map, key(KeyCode::KeyX), KeyPhase::Up),
+            Some(EnergyWindowKey::CycleDisplay)
+        );
+    }
+}

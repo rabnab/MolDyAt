@@ -46,6 +46,7 @@ New `.rs` / `.wgsl` files start with the MPL-2.0 header. Tests go in topic files
 - End with the attribution trailer required by the session.
 
 ## 5. Update the docs in the same PR
+This is plan item M10, which is part of every PR rather than an item of its own: no PR leaves docs, skills or the plan behind its change.
 - `docs/plan/refactoring-plan.md`: move the item from "Open" to "Landed on `master`" in the §4 table (it lands with the merge). If the item changes a decision or an open question, update §6/§7.
 - Update the concept docs that describe the changed area (`docs/architecture.md`, `docs/operators.md`, `docs/headless.md`, ...). Follow the `docs-maintenance` skill; when a whole phase or plan is done, move it to `docs/done/`.
 - If a rule in `.github/copilot-instructions.md` or a skill no longer matches the code, fix it.

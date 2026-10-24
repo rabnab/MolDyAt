@@ -6,9 +6,24 @@
 //! help text and the README key table.
 
 use super::super::command_registry::{
-    BindKey, COMMANDS, CommandCategory, HeldModifiers, KeyBinding, KeyInput, KeyPhase,
-    LABEL_VALUES, Modifier, Trigger, command_by_id, command_for_key, help_text,
+    BindKey, COMMANDS, CommandCategory, CommandDescriptor, KeyBinding, KeyInput, LABEL_VALUES,
+    Modifier, Trigger, command_by_id,
 };
+use super::super::key_map::{HeldModifiers, KeyMap, KeyPhase};
+
+/// Dispatch with the default bindings.
+fn command_for_key(
+    key: KeyInput,
+    phase: KeyPhase,
+    held: HeldModifiers,
+) -> Option<(&'static CommandDescriptor, KeyBinding)> {
+    KeyMap::default().command_for_key(key, phase, held)
+}
+
+/// The help text of the default bindings.
+fn help_text() -> String {
+    KeyMap::default().help_text()
+}
 use super::super::input_handler::{InputHandler, KeyCode};
 use std::collections::HashSet;
 

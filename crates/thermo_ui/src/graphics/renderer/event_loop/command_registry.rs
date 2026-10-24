@@ -7,15 +7,18 @@
 //! Each [`CommandDescriptor`] names a command (a stable id such as
 //! `sim.toggle_pause`), describes it for the help text, binds it to keys and
 //! says what it does: a [`UiAction`] that stays in the renderer, or a
-//! [`DomainCommand`] for the physics thread. Key dispatch
-//! ([`command_for_key`]), the help text ([`help_text`]) and the UI-vs-domain
-//! routing all read this table, so adding a command means one entry here plus
+//! [`DomainCommand`] for the physics thread. The key map (`key_map`, with
+//! the key dispatch and the help text) starts from these default bindings,
+//! and the UI-vs-domain routing reads this table, so adding a command means
+//! one entry here plus
 //! its handler (a `UiAction` arm in `action_processor`, or a `DomainCommand`
 //! variant handled by `DomainCommandHandler`).
 //!
 //! Mouse input (placing balls, zoom, pan, operator tools) is not in the
 //! registry; it carries positions and goes through the operator tools.
 
+use super::key_map::display_names;
+use super::key_names::bind_key_name;
 use Modifier::{Alt, Ctrl};
 use Trigger::{Press, PressOnce, Release};
 use thermo_physics::application::persistence::LoadSource;
@@ -215,11 +218,7 @@ impl KeyBinding {
 
     /// The key as the help text shows it, e.g. `Ctrl + S`.
     pub fn display(&self) -> String {
-        let key = match self.key {
-            BindKey::Code(code) => key_name(code).to_string(),
-            // Letters as printed on the keys.
-            BindKey::Symbol(symbol) => symbol.to_uppercase().to_string(),
-        };
+        let key = bind_key_name(self.key);
         match self.modifier {
             Modifier::None => key,
             Modifier::Ctrl => format!("Ctrl + {key}"),
@@ -229,18 +228,11 @@ impl KeyBinding {
 }
 
 impl CommandDescriptor {
-    /// The bindings as the help text shows them, e.g. `DEL / BACKSPACE`.
-    /// Keys with the same name (left and right Shift) are listed once;
-    /// hidden aliases are left out.
+    /// The default bindings as the help text shows them, e.g.
+    /// `DEL / BACKSPACE`. Keys with the same name (left and right Shift) are
+    /// listed once; hidden aliases are left out.
     pub fn binding_display(&self) -> Vec<String> {
-        let mut names: Vec<String> = Vec::new();
-        for binding in self.default_binding.iter().filter(|b| !b.hidden) {
-            let name = binding.display();
-            if !names.contains(&name) {
-                names.push(name);
-            }
-        }
-        names
+        display_names(self.default_binding.iter().copied())
     }
 
     /// The label with its values filled in (see [`LABEL_VALUES`]).
@@ -283,25 +275,6 @@ pub const LABEL_VALUES: &[LabelValue] = &[
     }),
     ("{high_gravity}", || format!("{HIGH_GRAVITY_MPS2:.2} m/s^2")),
 ];
-
-/// Help-text name of a key.
-fn key_name(key: KeyCode) -> &'static str {
-    match key {
-        KeyCode::Space => "SPACE",
-        KeyCode::Escape => "ESC",
-        KeyCode::Tab => "TAB",
-        KeyCode::Delete => "DEL",
-        KeyCode::Backspace => "BACKSPACE",
-        KeyCode::ShiftLeft | KeyCode::ShiftRight => "Shift",
-        KeyCode::F1 => "F1",
-        KeyCode::F2 => "F2",
-        KeyCode::F3 => "F3",
-        KeyCode::F4 => "F4",
-        KeyCode::F5 => "F5",
-        // A new binding needs a name here; the registry tests catch a gap.
-        _ => "?",
-    }
-}
 
 const fn key(key: KeyCode, trigger: Trigger) -> KeyBinding {
     KeyBinding::new(BindKey::Code(key), Modifier::None, trigger)
@@ -544,111 +517,4 @@ pub static COMMANDS: &[CommandDescriptor] = &[
 /// The command with this id.
 pub fn command_by_id(id: &str) -> Option<&'static CommandDescriptor> {
     COMMANDS.iter().find(|command| command.id == id)
-}
-
-/// Whether a key event is a press (or auto-repeat) or a release.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum KeyPhase {
-    Down,
-    Up,
-}
-
-/// Modifiers held during a key event.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct HeldModifiers {
-    pub ctrl: bool,
-    pub alt: bool,
-}
-
-impl HeldModifiers {
-    fn holds(self, modifier: Modifier) -> bool {
-        match modifier {
-            Modifier::None => true,
-            Modifier::Ctrl => self.ctrl,
-            Modifier::Alt => self.alt,
-        }
-    }
-}
-
-/// The command a key event runs, with the binding that matched.
-///
-/// Of the bindings for `key` that fire in `phase`, a held modifier's binding
-/// wins (Ctrl before Alt); otherwise the plain binding fires. Auto-repeat is
-/// not filtered here: the caller drops a repeated [`Trigger::PressOnce`].
-/// `InputHandler` decides chords with [`chord_for_key`] on the first press
-/// and looks up everything else here with no modifiers held.
-pub fn command_for_key(
-    key: KeyInput,
-    phase: KeyPhase,
-    held: HeldModifiers,
-) -> Option<(&'static CommandDescriptor, KeyBinding)> {
-    let fires_in_phase = |trigger: Trigger| match phase {
-        KeyPhase::Down => trigger != Release,
-        KeyPhase::Up => trigger == Release,
-    };
-    [Ctrl, Alt, Modifier::None]
-        .into_iter()
-        .filter(|&modifier| held.holds(modifier))
-        .find_map(|modifier| {
-            find_binding(key, |b| b.modifier == modifier && fires_in_phase(b.trigger))
-        })
-}
-
-/// The first binding of `key` that passes `accept`: of the physical key
-/// (only keys that type no character are bound physically), then of the
-/// character it types without modifiers, then of the one typed with them,
-/// for layouts where a character needs Shift (Swiss `+` is Shift + 1, an
-/// AZERTY `0` is Shift + `à`).
-fn find_binding(
-    key: KeyInput,
-    accept: impl Fn(&KeyBinding) -> bool,
-) -> Option<(&'static CommandDescriptor, KeyBinding)> {
-    [
-        Some(BindKey::Code(key.code)),
-        key.symbol.map(BindKey::Symbol),
-        key.typed.map(BindKey::Symbol),
-    ]
-    .into_iter()
-    .flatten()
-    .find_map(|wanted| {
-        COMMANDS.iter().find_map(|command| {
-            command
-                .default_binding
-                .iter()
-                .find(|b| b.key == wanted && accept(b))
-                .map(|b| (command, *b))
-        })
-    })
-}
-
-/// The chord a key press starts: the binding of `key` whose modifier is
-/// held (Ctrl before Alt), whatever its trigger. See [`chord`].
-pub fn chord_for_key(
-    key: KeyInput,
-    held: HeldModifiers,
-) -> Option<(&'static CommandDescriptor, KeyBinding)> {
-    [Ctrl, Alt]
-        .into_iter()
-        .filter(|&modifier| held.holds(modifier))
-        .find_map(|modifier| find_binding(key, |b| b.modifier == modifier))
-}
-
-/// The help text (key `H`), generated from [`COMMANDS`].
-pub fn help_text() -> String {
-    let mut text = String::from("HELP: Available keyboard shortcuts:");
-    for category in CommandCategory::ALL {
-        let commands: Vec<_> = COMMANDS
-            .iter()
-            .filter(|command| command.category == category && !command.default_binding.is_empty())
-            .collect();
-        if commands.is_empty() {
-            continue;
-        }
-        text.push_str(&format!("\n{}:", category.title()));
-        for command in commands {
-            let keys = command.binding_display().join(" / ");
-            text.push_str(&format!("\n  {keys:<22} {}", command.label_text()));
-        }
-    }
-    text
 }

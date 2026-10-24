@@ -314,6 +314,29 @@ Mouse:
 | Scroll wheel | Zoom in / out |
 | Middle-click drag | Pan viewport |
 
+### Changing the keys
+
+Put a `ui.toml` in the working directory (or pass `--ui-config <path>`) to
+change keys. Each entry replaces all keys of one command; the ids are those
+of the commands above (`H` prints the keys in effect):
+
+```toml
+[key_bindings]
+"sim.toggle_pause" = ["SPACE", "K"]   # keys as the table writes them
+"world.save" = "Ctrl + W"             # a single key
+"sim.double_time_step" = ["+", "=", "Num +"]   # = is + without Shift (US)
+"debug.toggle_timings" = []           # no key
+```
+
+A single character (`K`, `0`, `+`, `#`, `ü`; letters ignore case) means that
+character, wherever your layout puts it and with or without Shift, the
+numpad included. Keys that type no character go by name (`SPACE`, `ESC`,
+`TAB`, `F4`, ...); `Num +`, `Num 0`, ... name a numpad key alone. A key you bind is taken away from
+the command that had it by default; if two entries bind the same key, the
+first by id keeps it. The quotes around an id are optional. Unknown ids and
+keys are reported in the log and skipped. `ui.toml` holds settings of your
+computer, not of a simulation: it is not saved with worlds.
+
 ### Logging
 
 The simulation core never prints to stdout; everything goes through the log
@@ -500,7 +523,8 @@ crates/thermo_ui/              # The UI without a GPU backend
     │   └── renderer/          # Renderer trait, viewport, batch renderer
     │       ├── event_loop/    # InputHandler, PhysicsCoordinator, Metrics, …
     │       └── viewport/      # ViewportTransform, coordinate mapping
-    └── logging.rs             # env_logger initialisation
+    ├── logging.rs             # env_logger initialisation
+    └── ui_settings.rs         # ui.toml: key bindings (see Changing the keys)
 wgpu_renderer/
 └── src/
     ├── main.rs                # Entry point, Rayon init, window creation

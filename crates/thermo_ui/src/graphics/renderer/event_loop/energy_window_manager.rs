@@ -6,6 +6,9 @@
 //!
 //! Handles energy plot window creation, event handling, and data updates.
 
+use super::command_registry::{KeyInput, UiAction};
+use super::input_handler::key_input;
+use super::key_map::{HeldModifiers, KeyMap, KeyPhase};
 use crate::graphics::energy_plot::{
     DisplayMode, EnergyPlotWindow, SharedEnergyData, split_screen_layout_for_monitor,
 };
@@ -14,8 +17,40 @@ use std::time::{Duration, Instant};
 use thermo_runtime::application::renderer_snapshot::RendererSnapshot;
 use winit::event::{ElementState, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
-use winit::keyboard::{KeyCode, PhysicalKey};
+use winit::keyboard::KeyCode;
 use winit::window::{Window, WindowId};
+
+/// What a key does while the energy window has the focus.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum EnergyWindowKey {
+    /// Close the window.
+    Close,
+    /// Cycle what the window plots.
+    CycleDisplay,
+}
+
+/// The energy window's action for a key event. The keys come from the key
+/// map, so a `ui.toml` rebinds them here too (#355): the keys of the plot
+/// commands (`view.cycle_plot`, `view.toggle_energy_window`; `P` and `TAB`
+/// by default) cycle what the window plots, each on its own trigger. `ESC`
+/// closes the window, as the close shortcut of the window itself, not a
+/// registry command (in the main window `ESC` clears the balls).
+pub(super) fn energy_window_key(
+    key_map: &KeyMap,
+    input: KeyInput,
+    phase: KeyPhase,
+) -> Option<EnergyWindowKey> {
+    if phase == KeyPhase::Down && input.code == KeyCode::Escape {
+        return Some(EnergyWindowKey::Close);
+    }
+    let (command, _) = key_map.command_for_key(input, phase, HeldModifiers::default())?;
+    match command.ui_action()? {
+        UiAction::CyclePlotContent | UiAction::ToggleEnergyWindow => {
+            Some(EnergyWindowKey::CycleDisplay)
+        }
+        _ => None,
+    }
+}
 
 /// Manages the energy plot window lifecycle and data updates.
 ///
@@ -128,7 +163,8 @@ impl EnergyWindowManager {
     ///
     /// # Returns
     /// `true` if the event was handled, `false` if not an energy window event.
-    pub fn handle_event(&mut self, event: WindowEvent) -> bool {
+    /// Keys are looked up in `key_map` (see [`energy_window_key`]).
+    pub fn handle_event(&mut self, event: WindowEvent, key_map: &KeyMap) -> bool {
         match event {
             WindowEvent::CloseRequested => {
                 self.window = None;
@@ -140,28 +176,26 @@ impl EnergyWindowManager {
                 }
                 true
             }
-            WindowEvent::KeyboardInput {
-                event:
-                    winit::event::KeyEvent {
-                        physical_key: PhysicalKey::Code(keycode),
-                        state: ElementState::Pressed,
-                        ..
-                    },
-                ..
-            } => match keycode {
-                KeyCode::Escape => {
-                    self.window = None;
-                    true
-                }
-                KeyCode::Tab | KeyCode::KeyP => {
-                    if let Some(window) = &mut self.window {
-                        window.cycle_display_mode();
-                        window.request_redraw();
+            WindowEvent::KeyboardInput { event, .. } => {
+                let Some(input) = key_input(&event) else {
+                    return false;
+                };
+                let phase = match event.state {
+                    ElementState::Pressed => KeyPhase::Down,
+                    ElementState::Released => KeyPhase::Up,
+                };
+                match energy_window_key(key_map, input, phase) {
+                    Some(EnergyWindowKey::Close) => self.window = None,
+                    Some(EnergyWindowKey::CycleDisplay) => {
+                        if let Some(window) = &mut self.window {
+                            window.cycle_display_mode();
+                            window.request_redraw();
+                        }
                     }
-                    true
+                    None => return false,
                 }
-                _ => false,
-            },
+                true
+            }
             _ => false,
         }
     }

@@ -15,7 +15,7 @@ are in [refactoring-plan.md](plan/refactoring-plan.md).
 |---|---|---|
 | `crates/thermo_physics` | `thermo_physics` | The physics: particles and species, pair potentials and the SIMD force kernel, cell grid and Verlet lists, walls and operators (`objects2d`); the world, `MainContent` and its stepping (`application/core`); run settings (`sim_config`), units, stats, thermo fields and saves (`persistence`). Dependencies: rayon, serde, rand, toml, log |
 | `crates/thermo_runtime` | `thermo_runtime` | Running a simulation without a window: the physics thread and its `SnapshotPublisher`, `DomainCommand` and its handler, `OperatorCommand`s, `PhysicsEvent`, `RendererSnapshot` and its builder (`CreateSnapshot`), scene layers, and headless runs (`headless_cli`, `headless_runner`, `headless_output`, `headless_timings`). Dependencies: `thermo_physics`, arc-swap, serde_json, rayon, log |
-| `crates/thermo_ui` | `thermo_ui` | The UI without a GPU backend (`graphics`): event loop and input handling, the keyboard command registry, operator tools, viewport, sidebar model, and the energy plot window (still winit + softbuffer until V4a); plus the logger setup. Dependencies: `thermo_runtime`, `thermo_physics`, winit, softbuffer, arc-swap, log, env_logger |
+| `crates/thermo_ui` | `thermo_ui` | The UI without a GPU backend (`graphics`): event loop and input handling, the keyboard command registry and key map, operator tools, viewport, sidebar model, and the energy plot window (still winit + softbuffer until V4a); plus the logger setup and the UI settings file (`ui_settings`: `ui.toml` with the key bindings, #335). Dependencies: `thermo_runtime`, `thermo_physics`, winit, softbuffer, arc-swap, toml, log, env_logger |
 | `wgpu_renderer` | `moldyat_wgpu` | The `moldyat` binary: command line, the wgpu window and render pipelines. For `--headless` it computes the default world from its window size and calls `thermo_runtime`, handing it the git commit it was built from (`HeadlessRunner::from_config`) |
 
 Dependencies point one way: `moldyat_wgpu` → `thermo_ui` →
@@ -177,14 +177,22 @@ Every keyboard command is one `CommandDescriptor` in the table `COMMANDS`
 ```text
 KeyEvent → key_input (physical KeyCode + character typed without modifiers)
         → InputHandler::handle_key_down / handle_key_up (KeyInput)
-        → command_for_key(key, phase, held modifiers) → InputAction::Command(&CommandDescriptor)
+        → KeyMap::command_for_key(key, phase, held modifiers) → InputAction::Command(&CommandDescriptor)
         → InputOrchestrator::process_action → action_processor::run_command
               ├─ Domain(make) → PhysicsCoordinator::send_command(make())
               └─ Ui(action)   → run_ui_action (viewport, renderer config, help, energy window)
 ```
 
-The table generates the key dispatch, the help text (`H`, `help_text()`)
-and the UI-vs-domain routing. Key lookup: while a modifier is held, its
+The table holds the default bindings and generates the UI-vs-domain
+routing. The bindings in effect are a `KeyMap` (`key_map.rs`, owned by
+`InputHandler`): the defaults, with the entries of a UI settings file
+(`ui.toml` in the working directory, or `--ui-config`; `thermo_ui::ui_settings`,
+#335) applied by `KeyMap::with_overrides`. An entry replaces all keys of one
+command; a key it binds is taken away from the command that had it by
+default; unknown ids and keys are logged and skipped. Key names
+(`key_names.rs`) are those of the help text, so `parse_key` reads what the
+help shows. The key dispatch (`KeyMap::command_for_key`) and the help text
+(`H`, `KeyMap::help_text`) read the key map. Key lookup: while a modifier is held, its
 binding for the key wins (Ctrl before Alt); otherwise the plain binding fires.
 Within one modifier, a key's physical binding comes first (only keys that
 type no character have one), then the binding of the character it types
@@ -192,15 +200,22 @@ without modifiers (`key_without_modifiers`: Shift, Alt / Option and dead
 keys do not change it), then of the character it types with the modifiers
 held, for layouts where a character needs Shift (Swiss `+` is Shift + 1,
 AZERTY digits need Shift). Letters are matched in lower case, as a key
-types them without Shift, and shown in upper case. Layouts without Latin
+types them without Shift, and shown in upper case. The first of these
+with a binding for the held modifier owns the press, also in the phase
+where that binding does not fire, so a key bound to a press command never
+runs the command of its character on release. Layouts without Latin
 letters (e.g. Russian) are not supported: no key types `s`, so the letter
 shortcuts have no key there (decided on #354). On platforms where
 winit has no unmodified character (web, iOS, Android) both are the typed
 character, so there a modifier can change it. A release and every
 auto-repeat use the characters of the first press. `=` is a hidden alias
 of `+` (the same key on US keyboards): it works but the help shows `+`.
+The energy window looks its keys up in the same key map
+(`energy_window_key`): the keys of `view.cycle_plot` and
+`view.toggle_energy_window` (`P`, `TAB`) cycle what it plots, and `ESC`
+closes it, as that window's own close shortcut.
 A chord is decided when its key goes down with the modifier held
-(`chord_for_key`) and owns that key until the release: Ctrl+S (the key that
+(`KeyMap::chord_for_key`) and owns that key until the release: Ctrl+S (the key that
 types `s`) fires on press,
 Alt+`=` on the release even if Alt was let go first, and neither ever runs the
 plain key's command (S, `=`). A modifier pressed after the key, or during its
@@ -214,12 +229,14 @@ Adding a keyboard command:
    group and its arm in `DomainCommandHandler` (the logic goes into
    `MainContent`); for a UI command, a `UiAction` variant and its arm in
    `run_ui_action`.
-3. Add its key name to `key_name` if the key is new, and paste the README key
+3. Add its key name to `key_names.rs` if the key has none, and paste the README key
    table that the failing `test_readme_key_table_matches_the_registry` prints.
 
 The tests in `event_loop/tests/command_registry.rs` check unique ids and
 bindings, labels, that every binding dispatches to its command, the help text
-and the README table. A command must not depend on wall-clock time or thread
+and the README table; `event_loop/tests/key_map.rs` checks the key names and
+the overrides, and `ui_settings/tests.rs` the settings file and the README
+example. A command must not depend on wall-clock time or thread
 timing, so headless and seeded runs stay reproducible. Mouse input (placing
 balls, zoom, pan, the operator tools) carries positions and is not in the
 registry.

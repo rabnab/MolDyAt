@@ -57,7 +57,7 @@ impl EventRouter {
                 if matches!(event, WindowEvent::RedrawRequested) {
                     state.energy_manager_mut().handle_redraw();
                 } else {
-                    state.energy_manager_mut().handle_event(event);
+                    state.handle_energy_window_event(event);
                 }
             }
             WindowEventRoute::MainWindow => {

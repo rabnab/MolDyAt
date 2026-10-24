@@ -2263,6 +2263,7 @@ dependencies = [
  "softbuffer",
  "thermo_physics",
  "thermo_runtime",
+ "toml",
  "winit",
 ]
 
