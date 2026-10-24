@@ -107,12 +107,20 @@ headless runs; both step with the configured time step.
    walls and with line-segment walls are resolved along the wall normal
    (`ball_impl::wall_contact`).
 3. **forces**: pair forces from the SIMD kernel (`simd_forces`, `f32x4`).
-4. **apply**: velocity update, kinetic and potential energy (pair energy plus `m·g·y` with gravity on), wall momentum
-   bookkeeping, the overlap fallback for balls still inside a wall, and the
-   Nosé–Hoover thermostats. The velocity update runs in parallel over
-   fixed chunks of 1024 balls; each chunk sums its energies and momenta in
-   ball order and the chunk sums are combined in chunk order, so the sums
-   are the same for every thread count.
+4. **apply**: velocity update, kinetic and pair potential energy, wall
+   momentum bookkeeping, the overlap fallback for balls still inside a
+   wall, and the Nosé–Hoover thermostats. The velocity update runs in
+   parallel over fixed chunks of 1024 balls; each chunk sums its energies
+   and momenta in ball order and the chunk sums are combined in chunk
+   order, so the sums are the same for every thread count. With gravity
+   on, a last pass adds `m·g·h` to the potential energy (#334), from the
+   positions after the overlap fallback, with `h` the height above the
+   bottom wall (so f32 keeps the other energies in worlds far from the
+   origin) and balls with a NaN position left out. Gravity's acceleration
+   and potential are defined once (`ball_core::gravity_acceleration` /
+   `gravity_potential`). Changing gravity or adding balls shifts the total
+   energy: it measures drift only while gravity and the ball count stay
+   fixed.
 5. **cells**: source spheres emit balls, balls move between grid cells,
    invalid (NaN) balls are removed.
 6. **thermo**: global temperature.

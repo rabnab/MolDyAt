@@ -6,6 +6,7 @@ use super::line_segments::Obstacle;
 use super::placement::PlacementIndex;
 use super::*;
 use crate::application::{AppError, AppResult};
+use crate::objects2d::ball_impl::ball_core::gravity_acceleration;
 use rand::rng;
 use rand_distr::{Distribution, Normal};
 
@@ -390,7 +391,7 @@ impl SimulationWorld {
     }
 
     pub(crate) fn add_ball_and_register(&mut self, mut candidate: Ball2D) {
-        candidate.accel.y -= self.physics.constants.gravity;
+        candidate.accel.y += gravity_acceleration(self.physics.constants.gravity).y;
         // A new species may need wider cells; the grid is refitted before the
         // next neighbour rebuild (`fit_cell_grid`), when every ball is in its
         // cell.

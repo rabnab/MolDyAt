@@ -9,7 +9,7 @@ use crate::application::thermo_field::{THERMO_SAMPLE_STRIDE, compute_cell_thermo
 use crate::application::{AppResult, log_util};
 use crate::logging::log_update_hood_start;
 use crate::objects2d::ball_impl::ForceResult;
-use crate::objects2d::ball_impl::ball_core::{Ball2D, BounceInfo};
+use crate::objects2d::ball_impl::ball_core::{Ball2D, BounceInfo, gravity_potential};
 use crate::objects2d::ball_impl::simd_forces::{KernelPoint, force_simd};
 use crate::objects2d::ball_impl::verlet::Verlet;
 use crate::objects2d::ball_impl::wall_contact::normal_velocity_after_contact;
@@ -175,6 +175,14 @@ impl SimulationEngine {
                 world.sim.wall_momentum_y += wall_py + seg_py;
             },
         );
+
+        // Gravity's potential energy from the positions at the end of the
+        // step, after the wall-overlap fallback moved balls (#334). Skipped
+        // without gravity, so those runs stay bit-identical.
+        let gravity = world.physics.constants.gravity;
+        if gravity != 0.0 {
+            stats_accumulator.pot += Self::gravity_potential_energy(world, gravity, bound_rect);
+        }
 
         stats_accumulator.v_com = stats_accumulator
             .v_com
@@ -487,12 +495,6 @@ impl SimulationEngine {
         let speed_sq = ball.v.norm_sq();
         let momentum = ball.moment();
         stats.pot += result.potential_energy * 0.5;
-        // Gravity accelerates by -gravity along y, so its potential is
-        // m·g·y (zero at y = 0). Skipped without gravity, so those sums
-        // stay bit-identical (#334).
-        if gravity != 0.0 {
-            stats.pot += ball.mass * gravity * ball.get_position().y;
-        }
         stats.px += momentum.x;
         stats.py += momentum.y;
         stats.kin += speed_sq * ball.mass * 0.5;
@@ -500,6 +502,25 @@ impl SimulationEngine {
         stats.wall_px += wall_px;
         stats.wall_py += wall_py;
         (speed_sq, ball.get_id())
+    }
+
+    /// The balls' gravitational potential energy, with heights measured
+    /// from the bottom wall: a world far from the origin would otherwise add
+    /// `m·g·y` terms so large that f32 loses the kinetic and pair energy
+    /// next to them. Summed in ball order in f64. A ball with a non-finite
+    /// height (NaN, removed later this step) is left out, so it cannot turn
+    /// the reported energy into NaN.
+    fn gravity_potential_energy(world: &SimulationWorld, gravity: f32, bound_rect: &Rect) -> f32 {
+        let floor = bound_rect.get_tl().1.min(bound_rect.get_br().1);
+        world
+            .balls
+            .iter()
+            .filter(|ball| ball.get_position().y.is_finite())
+            .map(|ball| {
+                let height = ball.get_position().y - floor;
+                f64::from(gravity_potential(ball.mass, gravity, height))
+            })
+            .sum::<f64>() as f32
     }
 
     /// `factor` times the shorter world side (`speed_limit_factor` of
@@ -599,8 +620,7 @@ struct ApplyParams {
 /// Stats of one chunk of the apply pass, summed in ball order.
 #[derive(Debug, Default, Clone, Copy)]
 pub(crate) struct ApplyStats {
-    /// Half the pair potential energy (each pair is counted by both balls)
-    /// plus the gravitational potential energy `m·g·y`.
+    /// Half the pair potential energy (each pair is counted by both balls).
     pot: f32,
     kin: f32,
     /// Momentum of the balls.

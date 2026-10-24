@@ -40,7 +40,12 @@ fn mechanical_energy(main_content: &MainContent) -> f32 {
 /// surface. Returns the scenario and the height of the floor surface for the
 /// ball's centre.
 fn dropped_ball(on_wall: bool, height: f32) -> (MainContent, f32) {
-    let (mut main_content, _) = create_main_content_for_region(WORLD_TOP_LEFT.0, WORLD_TOP_LEFT.1);
+    dropped_ball_in(WORLD_TOP_LEFT, on_wall, height)
+}
+
+/// [`dropped_ball`] in the 100 x 100 world with this top-left corner.
+fn dropped_ball_in(top_left: (f32, f32), on_wall: bool, height: f32) -> (MainContent, f32) {
+    let (mut main_content, _) = create_main_content_for_region(top_left.0, top_left.1);
     main_content.world_mut().speed_limit_override = Some(f32::INFINITY);
     main_content.world_mut().physics.constants.gravity = GRAVITY;
     let factory = BallFactory::new();
@@ -117,8 +122,33 @@ fn reported_energy(main_content: &MainContent) -> f32 {
     sim.get_kinetic_energy() + sim.get_potential_energy()
 }
 
-/// The reported potential energy includes `m·g·y`, so the reported total
-/// energy of a ball bouncing under gravity is conserved (#334).
+/// `m·g·h` of every ball, with `h` its height above the bottom wall (the
+/// zero of the reported gravity energy).
+fn gravity_energy_above_floor(main_content: &MainContent) -> f32 {
+    let world = main_content.world();
+    let gravity = world.physics.constants.gravity;
+    let (_, y0) = world.world_region().get_tl();
+    let (_, y1) = world.world_region().get_br();
+    let floor = y0.min(y1);
+    world
+        .balls
+        .iter()
+        .map(|b| b.mass * gravity * (b.get_position().y - floor))
+        .sum()
+}
+
+fn kinetic_energy(main_content: &MainContent) -> f32 {
+    main_content
+        .world()
+        .balls
+        .iter()
+        .map(|b| 0.5 * b.mass * b.v.norm_sq())
+        .sum()
+}
+
+/// The reported potential energy includes `m·g·h` above the bottom wall, so
+/// the reported total energy of a ball bouncing under gravity is conserved
+/// (#334).
 #[test]
 fn test_reported_energy_includes_gravity_and_is_conserved() {
     let (mut main_content, _) = dropped_ball(false, 10.0);
@@ -128,10 +158,10 @@ fn test_reported_energy_includes_gravity_and_is_conserved() {
         .max(1e-3);
 
     let reported0 = reported_energy(&main_content);
-    let mechanical0 = mechanical_energy(&main_content);
+    let expected0 = kinetic_energy(&main_content) + gravity_energy_above_floor(&main_content);
     assert!(
-        ((reported0 - mechanical0) / reference).abs() < 1e-5,
-        "reported {reported0} vs kinetic + m·g·y {mechanical0}"
+        ((reported0 - expected0) / reference).abs() < 1e-5,
+        "reported {reported0} vs kinetic + m·g·h {expected0}"
     );
 
     for _ in 0..STEPS {
@@ -144,13 +174,53 @@ fn test_reported_energy_includes_gravity_and_is_conserved() {
     );
 }
 
-/// Without gravity the reported potential energy is the pair energy only.
+/// Far from the origin the gravity energy is still measured from the bottom
+/// wall, so it stays as small as near the origin instead of `m·g·y` with
+/// y ~ 500, which would drown the kinetic energy in f32 (#352 review).
 #[test]
-fn test_reported_potential_energy_has_no_gravity_term_without_gravity() {
+fn test_gravity_energy_is_measured_from_the_bottom_wall() {
+    let (mut near, _) = dropped_ball(false, 10.0);
+    let (mut far, _) = dropped_ball_in((-50.0, 595.0), false, 10.0);
+    near.simulation_step().unwrap();
+    far.simulation_step().unwrap();
+    let near_pot = near.world().sim.get_potential_energy();
+    let far_pot = far.world().sim.get_potential_energy();
+    assert!(far_pot > 0.0 && far_pot < 100.0, "far potential {far_pot}");
+    assert!(
+        ((far_pot - near_pot) / near_pot).abs() < 1e-4,
+        "near {near_pot}, far {far_pot}"
+    );
+}
+
+/// A ball with a NaN position (removed later in the step) must not turn the
+/// reported energy into NaN (#352 review).
+#[test]
+fn test_nan_ball_does_not_make_the_energy_nan() {
     let (mut main_content, _) = dropped_ball(false, 10.0);
-    main_content.world_mut().physics.constants.gravity = 0.0;
+    let factory = BallFactory::new();
+    // A NaN velocity gives a NaN position in this step's position update.
+    let ball = factory.create_massive_with_velocity(Vec2D::new(10.0, 50.0), Vec2D::zero());
+    main_content.world_mut().add_ball_and_register(ball);
+    main_content.world_mut().balls[1].v = Vec2D::new(0.0, f32::NAN);
     main_content.simulation_step().unwrap();
-    assert_eq!(main_content.world().sim.get_potential_energy(), 0.0);
+    let pot = main_content.world().sim.get_potential_energy();
+    assert!(pot.is_finite(), "potential energy {pot}");
+}
+
+/// The potential of gravity is minus the integral of its acceleration.
+#[test]
+fn test_gravity_potential_matches_its_acceleration() {
+    use crate::objects2d::ball_impl::ball_core::{gravity_acceleration, gravity_potential};
+    let (mass, gravity, height, dh) = (2.0_f32, 0.5_f32, 10.0_f32, 0.5_f32);
+    let force = -(gravity_potential(mass, gravity, height + dh)
+        - gravity_potential(mass, gravity, height - dh))
+        / (2.0 * dh);
+    let accel = gravity_acceleration(gravity);
+    assert!(
+        (force / mass - accel.y).abs() < 1e-5,
+        "{force} / {mass} vs {accel:?}"
+    );
+    assert_eq!(accel.x, 0.0);
 }
 
 #[test]

@@ -11,6 +11,7 @@ use crate::application::sim_config::{
 };
 use crate::application::sim_stats::{HIGH_GRAVITY, NORMAL_GRAVITY, is_normal_gravity};
 use crate::objects2d::Rect;
+use crate::objects2d::ball_impl::ball_core::gravity_acceleration;
 use crate::objects2d::operator::{is_degenerate, remap_point};
 use std::time::Duration;
 
@@ -110,7 +111,7 @@ impl MainContent {
         self.world.physics.constants.gravity = new_gravity;
 
         for ball in &mut self.world.balls {
-            ball.accel.y -= delta_gravity;
+            ball.accel.y += gravity_acceleration(delta_gravity).y;
         }
     }
 
