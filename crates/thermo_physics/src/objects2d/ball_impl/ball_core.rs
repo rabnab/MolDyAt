@@ -91,6 +91,21 @@ impl Default for Ball2D {
     }
 }
 
+/// Uniform gravity of strength `gravity`, defined once for the kick and the
+/// energy stats: the acceleration `-g ŷ` and its potential energy `m·g·h`
+/// at height `h` above the reference, so that `-dU/dh / m` is the
+/// acceleration (test `gravity_potential_matches_its_acceleration`). The
+/// `ExternalField` of plan item I8b replaces both.
+pub(crate) fn gravity_acceleration(gravity: f32) -> Vec2D {
+    Vec2D::new(0., -gravity)
+}
+
+/// The potential energy of mass `mass` at height `height` (see
+/// [`gravity_acceleration`]).
+pub(crate) fn gravity_potential(mass: f32, gravity: f32, height: f32) -> f32 {
+    mass * gravity * height
+}
+
 impl Ball2D {
     /// A ball of a built-in `species` at rest, with its mass and contact
     /// radius. Test builds only: production code builds balls from the
@@ -212,7 +227,7 @@ impl Ball2D {
         speed_limit: f32,
         dt: f32,
     ) -> Vec2D {
-        let gravi_vec = Vec2D::new(0., -gravity);
+        let gravi_vec = gravity_acceleration(gravity);
         let mut accel: Vec2D = (total_force).scaled(1. / self.mass) + gravi_vec;
 
         debug_assert!(speed_limit >= 0., "negative speed limit {speed_limit}");

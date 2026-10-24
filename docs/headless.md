@@ -85,7 +85,7 @@ unchanged.
 | `record_kind` | When | Contents |
 |---|---|---|
 | `run_start` | once, first | `config` (steps, snapshot interval, format, detail level, RNG seed, seeding, world scale, dt, walls and valves; `seed_species` as `[{species, weight}]` only with `--seed-species`; `sim`, the effective `SimConfig` after `--config`, `--dt` and a loaded save, in the layout of a `--config` file: `integration`, `potential`, `neighbours`, `display`, and `species` when the run has a `[[species]]` list; written to a `.json` file it is a valid `--config`, e.g. `head -1 run.jsonl | jq .config.sim > run.json`) and `initial` (step, time, ball count, gravity, operator counts, world rectangle) |
-| `frame` | step 0, every interval, last step | step, time, kinetic and potential energy (with gravity on, the potential energy includes `m·g·y`, #334), `delta_energy` from the step-0 frame, ball count, gravity, physics FPS, operator counts, plus the detail sections |
+| `frame` | step 0, every interval, last step | step, time, kinetic and potential energy (with gravity on, the potential energy includes `m·g·h`, `h` the height above the bottom wall, #334), `delta_energy` from the step-0 frame (drift only while gravity and the ball count stay fixed: changing gravity or adding balls shifts it), ball count, gravity, physics FPS, operator counts, plus the detail sections |
 | `run_end` | once, last | final step and time, number of frames written, final ball count, operator counts |
 
 Detail sections in `frame` records, chosen with `--detail`:
