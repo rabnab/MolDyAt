@@ -142,10 +142,20 @@ fn every_key_is_read() {
     assert_eq!(config, custom());
 }
 
+/// The "Simulation config" section of README.md, from its heading on (other
+/// sections have TOML examples of their own, e.g. the key bindings).
+fn readme_config_section() -> &'static str {
+    let readme = include_str!("../../../../../README.md");
+    let start = readme
+        .find("## Simulation config")
+        .expect("README has a Simulation config section");
+    &readme[start..]
+}
+
 /// The example in README.md ("Simulation config") must stay a valid file.
 #[test]
 fn readme_example_is_a_valid_config() {
-    let readme = include_str!("../../../../../README.md");
+    let readme = readme_config_section();
     let start = readme.find("```toml\n").expect("README has a TOML example") + "```toml\n".len();
     let end = start + readme[start..].find("```").unwrap();
     let config = SimConfig::from_toml(&readme[start..end]).unwrap();
@@ -465,7 +475,7 @@ fn unknown_keys_in_a_pair_override_are_rejected() {
 /// The commented-out override in the README example is a valid config.
 #[test]
 fn readme_pair_override_example_is_valid() {
-    let readme = include_str!("../../../../../README.md");
+    let readme = readme_config_section();
     let start = readme.find("```toml\n").expect("README has a TOML example") + "```toml\n".len();
     let end = start + readme[start..].find("```").unwrap();
     let uncommented: String = readme[start..end]

@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use super::command_registry::{CommandDescriptor, CommandKind, UiAction, help_text};
+use super::command_registry::{CommandDescriptor, CommandKind, UiAction};
 use super::unified_render_state::UnifiedRenderState;
 use thermo_runtime::application::ViewCommand;
 
@@ -32,7 +32,7 @@ fn run_ui_action(
 ) -> bool {
     match action {
         UiAction::PrintHelp => {
-            log::info!("{}", help_text());
+            log::info!("{}", state.input.key_map().help_text());
             false
         }
         UiAction::ResetView => {

@@ -124,10 +124,20 @@ fn help_flag_is_recognised_in_any_position() {
 
 #[test]
 fn window_mode_rejects_leftover_arguments() {
-    assert!(reject_window_args(&args(&["program"])).is_ok());
-    let error = reject_window_args(&args(&["program", "--steps", "5"])).unwrap_err();
+    assert_eq!(
+        parse_window_args(&args(&["program"])).unwrap(),
+        WindowArgs::default()
+    );
+    let error = parse_window_args(&args(&["program", "--steps", "5"])).unwrap_err();
     assert!(error.message.contains("--steps"), "{}", error.message);
     assert!(error.message.contains("--headless"), "{}", error.message);
+}
+
+#[test]
+fn window_mode_takes_a_ui_config() {
+    let window = parse_window_args(&args(&["program", "--ui-config", "keys.toml"])).unwrap();
+    assert_eq!(window.ui_config, Some(PathBuf::from("keys.toml")));
+    assert!(parse_window_args(&args(&["program", "--ui-config"])).is_err());
 }
 
 #[test]
@@ -140,6 +150,7 @@ fn usage_lists_every_option_group() {
     for option in GENERAL_OPTIONS
         .iter()
         .chain(COMMON_OPTIONS)
+        .chain(WINDOW_OPTIONS)
         .chain(HEADLESS_OPTIONS)
     {
         for name in option.names {
@@ -161,6 +172,7 @@ fn every_parsed_flag_is_documented() {
     let documented: Vec<&str> = GENERAL_OPTIONS
         .iter()
         .chain(COMMON_OPTIONS)
+        .chain(WINDOW_OPTIONS)
         .flat_map(|option| option.names.iter().copied())
         .collect();
     let mut parsed = 0;

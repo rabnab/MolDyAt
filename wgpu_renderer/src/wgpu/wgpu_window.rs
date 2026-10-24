@@ -15,7 +15,7 @@ use super::wgpu_context::WgpuContext;
 use super::wgpu_pipelines::WgpuPipelines;
 use std::sync::Arc;
 use thermo_physics::application::MainContent;
-use thermo_ui::graphics::renderer::event_loop::UnifiedRenderState;
+use thermo_ui::graphics::renderer::event_loop::{KeyMap, UnifiedRenderState};
 use winit::event_loop::EventLoopProxy;
 
 use winit::{
@@ -44,14 +44,15 @@ impl WgpuWindow {
     ///
     /// # Arguments
     /// * `application` - MainContent to be moved to physics thread
-    pub fn create_window(&self, application: MainContent) {
+    /// * `key_map` - the key bindings (defaults or a `ui.toml`)
+    pub fn create_window(&self, application: MainContent, key_map: KeyMap) {
         log::info!("Creating WGPU window");
 
         let event_loop = EventLoop::<UserEvent>::with_user_event()
             .build()
             .expect("Failed to create event loop");
         let event_loop_proxy = event_loop.create_proxy();
-        let mut app = WgpuApp::new(application, event_loop_proxy);
+        let mut app = WgpuApp::new(application, key_map, event_loop_proxy);
         event_loop
             .run_app(&mut app)
             .expect("Winit event loop terminated with an error");
@@ -66,6 +67,8 @@ pub(super) enum UserEvent {
 
 struct WgpuApp {
     application: Option<MainContent>,
+    /// Given to the render state when the window is created.
+    key_map: KeyMap,
     window: Option<Arc<Window>>,
     proxy: EventLoopProxy<UserEvent>,
     ctx: Option<WgpuContext>,
@@ -74,9 +77,10 @@ struct WgpuApp {
 }
 
 impl WgpuApp {
-    fn new(application: MainContent, proxy: EventLoopProxy<UserEvent>) -> Self {
+    fn new(application: MainContent, key_map: KeyMap, proxy: EventLoopProxy<UserEvent>) -> Self {
         Self {
             application: Some(application),
+            key_map,
             proxy,
             window: None,
             ctx: None,
@@ -94,7 +98,12 @@ impl WgpuApp {
             .application
             .take()
             .expect("Application state already consumed");
-        let initialized = AppLifecycle::initialize(event_loop, application, self.proxy.clone());
+        let initialized = AppLifecycle::initialize(
+            event_loop,
+            application,
+            self.key_map.clone(),
+            self.proxy.clone(),
+        );
 
         self.window = Some(initialized.window);
         self.ctx = Some(initialized.ctx);

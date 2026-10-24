@@ -56,7 +56,11 @@ fn print_diagnostics() {
     init_rayon();
 }
 
-fn run_wgpu_renderer(common: cli::CommonArgs, sim_config: &SimConfig) {
+fn run_wgpu_renderer(
+    common: cli::CommonArgs,
+    sim_config: &SimConfig,
+    key_map: thermo_ui::graphics::renderer::event_loop::KeyMap,
+) {
     use wgpu::WgpuWindow;
 
     log::info!("Renderer: wgpu");
@@ -83,7 +87,7 @@ fn run_wgpu_renderer(common: cli::CommonArgs, sim_config: &SimConfig) {
     let application = application.with_save_store(store);
 
     let window = WgpuWindow::new();
-    window.create_window(application);
+    window.create_window(application, key_map);
 }
 
 fn run_headless_renderer(
@@ -150,9 +154,14 @@ fn main() {
             }
         }
         Ok(None) => {
-            cli::reject_window_args(&args).unwrap_or_else(|e| usage_error(&e));
+            let window_args = cli::parse_window_args(&args).unwrap_or_else(|e| usage_error(&e));
             print_diagnostics();
-            run_wgpu_renderer(common, &sim_config);
+            let key_map = thermo_ui::ui_settings::load_key_map(window_args.ui_config.as_deref())
+                .unwrap_or_else(|error| {
+                    eprintln!("cannot read the UI settings: {error}");
+                    std::process::exit(1);
+                });
+            run_wgpu_renderer(common, &sim_config, key_map);
         }
         Err(e) => usage_error(&e),
     }

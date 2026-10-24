@@ -114,7 +114,7 @@ Size: **S** ≤ 1 day, **M** 2–4 days, **L** ≥ 1 week. "Deps" are hard prere
 | M7 | Crate split: `thermo_physics` | Move `objects2d`, `application/core` (world, engine), persistence into a crate without winit/softbuffer/scirs2. Keep `moldyat_core` as a re-export shim for one release. | L | M1, M2 |
 | M8 | Crate split: `thermo_runtime` + headless | Physics thread, `DomainCommand`, snapshot, headless runner/output move out of the GPU crate into `crates/thermo_runtime`, which builds without a windowing stack. Tighten the `thermo_physics` API that M7 widened (about 100 former `pub(crate)` items made `pub`, among them `SimulationWorld` fields): keep `pub` only what the runtime and UI use, behind accessors or narrow methods instead of public fields. Done (#309): the physics thread, commands, snapshots and headless runs are in `thermo_runtime`; `SimulationWorld` has accessors instead of public fields, and `thermo_physics` exposes only what the other crates use (831 → 505 public items, see `docs/architecture.md`). | L | M7 |
 | M9 | Crate split: `thermo_ui` | After M8 `moldyat_core` holds only the UI layer (event loop, tools, viewport, sidebar model, energy window) and the logger setup. Move it to `crates/thermo_ui`, rename the package, and remove the re-exports kept for one release by #308 and #309 (callers use `thermo_physics` / `thermo_runtime` directly). The energy window moves as it is; it becomes a wgpu window and `softbuffer` is dropped in V4a. Done (#310): `crates/thermo_ui`, no re-exports between the crates. | S | M8 |
-| M10 | Docs refresh | Update `architecture.md`, move finished plans to `docs/done/` (done for `refactor_architecture.md`, `headless-renderer-plan.md`, `nose-hoover.md`, `operator-handling-review.md`), update the `operator-framework` skill. Recurring: the last item of every phase (§4) checks the docs and skills that phase touched, and updates this plan's status and issue table. | S | end of each phase |
+| M10 | Docs refresh | Update `architecture.md`, move finished plans to `docs/done/` (done for `refactor_architecture.md`, `headless-renderer-plan.md`, `nose-hoover.md`, `operator-handling-review.md`), update the `operator-framework` skill. Recurring, part of every PR (decision 12): each PR updates the docs, skills and project rules its change touches, and this plan's status and issue table (`plan-item-workflow` skill, step 5). No issue or phase slot of its own. | – | every PR |
 
 ### Epic I – Interaction types and mixed species
 
@@ -143,7 +143,7 @@ guardrails. Water (I9–I10) follows. See §5 for the model choice behind it.
 |---|---|---|---|---|
 | C1 | Group `DomainCommand` | Split into `Sim(SimControl)`, `Balls(BallCommand)`, `World(WorldCommand)`, `Operator(Box<dyn OperatorCommand>)`. Handler delegates per group. | S | – |
 | C2 | Command registry | One table of `CommandDescriptor { id, label, category, default_binding, kind: Ui(UiAction) | Domain(fn(&Ctx)->DomainCommand) }`. Generated: key dispatch, help text (`PrintHelp`), `process_action_common`. Adding a command = one entry + handler. Unit test: no duplicate bindings, every command has help text. Landed as `command_registry.rs` with `Domain(fn() -> DomainCommand)`: no key command needs a context yet (C5 adds parameters). | M | C1 |
-| C3 | Configurable key bindings | Load overrides from a TOML file; defaults from C2. Bindings are a UI setting: a UI settings file read by the UI crate, not a `SimConfig` key (`SimConfig` lives in `thermo_physics` and travels with saves). | S | C2 |
+| C3 | Configurable key bindings | Load overrides from a TOML file; defaults from C2. Bindings are a UI setting: a UI settings file read by the UI crate, not a `SimConfig` key (`SimConfig` lives in `thermo_physics` and travels with saves). Done (#335): `[key_bindings]` in `ui.toml` (working directory) or `--ui-config`, applied as a `KeyMap` (`key_map.rs`) that the key dispatch and the help text read; key names as the help text shows them (`key_names.rs`). | S | C2 |
 | C4 | Tool registry | `ToolDescriptor { tool, icon, name }` list drives `OperatorTool`, `operator_tool_for_icon`, `selected_sidebar_icon` and the atlas order — removes the 3-file sync rule from the skill. Test: icon order == registry order. | M | – |
 | C5 | Scriptable commands for headless | Headless runner accepts a command script (`step 1000; add_random 500; toggle_gravity; …`) mapped through the same registry ids. Enables reproducible scenario tests. The registry (`command_registry.rs`) is in the UI crate, while headless runs are in `thermo_runtime`: the domain half (command id → `DomainCommand`) moves into `thermo_runtime`, and the UI registry refers to it by id. | M | C2, M8 |
 
@@ -186,11 +186,11 @@ Each item reports before/after numbers from G1 and must keep drift + energy test
 Phase 1 (guardrails + quick wins):  G1, G2, G3, M1, M3, M4, C1, P1, P3
 Phase 2 (mixed species):            I1, I2, I3, I4, M6, I5, I6, C2, I7
 Phase 3 (crate split):              M2, #295, #270, #273, #274, M5, C4, M7, M8, P2
-Phase 4 (finish the split):         M9, I8a, #327, C3, M10
-Phase 5 (metrics + plots):          V3, V7, V4a, V4b, C5, M10
-Phase 6 (visuals + tools):          V2, #290, V5, V6, #303, #203, M10
-Phase 7 (performance):              P8a, P4, #250, P6, P8b, M10
-Phase 8 (walls + water):            I12, I8b, I9 + I10 (once §7 is decided), I11 (if needed), M10
+Phase 4 (finish the split):         M9, I8a, #327, C3
+Phase 5 (metrics + plots):          V3, V7, V4a, V4b, C5
+Phase 6 (visuals + tools):          V2, #290, V5, V6, #303, #203
+Phase 7 (performance):              P8a, P4, #250, P6, P8b
+Phase 8 (walls + water):            I12, I8b, I9 + I10 (once §7 is decided), I11 (if needed)
 ```
 
 Every ID of §3 is in this order, except these, which need no work of their own:
@@ -202,6 +202,7 @@ Every ID of §3 is in this order, except these, which need no work of their own:
 | P7 | Folded into V2 (Phase 6). |
 | P9 | Dropped (reproducibility, decision 4). |
 | P10 | Done. |
+| M10 | Part of every PR (see §3). |
 
 GitHub issues (every open issue is in a phase, as of 2026-10-23):
 
@@ -210,15 +211,15 @@ GitHub issues (every open issue is in a phase, as of 2026-10-23):
 | 1 | #219 | G1 #221, G2 #222, G3 #223, M1 #224, M3 #225, M4 #226, C1 #227, P1 #228, P3 #229 | – |
 | 2 | #220 | I1 #230, I2 #233, I3 #234, M6 #231, I4 #235, I5 #236, C2 #232, I6 #237, I7 #238 | – |
 | 3 | #304 | M2 #305, #295, #270, #273, #274, M5 #306, C4 #307, P2 #311, M7 #308, M8 #309 | – |
-| 4 | #329 | M9 #310, I8a #334, #327 | C3 #335, M10 |
-| 5 | #330 | – | V3 #336, V7 #337, V4a #338, V4b #339, C5 #340, M10 |
-| 6 | #331 | – | V2 #341, #290, V5 #342, V6 #343, #303, #203, M10 |
-| 7 | #332 | – | P8a #344, P4 #345, #250, P6 #346, P8b #213, M10 |
-| 8 | #333 | – | I12 #280, I8b #347, I9 #348, I10 #349, I11 #350, M10 |
+| 4 | #329 | M9 #310, I8a #334, #327, C3 #335 | – |
+| 5 | #330 | – | V3 #336, V7 #337, V4a #338, V4b #339, C5 #340 |
+| 6 | #331 | – | V2 #341, #290, V5 #342, V6 #343, #303, #203 |
+| 7 | #332 | – | P8a #344, P4 #345, #250, P6 #346, P8b #213 |
+| 8 | #333 | – | I12 #280, I8b #347, I9 #348, I10 #349, I11 #350 |
 
 "Landed" is taken from the commits on `master` (as of 2026-10-23), not from
-the issue states. Every item has an issue; M10 is a checklist in each
-phase's parent issue instead of an issue of its own. A new issue goes into
+the issue states. Every item has an issue except M10, which is part of
+every PR. A new issue goes into
 the phase whose items it depends on or touches; add it to both lists above
 and as a sub-issue of that phase's parent.
 
@@ -242,8 +243,8 @@ crate work, graphs, visuals, performance and water in two long lists:
 - **Phase 8** holds the physics extensions. I12 has no open prerequisites
   and can be pulled forward; I9 and I10 wait for the water-model decision
   (§7).
-- **M10** closes every phase: docs, skills and this plan follow the code
-  of that phase before the next one starts.
+- **M10** is not a step of its own: every PR keeps the docs, skills and
+  this plan in line with its change, so they never lag behind a phase.
 
 Mixed species (Phase 2) lands before the crate split because it is needed soon and
 touches the hot kernel; it is easiest to verify against unchanged baselines. The
@@ -295,6 +296,10 @@ Decisions (2026-10-17):
 9. The per-pair interaction table moves from I4 into I3: the migrated size classes need `σ_ij` per pair (arithmetic mixing keeps every old equilibrium distance), and every pair has its own `r_cap`.
 10. Cutoff `4·σ_ij` per pair; the cell grid is sized for the species present in the world, not for the whole table, so worlds without large species keep small cells.
 11. A built-in `N2` species (`σ = ε = m = 1`) is the default for new balls and source spheres; the size classes `XS`–`XL` stay as built-in species for migrated saves. With `M` as default, every default world would have had 2.3x more neighbour pairs.
+
+Decisions (2026-10-23):
+
+12. Docs refresh (M10) is part of every PR, not an item at the end of a phase: each PR updates the docs, skills, project rules and this plan its change touches.
 
 ## 7. Open questions
 

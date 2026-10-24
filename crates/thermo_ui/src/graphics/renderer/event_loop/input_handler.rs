@@ -2,10 +2,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use super::command_registry::{
-    CommandDescriptor, HeldModifiers, KeyBinding, KeyInput, KeyPhase, Trigger, UiAction,
-    chord_for_key, command_for_key,
-};
+use super::command_registry::{CommandDescriptor, KeyBinding, KeyInput, Trigger, UiAction};
+use super::key_map::{HeldModifiers, KeyMap, KeyPhase};
 use std::collections::HashMap;
 use thermo_physics::objects2d::Vec2D;
 use thermo_runtime::application::operator_command::OperatorCommand;
@@ -100,6 +98,9 @@ pub struct InputHandler {
     is_panning: bool,
     pan_start_pos_px: [f32; 2],
     pan_start_offset: Vec2D,
+
+    // The bindings in effect: the defaults, or those of a key-binding file.
+    key_map: KeyMap,
 }
 
 /// What the first press of a held key decided; its release and auto-repeats
@@ -190,7 +191,21 @@ impl InputHandler {
             is_panning: false,
             pan_start_pos_px: [0.0, 0.0],
             pan_start_offset: Vec2D::zero(),
+            key_map: KeyMap::default(),
         }
+    }
+
+    /// A handler with these bindings instead of the defaults.
+    pub fn with_key_map(key_map: KeyMap) -> Self {
+        Self {
+            key_map,
+            ..Self::new()
+        }
+    }
+
+    /// The bindings in effect.
+    pub fn key_map(&self) -> &KeyMap {
+        &self.key_map
     }
 
     // Key state tracking
@@ -284,7 +299,10 @@ impl InputHandler {
         let (input, chord) = if is_repeat {
             (held.input.unwrap_or(input), held.chord)
         } else {
-            (input, chord_for_key(input, self.held_modifiers()))
+            (
+                input,
+                self.key_map.chord_for_key(input, self.held_modifiers()),
+            )
         };
         self.held_keys.insert(
             key,
@@ -302,7 +320,9 @@ impl InputHandler {
             return fires_now.then_some(InputAction::Command(command));
         }
 
-        let (command, binding) = command_for_key(input, KeyPhase::Down, HeldModifiers::default())?;
+        let (command, binding) =
+            self.key_map
+                .command_for_key(input, KeyPhase::Down, HeldModifiers::default())?;
         if is_repeat && binding.trigger == Trigger::PressOnce {
             return None;
         }
@@ -321,12 +341,13 @@ impl InputHandler {
 
         // Otherwise the press was plain: modifiers pressed since do not
         // count, and the characters are those of the press.
-        command_for_key(
-            held.input.unwrap_or(input),
-            KeyPhase::Up,
-            HeldModifiers::default(),
-        )
-        .map(|(command, _)| InputAction::Command(command))
+        self.key_map
+            .command_for_key(
+                held.input.unwrap_or(input),
+                KeyPhase::Up,
+                HeldModifiers::default(),
+            )
+            .map(|(command, _)| InputAction::Command(command))
     }
 
     /// Process mouse button and return action if any

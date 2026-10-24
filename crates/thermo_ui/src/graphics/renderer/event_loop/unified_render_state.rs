@@ -33,6 +33,7 @@ use super::energy_window_manager::EnergyWindowManager;
 use super::frame_orchestrator::FrameOrchestrator;
 use super::input_handler::{InputAction, InputHandler, OperatorTool};
 use super::input_orchestrator::InputOrchestrator;
+use super::key_map::KeyMap;
 use super::metrics::MetricsCollector;
 use super::operator_tool_handler::OperatorToolHandler;
 use super::physics_coordinator::PhysicsCoordinator;
@@ -95,11 +96,13 @@ impl UnifiedRenderState {
     /// * `world_bounds` – initial world rectangle for `ViewportTransform`.
     /// * `window_size` – initial window size in pixels `(width, height)`.
     /// * `margin_px` – pixel margins.
+    /// * `key_map` – the key bindings (defaults, or a `ui.toml`).
     pub fn new(
         application: MainContent,
         world_bounds: Rect,
         window_size: (f32, f32),
         margin_px: Margins,
+        key_map: KeyMap,
         wakeup_callback: Box<dyn Fn() + Send + Sync + 'static>,
     ) -> Self {
         let energy_data: SharedEnergyData = Arc::new(Mutex::new(EnergyData::new()));
@@ -109,7 +112,7 @@ impl UnifiedRenderState {
         let energy_manager = EnergyWindowManager::new(energy_data);
 
         let mut state = Self {
-            input: InputHandler::new(),
+            input: InputHandler::with_key_map(key_map),
             physics,
             render: RenderStateData {
                 viewport,
@@ -146,6 +149,14 @@ impl UnifiedRenderState {
 
     pub fn energy_manager_mut(&mut self) -> &mut EnergyWindowManager {
         &mut self.render.energy_manager
+    }
+
+    /// Handle an event of the energy window, with the keys of the key map.
+    /// Returns `true` if the event was handled.
+    pub fn handle_energy_window_event(&mut self, event: winit::event::WindowEvent) -> bool {
+        self.render
+            .energy_manager
+            .handle_event(event, self.input.key_map())
     }
 
     pub fn config(&self) -> &RendererConfig {

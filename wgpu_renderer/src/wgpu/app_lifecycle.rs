@@ -9,7 +9,7 @@ use crate::wgpu::margins_for_scale_factor;
 use crate::wgpu::{DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH};
 use std::sync::Arc;
 use thermo_physics::application::MainContent;
-use thermo_ui::graphics::renderer::event_loop::UnifiedRenderState;
+use thermo_ui::graphics::renderer::event_loop::{KeyMap, UnifiedRenderState};
 use winit::dpi::LogicalSize;
 use winit::event_loop::{ActiveEventLoop, EventLoopProxy};
 use winit::window::Window;
@@ -28,6 +28,7 @@ impl AppLifecycle {
     pub(super) fn initialize(
         event_loop: &ActiveEventLoop,
         application: MainContent,
+        key_map: KeyMap,
         proxy: EventLoopProxy<UserEvent>,
     ) -> InitializedApp {
         let window_attrs = Window::default_attributes()
@@ -67,6 +68,7 @@ impl AppLifecycle {
             initial_world_bounds,
             window_size,
             margins,
+            key_map,
             Box::new(wakeup_fn),
         );
         log::info!("Physics thread spawned, main thread: rendering (WGPU)");
