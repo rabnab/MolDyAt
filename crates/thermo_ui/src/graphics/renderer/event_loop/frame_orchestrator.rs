@@ -92,7 +92,9 @@ mod tests {
     }
 
     fn build_test_state_with_physics(physics: PhysicsCoordinator) -> UnifiedRenderState {
-        let energy_data: SharedEnergyData = Arc::new(Mutex::new(EnergyData::new()));
+        // Get metrics from physics coordinator and create energy data with it
+        let metrics = physics.metrics();
+        let energy_data: SharedEnergyData = Arc::new(Mutex::new(EnergyData::with_metrics(metrics)));
         UnifiedRenderState {
             input: InputHandler::new(),
             physics,
@@ -203,6 +205,16 @@ mod tests {
         snapshot.status_text = Some("fps 0".to_string());
 
         let physics = PhysicsCoordinator::with_snapshot(snapshot);
+        
+        // Populate the metrics registry with the snapshot values
+        // This simulates what would happen in the physics thread
+        let metrics = physics.metrics();
+        {
+            let mut metrics_lock = metrics.write().unwrap();
+            metrics_lock.record("E_kin", 1.5);
+            metrics_lock.record("E_pot", 2.5);
+        }
+        
         let mut state = build_test_state_with_physics(physics);
 
         FrameOrchestrator::begin_frame(&mut state);
@@ -220,10 +232,12 @@ mod tests {
             .energy_data()
             .lock()
             .expect("energy data lock should succeed");
+        // Energy data comes from MetricsRegistry, which we populated above
         assert_eq!(energy_data.v_kin.len(), 1);
         assert_eq!(energy_data.v_pot.len(), 1);
         assert_eq!(energy_data.v_kin[0], 1.5);
         assert_eq!(energy_data.v_pot[0], 2.5);
+        // Time is set from snapshot in update_from_snapshot
         assert_eq!(energy_data.time, 3.0);
         assert!(
             energy_data

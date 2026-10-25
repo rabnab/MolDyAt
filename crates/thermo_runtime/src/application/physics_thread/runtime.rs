@@ -8,6 +8,7 @@ use crate::application::DomainCommand;
 use crate::application::MainContent;
 use crate::application::PhysicsEvent;
 use crate::application::scene_layers::SceneLayers;
+use crate::metrics::SharedMetricsRegistry;
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::{Duration, Instant};
@@ -44,6 +45,7 @@ impl PhysicsRuntime {
         events: &Sender<PhysicsEvent>,
         shutdown_signal: &ShutdownSignal,
         wakeup: &Arc<dyn Fn() + Send + Sync>,
+        metrics: &SharedMetricsRegistry,
     ) {
         log::info!(
             "Physics thread ID: {:?} - Started!",
@@ -96,6 +98,12 @@ impl PhysicsRuntime {
                 let snapshot_start = Instant::now();
                 publisher.publish(publisher.snapshot(simulation));
                 wakeup();
+
+                // Sample metrics at snapshot cadence (decision 1-B)
+                {
+                    let mut metrics_registry = metrics.write().unwrap();
+                    metrics_registry.sample_from_world(&simulation.world());
+                }
 
                 snapshot_time_total += snapshot_start.elapsed();
                 snapshot_count += 1;

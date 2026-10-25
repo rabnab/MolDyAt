@@ -4,6 +4,7 @@
 
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
+use thermo_runtime::metrics::SharedMetricsRegistry;
 
 /// Energy display mode - controls which energy traces are shown
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -37,17 +38,24 @@ impl DisplayMode {
     }
 }
 
-/// Shared energy data structure for communication between main simulation and energy plot window
+/// Shared energy data structure for communication between main simulation and energy plot window.
+/// 
+/// This is now a thin wrapper around MetricsRegistry (decision 8-B). It syncs
+/// its cached values from the registry when requested.
 #[derive(Clone)]
 pub struct EnergyData {
+    /// Cached kinetic energy samples (synced from MetricsRegistry)
     pub v_kin: VecDeque<f32>,
+    /// Cached potential energy samples (synced from MetricsRegistry)
     pub v_pot: VecDeque<f32>,
     pub time: f32,
     pub status_text: Option<String>,
     /// Monotonically increasing counter that increments each time energy samples
-    /// are pushed. Renderers can compare this against a cached version to avoid
+    /// are synced. Renderers can compare this against a cached version to avoid
     /// rebuilding the plot when nothing has changed.
     pub version: u64,
+    /// Shared reference to the metrics registry
+    metrics: Option<SharedMetricsRegistry>,
 }
 
 impl EnergyData {
@@ -59,15 +67,53 @@ impl EnergyData {
             time: 0.0,
             status_text: None,
             version: 0,
+            metrics: None,
+        }
+    }
+
+    /// Create new energy data with a reference to MetricsRegistry.
+    pub fn with_metrics(metrics: SharedMetricsRegistry) -> Self {
+        Self {
+            v_kin: VecDeque::with_capacity(1000),
+            v_pot: VecDeque::with_capacity(1000),
+            time: 0.0,
+            status_text: None,
+            version: 0,
+            metrics: Some(metrics),
         }
     }
 
     /// Push a kinetic and potential energy sample, incrementing the version.
-    pub fn push_sample(&mut self, kinetic: f32, potential: f32, time: f32) {
-        self.v_kin.push_back(kinetic);
-        self.v_pot.push_back(potential);
-        self.time = time;
-        self.version = self.version.wrapping_add(1);
+    /// 
+    /// This method is kept for backward compatibility, but now it's a no-op
+    /// since metrics are recorded directly in the MetricsRegistry by the physics thread.
+    /// To update the cached values, call `sync_from_metrics()` instead.
+    pub fn push_sample(&mut self, _kinetic: f32, _potential: f32, _time: f32) {
+        // No-op: metrics are now recorded in MetricsRegistry by physics thread
+    }
+    
+    /// Sync cached values from MetricsRegistry.
+    /// 
+    /// This should be called before rendering to ensure the cached values
+    /// are up-to-date with the latest metrics from the registry.
+    pub fn sync_from_metrics(&mut self) {
+        if let Some(ref metrics) = self.metrics {
+            let metrics_lock = metrics.read().unwrap();
+            
+            // Sync energy values from registry
+            if let Some(kin_series) = metrics_lock.get_series("E_kin") {
+                self.v_kin = kin_series.get().clone();
+            }
+            if let Some(pot_series) = metrics_lock.get_series("E_pot") {
+                self.v_pot = pot_series.get().clone();
+            }
+            if let Some(time_value) = metrics_lock.get_current("time") {
+                self.time = time_value;
+            }
+            
+            // Increment version to signal that data has been updated
+            self.version = self.version.wrapping_add(1);
+        }
     }
 
     /// Calculate total energy (kinetic + potential) for each time point.
@@ -185,32 +231,52 @@ mod tests {
     }
 
     #[test]
-    fn test_push_sample_increments_version() {
+    fn test_push_sample_is_noop() {
+        // push_sample is now a no-op since metrics are recorded in MetricsRegistry
         let mut data = EnergyData::new();
         assert_eq!(data.version, 0);
         data.push_sample(1.0, 2.0, 0.1);
-        assert_eq!(data.version, 1);
-        data.push_sample(3.0, 4.0, 0.2);
-        assert_eq!(data.version, 2);
+        // push_sample is a no-op, so version doesn't increment
+        assert_eq!(data.version, 0);
+        assert_eq!(data.v_kin.len(), 0);
+        assert_eq!(data.v_pot.len(), 0);
     }
 
     #[test]
-    fn test_push_sample_stores_values() {
+    fn test_sync_from_metrics_without_metrics() {
+        // When no metrics are available, sync_from_metrics does nothing
         let mut data = EnergyData::new();
-        data.push_sample(7.0, 3.0, 5.0);
-        assert_eq!(data.v_kin.len(), 1);
-        assert_eq!(data.v_pot.len(), 1);
+        data.sync_from_metrics();
+        assert_eq!(data.v_kin.len(), 0);
+        assert_eq!(data.v_pot.len(), 0);
+    }
+
+    #[test]
+    fn test_sync_from_metrics_with_metrics() {
+        use std::sync::RwLock;
+        use thermo_runtime::metrics::MetricsRegistry;
+        
+        // Create a metrics registry with some data
+        let metrics = Arc::new(RwLock::new(MetricsRegistry::default()));
+        {
+            let mut metrics_lock = metrics.write().unwrap();
+            metrics_lock.record("E_kin", 7.0);
+            metrics_lock.record("E_kin", 8.0);
+            metrics_lock.record("E_pot", 3.0);
+            metrics_lock.record("E_pot", 4.0);
+        }
+        
+        // Create EnergyData with metrics
+        let mut data = EnergyData::with_metrics(Arc::clone(&metrics));
+        
+        // Sync from metrics
+        data.sync_from_metrics();
+        
+        // Should have synced the data
+        assert_eq!(data.v_kin.len(), 2);
+        assert_eq!(data.v_pot.len(), 2);
         assert_eq!(data.v_kin[0], 7.0);
         assert_eq!(data.v_pot[0], 3.0);
-        assert_eq!(data.time, 5.0);
-    }
-
-    #[test]
-    fn test_push_sample_version_wraps_without_panic() {
-        let mut data = EnergyData::new();
-        data.version = u64::MAX;
-        data.push_sample(0.0, 0.0, 0.0);
-        // wrapping_add(1) on u64::MAX yields 0
-        assert_eq!(data.version, 0);
+        assert_eq!(data.version, 1); // Version increments on sync
     }
 }

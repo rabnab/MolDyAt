@@ -4,6 +4,7 @@
 
 use crate::application::renderer_snapshot::{OperatorSnapshot, RendererSnapshot, ThermoGridSpec};
 use crate::headless_cli::{DetailLevel, HeadlessConfig, OutputFormat};
+use crate::metrics::SharedMetricsRegistry;
 use serde_json::json;
 use std::fs::File;
 use std::io::{self, BufWriter, Write};
@@ -25,6 +26,7 @@ pub struct HeadlessWriter {
     file: Option<BufWriter<File>>,
     config: HeadlessConfig,
     initial_total_energy: Option<f32>,
+    metrics: Option<SharedMetricsRegistry>,
 }
 
 impl HeadlessWriter {
@@ -46,8 +48,12 @@ impl HeadlessSnapshotSink for HeadlessWriter {
             self.write_stdout_line(&console_line)?;
         }
         if self.config.output.is_some() {
-            let jsonl_line =
-                frame_to_jsonl_with_config(&self.config, snapshot, self.initial_total_energy);
+            // Include metrics in JSONL output if available
+            let jsonl_line = if let Some(ref metrics) = self.metrics {
+                frame_to_jsonl_with_metrics(&self.config, snapshot, self.initial_total_energy, Some(metrics))
+            } else {
+                frame_to_jsonl_with_config(&self.config, snapshot, self.initial_total_energy)
+            };
             self.write_file_line(&jsonl_line)?;
         }
         Ok(())
@@ -68,6 +74,7 @@ pub struct HeadlessWriterBuilder {
     stdout_enabled: bool,
     output: Option<std::path::PathBuf>,
     config: Option<HeadlessConfig>,
+    metrics: Option<SharedMetricsRegistry>,
 }
 
 impl HeadlessWriterBuilder {
@@ -83,6 +90,11 @@ impl HeadlessWriterBuilder {
 
     pub fn config(mut self, config: HeadlessConfig) -> Self {
         self.config = Some(config);
+        self
+    }
+
+    pub fn metrics(mut self, metrics: SharedMetricsRegistry) -> Self {
+        self.metrics = Some(metrics);
         self
     }
 
@@ -107,6 +119,7 @@ impl HeadlessWriterBuilder {
             file,
             config,
             initial_total_energy: None,
+            metrics: self.metrics,
         })
     }
 }
@@ -242,6 +255,15 @@ fn frame_to_jsonl_with_config(
     snapshot: &RendererSnapshot,
     initial_total_energy: Option<f32>,
 ) -> String {
+    frame_to_jsonl_with_metrics(config, snapshot, initial_total_energy, None)
+}
+
+fn frame_to_jsonl_with_metrics(
+    config: &HeadlessConfig,
+    snapshot: &RendererSnapshot,
+    initial_total_energy: Option<f32>,
+    metrics: Option<&SharedMetricsRegistry>,
+) -> String {
     let total_energy = snapshot.kinetic_energy + snapshot.potential_energy;
     let delta_energy = initial_total_energy.map(|initial| total_energy - initial);
     let mut frame = json!({
@@ -257,6 +279,22 @@ fn frame_to_jsonl_with_config(
         "physics_fps": f32_value(snapshot.physics_fps),
         "operator_counts": operator_counts(&snapshot.operators),
     });
+
+    // Add metrics if available (decision 7-A: nested metrics object)
+    if let Some(metrics_registry) = metrics {
+        let metrics_lock = metrics_registry.read().unwrap();
+        if !metrics_lock.is_empty() {
+            let mut metrics_obj = serde_json::Map::new();
+            for (name, buffer) in metrics_lock.all_series() {
+                if let Some(value) = buffer.latest() {
+                    metrics_obj.insert(name.clone(), f32_value(*value));
+                }
+            }
+            if !metrics_obj.is_empty() {
+                frame["metrics"] = serde_json::Value::Object(metrics_obj);
+            }
+        }
+    }
 
     if config.detail.includes_balls() {
         let mut balls: Vec<_> = snapshot.balls.iter().collect();

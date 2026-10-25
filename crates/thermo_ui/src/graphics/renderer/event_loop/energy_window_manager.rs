@@ -80,9 +80,6 @@ pub struct EnergyWindowManager {
 /// has input focus).
 const ENERGY_REDRAW_MIN_INTERVAL: Duration = Duration::from_millis(83);
 
-/// Maximum number of energy samples to keep in buffer
-const MAX_ENERGY_SAMPLES: usize = 1000;
-
 impl EnergyWindowManager {
     /// Create a new energy window manager.
     ///
@@ -285,14 +282,13 @@ impl EnergyWindowManager {
                 data.v_kin.clear();
                 data.v_pot.clear();
             }
-            if new_step {
-                data.push_sample(
-                    snapshot.kinetic_energy,
-                    snapshot.potential_energy,
-                    snapshot.time,
-                );
-            }
-
+            
+            // Sync cached values from MetricsRegistry (decision 8-B: thin wrapper)
+            data.sync_from_metrics();
+            
+            // Update time from snapshot (not stored in MetricsRegistry)
+            data.time = snapshot.time;
+            
             // Update status text with FPS and per-frame metrics
             if let Some(ref status) = snapshot.status_text {
                 let fps_line = format_metrics_line(
@@ -307,13 +303,8 @@ impl EnergyWindowManager {
                 data.status_text = None;
             }
 
-            // Limit buffer size to prevent unbounded growth
-            if data.v_kin.len() > MAX_ENERGY_SAMPLES {
-                data.v_kin.pop_front();
-            }
-            if data.v_pot.len() > MAX_ENERGY_SAMPLES {
-                data.v_pot.pop_front();
-            }
+            // Note: Buffer size limiting is now handled by MetricsRegistry's ring buffers
+            // The cached values in EnergyData are synced from there, so no need to limit here
 
             // Release lock before requesting redraw
             drop(data);

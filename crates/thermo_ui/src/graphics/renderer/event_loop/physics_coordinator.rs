@@ -3,15 +3,19 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use arc_swap::ArcSwapOption;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use thermo_physics::application::MainContent;
 use thermo_runtime::application::renderer_snapshot::RendererSnapshot;
 use thermo_runtime::application::{DomainCommand, PhysicsEvent, PhysicsThread, SnapshotPublisher};
+use thermo_runtime::metrics::{MetricsRegistry, SharedMetricsRegistry};
 
 /// Coordinates communication between render thread and physics thread
 pub struct PhysicsCoordinator {
     physics_thread: Option<PhysicsThread>,
     snapshot_slot: Option<Arc<ArcSwapOption<RendererSnapshot>>>,
+    
+    /// Shared metrics registry for time-series data.
+    metrics: SharedMetricsRegistry,
 
     // Step tracking
     last_displayed_step: u64,
@@ -43,10 +47,15 @@ impl PhysicsCoordinator {
     ) -> Self {
         let publisher = SnapshotPublisher::new();
         let snapshot_slot = publisher.slot();
-        let physics_thread = PhysicsThread::spawn(application, publisher, wakeup_callback);
+        
+        // Create shared metrics registry
+        let metrics = Arc::new(RwLock::new(MetricsRegistry::default()));
+        
+        let physics_thread = PhysicsThread::spawn(application, publisher, wakeup_callback, Arc::clone(&metrics));
         Self {
             physics_thread: Some(physics_thread),
             snapshot_slot: Some(snapshot_slot),
+            metrics,
             last_displayed_step: 0,
             displayed_generation: 0,
             displayed_snapshot: None,
@@ -158,6 +167,11 @@ impl PhysicsCoordinator {
         self.steps_per_frame
     }
 
+    /// Get a clone of the shared metrics registry.
+    pub fn metrics(&self) -> SharedMetricsRegistry {
+        Arc::clone(&self.metrics)
+    }
+
     /// Check if physics thread is running
     pub fn is_running(&self) -> bool {
         self.physics_thread.is_some()
@@ -172,6 +186,7 @@ impl PhysicsCoordinator {
         Self {
             physics_thread: None,
             snapshot_slot: None,
+            metrics: Arc::new(RwLock::new(MetricsRegistry::default())),
             last_displayed_step: 0,
             displayed_generation: 0,
             displayed_snapshot: None,
@@ -193,6 +208,7 @@ impl PhysicsCoordinator {
         let coordinator = Self {
             physics_thread: None,
             snapshot_slot: None,
+            metrics: Arc::new(RwLock::new(MetricsRegistry::default())),
             last_displayed_step: 0,
             displayed_generation: 0,
             displayed_snapshot: None,
@@ -221,6 +237,7 @@ impl PhysicsCoordinator {
         Self {
             physics_thread: None,
             snapshot_slot: Some(Arc::new(ArcSwapOption::new(Some(Arc::new(snapshot))))),
+            metrics: Arc::new(RwLock::new(MetricsRegistry::default())),
             last_displayed_step: 0,
             displayed_generation: 0,
             displayed_snapshot: None,
@@ -254,6 +271,7 @@ mod tests {
         let mut coord = PhysicsCoordinator {
             physics_thread: None,
             snapshot_slot: None,
+            metrics: Arc::new(RwLock::new(MetricsRegistry::default())),
             last_displayed_step: 0,
             displayed_generation: 0,
             displayed_snapshot: None,
@@ -311,6 +329,7 @@ mod tests {
         let mut coord = PhysicsCoordinator {
             physics_thread: None,
             snapshot_slot: None,
+            metrics: Arc::new(RwLock::new(MetricsRegistry::default())),
             last_displayed_step: 0,
             displayed_generation: 0,
             displayed_snapshot: None,

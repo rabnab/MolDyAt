@@ -6,8 +6,10 @@ use crate::application::CreateSnapshot;
 use crate::headless_cli::HeadlessConfig;
 use crate::headless_output::{HeadlessSnapshotSink, HeadlessWriter};
 use crate::headless_timings::{RunClock, write_timings};
+use crate::metrics::SharedMetricsRegistry;
 use std::io;
 use std::path::PathBuf;
+use std::sync::{Arc, RwLock};
 use std::time::Instant;
 use thermo_physics::application::persistence::{LoadSource, SaveStore};
 use thermo_physics::application::{MainContent, SimConfig};
@@ -22,6 +24,8 @@ pub struct HeadlessRunner {
     timing_warmup: u32,
     /// Git commit of the binary, for the timings report (`--timings`).
     commit: &'static str,
+    /// Shared metrics registry for time-series data.
+    metrics: SharedMetricsRegistry,
 }
 
 pub struct HeadlessRunnerBuilder {
@@ -32,6 +36,7 @@ pub struct HeadlessRunnerBuilder {
     timings: Option<PathBuf>,
     timing_warmup: u32,
     commit: &'static str,
+    metrics: Option<SharedMetricsRegistry>,
 }
 
 pub struct HeadlessRunReport {
@@ -55,6 +60,7 @@ impl HeadlessRunnerBuilder {
             timings: None,
             timing_warmup: 0,
             commit: UNKNOWN_COMMIT,
+            metrics: None,
         }
     }
 
@@ -93,6 +99,12 @@ impl HeadlessRunnerBuilder {
         self
     }
 
+    /// Shared metrics registry for time-series data.
+    pub fn metrics(mut self, metrics: SharedMetricsRegistry) -> Self {
+        self.metrics = Some(metrics);
+        self
+    }
+
     pub fn build(self) -> HeadlessRunner {
         HeadlessRunner {
             application: self.application.expect("application is required"),
@@ -102,6 +114,7 @@ impl HeadlessRunnerBuilder {
             timings: self.timings,
             timing_warmup: self.timing_warmup,
             commit: self.commit,
+            metrics: self.metrics.unwrap_or_else(|| Arc::new(RwLock::new(crate::metrics::MetricsRegistry::default()))),
         }
     }
 }
@@ -122,10 +135,15 @@ impl HeadlessRunner {
         // when they are the defaults.
         config.dt = Some(application.time_step());
         config.sim = Some(application.config());
+        
+        // Create shared metrics registry
+        let metrics = Arc::new(RwLock::new(crate::metrics::MetricsRegistry::default()));
+        
         let sink = HeadlessWriter::builder()
             .stdout(config.stdout)
             .output(config.output.clone())
-            .config(config.clone());
+            .config(config.clone())
+            .metrics(Arc::clone(&metrics));
         Ok(Self::builder()
             .application(application)
             .sink(Box::new(sink.build()?))
@@ -133,12 +151,20 @@ impl HeadlessRunner {
             .snapshot_every(config.snapshot_every)
             .timings(config.timings.clone(), config.timing_warmup)
             .commit(commit)
+            .metrics(metrics)
             .build())
     }
 
     pub fn run(mut self) -> io::Result<HeadlessRunReport> {
         let mut snapshots_emitted = 0;
         let mut latest_snapshot = self.application.create_snapshot();
+        
+        // Sample metrics for initial snapshot
+        {
+            let mut metrics = self.metrics.write().unwrap();
+            metrics.sample_from_world(&self.application.world());
+        }
+        
         self.sink.write_run_start(&latest_snapshot)?;
         self.sink.write_frame(&latest_snapshot)?;
         snapshots_emitted += 1;
@@ -167,6 +193,13 @@ impl HeadlessRunner {
             {
                 let snapshot_start = Instant::now();
                 latest_snapshot = self.application.create_snapshot();
+                
+                // Sample metrics at snapshot cadence (decision 1-B)
+                {
+                    let mut metrics = self.metrics.write().unwrap();
+                    metrics.sample_from_world(&self.application.world());
+                }
+                
                 let snapshot_done = Instant::now();
                 self.sink.write_frame(&latest_snapshot)?;
                 clock.snapshot += snapshot_done - snapshot_start;
