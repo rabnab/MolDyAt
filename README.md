@@ -290,6 +290,10 @@ Keyboard (press `H` for the same list in the log):
 | `DEL` / `BACKSPACE` | Delete the highlighted object (hover it with its sidebar tool selected). |
 | `Ctrl + S` | Save the world to a new file in the save directory (--save-dir, default ./saves). |
 | `Ctrl + O` | Load the newest save from the save directory (paused, default view). |
+| `Ctrl + E` | Export the metrics series (energies, wall momentum, species counts) as CSV to the save directory. |
+| `Ctrl + J` | Export the metrics series as JSONL to the save directory. |
+| `Alt + E` | Export the state of every ball as CSV to the save directory. |
+| `Alt + J` | Export the state of every ball as JSONL to the save directory. |
 | `0` | Reset the viewport (1.0x zoom, centred). |
 | `F2` | Toggle rendering. |
 | `F3` | Cycle the cutoff-radius rings. |

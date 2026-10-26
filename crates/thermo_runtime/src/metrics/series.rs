@@ -31,6 +31,8 @@ pub struct RingBuffer<T> {
     pushed: u64,
     /// How often the buffer was cleared.
     epoch: u64,
+    /// Values pushed out to make room since the buffer was last cleared.
+    evicted: u64,
 }
 
 impl<T> RingBuffer<T> {
@@ -41,6 +43,7 @@ impl<T> RingBuffer<T> {
             capacity,
             pushed: 0,
             epoch: 0,
+            evicted: 0,
         }
     }
 
@@ -53,6 +56,7 @@ impl<T> RingBuffer<T> {
         self.pushed += 1;
         if self.data.len() >= self.capacity {
             self.data.pop_front();
+            self.evicted += 1;
         }
         self.data.push_back(value);
     }
@@ -71,6 +75,7 @@ impl<T> RingBuffer<T> {
     pub fn clear(&mut self) {
         self.data.clear();
         self.epoch += 1;
+        self.evicted = 0;
     }
 
     /// Values pushed so far, evicted ones included. With [`Self::epoch`] it
@@ -78,6 +83,12 @@ impl<T> RingBuffer<T> {
     /// within one epoch, the last `total_pushed() - seen` values are new.
     pub fn total_pushed(&self) -> u64 {
         self.pushed
+    }
+
+    /// Values pushed out since the last [`Self::clear`]: how many of the
+    /// samples taken since then are no longer held.
+    pub fn evicted(&self) -> u64 {
+        self.evicted
     }
 
     /// How often the buffer was cleared; a reader's copy older than the

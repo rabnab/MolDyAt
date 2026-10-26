@@ -634,3 +634,75 @@ fn every_parsed_flag_is_documented() {
         "found only {parsed} parsed flags; did the parser layout change?"
     );
 }
+
+#[test]
+fn test_export_flags() {
+    let config = HeadlessConfig::default();
+    assert_eq!(config.export_dir, None);
+    assert_eq!(config.export_format, ExportFormat::Csv);
+    assert_eq!(config.export_series, None);
+
+    let config = parse_headless_args_with_args(&headless_args(&[
+        "--export-dir",
+        "/tmp/out",
+        "--export-format",
+        "jsonl",
+        "--export-series",
+        "E_kin,N2:count",
+    ]))
+    .unwrap()
+    .unwrap();
+    assert_eq!(config.export_dir, Some(PathBuf::from("/tmp/out")));
+    assert_eq!(config.export_format, ExportFormat::Jsonl);
+    assert_eq!(
+        config.export_series,
+        Some(vec!["E_kin".to_string(), "N2:count".to_string()])
+    );
+}
+
+#[test]
+fn test_export_flag_errors() {
+    for args in [
+        &["--export-dir"][..],
+        &["--export-dir", "d", "--export-format"],
+        &["--export-dir", "d", "--export-format", "xml"],
+        &["--export-dir", "d", "--export-series"],
+        // Format and series choose what --export-dir writes.
+        &["--export-format", "csv"],
+        &["--export-series", "E_kin"],
+    ] {
+        assert!(
+            parse_headless_args_with_args(&headless_args(args)).is_err(),
+            "{args:?}"
+        );
+    }
+}
+
+#[test]
+fn test_export_series_names_are_trimmed_and_must_not_be_empty() {
+    let config = parse_headless_args_with_args(&headless_args(&[
+        "--export-dir",
+        "d",
+        "--export-series",
+        "E_kin, E_pot ,N2:count",
+    ]))
+    .unwrap()
+    .unwrap();
+    assert_eq!(
+        config.export_series,
+        Some(vec!["E_kin".into(), "E_pot".into(), "N2:count".into()])
+    );
+    for value in ["", "E_kin,", ",E_kin", "E_kin, ,E_pot"] {
+        let args = headless_args(&["--export-dir", "d", "--export-series", value]);
+        assert!(parse_headless_args_with_args(&args).is_err(), "{value:?}");
+    }
+}
+
+#[test]
+fn test_export_options_check_ignores_flag_values_that_look_like_flags() {
+    // A file named like a flag is a value, not the flag.
+    let config = parse_headless_args_with_args(&headless_args(&["--output", "--export-format"]))
+        .unwrap()
+        .unwrap();
+    assert_eq!(config.output, Some(PathBuf::from("--export-format")));
+}

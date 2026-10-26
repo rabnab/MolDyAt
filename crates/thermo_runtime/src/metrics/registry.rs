@@ -27,6 +27,12 @@ pub fn write_metrics(metrics: &SharedMetricsRegistry) -> RwLockWriteGuard<'_, Me
 
 /// Central registry for all time-series metrics.
 ///
+/// All series are sampled together: from its registration on, a series gets
+/// a value at every sample, so the newest value of every series belongs to
+/// the newest step and a shorter series (registered later) is right-aligned
+/// with `steps()`. The export relies on this; `record` outside `sample` is
+/// for tests and for series a caller feeds in lockstep with `sample`.
+///
 /// Stores named series (E_kin, E_pot, E_tot, wall momentum, per-species
 /// counts) in ring buffers, sampled at snapshot cadence. Both UI plots and
 /// headless output read from this registry. Series live in sorted maps so
@@ -36,6 +42,9 @@ pub struct MetricsRegistry {
     series_metadata: BTreeMap<SeriesName, SeriesMetadata>,
     /// Ring buffers storing the actual data for each series.
     buffers: BTreeMap<SeriesName, RingBuffer<f32>>,
+    /// The step of every sample. All series are sampled together, so the
+    /// newest entry of a series belongs to the newest step here.
+    steps: RingBuffer<u64>,
     /// `(world generation, step)` of the last sample, to skip a repeat.
     last_sampled: Option<(u64, u64)>,
     /// World generation the stored history belongs to.
@@ -60,6 +69,7 @@ impl MetricsRegistry {
         let mut registry = Self {
             series_metadata: BTreeMap::new(),
             buffers: BTreeMap::new(),
+            steps: RingBuffer::new(capacity),
             last_sampled: None,
             generation: 0,
             version: 0,
@@ -152,6 +162,7 @@ impl MetricsRegistry {
         for buffer in self.buffers.values_mut() {
             buffer.clear();
         }
+        self.steps.clear();
         self.species_table = None;
         self.count_series.clear();
         self.last_sampled = None;
@@ -176,6 +187,7 @@ impl MetricsRegistry {
             self.clear();
         }
         self.last_sampled = Some((generation, step));
+        self.steps.push(step);
 
         let (e_kin, e_pot) = (snapshot.kinetic_energy, snapshot.potential_energy);
         self.record("E_kin", e_kin);
@@ -199,6 +211,16 @@ impl MetricsRegistry {
                 .ids()
                 .map(|id| Self::per_species_name(&snapshot.species.species(id).name, "count"))
                 .collect();
+            // Another table: the count series of species it lacks stop for
+            // good. Drop them, so every series that is left receives a value
+            // at every sample (the alignment of the export relies on it).
+            let (buffers, metadata, current) = (
+                &mut self.buffers,
+                &mut self.series_metadata,
+                &self.count_series,
+            );
+            metadata.retain(|name, meta| !meta.is_per_species || current.contains(name));
+            buffers.retain(|name, _| metadata.contains_key(name));
             for name in self.count_series.clone() {
                 if !self.buffers.contains_key(&name) {
                     self.register_series(
@@ -218,6 +240,18 @@ impl MetricsRegistry {
             }
         }
         self.version = self.version.wrapping_add(1);
+    }
+
+    /// Add a sample step without sampling a world (tests).
+    #[cfg(test)]
+    pub(crate) fn push_step_for_test(&mut self, step: u64) {
+        self.steps.push(step);
+    }
+
+    /// The step of every sample, oldest first; the newest entry of each
+    /// series was recorded at the newest step.
+    pub fn steps(&self) -> &RingBuffer<u64> {
+        &self.steps
     }
 
     /// Counter that changes whenever stored series change.

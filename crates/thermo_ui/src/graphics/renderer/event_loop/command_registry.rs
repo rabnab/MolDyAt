@@ -26,6 +26,7 @@ use thermo_physics::application::{HIGH_GRAVITY_MPS2, NORMAL_GRAVITY_MPS2};
 use thermo_runtime::application::{
     BallCommand, DomainCommand, SimControl, ViewCommand, WorldCommand,
 };
+use thermo_runtime::export::{ExportFormat, ExportKind};
 use winit::keyboard::KeyCode;
 
 /// One keyboard command.
@@ -276,6 +277,10 @@ pub const LABEL_VALUES: &[LabelValue] = &[
     ("{high_gravity}", || format!("{HIGH_GRAVITY_MPS2:.2} m/s^2")),
 ];
 
+fn export(kind: ExportKind, format: ExportFormat) -> DomainCommand {
+    WorldCommand::Export { kind, format }.into()
+}
+
 const fn key(key: KeyCode, trigger: Trigger) -> KeyBinding {
     KeyBinding::new(BindKey::Code(key), Modifier::None, trigger)
 }
@@ -430,6 +435,34 @@ pub static COMMANDS: &[CommandDescriptor] = &[
         category: CommandCategory::World,
         default_binding: &[symbol_chord(Ctrl, 'o', PressOnce)],
         kind: CommandKind::Domain(|| WorldCommand::Load(LoadSource::Latest).into()),
+    },
+    CommandDescriptor {
+        id: "world.export_series_csv",
+        label: "Export the metrics series (energies, wall momentum, species counts) as CSV to the save directory.",
+        category: CommandCategory::World,
+        default_binding: &[symbol_chord(Ctrl, 'e', PressOnce)],
+        kind: CommandKind::Domain(|| export(ExportKind::Series, ExportFormat::Csv)),
+    },
+    CommandDescriptor {
+        id: "world.export_series_jsonl",
+        label: "Export the metrics series as JSONL to the save directory.",
+        category: CommandCategory::World,
+        default_binding: &[symbol_chord(Ctrl, 'j', PressOnce)],
+        kind: CommandKind::Domain(|| export(ExportKind::Series, ExportFormat::Jsonl)),
+    },
+    CommandDescriptor {
+        id: "world.export_snapshot_csv",
+        label: "Export the state of every ball as CSV to the save directory.",
+        category: CommandCategory::World,
+        default_binding: &[symbol_chord(Alt, 'e', PressOnce)],
+        kind: CommandKind::Domain(|| export(ExportKind::Snapshot, ExportFormat::Csv)),
+    },
+    CommandDescriptor {
+        id: "world.export_snapshot_jsonl",
+        label: "Export the state of every ball as JSONL to the save directory.",
+        category: CommandCategory::World,
+        default_binding: &[symbol_chord(Alt, 'j', PressOnce)],
+        kind: CommandKind::Domain(|| export(ExportKind::Snapshot, ExportFormat::Jsonl)),
     },
     // ── View ────────────────────────────────────────────────────────
     CommandDescriptor {

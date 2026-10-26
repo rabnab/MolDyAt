@@ -5,6 +5,7 @@
 use crate::application::operator_command::OperatorCommand;
 use crate::application::persistence::LoadSource;
 use crate::application::scene_layers::SceneLayers;
+use crate::export::{ExportFormat, ExportKind};
 use crate::objects2d::ball_impl::Ball2D;
 use crate::objects2d::{Rect, Vec2D};
 
@@ -70,6 +71,12 @@ pub enum WorldCommand {
     Save,
     /// Replace the world with a save (reported as a `PhysicsEvent`).
     Load(LoadSource),
+    /// Write the metrics series or a per-ball snapshot dump to the save
+    /// directory (reported as a `PhysicsEvent`).
+    Export {
+        kind: ExportKind,
+        format: ExportFormat,
+    },
 }
 
 /// Commands that change what is reported or shown, not the physics.

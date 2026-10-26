@@ -125,6 +125,9 @@ fn seeded_headless_output() -> String {
         valves: Vec::new(),
         timings: None,
         timing_warmup: 0,
+        export_dir: None,
+        export_format: Default::default(),
+        export_series: None,
         save_setup: false,
         sim: None,
     };
@@ -1053,4 +1056,208 @@ fn test_run_start_records_a_loaded_saves_sim_config_with_dt_winning() {
     fs::write(&reused, sim.to_string()).unwrap();
     assert_eq!(SimConfig::load(&reused).unwrap(), expected);
     let _ = fs::remove_dir_all(&dir);
+}
+
+fn export_scratch_dir(name: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!(
+        "moldyat_headless_export_{name}_{}",
+        std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&dir);
+    dir
+}
+
+fn export_config(dir: &std::path::Path, format: crate::export::ExportFormat) -> HeadlessConfig {
+    HeadlessConfig {
+        steps: 6,
+        snapshot_every: 2,
+        rng_seed: Some(12345),
+        seed_balls: Some(24),
+        export_dir: Some(dir.to_path_buf()),
+        export_format: format,
+        ..HeadlessConfig::default()
+    }
+}
+
+fn seeded_application(config: &HeadlessConfig) -> MainContent {
+    let mut application =
+        build_application(window_world_rect(), &SimConfig::default(), config.rng_seed)
+            .expect("build deterministic app");
+    application.seed_random_balls(config.seed_balls.expect("seed ball count") as usize);
+    application
+}
+
+#[test]
+fn test_export_dir_receives_the_series_and_the_final_snapshot() {
+    let dir = export_scratch_dir("csv");
+    let config = export_config(&dir, crate::export::ExportFormat::Csv);
+    let application = seeded_application(&config);
+    headless_output(config, application);
+
+    let series = fs::read_to_string(dir.join("series.csv")).expect("series.csv");
+    let lines: Vec<&str> = series.lines().collect();
+    for column in [
+        "E_kin [J]",
+        "E_pot [J]",
+        "E_tot [J]",
+        "wall_momentum [kg·m/s]",
+        "N2:count",
+    ] {
+        assert!(
+            lines[0].split(',').any(|c| c == column),
+            "{column} in {}",
+            lines[0]
+        );
+    }
+    let steps: Vec<&str> = lines[1..]
+        .iter()
+        .map(|l| l.split(',').next().unwrap())
+        .collect();
+    assert_eq!(steps, ["0", "2", "4", "6"]);
+
+    let snapshot = fs::read_to_string(dir.join("snapshot.csv")).expect("snapshot.csv");
+    assert_eq!(snapshot.lines().count(), 24 + 1);
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn test_export_is_deterministic_and_jsonl_series_selection_works() {
+    let run = |name: &str| {
+        let dir = export_scratch_dir(name);
+        let mut config = export_config(&dir, crate::export::ExportFormat::Jsonl);
+        config.export_series = Some(vec!["E_kin".to_string()]);
+        let application = seeded_application(&config);
+        headless_output(config, application);
+        let series = fs::read_to_string(dir.join("series.jsonl")).expect("series.jsonl");
+        let snapshot = fs::read_to_string(dir.join("snapshot.jsonl")).expect("snapshot.jsonl");
+        fs::remove_dir_all(dir).unwrap();
+        (series, snapshot)
+    };
+    let (series_a, snapshot_a) = run("det_a");
+    let (series_b, snapshot_b) = run("det_b");
+    assert_eq!(series_a, series_b);
+    assert_eq!(snapshot_a, snapshot_b);
+
+    let header: serde_json::Value = serde_json::from_str(series_a.lines().next().unwrap()).unwrap();
+    assert_eq!(header["series"].as_array().unwrap().len(), 1);
+    assert_eq!(header["rows"], 4);
+}
+
+#[test]
+#[should_panic(expected = "unknown series")]
+fn test_export_of_an_unknown_series_fails_the_run() {
+    let dir = export_scratch_dir("unknown");
+    let mut config = export_config(&dir, crate::export::ExportFormat::Csv);
+    config.export_series = Some(vec!["nope".to_string()]);
+    let application = seeded_application(&config);
+    headless_output(config, application);
+}
+
+#[test]
+fn test_export_of_an_unknown_series_fails_before_the_first_step() {
+    let dir = export_scratch_dir("early");
+    let mut config = export_config(&dir, crate::export::ExportFormat::Csv);
+    config.export_series = Some(vec!["E_kni".to_string()]);
+    let (output, _guard) = run_output_path("early");
+    config.output = Some(output.clone());
+    config.stdout = false;
+    let application = seeded_application(&config);
+    let error = HeadlessRunner::from_config(config, application, UNKNOWN_COMMIT)
+        .expect("runner")
+        .run()
+        .err()
+        .expect("the unknown series fails the run");
+    assert!(
+        error.to_string().contains("unknown series E_kni"),
+        "{error}"
+    );
+    // Nothing was written: not even `run_start`.
+    assert_eq!(fs::read_to_string(&output).unwrap_or_default(), "");
+    assert!(!dir.exists());
+}
+
+#[test]
+fn test_failed_export_still_writes_run_end_and_timings() {
+    let dir = export_scratch_dir("failing");
+    // A regular file where the export directory should be.
+    fs::create_dir_all(dir.parent().unwrap()).unwrap();
+    let blocker = dir.with_extension("file");
+    fs::write(&blocker, "x").unwrap();
+    let mut config = export_config(&blocker, crate::export::ExportFormat::Csv);
+    let (output, _guard) = run_output_path("failing");
+    let timings = output.with_extension("timings.json");
+    config.output = Some(output.clone());
+    config.stdout = false;
+    config.timings = Some(timings.clone());
+    let application = seeded_application(&config);
+    let result = HeadlessRunner::from_config(config, application, UNKNOWN_COMMIT)
+        .expect("runner")
+        .run();
+    assert!(result.is_err(), "the export fails");
+    let lines = fs::read_to_string(&output).unwrap();
+    assert!(
+        lines
+            .lines()
+            .last()
+            .unwrap()
+            .contains("\"record_kind\":\"run_end\"")
+    );
+    assert!(timings.exists(), "the timings report was written");
+    let _ = fs::remove_file(blocker);
+    let _ = fs::remove_file(timings);
+}
+
+#[test]
+fn test_export_covers_the_whole_run_by_sampling_every_kth_frame() {
+    let dir = export_scratch_dir("thinned");
+    // 3000 frames do not fit the 1000 samples of the registry.
+    let mut config = export_config(&dir, crate::export::ExportFormat::Csv);
+    config.steps = 3000;
+    config.snapshot_every = 1;
+    config.seed_balls = Some(3);
+    let application = seeded_application(&config);
+    headless_output(config, application);
+
+    let series = fs::read_to_string(dir.join("series.csv")).unwrap();
+    let mut lines = series.lines();
+    // Frames 0, 4, 8, … and the last: every 4th frame (ceil(3001 / 999)).
+    assert_eq!(lines.next(), Some("# sample_interval_steps=4"));
+    let steps: Vec<u64> = lines
+        .skip(1)
+        .map(|l| l.split(',').next().unwrap().parse().unwrap())
+        .collect();
+    assert!(steps.len() <= 1000, "{}", steps.len());
+    assert_eq!(steps[0], 0, "the first step is exported");
+    assert_eq!(*steps.last().unwrap(), 3000, "the last step is exported");
+    assert!(steps.windows(2).all(|w| w[0] < w[1]));
+    assert_eq!(steps[1], 4);
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn test_export_samples_every_frame_when_the_run_fits() {
+    let dir = export_scratch_dir("fits");
+    let config = export_config(&dir, crate::export::ExportFormat::Jsonl);
+    let application = seeded_application(&config);
+    headless_output(config, application);
+    let series = fs::read_to_string(dir.join("series.jsonl")).unwrap();
+    let header: serde_json::Value = serde_json::from_str(series.lines().next().unwrap()).unwrap();
+    assert!(header["sample_interval_steps"].is_null());
+    fs::remove_dir_all(dir).unwrap();
+}
+
+/// A temporary JSONL output path for a run, removed when the guard drops.
+fn run_output_path(name: &str) -> (std::path::PathBuf, impl Drop) {
+    struct Guard(std::path::PathBuf);
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            let _ = fs::remove_file(&self.0);
+        }
+    }
+    let path = std::env::temp_dir().join(format!(
+        "moldyat_headless_run_{name}_{}.jsonl",
+        std::process::id()
+    ));
+    let _ = fs::remove_file(&path);
+    (path.clone(), Guard(path))
 }

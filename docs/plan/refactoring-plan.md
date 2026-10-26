@@ -158,7 +158,7 @@ guardrails. Water (I9–I10) follows. See §5 for the model choice behind it.
 | V4b | Plot selection and layout | Any selected series from V3, several plots per window, legend, autoscale. | M | V4a |
 | V5 | Field visualisations | Generalise thermo heatmap to any scalar per-cell field (T, P, density, velocity magnitude) and add a vector field (velocity arrows). Field selection cycles through registry. Builds on the thermo grid of its own from #290, so the field resolution does not change with the species present. | M | V2, #290 |
 | V6 | Distribution graphs | Speed histogram vs. Maxwell–Boltzmann, radial distribution function g(r) — computed off the hot path at snapshot cadence. Headless output and export (V7) first; the plot needs V4b. | M | V3, V7 (V4b for the plot) |
-| V7 | Data export | CSV/JSONL export of selected series and a snapshot dump from the UI (command) and headless. | S | V3 |
+| V7 | Data export | CSV/JSONL export of selected series and a snapshot dump from the UI (command) and headless. Done (#337): `thermo_runtime::export` (`Ctrl + E` / `Ctrl + J` series, `Alt + E` / `Alt + J` per-ball snapshot, `--export-dir`, `--export-format`, `--export-series`); see `docs/headless.md#data-export`. | S | V3 |
 
 ### Epic P – Performance
 
@@ -212,7 +212,7 @@ GitHub issues (every open issue is in a phase, as of 2026-10-23):
 | 2 | #220 | I1 #230, I2 #233, I3 #234, M6 #231, I4 #235, I5 #236, C2 #232, I6 #237, I7 #238 | – |
 | 3 | #304 | M2 #305, #295, #270, #273, #274, M5 #306, C4 #307, P2 #311, M7 #308, M8 #309 | – |
 | 4 | #329 | M9 #310 | I8a #334, #327, C3 #335, M10 |
-| 5 | #330 | – | V3 #336, V7 #337, V4a #338, V4b #339, C5 #340, M10 |
+| 5 | #330 | V3 #336, V7 #337 | V4a #338, V4b #339, C5 #340, M10 |
 | 6 | #331 | – | V2 #341, #290, V5 #342, V6 #343, #303, #203, M10 |
 | 7 | #332 | – | P8a #344, P4 #345, #250, P6 #346, P8b #213, M10 |
 | 8 | #333 | – | I12 #280, I8b #347, I9 #348, I10 #349, I11 #350, M10 |
