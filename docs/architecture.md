@@ -316,11 +316,18 @@ step with the metrics store: the E_kin and E_pot series and the simulation
 time of each sample (`MetricsRegistry::times`), appending only new values.
 `PlotScene::build` (`energy_plot/plot_layout.rs`) lays the plot out in
 window pixels without a GPU: the title, key hints built from the key map
-(`energy_window_key_hints`, so a `ui.toml` rebinding shows), axes with round
-ticks (x: simulation time, so plots stay comparable when the time step
-changes; y: energy), grid and zero line, the curves of the display mode (a
-sample without a finite value or time breaks a curve), the legend and the
-status text. Labels and thin lines sit on whole pixels so the bitmap glyphs
+(`energy_window_key_hints`, so a `ui.toml` rebinding shows), the axes, grid
+and zero line, the curves of the display mode (a sample without a finite
+value or time breaks a curve), the legend and the status text. The x axis
+is simulation time over a fixed span (`TIME_SPAN`, 10 time units): the
+time step changes only how fast the curves scroll, never the scale. Until
+the history spans that much the curves start at the left edge, then the
+newest sample stays at the right edge; a history shorter than the span
+(the registry keeps 1000 samples) leaves the left part empty (#366 keeps
+the whole history, #367 adds zoom and pan). x ticks come every 0.5 time
+units when there is room (else every 1, 2, 5, …), with labels only where
+they fit; the y axis has round ticks (1/2/5 × 10ⁿ) over the visible
+samples. Labels and thin lines sit on whole pixels so the bitmap glyphs
 and 1 px lines stay crisp. The layout is unit-tested there.
 
 The binary draws it: on a `RedrawRequested` for the plot window,

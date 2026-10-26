@@ -11,8 +11,12 @@
 //! a label covers `chars × GLYPH_CELL × scale` by `GLYPH_CELL × scale` pixels,
 //! from a whole-pixel origin so the glyphs stay crisp.
 //!
-//! The x axis is the simulation time of the samples, not their step, so
-//! plots stay comparable when the time step changes.
+//! The x axis is the simulation time of the samples, not their step, and it
+//! always shows [`TIME_SPAN`] time units: the time step changes only how fast
+//! the curves scroll, never the scale. Until the history spans that much,
+//! the curves start at the left edge; then the newest sample stays at the
+//! right edge. A history shorter than the span (the registry keeps a fixed
+//! number of samples) leaves the left part empty.
 
 use super::energy_data::{DisplayMode, EnergyData};
 
@@ -32,6 +36,18 @@ pub const COLOR_ZERO: Rgba = [0.60, 0.60, 0.60, 0.9];
 pub const COLOR_TEXT: Rgba = [0.85, 0.85, 0.85, 1.0];
 pub const COLOR_TITLE: Rgba = [0.90, 0.90, 0.90, 1.0];
 pub const COLOR_STATUS: Rgba = [0.66, 0.66, 0.98, 1.0];
+
+/// Simulation time shown across the width of the plot, in the time units of
+/// the axis (reduced units, see `docs/units.md`).
+pub const TIME_SPAN: f64 = 10.0;
+
+/// Distances between x ticks, in time units; the smallest whose ticks are at
+/// least [`MIN_X_TICK_CELLS`] apart is used, and labels go on the smallest
+/// multiple of it they fit at.
+const X_TICK_INTERVALS: [f64; 10] = [0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0, 200.0, 500.0];
+
+/// Smallest distance between two x ticks, in glyph cells.
+const MIN_X_TICK_CELLS: f32 = 2.0;
 
 /// Length of a tick mark, in glyph cells.
 const TICK_CELLS: f32 = 0.5;
@@ -185,14 +201,50 @@ pub fn format_tick(value: f64, step: f64) -> String {
     format!("{value:.decimals$}")
 }
 
-/// The y range shown for `series`: their finite values with 5% room above
-/// and below. `None` when no value is finite.
-fn value_range(series: &[Series]) -> Option<(f64, f64)> {
-    let mut values = series
+/// One curve as `(time, value)` points, oldest first; `None` where the time
+/// or the value is not finite (which breaks the curve).
+type Curve = Vec<Option<(f64, f64)>>;
+
+/// The time range the plot shows: [`TIME_SPAN`] long, starting at the
+/// oldest sample while the history is shorter than that, else ending at the
+/// newest sample.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct TimeWindow {
+    t0: f64,
+    t1: f64,
+}
+
+impl TimeWindow {
+    /// The window for `curves`; `None` without a single finite point.
+    fn for_curves(curves: &[Curve]) -> Option<Self> {
+        let mut times = curves.iter().flatten().flatten().map(|&(t, _)| t);
+        let first = times.next()?;
+        let (oldest, newest) = times.fold((first, first), |(lo, hi), t| (lo.min(t), hi.max(t)));
+        let t0 = if newest - oldest > TIME_SPAN {
+            newest - TIME_SPAN
+        } else {
+            oldest
+        };
+        Some(Self {
+            t0,
+            t1: t0 + TIME_SPAN,
+        })
+    }
+
+    fn contains(&self, t: f64) -> bool {
+        (self.t0..=self.t1).contains(&t)
+    }
+}
+
+/// The y range shown: the values of the points inside `window`, with 5%
+/// room above and below. `None` when no point is inside.
+fn value_range(curves: &[Curve], window: TimeWindow) -> Option<(f64, f64)> {
+    let mut values = curves
         .iter()
-        .flat_map(|s| &s.values)
-        .filter(|v| v.is_finite())
-        .map(|&v| f64::from(v));
+        .flatten()
+        .flatten()
+        .filter(|&&(t, _)| window.contains(t))
+        .map(|&(_, v)| v);
     let first = values.next()?;
     let (lo, hi) = values.fold((first, first), |(lo, hi), v| (lo.min(v), hi.max(v)));
     let span = hi - lo;
@@ -204,35 +256,46 @@ fn value_range(series: &[Series]) -> Option<(f64, f64)> {
     Some((lo - room, hi + room))
 }
 
-/// Maps simulation times `x0..=x1` onto the width of the plot area.
+/// Maps the times of a [`TimeWindow`] onto the width of the plot area.
 struct XAxis {
-    x0: f64,
-    x1: f64,
+    window: TimeWindow,
     left: f32,
     width: f32,
 }
 
 impl XAxis {
-    /// The axis for the finite values of `times` (oldest first).
-    fn new(times: &[f64], area: PlotRect) -> Self {
-        let mut finite = times.iter().copied().filter(|t| t.is_finite());
-        let x0 = finite.next().unwrap_or(0.0);
+    fn new(window: TimeWindow, area: PlotRect) -> Self {
         Self {
-            x0,
-            x1: finite.next_back().unwrap_or(x0),
+            window,
             left: area.left,
             width: area.width(),
         }
     }
 
-    /// The pixel column of time `x`; a single sample sits at the left edge.
-    fn x_of(&self, x: f64) -> f32 {
-        if self.x1 > self.x0 {
-            self.left + ((x - self.x0) / (self.x1 - self.x0)) as f32 * self.width
-        } else {
-            self.left
-        }
+    /// Window pixels per time unit.
+    fn scale(&self) -> f32 {
+        self.width / (self.window.t1 - self.window.t0) as f32
     }
+
+    /// The pixel column of time `t`.
+    fn x_of(&self, t: f64) -> f32 {
+        self.left + (t - self.window.t0) as f32 * self.scale()
+    }
+}
+
+/// Whether `v` is a whole multiple of `step`.
+fn is_multiple(v: f64, step: f64) -> bool {
+    let r = v / step;
+    (r - r.round()).abs() < 1e-6
+}
+
+/// The multiples of `step` inside `window`, at most a thousand.
+fn multiples_in(step: f64, window: TimeWindow) -> Vec<f64> {
+    let first = (window.t0 / step - 1e-9).ceil();
+    (0..1000)
+        .map(|k| (first + f64::from(k)) * step)
+        .take_while(|&t| t <= window.t1 + step * 1e-9)
+        .collect()
 }
 
 /// Builds the scene; keeps track of the free space between the title at the
@@ -364,12 +427,17 @@ impl Layout<'_> {
         self.legend(&series, [pad, bottom]);
         bottom -= pad * 0.5;
 
-        let Some((lo, hi)) = value_range(&series) else {
+        let curves = self.curves(&series);
+        let shown = TimeWindow::for_curves(&curves)
+            .and_then(|window| Some((window, value_range(&curves, window)?)));
+        let Some((window, (lo, hi))) = shown else {
             self.waiting_message(top, bottom, w);
             return;
         };
         self.plot(
             &series,
+            &curves,
+            window,
             (lo, hi),
             PlotRect {
                 left: pad,
@@ -404,8 +472,16 @@ impl Layout<'_> {
     }
 
     /// Axes, ticks, grid, zero line and curves inside `free` (the space
-    /// between title and legend). The y range is `[lo, hi]`.
-    fn plot(&mut self, series: &[Series], (lo, hi): (f64, f64), free: PlotRect) {
+    /// between title and legend): the times of `window` across, the values
+    /// `[lo, hi]` up.
+    fn plot(
+        &mut self,
+        series: &[Series],
+        curves: &[Curve],
+        window: TimeWindow,
+        (lo, hi): (f64, f64),
+        free: PlotRect,
+    ) {
         let (glyph, line, thin) = (self.glyph, self.line, self.thin);
         let tick = glyph * TICK_CELLS;
 
@@ -444,28 +520,37 @@ impl Layout<'_> {
             self.segment([area.left, y], [area.right, y], thin, COLOR_ZERO);
         }
 
-        let times = self.sample_times(series);
-        let x_axis = XAxis::new(&times, area);
+        let x_axis = XAxis::new(window, area);
         self.x_ticks(&x_axis, area);
 
         // Axes over the grid, curves over the axes.
         let (left, bottom) = (self.snap(area.left), self.snap(area.bottom));
         self.segment([left, area.top], [left, bottom], thin, COLOR_AXIS);
         self.segment([left, bottom], [area.right, bottom], thin, COLOR_AXIS);
-        for s in series {
-            // A series registered later is shorter: it ends at the newest sample.
-            let offset = times.len() - s.values.len();
-            let points: Vec<Option<[f32; 2]>> = s
-                .values
-                .iter()
-                .enumerate()
-                .map(|(i, &v)| {
-                    let t = times[offset + i];
-                    (v.is_finite() && t.is_finite()).then(|| [x_axis.x_of(t), y_of(f64::from(v))])
-                })
-                .collect();
-            self.polyline(&points, thin * 2.0, s.color);
+        let to_px = |(t, v): (f64, f64)| [x_axis.x_of(t), y_of(v)];
+        for (s, curve) in series.iter().zip(curves) {
+            self.curve_segments(curve, window.t0, &to_px, thin * 2.0, s.color);
         }
+    }
+
+    /// The `(time, value)` points of each series; a series registered later
+    /// is shorter and ends at the newest sample.
+    fn curves(&self, series: &[Series]) -> Vec<Curve> {
+        let times = self.sample_times(series);
+        series
+            .iter()
+            .map(|s| {
+                let offset = times.len() - s.values.len();
+                s.values
+                    .iter()
+                    .enumerate()
+                    .map(|(i, &v)| {
+                        let t = times[offset + i];
+                        (v.is_finite() && t.is_finite()).then_some((t, f64::from(v)))
+                    })
+                    .collect()
+            })
+            .collect()
     }
 
     /// The x value of each sample of the longest series: its simulation
@@ -484,17 +569,35 @@ impl Layout<'_> {
         }
     }
 
-    /// Tick marks and time labels below the x axis.
+    /// Tick marks and time labels below the x axis: ticks every 0.5 time
+    /// units when they are far enough apart (else every 1, 2, 5, …), labels
+    /// on the smallest multiple of that at which they do not overlap.
     fn x_ticks(&mut self, x_axis: &XAxis, area: PlotRect) {
         let (glyph, thin) = (self.glyph, self.thin);
         let tick = glyph * TICK_CELLS;
-        let (x0, x1) = (x_axis.x0, x_axis.x1);
-        let max_ticks = (area.width() / (glyph * 8.0)).clamp(1.0, 10.0) as usize;
-        let (step, ticks) = nice_ticks(x0, x1, max_ticks);
-        for v in ticks {
-            let x = self.snap(x_axis.x_of(v));
+        let scale = x_axis.scale();
+        let last = X_TICK_INTERVALS[X_TICK_INTERVALS.len() - 1];
+        let interval = X_TICK_INTERVALS
+            .into_iter()
+            .find(|&i| i as f32 * scale >= glyph * MIN_X_TICK_CELLS)
+            .unwrap_or(last);
+        let ticks = multiples_in(interval, x_axis.window);
+        let widest = ticks
+            .iter()
+            .map(|&t| self.text_width(&format_tick(t, interval)))
+            .fold(0.0, f32::max);
+        let label_interval = X_TICK_INTERVALS
+            .into_iter()
+            .filter(|&i| i >= interval && is_multiple(i, interval))
+            .find(|&i| i as f32 * scale >= widest + glyph)
+            .unwrap_or(last);
+        for t in ticks {
+            let x = self.snap(x_axis.x_of(t));
             self.segment([x, area.bottom], [x, area.bottom + tick], thin, COLOR_AXIS);
-            let label = format_tick(v, step);
+            if !is_multiple(t, label_interval) {
+                continue;
+            }
+            let label = format_tick(t, label_interval);
             // Centred under its tick, but moved in at the window edges.
             let label_w = self.text_width(&label);
             let max_x = (self.scene.size.0 as f32 - self.pad - label_w).max(self.pad);
@@ -507,17 +610,34 @@ impl Layout<'_> {
         }
     }
 
-    /// Connect consecutive points; a missing (non-finite) value breaks the
-    /// line, and a lone point is drawn as a dot.
-    fn polyline(&mut self, points: &[Option<[f32; 2]>], width: f32, color: Rgba) {
-        for (i, point) in points.iter().enumerate() {
+    /// Connect consecutive points of `curve` (window pixels by `to_px`),
+    /// cut at `t0`, the left edge: a segment that crosses it starts there. A
+    /// missing point breaks the curve, and a lone point is drawn as a dot.
+    fn curve_segments(
+        &mut self,
+        curve: &[Option<(f64, f64)>],
+        t0: f64,
+        to_px: &impl Fn((f64, f64)) -> [f32; 2],
+        width: f32,
+        color: Rgba,
+    ) {
+        for (i, point) in curve.iter().enumerate() {
             let Some(p) = *point else { continue };
-            let prev = i.checked_sub(1).and_then(|j| points[j]);
-            let next = points.get(i + 1).copied().flatten();
-            match next {
-                Some(q) => self.segment(p, q, width, color),
-                None if prev.is_none() => self.segment(p, p, width, color),
-                None => {}
+            let prev = i.checked_sub(1).and_then(|j| curve[j]);
+            match curve.get(i + 1).copied().flatten() {
+                // A segment ending exactly at the edge would be cut to nothing.
+                Some(q) if q.0 > t0 || p.0 >= t0 => {
+                    let p = if p.0 < t0 && q.0 > p.0 {
+                        (t0, p.1 + (q.1 - p.1) * (t0 - p.0) / (q.0 - p.0))
+                    } else {
+                        p
+                    };
+                    self.segment(to_px(p), to_px(q), width, color);
+                }
+                None if prev.is_none() && p.0 >= t0 => {
+                    self.segment(to_px(p), to_px(p), width, color);
+                }
+                _ => {}
             }
         }
     }

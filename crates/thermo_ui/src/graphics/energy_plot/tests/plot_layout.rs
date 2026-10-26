@@ -81,7 +81,9 @@ fn test_single_mode_draws_only_its_curve() {
 }
 
 #[test]
-fn test_curves_stay_inside_the_plot_area_and_span_its_width() {
+fn test_short_history_starts_at_the_left_edge_and_keeps_the_scale() {
+    // 3 time units of history in a span of TIME_SPAN (10): the curve covers
+    // the left 30% and does not stretch.
     let scene = build(
         &data(&[-4.0, 7.0, 2.0, 9.0], &[0.0; 4], &[1.0, 2.0, 3.0, 4.0]),
         DisplayMode::Kin,
@@ -100,9 +102,119 @@ fn test_curves_stay_inside_the_plot_area_and_span_its_width() {
     let first = curve.first().unwrap().from[0];
     let last = curve.last().unwrap().to[0];
     assert!((first - area.left).abs() < 1e-3);
-    assert!((last - area.right).abs() < 1e-3);
+    let expected = area.left + area.width() * (3.0 / TIME_SPAN as f32);
+    assert!((last - expected).abs() < 1e-3, "{last} vs {expected}");
     // Larger values are higher up (smaller y).
     assert!(curve[0].to[1] < curve[0].from[1]);
+}
+
+/// Once the history is longer than the span, the newest sample stays at the
+/// right edge and older samples scroll out on the left.
+#[test]
+fn test_long_history_scrolls_with_the_newest_sample_at_the_right_edge() {
+    let times: Vec<f32> = (0..=60).map(|i| i as f32 * 0.5).collect();
+    let values: Vec<f32> = times.iter().map(|t| t.sin()).collect();
+    let scene = build(
+        &data(&values, &vec![0.0; times.len()], &times),
+        DisplayMode::Kin,
+        SIZE,
+        1.0,
+    );
+    let area = scene.plot_area.expect("plot area");
+    let curve = segments_of(&scene, COLOR_KINETIC);
+
+    assert!((curve.last().unwrap().to[0] - area.right).abs() < 1e-3);
+    // t = 20 .. 30 is shown: 20 segments, the first starting at the left edge.
+    assert_eq!(curve.len(), 20);
+    assert!((curve[0].from[0] - area.left).abs() < 1e-3);
+    assert!(curve.iter().all(|s| s.from[0] >= area.left - 1e-3));
+    assert!(has_label(&scene, "20") && has_label(&scene, "30"));
+    assert!(!has_label(&scene, "19"));
+}
+
+/// The goal of the fixed span (#365): halving the time step only scrolls
+/// the plot faster; an instant lands on the same pixel column.
+#[test]
+fn test_time_step_does_not_change_the_scale() {
+    let run = |dt: f32| {
+        let times: Vec<f32> = (0..=(20.0 / dt) as usize).map(|i| i as f32 * dt).collect();
+        let values: Vec<f32> = times.iter().map(|t| (t * 0.3).cos()).collect();
+        build(
+            &data(&values, &vec![0.0; times.len()], &times),
+            DisplayMode::Kin,
+            SIZE,
+            1.0,
+        )
+    };
+    let (coarse, fine) = (run(0.1), run(0.05));
+    let area = coarse.plot_area.unwrap();
+    // t = 15 in the window [10, 20].
+    let x15 = area.left + area.width() * 0.5;
+    for scene in [&coarse, &fine] {
+        let curve = segments_of(scene, COLOR_KINETIC);
+        assert!(
+            curve.iter().any(|s| (s.to[0] - x15).abs() < 1e-2),
+            "no point at t = 15"
+        );
+    }
+    let tick_labels = |scene: &PlotScene| -> Vec<(String, [f32; 2])> {
+        let area = scene.plot_area.unwrap();
+        scene
+            .labels
+            .iter()
+            .filter(|l| l.origin[1] > area.bottom && l.origin[1] < area.bottom + 2.0 * l.height())
+            .map(|l| (l.text.clone(), l.origin))
+            .collect()
+    };
+    assert_eq!(tick_labels(&coarse), tick_labels(&fine));
+}
+
+/// x tick marks: vertical axis-coloured segments below the plot area.
+fn x_tick_marks(scene: &PlotScene) -> Vec<f32> {
+    let area = scene.plot_area.unwrap();
+    scene
+        .segments
+        .iter()
+        .filter(|s| s.color == COLOR_AXIS && s.from[0] == s.to[0] && s.from[1] >= area.bottom - 1.0)
+        .filter(|s| s.to[1] > s.from[1] + 0.5 && s.to[1] - s.from[1] < 40.0)
+        .map(|s| s.from[0])
+        .collect()
+}
+
+#[test]
+fn test_x_ticks_every_half_unit_when_there_is_room() {
+    let d = data(&[1.0, 2.0], &[0.0; 2], &[0.0, 0.1]);
+    let wide = build(&d, DisplayMode::Kin, SIZE, 1.0);
+    let narrow = build(&d, DisplayMode::Kin, (500, 400), 1.0);
+
+    // [0, 10]: 21 ticks at 0.5 apart, 11 at 1 apart.
+    assert_eq!(x_tick_marks(&wide).len(), 21);
+    assert_eq!(x_tick_marks(&narrow).len(), 11);
+}
+
+#[test]
+fn test_x_tick_labels_do_not_overlap() {
+    let d = data(&[1.0, 2.0], &[0.0; 2], &[100.0, 100.1]);
+    for size in [SIZE, (500, 400), (1600, 900)] {
+        let scene = build(&d, DisplayMode::Kin, size, 1.0);
+        let area = scene.plot_area.unwrap();
+        let mut labels: Vec<&PlotLabel> = scene
+            .labels
+            .iter()
+            .filter(|l| l.origin[1] > area.bottom && l.origin[1] < area.bottom + 2.0 * l.height())
+            .filter(|l| l.color == COLOR_TEXT)
+            .collect();
+        labels.sort_by(|a, b| a.origin[0].total_cmp(&b.origin[0]));
+        assert!(labels.len() >= 2, "{size:?}");
+        for pair in labels.windows(2) {
+            assert!(
+                pair[0].origin[0] + pair[0].width() < pair[1].origin[0],
+                "{size:?}: {:?} overlaps {:?}",
+                pair[0],
+                pair[1]
+            );
+        }
+    }
 }
 
 #[test]
@@ -133,10 +245,11 @@ fn test_x_tick_labels_are_times() {
         1.0,
     );
 
-    assert!(has_label(&scene, "0"));
-    assert!(has_label(&scene, "0.5"));
-    assert!(has_label(&scene, "2.0"));
-    assert!(scene.labels.iter().any(|l| l.text.ends_with("x: time")));
+    // The window is [0, TIME_SPAN]; labels every whole unit.
+    for label in ["0", "1", "2", "10"] {
+        assert!(has_label(&scene, label), "{label}");
+    }
+    assert!(scene.labels.iter().any(|l| l.text.contains("x: time")));
 }
 
 /// The goal of the time axis (#365 review): runs over the same time span
