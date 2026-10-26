@@ -27,6 +27,10 @@ pub struct SeriesMetadata {
 pub struct RingBuffer<T> {
     data: VecDeque<T>,
     capacity: usize,
+    /// Values pushed since the buffer was made, evicted ones included.
+    pushed: u64,
+    /// How often the buffer was cleared.
+    epoch: u64,
 }
 
 impl<T> RingBuffer<T> {
@@ -35,11 +39,18 @@ impl<T> RingBuffer<T> {
         Self {
             data: VecDeque::with_capacity(capacity),
             capacity,
+            pushed: 0,
+            epoch: 0,
         }
     }
 
-    /// Push a new value, discarding the oldest if at capacity.
+    /// Push a new value, discarding the oldest if at capacity. A buffer of
+    /// capacity 0 keeps nothing.
     pub fn push(&mut self, value: T) {
+        if self.capacity == 0 {
+            return;
+        }
+        self.pushed += 1;
         if self.data.len() >= self.capacity {
             self.data.pop_front();
         }
@@ -59,6 +70,20 @@ impl<T> RingBuffer<T> {
     /// Clear all stored values.
     pub fn clear(&mut self) {
         self.data.clear();
+        self.epoch += 1;
+    }
+
+    /// Values pushed so far, evicted ones included. With [`Self::epoch`] it
+    /// lets a reader that copied the buffer earlier fetch only what is new:
+    /// within one epoch, the last `total_pushed() - seen` values are new.
+    pub fn total_pushed(&self) -> u64 {
+        self.pushed
+    }
+
+    /// How often the buffer was cleared; a reader's copy older than the
+    /// current epoch is stale as a whole.
+    pub fn epoch(&self) -> u64 {
+        self.epoch
     }
 
     /// Number of stored values.

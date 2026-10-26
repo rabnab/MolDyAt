@@ -62,7 +62,7 @@ fn test_version_changes_with_every_record() {
 #[test]
 fn test_clear_empties_series_and_drops_per_species_ones() {
     let mut registry = MetricsRegistry::new(100);
-    registry.register_per_species_series("count", "N2", meta(true));
+    registry.register_series("N2:count".to_string(), meta(true));
     registry.record("E_kin", 10.0);
     registry.record("N2:count", 3.0);
     registry.clear();
@@ -82,26 +82,6 @@ fn test_is_empty_depends_on_samples_not_on_registered_series() {
 #[test]
 fn test_default_capacity() {
     assert_eq!(MetricsRegistry::default().capacity(), 1000);
-}
-
-#[test]
-fn test_per_species_registration_uses_species_name() {
-    let mut registry = MetricsRegistry::new(100);
-    registry.register_per_species_series("count", "Ar", meta(true));
-    assert!(registry.get_series("Ar:count").is_some());
-}
-
-#[test]
-fn test_clear_species_removes_only_that_species() {
-    let mut registry = MetricsRegistry::new(100);
-    registry.register_per_species_series("count", "Ar", meta(true));
-    registry.register_per_species_series("temperature", "Ar", meta(true));
-    registry.register_per_species_series("count", "Ne", meta(true));
-    registry.clear_species("Ar");
-    assert!(registry.get_series("Ar:count").is_none());
-    assert!(registry.get_series("Ar:temperature").is_none());
-    assert!(registry.get_metadata("Ar:count").is_none());
-    assert!(registry.get_series("Ne:count").is_some());
 }
 
 #[test]

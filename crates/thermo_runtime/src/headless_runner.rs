@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::application::CreateSnapshot;
+use crate::application::renderer_snapshot::RendererSnapshot;
 use crate::headless_cli::HeadlessConfig;
 use crate::headless_output::{HeadlessSnapshotSink, HeadlessWriter};
 use crate::headless_timings::{RunClock, write_timings};
@@ -24,8 +25,9 @@ pub struct HeadlessRunner {
     timing_warmup: u32,
     /// Git commit of the binary, for the timings report (`--timings`).
     commit: &'static str,
-    /// Shared metrics registry for time-series data.
-    metrics: SharedMetricsRegistry,
+    /// Shared metrics registry for time-series data; without one (tests,
+    /// custom sinks) nothing is sampled.
+    metrics: Option<SharedMetricsRegistry>,
 }
 
 pub struct HeadlessRunnerBuilder {
@@ -114,7 +116,7 @@ impl HeadlessRunnerBuilder {
             timings: self.timings,
             timing_warmup: self.timing_warmup,
             commit: self.commit,
-            metrics: self.metrics.unwrap_or_else(MetricsRegistry::shared),
+            metrics: self.metrics,
         }
     }
 }
@@ -154,11 +156,17 @@ impl HeadlessRunner {
             .build())
     }
 
+    fn sample_metrics(&self, snapshot: &RendererSnapshot) {
+        if let Some(metrics) = &self.metrics {
+            write_metrics(metrics).sample(snapshot);
+        }
+    }
+
     pub fn run(mut self) -> io::Result<HeadlessRunReport> {
         let mut snapshots_emitted = 0;
         let mut latest_snapshot = self.application.create_snapshot();
 
-        write_metrics(&self.metrics).sample(&self.application, latest_snapshot.world_generation);
+        self.sample_metrics(&latest_snapshot);
 
         self.sink.write_run_start(&latest_snapshot)?;
         self.sink.write_frame(&latest_snapshot)?;
@@ -188,10 +196,11 @@ impl HeadlessRunner {
             {
                 let snapshot_start = Instant::now();
                 latest_snapshot = self.application.create_snapshot();
-                write_metrics(&self.metrics)
-                    .sample(&self.application, latest_snapshot.world_generation);
 
                 let snapshot_done = Instant::now();
+                // After the snapshot phase is timed: sampling is not part of
+                // building a snapshot, and must not skew the timings report.
+                self.sample_metrics(&latest_snapshot);
                 self.sink.write_frame(&latest_snapshot)?;
                 clock.snapshot += snapshot_done - snapshot_start;
                 clock.output += snapshot_done.elapsed();

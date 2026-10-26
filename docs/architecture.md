@@ -85,6 +85,7 @@ FrameRenderer → RenderGraph → GPU
 | Physics runtime | `PhysicsRuntime`, `DomainCommandHandler` | `crates/thermo_runtime/src/application/physics_thread/` | The thread loop: draining commands, sleep cadence, snapshot cadence, wakeups, shutdown, steps/s reporting |
 | Physics-thread owner | `MainContent` | `crates/thermo_physics/src/application/core/mod.rs` | The world plus `StepConfig` (time step, ball factory), `RuntimeOptions` (step-by-step, timing log, ball-stats display, real-units display; kept across loads, never saved) and `PhysicsRuntimeState` (wait time, snapshot interval, physics FPS, save store, world generation, pause during a window resize) |
 | Snapshots | `SnapshotPublisher`, `CreateSnapshot` | `crates/thermo_runtime/src/application/physics_thread.rs`, `crates/thermo_runtime/src/application/snapshot.rs` | The slot shared with the renderer and the requested layers; building a `RendererSnapshot` from a `MainContent` |
+| Metrics | `MetricsRegistry` | `crates/thermo_runtime/src/metrics/` | Time series (E_kin, E_pot, E_tot, wall momentum, ball count per species) in ring buffers, sampled from the snapshot once per new step just before it is published, and cleared for a new world generation. `EnergyData` reads the energy series (appending only new values); headless frames print the latest values |
 | Run settings | `SimConfig` | `crates/thermo_physics/src/application/sim_config/` | Time step, speed limit, force cap and cutoff, Verlet skin, snapshot interval; built from defaults, a `--config` TOML file and CLI flags, stored in saves (see below) |
 | World state | `SimulationWorld` | `crates/thermo_physics/src/application/core/mod.rs` | Balls, `BallPhysics` constants, cell grid, stats, operator collections (line segments, valves, wall chains, source spheres, thermostats), the ghost wall and thermo field history; physical state only, no UI flags (#305) |
 | Stepping | `SimulationEngine` | `crates/thermo_physics/src/application/core/simulation_engine.rs` | One simulation step over a `SimulationWorld` (see below); holds no state |
@@ -137,7 +138,6 @@ split into stateless orchestrators that operate on `RenderStateData`:
 | Orchestrator | Responsibility |
 |---|---|
 | `FrameOrchestrator` | Frame lifecycle: picks up new snapshots, frame metrics |
-| `MetricsRegistry` | Time series in ring buffers (`thermo_runtime::metrics`), sampled once per new step at snapshot cadence before the snapshot is published, cleared for a new world generation. `EnergyData` copies the energy series from it when its `version` changed; headless frames print the latest values |
 | `InputOrchestrator` | Input actions and operator tool events |
 | `ViewportOrchestrator` | Window resize, pan and zoom |
 | `PhysicsCoordinator` | Spawns the physics thread, sends commands, reads snapshots and events |

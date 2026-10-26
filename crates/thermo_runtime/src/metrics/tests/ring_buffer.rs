@@ -53,3 +53,22 @@ fn test_ring_buffer_default() {
     let buf: RingBuffer<i32> = RingBuffer::default();
     assert_eq!(buf.capacity(), 1000);
 }
+
+#[test]
+fn test_ring_buffer_of_capacity_zero_keeps_nothing() {
+    let mut buf: RingBuffer<f32> = RingBuffer::new(0);
+    buf.push(1.0);
+    assert!(buf.is_empty());
+    assert_eq!(buf.total_pushed(), 0);
+}
+
+#[test]
+fn test_ring_buffer_counts_pushes_beyond_eviction_and_clears() {
+    let mut buf: RingBuffer<f32> = RingBuffer::new(2);
+    for v in [1.0, 2.0, 3.0] {
+        buf.push(v);
+    }
+    assert_eq!((buf.len(), buf.total_pushed(), buf.epoch()), (2, 3, 0));
+    buf.clear();
+    assert_eq!((buf.len(), buf.total_pushed(), buf.epoch()), (0, 3, 1));
+}

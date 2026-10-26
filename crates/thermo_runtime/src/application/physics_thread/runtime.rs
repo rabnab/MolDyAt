@@ -100,7 +100,7 @@ impl PhysicsRuntime {
                 // Sample before publishing: a renderer woken by the snapshot
                 // finds the metrics of the same step.
                 let snapshot = publisher.snapshot(simulation);
-                write_metrics(metrics).sample(simulation, snapshot.world_generation);
+                write_metrics(metrics).sample(&snapshot);
                 publisher.publish(snapshot);
                 wakeup();
 

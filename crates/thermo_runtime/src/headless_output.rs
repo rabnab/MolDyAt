@@ -48,17 +48,12 @@ impl HeadlessSnapshotSink for HeadlessWriter {
             self.write_stdout_line(&console_line)?;
         }
         if self.config.output.is_some() {
-            // Include metrics in JSONL output if available
-            let jsonl_line = if let Some(ref metrics) = self.metrics {
-                frame_to_jsonl_with_metrics(
-                    &self.config,
-                    snapshot,
-                    self.initial_total_energy,
-                    Some(metrics),
-                )
-            } else {
-                frame_to_jsonl_with_config(&self.config, snapshot, self.initial_total_energy)
-            };
+            let jsonl_line = frame_to_jsonl_with_metrics(
+                &self.config,
+                snapshot,
+                self.initial_total_energy,
+                self.metrics.as_ref(),
+            );
             self.write_file_line(&jsonl_line)?;
         }
         Ok(())
@@ -252,15 +247,12 @@ fn world_rect_to_json(rect: &thermo_physics::objects2d::Rect) -> serde_json::Val
 
 #[cfg(test)]
 fn frame_to_jsonl(snapshot: &RendererSnapshot, initial_total_energy: Option<f32>) -> String {
-    frame_to_jsonl_with_config(&HeadlessConfig::default(), snapshot, initial_total_energy)
-}
-
-fn frame_to_jsonl_with_config(
-    config: &HeadlessConfig,
-    snapshot: &RendererSnapshot,
-    initial_total_energy: Option<f32>,
-) -> String {
-    frame_to_jsonl_with_metrics(config, snapshot, initial_total_energy, None)
+    frame_to_jsonl_with_metrics(
+        &HeadlessConfig::default(),
+        snapshot,
+        initial_total_energy,
+        None,
+    )
 }
 
 fn frame_to_jsonl_with_metrics(

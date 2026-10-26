@@ -4,7 +4,37 @@
 
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
-use thermo_runtime::metrics::{SharedMetricsRegistry, read_metrics};
+use thermo_runtime::metrics::{RingBuffer, SharedMetricsRegistry, read_metrics};
+
+/// Bring `cache` up to date with `series`: append the values pushed since the
+/// last sync (`cursor`) when the series was not cleared and nothing it
+/// pushed has been evicted unseen, copy it whole otherwise.
+fn sync_series(
+    cache: &mut VecDeque<f32>,
+    cursor: &mut Option<(u64, u64)>,
+    series: Option<&RingBuffer<f32>>,
+) {
+    let Some(series) = series else {
+        cache.clear();
+        *cursor = None;
+        return;
+    };
+    let now = (series.epoch(), series.total_pushed());
+    let new = match *cursor {
+        Some((epoch, pushed)) if epoch == now.0 && pushed <= now.1 => (now.1 - pushed) as usize,
+        _ => usize::MAX,
+    };
+    if new <= series.len() {
+        cache.extend(series.get().iter().skip(series.len() - new).copied());
+        while cache.len() > series.capacity() {
+            cache.pop_front();
+        }
+    } else {
+        cache.clear();
+        cache.extend(series.get().iter().copied());
+    }
+    *cursor = Some(now);
+}
 
 /// Energy display mode - controls which energy traces are shown
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -58,6 +88,10 @@ pub struct EnergyData {
     metrics: Option<SharedMetricsRegistry>,
     /// Registry version of the last sync.
     synced_version: Option<u64>,
+    /// `(epoch, total pushed)` of the registry series at the last sync, to
+    /// append only what is new.
+    kin_cursor: Option<(u64, u64)>,
+    pot_cursor: Option<(u64, u64)>,
 }
 
 impl EnergyData {
@@ -71,6 +105,8 @@ impl EnergyData {
             version: 0,
             metrics: None,
             synced_version: None,
+            kin_cursor: None,
+            pot_cursor: None,
         }
     }
 
@@ -84,11 +120,14 @@ impl EnergyData {
             version: 0,
             metrics: Some(metrics),
             synced_version: None,
+            kin_cursor: None,
+            pot_cursor: None,
         }
     }
 
-    /// Copy the energy series from the MetricsRegistry if it changed since the
-    /// last sync, and bump `version` then. Called before rendering; without
+    /// Take the energy series from the MetricsRegistry if it changed since the
+    /// last sync (appending only the new values when it can), and bump
+    /// `version` then. Called before rendering; without
     /// a registry, or without news, it does nothing, so the plot is not
     /// rebuilt for nothing.
     pub fn sync_from_metrics(&mut self) {
@@ -100,12 +139,16 @@ impl EnergyData {
             return;
         }
         self.synced_version = Some(registry.version());
-        for (cache, name) in [(&mut self.v_kin, "E_kin"), (&mut self.v_pot, "E_pot")] {
-            cache.clear();
-            if let Some(series) = registry.get_series(name) {
-                cache.extend(series.get().iter().copied());
-            }
-        }
+        sync_series(
+            &mut self.v_kin,
+            &mut self.kin_cursor,
+            registry.get_series("E_kin"),
+        );
+        sync_series(
+            &mut self.v_pot,
+            &mut self.pot_cursor,
+            registry.get_series("E_pot"),
+        );
         self.version = self.version.wrapping_add(1);
     }
 
@@ -267,6 +310,44 @@ mod tests {
         metrics.write().unwrap().clear();
         data.sync_from_metrics();
         assert!(data.v_kin.is_empty());
+    }
+
+    #[test]
+    fn test_sync_appends_new_values_and_survives_ring_wraparound() {
+        let metrics = Arc::new(std::sync::RwLock::new(MetricsRegistry::new(3)));
+        let mut data = EnergyData::with_metrics(Arc::clone(&metrics));
+        for round in 0..7 {
+            {
+                let mut registry = metrics.write().unwrap();
+                registry.record("E_kin", round as f32);
+                registry.record("E_pot", -(round as f32));
+                if round == 4 {
+                    // Several values between two syncs, more than fit.
+                    for extra in 0..5 {
+                        registry.record("E_kin", 100.0 + extra as f32);
+                    }
+                }
+            }
+            data.sync_from_metrics();
+            let registry = metrics.read().unwrap();
+            let expected = |name: &str| -> Vec<f32> {
+                registry
+                    .get_series(name)
+                    .unwrap()
+                    .get()
+                    .iter()
+                    .copied()
+                    .collect()
+            };
+            assert_eq!(
+                data.v_kin.iter().copied().collect::<Vec<_>>(),
+                expected("E_kin")
+            );
+            assert_eq!(
+                data.v_pot.iter().copied().collect::<Vec<_>>(),
+                expected("E_pot")
+            );
+        }
     }
 
     #[test]

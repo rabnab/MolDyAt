@@ -39,26 +39,35 @@ impl CreateSnapshot for MainContent {
     fn create_snapshot_with(&self, layers: SceneLayers) -> RendererSnapshot {
         let world = self.world();
         let step_config = self.step_config();
-        // The species counts of the status lines come from the same pass
-        // over the balls when the BALLS layer makes one.
+        // The species counts of the status lines and the metrics store come
+        // from the same pass over the balls when the BALLS layer makes one.
         let mut species_counts = [0; SpeciesSet::CAPACITY];
-        let (balls, counts) = if layers.contains(SceneLayers::BALLS) {
-            let balls = build_ball_render_data(world, &mut species_counts);
-            (balls, Some(&species_counts))
+        let balls = if layers.contains(SceneLayers::BALLS) {
+            build_ball_render_data(world, &mut species_counts)
         } else {
-            (Vec::new(), None)
+            for ball in world.balls() {
+                count_ball(&mut species_counts, ball);
+            }
+            Vec::new()
         };
+        let (wall_px, wall_py) = self.wall_momentum();
 
         RendererSnapshot {
             balls,
             simulation_step: world.step_count() as u64,
             world_generation: self.runtime().world_generation(),
             layers,
+            species_counts,
+            wall_momentum: wall_px.hypot(wall_py),
             kinetic_energy: world.sim().get_kinetic_energy(),
             potential_energy: world.sim().get_potential_energy(),
             time: world.sim().get_time(),
             // FPS not available during snapshot creation
-            status_text: self.status_text_with_counts(0, step_config.get_time_step(), counts),
+            status_text: self.status_text_with_counts(
+                0,
+                step_config.get_time_step(),
+                Some(&species_counts),
+            ),
             cell_grid_bounds: world.cell_grid().world_rect(),
             cursor_species: step_config.get_ball_factory().new_ball_species(),
             species: Arc::clone(world.species()),

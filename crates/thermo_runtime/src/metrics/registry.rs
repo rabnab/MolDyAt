@@ -4,9 +4,10 @@
 
 //! Metrics registry for time-series data.
 
+use crate::application::renderer_snapshot::RendererSnapshot;
+use crate::objects2d::ball_impl::SpeciesTable;
 use std::collections::BTreeMap;
 use std::sync::{Arc, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
-use thermo_physics::application::MainContent;
 
 use super::series::{RingBuffer, SeriesMetadata, SeriesName};
 
@@ -35,8 +36,6 @@ pub struct MetricsRegistry {
     series_metadata: BTreeMap<SeriesName, SeriesMetadata>,
     /// Ring buffers storing the actual data for each series.
     buffers: BTreeMap<SeriesName, RingBuffer<f32>>,
-    /// Simulation step of the last sample.
-    current_step: u64,
     /// `(world generation, step)` of the last sample, to skip a repeat.
     last_sampled: Option<(u64, u64)>,
     /// World generation the stored history belongs to.
@@ -46,8 +45,11 @@ pub struct MetricsRegistry {
     version: u64,
     /// Maximum number of samples to retain per series.
     capacity: usize,
-    /// Whether metrics are currently being sampled.
-    sampling_enabled: bool,
+    /// The species table the per-species series below belong to.
+    species_table: Option<Arc<SpeciesTable>>,
+    /// Name of the count series of each species, by species index, so a
+    /// sample allocates nothing.
+    count_series: Vec<SeriesName>,
 }
 
 impl MetricsRegistry {
@@ -58,12 +60,12 @@ impl MetricsRegistry {
         let mut registry = Self {
             series_metadata: BTreeMap::new(),
             buffers: BTreeMap::new(),
-            current_step: 0,
             last_sampled: None,
             generation: 0,
             version: 0,
             capacity,
-            sampling_enabled: true,
+            species_table: None,
+            count_series: Vec::new(),
         };
         registry.register_builtin_series();
         registry
@@ -119,16 +121,6 @@ impl MetricsRegistry {
         format!("{species_name}:{base_name}")
     }
 
-    /// Register a per-species series under [`Self::per_species_name`].
-    pub fn register_per_species_series(
-        &mut self,
-        base_name: &str,
-        species_name: &str,
-        metadata: SeriesMetadata,
-    ) {
-        self.register_series(Self::per_species_name(species_name, base_name), metadata);
-    }
-
     /// Record a value for a series.
     ///
     /// If the series doesn't exist, this is a no-op.
@@ -142,11 +134,6 @@ impl MetricsRegistry {
     /// Get the ring buffer for a series.
     pub fn get_series(&self, name: &str) -> Option<&RingBuffer<f32>> {
         self.buffers.get(name)
-    }
-
-    /// Get the current (latest) value for a series.
-    pub fn get_current(&self, name: &str) -> Option<f32> {
-        self.buffers.get(name).and_then(|b| b.latest().copied())
     }
 
     /// Get the metadata for a series.
@@ -165,41 +152,22 @@ impl MetricsRegistry {
         for buffer in self.buffers.values_mut() {
             buffer.clear();
         }
-        self.current_step = 0;
+        self.species_table = None;
+        self.count_series.clear();
         self.last_sampled = None;
         self.version = self.version.wrapping_add(1);
     }
 
-    /// Remove all series of a species (by name).
-    ///
-    /// Called when a species is removed from the simulation.
-    pub fn clear_species(&mut self, species_name: &str) {
-        let prefix = format!("{species_name}:");
-        self.buffers.retain(|name, _| !name.starts_with(&prefix));
-        self.series_metadata
-            .retain(|name, _| !name.starts_with(&prefix));
-        self.version = self.version.wrapping_add(1);
-    }
-
-    /// Enable or disable sampling.
-    ///
-    /// When disabled, `sample` is a no-op.
-    pub fn set_sampling_enabled(&mut self, enabled: bool) {
-        self.sampling_enabled = enabled;
-    }
-
-    /// Sample all metrics from the simulation.
+    /// Sample all metrics from `snapshot`, the values the renderer and the
+    /// headless frames show.
     ///
     /// This is called at snapshot cadence (not every physics step) to
     /// maintain performance and determinism. A sample is taken only for a
     /// step not sampled yet, so a paused world adds no duplicate points. A
-    /// new `generation` (a loaded world) starts a new history.
-    pub fn sample(&mut self, simulation: &MainContent, generation: u64) {
-        if !self.sampling_enabled {
-            return;
-        }
-        let world = simulation.world();
-        let step = world.step_count() as u64;
+    /// new world generation (a loaded world) starts a new history.
+    pub fn sample(&mut self, snapshot: &RendererSnapshot) {
+        let generation = snapshot.world_generation;
+        let step = snapshot.simulation_step;
         if self.last_sampled == Some((generation, step)) {
             return;
         }
@@ -208,50 +176,48 @@ impl MetricsRegistry {
             self.clear();
         }
         self.last_sampled = Some((generation, step));
-        self.current_step = step;
 
-        let sim = world.sim();
-        let e_kin = sim.get_kinetic_energy();
-        let e_pot = sim.get_potential_energy();
+        let (e_kin, e_pot) = (snapshot.kinetic_energy, snapshot.potential_energy);
         self.record("E_kin", e_kin);
         self.record("E_pot", e_pot);
         self.record("E_tot", e_kin + e_pot);
+        self.record("wall_momentum", snapshot.wall_momentum);
 
-        let (px, py) = simulation.wall_momentum();
-        self.record("wall_momentum", px.hypot(py));
-
-        self.sample_per_species(simulation);
+        self.sample_species_counts(snapshot);
     }
 
-    /// Record the ball count of every species, in one pass over the balls.
-    fn sample_per_species(&mut self, simulation: &MainContent) {
-        let world = simulation.world();
-        let species = world.species();
-        let mut counts = vec![0u32; species.len()];
-        for ball in world.balls() {
-            if let Some(count) = counts.get_mut(ball.species().index()) {
-                *count += 1;
+    /// Record the ball count of every species, counted by the snapshot.
+    fn sample_species_counts(&mut self, snapshot: &RendererSnapshot) {
+        let known = self
+            .species_table
+            .as_ref()
+            .is_some_and(|table| Arc::ptr_eq(table, &snapshot.species));
+        if !known {
+            self.species_table = Some(Arc::clone(&snapshot.species));
+            self.count_series = snapshot
+                .species
+                .ids()
+                .map(|id| Self::per_species_name(&snapshot.species.species(id).name, "count"))
+                .collect();
+            for name in self.count_series.clone() {
+                if !self.buffers.contains_key(&name) {
+                    self.register_series(
+                        name,
+                        SeriesMetadata {
+                            unit: None,
+                            description: "Ball count of the species",
+                            is_per_species: true,
+                        },
+                    );
+                }
             }
         }
-        for (id, count) in species.ids().zip(counts) {
-            let name = Self::per_species_name(&species.species(id).name, "count");
-            if !self.buffers.contains_key(&name) {
-                self.register_series(
-                    name.clone(),
-                    SeriesMetadata {
-                        unit: None,
-                        description: "Ball count of the species",
-                        is_per_species: true,
-                    },
-                );
+        for (name, &count) in self.count_series.iter().zip(&snapshot.species_counts) {
+            if let Some(buffer) = self.buffers.get_mut(name) {
+                buffer.push(count as f32);
             }
-            self.record(&name, count as f32);
         }
-    }
-
-    /// Simulation step of the last sample.
-    pub fn current_step(&self) -> u64 {
-        self.current_step
+        self.version = self.version.wrapping_add(1);
     }
 
     /// Counter that changes whenever stored series change.
