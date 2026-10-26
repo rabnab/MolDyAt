@@ -202,11 +202,11 @@ fn update_from_snapshot_starts_a_new_history_for_a_new_world() {
     // Note: sync_from_metrics gets all values from the ring buffer, which may have old values too
     // For this test, we check that we have data and that new world clearing worked
     assert!(
-        data.v_kin.len() >= 1,
+        !data.v_kin.is_empty(),
         "should have at least one energy sample after new world"
     );
     assert!(
-        data.v_pot.len() >= 1,
+        !data.v_pot.is_empty(),
         "should have at least one potential energy sample after new world"
     );
 }
