@@ -17,6 +17,7 @@ use crate::application::MainContent;
 use crate::application::PhysicsEvent;
 use crate::application::renderer_snapshot::RendererSnapshot;
 use crate::application::scene_layers::SceneLayers;
+use crate::metrics::SharedMetricsRegistry;
 use arc_swap::ArcSwapOption;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -133,6 +134,7 @@ impl PhysicsThread {
     /// * `main_content` - The simulation state to run in the physics thread
     /// * `publisher` - Where the thread publishes its snapshots; take its
     ///   `slot()` before handing it over
+    /// * `metrics` - Shared metrics registry for time-series data
     ///
     /// # Returns
     /// A `PhysicsThread` handle that can be used to control the thread
@@ -140,6 +142,7 @@ impl PhysicsThread {
         mut main_content: MainContent,
         mut publisher: SnapshotPublisher,
         wakeup_callback: Box<dyn Fn() + Send + Sync + 'static>,
+        metrics: SharedMetricsRegistry,
     ) -> Self {
         let shutdown_signal = ShutdownSignal::new();
         let thread_signal = shutdown_signal.clone();
@@ -160,6 +163,7 @@ impl PhysicsThread {
                 &event_sender,
                 &thread_signal,
                 &thread_wakeup,
+                &metrics,
             );
         });
 

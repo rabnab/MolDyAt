@@ -8,6 +8,7 @@ use crate::application::DomainCommand;
 use crate::application::MainContent;
 use crate::application::PhysicsEvent;
 use crate::application::scene_layers::SceneLayers;
+use crate::metrics::{SharedMetricsRegistry, write_metrics};
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::{Duration, Instant};
@@ -36,6 +37,7 @@ impl PhysicsRuntime {
         handler.flush();
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn run(
         &self,
         simulation: &mut MainContent,
@@ -44,6 +46,7 @@ impl PhysicsRuntime {
         events: &Sender<PhysicsEvent>,
         shutdown_signal: &ShutdownSignal,
         wakeup: &Arc<dyn Fn() + Send + Sync>,
+        metrics: &SharedMetricsRegistry,
     ) {
         log::info!(
             "Physics thread ID: {:?} - Started!",
@@ -94,7 +97,11 @@ impl PhysicsRuntime {
                         >= simulation.runtime().snapshot_interval())
             {
                 let snapshot_start = Instant::now();
-                publisher.publish(publisher.snapshot(simulation));
+                // Sample before publishing: a renderer woken by the snapshot
+                // finds the metrics of the same step.
+                let snapshot = publisher.snapshot(simulation);
+                write_metrics(metrics).sample(&snapshot);
+                publisher.publish(snapshot);
                 wakeup();
 
                 snapshot_time_total += snapshot_start.elapsed();

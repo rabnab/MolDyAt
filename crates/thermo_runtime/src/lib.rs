@@ -15,6 +15,7 @@ pub mod headless_cli;
 pub mod headless_output;
 pub mod headless_runner;
 pub mod headless_timings;
+pub mod metrics;
 
 // The physics modules, under the paths the moved code uses. Private: users
 // of this crate take them from `thermo_physics`.

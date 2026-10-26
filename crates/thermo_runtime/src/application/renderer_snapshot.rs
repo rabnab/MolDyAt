@@ -24,7 +24,8 @@
 //! - **Immutability**: Snapshots are immutable after creation, so no need for
 //!   partial field updates that might benefit from SoA.
 
-use crate::objects2d::ball_impl::{DEFAULT_SPECIES, SpeciesId, SpeciesTable};
+use crate::application::log_util::SpeciesCounts;
+use crate::objects2d::ball_impl::{DEFAULT_SPECIES, SpeciesId, SpeciesSet, SpeciesTable};
 use crate::objects2d::line_segment::valve_half_width;
 use crate::objects2d::{SimLineSegment, SimSourceSphere, SimThermostat, Vec2D};
 use std::sync::Arc;
@@ -294,6 +295,13 @@ pub struct RendererSnapshot {
     /// fresh thermostat readings (rendering off, F2).
     pub layers: SceneLayers,
 
+    /// Ball count per species index (see `SpeciesTable`), whatever the
+    /// layers: the metrics store samples it.
+    pub species_counts: SpeciesCounts,
+
+    /// Magnitude of the momentum given to walls since the start of the run.
+    pub wall_momentum: f32,
+
     /// Kinetic energy of the system
     pub kinetic_energy: f32,
 
@@ -358,6 +366,8 @@ impl RendererSnapshot {
             simulation_step: 0,
             world_generation: 0,
             layers: SceneLayers::ALL,
+            species_counts: [0; SpeciesSet::CAPACITY],
+            wall_momentum: 0.0,
             kinetic_energy: 0.0,
             potential_energy: 0.0,
             time: 0.0,
@@ -394,6 +404,8 @@ impl RendererSnapshot {
             simulation_step: 0,
             world_generation: 0,
             layers: SceneLayers::ALL,
+            species_counts: [0; SpeciesSet::CAPACITY],
+            wall_momentum: 0.0,
             kinetic_energy: 0.0,
             potential_energy: 0.0,
             time: 0.0,

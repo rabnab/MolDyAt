@@ -11,6 +11,7 @@ use crate::graphics::renderer::event_loop::metrics::FrameMetrics;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use thermo_runtime::application::renderer_snapshot::RendererSnapshot;
+use thermo_runtime::metrics::MetricsRegistry;
 
 fn make_manager() -> EnergyWindowManager {
     let data: SharedEnergyData = Arc::new(Mutex::new(EnergyData::new()));
@@ -34,84 +35,84 @@ fn energy_data_version_starts_at_zero() {
     assert_eq!(data.version, 0);
 }
 
-#[test]
-fn push_sample_increments_version_each_call() {
-    let mut data = EnergyData::new();
-    data.push_sample(1.0, 2.0, 0.1);
-    assert_eq!(data.version, 1);
-    data.push_sample(2.0, 3.0, 0.2);
-    assert_eq!(data.version, 2);
-    data.push_sample(3.0, 4.0, 0.3);
-    assert_eq!(data.version, 3);
+fn shared_with_metrics(
+    metrics: &thermo_runtime::metrics::SharedMetricsRegistry,
+) -> SharedEnergyData {
+    Arc::new(Mutex::new(EnergyData::with_metrics(Arc::clone(metrics))))
+}
+
+fn record(metrics: &thermo_runtime::metrics::SharedMetricsRegistry, kin: f32, pot: f32) {
+    let mut registry = metrics.write().unwrap();
+    registry.record("E_kin", kin);
+    registry.record("E_pot", pot);
 }
 
 #[test]
-fn push_sample_stores_energy_values() {
-    let mut data = EnergyData::new();
-    data.push_sample(5.5, 3.3, 1.0);
-    assert_eq!(data.v_kin.back().copied(), Some(5.5));
-    assert_eq!(data.v_pot.back().copied(), Some(3.3));
-    assert_eq!(data.time, 1.0);
-}
-
-#[test]
-fn update_from_snapshot_increments_version() {
-    let shared: SharedEnergyData = Arc::new(Mutex::new(EnergyData::new()));
+fn update_from_snapshot_increments_version_for_new_samples() {
+    let metrics = MetricsRegistry::shared();
+    record(&metrics, 10.0, 20.0);
+    let shared = shared_with_metrics(&metrics);
     let mut manager = EnergyWindowManager::new(shared.clone());
 
-    let snapshot = make_snapshot(1, 10.0, 20.0);
-    manager.update_from_snapshot(&snapshot, 60.0, 1.0, &FrameMetrics::default());
+    manager.update_from_snapshot(
+        &make_snapshot(1, 10.0, 20.0),
+        60.0,
+        1.0,
+        &FrameMetrics::default(),
+    );
 
     let data = shared.lock().unwrap();
-    assert_eq!(
-        data.version, 1,
-        "version should have incremented after update"
-    );
+    assert_eq!(data.version, 1);
+    assert_eq!(data.v_kin.back().copied(), Some(10.0));
+    assert_eq!(data.time, 0.01);
 }
 
 #[test]
 fn update_from_snapshot_ignores_duplicate_step() {
-    let shared: SharedEnergyData = Arc::new(Mutex::new(EnergyData::new()));
+    let metrics = MetricsRegistry::shared();
+    record(&metrics, 1.0, 2.0);
+    let shared = shared_with_metrics(&metrics);
     let mut manager = EnergyWindowManager::new(shared.clone());
-
     let snapshot = make_snapshot(5, 1.0, 2.0);
     manager.update_from_snapshot(&snapshot, 60.0, 1.0, &FrameMetrics::default());
     manager.update_from_snapshot(&snapshot, 60.0, 1.0, &FrameMetrics::default());
 
     let data = shared.lock().unwrap();
-    assert_eq!(
-        data.v_kin.len(),
-        1,
-        "duplicate step should be ignored, only one sample expected"
-    );
-    assert_eq!(
-        data.version, 1,
-        "duplicate update must not bump version again"
-    );
+    assert_eq!(data.v_kin.len(), 1);
+    assert_eq!(data.version, 1, "no new sample must not bump the version");
 }
 
 #[test]
 fn update_from_snapshot_starts_a_new_history_for_a_new_world() {
-    let shared: SharedEnergyData = Arc::new(Mutex::new(EnergyData::new()));
+    let metrics = MetricsRegistry::shared();
+    let shared = shared_with_metrics(&metrics);
     let mut manager = EnergyWindowManager::new(shared.clone());
-    let metrics = FrameMetrics::default();
+    let frame_metrics = FrameMetrics::default();
     for step in [10, 20, 30] {
-        manager.update_from_snapshot(&make_snapshot(step, 1.0, 2.0), 60.0, 1.0, &metrics);
+        record(&metrics, 1.0, 2.0);
+        manager.update_from_snapshot(&make_snapshot(step, 1.0, 2.0), 60.0, 1.0, &frame_metrics);
     }
-    // A loaded world counts from 0 again, or even sits at the same step.
+    // A loaded world: the registry starts afresh (the physics thread does it
+    // when the world generation changes).
+    metrics.write().unwrap().clear();
+    record(&metrics, 7.0, 8.0);
     let mut loaded = make_snapshot(30, 7.0, 8.0);
     loaded.world_generation = 1;
-    manager.update_from_snapshot(&loaded, 60.0, 1.0, &metrics);
+    manager.update_from_snapshot(&loaded, 60.0, 1.0, &frame_metrics);
+    record(&metrics, 9.0, 9.5);
     let mut next = make_snapshot(32, 9.0, 9.5);
     next.world_generation = 1;
-    manager.update_from_snapshot(&next, 60.0, 1.0, &metrics);
+    manager.update_from_snapshot(&next, 60.0, 1.0, &frame_metrics);
 
     let data = shared.lock().unwrap();
     assert_eq!(
         data.v_kin.iter().copied().collect::<Vec<_>>(),
         vec![7.0, 9.0]
     );
-    assert_eq!(data.v_pot.len(), 2);
+    assert_eq!(
+        data.v_pot.iter().copied().collect::<Vec<_>>(),
+        vec![8.0, 9.5]
+    );
 }
 
 // ── handle_redraw ────────────────────────────────────────────────────────────

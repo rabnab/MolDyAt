@@ -200,7 +200,7 @@ fn test_detail_balls_includes_ball_fields() {
         detail: DetailLevel::Balls,
         ..HeadlessConfig::default()
     };
-    let line = frame_to_jsonl_with_config(&config, &snapshot, Some(0.0));
+    let line = frame_to_jsonl_with_metrics(&config, &snapshot, Some(0.0), None);
     let value: serde_json::Value = serde_json::from_str(&line).expect("valid json");
 
     assert_eq!(value["balls"][0]["id"], 3);
@@ -257,7 +257,7 @@ fn test_thermo_detail_serializes_grids_and_non_finite_values_as_null() {
         detail: DetailLevel::Thermo,
         ..HeadlessConfig::default()
     };
-    let line = frame_to_jsonl_with_config(&config, &snapshot, Some(0.0));
+    let line = frame_to_jsonl_with_metrics(&config, &snapshot, Some(0.0), None);
     let value: serde_json::Value = serde_json::from_str(&line).expect("valid json");
 
     assert_eq!(value["thermo"]["temperature"]["rows"], 1);

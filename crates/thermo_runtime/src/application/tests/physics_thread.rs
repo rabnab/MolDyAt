@@ -9,6 +9,8 @@ use crate::application::{BallCommand, DomainCommand, SimControl, ViewCommand, Wo
 use crate::application::{
     CommandHandler, DomainCommandHandler, PhysicsRuntime, PhysicsThread, ShutdownSignal,
 };
+use crate::metrics::MetricsRegistry;
+
 use crate::objects2d::{Rect, Vec2D};
 
 struct RecordingHandler<T> {
@@ -150,7 +152,12 @@ fn test_command_channel_toggle_pause() {
     let world_rect = Rect::new(0.0, 0.0, 100.0, 100.0);
     let main_content = MainContent::new(world_rect).expect("Failed to create MainContent");
     let snapshot_slot = publisher.slot();
-    let physics_thread = PhysicsThread::spawn(main_content, publisher, Box::new(|| {}));
+    let physics_thread = PhysicsThread::spawn(
+        main_content,
+        publisher,
+        Box::new(|| {}),
+        MetricsRegistry::shared(),
+    );
 
     // Running: the step count advances.
     let first = wait_for_snapshot(&snapshot_slot, "a first snapshot", |_| true);
@@ -193,7 +200,12 @@ fn test_command_channel_speed_control() {
     let main_content = MainContent::new(world_rect).expect("Failed to create MainContent");
     let initial_dt = main_content.time_step();
     let snapshot_slot = publisher.slot();
-    let physics_thread = PhysicsThread::spawn(main_content, publisher, Box::new(|| {}));
+    let physics_thread = PhysicsThread::spawn(
+        main_content,
+        publisher,
+        Box::new(|| {}),
+        MetricsRegistry::shared(),
+    );
 
     for _ in 0..3 {
         physics_thread
@@ -337,6 +349,7 @@ fn test_runtime_publishes_a_snapshot_right_after_a_resize() {
 
     let runtime = PhysicsRuntime;
     let thread_signal = signal.clone();
+    let metrics = MetricsRegistry::shared();
     let handle = std::thread::spawn(move || {
         runtime.run(
             &mut main_content,
@@ -345,6 +358,7 @@ fn test_runtime_publishes_a_snapshot_right_after_a_resize() {
             &events,
             &thread_signal,
             &wakeup,
+            &metrics,
         );
     });
 
@@ -379,8 +393,12 @@ fn test_physics_thread_shutdown_and_join_is_graceful() {
 
     let world_rect = Rect::new(0.0, 0.0, 100.0, 100.0);
     let main_content = MainContent::new(world_rect).expect("Failed to create MainContent");
-    let physics_thread =
-        PhysicsThread::spawn(main_content, SnapshotPublisher::new(), Box::new(|| {}));
+    let physics_thread = PhysicsThread::spawn(
+        main_content,
+        SnapshotPublisher::new(),
+        Box::new(|| {}),
+        MetricsRegistry::shared(),
+    );
 
     let start = Instant::now();
     physics_thread
@@ -418,7 +436,12 @@ fn test_snapshots_follow_changes_for_paused_and_running_by_layers() {
                 .expect("add ball");
             let publisher = SnapshotPublisher::new();
             let slot = publisher.slot();
-            let physics_thread = PhysicsThread::spawn(main_content, publisher, Box::new(|| {}));
+            let physics_thread = PhysicsThread::spawn(
+                main_content,
+                publisher,
+                Box::new(|| {}),
+                MetricsRegistry::shared(),
+            );
             let latest = || slot.load_full();
             let wait_for = |what: &str, done: &dyn Fn(&RendererSnapshot) -> bool| {
                 let deadline = Instant::now() + Duration::from_secs(5);

@@ -105,9 +105,13 @@ impl UnifiedRenderState {
         key_map: KeyMap,
         wakeup_callback: Box<dyn Fn() + Send + Sync + 'static>,
     ) -> Self {
-        let energy_data: SharedEnergyData = Arc::new(Mutex::new(EnergyData::new()));
-
+        // Create physics coordinator first to get metrics registry
         let physics = PhysicsCoordinator::new(application, wakeup_callback);
+        let metrics = physics.metrics();
+
+        // Create energy data with reference to metrics registry
+        let energy_data: SharedEnergyData = Arc::new(Mutex::new(EnergyData::with_metrics(metrics)));
+
         let viewport = ViewportTransform::new(world_bounds, window_size, margin_px);
         let energy_manager = EnergyWindowManager::new(energy_data);
 

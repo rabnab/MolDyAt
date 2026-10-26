@@ -9,6 +9,7 @@ use crate::application::SnapshotPublisher;
 use crate::application::persistence::{LoadSource, SaveStore};
 use crate::application::sim_config::PairOverrideConfig;
 use crate::application::{MainContent, PhysicsEvent, PhysicsThread, SimConfig, WorldCommand};
+use crate::metrics::MetricsRegistry;
 use crate::objects2d::ball_impl::{Ball2D, SpeciesId};
 use crate::objects2d::{Rect, Vec2D};
 use std::fs;
@@ -92,6 +93,7 @@ fn physics_thread_reports_save_and_load_results() {
         busy_world().with_save_store(store.clone()),
         SnapshotPublisher::new(),
         Box::new(|| {}),
+        MetricsRegistry::shared(),
     );
 
     thread.send_command(WorldCommand::Save).unwrap();
@@ -121,7 +123,12 @@ fn physics_thread_reports_save_and_load_results() {
 
 #[test]
 fn without_a_save_store_save_and_load_fail_cleanly() {
-    let thread = PhysicsThread::spawn(empty_world(), SnapshotPublisher::new(), Box::new(|| {}));
+    let thread = PhysicsThread::spawn(
+        empty_world(),
+        SnapshotPublisher::new(),
+        Box::new(|| {}),
+        MetricsRegistry::shared(),
+    );
     thread.send_command(WorldCommand::Save).unwrap();
     assert!(matches!(next_event(&thread), PhysicsEvent::SaveFailed(_)));
     thread

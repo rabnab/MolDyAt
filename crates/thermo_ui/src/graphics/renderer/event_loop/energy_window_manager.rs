@@ -61,9 +61,6 @@ pub struct EnergyWindowManager {
     window: Option<EnergyPlotWindow>,
     /// Shared energy data (shared with window)
     energy_data: SharedEnergyData,
-    /// Last processed simulation step (to avoid duplicate updates)
-    last_processed_step: u64,
-    last_processed_generation: u64,
     /// Instant of the most recent energy window render completion.
     last_redraw_instant: Option<Instant>,
     /// `true` while a `request_redraw()` has been sent but the corresponding
@@ -80,9 +77,6 @@ pub struct EnergyWindowManager {
 /// has input focus).
 const ENERGY_REDRAW_MIN_INTERVAL: Duration = Duration::from_millis(83);
 
-/// Maximum number of energy samples to keep in buffer
-const MAX_ENERGY_SAMPLES: usize = 1000;
-
 impl EnergyWindowManager {
     /// Create a new energy window manager.
     ///
@@ -92,8 +86,6 @@ impl EnergyWindowManager {
         Self {
             window: None,
             energy_data,
-            last_processed_step: 0,
-            last_processed_generation: 0,
             last_redraw_instant: None,
             redraw_pending: false,
         }
@@ -257,8 +249,9 @@ impl EnergyWindowManager {
     /// Update energy data from a snapshot.
     ///
     /// The status text follows every snapshot (also while paused, when edits
-    /// change ball counts and toggles). The plot history grows only for a new
-    /// simulation step, so a paused world adds no duplicate points.
+    /// change ball counts and toggles). The plot history comes from the
+    /// MetricsRegistry, which samples a step once and starts afresh for a
+    /// loaded world, so a paused world adds no duplicate points.
     ///
     /// # Arguments
     /// * `snapshot` - The renderer snapshot with energy data
@@ -272,26 +265,11 @@ impl EnergyWindowManager {
         steps_per_frame: f32,
         frame_metrics: &FrameMetrics,
     ) {
-        // A new world (load) starts its own history, whatever its step count.
-        let new_world = snapshot.world_generation != self.last_processed_generation;
-        let new_step = new_world || snapshot.simulation_step > self.last_processed_step;
-        self.last_processed_generation = snapshot.world_generation;
-        if new_step {
-            self.last_processed_step = snapshot.simulation_step;
-        }
-
         if let Ok(mut data) = self.energy_data.lock() {
-            if new_world {
-                data.v_kin.clear();
-                data.v_pot.clear();
-            }
-            if new_step {
-                data.push_sample(
-                    snapshot.kinetic_energy,
-                    snapshot.potential_energy,
-                    snapshot.time,
-                );
-            }
+            data.sync_from_metrics();
+
+            // The time is not a metrics series: it comes with the snapshot.
+            data.time = snapshot.time;
 
             // Update status text with FPS and per-frame metrics
             if let Some(ref status) = snapshot.status_text {
@@ -305,14 +283,6 @@ impl EnergyWindowManager {
                 data.status_text = Some(updated_status);
             } else {
                 data.status_text = None;
-            }
-
-            // Limit buffer size to prevent unbounded growth
-            if data.v_kin.len() > MAX_ENERGY_SAMPLES {
-                data.v_kin.pop_front();
-            }
-            if data.v_pot.len() > MAX_ENERGY_SAMPLES {
-                data.v_pot.pop_front();
             }
 
             // Release lock before requesting redraw
