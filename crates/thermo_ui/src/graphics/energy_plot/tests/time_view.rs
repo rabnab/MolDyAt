@@ -160,3 +160,72 @@ fn test_panned_view_stays_put_while_samples_arrive() {
     // Until the samples it shows are evicted from the history.
     assert_eq!(view.window(&history(25.0, 60.0)), (25.0, 35.0));
 }
+
+/// Zooming in and back out by the same notches returns to the default view,
+/// also with fractional (trackpad) notches (#368 review).
+#[test]
+fn test_zoom_in_and_out_returns_to_the_default() {
+    let h = history(0.0, 50.0);
+    for steps in [[1.0, -1.0], [3.0, -3.0], [0.37, -0.37]] {
+        let mut view = TimeView::default();
+        view.zoom(steps[0], 0.3, &h);
+        assert!(!view.is_default());
+        view.zoom(steps[1], 0.3, &h);
+        assert!(view.is_default(), "{steps:?}: span {}", view.span());
+        assert_eq!(view.span(), TIME_SPAN);
+    }
+    // Several small steps out.
+    let mut view = TimeView::default();
+    view.zoom(2.0, 0.5, &h);
+    view.zoom(-1.0, 0.5, &h);
+    view.zoom(-1.0, 0.5, &h);
+    assert!(view.is_default());
+}
+
+/// A pan that ends in follow mode (a short history) leaves the view equal
+/// to the default: the unused right edge does not count.
+#[test]
+fn test_pan_on_a_short_history_stays_the_default_view() {
+    let h = TimeHistory {
+        oldest: 0.0,
+        newest: 5.0,
+        samples: 500,
+    };
+    let mut view = TimeView::default();
+    view.zoom(-1.0, 0.5, &h);
+    view.pan(-1.0, &h);
+    assert!(view.is_following());
+    assert!(view.is_default(), "{view:?}");
+}
+
+/// A coarse history (few samples far apart) has a minimum span above the
+/// default; zooming must not panic (#368 review).
+#[test]
+fn test_zoom_on_a_coarse_history_does_not_panic() {
+    let coarse = TimeHistory {
+        oldest: 0.0,
+        newest: 6.0,
+        samples: 3,
+    };
+    assert_eq!(coarse.min_span(), 12.0);
+    assert!(coarse.max_span() >= coarse.min_span());
+    for history in [
+        coarse,
+        TimeHistory {
+            oldest: 2.0,
+            newest: 2.0,
+            samples: 1,
+        },
+        TimeHistory {
+            oldest: 2.0,
+            newest: 2.0,
+            samples: 0,
+        },
+    ] {
+        let mut view = TimeView::default();
+        view.zoom(1.0, 0.5, &history);
+        view.zoom(-3.0, 0.5, &history);
+        view.pan(-1.0, &history);
+        assert!(view.span() >= history.min_span() - 1e-12, "{history:?}");
+    }
+}

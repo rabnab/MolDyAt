@@ -95,6 +95,20 @@ pub(super) fn energy_window_key_hints(key_map: &KeyMap) -> String {
 const DOUBLE_CLICK_TIME: Duration = Duration::from_millis(400);
 const DOUBLE_CLICK_DISTANCE_PX: f32 = 6.0;
 
+/// A middle-button drag pans only once the pointer has moved this far from
+/// the press, so a click with a little jitter (or the first click of a
+/// double click) does not pause the plot.
+const PAN_THRESHOLD_PX: f32 = 4.0;
+
+/// A middle-button drag in progress.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Drag {
+    /// x of the press.
+    origin_x: f32,
+    /// x at the last pan step, once the drag passed [`PAN_THRESHOLD_PX`].
+    panned_to: Option<f32>,
+}
+
 /// Where the plot was in the last frame: turns pointer pixels into times.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(super) struct PlotGeometry {
@@ -107,8 +121,8 @@ pub(super) struct PlotGeometry {
 struct PlotPointer {
     /// Last cursor position, window pixels.
     cursor: Option<[f32; 2]>,
-    /// x of the cursor at the last pan step while the middle button is held.
-    drag_x: Option<f32>,
+    /// The drag while the middle button is held.
+    drag: Option<Drag>,
     /// Time and place of the last middle-button press, for double clicks.
     last_middle_press: Option<(Instant, [f32; 2])>,
 }
@@ -175,7 +189,9 @@ impl EnergyWindowManager {
     /// Return the plot to its default time view and show it now.
     pub fn reset_plot_view(&mut self) {
         if !self.view.is_default() {
+            let was_following = self.view.is_following();
             self.view.reset();
+            self.resume_if_following(was_following);
             self.redraw_now();
         }
     }
@@ -216,9 +232,24 @@ impl EnergyWindowManager {
         change(&mut self.view);
         let changed = self.view != before;
         if changed {
+            self.resume_if_following(before.is_following());
             self.redraw_now();
         }
         changed
+    }
+
+    /// A paused plot keeps the history it had when the pause began (see
+    /// [`Self::update_from_snapshot`]); back in follow mode it takes the
+    /// current series at once, not only with the next snapshot (a paused
+    /// simulation sends none).
+    fn resume_if_following(&mut self, was_following: bool) {
+        if was_following || !self.view.is_following() {
+            return;
+        }
+        if let Ok(mut data) = self.energy_data.lock() {
+            data.sync_from_metrics();
+            self.seen_history_resets = data.history_resets;
+        }
     }
 
     /// Redraw promptly after a view change, not waiting for the throttle that
@@ -239,21 +270,35 @@ impl EnergyWindowManager {
         });
         if double {
             self.pointer.last_middle_press = None;
-            self.pointer.drag_x = None;
+            self.pointer.drag = None;
             self.reset_plot_view();
         } else {
             self.pointer.last_middle_press = Some((now, at));
-            self.pointer.drag_x = Some(at[0]);
+            self.pointer.drag = Some(Drag {
+                origin_x: at[0],
+                panned_to: None,
+            });
         }
     }
 
-    /// The pointer moved to `at`; while the middle button is held this pans.
+    /// The pointer moved to `at`. While the middle button is held this pans,
+    /// once the pointer is more than [`PAN_THRESHOLD_PX`] from the press;
+    /// the first pan step covers the whole move from the press.
     pub(super) fn pointer_moved(&mut self, at: [f32; 2]) {
         self.pointer.cursor = Some(at);
-        if let Some(from) = self.pointer.drag_x {
-            self.pointer.drag_x = Some(at[0]);
-            self.pan_plot(at[0] - from);
-        }
+        let Some(drag) = self.pointer.drag else {
+            return;
+        };
+        let from = match drag.panned_to {
+            Some(last) => last,
+            None if (at[0] - drag.origin_x).abs() > PAN_THRESHOLD_PX => drag.origin_x,
+            None => return,
+        };
+        self.pointer.drag = Some(Drag {
+            panned_to: Some(at[0]),
+            ..drag
+        });
+        self.pan_plot(at[0] - from);
     }
 
     /// The mouse gestures of the energy window. Returns whether the event
@@ -274,14 +319,14 @@ impl EnergyWindowManager {
                     let at = self.pointer.cursor.unwrap_or_default();
                     self.middle_pressed(at, Instant::now());
                 }
-                ElementState::Released => self.pointer.drag_x = None,
+                ElementState::Released => self.pointer.drag = None,
             },
             WindowEvent::CursorMoved { position, .. } => {
                 self.pointer_moved([position.x as f32, position.y as f32]);
             }
             WindowEvent::CursorLeft { .. } => self.pointer.cursor = None,
             // A release while the window had no focus never arrives.
-            WindowEvent::Focused(false) => self.pointer.drag_x = None,
+            WindowEvent::Focused(false) => self.pointer.drag = None,
             _ => return false,
         }
         true
@@ -470,7 +515,12 @@ impl EnergyWindowManager {
         frame_metrics: &FrameMetrics,
     ) {
         if let Ok(mut data) = self.energy_data.lock() {
-            data.sync_from_metrics();
+            // A paused plot keeps its history so it can be examined: only a
+            // following one takes new samples. A loaded world (a cleared
+            // registry) ends the pause.
+            if self.view.is_following() || data.registry_history_changed() {
+                data.sync_from_metrics();
+            }
             // A new world starts a new history: back to the default view.
             if data.history_resets != self.seen_history_resets {
                 self.seen_history_resets = data.history_resets;

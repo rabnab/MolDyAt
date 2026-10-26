@@ -584,6 +584,9 @@ fn test_legend_shows_a_changed_view() {
             .iter()
             .all(|l| !l.text.contains("paused") && !l.text.contains("zoomed"))
     );
+    // The current time is not part of a paused (frozen) plot.
+    assert!(paused.labels.iter().all(|l| !l.text.contains("t = ")));
+    assert!(default.labels.iter().any(|l| l.text.contains("t = ")));
     assert!(
         paused
             .labels

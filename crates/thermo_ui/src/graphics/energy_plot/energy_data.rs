@@ -82,8 +82,9 @@ pub struct EnergyData {
     /// plot's x axis. The series end at the newest sample: the last value of
     /// `v_kin` and `v_pot` belongs to the last time here.
     pub sample_times: VecDeque<f32>,
-    /// How often the registry started a new history (a loaded world): the
-    /// plot returns to its default view when this changes.
+    /// How often a sync found the registry starting a new history (a loaded
+    /// world): the plot returns to its default view when this changes. A
+    /// paused plot does not sync; it asks [`Self::registry_history_changed`].
     pub history_resets: u64,
     pub time: f32,
     pub status_text: Option<String>,
@@ -179,6 +180,16 @@ impl EnergyData {
             Some(registry.times()),
         );
         self.version = self.version.wrapping_add(1);
+    }
+
+    /// Whether the registry started a new history since the last sync (it was
+    /// cleared for a loaded world), checked without copying any series.
+    pub fn registry_history_changed(&self) -> bool {
+        let Some(metrics) = &self.metrics else {
+            return false;
+        };
+        let epoch = read_metrics(metrics).times().epoch();
+        self.times_epoch.is_some_and(|seen| seen != epoch)
     }
 
     /// Calculate total energy (kinetic + potential) for each time point.

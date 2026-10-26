@@ -486,16 +486,22 @@ impl Layout<'_> {
         );
     }
 
-    /// Legend: each curve in its colour, then the time, the x axis, and the
-    /// range shown when the view was zoomed or panned. The x axis note is
-    /// left out when the line would not fit the window.
+    /// Legend: each curve in its colour, then the time (not while paused),
+    /// the x axis, and the range shown when the view was zoomed or panned.
+    /// The x axis note is left out when the line would not fit the window.
     fn legend(&mut self, series: &[Series], window: Option<TimeWindow>, origin: [f32; 2]) {
         let mut x = origin[0];
         for s in series {
             x += self.label(s.name, [x, origin[1]], s.color);
             x += self.glyph;
         }
-        let time = format!(" t = {:.2}", self.data.time);
+        // A paused plot shows a frozen history: the current time is not
+        // part of it (its range is shown instead).
+        let time = if self.view.is_following() {
+            format!(" t = {:.2}", self.data.time)
+        } else {
+            String::new()
+        };
         let axis = "   x: time";
         let view = window
             .filter(|_| !self.view.is_default())

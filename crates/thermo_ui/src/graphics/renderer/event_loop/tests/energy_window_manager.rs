@@ -496,4 +496,99 @@ mod plot_view {
         manager.update_from_snapshot(&loaded, 60.0, 1.0, &frame_metrics);
         assert!(manager.plot_view().is_default());
     }
+
+    /// A press with a little jitter does not pause the plot; beyond the
+    /// threshold the pan covers the whole move from the press (#368 review).
+    #[test]
+    fn small_moves_do_not_pan_and_larger_ones_pan_the_full_distance() {
+        let mut manager = manager();
+        send(&mut manager, moved(500.0));
+        send(&mut manager, middle(ElementState::Pressed));
+        send(&mut manager, moved(503.0));
+        send(&mut manager, moved(497.0));
+        assert!(manager.plot_view().is_following(), "jitter must not pan");
+
+        send(&mut manager, moved(600.0));
+        assert_eq!(window(&manager), (39.0, 49.0), "100 px from the press");
+        send(&mut manager, moved(650.0));
+        assert_eq!(window(&manager), (38.5, 48.5));
+    }
+
+    fn recorded_kin(shared: &SharedEnergyData) -> usize {
+        shared.lock().unwrap().v_kin.len()
+    }
+
+    /// While paused, the plot keeps the history it had when the pause began;
+    /// back in follow mode it shows the registry's series at once.
+    #[test]
+    fn paused_plot_freezes_its_history_until_it_follows_again() {
+        let metrics = MetricsRegistry::shared();
+        let shared = shared_with_metrics(&metrics);
+        let mut manager = EnergyWindowManager::new(shared.clone());
+        manager.set_plot_geometry(Some(geometry()));
+        let frame_metrics = FrameMetrics::default();
+        for step in 1..=3 {
+            record(&metrics, step as f32, 0.0);
+            manager.update_from_snapshot(&make_snapshot(step, 1.0, 0.0), 60.0, 1.0, &frame_metrics);
+        }
+        assert_eq!(recorded_kin(&shared), 3);
+
+        assert!(manager.pan_plot(100.0));
+        assert!(!manager.plot_view().is_following());
+        for step in 4..=8 {
+            record(&metrics, step as f32, 0.0);
+            manager.update_from_snapshot(&make_snapshot(step, 1.0, 0.0), 60.0, 1.0, &frame_metrics);
+        }
+        assert_eq!(recorded_kin(&shared), 3, "frozen while paused");
+        assert_eq!(shared.lock().unwrap().time, 0.08, "the time still updates");
+
+        manager.reset_plot_view();
+        assert_eq!(recorded_kin(&shared), 8, "the current series at once");
+    }
+
+    #[test]
+    fn panning_back_to_the_newest_sample_resumes_the_series() {
+        let metrics = MetricsRegistry::shared();
+        let shared = shared_with_metrics(&metrics);
+        let mut manager = EnergyWindowManager::new(shared.clone());
+        manager.set_plot_geometry(Some(geometry()));
+        let frame_metrics = FrameMetrics::default();
+        record(&metrics, 1.0, 0.0);
+        manager.update_from_snapshot(&make_snapshot(1, 1.0, 0.0), 60.0, 1.0, &frame_metrics);
+        manager.pan_plot(100.0);
+        record(&metrics, 2.0, 0.0);
+        manager.update_from_snapshot(&make_snapshot(2, 1.0, 0.0), 60.0, 1.0, &frame_metrics);
+        assert_eq!(recorded_kin(&shared), 1);
+
+        manager.pan_plot(-1000.0);
+        assert!(manager.plot_view().is_following());
+        assert_eq!(recorded_kin(&shared), 2);
+    }
+
+    /// A world loaded while the plot is paused ends the pause and shows the
+    /// new history.
+    #[test]
+    fn world_load_while_paused_resets_and_shows_the_new_history() {
+        let metrics = MetricsRegistry::shared();
+        let shared = shared_with_metrics(&metrics);
+        let mut manager = EnergyWindowManager::new(shared.clone());
+        manager.set_plot_geometry(Some(geometry()));
+        let frame_metrics = FrameMetrics::default();
+        for step in 1..=3 {
+            record(&metrics, 1.0, 0.0);
+            manager.update_from_snapshot(&make_snapshot(step, 1.0, 0.0), 60.0, 1.0, &frame_metrics);
+        }
+        manager.pan_plot(100.0);
+        assert!(!manager.plot_view().is_following());
+
+        metrics.write().unwrap().clear();
+        record(&metrics, 7.0, 8.0);
+        let mut loaded = make_snapshot(30, 7.0, 8.0);
+        loaded.world_generation = 1;
+        manager.update_from_snapshot(&loaded, 60.0, 1.0, &frame_metrics);
+
+        assert!(manager.plot_view().is_default());
+        let data = shared.lock().unwrap();
+        assert_eq!(data.v_kin.iter().copied().collect::<Vec<_>>(), vec![7.0]);
+    }
 }

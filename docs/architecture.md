@@ -339,9 +339,18 @@ command registry). The scroll wheel zooms by `ZOOM_FACTOR` (1.25) per notch,
 line and pixel deltas alike: around the pointer, or with the newest sample
 kept at the right edge in follow mode. The span stays between four sample
 intervals and the whole history (at least `TIME_SPAN`). A middle-button
-drag pans with the pointer (dragging right shows earlier times); panning
-away from the newest sample leaves follow mode, panning back returns to
-it. A middle double click or the key of `view.reset_plot_view` (`HOME`)
+drag pans with the pointer (dragging right shows earlier times) once it
+has moved more than a few pixels (`PAN_THRESHOLD_PX`), so a click with a
+little jitter does not pause the plot; panning away from the newest sample
+leaves follow mode, panning back returns to it. While not following, the
+plot is paused: `update_from_snapshot` does not sync `EnergyData`, so the
+history stays as it was when the pause began and can be examined (the
+status text and the current time still update; the legend shows the
+paused range instead of the time). Back in follow mode it syncs at once
+and jumps to the current series. A cleared registry (a loaded world) is
+noticed while paused by `EnergyData::registry_history_changed`, which
+checks the epoch of the registry's times without copying, and ends the
+pause. A middle double click or the key of `view.reset_plot_view` (`HOME`)
 resets the view, and so does a new world history (`EnergyData::history_resets`,
 counted when the registry is cleared). The pixel-to-time conversion uses
 the plot area and history of the last frame (`PlotScene::plot_area`,

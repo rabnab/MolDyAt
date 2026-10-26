@@ -27,6 +27,14 @@ const MIN_SAMPLE_INTERVALS: f64 = 4.0;
 /// The shortest span when the sample interval is not known.
 const MIN_SPAN: f64 = 1e-3;
 
+/// Relative tolerance below which two spans are the same: zooming in and
+/// out by the same notches lands back on the default span.
+const SPAN_TOLERANCE: f64 = 1e-9;
+
+fn same_span(a: f64, b: f64) -> bool {
+    (a - b).abs() <= SPAN_TOLERANCE * a.abs().max(b.abs())
+}
+
 /// What there is to show: the times of the oldest and the newest sample and
 /// the number of samples in between (both included).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -53,20 +61,31 @@ impl TimeHistory {
     }
 
     /// Zooming out stops at the whole history, or the default span when the
-    /// history is shorter.
+    /// history is shorter; never below [`Self::min_span`] (a coarse history,
+    /// few samples far apart).
     pub fn max_span(&self) -> f64 {
-        self.length().max(TIME_SPAN)
+        self.length().max(TIME_SPAN).max(self.min_span())
     }
 }
 
 /// The time range of the plot: its span, its right edge and whether it
-/// follows the newest sample.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// follows the newest sample. Two views are equal when they show the same
+/// range: spans within a rounding tolerance, and the right edge only
+/// counts while not following.
+#[derive(Debug, Clone, Copy)]
 pub struct TimeView {
     span: f64,
     /// The right edge while not following; unused while following.
     right: f64,
     follow: bool,
+}
+
+impl PartialEq for TimeView {
+    fn eq(&self, other: &Self) -> bool {
+        self.follow == other.follow
+            && same_span(self.span, other.span)
+            && (self.follow || self.right == other.right)
+    }
 }
 
 impl Default for TimeView {
@@ -141,8 +160,12 @@ impl TimeView {
         if !notches.is_finite() || notches == 0.0 {
             return;
         }
-        let new_span =
+        let mut new_span =
             (self.span * ZOOM_FACTOR.powf(-notches)).clamp(history.min_span(), history.max_span());
+        // In and out by the same notches lands exactly on the default span.
+        if same_span(new_span, TIME_SPAN) {
+            new_span = TIME_SPAN;
+        }
         if self.follow {
             self.span = new_span;
             return;
