@@ -8,7 +8,7 @@ use crate::application::DomainCommand;
 use crate::application::MainContent;
 use crate::application::PhysicsEvent;
 use crate::application::scene_layers::SceneLayers;
-use crate::metrics::SharedMetricsRegistry;
+use crate::metrics::{SharedMetricsRegistry, write_metrics};
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::{Duration, Instant};
@@ -97,14 +97,12 @@ impl PhysicsRuntime {
                         >= simulation.runtime().snapshot_interval())
             {
                 let snapshot_start = Instant::now();
-                publisher.publish(publisher.snapshot(simulation));
+                // Sample before publishing: a renderer woken by the snapshot
+                // finds the metrics of the same step.
+                let snapshot = publisher.snapshot(simulation);
+                write_metrics(metrics).sample(simulation, snapshot.world_generation);
+                publisher.publish(snapshot);
                 wakeup();
-
-                // Sample metrics at snapshot cadence (decision 1-B)
-                {
-                    let mut metrics_registry = metrics.write().unwrap();
-                    metrics_registry.sample_from_world(simulation.world());
-                }
 
                 snapshot_time_total += snapshot_start.elapsed();
                 snapshot_count += 1;

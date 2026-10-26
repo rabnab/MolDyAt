@@ -137,6 +137,7 @@ split into stateless orchestrators that operate on `RenderStateData`:
 | Orchestrator | Responsibility |
 |---|---|
 | `FrameOrchestrator` | Frame lifecycle: picks up new snapshots, frame metrics |
+| `MetricsRegistry` | Time series in ring buffers (`thermo_runtime::metrics`), sampled once per new step at snapshot cadence before the snapshot is published, cleared for a new world generation. `EnergyData` copies the energy series from it when its `version` changed; headless frames print the latest values |
 | `InputOrchestrator` | Input actions and operator tool events |
 | `ViewportOrchestrator` | Window resize, pan and zoom |
 | `PhysicsCoordinator` | Spawns the physics thread, sends commands, reads snapshots and events |

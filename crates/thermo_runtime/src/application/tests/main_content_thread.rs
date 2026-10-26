@@ -7,12 +7,7 @@ use crate::application::tests::{sync_commands, wait_for_snapshot};
 use crate::application::{PhysicsThread, SimControl};
 use crate::metrics::MetricsRegistry;
 use crate::objects2d::Vec2D;
-use std::sync::{Arc, RwLock};
 use thermo_physics::test_support::create_main_content;
-
-fn metrics_registry() -> Arc<RwLock<MetricsRegistry>> {
-    Arc::new(RwLock::new(MetricsRegistry::default()))
-}
 
 #[test]
 fn test_physics_thread_spawning() {
@@ -20,8 +15,12 @@ fn test_physics_thread_spawning() {
     let (main_content, _) = create_main_content();
     let snapshot_slot = publisher.slot();
 
-    let physics_thread =
-        PhysicsThread::spawn(main_content, publisher, Box::new(|| {}), metrics_registry());
+    let physics_thread = PhysicsThread::spawn(
+        main_content,
+        publisher,
+        Box::new(|| {}),
+        MetricsRegistry::shared(),
+    );
 
     // The thread runs and publishes.
     wait_for_snapshot(&snapshot_slot, "a first snapshot", |_| true);
@@ -46,8 +45,12 @@ fn test_physics_thread_snapshot_publishing() {
         .expect("Failed to add ball");
     let snapshot_slot = publisher.slot();
 
-    let physics_thread =
-        PhysicsThread::spawn(main_content, publisher, Box::new(|| {}), metrics_registry());
+    let physics_thread = PhysicsThread::spawn(
+        main_content,
+        publisher,
+        Box::new(|| {}),
+        MetricsRegistry::shared(),
+    );
 
     let snapshot = wait_for_snapshot(&snapshot_slot, "a snapshot with the ball", |s| {
         s.balls.len() == 1

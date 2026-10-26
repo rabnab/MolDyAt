@@ -4,7 +4,7 @@
 
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
-use thermo_runtime::metrics::SharedMetricsRegistry;
+use thermo_runtime::metrics::{SharedMetricsRegistry, read_metrics};
 
 /// Energy display mode - controls which energy traces are shown
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -56,6 +56,8 @@ pub struct EnergyData {
     pub version: u64,
     /// Shared reference to the metrics registry
     metrics: Option<SharedMetricsRegistry>,
+    /// Registry version of the last sync.
+    synced_version: Option<u64>,
 }
 
 impl EnergyData {
@@ -68,6 +70,7 @@ impl EnergyData {
             status_text: None,
             version: 0,
             metrics: None,
+            synced_version: None,
         }
     }
 
@@ -80,40 +83,30 @@ impl EnergyData {
             status_text: None,
             version: 0,
             metrics: Some(metrics),
+            synced_version: None,
         }
     }
 
-    /// Push a kinetic and potential energy sample, incrementing the version.
-    ///
-    /// This method is kept for backward compatibility, but now it's a no-op
-    /// since metrics are recorded directly in the MetricsRegistry by the physics thread.
-    /// To update the cached values, call `sync_from_metrics()` instead.
-    pub fn push_sample(&mut self, _kinetic: f32, _potential: f32, _time: f32) {
-        // No-op: metrics are now recorded in MetricsRegistry by physics thread
-    }
-
-    /// Sync cached values from MetricsRegistry.
-    ///
-    /// This should be called before rendering to ensure the cached values
-    /// are up-to-date with the latest metrics from the registry.
+    /// Copy the energy series from the MetricsRegistry if it changed since the
+    /// last sync, and bump `version` then. Called before rendering; without
+    /// a registry, or without news, it does nothing, so the plot is not
+    /// rebuilt for nothing.
     pub fn sync_from_metrics(&mut self) {
-        if let Some(ref metrics) = self.metrics {
-            let metrics_lock = metrics.read().unwrap();
-
-            // Sync energy values from registry
-            if let Some(kin_series) = metrics_lock.get_series("E_kin") {
-                self.v_kin = kin_series.get().clone();
-            }
-            if let Some(pot_series) = metrics_lock.get_series("E_pot") {
-                self.v_pot = pot_series.get().clone();
-            }
-            if let Some(time_value) = metrics_lock.get_current("time") {
-                self.time = time_value;
-            }
-
-            // Increment version to signal that data has been updated
-            self.version = self.version.wrapping_add(1);
+        let Some(metrics) = &self.metrics else {
+            return;
+        };
+        let registry = read_metrics(metrics);
+        if self.synced_version == Some(registry.version()) {
+            return;
         }
+        self.synced_version = Some(registry.version());
+        for (cache, name) in [(&mut self.v_kin, "E_kin"), (&mut self.v_pot, "E_pot")] {
+            cache.clear();
+            if let Some(series) = registry.get_series(name) {
+                cache.extend(series.get().iter().copied());
+            }
+        }
+        self.version = self.version.wrapping_add(1);
     }
 
     /// Calculate total energy (kinetic + potential) for each time point.
@@ -138,6 +131,7 @@ pub type SharedEnergyData = Arc<Mutex<EnergyData>>;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use thermo_runtime::metrics::MetricsRegistry;
 
     #[test]
     fn test_energy_data_new() {
@@ -231,52 +225,56 @@ mod tests {
     }
 
     #[test]
-    fn test_push_sample_is_noop() {
-        // push_sample is now a no-op since metrics are recorded in MetricsRegistry
-        let mut data = EnergyData::new();
-        assert_eq!(data.version, 0);
-        data.push_sample(1.0, 2.0, 0.1);
-        // push_sample is a no-op, so version doesn't increment
-        assert_eq!(data.version, 0);
-        assert_eq!(data.v_kin.len(), 0);
-        assert_eq!(data.v_pot.len(), 0);
-    }
-
-    #[test]
     fn test_sync_from_metrics_without_metrics() {
-        // When no metrics are available, sync_from_metrics does nothing
         let mut data = EnergyData::new();
         data.sync_from_metrics();
-        assert_eq!(data.v_kin.len(), 0);
-        assert_eq!(data.v_pot.len(), 0);
+        assert_eq!(data.version, 0);
+        assert!(data.v_kin.is_empty());
     }
 
     #[test]
-    fn test_sync_from_metrics_with_metrics() {
-        use std::sync::RwLock;
-        use thermo_runtime::metrics::MetricsRegistry;
-
-        // Create a metrics registry with some data
-        let metrics = Arc::new(RwLock::new(MetricsRegistry::default()));
+    fn test_sync_from_metrics_copies_series_and_bumps_version_once() {
+        let metrics = MetricsRegistry::shared();
         {
-            let mut metrics_lock = metrics.write().unwrap();
-            metrics_lock.record("E_kin", 7.0);
-            metrics_lock.record("E_kin", 8.0);
-            metrics_lock.record("E_pot", 3.0);
-            metrics_lock.record("E_pot", 4.0);
+            let mut registry = metrics.write().unwrap();
+            registry.record("E_kin", 7.0);
+            registry.record("E_kin", 8.0);
+            registry.record("E_pot", 3.0);
+            registry.record("E_pot", 4.0);
         }
-
-        // Create EnergyData with metrics
         let mut data = EnergyData::with_metrics(Arc::clone(&metrics));
-
-        // Sync from metrics
         data.sync_from_metrics();
+        assert_eq!(data.v_kin.iter().copied().collect::<Vec<_>>(), [7.0, 8.0]);
+        assert_eq!(data.v_pot.iter().copied().collect::<Vec<_>>(), [3.0, 4.0]);
+        assert_eq!(data.version, 1);
 
-        // Should have synced the data
-        assert_eq!(data.v_kin.len(), 2);
-        assert_eq!(data.v_pot.len(), 2);
-        assert_eq!(data.v_kin[0], 7.0);
-        assert_eq!(data.v_pot[0], 3.0);
-        assert_eq!(data.version, 1); // Version increments on sync
+        // Nothing new in the registry: no copy, no new version.
+        data.sync_from_metrics();
+        assert_eq!(data.version, 1);
+
+        metrics.write().unwrap().record("E_kin", 9.0);
+        data.sync_from_metrics();
+        assert_eq!(data.v_kin.len(), 3);
+        assert_eq!(data.version, 2);
+    }
+
+    #[test]
+    fn test_sync_from_metrics_follows_a_cleared_registry() {
+        let metrics = MetricsRegistry::shared();
+        metrics.write().unwrap().record("E_kin", 1.0);
+        let mut data = EnergyData::with_metrics(Arc::clone(&metrics));
+        data.sync_from_metrics();
+        metrics.write().unwrap().clear();
+        data.sync_from_metrics();
+        assert!(data.v_kin.is_empty());
+    }
+
+    #[test]
+    fn test_sync_version_wraps_without_panic() {
+        let metrics = MetricsRegistry::shared();
+        let mut data = EnergyData::with_metrics(metrics);
+        data.version = u64::MAX;
+        data.sync_from_metrics();
+        assert_eq!(data.version, 0);
     }
 }

@@ -4,7 +4,7 @@
 
 use crate::application::renderer_snapshot::{OperatorSnapshot, RendererSnapshot, ThermoGridSpec};
 use crate::headless_cli::{DetailLevel, HeadlessConfig, OutputFormat};
-use crate::metrics::SharedMetricsRegistry;
+use crate::metrics::{SharedMetricsRegistry, read_metrics};
 use serde_json::json;
 use std::fs::File;
 use std::io::{self, BufWriter, Write};
@@ -287,17 +287,12 @@ fn frame_to_jsonl_with_metrics(
 
     // Add metrics if available (decision 7-A: nested metrics object)
     if let Some(metrics_registry) = metrics {
-        let metrics_lock = metrics_registry.read().unwrap();
-        if !metrics_lock.is_empty() {
-            let mut metrics_obj = serde_json::Map::new();
-            for (name, buffer) in metrics_lock.all_series() {
-                if let Some(value) = buffer.latest() {
-                    metrics_obj.insert(name.clone(), f32_value(*value));
-                }
-            }
-            if !metrics_obj.is_empty() {
-                frame["metrics"] = serde_json::Value::Object(metrics_obj);
-            }
+        let metrics_obj: serde_json::Map<_, _> = read_metrics(metrics_registry)
+            .all_series()
+            .filter_map(|(name, buffer)| Some((name.clone(), f32_value(*buffer.latest()?))))
+            .collect();
+        if !metrics_obj.is_empty() {
+            frame["metrics"] = serde_json::Value::Object(metrics_obj);
         }
     }
 

@@ -6,10 +6,10 @@ use crate::application::CreateSnapshot;
 use crate::headless_cli::HeadlessConfig;
 use crate::headless_output::{HeadlessSnapshotSink, HeadlessWriter};
 use crate::headless_timings::{RunClock, write_timings};
-use crate::metrics::SharedMetricsRegistry;
+use crate::metrics::{MetricsRegistry, SharedMetricsRegistry, write_metrics};
 use std::io;
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::Instant;
 use thermo_physics::application::persistence::{LoadSource, SaveStore};
 use thermo_physics::application::{MainContent, SimConfig};
@@ -114,9 +114,7 @@ impl HeadlessRunnerBuilder {
             timings: self.timings,
             timing_warmup: self.timing_warmup,
             commit: self.commit,
-            metrics: self.metrics.unwrap_or_else(|| {
-                Arc::new(RwLock::new(crate::metrics::MetricsRegistry::default()))
-            }),
+            metrics: self.metrics.unwrap_or_else(MetricsRegistry::shared),
         }
     }
 }
@@ -138,8 +136,7 @@ impl HeadlessRunner {
         config.dt = Some(application.time_step());
         config.sim = Some(application.config());
 
-        // Create shared metrics registry
-        let metrics = Arc::new(RwLock::new(crate::metrics::MetricsRegistry::default()));
+        let metrics = MetricsRegistry::shared();
 
         let sink = HeadlessWriter::builder()
             .stdout(config.stdout)
@@ -161,11 +158,7 @@ impl HeadlessRunner {
         let mut snapshots_emitted = 0;
         let mut latest_snapshot = self.application.create_snapshot();
 
-        // Sample metrics for initial snapshot
-        {
-            let mut metrics = self.metrics.write().unwrap();
-            metrics.sample_from_world(self.application.world());
-        }
+        write_metrics(&self.metrics).sample(&self.application, latest_snapshot.world_generation);
 
         self.sink.write_run_start(&latest_snapshot)?;
         self.sink.write_frame(&latest_snapshot)?;
@@ -195,12 +188,8 @@ impl HeadlessRunner {
             {
                 let snapshot_start = Instant::now();
                 latest_snapshot = self.application.create_snapshot();
-
-                // Sample metrics at snapshot cadence (decision 1-B)
-                {
-                    let mut metrics = self.metrics.write().unwrap();
-                    metrics.sample_from_world(self.application.world());
-                }
+                write_metrics(&self.metrics)
+                    .sample(&self.application, latest_snapshot.world_generation);
 
                 let snapshot_done = Instant::now();
                 self.sink.write_frame(&latest_snapshot)?;
