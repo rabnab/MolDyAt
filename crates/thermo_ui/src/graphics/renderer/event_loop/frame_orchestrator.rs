@@ -205,7 +205,7 @@ mod tests {
         snapshot.status_text = Some("fps 0".to_string());
 
         let physics = PhysicsCoordinator::with_snapshot(snapshot);
-        
+
         // Populate the metrics registry with the snapshot values
         // This simulates what would happen in the physics thread
         let metrics = physics.metrics();
@@ -214,7 +214,7 @@ mod tests {
             metrics_lock.record("E_kin", 1.5);
             metrics_lock.record("E_pot", 2.5);
         }
-        
+
         let mut state = build_test_state_with_physics(physics);
 
         FrameOrchestrator::begin_frame(&mut state);

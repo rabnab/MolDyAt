@@ -117,8 +117,7 @@ impl MetricsRegistry {
     /// * `metadata` - Metadata describing the series
     pub fn register_series(&mut self, name: SeriesName, metadata: SeriesMetadata) {
         self.series_metadata.insert(name.clone(), metadata);
-        self.buffers
-            .insert(name, RingBuffer::new(self.capacity));
+        self.buffers.insert(name, RingBuffer::new(self.capacity));
     }
 
     /// Register a per-species series.
@@ -156,9 +155,7 @@ impl MetricsRegistry {
 
     /// Get the current (latest) value for a series.
     pub fn get_current(&self, name: &str) -> Option<f32> {
-        self.buffers
-            .get(name)
-            .and_then(|b| b.latest().copied())
+        self.buffers.get(name).and_then(|b| b.latest().copied())
     }
 
     /// Get the metadata for a series.
@@ -218,7 +215,7 @@ impl MetricsRegistry {
         // Wall momentum (accessing public fields wall_momentum_x/y)
         let wall_momentum = (sim.wall_momentum_x.powi(2) + sim.wall_momentum_y.powi(2)).sqrt();
         self.record("wall_momentum", wall_momentum);
-        
+
         // Note: Temperature and Pressure are computed as per-cell fields (see thermo_field.rs)
         // and are not available as global scalars via SimStats public API.
         // To add them: either add getters to SimStats or compute globally from balls.
@@ -231,10 +228,7 @@ impl MetricsRegistry {
     }
 
     /// Sample per-species metrics from the simulation world.
-    fn sample_per_species(
-        &mut self,
-        world: &thermo_physics::application::core::SimulationWorld,
-    ) {
+    fn sample_per_species(&mut self, world: &thermo_physics::application::core::SimulationWorld) {
         for species_id in world.species().ids() {
             // Use species name if available, otherwise fall back to indexed name
             let species_name = world
@@ -293,17 +287,17 @@ mod tests {
     #[test]
     fn test_new_registry_has_builtin_series() {
         let registry = MetricsRegistry::new(100);
-        
+
         // Check energy series exist
         assert!(registry.get_series("E_kin").is_some());
         assert!(registry.get_series("E_pot").is_some());
         assert!(registry.get_series("E_tot").is_some());
-        
+
         // Note: T (temperature) not registered as it's a per-cell field, not a global scalar
-        
+
         // Check mechanical series exist
         assert!(registry.get_series("wall_momentum").is_some());
-        
+
         // Check system series exist
         assert!(registry.get_series("neighbour_count").is_some());
         assert!(registry.get_series("step_time").is_some());
@@ -313,7 +307,7 @@ mod tests {
     fn test_register_series() {
         let mut registry = MetricsRegistry::new(100);
         let original_len = registry.all_series().count();
-        
+
         registry.register_series(
             "custom_metric".to_string(),
             SeriesMetadata {
@@ -322,7 +316,7 @@ mod tests {
                 is_per_species: false,
             },
         );
-        
+
         assert_eq!(registry.all_series().count(), original_len + 1);
         assert!(registry.get_series("custom_metric").is_some());
     }
@@ -330,11 +324,11 @@ mod tests {
     #[test]
     fn test_record_and_retrieve() {
         let mut registry = MetricsRegistry::new(100);
-        
+
         registry.record("E_kin", 10.5);
         registry.record("E_kin", 11.2);
         registry.record("E_kin", 9.8);
-        
+
         let buffer = registry.get_series("E_kin").unwrap();
         assert_eq!(buffer.len(), 3);
         assert_eq!(buffer.latest(), Some(&9.8));
@@ -343,13 +337,13 @@ mod tests {
     #[test]
     fn test_clear() {
         let mut registry = MetricsRegistry::new(100);
-        
+
         registry.record("E_kin", 10.0);
         registry.record("E_kin", 20.0);
         registry.record("E_pot", 5.0);
-        
+
         registry.clear();
-        
+
         assert!(registry.get_series("E_kin").unwrap().is_empty());
         assert!(registry.get_series("E_pot").unwrap().is_empty());
     }
@@ -363,7 +357,7 @@ mod tests {
     #[test]
     fn test_per_species_registration() {
         let mut registry = MetricsRegistry::new(100);
-        
+
         let species_id = SpeciesId::new(0);
         registry.register_per_species_series(
             "count",
@@ -374,14 +368,14 @@ mod tests {
                 is_per_species: true,
             },
         );
-        
+
         assert!(registry.get_series("species_0:count").is_some());
     }
 
     #[test]
     fn test_clear_species() {
         let mut registry = MetricsRegistry::new(100);
-        
+
         let species_id = SpeciesId::new(0);
         registry.register_per_species_series(
             "count",
@@ -401,12 +395,12 @@ mod tests {
                 is_per_species: true,
             },
         );
-        
+
         registry.record("species_0:count", 10.0);
         registry.record("species_0:temperature", 300.0);
-        
+
         registry.clear_species(species_id);
-        
+
         assert!(registry.get_series("species_0:count").is_none());
         assert!(registry.get_series("species_0:temperature").is_none());
     }

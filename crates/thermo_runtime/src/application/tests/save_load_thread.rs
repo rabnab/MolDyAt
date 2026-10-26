@@ -128,7 +128,12 @@ fn physics_thread_reports_save_and_load_results() {
 
 #[test]
 fn without_a_save_store_save_and_load_fail_cleanly() {
-    let thread = PhysicsThread::spawn(empty_world(), SnapshotPublisher::new(), Box::new(|| {}), metrics_registry());
+    let thread = PhysicsThread::spawn(
+        empty_world(),
+        SnapshotPublisher::new(),
+        Box::new(|| {}),
+        metrics_registry(),
+    );
     thread.send_command(WorldCommand::Save).unwrap();
     assert!(matches!(next_event(&thread), PhysicsEvent::SaveFailed(_)));
     thread

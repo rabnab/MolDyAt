@@ -20,7 +20,8 @@ fn test_physics_thread_spawning() {
     let (main_content, _) = create_main_content();
     let snapshot_slot = publisher.slot();
 
-    let physics_thread = PhysicsThread::spawn(main_content, publisher, Box::new(|| {}), metrics_registry());
+    let physics_thread =
+        PhysicsThread::spawn(main_content, publisher, Box::new(|| {}), metrics_registry());
 
     // The thread runs and publishes.
     wait_for_snapshot(&snapshot_slot, "a first snapshot", |_| true);
@@ -45,7 +46,8 @@ fn test_physics_thread_snapshot_publishing() {
         .expect("Failed to add ball");
     let snapshot_slot = publisher.slot();
 
-    let physics_thread = PhysicsThread::spawn(main_content, publisher, Box::new(|| {}), metrics_registry());
+    let physics_thread =
+        PhysicsThread::spawn(main_content, publisher, Box::new(|| {}), metrics_registry());
 
     let snapshot = wait_for_snapshot(&snapshot_slot, "a snapshot with the ball", |s| {
         s.balls.len() == 1

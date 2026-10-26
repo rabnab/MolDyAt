@@ -50,7 +50,12 @@ impl HeadlessSnapshotSink for HeadlessWriter {
         if self.config.output.is_some() {
             // Include metrics in JSONL output if available
             let jsonl_line = if let Some(ref metrics) = self.metrics {
-                frame_to_jsonl_with_metrics(&self.config, snapshot, self.initial_total_energy, Some(metrics))
+                frame_to_jsonl_with_metrics(
+                    &self.config,
+                    snapshot,
+                    self.initial_total_energy,
+                    Some(metrics),
+                )
             } else {
                 frame_to_jsonl_with_config(&self.config, snapshot, self.initial_total_energy)
             };

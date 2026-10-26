@@ -41,11 +41,11 @@ fn sync_from_metrics_increments_version_each_call() {
     // Version increments when sync_from_metrics is called with metrics available.
     let metrics = Arc::new(RwLock::new(MetricsRegistry::new(1000)));
     let mut data = EnergyData::with_metrics(Arc::clone(&metrics));
-    
+
     // Sync without any metrics data - version should still increment
     data.sync_from_metrics();
     assert_eq!(data.version, 1);
-    
+
     // Add some data to metrics
     {
         let mut metrics_lock = metrics.write().unwrap();
@@ -53,7 +53,7 @@ fn sync_from_metrics_increments_version_each_call() {
     }
     data.sync_from_metrics();
     assert_eq!(data.version, 2);
-    
+
     {
         let mut metrics_lock = metrics.write().unwrap();
         metrics_lock.record("E_pot", 3.0);
@@ -65,7 +65,7 @@ fn sync_from_metrics_increments_version_each_call() {
 #[test]
 fn sync_from_metrics_stores_energy_values() {
     let metrics = Arc::new(RwLock::new(MetricsRegistry::new(1000)));
-    
+
     // Add test data to metrics
     {
         let mut metrics_lock = metrics.write().unwrap();
@@ -74,10 +74,10 @@ fn sync_from_metrics_stores_energy_values() {
         // Note: time is not stored in MetricsRegistry, it comes from snapshot
         // So we don't test time syncing here
     }
-    
+
     let mut data = EnergyData::with_metrics(Arc::clone(&metrics));
     data.sync_from_metrics();
-    
+
     assert_eq!(data.v_kin.back().copied(), Some(5.5));
     assert_eq!(data.v_pot.back().copied(), Some(3.3));
     // Time is set by update_from_snapshot, not sync_from_metrics, so it remains 0.0
@@ -88,15 +88,17 @@ fn sync_from_metrics_stores_energy_values() {
 fn update_from_snapshot_increments_version() {
     // Create a metrics registry and shared energy data with it
     let metrics_registry = Arc::new(RwLock::new(MetricsRegistry::new(1000)));
-    
+
     // Add some initial data to the registry
     {
         let mut metrics_lock = metrics_registry.write().unwrap();
         metrics_lock.record("E_kin", 10.0);
         metrics_lock.record("E_pot", 20.0);
     }
-    
-    let shared: SharedEnergyData = Arc::new(Mutex::new(EnergyData::with_metrics(Arc::clone(&metrics_registry))));
+
+    let shared: SharedEnergyData = Arc::new(Mutex::new(EnergyData::with_metrics(Arc::clone(
+        &metrics_registry,
+    ))));
     let mut manager = EnergyWindowManager::new(shared.clone());
 
     let snapshot = make_snapshot(1, 10.0, 20.0);
@@ -113,15 +115,17 @@ fn update_from_snapshot_increments_version() {
 fn update_from_snapshot_ignores_duplicate_step() {
     // Create a metrics registry and shared energy data with it
     let metrics_registry = Arc::new(RwLock::new(MetricsRegistry::new(1000)));
-    
+
     // Add some initial data to the registry
     {
         let mut metrics_lock = metrics_registry.write().unwrap();
         metrics_lock.record("E_kin", 1.0);
         metrics_lock.record("E_pot", 2.0);
     }
-    
-    let shared: SharedEnergyData = Arc::new(Mutex::new(EnergyData::with_metrics(Arc::clone(&metrics_registry))));
+
+    let shared: SharedEnergyData = Arc::new(Mutex::new(EnergyData::with_metrics(Arc::clone(
+        &metrics_registry,
+    ))));
     let mut manager = EnergyWindowManager::new(shared.clone());
 
     let snapshot = make_snapshot(5, 1.0, 2.0);
@@ -147,11 +151,13 @@ fn update_from_snapshot_ignores_duplicate_step() {
 fn update_from_snapshot_starts_a_new_history_for_a_new_world() {
     // Create a metrics registry and shared energy data with it
     let metrics_registry = Arc::new(RwLock::new(MetricsRegistry::new(1000)));
-    
-    let shared: SharedEnergyData = Arc::new(Mutex::new(EnergyData::with_metrics(Arc::clone(&metrics_registry))));
+
+    let shared: SharedEnergyData = Arc::new(Mutex::new(EnergyData::with_metrics(Arc::clone(
+        &metrics_registry,
+    ))));
     let mut manager = EnergyWindowManager::new(shared.clone());
     let frame_metrics = FrameMetrics::default();
-    
+
     // Add initial data to the registry
     {
         let mut metrics_lock = metrics_registry.write().unwrap();
@@ -162,12 +168,12 @@ fn update_from_snapshot_starts_a_new_history_for_a_new_world() {
         metrics_lock.record("E_pot", 2.0);
         metrics_lock.record("E_pot", 2.0);
     }
-    
+
     // Process initial steps
     for step in [10, 20, 30] {
         manager.update_from_snapshot(&make_snapshot(step, 1.0, 2.0), 60.0, 1.0, &frame_metrics);
     }
-    
+
     // A loaded world counts from 0 again, or even sits at the same step.
     // This should clear the energy data and start fresh
     {
@@ -176,17 +182,17 @@ fn update_from_snapshot_starts_a_new_history_for_a_new_world() {
         metrics_lock.record("E_kin", 7.0);
         metrics_lock.record("E_pot", 8.0);
     }
-    
+
     let mut loaded = make_snapshot(30, 7.0, 8.0);
     loaded.world_generation = 1;
     manager.update_from_snapshot(&loaded, 60.0, 1.0, &frame_metrics);
-    
+
     {
         let mut metrics_lock = metrics_registry.write().unwrap();
         metrics_lock.record("E_kin", 9.0);
         metrics_lock.record("E_pot", 9.5);
     }
-    
+
     let mut next = make_snapshot(32, 9.0, 9.5);
     next.world_generation = 1;
     manager.update_from_snapshot(&next, 60.0, 1.0, &frame_metrics);

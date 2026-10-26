@@ -282,13 +282,13 @@ impl EnergyWindowManager {
                 data.v_kin.clear();
                 data.v_pot.clear();
             }
-            
+
             // Sync cached values from MetricsRegistry (decision 8-B: thin wrapper)
             data.sync_from_metrics();
-            
+
             // Update time from snapshot (not stored in MetricsRegistry)
             data.time = snapshot.time;
-            
+
             // Update status text with FPS and per-frame metrics
             if let Some(ref status) = snapshot.status_text {
                 let fps_line = format_metrics_line(

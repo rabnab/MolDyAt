@@ -37,6 +37,7 @@ impl PhysicsRuntime {
         handler.flush();
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn run(
         &self,
         simulation: &mut MainContent,
@@ -102,7 +103,7 @@ impl PhysicsRuntime {
                 // Sample metrics at snapshot cadence (decision 1-B)
                 {
                     let mut metrics_registry = metrics.write().unwrap();
-                    metrics_registry.sample_from_world(&simulation.world());
+                    metrics_registry.sample_from_world(simulation.world());
                 }
 
                 snapshot_time_total += snapshot_start.elapsed();

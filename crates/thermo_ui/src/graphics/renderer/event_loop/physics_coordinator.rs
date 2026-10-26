@@ -13,7 +13,7 @@ use thermo_runtime::metrics::{MetricsRegistry, SharedMetricsRegistry};
 pub struct PhysicsCoordinator {
     physics_thread: Option<PhysicsThread>,
     snapshot_slot: Option<Arc<ArcSwapOption<RendererSnapshot>>>,
-    
+
     /// Shared metrics registry for time-series data.
     metrics: SharedMetricsRegistry,
 
@@ -47,11 +47,16 @@ impl PhysicsCoordinator {
     ) -> Self {
         let publisher = SnapshotPublisher::new();
         let snapshot_slot = publisher.slot();
-        
+
         // Create shared metrics registry
         let metrics = Arc::new(RwLock::new(MetricsRegistry::default()));
-        
-        let physics_thread = PhysicsThread::spawn(application, publisher, wakeup_callback, Arc::clone(&metrics));
+
+        let physics_thread = PhysicsThread::spawn(
+            application,
+            publisher,
+            wakeup_callback,
+            Arc::clone(&metrics),
+        );
         Self {
             physics_thread: Some(physics_thread),
             snapshot_slot: Some(snapshot_slot),

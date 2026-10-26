@@ -39,7 +39,7 @@ impl DisplayMode {
 }
 
 /// Shared energy data structure for communication between main simulation and energy plot window.
-/// 
+///
 /// This is now a thin wrapper around MetricsRegistry (decision 8-B). It syncs
 /// its cached values from the registry when requested.
 #[derive(Clone)]
@@ -84,22 +84,22 @@ impl EnergyData {
     }
 
     /// Push a kinetic and potential energy sample, incrementing the version.
-    /// 
+    ///
     /// This method is kept for backward compatibility, but now it's a no-op
     /// since metrics are recorded directly in the MetricsRegistry by the physics thread.
     /// To update the cached values, call `sync_from_metrics()` instead.
     pub fn push_sample(&mut self, _kinetic: f32, _potential: f32, _time: f32) {
         // No-op: metrics are now recorded in MetricsRegistry by physics thread
     }
-    
+
     /// Sync cached values from MetricsRegistry.
-    /// 
+    ///
     /// This should be called before rendering to ensure the cached values
     /// are up-to-date with the latest metrics from the registry.
     pub fn sync_from_metrics(&mut self) {
         if let Some(ref metrics) = self.metrics {
             let metrics_lock = metrics.read().unwrap();
-            
+
             // Sync energy values from registry
             if let Some(kin_series) = metrics_lock.get_series("E_kin") {
                 self.v_kin = kin_series.get().clone();
@@ -110,7 +110,7 @@ impl EnergyData {
             if let Some(time_value) = metrics_lock.get_current("time") {
                 self.time = time_value;
             }
-            
+
             // Increment version to signal that data has been updated
             self.version = self.version.wrapping_add(1);
         }
@@ -255,7 +255,7 @@ mod tests {
     fn test_sync_from_metrics_with_metrics() {
         use std::sync::RwLock;
         use thermo_runtime::metrics::MetricsRegistry;
-        
+
         // Create a metrics registry with some data
         let metrics = Arc::new(RwLock::new(MetricsRegistry::default()));
         {
@@ -265,13 +265,13 @@ mod tests {
             metrics_lock.record("E_pot", 3.0);
             metrics_lock.record("E_pot", 4.0);
         }
-        
+
         // Create EnergyData with metrics
         let mut data = EnergyData::with_metrics(Arc::clone(&metrics));
-        
+
         // Sync from metrics
         data.sync_from_metrics();
-        
+
         // Should have synced the data
         assert_eq!(data.v_kin.len(), 2);
         assert_eq!(data.v_pot.len(), 2);
