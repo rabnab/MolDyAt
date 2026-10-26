@@ -31,6 +31,8 @@ shaders! {
     LABEL_CAPSULE => "label_capsule.wgsl",
     LINE => "line.wgsl",
     PLACEMENT_RINGS => "placement_rings.wgsl",
+    PLOT_SEGMENT => "plot_segment.wgsl",
+    PLOT_TEXT => "plot_text.wgsl",
     SIDEBAR => "sidebar.wgsl",
     SOLID_RECT => "solid_rect.wgsl",
     SOURCE_SPHERE => "source_sphere.wgsl",

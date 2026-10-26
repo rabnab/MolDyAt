@@ -9,10 +9,10 @@ use thermo_runtime::metrics::{RingBuffer, SharedMetricsRegistry, read_metrics};
 /// Bring `cache` up to date with `series`: append the values pushed since the
 /// last sync (`cursor`) when the series was not cleared and nothing it
 /// pushed has been evicted unseen, copy it whole otherwise.
-fn sync_series(
-    cache: &mut VecDeque<f32>,
+fn sync_series<T: Copy>(
+    cache: &mut VecDeque<T>,
     cursor: &mut Option<(u64, u64)>,
-    series: Option<&RingBuffer<f32>>,
+    series: Option<&RingBuffer<T>>,
 ) {
     let Some(series) = series else {
         cache.clear();
@@ -78,6 +78,10 @@ pub struct EnergyData {
     pub v_kin: VecDeque<f32>,
     /// Cached potential energy samples (synced from MetricsRegistry)
     pub v_pot: VecDeque<f32>,
+    /// Simulation time of each sample (synced from MetricsRegistry), the
+    /// plot's x axis. The series end at the newest sample: the last value of
+    /// `v_kin` and `v_pot` belongs to the last time here.
+    pub sample_times: VecDeque<f32>,
     pub time: f32,
     pub status_text: Option<String>,
     /// Monotonically increasing counter that increments each time energy samples
@@ -92,6 +96,7 @@ pub struct EnergyData {
     /// append only what is new.
     kin_cursor: Option<(u64, u64)>,
     pot_cursor: Option<(u64, u64)>,
+    times_cursor: Option<(u64, u64)>,
 }
 
 impl EnergyData {
@@ -100,6 +105,7 @@ impl EnergyData {
         Self {
             v_kin: VecDeque::with_capacity(1000),
             v_pot: VecDeque::with_capacity(1000),
+            sample_times: VecDeque::with_capacity(1000),
             time: 0.0,
             status_text: None,
             version: 0,
@@ -107,6 +113,7 @@ impl EnergyData {
             synced_version: None,
             kin_cursor: None,
             pot_cursor: None,
+            times_cursor: None,
         }
     }
 
@@ -115,6 +122,7 @@ impl EnergyData {
         Self {
             v_kin: VecDeque::with_capacity(1000),
             v_pot: VecDeque::with_capacity(1000),
+            sample_times: VecDeque::with_capacity(1000),
             time: 0.0,
             status_text: None,
             version: 0,
@@ -122,6 +130,7 @@ impl EnergyData {
             synced_version: None,
             kin_cursor: None,
             pot_cursor: None,
+            times_cursor: None,
         }
     }
 
@@ -148,6 +157,11 @@ impl EnergyData {
             &mut self.v_pot,
             &mut self.pot_cursor,
             registry.get_series("E_pot"),
+        );
+        sync_series(
+            &mut self.sample_times,
+            &mut self.times_cursor,
+            Some(registry.times()),
         );
         self.version = self.version.wrapping_add(1);
     }

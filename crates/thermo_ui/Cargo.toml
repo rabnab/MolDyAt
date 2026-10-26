@@ -1,6 +1,6 @@
 [package]
 name = "thermo_ui"
-description = "MolDyAt user interface without a GPU backend: the event loop and input handling, operator tools, viewport, sidebar model and the energy plot window."
+description = "MolDyAt user interface without a GPU backend: the event loop and input handling, operator tools, viewport, sidebar model and the energy plot window (its layout; the backend draws it)."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -22,9 +22,8 @@ toml = { version = "1", default-features = false, features = ["parse", "serde", 
 log = "0.4"
 env_logger = "0.11"
 
-# Window management (energy plot uses softbuffer + winit)
+# Window management (the energy plot window; the backend draws into it)
 winit = "0.30.12"
-softbuffer = "0.4"
 
 [dev-dependencies]
 float-cmp = "0.10"

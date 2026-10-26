@@ -173,15 +173,8 @@ impl PendingSurfaceSize {
 /// - `Surface`: Rendering target (window surface)
 /// - `SurfaceConfiguration`: Current surface settings
 pub struct WgpuContext {
-    #[expect(
-        dead_code,
-        reason = "held for the context's lifetime; not read after setup"
-    )]
+    /// Also creates the energy plot window's surface (`plot_surface.rs`).
     pub instance: Instance,
-    #[expect(
-        dead_code,
-        reason = "held for the context's lifetime; not read after setup"
-    )]
     pub adapter: Adapter,
     pub device: Device,
     pub queue: Queue,

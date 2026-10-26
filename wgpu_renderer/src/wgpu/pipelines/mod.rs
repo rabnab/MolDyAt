@@ -9,6 +9,7 @@ pub(crate) mod frame_pipeline;
 pub(crate) mod grid_pipeline;
 pub(crate) mod highlight_pipeline;
 pub(crate) mod line_pipeline;
+pub(crate) mod plot_pipeline;
 pub(crate) mod sidebar_pipeline;
 pub(crate) mod source_label_pipeline;
 pub(crate) mod source_sphere_pipeline;

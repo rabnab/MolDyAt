@@ -7,21 +7,6 @@ use crate::graphics::energy_plot::energy_window::*;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 
 #[test]
-fn test_height_constants_calculation() {
-    // Compute expected values from constants, not hardcoded numbers
-    let expected_without_status = MARGIN_TOP + BASE_LINES * CHAR_HEIGHT_PIX;
-    let expected_with_status = MARGIN_TOP + (BASE_LINES + STATUS_TEXT_LINES) * CHAR_HEIGHT_PIX;
-
-    assert_eq!(MIN_HEIGHT_WITHOUT_STATUS, expected_without_status);
-    assert_eq!(MIN_HEIGHT_WITH_STATUS, expected_with_status);
-
-    assert_eq!(
-        MIN_HEIGHT_WITH_STATUS - MIN_HEIGHT_WITHOUT_STATUS,
-        STATUS_TEXT_LINES * CHAR_HEIGHT_PIX
-    );
-}
-
-#[test]
 fn test_energy_plot_window_new() {
     use crate::graphics::energy_plot::EnergyData;
     use std::sync::{Arc, Mutex};
@@ -30,8 +15,15 @@ fn test_energy_plot_window_new() {
     let window = EnergyPlotWindow::new(energy_data, DisplayMode::All);
 
     assert!(!window.is_open());
-    assert!(!window.has_status_text);
+    assert!(window.window_handle().is_none());
+    assert!(window.scene("").is_none(), "a closed window shows nothing");
     assert_eq!(window.get_display_mode(), DisplayMode::All);
+}
+
+#[test]
+fn test_window_title_names_the_display_mode() {
+    assert_eq!(window_title(DisplayMode::Kin), "Energy Plot - kin");
+    assert_eq!(window_title(DisplayMode::All), "Energy Plot - all");
 }
 
 #[test]

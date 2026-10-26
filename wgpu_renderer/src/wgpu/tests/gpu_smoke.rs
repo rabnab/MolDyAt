@@ -245,3 +245,92 @@ fn all_pipelines_build_and_render_without_validation_errors() {
         errors.join("\n")
     );
 }
+
+/// The energy plot pipeline on a real device: a scene with curves, a dot,
+/// axes and labels drawn offscreen, in the format the plot surface prefers
+/// and in an sRGB one.
+#[test]
+fn plot_pipeline_builds_and_renders_without_validation_errors() {
+    use thermo_ui::graphics::energy_plot::{DisplayMode, EnergyData, PlotScene};
+
+    use crate::wgpu::pipelines::plot_pipeline::PlotPipeline;
+
+    let Some((device, queue)) = request_device() else {
+        eprintln!("no GPU adapter available; skipping GPU smoke test");
+        return;
+    };
+    let errors: Arc<Mutex<Vec<String>>> = Arc::default();
+    let sink = errors.clone();
+    device.on_uncaptured_error(Arc::new(move |e: wgpu::Error| {
+        sink.lock().unwrap().push(e.to_string());
+    }));
+
+    let mut data = EnergyData::new();
+    data.v_kin.extend([1.0, 3.0, 2.0, f32::NAN, 4.0]);
+    data.v_pot.extend([-1.0, -2.0, -1.5, -1.0, -3.0]);
+    data.sample_times.extend([0.0, 0.1, 0.2, 0.3, 0.4]);
+    data.status_text = Some("fps 60\n#Balls: 2".to_string());
+    let empty = PlotScene::build(
+        &EnergyData::new(),
+        DisplayMode::All,
+        SIZE,
+        1.0,
+        "Esc: close",
+    );
+    let full = PlotScene::build(&data, DisplayMode::All, SIZE, 1.0, "Esc: close");
+    assert!(full.plot_area.is_some() && !full.segments.is_empty());
+
+    for format in [wgpu::TextureFormat::Bgra8Unorm, FORMAT] {
+        let mut pipeline = PlotPipeline::new(&device, &queue, format);
+        for scene in [&full, &empty, &full] {
+            pipeline.prepare(&device, &queue, scene);
+            let target = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("plot smoke target"),
+                size: wgpu::Extent3d {
+                    width: SIZE.0,
+                    height: SIZE.1,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            });
+            let view = target.create_view(&wgpu::TextureViewDescriptor::default());
+            let mut encoder =
+                device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+            {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("plot smoke pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        depth_slice: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    occlusion_query_set: None,
+                    timestamp_writes: None,
+                    multiview_mask: None,
+                });
+                pipeline.render(&mut pass);
+            }
+            queue.submit(std::iter::once(encoder.finish()));
+        }
+    }
+    device
+        .poll(wgpu::PollType::wait_indefinitely())
+        .expect("poll");
+
+    let errors = errors.lock().unwrap();
+    assert!(
+        errors.is_empty(),
+        "wgpu validation errors:\n{}",
+        errors.join("\n")
+    );
+}

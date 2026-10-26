@@ -13,7 +13,7 @@ Dependabot (`.github/dependabot.yml`) opens monthly, grouped PRs: one for cargo 
 | `rand`, `rand_distr` | seeded runs place and accelerate balls differently: every fixture and drift baseline moves | `cargo ci-test-headless-regression`, `cargo ci-test-drift`; a change here is a behaviour change (see `physics-change`) |
 | `rayon` | scheduling must not affect results | `cargo test --workspace thread_count` |
 | `wgpu`, `winit` | API changes in the backend; surface, present mode and event handling | build, `cargo test -p moldyat_wgpu`, run `gpu_smoke.rs` on a machine with a GPU, start the app and resize the window |
-| `winit`, `softbuffer` | core and `wgpu_renderer` must use the same `winit` version (energy window) | versions in both `Cargo.toml`s match |
+| `winit` | `thermo_ui` and `wgpu_renderer` must use the same `winit` version (the energy window is created in `thermo_ui`, its surface in the binary) | versions in both `Cargo.toml`s match |
 | `serde`, `serde_json` | save file format | `cargo test -p thermo_physics persistence` |
 | `env_logger`, `log` | log filters and targets | `RUST_LOG` targets still work |
 | any new crate | license, release build | `cargo deny check licenses`, `scripts/check_release_files.sh` |

@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use super::frame_renderer::FrameRenderer;
+use super::plot_surface::PlotTarget;
 use super::wgpu_context::WgpuContext;
 use super::wgpu_input::execute_input_action;
 use super::wgpu_pipelines::WgpuPipelines;
@@ -22,6 +23,15 @@ pub(super) enum WindowEventRoute {
     Ignore,
 }
 
+/// The GPU resources an event may need: the main window's context and
+/// pipelines (missing before the window is set up) and the energy window's
+/// surface (while it is open).
+pub(super) struct GpuResources<'a> {
+    pub(super) ctx: Option<&'a mut WgpuContext>,
+    pub(super) pipelines: Option<&'a mut WgpuPipelines>,
+    pub(super) plot: &'a mut PlotTarget,
+}
+
 /// Routes window and device events to the WGPU backend's focused handlers.
 pub(super) struct EventRouter;
 
@@ -29,12 +39,16 @@ impl EventRouter {
     pub(super) fn route_window_event(
         window_id: WindowId,
         event: WindowEvent,
-        ctx: Option<&mut WgpuContext>,
+        gpu: GpuResources,
         state: &mut UnifiedRenderState,
-        pipelines: Option<&mut WgpuPipelines>,
         event_loop: &ActiveEventLoop,
         main_window: Option<&Window>,
     ) {
+        let GpuResources {
+            ctx,
+            pipelines,
+            plot,
+        } = gpu;
         let targets_main_window = main_window.is_some_and(|window| window.id() == window_id);
         let route = Self::classify_window_event(
             &event,
@@ -55,9 +69,13 @@ impl EventRouter {
             }
             WindowEventRoute::EnergyWindow => {
                 if matches!(event, WindowEvent::RedrawRequested) {
-                    state.energy_manager_mut().handle_redraw();
+                    if let (Some(frame), Some(ctx)) = (state.energy_window_redraw(), ctx) {
+                        plot.draw(ctx, frame);
+                    }
                 } else {
                     state.handle_energy_window_event(event);
+                    // ESC or the close button closed it: let the window go.
+                    plot.sync(state.energy_manager().window_id());
                 }
             }
             WindowEventRoute::MainWindow => {

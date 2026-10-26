@@ -22,13 +22,15 @@
 //! - `gpu/`: shared building blocks — `GpuBatch` (the only place that creates
 //!   wgpu pipelines and buffers), WGSL sources with the common header,
 //!   textures, bitmap text
-//! - `EnergyWindowManager`: Managed through the shared core renderer state layer
+//! - `EnergyWindowManager` (in `thermo_ui`): the energy plot window and its
+//!   layout; `plot_surface` draws it with its own surface on the shared device
 
 mod app_lifecycle;
 mod event_router;
 mod frame_renderer;
 mod gpu;
 mod pipelines;
+mod plot_surface;
 mod render_graph;
 mod wgpu_context;
 mod wgpu_input;

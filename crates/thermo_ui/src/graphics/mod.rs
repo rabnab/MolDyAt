@@ -5,5 +5,5 @@
 pub mod renderer;
 pub mod sidebar;
 
-// Energy plot window is renderer-agnostic (uses softbuffer)
+// Energy plot window: the window and its plot layout; the backend draws it
 pub mod energy_plot;
