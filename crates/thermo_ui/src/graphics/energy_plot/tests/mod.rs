@@ -4,5 +4,5 @@
 
 //! Tests for the energy plot, one file per topic.
 
-mod energy_renderer;
 mod energy_window;
+mod plot_layout;

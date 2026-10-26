@@ -43,5 +43,8 @@ pub trait RenderPipeline: Any {
 - Unit-test geometry builders and instance generation without a device (see `tests/highlight_pipeline.rs`, `tests/sidebar_pipeline.rs`, `tests/thermostat_label_pipeline.rs`).
 - Commands: `cargo test -p moldyat_wgpu`, then `cargo fmt` and `cargo clippy --workspace -- -D warnings`. New `.rs` and `.wgsl` files start with the MPL-2.0 header.
 
+## The energy plot window
+`PlotPipeline` (`pipelines/plot_pipeline.rs`) is the one pipeline outside the render graph: it draws a `PlotScene` from `thermo_ui` (window pixels, laid out and unit-tested there) into the plot window's own surface (`plot_surface.rs`). It still builds only `GpuBatch`es and takes its shaders (`plot_segment.wgsl`, `plot_text.wgsl`) from `gpu/shaders.rs`. A change to what the plot shows belongs in `PlotScene::build`, not in the pipeline.
+
 ## Related skills
 Operator visuals: `operator-framework`. Sidebar icons and atlas: `operator-framework` (Sidebar And Tool Order).

@@ -118,11 +118,11 @@ fn update_from_snapshot_starts_a_new_history_for_a_new_world() {
 // ── handle_redraw ────────────────────────────────────────────────────────────
 
 #[test]
-fn handle_redraw_returns_false_when_no_window() {
+fn handle_redraw_gives_no_frame_without_window() {
     let mut manager = make_manager();
     assert!(
-        !manager.handle_redraw(),
-        "handle_redraw should return false when no energy window is open"
+        manager.handle_redraw().is_none(),
+        "handle_redraw should give no frame when no energy window is open"
     );
 }
 

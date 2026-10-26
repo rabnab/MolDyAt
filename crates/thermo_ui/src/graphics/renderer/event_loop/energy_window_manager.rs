@@ -2,17 +2,18 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Energy window manager - shared logic for both ggez and wgpu renderers
-//!
-//! Handles energy plot window creation, event handling, and data updates.
+//! Energy window manager: creating and closing the energy plot window, its
+//! keys and data updates, and when it is redrawn. The backend draws the
+//! [`PlotFrame`] that [`EnergyWindowManager::handle_redraw`] hands out.
 
 use super::command_registry::{KeyInput, UiAction};
 use super::input_handler::key_input;
 use super::key_map::{HeldModifiers, KeyMap, KeyPhase};
 use crate::graphics::energy_plot::{
-    DisplayMode, EnergyPlotWindow, SharedEnergyData, split_screen_layout_for_monitor,
+    DisplayMode, EnergyPlotWindow, PlotScene, SharedEnergyData, split_screen_layout_for_monitor,
 };
 use crate::graphics::renderer::event_loop::metrics::FrameMetrics;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use thermo_runtime::application::renderer_snapshot::RendererSnapshot;
 use winit::event::{ElementState, WindowEvent};
@@ -52,10 +53,13 @@ pub(super) fn energy_window_key(
     }
 }
 
+/// One redraw of the energy window: the window to draw into and what to draw.
+pub struct PlotFrame {
+    pub window: Arc<Window>,
+    pub scene: PlotScene,
+}
+
 /// Manages the energy plot window lifecycle and data updates.
-///
-/// This struct encapsulates all the energy window logic that was previously
-/// duplicated between ggez and wgpu renderers.
 pub struct EnergyWindowManager {
     /// The energy plot window (if open)
     window: Option<EnergyPlotWindow>,
@@ -71,10 +75,10 @@ pub struct EnergyWindowManager {
 
 /// Minimum interval between energy-window redraws (≈12 Hz).
 ///
-/// The energy window renders CPU-side text and a bitmap plot on every
-/// `RedrawRequested` event.  Throttling to this interval avoids saturating
-/// the CPU when the OS services the window more aggressively (e.g., when it
-/// has input focus).
+/// Every `RedrawRequested` event lays the plot out anew (up to a few thousand
+/// segments) and presents a frame. Throttling to this interval keeps that
+/// from stealing frame time from the simulation window when the OS services
+/// the energy window more aggressively (e.g., when it has input focus).
 const ENERGY_REDRAW_MIN_INTERVAL: Duration = Duration::from_millis(83);
 
 impl EnergyWindowManager {
@@ -192,25 +196,25 @@ impl EnergyWindowManager {
         }
     }
 
-    /// Handle a redraw request for the energy window.
+    /// Handle a redraw request for the energy window: the frame to draw.
     ///
-    /// Records the completion time and clears the pending flag so subsequent
-    /// [`Self::request_redraw`] calls can schedule the next redraw.  Both
-    /// state updates are performed only when rendering actually takes place,
-    /// so a spurious call with no window open leaves the throttle state clean.
+    /// Records the time and clears the pending flag so subsequent
+    /// [`Self::request_redraw`] calls can schedule the next redraw. Both
+    /// state updates happen only while a window is open, so a spurious call
+    /// with no window leaves the throttle state clean.
     ///
     /// # Returns
-    /// `true` if render was performed, `false` if not energy window's redraw.
-    pub fn handle_redraw(&mut self) -> bool {
+    /// `None` without a window, or while it is minimised.
+    pub fn handle_redraw(&mut self) -> Option<PlotFrame> {
         log::trace!("EnergyWindowManager: handle_redraw called");
-        if let Some(window) = &mut self.window {
-            let _ = window.render();
-            self.redraw_pending = false;
-            self.last_redraw_instant = Some(Instant::now());
-            true
-        } else {
-            false
-        }
+        let window = self.window.as_ref()?;
+        let handle = Arc::clone(window.window_handle()?);
+        self.redraw_pending = false;
+        self.last_redraw_instant = Some(Instant::now());
+        Some(PlotFrame {
+            window: handle,
+            scene: window.scene()?,
+        })
     }
 
     /// Request a redraw for the energy window if it is open.
@@ -218,7 +222,7 @@ impl EnergyWindowManager {
     /// Requests are **throttled** to at most [`ENERGY_REDRAW_MIN_INTERVAL`] and
     /// **coalesced** so that at most one redraw is pending at any time.  This
     /// prevents the OS (especially when the energy window has input focus) from
-    /// driving the CPU-heavy software renderer faster than needed.
+    /// driving the plot redraws faster than needed.
     pub fn request_redraw(&mut self) {
         if self.window.is_none() {
             return;

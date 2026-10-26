@@ -15,8 +15,8 @@ are in [refactoring-plan.md](plan/refactoring-plan.md).
 |---|---|---|
 | `crates/thermo_physics` | `thermo_physics` | The physics: particles and species, pair potentials and the SIMD force kernel, cell grid and Verlet lists, walls and operators (`objects2d`); the world, `MainContent` and its stepping (`application/core`); run settings (`sim_config`), units, stats, thermo fields and saves (`persistence`). Dependencies: rayon, serde, rand, toml, log |
 | `crates/thermo_runtime` | `thermo_runtime` | Running a simulation without a window: the physics thread and its `SnapshotPublisher`, `DomainCommand` and its handler, `OperatorCommand`s, `PhysicsEvent`, `RendererSnapshot` and its builder (`CreateSnapshot`), scene layers, the metrics store (`metrics`), the data export (`export`), and headless runs (`headless_cli`, `headless_runner`, `headless_output`, `headless_timings`). Dependencies: `thermo_physics`, arc-swap, serde_json, rayon, log |
-| `crates/thermo_ui` | `thermo_ui` | The UI without a GPU backend (`graphics`): event loop and input handling, the keyboard command registry and key map, operator tools, viewport, sidebar model, and the energy plot window (still winit + softbuffer until V4a); plus the logger setup and the UI settings file (`ui_settings`: `ui.toml` with the key bindings, #335). Dependencies: `thermo_runtime`, `thermo_physics`, winit, softbuffer, arc-swap, toml, log, env_logger |
-| `wgpu_renderer` | `moldyat_wgpu` | The `moldyat` binary: command line, the wgpu window and render pipelines. For `--headless` it computes the default world from its window size and calls `thermo_runtime`, handing it the git commit it was built from (`HeadlessRunner::from_config`) |
+| `crates/thermo_ui` | `thermo_ui` | The UI without a GPU backend (`graphics`): event loop and input handling, the keyboard command registry and key map, operator tools, viewport, sidebar model, and the energy plot window with its plot layout (`PlotScene`, drawn by the backend); plus the logger setup and the UI settings file (`ui_settings`: `ui.toml` with the key bindings, #335). Dependencies: `thermo_runtime`, `thermo_physics`, winit, arc-swap, toml, log, env_logger |
+| `wgpu_renderer` | `moldyat_wgpu` | The `moldyat` binary: command line, the wgpu window and render pipelines, and the energy plot window's surface (`plot_surface`). For `--headless` it computes the default world from its window size and calls `thermo_runtime`, handing it the git commit it was built from (`HeadlessRunner::from_config`) |
 
 Dependencies point one way: `moldyat_wgpu` → `thermo_ui` →
 `thermo_runtime` → `thermo_physics`. `thermo_physics` and `thermo_runtime`
@@ -74,8 +74,9 @@ FrameRenderer → RenderGraph → GPU
 - **Rayon pool.** The physics step parallelises neighbour-list rebuilds,
   positions and forces with `par_iter`. The pool has `RAYON_NUM_THREADS`
   workers, or the number of cores minus 2.
-- **Energy plot window.** A separate winit/softbuffer window
-  (`graphics/energy_plot`) that draws the energy history from snapshots.
+- **Energy plot window.** A separate OS window (`graphics/energy_plot`)
+  with the energy history from the metrics store, drawn on the main
+  thread with wgpu (see [Energy plot window](#energy-plot-window)).
 
 ## Layers
 
@@ -150,7 +151,8 @@ split into stateless orchestrators that operate on `RenderStateData`:
 | `AppLifecycle` | Creates the window, GPU context, pipelines and shared state |
 | `EventRouter` | Classifies window and device events and dispatches them |
 | `FrameRenderer` | Redraws: prepares pipelines from the snapshot and submits the frame |
-| `WgpuContext` | Device, queue, surface and adapter |
+| `WgpuContext` | Instance, device, queue, surface and adapter |
+| `PlotSurface` | The energy plot window's surface and `PlotPipeline`, on the main window's device |
 | `RenderGraph` / `WgpuPipelines` | Ordered set of render pipelines with named handles |
 
 ## Command flow
@@ -300,7 +302,35 @@ Every visual layer is one `RenderPipeline` in
   keep the identity `view_proj`.
 - Tests: `gpu/tests/shaders.rs` validates all WGSL with naga, and
   `tests/gpu_smoke.rs` builds every pipeline on a real device and renders a
-  populated frame (skipped without a GPU adapter).
+  populated frame (skipped without a GPU adapter), the energy plot's
+  `PlotPipeline` included.
+- The energy plot window has its own surface and pipeline outside the render
+  graph (see [Energy plot window](#energy-plot-window)).
+
+### Energy plot window
+
+`EnergyWindowManager` (`thermo_ui`) opens the window on the energy half of
+the split screen (`split_screen_layout`; the simulation window keeps its
+size, #167), owns its keys and display mode, and keeps `EnergyData` in
+step with the metrics store: the E_kin and E_pot series and the step of
+each sample, appending only new values. `PlotScene::build`
+(`energy_plot/plot_layout.rs`) lays the plot out in window pixels without a
+GPU: title and key hints, axes with round ticks (x: simulation step,
+y: energy), grid and zero line, the curves of the display mode (a
+non-finite value breaks a curve), the legend and the status text. The
+layout is unit-tested there.
+
+The binary draws it: on a `RedrawRequested` for the plot window,
+`EnergyWindowManager::handle_redraw` hands out a `PlotFrame` (window and
+scene), and `plot_surface::draw_plot_frame` renders it into a surface of its
+own, created from the shared `Instance` and drawn with the shared device
+and queue. `PlotPipeline` (`pipelines/plot_pipeline.rs`) is not part of the
+render graph: it draws a scene, not a snapshot, with two `GpuBatch`es,
+anti-aliased round-capped segments (`plot_segment.wgsl`) and coloured 8×8
+bitmap text (`plot_text.wgsl`), both in window pixels. The surface prefers a
+format without sRGB encoding so the colours appear as given. It holds an
+`Arc` of the window, so the router drops it as soon as the window closes
+(`sync_plot_surface`). Redraws are throttled to about 12 Hz.
 
 ## Persistence
 

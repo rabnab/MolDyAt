@@ -186,7 +186,7 @@ impl TextBatch {
 }
 
 /// Row-major R8 atlas: glyph `i` of `atlas_chars` at x = `i * GLYPH_W`.
-fn build_atlas_data(atlas_chars: &[char]) -> Vec<u8> {
+pub(crate) fn build_atlas_data(atlas_chars: &[char]) -> Vec<u8> {
     let width = atlas_chars.len() * GLYPH_W as usize;
     let mut data = vec![0u8; width * GLYPH_H as usize];
 

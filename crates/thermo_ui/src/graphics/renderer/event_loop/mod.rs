@@ -30,7 +30,7 @@ mod viewport_orchestrator;
 // EnergyWindowManager is exposed through UnifiedRenderState accessors and must
 // remain exported so backend code can name the type.
 pub use command_registry::{COMMANDS, CommandDescriptor, CommandKind, UiAction};
-pub use energy_window_manager::EnergyWindowManager;
+pub use energy_window_manager::{EnergyWindowManager, PlotFrame};
 pub use input_handler::{InputAction, InputHandler, KeyCode, OperatorTool, key_input};
 pub use key_map::KeyMap;
 pub use metrics::{FrameMetrics, MetricsCollector};

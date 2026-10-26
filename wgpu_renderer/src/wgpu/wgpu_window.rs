@@ -9,8 +9,9 @@
 //! Integrates with the physics thread via PhysicsCoordinator to receive simulation snapshots.
 
 use super::app_lifecycle::AppLifecycle;
-use super::event_router::EventRouter;
+use super::event_router::{EventRouter, GpuResources};
 use super::frame_renderer::FrameRenderer;
+use super::plot_surface::PlotSurface;
 use super::wgpu_context::WgpuContext;
 use super::wgpu_pipelines::WgpuPipelines;
 use std::sync::Arc;
@@ -73,6 +74,8 @@ struct WgpuApp {
     proxy: EventLoopProxy<UserEvent>,
     ctx: Option<WgpuContext>,
     pipelines: Option<WgpuPipelines>,
+    /// Surface of the energy plot window while it is open.
+    plot: Option<PlotSurface>,
     state: Option<UnifiedRenderState>,
 }
 
@@ -85,6 +88,7 @@ impl WgpuApp {
             window: None,
             ctx: None,
             pipelines: None,
+            plot: None,
             state: None,
         }
     }
@@ -145,13 +149,14 @@ impl ApplicationHandler<UserEvent> for WgpuApp {
             return;
         };
 
-        let ctx = self.ctx.as_mut();
-        let pipelines = self.pipelines.as_mut();
+        let gpu = GpuResources {
+            ctx: self.ctx.as_mut(),
+            pipelines: self.pipelines.as_mut(),
+            plot: &mut self.plot,
+        };
         let window = self.window.as_deref();
 
-        EventRouter::route_window_event(
-            window_id, event, ctx, state, pipelines, event_loop, window,
-        );
+        EventRouter::route_window_event(window_id, event, gpu, state, event_loop, window);
     }
 
     fn device_event(
