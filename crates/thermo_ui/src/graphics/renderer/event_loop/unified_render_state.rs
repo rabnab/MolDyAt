@@ -155,8 +155,6 @@ impl UnifiedRenderState {
         &mut self.render.energy_manager
     }
 
-    /// Handle an event of the energy window, with the keys of the key map.
-    /// Returns `true` if the event was handled.
     /// Redraw of the energy window: the frame to draw, with the key hints of
     /// the current key map (see [`EnergyWindowManager::handle_redraw`]).
     pub fn energy_window_redraw(&mut self) -> Option<super::PlotFrame> {
@@ -165,6 +163,8 @@ impl UnifiedRenderState {
             .handle_redraw(self.input.key_map())
     }
 
+    /// Handle an event of the energy window, with the keys of the key map.
+    /// Returns `true` if the event was handled.
     pub fn handle_energy_window_event(&mut self, event: winit::event::WindowEvent) -> bool {
         self.render
             .energy_manager

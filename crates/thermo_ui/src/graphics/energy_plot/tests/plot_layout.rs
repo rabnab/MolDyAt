@@ -132,6 +132,31 @@ fn test_long_history_scrolls_with_the_newest_sample_at_the_right_edge() {
     assert!(!has_label(&scene, "19"));
 }
 
+/// A spike that just left the window must not pull the curve, cut at the
+/// left edge, out of the plot area (#365 re-review).
+#[test]
+fn test_curve_cut_at_the_left_edge_stays_inside_the_plot_area() {
+    // The window is [2, 12]; the cut at t = 2 lies between 1000 and 1.
+    let scene = build(
+        &data(&[1000.0, 1.0, 1.1], &[0.0; 3], &[0.0, 5.0, 12.0]),
+        DisplayMode::Kin,
+        SIZE,
+        1.0,
+    );
+    let area = scene.plot_area.expect("plot area");
+    let curve = segments_of(&scene, COLOR_KINETIC);
+
+    assert_eq!(curve.len(), 2);
+    for s in &curve {
+        assert!(
+            area.contains(s.from) && area.contains(s.to),
+            "{s:?} outside {area:?}"
+        );
+    }
+    // The cut value (600.4) is the highest point drawn.
+    assert!(curve[0].from[1] < curve[1].from[1]);
+}
+
 /// The goal of the fixed span (#365): halving the time step only scrolls
 /// the plot faster; an instant lands on the same pixel column.
 #[test]

@@ -236,15 +236,35 @@ impl TimeWindow {
     }
 }
 
-/// The y range shown: the values of the points inside `window`, with 5%
+/// The value at time `t` on the straight line from `p` to `q`.
+fn interpolate(p: (f64, f64), q: (f64, f64), t: f64) -> f64 {
+    p.1 + (q.1 - p.1) * (t - p.0) / (q.0 - p.0)
+}
+
+/// Where each curve crosses the left edge `t0`: the value cut there from the
+/// segment between the last point before and the first point after it.
+fn edge_values(curves: &[Curve], t0: f64) -> impl Iterator<Item = f64> + '_ {
+    curves.iter().flat_map(move |curve| {
+        curve
+            .windows(2)
+            .filter_map(move |pair| match (pair[0], pair[1]) {
+                (Some(p), Some(q)) if p.0 < t0 && q.0 > t0 => Some(interpolate(p, q, t0)),
+                _ => None,
+            })
+    })
+}
+
+/// The y range shown: the values of the points inside `window` and where
+/// the curves are cut at its left edge, so everything drawn fits, with 5%
 /// room above and below. `None` when no point is inside.
 fn value_range(curves: &[Curve], window: TimeWindow) -> Option<(f64, f64)> {
-    let mut values = curves
+    let inside = curves
         .iter()
         .flatten()
         .flatten()
         .filter(|&&(t, _)| window.contains(t))
         .map(|&(_, v)| v);
+    let mut values = inside.chain(edge_values(curves, window.t0));
     let first = values.next()?;
     let (lo, hi) = values.fold((first, first), |(lo, hi), v| (lo.min(v), hi.max(v)));
     let span = hi - lo;
@@ -627,8 +647,9 @@ impl Layout<'_> {
             match curve.get(i + 1).copied().flatten() {
                 // A segment ending exactly at the edge would be cut to nothing.
                 Some(q) if q.0 > t0 || p.0 >= t0 => {
+                    // Cut at the edge; `value_range` includes this value.
                     let p = if p.0 < t0 && q.0 > p.0 {
-                        (t0, p.1 + (q.1 - p.1) * (t0 - p.0) / (q.0 - p.0))
+                        (t0, interpolate(p, q, t0))
                     } else {
                         p
                     };
