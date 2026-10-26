@@ -3,20 +3,27 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! Energy window manager: creating and closing the energy plot window, its
-//! keys and data updates, and when it is redrawn. The backend draws the
-//! [`PlotFrame`] that [`EnergyWindowManager::handle_redraw`] hands out.
+//! keys and mouse gestures, data updates, and when it is redrawn. The
+//! backend draws the [`PlotFrame`] that [`EnergyWindowManager::handle_redraw`]
+//! hands out.
+//!
+//! Mouse (#367): the scroll wheel zooms the plot's time range around the
+//! pointer, a middle-button drag pans it, a middle-button double click (or
+//! the key of `view.reset_plot_view`) returns to the default view.
 
 use super::command_registry::{KeyInput, UiAction, command_by_id};
 use super::input_handler::key_input;
 use super::key_map::{HeldModifiers, KeyMap, KeyPhase};
+use super::operator_tool_handler::scroll_y_from_delta;
 use crate::graphics::energy_plot::{
-    DisplayMode, EnergyPlotWindow, PlotScene, SharedEnergyData, split_screen_layout_for_monitor,
+    DisplayMode, EnergyPlotWindow, PlotRect, PlotScene, SharedEnergyData, TimeHistory, TimeView,
+    split_screen_layout_for_monitor,
 };
 use crate::graphics::renderer::event_loop::metrics::FrameMetrics;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use thermo_runtime::application::renderer_snapshot::RendererSnapshot;
-use winit::event::{ElementState, WindowEvent};
+use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::KeyCode;
 use winit::window::{Window, WindowId};
@@ -28,6 +35,8 @@ pub(super) enum EnergyWindowKey {
     Close,
     /// Cycle what the window plots.
     CycleDisplay,
+    /// Return the plot to its default time view.
+    ResetView,
 }
 
 /// The energy window's action for a key event. The keys come from the key
@@ -49,6 +58,7 @@ pub(super) fn energy_window_key(
         UiAction::CyclePlotContent | UiAction::ToggleEnergyWindow => {
             Some(EnergyWindowKey::CycleDisplay)
         }
+        UiAction::ResetPlotView => Some(EnergyWindowKey::ResetView),
         _ => None,
     }
 }
@@ -67,11 +77,40 @@ pub(super) fn energy_window_key_hints(key_map: &KeyMap) -> String {
             }
             keys
         });
-    if mode_keys.is_empty() {
-        "Esc: close".to_string()
-    } else {
-        format!("Esc: close  {}: mode", mode_keys.join(" / "))
+    let mut hints = "Esc: close".to_string();
+    if !mode_keys.is_empty() {
+        hints.push_str(&format!("  {}: mode", mode_keys.join(" / ")));
     }
+    let reset_keys = command_by_id("view.reset_plot_view")
+        .map(|command| key_map.binding_display(command))
+        .unwrap_or_default();
+    if !reset_keys.is_empty() {
+        hints.push_str(&format!("  {}: reset", reset_keys.join(" / ")));
+    }
+    hints
+}
+
+/// Two middle-button presses at most this far apart in time and space are
+/// a double click (reset the view).
+const DOUBLE_CLICK_TIME: Duration = Duration::from_millis(400);
+const DOUBLE_CLICK_DISTANCE_PX: f32 = 6.0;
+
+/// Where the plot was in the last frame: turns pointer pixels into times.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) struct PlotGeometry {
+    pub(super) area: PlotRect,
+    pub(super) history: TimeHistory,
+}
+
+/// The pointer over the energy window.
+#[derive(Debug, Default)]
+struct PlotPointer {
+    /// Last cursor position, window pixels.
+    cursor: Option<[f32; 2]>,
+    /// x of the cursor at the last pan step while the middle button is held.
+    drag_x: Option<f32>,
+    /// Time and place of the last middle-button press, for double clicks.
+    last_middle_press: Option<(Instant, [f32; 2])>,
 }
 
 /// One redraw of the energy window: the window to draw into and what to draw.
@@ -92,6 +131,14 @@ pub struct EnergyWindowManager {
     /// `RedrawRequested` event has not yet been handled.  Prevents queuing
     /// more than one pending redraw at a time.
     redraw_pending: bool,
+    /// The plot's time range; kept when the window is closed and reopened.
+    view: TimeView,
+    /// The plot geometry of the last frame, for the mouse gestures.
+    geometry: Option<PlotGeometry>,
+    pointer: PlotPointer,
+    /// `EnergyData::history_resets` the view last saw: a new world history
+    /// returns the view to its default.
+    seen_history_resets: u64,
 }
 
 /// Minimum interval between energy-window redraws (≈12 Hz).
@@ -113,7 +160,131 @@ impl EnergyWindowManager {
             energy_data,
             last_redraw_instant: None,
             redraw_pending: false,
+            view: TimeView::default(),
+            geometry: None,
+            pointer: PlotPointer::default(),
+            seen_history_resets: 0,
         }
+    }
+
+    /// The plot's time range.
+    pub fn plot_view(&self) -> &TimeView {
+        &self.view
+    }
+
+    /// Return the plot to its default time view and show it now.
+    pub fn reset_plot_view(&mut self) {
+        if !self.view.is_default() {
+            self.view.reset();
+            self.redraw_now();
+        }
+    }
+
+    /// Zoom the plot's time range by `notches` wheel notches (positive: in)
+    /// around the pointer at `cursor_x` (window pixels), in the geometry of
+    /// the last frame. Returns whether the view changed.
+    pub(super) fn zoom_plot(&mut self, notches: f64, cursor_x: Option<f32>) -> bool {
+        let Some(geometry) = self.geometry else {
+            return false;
+        };
+        let area = geometry.area;
+        let anchor = cursor_x.map_or(1.0, |x| {
+            (f64::from(x) - f64::from(area.left)) / f64::from(area.width())
+        });
+        self.change_view(|view| view.zoom(notches, anchor, &geometry.history))
+    }
+
+    /// Pan the plot by a pointer move of `dx_px` window pixels: the curves
+    /// follow the pointer, so moving right shows earlier times. Returns
+    /// whether the view changed.
+    pub(super) fn pan_plot(&mut self, dx_px: f32) -> bool {
+        let Some(geometry) = self.geometry else {
+            return false;
+        };
+        let dt = -f64::from(dx_px) / f64::from(geometry.area.width()) * self.view.span();
+        self.change_view(|view| view.pan(dt, &geometry.history))
+    }
+
+    /// The geometry of the last frame (tests).
+    #[cfg(test)]
+    pub(super) fn set_plot_geometry(&mut self, geometry: Option<PlotGeometry>) {
+        self.geometry = geometry;
+    }
+
+    fn change_view(&mut self, change: impl FnOnce(&mut TimeView)) -> bool {
+        let before = self.view;
+        change(&mut self.view);
+        let changed = self.view != before;
+        if changed {
+            self.redraw_now();
+        }
+        changed
+    }
+
+    /// Redraw promptly after a view change, not waiting for the throttle that
+    /// paces redraws for new samples.
+    fn redraw_now(&mut self) {
+        if let Some(window) = &self.window {
+            window.request_redraw();
+            self.redraw_pending = true;
+        }
+    }
+
+    /// A middle-button press at `at`: a double click resets the view,
+    /// otherwise a pan starts.
+    pub(super) fn middle_pressed(&mut self, at: [f32; 2], now: Instant) {
+        let double = self.pointer.last_middle_press.is_some_and(|(time, place)| {
+            now.duration_since(time) <= DOUBLE_CLICK_TIME
+                && (at[0] - place[0]).hypot(at[1] - place[1]) <= DOUBLE_CLICK_DISTANCE_PX
+        });
+        if double {
+            self.pointer.last_middle_press = None;
+            self.pointer.drag_x = None;
+            self.reset_plot_view();
+        } else {
+            self.pointer.last_middle_press = Some((now, at));
+            self.pointer.drag_x = Some(at[0]);
+        }
+    }
+
+    /// The pointer moved to `at`; while the middle button is held this pans.
+    pub(super) fn pointer_moved(&mut self, at: [f32; 2]) {
+        self.pointer.cursor = Some(at);
+        if let Some(from) = self.pointer.drag_x {
+            self.pointer.drag_x = Some(at[0]);
+            self.pan_plot(at[0] - from);
+        }
+    }
+
+    /// The mouse gestures of the energy window. Returns whether the event
+    /// was one.
+    fn handle_mouse_event(&mut self, event: &WindowEvent) -> bool {
+        match event {
+            WindowEvent::MouseWheel { delta, .. } => {
+                let notches = f64::from(scroll_y_from_delta(*delta));
+                let cursor_x = self.pointer.cursor.map(|[x, _]| x);
+                self.zoom_plot(notches, cursor_x);
+            }
+            WindowEvent::MouseInput {
+                state,
+                button: MouseButton::Middle,
+                ..
+            } => match state {
+                ElementState::Pressed => {
+                    let at = self.pointer.cursor.unwrap_or_default();
+                    self.middle_pressed(at, Instant::now());
+                }
+                ElementState::Released => self.pointer.drag_x = None,
+            },
+            WindowEvent::CursorMoved { position, .. } => {
+                self.pointer_moved([position.x as f32, position.y as f32]);
+            }
+            WindowEvent::CursorLeft { .. } => self.pointer.cursor = None,
+            // A release while the window had no focus never arrives.
+            WindowEvent::Focused(false) => self.pointer.drag_x = None,
+            _ => return false,
+        }
+        true
     }
 
     /// Get the window ID if the energy window is open.
@@ -209,11 +380,12 @@ impl EnergyWindowManager {
                             window.request_redraw();
                         }
                     }
+                    Some(EnergyWindowKey::ResetView) => self.reset_plot_view(),
                     None => return false,
                 }
                 true
             }
-            _ => false,
+            event => self.handle_mouse_event(&event),
         }
     }
 
@@ -234,9 +406,14 @@ impl EnergyWindowManager {
         let handle = Arc::clone(window.window_handle()?);
         self.redraw_pending = false;
         self.last_redraw_instant = Some(Instant::now());
+        let scene = window.scene(&energy_window_key_hints(key_map), &self.view)?;
+        self.geometry = scene
+            .plot_area
+            .zip(scene.history)
+            .map(|(area, history)| PlotGeometry { area, history });
         Some(PlotFrame {
             window: handle,
-            scene: window.scene(&energy_window_key_hints(key_map))?,
+            scene,
         })
     }
 
@@ -294,6 +471,12 @@ impl EnergyWindowManager {
     ) {
         if let Ok(mut data) = self.energy_data.lock() {
             data.sync_from_metrics();
+            // A new world starts a new history: back to the default view.
+            if data.history_resets != self.seen_history_resets {
+                self.seen_history_resets = data.history_resets;
+                self.view.reset();
+                self.geometry = None;
+            }
 
             // The time is not a metrics series: it comes with the snapshot.
             data.time = snapshot.time;

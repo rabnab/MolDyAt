@@ -300,6 +300,7 @@ Keyboard (press `H` for the same list in the log):
 | `T` | Cycle the thermo overlay: Off -> Grid -> Temperature -> Pressure -> Off. |
 | `P` | Cycle the plot content. |
 | `TAB` | Toggle the energy plot window. |
+| `HOME` | Reset the energy plot's time range (follow the newest sample; also a middle double click in the plot). |
 | `D` | Toggle the display of real data (SI units, see docs/units.md). |
 | `B` | Toggle the ball statistics overlay. |
 | `F4` | Toggle step timings in the log. |
@@ -317,6 +318,9 @@ Mouse:
 | Right click on a source sphere (source tool) | Next species that sphere emits |
 | Scroll wheel | Zoom in / out |
 | Middle-click drag | Pan viewport |
+| Scroll wheel in the energy plot | Show less / more time, around the pointer (the newest sample stays at the right edge while the plot follows it) |
+| Middle-click drag in the energy plot | Move the time range; drag to the newest sample to follow it again |
+| Middle double click in the energy plot | Reset the time range (as `HOME`) |
 
 ### Changing the keys
 

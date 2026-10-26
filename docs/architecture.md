@@ -215,7 +215,8 @@ auto-repeat use the characters of the first press. `=` is a hidden alias
 of `+` (the same key on US keyboards): it works but the help shows `+`.
 The energy window looks its keys up in the same key map
 (`energy_window_key`): the keys of `view.cycle_plot` and
-`view.toggle_energy_window` (`P`, `TAB`) cycle what it plots, and `ESC`
+`view.toggle_energy_window` (`P`, `TAB`) cycle what it plots, the key of
+`view.reset_plot_view` (`HOME`) resets its time range, and `ESC`
 closes it, as that window's own close shortcut.
 A chord is decided when its key goes down with the modifier held
 (`KeyMap::chord_for_key`) and owns that key until the release: Ctrl+S (the key that
@@ -319,16 +320,34 @@ window pixels without a GPU: the title, key hints built from the key map
 (`energy_window_key_hints`, so a `ui.toml` rebinding shows), the axes, grid
 and zero line, the curves of the display mode (a sample without a finite
 value or time breaks a curve), the legend and the status text. The x axis
-is simulation time over a fixed span (`TIME_SPAN`, 10 time units): the
-time step changes only how fast the curves scroll, never the scale. Until
-the history spans that much the curves start at the left edge, then the
-newest sample stays at the right edge; a history shorter than the span
-(the registry keeps 1000 samples) leaves the left part empty (#366 keeps
-the whole history, #367 adds zoom and pan). x ticks come every 0.5 time
-units when there is room (else every 1, 2, 5, …), with labels only where
-they fit; the y axis has round ticks (1/2/5 × 10ⁿ) over the visible
-samples. Labels and thin lines sit on whole pixels so the bitmap glyphs
-and 1 px lines stay crisp. The layout is unit-tested there.
+is simulation time over the range of a `TimeView` (`energy_plot/time_view.rs`).
+By default it shows a fixed span (`TIME_SPAN`, 10 time units): the time
+step changes only how fast the curves scroll, never the scale. Until the
+history spans that much the curves start at the left edge, then the newest
+sample stays at the right edge (follow mode); a history shorter than the
+span (the registry keeps 1000 samples) leaves the left part empty (#366
+keeps the whole history). Curves are cut at both edges of the range, and
+the y range (round ticks, 1/2/5 × 10ⁿ) fits what is visible, the cut values
+included. x ticks come every 0.5 time units when there is room (else every
+1, 2, 5, …), with labels only where they fit. Labels and thin lines sit on
+whole pixels so the bitmap glyphs and 1 px lines stay crisp. The layout is
+unit-tested there.
+
+The mouse changes the range (#367), through the energy window's own event
+path (`EnergyWindowManager::handle_event`; mouse input is not in the
+command registry). The scroll wheel zooms by `ZOOM_FACTOR` (1.25) per notch,
+line and pixel deltas alike: around the pointer, or with the newest sample
+kept at the right edge in follow mode. The span stays between four sample
+intervals and the whole history (at least `TIME_SPAN`). A middle-button
+drag pans with the pointer (dragging right shows earlier times); panning
+away from the newest sample leaves follow mode, panning back returns to
+it. A middle double click or the key of `view.reset_plot_view` (`HOME`)
+resets the view, and so does a new world history (`EnergyData::history_resets`,
+counted when the registry is cleared). The pixel-to-time conversion uses
+the plot area and history of the last frame (`PlotScene::plot_area`,
+`PlotScene::history`). A view change redraws at once instead of waiting for
+the redraw throttle; the legend shows a zoomed or paused range. The view
+lives in the manager and survives closing and reopening the window.
 
 The binary draws it: on a `RedrawRequested` for the plot window,
 `UnifiedRenderState::energy_window_redraw` hands out a `PlotFrame` (window

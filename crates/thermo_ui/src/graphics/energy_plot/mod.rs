@@ -5,6 +5,7 @@
 pub mod energy_data;
 pub mod energy_window;
 pub mod plot_layout;
+pub mod time_view;
 
 #[cfg(test)]
 mod tests;
@@ -14,3 +15,4 @@ pub use energy_window::{
     EnergyPlotWindow, SplitScreenLayout, WindowGeometry, split_screen_layout_for_monitor,
 };
 pub use plot_layout::{PlotLabel, PlotRect, PlotScene, PlotSegment};
+pub use time_view::{TimeHistory, TimeView};

@@ -82,6 +82,9 @@ pub struct EnergyData {
     /// plot's x axis. The series end at the newest sample: the last value of
     /// `v_kin` and `v_pot` belongs to the last time here.
     pub sample_times: VecDeque<f32>,
+    /// How often the registry started a new history (a loaded world): the
+    /// plot returns to its default view when this changes.
+    pub history_resets: u64,
     pub time: f32,
     pub status_text: Option<String>,
     /// Monotonically increasing counter that increments each time energy samples
@@ -97,6 +100,9 @@ pub struct EnergyData {
     kin_cursor: Option<(u64, u64)>,
     pot_cursor: Option<(u64, u64)>,
     times_cursor: Option<(u64, u64)>,
+    /// Clear count (`RingBuffer::epoch`) of the registry's times at the last
+    /// sync.
+    times_epoch: Option<u64>,
 }
 
 impl EnergyData {
@@ -106,6 +112,7 @@ impl EnergyData {
             v_kin: VecDeque::with_capacity(1000),
             v_pot: VecDeque::with_capacity(1000),
             sample_times: VecDeque::with_capacity(1000),
+            history_resets: 0,
             time: 0.0,
             status_text: None,
             version: 0,
@@ -114,6 +121,7 @@ impl EnergyData {
             kin_cursor: None,
             pot_cursor: None,
             times_cursor: None,
+            times_epoch: None,
         }
     }
 
@@ -123,6 +131,7 @@ impl EnergyData {
             v_kin: VecDeque::with_capacity(1000),
             v_pot: VecDeque::with_capacity(1000),
             sample_times: VecDeque::with_capacity(1000),
+            history_resets: 0,
             time: 0.0,
             status_text: None,
             version: 0,
@@ -131,6 +140,7 @@ impl EnergyData {
             kin_cursor: None,
             pot_cursor: None,
             times_cursor: None,
+            times_epoch: None,
         }
     }
 
@@ -158,6 +168,11 @@ impl EnergyData {
             &mut self.pot_cursor,
             registry.get_series("E_pot"),
         );
+        let epoch = registry.times().epoch();
+        if self.times_epoch.is_some_and(|seen| seen != epoch) {
+            self.history_resets += 1;
+        }
+        self.times_epoch = Some(epoch);
         sync_series(
             &mut self.sample_times,
             &mut self.times_cursor,

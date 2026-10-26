@@ -3,11 +3,11 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::graphics::energy_plot::plot_layout::*;
-use crate::graphics::energy_plot::{DisplayMode, EnergyData};
+use crate::graphics::energy_plot::{DisplayMode, EnergyData, TimeView};
 
 const SIZE: (u32, u32) = (1000, 700);
 
-const HINTS: &str = "Esc: close  TAB / P: mode";
+const HINTS: &str = "Esc: close  TAB / P: mode  HOME: reset";
 
 fn data(kin: &[f32], pot: &[f32], times: &[f32]) -> EnergyData {
     let mut data = EnergyData::new();
@@ -19,7 +19,7 @@ fn data(kin: &[f32], pot: &[f32], times: &[f32]) -> EnergyData {
 }
 
 fn build(data: &EnergyData, mode: DisplayMode, size: (u32, u32), scale_factor: f64) -> PlotScene {
-    PlotScene::build(data, mode, size, scale_factor, HINTS)
+    PlotScene::build(data, mode, size, scale_factor, HINTS, &TimeView::default())
 }
 
 fn has_label(scene: &PlotScene, text: &str) -> bool {
@@ -405,8 +405,15 @@ fn test_key_hints_sit_on_the_title_line_only_when_they_fit() {
 #[test]
 fn test_key_hints_are_the_ones_passed_in() {
     let d = data(&[1.0, 2.0], &[0.0; 2], &[0.0, 0.5]);
-    let rebound = PlotScene::build(&d, DisplayMode::Kin, SIZE, 1.0, "Esc: close  X: mode");
-    let none = PlotScene::build(&d, DisplayMode::Kin, SIZE, 1.0, "");
+    let rebound = PlotScene::build(
+        &d,
+        DisplayMode::Kin,
+        SIZE,
+        1.0,
+        "Esc: close  X: mode",
+        &TimeView::default(),
+    );
+    let none = PlotScene::build(&d, DisplayMode::Kin, SIZE, 1.0, "", &TimeView::default());
 
     assert!(has_label(&rebound, "Esc: close  X: mode"));
     assert!(!has_label(&rebound, HINTS));
@@ -505,4 +512,112 @@ fn test_format_tick_uses_the_decimals_of_the_step() {
     assert_eq!(format_tick(0.04, 0.02), "0.04");
     assert_eq!(format_tick(1e-17, 0.5), "0");
     assert_eq!(format_tick(300000.0, 100000.0), "3.00e5");
+}
+
+/// A view `pan` time units back from the default (#367).
+fn panned(pan: f64, d: &EnergyData) -> PlotScene {
+    let scene = build(d, DisplayMode::Kin, SIZE, 1.0);
+    let mut view = TimeView::default();
+    view.pan(pan, &scene.history.expect("history"));
+    PlotScene::build(d, DisplayMode::Kin, SIZE, 1.0, HINTS, &view)
+}
+
+/// Samples every 0.5 from `start`, 41 of them; a spike of 1000 at the
+/// second one.
+fn spiky_data(start: f32) -> EnergyData {
+    let times: Vec<f32> = (0..41).map(|i| start + i as f32 * 0.5).collect();
+    let mut values: Vec<f32> = times.iter().map(|t| t.sin()).collect();
+    values[1] = 1000.0;
+    data(&values, &vec![0.0; times.len()], &times)
+}
+
+#[test]
+fn test_panned_view_draws_only_its_range_and_fits_y_to_it() {
+    // History 0..20, view [5, 15]: the spike at t = 0.5 is not shown.
+    let scene = panned(-5.0, &spiky_data(0.0));
+    let area = scene.plot_area.expect("plot area");
+    let curve = segments_of(&scene, COLOR_KINETIC);
+
+    assert_eq!(scene.time_window, Some((5.0, 15.0)));
+    assert_eq!(curve.len(), 20, "samples 5.0 ..= 15.0");
+    for s in &curve {
+        assert!(area.contains(s.from) && area.contains(s.to), "{s:?}");
+    }
+    // The y labels fit sin values, not the spike.
+    let y_labels: Vec<f64> = scene
+        .labels
+        .iter()
+        .filter(|l| l.origin[0] < area.left && l.origin[1] < area.bottom)
+        .filter_map(|l| l.text.parse().ok())
+        .collect();
+    assert!(!y_labels.is_empty() && y_labels.iter().all(|v| v.abs() <= 2.0));
+    // The x tick labels lie inside the range.
+    for label in ["5", "10", "15"] {
+        assert!(has_label(&scene, label), "{label}");
+    }
+    assert!(!has_label(&scene, "4") && !has_label(&scene, "16"));
+}
+
+#[test]
+fn test_panned_view_cuts_the_curves_at_both_edges() {
+    // Samples at 0.25, 0.75, …: the edges 5 and 15 fall between samples.
+    let scene = panned(-5.25, &spiky_data(0.25));
+    let area = scene.plot_area.expect("plot area");
+    let curve = segments_of(&scene, COLOR_KINETIC);
+
+    assert!((curve.first().unwrap().from[0] - area.left).abs() < 1e-3);
+    assert!((curve.last().unwrap().to[0] - area.right).abs() < 1e-3);
+    for s in &curve {
+        assert!(area.contains(s.from) && area.contains(s.to), "{s:?}");
+    }
+}
+
+#[test]
+fn test_legend_shows_a_changed_view() {
+    let d = spiky_data(0.0);
+    let default = build(&d, DisplayMode::Kin, SIZE, 1.0);
+    let paused = panned(-5.0, &d);
+
+    assert!(
+        default
+            .labels
+            .iter()
+            .all(|l| !l.text.contains("paused") && !l.text.contains("zoomed"))
+    );
+    assert!(
+        paused
+            .labels
+            .iter()
+            .any(|l| l.text.contains("paused 5.0-15.0")),
+        "{:?}",
+        paused.labels
+    );
+}
+
+/// With all three curves and a paused view, the legend still fits the
+/// default window width (the x axis note gives way).
+#[test]
+fn test_legend_with_a_view_fits_a_narrow_window() {
+    let d = spiky_data(0.0);
+    let probe = build(&d, DisplayMode::All, (960, 700), 1.0);
+    let mut view = TimeView::default();
+    view.pan(-5.0, &probe.history.unwrap());
+    let scene = PlotScene::build(&d, DisplayMode::All, (960, 700), 1.0, HINTS, &view);
+
+    let legend = scene
+        .labels
+        .iter()
+        .find(|l| l.text.contains("paused"))
+        .expect("view in the legend");
+    assert!(legend.origin[0] + legend.width() <= 960.0, "{legend:?}");
+}
+
+#[test]
+fn test_scene_reports_its_history_and_time_window() {
+    let scene = build(&spiky_data(2.0), DisplayMode::Kin, SIZE, 1.0);
+    let history = scene.history.expect("history");
+
+    assert_eq!((history.oldest, history.newest), (2.0, 22.0));
+    assert_eq!(history.samples, 41);
+    assert_eq!(scene.time_window, Some((12.0, 22.0)));
 }

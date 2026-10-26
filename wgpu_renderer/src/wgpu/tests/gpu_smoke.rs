@@ -251,7 +251,7 @@ fn all_pipelines_build_and_render_without_validation_errors() {
 /// and in an sRGB one.
 #[test]
 fn plot_pipeline_builds_and_renders_without_validation_errors() {
-    use thermo_ui::graphics::energy_plot::{DisplayMode, EnergyData, PlotScene};
+    use thermo_ui::graphics::energy_plot::{DisplayMode, EnergyData, PlotScene, TimeView};
 
     use crate::wgpu::pipelines::plot_pipeline::PlotPipeline;
 
@@ -276,8 +276,16 @@ fn plot_pipeline_builds_and_renders_without_validation_errors() {
         SIZE,
         1.0,
         "Esc: close",
+        &TimeView::default(),
     );
-    let full = PlotScene::build(&data, DisplayMode::All, SIZE, 1.0, "Esc: close");
+    let full = PlotScene::build(
+        &data,
+        DisplayMode::All,
+        SIZE,
+        1.0,
+        "Esc: close",
+        &TimeView::default(),
+    );
     assert!(full.plot_area.is_some() && !full.segments.is_empty());
 
     for format in [wgpu::TextureFormat::Bgra8Unorm, FORMAT] {

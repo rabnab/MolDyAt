@@ -270,11 +270,20 @@ mod keys {
         );
     }
 
+    /// `HOME` resets the plot's time view in the energy window (#367).
+    #[test]
+    fn test_home_resets_the_plot_view() {
+        assert_eq!(
+            energy_window_key(&KeyMap::default(), key(KeyCode::Home), KeyPhase::Down),
+            Some(EnergyWindowKey::ResetView)
+        );
+    }
+
     #[test]
     fn test_key_hints_name_the_default_keys() {
         assert_eq!(
             energy_window_key_hints(&KeyMap::default()),
-            "Esc: close  TAB / P: mode"
+            "Esc: close  TAB / P: mode  HOME: reset"
         );
     }
 
@@ -287,12 +296,204 @@ mod keys {
             ("view.cycle_plot", x.as_slice()),
             ("view.toggle_energy_window", none.as_slice()),
         ]);
-        assert_eq!(energy_window_key_hints(&rebound), "Esc: close  X: mode");
+        assert_eq!(
+            energy_window_key_hints(&rebound),
+            "Esc: close  X: mode  HOME: reset"
+        );
 
         let (unbound, _) = KeyMap::with_overrides([
             ("view.cycle_plot", none.as_slice()),
             ("view.toggle_energy_window", none.as_slice()),
         ]);
-        assert_eq!(energy_window_key_hints(&unbound), "Esc: close");
+        assert_eq!(energy_window_key_hints(&unbound), "Esc: close  HOME: reset");
+    }
+}
+
+/// The plot's mouse gestures (#367), against a set plot geometry: the plot
+/// area spans x = 100..1100, the history 0..50 with a sample every 0.1.
+mod plot_view {
+    use super::*;
+    use crate::graphics::energy_plot::{PlotRect, TimeHistory};
+    use crate::graphics::renderer::event_loop::KeyMap;
+    use crate::graphics::renderer::event_loop::energy_window_manager::PlotGeometry;
+    use winit::dpi::{PhysicalPosition, PhysicalSize};
+    use winit::event::{
+        DeviceId, ElementState, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent,
+    };
+
+    fn geometry() -> PlotGeometry {
+        PlotGeometry {
+            area: PlotRect {
+                left: 100.0,
+                top: 50.0,
+                right: 1100.0,
+                bottom: 650.0,
+            },
+            history: TimeHistory {
+                oldest: 0.0,
+                newest: 50.0,
+                samples: 501,
+            },
+        }
+    }
+
+    fn manager() -> EnergyWindowManager {
+        let mut manager = make_manager();
+        manager.set_plot_geometry(Some(geometry()));
+        manager
+    }
+
+    fn send(manager: &mut EnergyWindowManager, event: WindowEvent) -> bool {
+        manager.handle_event(event, &KeyMap::default())
+    }
+
+    fn wheel(delta: MouseScrollDelta) -> WindowEvent {
+        WindowEvent::MouseWheel {
+            device_id: DeviceId::dummy(),
+            delta,
+            phase: TouchPhase::Moved,
+        }
+    }
+
+    fn moved(x: f64) -> WindowEvent {
+        WindowEvent::CursorMoved {
+            device_id: DeviceId::dummy(),
+            position: PhysicalPosition::new(x, 300.0),
+        }
+    }
+
+    fn middle(state: ElementState) -> WindowEvent {
+        WindowEvent::MouseInput {
+            device_id: DeviceId::dummy(),
+            state,
+            button: MouseButton::Middle,
+        }
+    }
+
+    fn window(manager: &EnergyWindowManager) -> (f64, f64) {
+        manager.plot_view().window(&geometry().history)
+    }
+
+    #[test]
+    fn wheel_forward_zooms_in_for_line_and_pixel_deltas() {
+        for (forward, backward) in [
+            (
+                MouseScrollDelta::LineDelta(0.0, 1.0),
+                MouseScrollDelta::LineDelta(0.0, -1.0),
+            ),
+            (
+                MouseScrollDelta::PixelDelta(PhysicalPosition::new(0.0, 50.0)),
+                MouseScrollDelta::PixelDelta(PhysicalPosition::new(0.0, -50.0)),
+            ),
+        ] {
+            let mut manager = manager();
+            let default = manager.plot_view().span();
+            assert!(send(&mut manager, wheel(forward)));
+            assert!(manager.plot_view().span() < default, "{forward:?}");
+            send(&mut manager, wheel(backward));
+            send(&mut manager, wheel(backward));
+            assert!(manager.plot_view().span() > default, "{backward:?}");
+        }
+    }
+
+    #[test]
+    fn middle_drag_pans_with_the_pointer() {
+        let mut manager = manager();
+        send(&mut manager, moved(500.0));
+        send(&mut manager, middle(ElementState::Pressed));
+        // 100 px of a 1000 px wide plot showing 10 time units: 1 unit back.
+        send(&mut manager, moved(600.0));
+        assert_eq!(window(&manager), (39.0, 49.0));
+        assert!(!manager.plot_view().is_following());
+
+        // Released: moving no longer pans.
+        send(&mut manager, middle(ElementState::Released));
+        send(&mut manager, moved(900.0));
+        assert_eq!(window(&manager), (39.0, 49.0));
+    }
+
+    #[test]
+    fn wheel_zooms_around_the_pointer_once_panned() {
+        let mut manager = manager();
+        send(&mut manager, moved(500.0));
+        send(&mut manager, middle(ElementState::Pressed));
+        send(&mut manager, moved(700.0)); // [38, 48]
+        send(&mut manager, middle(ElementState::Released));
+        // The pointer at x = 350: a quarter into the plot, t = 40.5.
+        send(&mut manager, moved(350.0));
+        send(&mut manager, wheel(MouseScrollDelta::LineDelta(0.0, 1.0)));
+
+        let (t0, t1) = window(&manager);
+        assert!((t0 + 0.25 * (t1 - t0) - 40.5).abs() < 1e-9, "{t0}..{t1}");
+    }
+
+    #[test]
+    fn middle_double_click_resets_the_view() {
+        let mut manager = manager();
+        manager.zoom_plot(2.0, None);
+        assert!(!manager.plot_view().is_default());
+
+        let now = Instant::now();
+        manager.middle_pressed([500.0, 300.0], now);
+        manager.middle_pressed([502.0, 301.0], now + Duration::from_millis(200));
+        assert!(manager.plot_view().is_default());
+    }
+
+    #[test]
+    fn slow_or_distant_second_click_does_not_reset() {
+        let mut manager = manager();
+        manager.zoom_plot(2.0, None);
+        let now = Instant::now();
+        manager.middle_pressed([500.0, 300.0], now);
+        manager.middle_pressed([500.0, 300.0], now + Duration::from_millis(900));
+        manager.middle_pressed([600.0, 300.0], now + Duration::from_millis(1000));
+        assert!(!manager.plot_view().is_default());
+    }
+
+    #[test]
+    fn reset_plot_view_returns_to_the_default() {
+        let mut manager = manager();
+        manager.zoom_plot(2.0, None);
+        manager.reset_plot_view();
+        assert!(manager.plot_view().is_default());
+    }
+
+    #[test]
+    fn gestures_without_a_plot_do_nothing() {
+        let mut manager = make_manager();
+        assert!(!manager.zoom_plot(1.0, Some(500.0)));
+        assert!(!manager.pan_plot(100.0));
+        assert!(manager.plot_view().is_default());
+    }
+
+    #[test]
+    fn other_events_are_not_gestures() {
+        let mut manager = manager();
+        let resized = WindowEvent::Resized(PhysicalSize::new(800, 600));
+        // Handled (as a resize), but the view is unchanged.
+        send(&mut manager, resized);
+        assert!(manager.plot_view().is_default());
+    }
+
+    /// A loaded world starts a new history: the view returns to following
+    /// the newest sample with the default span.
+    #[test]
+    fn new_world_returns_to_the_default_view() {
+        let metrics = MetricsRegistry::shared();
+        let shared = shared_with_metrics(&metrics);
+        let mut manager = EnergyWindowManager::new(shared);
+        manager.set_plot_geometry(Some(geometry()));
+        let frame_metrics = FrameMetrics::default();
+        record(&metrics, 1.0, 2.0);
+        manager.update_from_snapshot(&make_snapshot(10, 1.0, 2.0), 60.0, 1.0, &frame_metrics);
+        manager.zoom_plot(2.0, None);
+        assert!(!manager.plot_view().is_default());
+
+        metrics.write().unwrap().clear();
+        record(&metrics, 7.0, 8.0);
+        let mut loaded = make_snapshot(30, 7.0, 8.0);
+        loaded.world_generation = 1;
+        manager.update_from_snapshot(&loaded, 60.0, 1.0, &frame_metrics);
+        assert!(manager.plot_view().is_default());
     }
 }

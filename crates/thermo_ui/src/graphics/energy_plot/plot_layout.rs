@@ -11,14 +11,17 @@
 //! a label covers `chars × GLYPH_CELL × scale` by `GLYPH_CELL × scale` pixels,
 //! from a whole-pixel origin so the glyphs stay crisp.
 //!
-//! The x axis is the simulation time of the samples, not their step, and it
-//! always shows [`TIME_SPAN`] time units: the time step changes only how fast
-//! the curves scroll, never the scale. Until the history spans that much,
-//! the curves start at the left edge; then the newest sample stays at the
-//! right edge. A history shorter than the span (the registry keeps a fixed
-//! number of samples) leaves the left part empty.
+//! The x axis is the simulation time of the samples, not their step. It
+//! shows the range of a [`TimeView`]: by default [`TIME_SPAN`] time units,
+//! so the time step changes only how fast the curves scroll, never the
+//! scale. Until the history spans that much, the curves start at the left
+//! edge; then the newest sample stays at the right edge. The scroll wheel
+//! and a middle-button drag change the range (#367). A history shorter than
+//! the span (the registry keeps a fixed number of samples) leaves the left
+//! part empty.
 
 use super::energy_data::{DisplayMode, EnergyData};
+use super::time_view::{TimeHistory, TimeView};
 
 /// Size in font pixels of one glyph of the bitmap font (8×8).
 pub const GLYPH_CELL: f32 = 8.0;
@@ -111,6 +114,10 @@ pub struct PlotScene {
     pub background: Rgba,
     /// The area inside the axes, when the window is large enough for one.
     pub plot_area: Option<PlotRect>,
+    /// The time range `(t0, t1)` across the plot area, when there is one.
+    pub time_window: Option<(f64, f64)>,
+    /// What there was to show, when there were samples.
+    pub history: Option<TimeHistory>,
     pub segments: Vec<PlotSegment>,
     pub labels: Vec<PlotLabel>,
 }
@@ -205,9 +212,7 @@ pub fn format_tick(value: f64, step: f64) -> String {
 /// or the value is not finite (which breaks the curve).
 type Curve = Vec<Option<(f64, f64)>>;
 
-/// The time range the plot shows: [`TIME_SPAN`] long, starting at the
-/// oldest sample while the history is shorter than that, else ending at the
-/// newest sample.
+/// The time range the plot shows (the [`TimeView`]'s window).
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct TimeWindow {
     t0: f64,
@@ -215,25 +220,21 @@ struct TimeWindow {
 }
 
 impl TimeWindow {
-    /// The window for `curves`; `None` without a single finite point.
-    fn for_curves(curves: &[Curve]) -> Option<Self> {
-        let mut times = curves.iter().flatten().flatten().map(|&(t, _)| t);
-        let first = times.next()?;
-        let (oldest, newest) = times.fold((first, first), |(lo, hi), t| (lo.min(t), hi.max(t)));
-        let t0 = if newest - oldest > TIME_SPAN {
-            newest - TIME_SPAN
-        } else {
-            oldest
-        };
-        Some(Self {
-            t0,
-            t1: t0 + TIME_SPAN,
-        })
-    }
-
     fn contains(&self, t: f64) -> bool {
         (self.t0..=self.t1).contains(&t)
     }
+}
+
+/// The time history of `curves`; `None` without a single finite point.
+fn history_of(curves: &[Curve]) -> Option<TimeHistory> {
+    let mut times = curves.iter().flatten().flatten().map(|&(t, _)| t);
+    let first = times.next()?;
+    let (oldest, newest) = times.fold((first, first), |(lo, hi), t| (lo.min(t), hi.max(t)));
+    Some(TimeHistory {
+        oldest,
+        newest,
+        samples: curves.iter().map(Vec::len).max().unwrap_or(0),
+    })
 }
 
 /// The value at time `t` on the straight line from `p` to `q`.
@@ -241,22 +242,26 @@ fn interpolate(p: (f64, f64), q: (f64, f64), t: f64) -> f64 {
     p.1 + (q.1 - p.1) * (t - p.0) / (q.0 - p.0)
 }
 
-/// Where each curve crosses the left edge `t0`: the value cut there from the
-/// segment between the last point before and the first point after it.
-fn edge_values(curves: &[Curve], t0: f64) -> impl Iterator<Item = f64> + '_ {
-    curves.iter().flat_map(move |curve| {
-        curve
-            .windows(2)
-            .filter_map(move |pair| match (pair[0], pair[1]) {
-                (Some(p), Some(q)) if p.0 < t0 && q.0 > t0 => Some(interpolate(p, q, t0)),
-                _ => None,
+/// Where each curve crosses an edge of `window`: the value cut there from
+/// the segment between the last point before and the first point after it.
+fn edge_values(curves: &[Curve], window: TimeWindow) -> impl Iterator<Item = f64> + '_ {
+    curves
+        .iter()
+        .flat_map(move |curve| {
+            curve.windows(2).flat_map(move |pair| {
+                let (Some(p), Some(q)) = (pair[0], pair[1]) else {
+                    return [None, None];
+                };
+                let cut = |edge: f64| (p.0 < edge && q.0 > edge).then(|| interpolate(p, q, edge));
+                [cut(window.t0), cut(window.t1)]
             })
-    })
+        })
+        .flatten()
 }
 
 /// The y range shown: the values of the points inside `window` and where
-/// the curves are cut at its left edge, so everything drawn fits, with 5%
-/// room above and below. `None` when no point is inside.
+/// the curves are cut at its edges, so everything drawn fits, with 5% room
+/// above and below. `None` when nothing of the curves is inside.
 fn value_range(curves: &[Curve], window: TimeWindow) -> Option<(f64, f64)> {
     let inside = curves
         .iter()
@@ -264,7 +269,7 @@ fn value_range(curves: &[Curve], window: TimeWindow) -> Option<(f64, f64)> {
         .flatten()
         .filter(|&&(t, _)| window.contains(t))
         .map(|&(_, v)| v);
-    let mut values = inside.chain(edge_values(curves, window.t0));
+    let mut values = inside.chain(edge_values(curves, window));
     let first = values.next()?;
     let (lo, hi) = values.fold((first, first), |(lo, hi), v| (lo.min(v), hi.max(v)));
     let span = hi - lo;
@@ -332,6 +337,8 @@ struct Layout<'a> {
     /// Width of thin lines (axes, ticks), in whole window pixels.
     thin: f32,
     data: &'a EnergyData,
+    /// The time range to show.
+    view: &'a TimeView,
     /// The window's keys, shown at the right end of the title line.
     key_hints: &'a str,
 }
@@ -377,15 +384,16 @@ impl Layout<'_> {
 impl PlotScene {
     /// The plot of `data` as `mode` selects it, for a window of `size`
     /// pixels at `scale_factor`: title and `key_hints` at the top, then the
-    /// plot with its axes and ticks (x: simulation time, y: energy), the
-    /// legend line and the status text at the bottom. Without samples a
-    /// waiting message stands in for the plot.
+    /// plot with its axes and ticks (x: simulation time over the range of
+    /// `view`, y: energy), the legend line and the status text at the
+    /// bottom. Without samples a waiting message stands in for the plot.
     pub fn build(
         data: &EnergyData,
         mode: DisplayMode,
         size: (u32, u32),
         scale_factor: f64,
         key_hints: &str,
+        view: &TimeView,
     ) -> Self {
         let scale = text_scale(scale_factor);
         let glyph = GLYPH_CELL * scale;
@@ -394,6 +402,8 @@ impl PlotScene {
                 size,
                 background: BACKGROUND,
                 plot_area: None,
+                time_window: None,
+                history: None,
                 segments: Vec::new(),
                 labels: Vec::new(),
             },
@@ -405,6 +415,7 @@ impl PlotScene {
             thin: scale_factor.max(1.0).round() as f32,
             data,
             key_hints,
+            view,
         };
         layout.build(mode);
         layout.scene
@@ -444,16 +455,23 @@ impl Layout<'_> {
         }
         bottom -= line;
         let series = visible_series(self.data, mode);
-        self.legend(&series, [pad, bottom]);
+        let curves = self.curves(&series);
+        let history = history_of(&curves);
+        self.scene.history = history;
+        let window = history.map(|history| {
+            let (t0, t1) = self.view.window(&history);
+            TimeWindow { t0, t1 }
+        });
+        self.legend(&series, window, [pad, bottom]);
         bottom -= pad * 0.5;
 
-        let curves = self.curves(&series);
-        let shown = TimeWindow::for_curves(&curves)
-            .and_then(|window| Some((window, value_range(&curves, window)?)));
-        let Some((window, (lo, hi))) = shown else {
+        let Some(window) = window else {
             self.waiting_message(top, bottom, w);
             return;
         };
+        // A range panned or zoomed where no curve is: an empty plot with
+        // its axes, around zero.
+        let (lo, hi) = value_range(&curves, window).unwrap_or((-1.0, 1.0));
         self.plot(
             &series,
             &curves,
@@ -468,14 +486,35 @@ impl Layout<'_> {
         );
     }
 
-    /// Legend: each curve in its colour, then the time and the x axis.
-    fn legend(&mut self, series: &[Series], origin: [f32; 2]) {
+    /// Legend: each curve in its colour, then the time, the x axis, and the
+    /// range shown when the view was zoomed or panned. The x axis note is
+    /// left out when the line would not fit the window.
+    fn legend(&mut self, series: &[Series], window: Option<TimeWindow>, origin: [f32; 2]) {
         let mut x = origin[0];
         for s in series {
             x += self.label(s.name, [x, origin[1]], s.color);
             x += self.glyph;
         }
-        let rest = format!(" t = {:.2}   x: time", self.data.time);
+        let time = format!(" t = {:.2}", self.data.time);
+        let axis = "   x: time";
+        let view = window
+            .filter(|_| !self.view.is_default())
+            .map(|window| {
+                let state = if self.view.is_following() {
+                    "zoomed"
+                } else {
+                    "paused"
+                };
+                format!("   {state} {:.1}-{:.1}", window.t0, window.t1)
+            })
+            .unwrap_or_default();
+        let available = self.scene.size.0 as f32 - self.pad - x;
+        let full = format!("{time}{axis}{view}");
+        let rest = if self.text_width(&full) <= available {
+            full
+        } else {
+            format!("{time}{view}")
+        };
         self.label(rest, [x, origin[1]], COLOR_TEXT);
     }
 
@@ -524,6 +563,7 @@ impl Layout<'_> {
             return;
         }
         self.scene.plot_area = Some(area);
+        self.scene.time_window = Some((window.t0, window.t1));
 
         let y_of = |v: f64| area.bottom - ((v - lo) / (hi - lo)) as f32 * area.height();
 
@@ -549,7 +589,7 @@ impl Layout<'_> {
         self.segment([left, bottom], [area.right, bottom], thin, COLOR_AXIS);
         let to_px = |(t, v): (f64, f64)| [x_axis.x_of(t), y_of(v)];
         for (s, curve) in series.iter().zip(curves) {
-            self.curve_segments(curve, window.t0, &to_px, thin * 2.0, s.color);
+            self.curve_segments(curve, window, &to_px, thin * 2.0, s.color);
         }
     }
 
@@ -631,31 +671,39 @@ impl Layout<'_> {
     }
 
     /// Connect consecutive points of `curve` (window pixels by `to_px`),
-    /// cut at `t0`, the left edge: a segment that crosses it starts there. A
-    /// missing point breaks the curve, and a lone point is drawn as a dot.
+    /// cut at the edges of `window`: a segment that crosses an edge ends
+    /// there, one outside is left out. A missing point breaks the curve,
+    /// and a lone point inside the window is drawn as a dot.
     fn curve_segments(
         &mut self,
         curve: &[Option<(f64, f64)>],
-        t0: f64,
+        window: TimeWindow,
         to_px: &impl Fn((f64, f64)) -> [f32; 2],
         width: f32,
         color: Rgba,
     ) {
+        let TimeWindow { t0, t1 } = window;
         for (i, point) in curve.iter().enumerate() {
             let Some(p) = *point else { continue };
             let prev = i.checked_sub(1).and_then(|j| curve[j]);
             match curve.get(i + 1).copied().flatten() {
-                // A segment ending exactly at the edge would be cut to nothing.
-                Some(q) if q.0 > t0 || p.0 >= t0 => {
-                    // Cut at the edge; `value_range` includes this value.
-                    let p = if p.0 < t0 && q.0 > p.0 {
+                // Not left of t0 nor right of t1; a segment that only
+                // touches an edge would be cut to nothing.
+                Some(q) if (q.0 > t0 || p.0 >= t0) && (p.0 < t1 || q.0 <= t1) => {
+                    // Cut at the edges; `value_range` includes these values.
+                    let from = if p.0 < t0 && q.0 > p.0 {
                         (t0, interpolate(p, q, t0))
                     } else {
                         p
                     };
-                    self.segment(to_px(p), to_px(q), width, color);
+                    let to = if q.0 > t1 && q.0 > p.0 {
+                        (t1, interpolate(p, q, t1))
+                    } else {
+                        q
+                    };
+                    self.segment(to_px(from), to_px(to), width, color);
                 }
-                None if prev.is_none() && p.0 >= t0 => {
+                None if prev.is_none() && window.contains(p.0) => {
                     self.segment(to_px(p), to_px(p), width, color);
                 }
                 _ => {}
