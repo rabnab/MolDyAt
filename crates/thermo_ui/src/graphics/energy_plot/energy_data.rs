@@ -78,10 +78,10 @@ pub struct EnergyData {
     pub v_kin: VecDeque<f32>,
     /// Cached potential energy samples (synced from MetricsRegistry)
     pub v_pot: VecDeque<f32>,
-    /// Simulation step of each sample (synced from MetricsRegistry). The
-    /// series end at the newest step: the last value of `v_kin` and `v_pot`
-    /// belongs to the last step here.
-    pub steps: VecDeque<u64>,
+    /// Simulation time of each sample (synced from MetricsRegistry), the
+    /// plot's x axis. The series end at the newest sample: the last value of
+    /// `v_kin` and `v_pot` belongs to the last time here.
+    pub sample_times: VecDeque<f32>,
     pub time: f32,
     pub status_text: Option<String>,
     /// Monotonically increasing counter that increments each time energy samples
@@ -96,7 +96,7 @@ pub struct EnergyData {
     /// append only what is new.
     kin_cursor: Option<(u64, u64)>,
     pot_cursor: Option<(u64, u64)>,
-    steps_cursor: Option<(u64, u64)>,
+    times_cursor: Option<(u64, u64)>,
 }
 
 impl EnergyData {
@@ -105,7 +105,7 @@ impl EnergyData {
         Self {
             v_kin: VecDeque::with_capacity(1000),
             v_pot: VecDeque::with_capacity(1000),
-            steps: VecDeque::with_capacity(1000),
+            sample_times: VecDeque::with_capacity(1000),
             time: 0.0,
             status_text: None,
             version: 0,
@@ -113,7 +113,7 @@ impl EnergyData {
             synced_version: None,
             kin_cursor: None,
             pot_cursor: None,
-            steps_cursor: None,
+            times_cursor: None,
         }
     }
 
@@ -122,7 +122,7 @@ impl EnergyData {
         Self {
             v_kin: VecDeque::with_capacity(1000),
             v_pot: VecDeque::with_capacity(1000),
-            steps: VecDeque::with_capacity(1000),
+            sample_times: VecDeque::with_capacity(1000),
             time: 0.0,
             status_text: None,
             version: 0,
@@ -130,7 +130,7 @@ impl EnergyData {
             synced_version: None,
             kin_cursor: None,
             pot_cursor: None,
-            steps_cursor: None,
+            times_cursor: None,
         }
     }
 
@@ -159,9 +159,9 @@ impl EnergyData {
             registry.get_series("E_pot"),
         );
         sync_series(
-            &mut self.steps,
-            &mut self.steps_cursor,
-            Some(registry.steps()),
+            &mut self.sample_times,
+            &mut self.times_cursor,
+            Some(registry.times()),
         );
         self.version = self.version.wrapping_add(1);
     }

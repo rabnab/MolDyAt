@@ -8,7 +8,11 @@
 //!
 //! Pixel coordinates have their origin at the top-left corner of the window,
 //! with y pointing down. Text is drawn with the backend's 8×8 bitmap font:
-//! a label covers `chars × GLYPH_CELL × scale` by `GLYPH_CELL × scale` pixels.
+//! a label covers `chars × GLYPH_CELL × scale` by `GLYPH_CELL × scale` pixels,
+//! from a whole-pixel origin so the glyphs stay crisp.
+//!
+//! The x axis is the simulation time of the samples, not their step, so
+//! plots stay comparable when the time step changes.
 
 use super::energy_data::{DisplayMode, EnergyData};
 
@@ -28,9 +32,6 @@ pub const COLOR_ZERO: Rgba = [0.60, 0.60, 0.60, 0.9];
 pub const COLOR_TEXT: Rgba = [0.85, 0.85, 0.85, 1.0];
 pub const COLOR_TITLE: Rgba = [0.90, 0.90, 0.90, 1.0];
 pub const COLOR_STATUS: Rgba = [0.66, 0.66, 0.98, 1.0];
-
-/// The window's keys, shown at the right end of the title line.
-pub const KEY_HINTS: &str = "Esc: close  Tab: mode";
 
 /// Length of a tick mark, in glyph cells.
 const TICK_CELLS: f32 = 0.5;
@@ -139,7 +140,8 @@ pub fn text_scale(scale_factor: f64) -> f32 {
 
 /// Ticks at round values (1, 2 or 5 × 10ⁿ apart) inside `[lo, hi]`, at most
 /// about `max_ticks` of them, and their spacing. A range without width gives
-/// one tick at `lo`.
+/// one tick at `lo`. The count is bounded even where the spacing is lost in
+/// the precision of `lo` (huge values).
 pub fn nice_ticks(lo: f64, hi: f64, max_ticks: usize) -> (f64, Vec<f64>) {
     if hi.partial_cmp(&lo) != Some(std::cmp::Ordering::Greater)
         || !lo.is_finite()
@@ -160,6 +162,7 @@ pub fn nice_ticks(lo: f64, hi: f64, max_ticks: usize) -> (f64, Vec<f64>) {
     let ticks = (0..)
         .map(|k| (first + k as f64) * step)
         .take_while(|&v| v <= hi + step * 1e-9)
+        .take(max_ticks.max(1) * 2 + 2)
         .collect();
     (step, ticks)
 }
@@ -201,7 +204,7 @@ fn value_range(series: &[Series]) -> Option<(f64, f64)> {
     Some((lo - room, hi + room))
 }
 
-/// Maps steps `x0..=x1` onto the width of the plot area.
+/// Maps simulation times `x0..=x1` onto the width of the plot area.
 struct XAxis {
     x0: f64,
     x1: f64,
@@ -210,16 +213,19 @@ struct XAxis {
 }
 
 impl XAxis {
-    fn new(steps: &[f64], area: PlotRect) -> Self {
+    /// The axis for the finite values of `times` (oldest first).
+    fn new(times: &[f64], area: PlotRect) -> Self {
+        let mut finite = times.iter().copied().filter(|t| t.is_finite());
+        let x0 = finite.next().unwrap_or(0.0);
         Self {
-            x0: steps.first().copied().unwrap_or(0.0),
-            x1: steps.last().copied().unwrap_or(0.0),
+            x0,
+            x1: finite.next_back().unwrap_or(x0),
             left: area.left,
             width: area.width(),
         }
     }
 
-    /// The pixel column of step `x`; a single step sits at the left edge.
+    /// The pixel column of time `x`; a single sample sits at the left edge.
     fn x_of(&self, x: f64) -> f32 {
         if self.x1 > self.x0 {
             self.left + ((x - self.x0) / (self.x1 - self.x0)) as f32 * self.width
@@ -240,16 +246,19 @@ struct Layout<'a> {
     line: f32,
     /// Outer padding, in window pixels.
     pad: f32,
-    /// Width of thin lines (axes, ticks), in window pixels.
+    /// Width of thin lines (axes, ticks), in whole window pixels.
     thin: f32,
     data: &'a EnergyData,
+    /// The window's keys, shown at the right end of the title line.
+    key_hints: &'a str,
 }
 
 impl Layout<'_> {
     fn label(&mut self, text: impl Into<String>, origin: [f32; 2], color: Rgba) -> f32 {
         let label = PlotLabel {
             text: text.into(),
-            origin,
+            // Whole pixels: the glyphs are sampled with the nearest filter.
+            origin: origin.map(f32::round),
             scale: self.scale,
             color,
         };
@@ -267,6 +276,16 @@ impl Layout<'_> {
         });
     }
 
+    /// `v` moved onto the centre line of a pixel for a thin line of odd
+    /// width (onto a pixel edge for an even one), so it covers whole pixels.
+    fn snap(&self, v: f32) -> f32 {
+        if self.thin % 2.0 == 1.0 {
+            v.floor() + 0.5
+        } else {
+            v.round()
+        }
+    }
+
     fn text_width(&self, text: &str) -> f32 {
         text.chars().count() as f32 * self.glyph
     }
@@ -274,15 +293,16 @@ impl Layout<'_> {
 
 impl PlotScene {
     /// The plot of `data` as `mode` selects it, for a window of `size`
-    /// pixels at `scale_factor`: title at the top, then the plot with its
-    /// axes and ticks (x: simulation step, y: energy), the legend line and the
-    /// status text at the bottom. Without samples a waiting message stands in
-    /// for the plot.
+    /// pixels at `scale_factor`: title and `key_hints` at the top, then the
+    /// plot with its axes and ticks (x: simulation time, y: energy), the
+    /// legend line and the status text at the bottom. Without samples a
+    /// waiting message stands in for the plot.
     pub fn build(
         data: &EnergyData,
         mode: DisplayMode,
         size: (u32, u32),
         scale_factor: f64,
+        key_hints: &str,
     ) -> Self {
         let scale = text_scale(scale_factor);
         let glyph = GLYPH_CELL * scale;
@@ -298,8 +318,10 @@ impl PlotScene {
             glyph,
             line: glyph * 1.25,
             pad: glyph * 0.75,
-            thin: scale_factor.max(1.0) as f32,
+            // Whole pixels, as for the text: fractional widths look blurry.
+            thin: scale_factor.max(1.0).round() as f32,
             data,
+            key_hints,
         };
         layout.build(mode);
         layout.scene
@@ -317,9 +339,9 @@ impl Layout<'_> {
             COLOR_TITLE,
         );
         // The keys at the right end of the title line, if they fit.
-        let keys_x = w - pad - self.text_width(KEY_HINTS);
-        if keys_x >= pad + title_w + self.glyph * 2.0 {
-            self.label(KEY_HINTS, [keys_x, pad], COLOR_TEXT);
+        let keys_x = w - pad - self.text_width(self.key_hints);
+        if !self.key_hints.is_empty() && keys_x >= pad + title_w + self.glyph * 2.0 {
+            self.label(self.key_hints, [keys_x, pad], COLOR_TEXT);
         }
         let top = pad + line + pad * 0.5;
 
@@ -365,7 +387,7 @@ impl Layout<'_> {
             x += self.label(s.name, [x, origin[1]], s.color);
             x += self.glyph;
         }
-        let rest = format!(" t = {:.2}   x: step", self.data.time);
+        let rest = format!(" t = {:.2}   x: time", self.data.time);
         self.label(rest, [x, origin[1]], COLOR_TEXT);
     }
 
@@ -411,84 +433,72 @@ impl Layout<'_> {
 
         // Horizontal grid lines with their labels.
         for (&v, label) in y_ticks.iter().zip(&y_labels) {
-            let y = y_of(v);
+            let y = self.snap(y_of(v));
             self.segment([area.left, y], [area.right, y], thin, COLOR_GRID);
             self.segment([area.left - tick, y], [area.left, y], thin, COLOR_AXIS);
             let x = area.left - tick - glyph * 0.25 - self.text_width(label);
             self.label(label.clone(), [x, y - glyph * 0.5], COLOR_TEXT);
         }
         if lo < 0.0 && hi > 0.0 {
-            let y = y_of(0.0);
+            let y = self.snap(y_of(0.0));
             self.segment([area.left, y], [area.right, y], thin, COLOR_ZERO);
         }
 
-        let steps = self.sample_steps(series);
-        let x_axis = XAxis::new(&steps, area);
+        let times = self.sample_times(series);
+        let x_axis = XAxis::new(&times, area);
         self.x_ticks(&x_axis, area);
 
         // Axes over the grid, curves over the axes.
-        self.segment(
-            [area.left, area.top],
-            [area.left, area.bottom],
-            thin,
-            COLOR_AXIS,
-        );
-        self.segment(
-            [area.left, area.bottom],
-            [area.right, area.bottom],
-            thin,
-            COLOR_AXIS,
-        );
+        let (left, bottom) = (self.snap(area.left), self.snap(area.bottom));
+        self.segment([left, area.top], [left, bottom], thin, COLOR_AXIS);
+        self.segment([left, bottom], [area.right, bottom], thin, COLOR_AXIS);
         for s in series {
-            // A series registered later is shorter: it ends at the newest step.
-            let offset = steps.len() - s.values.len();
+            // A series registered later is shorter: it ends at the newest sample.
+            let offset = times.len() - s.values.len();
             let points: Vec<Option<[f32; 2]>> = s
                 .values
                 .iter()
                 .enumerate()
                 .map(|(i, &v)| {
-                    v.is_finite()
-                        .then(|| [x_axis.x_of(steps[offset + i]), y_of(f64::from(v))])
+                    let t = times[offset + i];
+                    (v.is_finite() && t.is_finite()).then(|| [x_axis.x_of(t), y_of(f64::from(v))])
                 })
                 .collect();
             self.polyline(&points, thin * 2.0, s.color);
         }
     }
 
-    /// The x value of each sample of the longest series: its step, or its
-    /// index without a step history.
-    fn sample_steps(&self, series: &[Series]) -> Vec<f64> {
+    /// The x value of each sample of the longest series: its simulation
+    /// time, or its index without a time history.
+    fn sample_times(&self, series: &[Series]) -> Vec<f64> {
         let n = series.iter().map(|s| s.values.len()).max().unwrap_or(0);
-        let steps = &self.data.steps;
-        if steps.len() >= n {
-            steps
+        let times = &self.data.sample_times;
+        if times.len() >= n {
+            times
                 .iter()
-                .skip(steps.len() - n)
-                .map(|&s| s as f64)
+                .skip(times.len() - n)
+                .map(|&t| f64::from(t))
                 .collect()
         } else {
             (0..n).map(|i| i as f64).collect()
         }
     }
 
-    /// Tick marks and step labels below the x axis.
+    /// Tick marks and time labels below the x axis.
     fn x_ticks(&mut self, x_axis: &XAxis, area: PlotRect) {
         let (glyph, thin) = (self.glyph, self.thin);
         let tick = glyph * TICK_CELLS;
         let (x0, x1) = (x_axis.x0, x_axis.x1);
         let max_ticks = (area.width() / (glyph * 8.0)).clamp(1.0, 10.0) as usize;
         let (step, ticks) = nice_ticks(x0, x1, max_ticks);
-        // Steps are whole numbers: no ticks between two steps.
-        let ticks = if step < 1.0 && x1 > x0 {
-            nice_ticks(x0, x1, ((x1 - x0) as usize).max(1)).1
-        } else {
-            ticks
-        };
         for v in ticks {
-            let x = x_axis.x_of(v);
+            let x = self.snap(x_axis.x_of(v));
             self.segment([x, area.bottom], [x, area.bottom + tick], thin, COLOR_AXIS);
-            let label = format!("{v:.0}");
-            let label_x = x - self.text_width(&label) * 0.5;
+            let label = format_tick(v, step);
+            // Centred under its tick, but moved in at the window edges.
+            let label_w = self.text_width(&label);
+            let max_x = (self.scene.size.0 as f32 - self.pad - label_w).max(self.pad);
+            let label_x = (x - label_w * 0.5).clamp(self.pad, max_x);
             self.label(
                 label,
                 [label_x, area.bottom + tick + glyph * 0.25],

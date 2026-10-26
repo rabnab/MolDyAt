@@ -6,7 +6,7 @@
 //! keys and data updates, and when it is redrawn. The backend draws the
 //! [`PlotFrame`] that [`EnergyWindowManager::handle_redraw`] hands out.
 
-use super::command_registry::{KeyInput, UiAction};
+use super::command_registry::{KeyInput, UiAction, command_by_id};
 use super::input_handler::key_input;
 use super::key_map::{HeldModifiers, KeyMap, KeyPhase};
 use crate::graphics::energy_plot::{
@@ -50,6 +50,27 @@ pub(super) fn energy_window_key(
             Some(EnergyWindowKey::CycleDisplay)
         }
         _ => None,
+    }
+}
+
+/// The key hints the energy window shows, from `key_map`: `Esc` closes it
+/// (fixed), and the keys of the plot commands cycle what it plots (see
+/// [`energy_window_key`]), so a rebinding in `ui.toml` shows here too.
+pub(super) fn energy_window_key_hints(key_map: &KeyMap) -> String {
+    let mode_keys: Vec<String> = ["view.toggle_energy_window", "view.cycle_plot"]
+        .into_iter()
+        .filter_map(command_by_id)
+        .flat_map(|command| key_map.binding_display(command))
+        .fold(Vec::new(), |mut keys, key| {
+            if !keys.contains(&key) {
+                keys.push(key);
+            }
+            keys
+        });
+    if mode_keys.is_empty() {
+        "Esc: close".to_string()
+    } else {
+        format!("Esc: close  {}: mode", mode_keys.join(" / "))
     }
 }
 
@@ -203,9 +224,11 @@ impl EnergyWindowManager {
     /// state updates happen only while a window is open, so a spurious call
     /// with no window leaves the throttle state clean.
     ///
+    /// The key hints come from `key_map` (see [`energy_window_key_hints`]).
+    ///
     /// # Returns
     /// `None` without a window, or while it is minimised.
-    pub fn handle_redraw(&mut self) -> Option<PlotFrame> {
+    pub fn handle_redraw(&mut self, key_map: &KeyMap) -> Option<PlotFrame> {
         log::trace!("EnergyWindowManager: handle_redraw called");
         let window = self.window.as_ref()?;
         let handle = Arc::clone(window.window_handle()?);
@@ -213,7 +236,7 @@ impl EnergyWindowManager {
         self.last_redraw_instant = Some(Instant::now());
         Some(PlotFrame {
             window: handle,
-            scene: window.scene()?,
+            scene: window.scene(&energy_window_key_hints(key_map))?,
         })
     }
 

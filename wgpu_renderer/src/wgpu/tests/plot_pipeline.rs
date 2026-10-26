@@ -10,7 +10,7 @@ use thermo_ui::graphics::energy_plot::{PlotLabel, PlotScene, PlotSegment};
 
 use crate::wgpu::gpu::text::ASCII_CHARS;
 use crate::wgpu::pipelines::plot_pipeline::{push_label, segment_instances};
-use crate::wgpu::plot_surface::plot_surface_format;
+use crate::wgpu::plot_surface::{PlotTarget, plot_surface_format};
 
 fn scene(segments: Vec<PlotSegment>, labels: Vec<PlotLabel>) -> PlotScene {
     PlotScene {
@@ -93,13 +93,45 @@ fn label_skips_characters_missing_from_the_atlas_but_keeps_their_space() {
 }
 
 #[test]
-fn plot_surface_prefers_a_format_without_srgb_encoding() {
-    use wgpu::TextureFormat::{Bgra8Unorm, Bgra8UnormSrgb, Rgba8UnormSrgb};
+fn plot_surface_prefers_8_bit_formats_without_srgb_encoding() {
+    use wgpu::TextureFormat::{
+        Bgra8Unorm, Bgra8UnormSrgb, Rgb10a2Unorm, Rgba8Unorm, Rgba8UnormSrgb, Rgba16Float,
+    };
 
     assert_eq!(
-        plot_surface_format(&[Bgra8UnormSrgb, Bgra8Unorm]),
+        plot_surface_format(&[Bgra8UnormSrgb, Rgba16Float, Rgba8Unorm, Bgra8Unorm]),
         Some(Bgra8Unorm)
+    );
+    assert_eq!(
+        plot_surface_format(&[Rgba16Float, Rgba8Unorm]),
+        Some(Rgba8Unorm)
+    );
+    assert_eq!(
+        plot_surface_format(&[Bgra8UnormSrgb, Rgb10a2Unorm]),
+        Some(Rgb10a2Unorm)
     );
     assert_eq!(plot_surface_format(&[Rgba8UnormSrgb]), Some(Rgba8UnormSrgb));
     assert_eq!(plot_surface_format(&[]), None);
+}
+
+/// A surface that could not be made is not retried at every redraw, only
+/// for the next window (#365 review).
+#[test]
+fn plot_target_tries_a_failed_window_once() {
+    use winit::window::WindowId;
+
+    let (first, second) = (WindowId::from(1), WindowId::from(2));
+    let mut target = PlotTarget::default();
+    assert!(target.should_create(first));
+
+    target.mark_failed(first);
+    target.sync(Some(first));
+    assert!(!target.should_create(first), "same window: no retry");
+
+    // Closed, then a new window: it gets its own try.
+    target.sync(None);
+    assert!(target.should_create(first));
+    target.mark_failed(first);
+    target.sync(Some(second));
+    assert!(target.should_create(second));
 }

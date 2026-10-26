@@ -3,7 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use super::frame_renderer::FrameRenderer;
-use super::plot_surface::{PlotSurface, draw_plot_frame, sync_plot_surface};
+use super::plot_surface::PlotTarget;
 use super::wgpu_context::WgpuContext;
 use super::wgpu_input::execute_input_action;
 use super::wgpu_pipelines::WgpuPipelines;
@@ -29,7 +29,7 @@ pub(super) enum WindowEventRoute {
 pub(super) struct GpuResources<'a> {
     pub(super) ctx: Option<&'a mut WgpuContext>,
     pub(super) pipelines: Option<&'a mut WgpuPipelines>,
-    pub(super) plot: &'a mut Option<PlotSurface>,
+    pub(super) plot: &'a mut PlotTarget,
 }
 
 /// Routes window and device events to the WGPU backend's focused handlers.
@@ -69,15 +69,13 @@ impl EventRouter {
             }
             WindowEventRoute::EnergyWindow => {
                 if matches!(event, WindowEvent::RedrawRequested) {
-                    if let (Some(frame), Some(ctx)) =
-                        (state.energy_manager_mut().handle_redraw(), ctx)
-                    {
-                        draw_plot_frame(plot, ctx, frame);
+                    if let (Some(frame), Some(ctx)) = (state.energy_window_redraw(), ctx) {
+                        plot.draw(ctx, frame);
                     }
                 } else {
                     state.handle_energy_window_event(event);
                     // ESC or the close button closed it: let the window go.
-                    sync_plot_surface(plot, state.energy_manager().window_id());
+                    plot.sync(state.energy_manager().window_id());
                 }
             }
             WindowEventRoute::MainWindow => {

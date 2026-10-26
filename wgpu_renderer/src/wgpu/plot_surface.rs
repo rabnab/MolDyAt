@@ -15,19 +15,22 @@ use winit::window::{Window, WindowId};
 use super::pipelines::plot_pipeline::PlotPipeline;
 use super::wgpu_context::WgpuContext;
 
-/// A format that stores the colours as given (no sRGB encoding), so the
-/// plot's colours match their values; else the first the surface offers.
+/// The surface format for the plot: 8-bit without sRGB encoding, so the
+/// plot's colours appear as given (`Bgra8Unorm`, then `Rgba8Unorm`), else
+/// any format without sRGB encoding, else the first the surface offers. A
+/// wider format (e.g. `Rgba16Float`) would only cost memory for a line plot.
 pub(super) fn plot_surface_format(formats: &[wgpu::TextureFormat]) -> Option<wgpu::TextureFormat> {
-    formats
-        .iter()
-        .copied()
-        .find(|format| !format.is_srgb())
+    use wgpu::TextureFormat::{Bgra8Unorm, Rgba8Unorm};
+    [Bgra8Unorm, Rgba8Unorm]
+        .into_iter()
+        .find(|preferred| formats.contains(preferred))
+        .or_else(|| formats.iter().copied().find(|format| !format.is_srgb()))
         .or_else(|| formats.first().copied())
 }
 
 pub(super) struct PlotSurface {
     /// Keeps the window alive as long as the surface: drop the surface (see
-    /// [`sync_plot_surface`]) when the energy window closes.
+    /// [`PlotTarget::sync`]) when the energy window closes.
     window: Arc<Window>,
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
@@ -43,6 +46,11 @@ impl PlotSurface {
         let caps = surface.get_capabilities(&ctx.adapter);
         let format = plot_surface_format(&caps.formats)
             .ok_or("the energy window surface supports no format on this adapter")?;
+        let alpha_mode = caps
+            .alpha_modes
+            .first()
+            .copied()
+            .ok_or("the energy window surface supports no alpha mode on this adapter")?;
         let size = window.inner_size();
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -52,7 +60,7 @@ impl PlotSurface {
             height: size.height.max(1),
             // Every surface supports Fifo; the plot redraws at most ~12 Hz.
             present_mode: wgpu::PresentMode::AutoVsync,
-            alpha_mode: caps.alpha_modes[0],
+            alpha_mode,
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
         };
@@ -132,27 +140,54 @@ impl PlotSurface {
     }
 }
 
-/// Drop the surface once the energy window it was made for is closed or
-/// replaced (`open` is the window open now), so the window can go away.
-pub(super) fn sync_plot_surface(plot: &mut Option<PlotSurface>, open: Option<WindowId>) {
-    if plot.as_ref().map(PlotSurface::window_id) != open {
-        *plot = None;
-    }
+/// The energy window's surface while it is open, and the window it could
+/// not be created for (if any), so a failure is logged once and not retried
+/// at every redraw until the window is replaced.
+#[derive(Default)]
+pub(super) struct PlotTarget {
+    surface: Option<PlotSurface>,
+    failed: Option<WindowId>,
 }
 
-/// Draw `frame`, creating the surface for its window first if needed.
-pub(super) fn draw_plot_frame(plot: &mut Option<PlotSurface>, ctx: &WgpuContext, frame: PlotFrame) {
-    sync_plot_surface(plot, Some(frame.window.id()));
-    if plot.is_none() {
-        match PlotSurface::new(ctx, frame.window) {
-            Ok(surface) => *plot = Some(surface),
-            Err(error) => {
-                log::error!("{error}");
-                return;
-            }
+impl PlotTarget {
+    /// Forget the surface and a failure once the energy window they belong
+    /// to is closed or replaced (`open` is the window open now), so the
+    /// window can go away and a new one gets its own try.
+    pub(super) fn sync(&mut self, open: Option<WindowId>) {
+        if self.surface.as_ref().map(PlotSurface::window_id) != open {
+            self.surface = None;
+        }
+        if self.failed.is_some() && self.failed != open {
+            self.failed = None;
         }
     }
-    if let Some(surface) = plot {
-        surface.render(&ctx.device, &ctx.queue, &frame.scene);
+
+    /// Whether a surface for `window` is still to be created: none exists
+    /// for it, and creating one has not failed for it before.
+    pub(super) fn should_create(&self, window: WindowId) -> bool {
+        self.surface.is_none() && self.failed != Some(window)
+    }
+
+    /// Record that no surface could be made for `window`.
+    pub(super) fn mark_failed(&mut self, window: WindowId) {
+        self.failed = Some(window);
+    }
+
+    /// Draw `frame`, creating the surface for its window first if needed.
+    pub(super) fn draw(&mut self, ctx: &WgpuContext, frame: PlotFrame) {
+        let window = frame.window.id();
+        self.sync(Some(window));
+        if self.should_create(window) {
+            match PlotSurface::new(ctx, frame.window) {
+                Ok(surface) => self.surface = Some(surface),
+                Err(error) => {
+                    log::error!("{error}; the energy plot stays empty");
+                    self.mark_failed(window);
+                }
+            }
+        }
+        if let Some(surface) = &mut self.surface {
+            surface.render(&ctx.device, &ctx.queue, &frame.scene);
+        }
     }
 }

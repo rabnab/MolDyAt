@@ -178,9 +178,9 @@ impl EnergyPlotWindow {
         self.set_display_mode(self.display_mode.next());
     }
 
-    /// What the window shows now, laid out for its current size; `None`
-    /// while it is closed or minimised.
-    pub fn scene(&self) -> Option<PlotScene> {
+    /// What the window shows now, laid out for its current size with
+    /// `key_hints` on the title line; `None` while it is closed or minimised.
+    pub fn scene(&self, key_hints: &str) -> Option<PlotScene> {
         let window = self.window.as_ref()?;
         let size = window.inner_size();
         if size.width == 0 || size.height == 0 {
@@ -192,6 +192,7 @@ impl EnergyPlotWindow {
             self.display_mode,
             (size.width, size.height),
             window.scale_factor(),
+            key_hints,
         ))
     }
 }

@@ -45,6 +45,8 @@ pub struct MetricsRegistry {
     /// The step of every sample. All series are sampled together, so the
     /// newest entry of a series belongs to the newest step here.
     steps: RingBuffer<u64>,
+    /// Simulation time of every sample, next to `steps` (the plot's x axis).
+    times: RingBuffer<f32>,
     /// `(world generation, step)` of the last sample, to skip a repeat.
     last_sampled: Option<(u64, u64)>,
     /// World generation the stored history belongs to.
@@ -70,6 +72,7 @@ impl MetricsRegistry {
             series_metadata: BTreeMap::new(),
             buffers: BTreeMap::new(),
             steps: RingBuffer::new(capacity),
+            times: RingBuffer::new(capacity),
             last_sampled: None,
             generation: 0,
             version: 0,
@@ -163,6 +166,7 @@ impl MetricsRegistry {
             buffer.clear();
         }
         self.steps.clear();
+        self.times.clear();
         self.species_table = None;
         self.count_series.clear();
         self.last_sampled = None;
@@ -188,6 +192,7 @@ impl MetricsRegistry {
         }
         self.last_sampled = Some((generation, step));
         self.steps.push(step);
+        self.times.push(snapshot.time);
 
         let (e_kin, e_pot) = (snapshot.kinetic_energy, snapshot.potential_energy);
         self.record("E_kin", e_kin);
@@ -252,6 +257,13 @@ impl MetricsRegistry {
     /// series was recorded at the newest step.
     pub fn steps(&self) -> &RingBuffer<u64> {
         &self.steps
+    }
+
+    /// The simulation time of every sample, oldest first, one per entry of
+    /// [`Self::steps`]. Plots use it as their x axis, so they stay
+    /// comparable when the time step changes.
+    pub fn times(&self) -> &RingBuffer<f32> {
+        &self.times
     }
 
     /// Counter that changes whenever stored series change.

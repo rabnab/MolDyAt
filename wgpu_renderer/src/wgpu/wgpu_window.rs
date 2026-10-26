@@ -11,7 +11,7 @@
 use super::app_lifecycle::AppLifecycle;
 use super::event_router::{EventRouter, GpuResources};
 use super::frame_renderer::FrameRenderer;
-use super::plot_surface::PlotSurface;
+use super::plot_surface::PlotTarget;
 use super::wgpu_context::WgpuContext;
 use super::wgpu_pipelines::WgpuPipelines;
 use std::sync::Arc;
@@ -75,7 +75,7 @@ struct WgpuApp {
     ctx: Option<WgpuContext>,
     pipelines: Option<WgpuPipelines>,
     /// Surface of the energy plot window while it is open.
-    plot: Option<PlotSurface>,
+    plot: PlotTarget,
     state: Option<UnifiedRenderState>,
 }
 
@@ -88,7 +88,7 @@ impl WgpuApp {
             window: None,
             ctx: None,
             pipelines: None,
-            plot: None,
+            plot: PlotTarget::default(),
             state: None,
         }
     }

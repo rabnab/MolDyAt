@@ -121,7 +121,9 @@ fn update_from_snapshot_starts_a_new_history_for_a_new_world() {
 fn handle_redraw_gives_no_frame_without_window() {
     let mut manager = make_manager();
     assert!(
-        manager.handle_redraw().is_none(),
+        manager
+            .handle_redraw(&crate::graphics::renderer::event_loop::KeyMap::default())
+            .is_none(),
         "handle_redraw should give no frame when no energy window is open"
     );
 }
@@ -133,7 +135,7 @@ fn handle_redraw_does_not_alter_pending_flag_without_window() {
     let mut manager = make_manager();
     manager.mark_redraw_pending();
 
-    manager.handle_redraw(); // no window → no render
+    manager.handle_redraw(&crate::graphics::renderer::event_loop::KeyMap::default()); // no window → no render
 
     // Pending flag should still be set because no render happened.
     assert!(
@@ -216,7 +218,7 @@ mod keys {
     use crate::graphics::renderer::event_loop::KeyCode;
     use crate::graphics::renderer::event_loop::command_registry::KeyInput;
     use crate::graphics::renderer::event_loop::energy_window_manager::{
-        EnergyWindowKey, energy_window_key,
+        EnergyWindowKey, energy_window_key, energy_window_key_hints,
     };
     use crate::graphics::renderer::event_loop::key_map::{KeyMap, KeyPhase};
 
@@ -266,5 +268,31 @@ mod keys {
             energy_window_key(&key_map, key(KeyCode::KeyX), KeyPhase::Up),
             Some(EnergyWindowKey::CycleDisplay)
         );
+    }
+
+    #[test]
+    fn test_key_hints_name_the_default_keys() {
+        assert_eq!(
+            energy_window_key_hints(&KeyMap::default()),
+            "Esc: close  TAB / P: mode"
+        );
+    }
+
+    /// The hints follow a `ui.toml` rebinding (#365 review).
+    #[test]
+    fn test_key_hints_follow_overrides() {
+        let x = ["X".to_string()];
+        let none: [String; 0] = [];
+        let (rebound, _) = KeyMap::with_overrides([
+            ("view.cycle_plot", x.as_slice()),
+            ("view.toggle_energy_window", none.as_slice()),
+        ]);
+        assert_eq!(energy_window_key_hints(&rebound), "Esc: close  X: mode");
+
+        let (unbound, _) = KeyMap::with_overrides([
+            ("view.cycle_plot", none.as_slice()),
+            ("view.toggle_energy_window", none.as_slice()),
+        ]);
+        assert_eq!(energy_window_key_hints(&unbound), "Esc: close");
     }
 }

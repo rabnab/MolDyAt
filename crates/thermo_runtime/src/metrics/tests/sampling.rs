@@ -37,6 +37,26 @@ fn test_sample_records_the_values_of_the_snapshot() {
 }
 
 #[test]
+fn test_sample_records_the_time_of_each_sample_next_to_its_step() {
+    let mut registry = MetricsRegistry::default();
+    let mut snapshot = stepped_snapshot(2);
+    registry.sample(&snapshot);
+    snapshot.simulation_step += 1;
+    snapshot.time += 0.25;
+    registry.sample(&snapshot);
+
+    assert_eq!(registry.times().len(), registry.steps().len());
+    assert_eq!(registry.times().latest().copied(), Some(snapshot.time));
+    let times: Vec<f32> = registry.times().get().iter().copied().collect();
+    assert_eq!(times[1] - times[0], 0.25);
+
+    // A new world clears the times with the rest.
+    snapshot.world_generation = 1;
+    registry.sample(&snapshot);
+    assert_eq!(registry.times().len(), 1);
+}
+
+#[test]
 fn test_sample_skips_a_step_already_sampled() {
     let snapshot = stepped_snapshot(2);
     let mut registry = MetricsRegistry::default();

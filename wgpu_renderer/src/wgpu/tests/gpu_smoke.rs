@@ -268,10 +268,16 @@ fn plot_pipeline_builds_and_renders_without_validation_errors() {
     let mut data = EnergyData::new();
     data.v_kin.extend([1.0, 3.0, 2.0, f32::NAN, 4.0]);
     data.v_pot.extend([-1.0, -2.0, -1.5, -1.0, -3.0]);
-    data.steps.extend([0, 10, 20, 30, 40]);
+    data.sample_times.extend([0.0, 0.1, 0.2, 0.3, 0.4]);
     data.status_text = Some("fps 60\n#Balls: 2".to_string());
-    let empty = PlotScene::build(&EnergyData::new(), DisplayMode::All, SIZE, 1.0);
-    let full = PlotScene::build(&data, DisplayMode::All, SIZE, 1.0);
+    let empty = PlotScene::build(
+        &EnergyData::new(),
+        DisplayMode::All,
+        SIZE,
+        1.0,
+        "Esc: close",
+    );
+    let full = PlotScene::build(&data, DisplayMode::All, SIZE, 1.0, "Esc: close");
     assert!(full.plot_area.is_some() && !full.segments.is_empty());
 
     for format in [wgpu::TextureFormat::Bgra8Unorm, FORMAT] {

@@ -86,7 +86,7 @@ FrameRenderer → RenderGraph → GPU
 | Physics runtime | `PhysicsRuntime`, `DomainCommandHandler` | `crates/thermo_runtime/src/application/physics_thread/` | The thread loop: draining commands, sleep cadence, snapshot cadence, wakeups, shutdown, steps/s reporting |
 | Physics-thread owner | `MainContent` | `crates/thermo_physics/src/application/core/mod.rs` | The world plus `StepConfig` (time step, ball factory), `RuntimeOptions` (step-by-step, timing log, ball-stats display, real-units display; kept across loads, never saved) and `PhysicsRuntimeState` (wait time, snapshot interval, physics FPS, save store, world generation, pause during a window resize) |
 | Snapshots | `SnapshotPublisher`, `CreateSnapshot` | `crates/thermo_runtime/src/application/physics_thread.rs`, `crates/thermo_runtime/src/application/snapshot.rs` | The slot shared with the renderer and the requested layers; building a `RendererSnapshot` from a `MainContent` |
-| Metrics | `MetricsRegistry` | `crates/thermo_runtime/src/metrics/` | Time series (E_kin, E_pot, E_tot, wall momentum, ball count per species) in ring buffers, sampled from the snapshot once per new step just before it is published, and cleared for a new world generation. `EnergyData` reads the energy series (appending only new values); headless frames print the latest values; `export` writes its series and a per-ball snapshot dump as CSV or JSONL (`Export` world command, `--export-dir`) |
+| Metrics | `MetricsRegistry` | `crates/thermo_runtime/src/metrics/` | Time series (E_kin, E_pot, E_tot, wall momentum, ball count per species) in ring buffers, with the step and simulation time of every sample, sampled from the snapshot once per new step just before it is published, and cleared for a new world generation. `EnergyData` reads the energy series (appending only new values); headless frames print the latest values; `export` writes its series and a per-ball snapshot dump as CSV or JSONL (`Export` world command, `--export-dir`) |
 | Run settings | `SimConfig` | `crates/thermo_physics/src/application/sim_config/` | Time step, speed limit, force cap and cutoff, Verlet skin, snapshot interval; built from defaults, a `--config` TOML file and CLI flags, stored in saves (see below) |
 | World state | `SimulationWorld` | `crates/thermo_physics/src/application/core/mod.rs` | Balls, `BallPhysics` constants, cell grid, stats, operator collections (line segments, valves, wall chains, source spheres, thermostats), the ghost wall and thermo field history; physical state only, no UI flags (#305) |
 | Stepping | `SimulationEngine` | `crates/thermo_physics/src/application/core/simulation_engine.rs` | One simulation step over a `SimulationWorld` (see below); holds no state |
@@ -312,25 +312,30 @@ Every visual layer is one `RenderPipeline` in
 `EnergyWindowManager` (`thermo_ui`) opens the window on the energy half of
 the split screen (`split_screen_layout`; the simulation window keeps its
 size, #167), owns its keys and display mode, and keeps `EnergyData` in
-step with the metrics store: the E_kin and E_pot series and the step of
-each sample, appending only new values. `PlotScene::build`
-(`energy_plot/plot_layout.rs`) lays the plot out in window pixels without a
-GPU: title and key hints, axes with round ticks (x: simulation step,
-y: energy), grid and zero line, the curves of the display mode (a
-non-finite value breaks a curve), the legend and the status text. The
-layout is unit-tested there.
+step with the metrics store: the E_kin and E_pot series and the simulation
+time of each sample (`MetricsRegistry::times`), appending only new values.
+`PlotScene::build` (`energy_plot/plot_layout.rs`) lays the plot out in
+window pixels without a GPU: the title, key hints built from the key map
+(`energy_window_key_hints`, so a `ui.toml` rebinding shows), axes with round
+ticks (x: simulation time, so plots stay comparable when the time step
+changes; y: energy), grid and zero line, the curves of the display mode (a
+sample without a finite value or time breaks a curve), the legend and the
+status text. Labels and thin lines sit on whole pixels so the bitmap glyphs
+and 1 px lines stay crisp. The layout is unit-tested there.
 
 The binary draws it: on a `RedrawRequested` for the plot window,
-`EnergyWindowManager::handle_redraw` hands out a `PlotFrame` (window and
-scene), and `plot_surface::draw_plot_frame` renders it into a surface of its
-own, created from the shared `Instance` and drawn with the shared device
-and queue. `PlotPipeline` (`pipelines/plot_pipeline.rs`) is not part of the
-render graph: it draws a scene, not a snapshot, with two `GpuBatch`es,
-anti-aliased round-capped segments (`plot_segment.wgsl`) and coloured 8×8
-bitmap text (`plot_text.wgsl`), both in window pixels. The surface prefers a
-format without sRGB encoding so the colours appear as given. It holds an
-`Arc` of the window, so the router drops it as soon as the window closes
-(`sync_plot_surface`). Redraws are throttled to about 12 Hz.
+`UnifiedRenderState::energy_window_redraw` hands out a `PlotFrame` (window
+and scene), and `PlotTarget` (`plot_surface.rs`) renders it into a surface
+of its own, created from the shared `Instance` and drawn with the shared
+device and queue. `PlotPipeline` (`pipelines/plot_pipeline.rs`) is not part
+of the render graph: it draws a scene, not a snapshot, with two
+`GpuBatch`es, anti-aliased round-capped segments (`plot_segment.wgsl`) and
+coloured 8×8 bitmap text (`plot_text.wgsl`), both in window pixels. The
+surface prefers `Bgra8Unorm` / `Rgba8Unorm` (no sRGB encoding, so the
+colours appear as given). It holds an `Arc` of the window, so the router
+drops it as soon as the window closes (`PlotTarget::sync`); a window whose
+surface cannot be created is logged once and not retried until it is
+replaced. Redraws are throttled to about 12 Hz.
 
 ## Persistence
 
