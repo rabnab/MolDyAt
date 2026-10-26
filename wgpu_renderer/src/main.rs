@@ -98,7 +98,12 @@ fn run_headless_renderer(
             .map_err(|error| std::io::Error::other(format!("{error:?}")))?;
         eprintln!("saved world: {}", path.display());
     }
-    headless_runner::HeadlessRunner::from_config(config, application, env!("GIT_COMMIT"))?.run()?;
+    let report =
+        headless_runner::HeadlessRunner::from_config(config, application, env!("GIT_COMMIT"))?
+            .run()?;
+    for path in &report.exported {
+        eprintln!("exported: {}", path.display());
+    }
     Ok(())
 }
 

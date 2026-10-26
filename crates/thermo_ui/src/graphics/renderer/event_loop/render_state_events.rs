@@ -30,6 +30,13 @@ impl UnifiedRenderState {
                 self.fit_window_to_world();
             }
             PhysicsEvent::LoadFailed(error) => log::error!("Loading world failed: {error}"),
+            PhysicsEvent::DataExported { path, note } => {
+                log::info!("Exported data to {}", path.display());
+                if let Some(note) = note {
+                    log::warn!("{note}");
+                }
+            }
+            PhysicsEvent::ExportFailed(error) => log::error!("Export failed: {error}"),
         }
     }
 

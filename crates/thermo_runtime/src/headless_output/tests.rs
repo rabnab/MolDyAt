@@ -58,6 +58,9 @@ fn test_run_start_record_contains_config_and_operator_counts() {
         valves: Vec::new(),
         timings: None,
         timing_warmup: 0,
+        export_dir: None,
+        export_format: Default::default(),
+        export_series: None,
         save_setup: false,
         sim: None,
     };
@@ -364,6 +367,9 @@ fn test_runs_with_same_seed_and_config_emit_identical_jsonl() {
         valves: Vec::new(),
         timings: None,
         timing_warmup: 0,
+        export_dir: None,
+        export_format: Default::default(),
+        export_series: None,
         save_setup: false,
         sim: None,
     };

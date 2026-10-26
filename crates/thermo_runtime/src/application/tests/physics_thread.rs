@@ -48,7 +48,8 @@ fn drain_into(main_content: &mut MainContent, commands: Vec<DomainCommand>) -> u
         sender.send(command).expect("send should succeed");
     }
 
-    let mut handler = DomainCommandHandler::new(main_content, &mut publisher, &events);
+    let metrics = MetricsRegistry::shared();
+    let mut handler = DomainCommandHandler::new(main_content, &mut publisher, &events, &metrics);
     runtime.drain_commands(&receiver, &mut handler);
     handler.resizes_applied()
 }

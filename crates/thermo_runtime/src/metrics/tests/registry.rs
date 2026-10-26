@@ -92,3 +92,19 @@ fn test_all_series_is_sorted_by_name() {
     sorted.sort();
     assert_eq!(names, sorted);
 }
+
+#[test]
+fn test_a_new_world_does_not_count_the_old_samples_as_evicted() {
+    let mut registry = MetricsRegistry::new(5);
+    // Samples of a first world fill the buffer and overflow it.
+    for step in 0..8u64 {
+        registry.push_step_for_test(step);
+    }
+    assert!(registry.steps().evicted() > 0);
+    registry.clear();
+    for step in 0..3u64 {
+        registry.push_step_for_test(step);
+    }
+    assert_eq!(registry.steps().evicted(), 0);
+    assert_eq!(registry.steps().len(), 3);
+}

@@ -37,6 +37,22 @@ fn test_every_domain_command_maps_as_before() {
         ("balls.enable_random_speed", "Balls(EnableRandomSpeed)"),
         ("world.save", "World(Save)"),
         ("world.load_latest", "World(Load(Latest))"),
+        (
+            "world.export_series_csv",
+            "World(Export { kind: Series, format: Csv })",
+        ),
+        (
+            "world.export_series_jsonl",
+            "World(Export { kind: Series, format: Jsonl })",
+        ),
+        (
+            "world.export_snapshot_csv",
+            "World(Export { kind: Snapshot, format: Csv })",
+        ),
+        (
+            "world.export_snapshot_jsonl",
+            "World(Export { kind: Snapshot, format: Jsonl })",
+        ),
         ("view.toggle_real_data", "View(ToggleRealData)"),
         ("view.toggle_ball_stats", "View(ToggleBallStats)"),
         ("debug.toggle_timings", "View(ToggleTimingDisplay)"),

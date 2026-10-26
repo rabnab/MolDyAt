@@ -25,6 +25,51 @@ pub struct SaveStore {
     dir: PathBuf,
 }
 
+/// Write `contents` to `dir/<stem>.<extension>` (the directory is created if
+/// missing) and return the path. With `keep_existing` an existing file is
+/// never overwritten: a `_01`, `_02`, … suffix is added to the stem, which
+/// still sorts after it; without it the file is replaced.
+///
+/// The data goes to a temporary file next to the target first (its name is
+/// the target's plus `.tmp`) and is renamed into place, so a crash cannot
+/// leave a truncated file behind.
+pub fn write_atomic_unique(
+    dir: &Path,
+    stem: &str,
+    extension: &str,
+    contents: &[u8],
+    keep_existing: bool,
+) -> std::io::Result<PathBuf> {
+    fn context(action: &str, path: &Path, error: std::io::Error) -> std::io::Error {
+        std::io::Error::new(
+            error.kind(),
+            format!("{action} {}: {error}", path.display()),
+        )
+    }
+
+    fs::create_dir_all(dir).map_err(|e| context("cannot create", dir, e))?;
+    let file_path = |stem: &str| dir.join(format!("{stem}.{extension}"));
+    let mut path = file_path(stem);
+    if keep_existing {
+        let mut counter = 0;
+        while path.exists() {
+            counter += 1;
+            path = file_path(&format!("{stem}_{counter:02}"));
+        }
+    }
+
+    let mut tmp_name = path.clone().into_os_string();
+    tmp_name.push(".tmp");
+    let tmp = PathBuf::from(tmp_name);
+    let mut out = fs::File::create(&tmp).map_err(|e| context("cannot create", &tmp, e))?;
+    out.write_all(contents)
+        .and_then(|()| out.sync_all())
+        .map_err(|e| context("cannot write", &tmp, e))?;
+    drop(out);
+    fs::rename(&tmp, &path).map_err(|e| context("cannot rename to", &path, e))?;
+    Ok(path)
+}
+
 fn io_error(action: &str, path: &Path, error: impl std::fmt::Display) -> AppError {
     AppError::CustomError(format!("{action} {}: {error}", path.display()))
 }
@@ -47,24 +92,15 @@ impl SaveStore {
     /// crash cannot leave a truncated save behind.
     pub(crate) fn save(&self, file: &WorldFile) -> AppResult<PathBuf> {
         let json = file.to_json()?;
-        fs::create_dir_all(&self.dir).map_err(|e| io_error("cannot create", &self.dir, e))?;
-
         let stamp = timestamp_utc(SystemTime::now());
-        let mut path = self.file_path(&stamp);
-        let mut counter = 0;
-        while path.exists() {
-            counter += 1;
-            path = self.file_path(&format!("{stamp}_{counter:02}"));
-        }
-
-        let tmp = path.with_extension(format!("{FILE_EXTENSION}.tmp"));
-        let mut out = fs::File::create(&tmp).map_err(|e| io_error("cannot create", &tmp, e))?;
-        out.write_all(json.as_bytes())
-            .and_then(|()| out.sync_all())
-            .map_err(|e| io_error("cannot write", &tmp, e))?;
-        drop(out);
-        fs::rename(&tmp, &path).map_err(|e| io_error("cannot rename to", &path, e))?;
-        Ok(path)
+        write_atomic_unique(
+            &self.dir,
+            &format!("{FILE_PREFIX}{stamp}"),
+            FILE_EXTENSION,
+            json.as_bytes(),
+            true,
+        )
+        .map_err(|e| AppError::CustomError(e.to_string()))
     }
 
     /// The newest save, or `None` when the directory is missing or holds none.
@@ -110,11 +146,6 @@ impl SaveStore {
             }),
         }
     }
-
-    fn file_path(&self, stamp: &str) -> PathBuf {
-        self.dir
-            .join(format!("{FILE_PREFIX}{stamp}.{FILE_EXTENSION}"))
-    }
 }
 
 /// The sort key of a save named `world_YYYYMMDD_HHMMSS[_NN].json`: its
@@ -145,7 +176,7 @@ pub(crate) fn save_order(name: &str) -> Option<(&str, u32)> {
 }
 
 /// `YYYYMMDD_HHMMSS` in UTC.
-pub(crate) fn timestamp_utc(time: SystemTime) -> String {
+pub fn timestamp_utc(time: SystemTime) -> String {
     let secs = time
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_secs() as i64);

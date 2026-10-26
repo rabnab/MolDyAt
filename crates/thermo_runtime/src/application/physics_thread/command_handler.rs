@@ -4,17 +4,25 @@
 
 use super::SnapshotPublisher;
 use super::runtime::CommandHandler;
+use crate::application::CreateSnapshot;
 use crate::application::MainContent;
 use crate::application::PhysicsEvent;
 use crate::application::persistence::LoadSource;
+use crate::application::persistence::timestamp_utc;
+use crate::application::scene_layers::SceneLayers;
 use crate::application::{BallCommand, DomainCommand, SimControl, ViewCommand, WorldCommand};
+use crate::export::{ExportFormat, ExportKind, series_to_string, snapshot_to_string, write_export};
+use crate::metrics::{SharedMetricsRegistry, read_metrics};
 use crate::objects2d::Rect;
 use std::sync::mpsc::Sender;
+use std::time::SystemTime;
 
 pub(crate) struct DomainCommandHandler<'a> {
     main_content: &'a mut MainContent,
     publisher: &'a mut SnapshotPublisher,
     events: &'a Sender<PhysicsEvent>,
+    /// Where `Export` reads the series from.
+    metrics: &'a SharedMetricsRegistry,
     /// The latest `Resize` not applied yet. Applying one costs O(balls) and a
     /// window drag queues one per mouse step, so a run of them is held back
     /// and only its last one is applied.
@@ -28,11 +36,13 @@ impl<'a> DomainCommandHandler<'a> {
         main_content: &'a mut MainContent,
         publisher: &'a mut SnapshotPublisher,
         events: &'a Sender<PhysicsEvent>,
+        metrics: &'a SharedMetricsRegistry,
     ) -> Self {
         Self {
             main_content,
             publisher,
             events,
+            metrics,
             pending_resize: None,
             resizes_applied: 0,
             commands_handled: 0,
@@ -79,6 +89,41 @@ impl<'a> DomainCommandHandler<'a> {
         match self.main_content.load_world(&store, source, true) {
             Ok(loaded) => PhysicsEvent::WorldLoaded(loaded),
             Err(e) => PhysicsEvent::LoadFailed(format!("{e:?}")),
+        }
+    }
+
+    fn export_data(&self, kind: ExportKind, format: ExportFormat) -> PhysicsEvent {
+        let Some(store) = self.main_content.runtime().save_store() else {
+            return PhysicsEvent::ExportFailed("no save directory configured".into());
+        };
+        let mut note = None;
+        let text = match kind {
+            ExportKind::Series => {
+                let registry = read_metrics(self.metrics);
+                let steps = registry.steps();
+                if steps.evicted() > 0 {
+                    let message = format!(
+                        "the export holds the last {} samples; {} older ones were evicted",
+                        steps.len(),
+                        steps.evicted()
+                    );
+                    log::warn!("{message}");
+                    note = Some(message);
+                }
+                series_to_string(&registry, None, format, None)
+            }
+            ExportKind::Snapshot => {
+                // Only the balls matter here; the thermo grids would cost for nothing.
+                let layers = SceneLayers::ALL
+                    .difference(SceneLayers::THERMO)
+                    .difference(SceneLayers::READOUTS);
+                snapshot_to_string(&self.main_content.create_snapshot_with(layers), format)
+            }
+        };
+        let prefix = format!("export_{}", timestamp_utc(SystemTime::now()));
+        match write_export(store.dir(), &prefix, kind, format, &text, true) {
+            Ok(path) => PhysicsEvent::DataExported { path, note },
+            Err(e) => PhysicsEvent::ExportFailed(e.to_string()),
         }
     }
 
@@ -143,6 +188,10 @@ impl DomainCommandHandler<'_> {
             }
             WorldCommand::Load(source) => {
                 let event = self.load_world(&source);
+                self.report(event);
+            }
+            WorldCommand::Export { kind, format } => {
+                let event = self.export_data(kind, format);
                 self.report(event);
             }
         }

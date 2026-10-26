@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+use crate::export::ExportFormat;
 use std::path::PathBuf;
 use thermo_physics::application::sim_config::{MAX_TIME_STEP, MIN_TIME_STEP, SimConfig};
 
@@ -51,6 +52,13 @@ pub struct HeadlessConfig {
     pub timings: Option<PathBuf>,
     /// Steps run before the timings start; they are not counted.
     pub timing_warmup: u32,
+    /// Write the series and the final per-ball snapshot to this directory as
+    /// `series.<ext>` and `snapshot.<ext>` once the run ends (#337).
+    pub export_dir: Option<PathBuf>,
+    /// Format of the export files (`--export-format`, default CSV).
+    pub export_format: ExportFormat,
+    /// Series to export (`--export-series`); `None` exports all.
+    pub export_series: Option<Vec<String>>,
     /// Save the world to the save directory once it is set up (walls,
     /// valves, seeded balls), before the first step. Perf runs seed a large
     /// world once and `--load` it for every run.
@@ -102,6 +110,9 @@ impl Default for HeadlessConfig {
             valves: Vec::new(),
             timings: None,
             timing_warmup: 0,
+            export_dir: None,
+            export_format: ExportFormat::default(),
+            export_series: None,
             save_setup: false,
             sim: None,
         }
@@ -141,6 +152,8 @@ fn parse_headless_args_with_args(args: &[String]) -> Result<Option<HeadlessConfi
     }
 
     let mut config = HeadlessConfig::default();
+    // `--export-format` or `--export-series` seen; both need `--export-dir`.
+    let mut export_options_given = false;
     let mut i = 1;
 
     while i < args.len() {
@@ -289,6 +302,34 @@ fn parse_headless_args_with_args(args: &[String]) -> Result<Option<HeadlessConfi
                     CliError::new("--timing-warmup value must be a non-negative integer")
                 })?;
             }
+            "--export-dir" => {
+                i += 1;
+                if i >= args.len() {
+                    return Err(CliError::new("--export-dir requires a value"));
+                }
+                config.export_dir = Some(PathBuf::from(&args[i]));
+            }
+            "--export-format" => {
+                i += 1;
+                if i >= args.len() {
+                    return Err(CliError::new("--export-format requires a value"));
+                }
+                config.export_format = ExportFormat::parse(&args[i])
+                    .ok_or_else(|| CliError::new("--export-format value must be csv or jsonl"))?;
+                export_options_given = true;
+            }
+            "--export-series" => {
+                i += 1;
+                if i >= args.len() {
+                    return Err(CliError::new("--export-series requires a value"));
+                }
+                let names: Vec<String> = args[i].split(',').map(|n| n.trim().to_string()).collect();
+                if names.iter().any(String::is_empty) {
+                    return Err(CliError::new("--export-series names must not be empty"));
+                }
+                config.export_series = Some(names);
+                export_options_given = true;
+            }
             other => return Err(CliError::new(format!("Unknown argument: {}", other))),
         }
         i += 1;
@@ -302,6 +343,12 @@ fn parse_headless_args_with_args(args: &[String]) -> Result<Option<HeadlessConfi
             .any(|pair| pair[0] == "--no-stdout" && pair[1] == "--stdout")
     {
         return Err(CliError::new("--stdout and --no-stdout cannot be combined"));
+    }
+
+    if config.export_dir.is_none() && export_options_given {
+        return Err(CliError::new(
+            "--export-format and --export-series need --export-dir",
+        ));
     }
 
     for (index, valve) in config.valves.iter().enumerate() {

@@ -4,10 +4,11 @@
 
 use crate::application::CreateSnapshot;
 use crate::application::renderer_snapshot::RendererSnapshot;
+use crate::export::{ExportFormat, ExportKind, series_to_string, snapshot_to_string, write_export};
 use crate::headless_cli::HeadlessConfig;
 use crate::headless_output::{HeadlessSnapshotSink, HeadlessWriter};
 use crate::headless_timings::{RunClock, write_timings};
-use crate::metrics::{MetricsRegistry, SharedMetricsRegistry, write_metrics};
+use crate::metrics::{MetricsRegistry, SharedMetricsRegistry, read_metrics, write_metrics};
 use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -28,6 +29,7 @@ pub struct HeadlessRunner {
     /// Shared metrics registry for time-series data; without one (tests,
     /// custom sinks) nothing is sampled.
     metrics: Option<SharedMetricsRegistry>,
+    export: Option<ExportRun>,
 }
 
 pub struct HeadlessRunnerBuilder {
@@ -39,11 +41,95 @@ pub struct HeadlessRunnerBuilder {
     timing_warmup: u32,
     commit: &'static str,
     metrics: Option<SharedMetricsRegistry>,
+    export: Option<ExportSettings>,
+}
+
+/// Where and how a run writes its export files (#337).
+#[derive(Debug, Clone)]
+pub struct ExportSettings {
+    pub dir: PathBuf,
+    pub format: ExportFormat,
+    /// Series to export; `None` exports all.
+    pub series: Option<Vec<String>>,
+}
+
+/// The series of a run being exported (`--export-dir`).
+///
+/// The export has its own registry, sampled at every k-th frame and at the
+/// last one, with k chosen from the known run length so that the whole run
+/// fits into the ring buffers; the frames' own `metrics` keep following
+/// every frame. The frame interval (`--snapshot-every`) is unchanged.
+struct ExportRun {
+    settings: ExportSettings,
+    registry: SharedMetricsRegistry,
+    /// Sample every `stride`-th frame (and the last one).
+    stride: u64,
+    /// Frames sampled or skipped so far.
+    frames: u64,
+}
+
+impl ExportRun {
+    /// `steps` steps with a frame every `snapshot_every` steps (0: the first
+    /// and the last only) give `1 + steps / every (+ 1)` frames.
+    fn new(settings: ExportSettings, steps: u32, snapshot_every: u32) -> Self {
+        let registry = MetricsRegistry::shared();
+        let capacity = read_metrics(&registry).capacity() as u64;
+        let frames = match (steps, snapshot_every) {
+            (0, _) => 1,
+            (_, 0) => 2,
+            (steps, every) => 1 + u64::from(steps / every) + u64::from(steps % every != 0),
+        };
+        // One slot stays free for the last frame, which is always sampled.
+        let stride = if frames <= capacity {
+            1
+        } else {
+            frames.div_ceil(capacity - 1)
+        };
+        Self {
+            settings,
+            registry,
+            stride,
+            frames: 0,
+        }
+    }
+
+    /// Steps between two samples when the run sampled only every k-th frame.
+    fn sample_interval_steps(&self, snapshot_every: u32) -> Option<u64> {
+        (self.stride > 1).then(|| self.stride * u64::from(snapshot_every))
+    }
+
+    fn sample(&mut self, snapshot: &RendererSnapshot, last: bool) {
+        if last || self.frames.is_multiple_of(self.stride) {
+            write_metrics(&self.registry).sample(snapshot);
+        }
+        self.frames += 1;
+    }
+
+    /// Fail before the first step on a series name that does not exist: the
+    /// built-in series and the species counts all exist after the first
+    /// sample.
+    fn check_series(&self) -> io::Result<()> {
+        let registry = read_metrics(&self.registry);
+        match self
+            .settings
+            .series
+            .iter()
+            .flatten()
+            .find(|name| registry.get_series(name).is_none())
+        {
+            Some(unknown) => Err(io::Error::other(format!(
+                "--export-series: unknown series {unknown}"
+            ))),
+            None => Ok(()),
+        }
+    }
 }
 
 pub struct HeadlessRunReport {
     /// Snapshots written (the binary writes the count to `run_end` itself).
     pub snapshots_emitted: u32,
+    /// Files written by `--export-dir`, series first.
+    pub exported: Vec<PathBuf>,
 }
 
 impl Default for HeadlessRunnerBuilder {
@@ -63,6 +149,7 @@ impl HeadlessRunnerBuilder {
             timing_warmup: 0,
             commit: UNKNOWN_COMMIT,
             metrics: None,
+            export: None,
         }
     }
 
@@ -107,6 +194,18 @@ impl HeadlessRunnerBuilder {
         self
     }
 
+    /// Write the series and the final snapshot when the run ends. Needs a
+    /// registry (`.metrics()`).
+    pub fn export(mut self, export: ExportSettings) -> Self {
+        self.export = Some(export);
+        self
+    }
+
+    fn export_if(mut self, export: Option<ExportSettings>) -> Self {
+        self.export = export;
+        self
+    }
+
     pub fn build(self) -> HeadlessRunner {
         HeadlessRunner {
             application: self.application.expect("application is required"),
@@ -117,6 +216,9 @@ impl HeadlessRunnerBuilder {
             timing_warmup: self.timing_warmup,
             commit: self.commit,
             metrics: self.metrics,
+            export: self
+                .export
+                .map(|settings| ExportRun::new(settings, self.steps, self.snapshot_every)),
         }
     }
 }
@@ -153,7 +255,36 @@ impl HeadlessRunner {
             .timings(config.timings.clone(), config.timing_warmup)
             .commit(commit)
             .metrics(metrics)
+            .export_if(config.export_dir.clone().map(|dir| ExportSettings {
+                dir,
+                format: config.export_format,
+                series: config.export_series.clone(),
+            }))
             .build())
+    }
+
+    /// The export files of `--export-dir`: the series of the whole run and
+    /// the per-ball state of the final snapshot, under fixed names so scripts
+    /// find them.
+    fn write_exports(&self, snapshot: &RendererSnapshot) -> io::Result<Vec<PathBuf>> {
+        let Some(export) = &self.export else {
+            return Ok(Vec::new());
+        };
+        let settings = &export.settings;
+        let series = series_to_string(
+            &read_metrics(&export.registry),
+            settings.series.as_deref(),
+            settings.format,
+            export.sample_interval_steps(self.snapshot_every),
+        );
+        let snapshot = snapshot_to_string(snapshot, settings.format);
+        [
+            (ExportKind::Series, series),
+            (ExportKind::Snapshot, snapshot),
+        ]
+        .into_iter()
+        .map(|(kind, text)| write_export(&settings.dir, "", kind, settings.format, &text, false))
+        .collect()
     }
 
     fn sample_metrics(&self, snapshot: &RendererSnapshot) {
@@ -167,6 +298,10 @@ impl HeadlessRunner {
         let mut latest_snapshot = self.application.create_snapshot();
 
         self.sample_metrics(&latest_snapshot);
+        if let Some(export) = &mut self.export {
+            export.sample(&latest_snapshot, self.steps == 0);
+            export.check_series()?;
+        }
 
         self.sink.write_run_start(&latest_snapshot)?;
         self.sink.write_frame(&latest_snapshot)?;
@@ -198,9 +333,12 @@ impl HeadlessRunner {
                 latest_snapshot = self.application.create_snapshot();
 
                 let snapshot_done = Instant::now();
-                // After the snapshot phase is timed: sampling is not part of
-                // building a snapshot, and must not skew the timings report.
+                // Sampling is not part of building a snapshot: it is timed as
+                // output, not as snapshot, like writing the frame.
                 self.sample_metrics(&latest_snapshot);
+                if let Some(export) = &mut self.export {
+                    export.sample(&latest_snapshot, step + 1 == self.steps);
+                }
                 self.sink.write_frame(&latest_snapshot)?;
                 clock.snapshot += snapshot_done - snapshot_start;
                 clock.output += snapshot_done.elapsed();
@@ -221,7 +359,13 @@ impl HeadlessRunner {
                 &latest_snapshot,
             )?;
         }
-        Ok(HeadlessRunReport { snapshots_emitted })
+        // Last, so an export error cannot cost the run its `run_end` record
+        // or its timings report.
+        let exported = self.write_exports(&latest_snapshot)?;
+        Ok(HeadlessRunReport {
+            snapshots_emitted,
+            exported,
+        })
     }
 }
 

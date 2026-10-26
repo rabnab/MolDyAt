@@ -103,7 +103,7 @@ mod tests;
 #[cfg(test)]
 pub(crate) use format::WORLD_FILE_VERSION;
 pub(crate) use format::WorldFile;
-pub use store::SaveStore;
+pub use store::{SaveStore, timestamp_utc, write_atomic_unique};
 
 use crate::application::core::SimulationWorld;
 use crate::application::{AppResult, MainContent};

@@ -72,3 +72,23 @@ fn test_ring_buffer_counts_pushes_beyond_eviction_and_clears() {
     buf.clear();
     assert_eq!((buf.len(), buf.total_pushed(), buf.epoch()), (0, 3, 1));
 }
+
+#[test]
+fn test_ring_buffer_counts_evictions_since_the_last_clear() {
+    let mut buf: RingBuffer<f32> = RingBuffer::new(2);
+    buf.push(1.0);
+    buf.push(2.0);
+    assert_eq!(buf.evicted(), 0);
+    buf.push(3.0);
+    buf.push(4.0);
+    assert_eq!(buf.evicted(), 2);
+    // A cleared buffer holds everything pushed since: nothing was lost.
+    buf.clear();
+    buf.push(5.0);
+    assert_eq!(buf.evicted(), 0);
+    assert_eq!(
+        buf.total_pushed(),
+        5,
+        "the push counter still survives a clear"
+    );
+}

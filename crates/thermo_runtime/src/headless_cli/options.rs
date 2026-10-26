@@ -102,6 +102,21 @@ pub const HEADLESS_OPTIONS: &[OptionHelp] = &[
         help: &["Write ms/step per phase as JSON (see docs/perf-baseline.md)"],
     },
     OptionHelp {
+        names: &["--export-dir"],
+        value: Some("<DIR>"),
+        help: &["Write series.<ext> and the final per-ball snapshot.<ext> to DIR"],
+    },
+    OptionHelp {
+        names: &["--export-format"],
+        value: Some("<FORMAT>"),
+        help: &["Export file format: csv (default) or jsonl"],
+    },
+    OptionHelp {
+        names: &["--export-series"],
+        value: Some("<A,B,..>"),
+        help: &["Export only these series (default: all), e.g. E_kin,N2:count"],
+    },
+    OptionHelp {
         names: &["--timing-warmup"],
         value: Some("<N>"),
         help: &["Steps before --timings starts measuring (default 0)"],

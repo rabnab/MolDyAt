@@ -18,4 +18,11 @@ pub enum PhysicsEvent {
     /// The world was replaced; the view should show `world_rect`.
     WorldLoaded(LoadedWorld),
     LoadFailed(String),
+    /// An export file was written; `note` warns about what it lacks (older
+    /// samples were evicted from the registry).
+    DataExported {
+        path: PathBuf,
+        note: Option<String>,
+    },
+    ExportFailed(String),
 }

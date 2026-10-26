@@ -66,7 +66,7 @@ impl PhysicsRuntime {
 
         while !shutdown_signal.should_shutdown() {
             let world_resized = {
-                let mut handler = DomainCommandHandler::new(simulation, publisher, events);
+                let mut handler = DomainCommandHandler::new(simulation, publisher, events, metrics);
                 self.drain_commands(receiver, &mut handler);
                 changed |= handler.commands_handled() > 0;
                 handler.resizes_applied() > 0
