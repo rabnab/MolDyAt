@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 use thermo_ui::graphics::energy_plot::EnergyData;
 use thermo_ui::graphics::renderer::event_loop::{EnergyWindowManager, KeyMap};
 
-use crate::wgpu::plot_surface::{PlotOsWindow, handle_plot_requests};
+use crate::wgpu::shell::plot_window::{PlotOsWindow, handle_plot_requests};
 
 /// What happened to the fake windows, shared with the test.
 #[derive(Default)]

@@ -2,45 +2,26 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! WGPU rendering backend
+//! WGPU rendering backend, in two parts with a one-way dependency (#372):
 //!
-//! This module contains the wgpu-based renderer implementation.
-//! After issue #140, the runtime wiring is split into focused pieces:
-//! [`app_lifecycle::AppLifecycle`] bootstraps the window and renderer state,
-//! [`event_router::EventRouter`] classifies and dispatches winit events, and
-//! [`frame_renderer::FrameRenderer`] prepares pipelines and submits redraws.
+//! - [`shell`]: the OS side: the winit event loop, the main and plot
+//!   windows, input dispatch into `UnifiedRenderState`, redraw requests
+//! - [`render`]: the drawing side: the GPU context and surfaces, the
+//!   pipelines and the render graph, one frame drawn without a window. It
+//!   uses no winit (checked by `tests/render_guard.rs`).
 //!
-//! # Components
-//! - [`app_lifecycle::AppLifecycle`]: Window, context, pipeline, and shared-state bootstrap
-//! - [`event_router::EventRouter`]: Window and device event classification and dispatch
-//! - [`frame_renderer::FrameRenderer`]: Snapshot preparation and frame submission
-//! - [`WgpuContext`]: Core GPU resources (Device, Queue, Surface, Adapter)
-//! - [`WgpuWindow`]: Thin event-loop shell that wires lifecycle, routing, and rendering
-//! - [`WgpuPipelines`]: All render pipelines, registered in a `RenderGraph`
-//! - `pipelines/`: one `RenderPipeline` per visual layer (balls, walls,
-//!   sidebar, labels, ...), all built the same way on top of `gpu/`
-//! - `gpu/`: shared building blocks — `GpuBatch` (the only place that creates
-//!   wgpu pipelines and buffers), WGSL sources with the common header,
-//!   textures, bitmap text
-//! - `EnergyWindowManager` (in `thermo_ui`): the energy plot window and its
-//!   layout; `plot_surface` draws it with its own surface on the shared device
+//! The shell depends on the renderer, never the other way round; what the
+//! renderer needs of a window goes through
+//! [`render::surface_window::RenderWindow`]. A later crate split (library
+//! for the renderer, binary for the shell) is then a file move.
 
-mod app_lifecycle;
-mod event_router;
-mod frame_renderer;
-mod gpu;
-mod pipelines;
-mod plot_surface;
-mod render_graph;
-mod wgpu_context;
-mod wgpu_input;
-mod wgpu_pipelines;
-mod wgpu_window;
+mod render;
+mod shell;
 
 #[cfg(test)]
 mod tests;
 
-pub use wgpu_window::WgpuWindow;
+pub use shell::wgpu_window::WgpuWindow;
 
 use thermo_ui::graphics::renderer::margins::Margins;
 

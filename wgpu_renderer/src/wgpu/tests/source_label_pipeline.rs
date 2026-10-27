@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use crate::wgpu::pipelines::source_label_pipeline::label_texts;
+use crate::wgpu::render::pipelines::source_label_pipeline::label_texts;
 use thermo_physics::objects2d::ball_impl::{SpeciesId, SpeciesTable};
 use thermo_physics::objects2d::{SimSourceSphere, Vec2D};
 

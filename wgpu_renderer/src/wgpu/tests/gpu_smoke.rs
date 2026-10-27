@@ -23,9 +23,10 @@ use thermo_ui::graphics::renderer::event_loop::FramePreviews;
 use thermo_ui::graphics::renderer::state_layers::ThermoDisplayMode;
 
 use crate::wgpu::MARGINS;
-use crate::wgpu::gpu::geometry::build_view_proj_matrix;
-use crate::wgpu::render_graph::PrepareContext;
-use crate::wgpu::wgpu_pipelines::WgpuPipelines;
+use crate::wgpu::render::frame::encode_frame;
+use crate::wgpu::render::gpu::geometry::build_view_proj_matrix;
+use crate::wgpu::render::render_graph::PrepareContext;
+use crate::wgpu::render::wgpu_pipelines::WgpuPipelines;
 
 const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8UnormSrgb;
 const SIZE: (u32, u32) = (800, 600);
@@ -161,27 +162,9 @@ fn render_frame(
         view_formats: &[],
     });
     let view = target.create_view(&wgpu::TextureViewDescriptor::default());
-    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
-    {
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("smoke pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &view,
-                resolve_target: None,
-                depth_slice: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            occlusion_query_set: None,
-            timestamp_writes: None,
-            multiview_mask: None,
-        });
-        pipelines.render(&mut pass, SIZE, MARGINS, layers);
-    }
-    queue.submit(std::iter::once(encoder.finish()));
+    // The main window's frame recording, into an offscreen target (#372).
+    let commands = encode_frame(device, pipelines, &view, SIZE, MARGINS, layers);
+    queue.submit(std::iter::once(commands));
 }
 
 #[test]
@@ -253,7 +236,7 @@ fn all_pipelines_build_and_render_without_validation_errors() {
 fn plot_pipeline_builds_and_renders_without_validation_errors() {
     use thermo_ui::graphics::energy_plot::{EnergyData, PlotScene, PlotSelection, TimeView};
 
-    use crate::wgpu::pipelines::plot_pipeline::PlotPipeline;
+    use crate::wgpu::render::pipelines::plot_pipeline::PlotPipeline;
 
     let Some((device, queue)) = request_device() else {
         eprintln!("no GPU adapter available; skipping GPU smoke test");
