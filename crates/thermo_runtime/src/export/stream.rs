@@ -105,17 +105,31 @@ impl SampleStream {
     /// Write the samples `registry` took since the last call. Returns the
     /// path of a file this call started (the first sample, a new world or
     /// another set of series).
+    ///
+    /// The caller feeds the stream at least once per registry capacity of
+    /// samples (the physics loop and the headless run feed it after every
+    /// sample). Samples the registry evicted before they were written cannot
+    /// be written any more: that is an error, so the file never has a silent
+    /// gap.
     pub fn record(&mut self, registry: &MetricsRegistry) -> io::Result<Option<PathBuf>> {
         let steps = registry.steps();
         let (epoch, pushed) = (steps.epoch(), steps.total_pushed());
-        let new = if epoch == self.seen.0 {
+        let taken = if epoch == self.seen.0 {
             pushed.saturating_sub(self.seen.1)
         } else {
-            // A new world: the registry holds only samples of it.
-            steps.len() as u64
+            // A new world: every sample since the registry was cleared, the
+            // evicted ones included.
+            steps.len() as u64 + steps.evicted()
         };
         self.seen = (epoch, pushed);
-        let new = (new as usize).min(steps.len());
+        let missing = taken.saturating_sub(steps.len() as u64);
+        if missing > 0 {
+            return Err(io::Error::other(format!(
+                "{missing} samples were evicted from the metrics registry before \
+                 the stream could write them"
+            )));
+        }
+        let new = taken as usize;
         if new == 0 {
             return Ok(None);
         }

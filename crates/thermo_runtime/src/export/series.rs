@@ -17,13 +17,20 @@ struct Column<'a> {
     values: Vec<Option<f32>>,
 }
 
-/// The selected series, sorted by name, and the step of each row. Rows are
-/// the sampled steps; a series shorter than the others (registered later)
-/// has no value for the first rows, since all series end at the newest step.
+/// The step and simulation time of each row.
+struct Rows {
+    steps: Vec<Option<u64>>,
+    times: Vec<Option<f32>>,
+}
+
+/// The selected series, sorted by name, and the step and time of each row.
+/// Rows are the sampled steps; a series shorter than the others (registered
+/// later) has no value for the first rows, since all series end at the
+/// newest step. The times are parallel to the steps.
 fn columns<'a>(
     registry: &'a MetricsRegistry,
     selection: Option<&[String]>,
-) -> (Vec<Option<u64>>, Vec<Column<'a>>) {
+) -> (Rows, Vec<Column<'a>>) {
     let series: Vec<_> = registry
         .all_series()
         .filter(|(name, _)| selection.is_none_or(|names| names.iter().any(|n| n == *name)))
@@ -39,6 +46,12 @@ fn columns<'a>(
         .map(|row| {
             aligned(registry.steps().len(), row)
                 .and_then(|i| registry.steps().get().get(i).copied())
+        })
+        .collect();
+    let times = (0..rows)
+        .map(|row| {
+            aligned(registry.times().len(), row)
+                .and_then(|i| registry.times().get().get(i).copied())
         })
         .collect();
     let columns = series
@@ -58,15 +71,17 @@ fn columns<'a>(
             }
         })
         .collect();
-    (steps, columns)
+    (Rows { steps, times }, columns)
 }
 
 /// The `selection` of the registry's series (`None` = all), sorted by name.
 ///
-/// CSV: a header row `step,<name>[ [<unit>]],…` and one row per sampled
-/// step. JSONL: a `series_header` record (names, units, descriptions, row
-/// count, `sample_interval_steps`), then one `series_row` record per step
-/// with a `values` object.
+/// CSV: a header row `step,time,<name>[ [<unit>]],…` and one row per
+/// sampled step. JSONL: a `series_header` record (names, units,
+/// descriptions, row count, `sample_interval_steps`), then one `series_row`
+/// record per step with its `time` and a `values` object. The time is the
+/// simulation time of the sample, as in the sample stream, so files of one
+/// run can be joined on it.
 ///
 /// `sample_interval_steps` is the nominal distance in steps between two
 /// samples when the run sampled only every k-th frame to fit the registry
@@ -79,14 +94,15 @@ pub fn series_to_string(
     format: ExportFormat,
     sample_interval_steps: Option<u64>,
 ) -> String {
-    let (steps, columns) = columns(registry, selection);
+    let (rows, columns) = columns(registry, selection);
+    let steps = &rows.steps;
     let mut out = String::new();
     match format {
         ExportFormat::Csv => {
             if let Some(interval) = sample_interval_steps {
                 out.push_str(&format!("# sample_interval_steps={interval}\n"));
             }
-            out.push_str("step");
+            out.push_str("step,time");
             for column in &columns {
                 out.push(',');
                 match column.unit {
@@ -97,6 +113,8 @@ pub fn series_to_string(
             out.push('\n');
             for (row, step) in steps.iter().enumerate() {
                 out.push_str(&step.map(|s| s.to_string()).unwrap_or_default());
+                out.push(',');
+                out.push_str(&csv_f32(rows.times[row]));
                 for column in &columns {
                     out.push(',');
                     out.push_str(&csv_f32(column.values[row]));
@@ -128,6 +146,7 @@ pub fn series_to_string(
                     "schema_version": SCHEMA_VERSION,
                     "record_kind": "series_row",
                     "step": step,
+                    "time": json_f32(rows.times[row]),
                     "values": values,
                 });
                 out.push_str(&record.to_string());

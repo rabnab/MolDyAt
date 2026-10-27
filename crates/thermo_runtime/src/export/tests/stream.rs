@@ -200,3 +200,42 @@ fn test_stream_into_an_unwritable_dir_fails_at_the_first_sample() {
     assert!(stream.record(&registry).is_err());
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn test_stream_fails_when_samples_were_evicted_before_it_saw_them() {
+    let dir = temp_dir("missed");
+    let mut registry = MetricsRegistry::new(4);
+    let mut stream = SampleStream::new(settings(&dir, ExportFormat::Csv), &registry);
+    let mut snapshot = base_snapshot();
+    sample(&mut registry, &mut stream, &mut snapshot, 0, 1);
+    // Six samples between two calls, two more than the registry holds.
+    for step in 2..8 {
+        snapshot.simulation_step = step;
+        registry.sample(&snapshot);
+    }
+    let error = stream.record(&registry).expect_err("a gap is an error");
+    assert!(
+        error.to_string().contains("2 samples were evicted"),
+        "{error}"
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn test_stream_of_a_new_world_counts_its_evicted_samples_too() {
+    let dir = temp_dir("missed_world");
+    let mut registry = MetricsRegistry::new(4);
+    let mut stream = SampleStream::new(settings(&dir, ExportFormat::Csv), &registry);
+    let mut snapshot = base_snapshot();
+    sample(&mut registry, &mut stream, &mut snapshot, 0, 1);
+    snapshot.world_generation = 1;
+    for step in 100..105 {
+        snapshot.simulation_step = step;
+        registry.sample(&snapshot);
+    }
+    assert!(
+        stream.record(&registry).is_err(),
+        "5 samples of the new world, 4 held"
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
