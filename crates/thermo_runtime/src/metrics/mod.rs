@@ -14,5 +14,7 @@ mod series;
 #[cfg(test)]
 mod tests;
 
-pub use registry::{MetricsRegistry, SharedMetricsRegistry, read_metrics, write_metrics};
+pub use registry::{
+    ENERGY_UNIT, MOMENTUM_UNIT, MetricsRegistry, SharedMetricsRegistry, read_metrics, write_metrics,
+};
 pub use series::{RingBuffer, SeriesMetadata, SeriesName};

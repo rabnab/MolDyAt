@@ -1098,10 +1098,10 @@ fn test_export_dir_receives_the_series_and_the_final_snapshot() {
     let series = fs::read_to_string(dir.join("series.csv")).expect("series.csv");
     let lines: Vec<&str> = series.lines().collect();
     for column in [
-        "E_kin [J]",
-        "E_pot [J]",
-        "E_tot [J]",
-        "wall_momentum [kg·m/s]",
+        "E_kin [eps*]",
+        "E_pot [eps*]",
+        "E_tot [eps*]",
+        "wall_momentum [m*sigma*/tau*]",
         "N2:count",
     ] {
         assert!(

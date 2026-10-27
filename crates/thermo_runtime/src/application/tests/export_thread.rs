@@ -74,7 +74,7 @@ fn export_writes_timestamped_files_to_the_save_directory() {
     let series = fs::read_to_string(series).unwrap();
     assert!(series.starts_with("step,"), "{series}");
     assert!(
-        series.lines().next().unwrap().contains(",E_kin [J],"),
+        series.lines().next().unwrap().contains(",E_kin [eps*],"),
         "{series}"
     );
     assert!(series.lines().count() >= 2);

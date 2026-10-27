@@ -12,7 +12,8 @@ pub type SeriesName = String;
 /// Metadata for a metric series.
 #[derive(Debug, Clone)]
 pub struct SeriesMetadata {
-    /// Unit of measurement, if applicable (e.g., "J", "K", "Pa").
+    /// Unit of measurement, if applicable (the built-in series are in reduced
+    /// units, e.g. "eps*").
     pub unit: Option<&'static str>,
     /// Human-readable description of the series.
     pub description: &'static str,

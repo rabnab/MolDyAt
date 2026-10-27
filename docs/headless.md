@@ -144,13 +144,16 @@ their shortest round-trip form, and the same seed, flags and build give
 byte-identical files. JSONL records carry `schema_version: "export.v1"` and a
 `record_kind`; consumers ignore unknown kinds and fields.
 
-| File     | CSV                                                                                                                                                                                                                      | JSONL                                                                                                                                                 |
-|----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
-| series   | Header `step,time,<name>[ [<unit>]],…` with the series sorted by name (`E_kin [J]`, `N2:count`), then one row per sampled step with its simulation time. A series registered later has empty cells for the earlier steps | `series_header` (`rows`, `series`: name, unit, description, per_species), then one `series_row` per step (`step`, `time`, `values` object)            |
-| snapshot | `id,species,x,y,vx,vy,mass,contact_radius`, one row per ball sorted by id                                                                                                                                                | `snapshot_header` (`step`, `time`, `ball_count`), then one `ball` record per ball (`id`, `species`, `position`, `velocity`, `contact_radius`, `mass`) |
+| File     | CSV                                                                                                                                                                                                                         | JSONL                                                                                                                                                 |
+|----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
+| series   | Header `step,time,<name>[ [<unit>]],…` with the series sorted by name (`E_kin [eps*]`, `N2:count`), then one row per sampled step with its simulation time. A series registered later has empty cells for the earlier steps | `series_header` (`rows`, `series`: name, unit, description, per_species), then one `series_row` per step (`step`, `time`, `values` object)            |
+| snapshot | `id,species,x,y,vx,vy,mass,contact_radius`, one row per ball sorted by id                                                                                                                                                   | `snapshot_header` (`step`, `time`, `ball_count`), then one `ball` record per ball (`id`, `species`, `position`, `velocity`, `contact_radius`, `mass`) |
 
 The series are those of the `MetricsRegistry` (`E_kin`, `E_pot`, `E_tot`,
-`wall_momentum`, `<species>:count`), sampled at snapshot cadence. The registry keeps
+`wall_momentum`, `<species>:count`), sampled at snapshot cadence. Their values are in the
+simulation's reduced units (see [units.md](units.md)) and labelled so in ASCII:
+energies in `eps*` (ε*, 1.312E-21 J for N₂), the wall momentum in `m*sigma*/tau*`;
+the counts have no unit. The registry keeps
 the last 1000 samples, so:
 
 - **Headless runs** export the whole run. The run length is known up front, so the

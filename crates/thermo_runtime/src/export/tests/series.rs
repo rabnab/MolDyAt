@@ -13,11 +13,11 @@ fn test_series_csv_round_trips_columns_units_and_gaps() {
         [
             "step",
             "time",
-            "E_kin [J]",
-            "E_pot [J]",
-            "E_tot [J]",
+            "E_kin [eps*]",
+            "E_pot [eps*]",
+            "E_tot [eps*]",
             "late",
-            "wall_momentum [kg·m/s]"
+            "wall_momentum [m*sigma*/tau*]"
         ]
     );
     assert_eq!(rows.len(), 4);
@@ -42,7 +42,7 @@ fn test_series_selection_and_non_finite_values() {
         ExportFormat::Csv,
         None,
     ));
-    assert_eq!(rows[0], ["step", "time", "E_kin [J]"]);
+    assert_eq!(rows[0], ["step", "time", "E_kin [eps*]"]);
     assert_eq!(rows[4], ["40", "4", ""]);
 }
 
@@ -65,7 +65,7 @@ fn test_series_jsonl_round_trips_with_null_for_gaps() {
         .iter()
         .find(|s| s["name"] == "E_kin")
         .unwrap();
-    assert_eq!(e_kin["unit"], "J");
+    assert_eq!(e_kin["unit"], "eps*");
     assert_eq!(records[1]["record_kind"], "series_row");
     assert_eq!(records[1]["values"]["E_kin"], 0.5);
     assert_eq!(records[1]["step"], 10);
