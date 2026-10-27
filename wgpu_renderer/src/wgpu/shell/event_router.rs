@@ -146,6 +146,9 @@ impl EventRouter {
         window_target: &ActiveEventLoop,
         main_window: &Window,
     ) {
+        if Self::redraws_main_window(&event) {
+            main_window.request_redraw();
+        }
         match event {
             WindowEvent::CloseRequested => {
                 log::info!("Window close requested");
@@ -156,15 +159,9 @@ impl EventRouter {
                 ctx.resize(size.width, size.height);
                 let margins = margins_for_scale_factor(main_window.scale_factor());
                 state.handle_resize(size.width as f32, size.height as f32, margins);
-                // Show the new size now, not with the next physics snapshot.
-                main_window.request_redraw();
             }
             WindowEvent::ScaleFactorChanged { .. } => {
                 // A follow-up `Resized` event updates the surface dimensions.
-            }
-            WindowEvent::Occluded(false) => {
-                // Frames were skipped while hidden.
-                main_window.request_redraw();
             }
             WindowEvent::Focused(false) => {
                 // Key releases while unfocused never arrive.
@@ -193,6 +190,18 @@ impl EventRouter {
             }
             _ => {}
         }
+    }
+
+    /// Whether `event` of the main window asks for a redraw by itself: a
+    /// new size is shown now, not with the next physics snapshot, and a
+    /// window shown again (`Occluded(false)`) is drawn, because the renderer
+    /// skips frames while it is hidden (`FrameOutcome::NotDrawn { retry:
+    /// false }`) and only this event brings it back.
+    pub(crate) fn redraws_main_window(event: &WindowEvent) -> bool {
+        matches!(
+            event,
+            WindowEvent::Resized(_) | WindowEvent::Occluded(false)
+        )
     }
 
     /// Record a view change from input and draw it now. Snapshots arrive

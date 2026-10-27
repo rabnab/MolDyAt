@@ -15,6 +15,42 @@ use winit::dpi::PhysicalSize;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId};
 
+/// What the window does after the renderer's frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) struct AfterFrame {
+    /// Configure the surface for the window's size now.
+    pub(crate) fit_surface: bool,
+    /// Ask for another redraw.
+    pub(crate) redraw: bool,
+    pub(crate) exit: bool,
+}
+
+/// The window's part after a frame with `outcome`. A frame skipped while
+/// the window is hidden asks for nothing: the window is drawn again on
+/// `Occluded(false)` (`EventRouter::redraws_main_window`).
+pub(crate) fn after_frame(outcome: FrameOutcome) -> AfterFrame {
+    match outcome {
+        FrameOutcome::Done | FrameOutcome::NotDrawn { retry: false } => AfterFrame::default(),
+        FrameOutcome::Suboptimal => AfterFrame {
+            fit_surface: true,
+            ..AfterFrame::default()
+        },
+        FrameOutcome::Reconfigure => AfterFrame {
+            fit_surface: true,
+            redraw: true,
+            ..AfterFrame::default()
+        },
+        FrameOutcome::NotDrawn { retry: true } => AfterFrame {
+            redraw: true,
+            ..AfterFrame::default()
+        },
+        FrameOutcome::Exit => AfterFrame {
+            exit: true,
+            ..AfterFrame::default()
+        },
+    }
+}
+
 /// Coordinates redraw handling for the main window.
 pub(crate) struct FrameRenderer;
 
@@ -64,15 +100,15 @@ impl FrameRenderer {
             window_id,
             state.should_render()
         );
-        match draw_main_frame(ctx, pipelines, state) {
-            FrameOutcome::Done | FrameOutcome::NotDrawn { retry: false } => {}
-            FrameOutcome::Suboptimal => Self::fit_surface(ctx, window),
-            FrameOutcome::Reconfigure => {
-                Self::fit_surface(ctx, window);
-                window.request_redraw();
-            }
-            FrameOutcome::NotDrawn { retry: true } => window.request_redraw(),
-            FrameOutcome::Exit => event_loop.exit(),
+        let after = after_frame(draw_main_frame(ctx, pipelines, state));
+        if after.fit_surface {
+            Self::fit_surface(ctx, window);
+        }
+        if after.redraw {
+            window.request_redraw();
+        }
+        if after.exit {
+            event_loop.exit();
         }
         true
     }
