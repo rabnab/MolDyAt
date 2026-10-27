@@ -68,8 +68,8 @@ fn test_stream_writes_every_sample_although_the_registry_evicts() {
 
     let rows = parse_csv(&std::fs::read_to_string(&files[0]).unwrap());
     assert_eq!(rows[0][..2], ["step", "time"]);
-    assert!(rows[0].contains(&"wall_momentum [kg·m/s]".to_string()));
-    let e_kin = rows[0].iter().position(|c| c == "E_kin [J]").unwrap();
+    assert!(rows[0].contains(&"wall_momentum [m*sigma*/tau*]".to_string()));
+    let e_kin = rows[0].iter().position(|c| c == "E_kin [eps*]").unwrap();
     assert_eq!(rows.len(), 11, "header and one row per sample");
     assert!(rows.iter().all(|row| row.len() == rows[0].len()));
     assert_eq!([&rows[1][0], &rows[1][1], &rows[1][e_kin]], ["0", "0", "0"]);
@@ -124,7 +124,7 @@ fn test_stream_jsonl_round_trips_units_and_non_finite_values() {
         .iter()
         .find(|s| s["name"] == "E_kin")
         .unwrap();
-    assert_eq!(e_kin["unit"], "J");
+    assert_eq!(e_kin["unit"], "eps*");
     let row = &records[2];
     assert_eq!(row["record_kind"], "series_row");
     assert_eq!(row["step"], 2);
