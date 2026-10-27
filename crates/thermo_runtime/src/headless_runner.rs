@@ -10,8 +10,11 @@ use crate::export::{
 };
 use crate::headless_cli::HeadlessConfig;
 use crate::headless_output::{HeadlessSnapshotSink, HeadlessWriter};
+use crate::headless_script::CommandRecord;
+use crate::headless_script::Script;
 use crate::headless_timings::{RunClock, write_timings};
 use crate::metrics::{MetricsRegistry, SharedMetricsRegistry, read_metrics, write_metrics};
+use script_run::ScriptRun;
 use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -33,6 +36,8 @@ pub struct HeadlessRunner {
     /// custom sinks) nothing is sampled.
     metrics: Option<SharedMetricsRegistry>,
     export: Option<ExportRun>,
+    /// The `--script` commands still to run (#340).
+    script: Option<ScriptRun>,
 }
 
 pub struct HeadlessRunnerBuilder {
@@ -45,6 +50,7 @@ pub struct HeadlessRunnerBuilder {
     commit: &'static str,
     metrics: Option<SharedMetricsRegistry>,
     export: Option<ExportSettings>,
+    script: Option<Script>,
 }
 
 /// Where and how a run writes its export files (#337).
@@ -227,6 +233,7 @@ impl HeadlessRunnerBuilder {
             commit: UNKNOWN_COMMIT,
             metrics: None,
             export: None,
+            script: None,
         }
     }
 
@@ -278,6 +285,13 @@ impl HeadlessRunnerBuilder {
         self
     }
 
+    /// Run the commands of `script` at their steps (#340). The run length
+    /// stays what `.steps()` sets; `from_config` sets it from the script.
+    pub fn script(mut self, script: Option<Script>) -> Self {
+        self.script = script;
+        self
+    }
+
     fn export_if(mut self, export: Option<ExportSettings>) -> Self {
         self.export = export;
         self
@@ -296,6 +310,7 @@ impl HeadlessRunnerBuilder {
             export: self
                 .export
                 .map(|settings| ExportRun::new(settings, self.steps, self.snapshot_every)),
+            script: self.script.as_ref().map(ScriptRun::new),
         }
     }
 }
@@ -332,6 +347,7 @@ impl HeadlessRunner {
             .timings(config.timings.clone(), config.timing_warmup)
             .commit(commit)
             .metrics(metrics)
+            .script(config.script.clone())
             .export_if(config.export_dir.clone().map(|dir| ExportSettings {
                 dir,
                 format: config.export_format,
@@ -376,8 +392,35 @@ impl HeadlessRunner {
         }
     }
 
+    /// Run the script commands due after `steps_done` steps; their records
+    /// go to the sink unless `hold` takes them (the commands before the
+    /// first step run before `run_start` is written).
+    fn run_script(
+        &mut self,
+        steps_done: u32,
+        hold: Option<&mut Vec<CommandRecord>>,
+    ) -> io::Result<()> {
+        let Some(script) = &mut self.script else {
+            return Ok(());
+        };
+        let records = script.run_due(steps_done, &mut self.application, self.metrics.as_ref())?;
+        match hold {
+            Some(held) => held.extend(records),
+            None => {
+                for record in &records {
+                    self.sink.write_command(record)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub fn run(mut self) -> io::Result<HeadlessRunReport> {
         let mut snapshots_emitted = 0;
+        // Setup commands run before the first snapshot, so `run_start` and
+        // the frame at step 0 show what they placed.
+        let mut setup = Vec::new();
+        self.run_script(0, Some(&mut setup))?;
         let mut latest_snapshot = self.application.create_snapshot();
 
         self.sample_metrics(&latest_snapshot);
@@ -387,6 +430,9 @@ impl HeadlessRunner {
         }
 
         self.sink.write_run_start(&latest_snapshot)?;
+        for record in &setup {
+            self.sink.write_command(record)?;
+        }
         self.sink.write_frame(&latest_snapshot)?;
         snapshots_emitted += 1;
         let mut clock = RunClock::start(0);
@@ -428,6 +474,9 @@ impl HeadlessRunner {
                 clock.snapshots += 1;
                 snapshots_emitted += 1;
             }
+            // After the step's frame, so a frame shows the world before the
+            // commands of its step.
+            self.run_script(step + 1, None)?;
         }
         let wall = clock.started.elapsed();
         self.sink
@@ -525,6 +574,8 @@ pub fn prepare_application(
     }
     Ok(application)
 }
+
+mod script_run;
 
 #[cfg(test)]
 mod tests;

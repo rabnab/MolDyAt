@@ -11,6 +11,7 @@ use thermo_physics::application::{
 #[cfg(test)]
 use thermo_physics::application::{SimConfig, sim_config};
 
+pub mod command_table;
 mod domain_command;
 pub mod operator_command;
 mod physics_event;
@@ -22,10 +23,13 @@ mod snapshot;
 #[cfg(test)]
 mod tests;
 
+pub use command_table::{CommandParam, DOMAIN_COMMANDS, DomainCommandSpec, domain_command_spec};
 pub use domain_command::{BallCommand, DomainCommand, SimControl, ViewCommand, WorldCommand};
 pub use physics_event::PhysicsEvent;
 pub use physics_thread::{PhysicsThread, ShutdownSignal, SnapshotPublisher};
 pub use snapshot::{CreateSnapshot, valve_spans};
 
+// Headless scripts (#340) run domain commands through the same handler.
 #[cfg(test)]
-pub(crate) use physics_thread::{CommandHandler, DomainCommandHandler, PhysicsRuntime};
+pub(crate) use physics_thread::PhysicsRuntime;
+pub(crate) use physics_thread::{CommandHandler, DomainCommandHandler};

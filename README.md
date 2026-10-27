@@ -224,6 +224,12 @@ Key behavior:
 Seeded regression fixture workflow (used by CI; required for refactor PRs, see [CONTRIBUTING.md](CONTRIBUTING.md#refactor-prs-required-gates)):
 
 ```bash
+# Run a command script: commands by their key-registry id at chosen steps
+# (see docs/headless.md#scripts); its `step` lines set the run length
+cargo run -p moldyat_wgpu -- --headless --script crates/thermo_runtime/src/headless_runner/fixtures/seeded_headless_operators.script --rng-seed 222 --seed-balls 32 --output /tmp/scripted.jsonl --no-stdout
+```
+
+```bash
 # Run the fixture regression checks used in CI (the tests are #[ignore]d)
 cargo ci-test-headless-regression
 ```
@@ -237,6 +243,7 @@ Fixture files:
 
 - `crates/thermo_runtime/src/headless_runner/fixtures/seeded_headless_regression.jsonl`: free gas, summary records
 - `crates/thermo_runtime/src/headless_runner/fixtures/seeded_headless_operators.jsonl`: walls, a valve, a thermostat and a source sphere, with per-ball state
+- Each fixture's run is the command line in its `.args` file (the operator scenario adds a `.toml` config and a `.script`); `moldyat $(cat <name>.args)` in that directory writes it again
 - Regenerate only when changes to headless output are intentional and reviewed.
 
 ### Testing

@@ -1,0 +1,1 @@
+--headless --steps 6 --snapshot-every 2 --rng-seed 12345 --seed-balls 24 --no-stdout --output seeded_headless_regression.jsonl

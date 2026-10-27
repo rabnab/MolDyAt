@@ -14,6 +14,7 @@ description: Contract for changing headless mode - CLI flags, the JSONL headless
 | Shared flags (`--load`, `--save-dir`, `--config`), `--help` (`GENERAL_OPTIONS`) | `wgpu_renderer/src/cli.rs`, `cli/usage.rs` | `cli/tests.rs` |
 | World setup order, step loop, frame cadence | `crates/thermo_runtime/src/headless_runner.rs` | `headless_runner/tests.rs` |
 | JSONL records, console line, non-finite policy | `crates/thermo_runtime/src/headless_output.rs` | `headless_output/tests.rs` |
+| `--script` parsing, command ids, operator commands | `crates/thermo_runtime/src/headless_script.rs` (domain ids from `application::command_table`), run in `headless_runner/script_run.rs` | `headless_script/tests.rs`, `headless_runner/tests.rs` |
 | `--timings` report (`headless-timings.v1`) | `crates/thermo_runtime/src/headless_timings.rs` | read by `scripts/headless_perf.sh` |
 
 ## Rules
@@ -30,6 +31,8 @@ description: Contract for changing headless mode - CLI flags, the JSONL headless
 
 ## Fixtures
 Gates, all in the `test` job of `.github/workflows/ci.yml`:
+Each fixture's inputs are checked in next to it: `<name>.args` (the command line), and for the operator scenario `.toml` (`--config`) and `.script` (`--script`). The tests parse these files, so a scenario change edits them, not the test code.
+
 - `cargo ci-test-headless-regression` (both fixture tests are `#[ignore = "suite:headless-regression"]`):
   `seeded_headless_regression.jsonl` (free gas, summary) and `seeded_headless_operators.jsonl` (walls, valve, thermostat, source sphere, per-ball state).
 - `test_seeded_operators_run_does_not_depend_on_thread_count` (1 vs 4 threads, f32 bits).

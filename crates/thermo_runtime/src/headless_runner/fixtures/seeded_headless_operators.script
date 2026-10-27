@@ -1,0 +1,12 @@
+# An active thermostat left of the valve wall and an emitting source sphere
+# right of it (the walls and the valve come from the command line).
+operator.place_thermostat -8 0
+operator.place_source_sphere 7 3
+operator.toggle_thermostat 0
+operator.toggle_source_sphere 0
+# Emit period 3000 steps -> 20, speed 0.05 -> 3.0. At 3.0 an emitted ball
+# moves 0.6 in one period, out of the way of the next one (emission needs a
+# free spot at the sphere's perimeter).
+operator.adjust_source_sphere_period 0 -2980
+operator.adjust_source_sphere_speed 0 2.95
+step 200

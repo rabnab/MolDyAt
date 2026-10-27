@@ -1,0 +1,4 @@
+# The operator scenario runs in a quarter-size world, so that balls reach
+# the walls, the valve, the thermostat and the source sphere within the run.
+[world]
+scale = 0.25

@@ -10,8 +10,10 @@ use thermo_runtime::application::ViewCommand;
 /// UI command is handled here. Returns true if the view changed.
 pub(super) fn run_command(state: &mut UnifiedRenderState, command: &CommandDescriptor) -> bool {
     match command.kind {
-        CommandKind::Domain(make) => {
-            state.physics.send_command(make());
+        CommandKind::Domain(_) => {
+            if let Some(command) = command.domain_command() {
+                state.physics.send_command(command);
+            }
             false
         }
         CommandKind::Ui(action) => run_ui_action(state, action),

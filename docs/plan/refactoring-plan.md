@@ -145,7 +145,7 @@ guardrails. Water (I9–I10) follows. See §5 for the model choice behind it.
 | C2 | Command registry | One table of `CommandDescriptor { id, label, category, default_binding, kind: Ui(UiAction) | Domain(fn(&Ctx)->DomainCommand) }`. Generated: key dispatch, help text (`PrintHelp`), `process_action_common`. Adding a command = one entry + handler. Unit test: no duplicate bindings, every command has help text. Landed as `command_registry.rs` with `Domain(fn() -> DomainCommand)`: no key command needs a context yet (C5 adds parameters). | M | C1 |
 | C3 | Configurable key bindings | Load overrides from a TOML file; defaults from C2. Bindings are a UI setting: a UI settings file read by the UI crate, not a `SimConfig` key (`SimConfig` lives in `thermo_physics` and travels with saves). Done (#335): `[key_bindings]` in `ui.toml` (working directory) or `--ui-config`, applied as a `KeyMap` (`key_map.rs`) that the key dispatch and the help text read; key names as the help text shows them (`key_names.rs`). | S | C2 |
 | C4 | Tool registry | `ToolDescriptor { tool, icon, name }` list drives `OperatorTool`, `operator_tool_for_icon`, `selected_sidebar_icon` and the atlas order — removes the 3-file sync rule from the skill. Test: icon order == registry order. | M | – |
-| C5 | Scriptable commands for headless | Headless runner accepts a command script (`step 1000; add_random 500; toggle_gravity; …`) mapped through the same registry ids. Enables reproducible scenario tests. The registry (`command_registry.rs`) is in the UI crate, while headless runs are in `thermo_runtime`: the domain half (command id → `DomainCommand`) moves into `thermo_runtime`, and the UI registry refers to it by id. | M | C2, M8 |
+| C5 | Scriptable commands for headless | Headless runner accepts a command script (`step 1000; add_random 500; toggle_gravity; …`) mapped through the same registry ids. Enables reproducible scenario tests. The registry (`command_registry.rs`) is in the UI crate, while headless runs are in `thermo_runtime`: the domain half (command id → `DomainCommand`) moves into `thermo_runtime`, and the UI registry refers to it by id. Landed as `--script` (#340): `DOMAIN_COMMANDS` in `thermo_runtime::application::command_table`, `step N` lines, `operator.*` commands for the sidebar tools, `command` records; both headless fixtures are now checked-in args/script/config files. | M | C2, M8 |
 
 ### Epic V – Visuals and graphs
 
@@ -212,7 +212,7 @@ GitHub issues (every open issue is in a phase, as of 2026-10-23):
 | 2 | #220 | I1 #230, I2 #233, I3 #234, M6 #231, I4 #235, I5 #236, C2 #232, I6 #237, I7 #238 | – |
 | 3 | #304 | M2 #305, #295, #270, #273, #274, M5 #306, C4 #307, P2 #311, M7 #308, M8 #309 | – |
 | 4 | #329 | M9 #310 | I8a #334, #327, C3 #335, M10 |
-| 5 | #330 | V3 #336, V7 #337, V4a #338, #367, #366, V4b #339, #371, #372 | C5 #340, M10 |
+| 5 | #330 | V3 #336, V7 #337, V4a #338, #367, #366, V4b #339, #371, #372, C5 #340 | M10 |
 | 6 | #331 | – | V2 #341, #290, V5 #342, V6 #343, #303, #203, M10 |
 | 7 | #332 | – | P8a #344, P4 #345, #250, P6 #346, P8b #213, M10 |
 | 8 | #333 | – | I12 #280, I8b #347, I9 #348, I10 #349, I11 #350, M10 |
