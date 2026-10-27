@@ -19,6 +19,7 @@
 
 use super::key_map::display_names;
 use super::key_names::bind_key_name;
+use crate::graphics::energy_plot::MAX_PLOTS;
 use Modifier::{Alt, Ctrl};
 use Trigger::{Press, PressOnce, Release};
 use thermo_physics::application::persistence::LoadSource;
@@ -67,7 +68,25 @@ pub enum UiAction {
     ToggleEnergyWindow,
     /// The energy plot's time view (zoom and pan, #367) back to its default.
     ResetPlotView,
+    /// Change the plots of the plot window (#339).
+    Plot(PlotChange),
     DeleteHovered,
+}
+
+/// A change of what the plot window shows (#339); the keys work in both
+/// windows and act on the focused plot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlotChange {
+    /// The next energy preset for the focused plot (`view.cycle_plot` in
+    /// the plot window).
+    CyclePreset,
+    NextSeries,
+    PreviousSeries,
+    AddSeries,
+    RemoveSeries,
+    AddPlot,
+    RemovePlot,
+    FocusNext,
 }
 
 /// Groups for the help text. Each id starts with its category's prefix.
@@ -277,6 +296,7 @@ pub const LABEL_VALUES: &[LabelValue] = &[
         format!("{NORMAL_GRAVITY_MPS2:.2} m/s^2")
     }),
     ("{high_gravity}", || format!("{HIGH_GRAVITY_MPS2:.2} m/s^2")),
+    ("{max_plots}", || MAX_PLOTS.to_string()),
 ];
 
 fn export(kind: ExportKind, format: ExportFormat) -> DomainCommand {
@@ -516,7 +536,7 @@ pub static COMMANDS: &[CommandDescriptor] = &[
     },
     CommandDescriptor {
         id: "view.cycle_plot",
-        label: "Cycle the plot content.",
+        label: "Cycle the plot content (in the plot window: the focused plot's energy preset).",
         category: CommandCategory::View,
         default_binding: &[symbol('p', Release)],
         kind: CommandKind::Ui(UiAction::CyclePlotContent),
@@ -534,6 +554,55 @@ pub static COMMANDS: &[CommandDescriptor] = &[
         category: CommandCategory::View,
         default_binding: &[key(KeyCode::Home, PressOnce)],
         kind: CommandKind::Ui(UiAction::ResetPlotView),
+    },
+    CommandDescriptor {
+        id: "view.plot_next_series",
+        label: "Plot window: show the next series in place of the focused plot's last one.",
+        category: CommandCategory::View,
+        default_binding: &[symbol('.', Release)],
+        kind: CommandKind::Ui(UiAction::Plot(PlotChange::NextSeries)),
+    },
+    CommandDescriptor {
+        id: "view.plot_previous_series",
+        label: "Plot window: show the previous series in place of the focused plot's last one.",
+        category: CommandCategory::View,
+        default_binding: &[symbol(',', Release)],
+        kind: CommandKind::Ui(UiAction::Plot(PlotChange::PreviousSeries)),
+    },
+    CommandDescriptor {
+        id: "view.plot_add_series",
+        label: "Plot window: add the next series to the focused plot.",
+        category: CommandCategory::View,
+        default_binding: &[symbol_chord(Ctrl, 'p', PressOnce)],
+        kind: CommandKind::Ui(UiAction::Plot(PlotChange::AddSeries)),
+    },
+    CommandDescriptor {
+        id: "view.plot_remove_series",
+        label: "Plot window: remove the last series of the focused plot.",
+        category: CommandCategory::View,
+        default_binding: &[symbol_chord(Alt, 'p', PressOnce)],
+        kind: CommandKind::Ui(UiAction::Plot(PlotChange::RemoveSeries)),
+    },
+    CommandDescriptor {
+        id: "view.plot_add_plot",
+        label: "Plot window: add a plot below the focused one (up to {max_plots}).",
+        category: CommandCategory::View,
+        default_binding: &[symbol_chord(Ctrl, 'l', PressOnce)],
+        kind: CommandKind::Ui(UiAction::Plot(PlotChange::AddPlot)),
+    },
+    CommandDescriptor {
+        id: "view.plot_remove_plot",
+        label: "Plot window: remove the focused plot.",
+        category: CommandCategory::View,
+        default_binding: &[symbol_chord(Alt, 'l', PressOnce)],
+        kind: CommandKind::Ui(UiAction::Plot(PlotChange::RemovePlot)),
+    },
+    CommandDescriptor {
+        id: "view.plot_focus_next",
+        label: "Plot window: focus the next plot (or click a plot; click a legend entry to hide or show its series).",
+        category: CommandCategory::View,
+        default_binding: &[symbol('f', Release)],
+        kind: CommandKind::Ui(UiAction::Plot(PlotChange::FocusNext)),
     },
     CommandDescriptor {
         id: "view.toggle_real_data",

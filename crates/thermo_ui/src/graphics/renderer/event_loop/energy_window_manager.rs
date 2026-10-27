@@ -11,13 +11,13 @@
 //! pointer, a middle-button drag pans it, a middle-button double click (or
 //! the key of `view.reset_plot_view`) returns to the default view.
 
-use super::command_registry::{KeyInput, UiAction, command_by_id};
+use super::command_registry::{KeyInput, PlotChange, UiAction, command_by_id};
 use super::input_handler::key_input;
 use super::key_map::{HeldModifiers, KeyMap, KeyPhase};
 use super::operator_tool_handler::scroll_y_from_delta;
 use crate::graphics::energy_plot::{
-    DisplayMode, EnergyPlotWindow, PlotRect, PlotScene, SharedEnergyData, TimeHistory, TimeView,
-    split_screen_layout_for_monitor,
+    EnergyPlotWindow, LegendEntry, PanelArea, PlotRect, PlotScene, PlotSelection, SharedEnergyData,
+    TimeHistory, TimeView, split_screen_layout_for_monitor,
 };
 use crate::graphics::renderer::event_loop::metrics::FrameMetrics;
 use std::sync::Arc;
@@ -33,61 +33,78 @@ use winit::window::{Window, WindowId};
 pub(super) enum EnergyWindowKey {
     /// Close the window.
     Close,
-    /// Cycle what the window plots.
-    CycleDisplay,
+    /// Change the plots (the plot commands, #339).
+    Plot(PlotChange),
     /// Return the plot to its default time view.
     ResetView,
 }
 
 /// The energy window's action for a key event. The keys come from the key
-/// map, so a `ui.toml` rebinds them here too (#355): the keys of the plot
-/// commands (`view.cycle_plot`, `view.toggle_energy_window`; `P` and `TAB`
-/// by default) cycle what the window plots, each on its own trigger. `ESC`
+/// map, so a `ui.toml` rebinds them here too (#355): the keys of
+/// `view.cycle_plot` and `view.toggle_energy_window` (`P` and `TAB` by
+/// default) give the focused plot the next energy preset, each on its own
+/// trigger, and the `view.plot_*` commands change the plots (#339). `ESC`
 /// closes the window, as the close shortcut of the window itself, not a
 /// registry command (in the main window `ESC` clears the balls).
 pub(super) fn energy_window_key(
     key_map: &KeyMap,
     input: KeyInput,
     phase: KeyPhase,
+    held: HeldModifiers,
 ) -> Option<EnergyWindowKey> {
     if phase == KeyPhase::Down && input.code == KeyCode::Escape {
         return Some(EnergyWindowKey::Close);
     }
-    let (command, _) = key_map.command_for_key(input, phase, HeldModifiers::default())?;
+    let (command, _) = key_map.command_for_key(input, phase, held)?;
     match command.ui_action()? {
         UiAction::CyclePlotContent | UiAction::ToggleEnergyWindow => {
-            Some(EnergyWindowKey::CycleDisplay)
+            Some(EnergyWindowKey::Plot(PlotChange::CyclePreset))
         }
+        UiAction::Plot(change) => Some(EnergyWindowKey::Plot(change)),
         UiAction::ResetPlotView => Some(EnergyWindowKey::ResetView),
         _ => None,
     }
 }
 
-/// The key hints the energy window shows, from `key_map`: `Esc` closes it
-/// (fixed), and the keys of the plot commands cycle what it plots (see
-/// [`energy_window_key`]), so a rebinding in `ui.toml` shows here too.
+/// The key hints the energy window shows, from `key_map`, most important
+/// first, two spaces apart (the layout drops trailing hints that do not
+/// fit): `Esc` closes it (fixed), the keys of the plot commands give the
+/// focused plot the next preset (see [`energy_window_key`]), then the keys
+/// to step the series, reset the view and move the focus, so a rebinding in
+/// `ui.toml` shows here too.
 pub(super) fn energy_window_key_hints(key_map: &KeyMap) -> String {
-    let mode_keys: Vec<String> = ["view.toggle_energy_window", "view.cycle_plot"]
-        .into_iter()
-        .filter_map(command_by_id)
-        .flat_map(|command| key_map.binding_display(command))
-        .fold(Vec::new(), |mut keys, key| {
-            if !keys.contains(&key) {
-                keys.push(key);
-            }
-            keys
-        });
-    let mut hints = "Esc: close".to_string();
-    if !mode_keys.is_empty() {
-        hints.push_str(&format!("  {}: mode", mode_keys.join(" / ")));
+    let keys = |ids: &[&str]| -> String {
+        ids.iter()
+            .copied()
+            .filter_map(command_by_id)
+            .flat_map(|command| key_map.binding_display(command))
+            .fold(Vec::new(), |mut keys, key| {
+                if !keys.contains(&key) {
+                    keys.push(key);
+                }
+                keys
+            })
+            .join(" / ")
+    };
+    let mut hints = vec!["Esc: close".to_string()];
+    for (ids, what) in [
+        (
+            &["view.toggle_energy_window", "view.cycle_plot"][..],
+            "preset",
+        ),
+        (
+            &["view.plot_previous_series", "view.plot_next_series"][..],
+            "series",
+        ),
+        (&["view.reset_plot_view"][..], "reset"),
+        (&["view.plot_focus_next"][..], "focus"),
+    ] {
+        let keys = keys(ids);
+        if !keys.is_empty() {
+            hints.push(format!("{keys}: {what}"));
+        }
     }
-    let reset_keys = command_by_id("view.reset_plot_view")
-        .map(|command| key_map.binding_display(command))
-        .unwrap_or_default();
-    if !reset_keys.is_empty() {
-        hints.push_str(&format!("  {}: reset", reset_keys.join(" / ")));
-    }
-    hints
+    hints.join("  ")
 }
 
 /// Two middle-button presses at most this far apart in time and space are
@@ -114,6 +131,23 @@ struct Drag {
 pub(super) struct PlotGeometry {
     pub(super) area: PlotRect,
     pub(super) history: TimeHistory,
+}
+
+/// Where the plots and their legend entries were in the last frame, for
+/// left clicks (#339).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub(super) struct ClickTargets {
+    pub(super) panels: Vec<PanelArea>,
+    pub(super) legend: Vec<LegendEntry>,
+}
+
+impl ClickTargets {
+    fn of(scene: &PlotScene) -> Self {
+        Self {
+            panels: scene.panels.clone(),
+            legend: scene.legend.clone(),
+        }
+    }
 }
 
 /// The pointer over the energy window.
@@ -149,6 +183,13 @@ pub struct EnergyWindowManager {
     view: TimeView,
     /// The plot geometry of the last frame, for the mouse gestures.
     geometry: Option<PlotGeometry>,
+    /// The plots and legend entries of the last frame, for left clicks.
+    targets: ClickTargets,
+    /// The plots shown; kept when the window is closed and reopened.
+    selection: PlotSelection,
+    /// Ctrl and Alt as held over the energy window, for its chords
+    /// (`Ctrl + P`, …).
+    modifiers: HeldModifiers,
     pointer: PlotPointer,
     /// `EnergyData::history_resets` the view last saw: a new world history
     /// returns the view to its default.
@@ -176,9 +217,84 @@ impl EnergyWindowManager {
             redraw_pending: false,
             view: TimeView::default(),
             geometry: None,
+            targets: ClickTargets::default(),
+            selection: PlotSelection::default(),
+            modifiers: HeldModifiers::default(),
             pointer: PlotPointer::default(),
             seen_history_resets: 0,
         }
+    }
+
+    /// The plots shown (also while the window is closed).
+    pub fn selection(&self) -> &PlotSelection {
+        &self.selection
+    }
+
+    /// Change the plots as `change` says (a plot command); with the window
+    /// open it redraws now. Returns whether the plots changed.
+    pub fn change_plots(&mut self, change: PlotChange) -> bool {
+        self.edit_selection(|selection, available| match change {
+            PlotChange::CyclePreset => {
+                selection.cycle_preset();
+                true
+            }
+            PlotChange::NextSeries => selection.step_series(available, 1),
+            PlotChange::PreviousSeries => selection.step_series(available, -1),
+            PlotChange::AddSeries => selection.add_series(available),
+            PlotChange::RemoveSeries => selection.remove_series(),
+            PlotChange::AddPlot => selection.add_plot(available),
+            PlotChange::RemovePlot => selection.remove_plot(),
+            PlotChange::FocusNext => {
+                selection.focus_next();
+                selection.panels().len() > 1
+            }
+        })
+    }
+
+    /// A left click at `at` (window pixels) in the last frame: on a legend
+    /// entry it hides or shows that series, in a plot it focuses the plot.
+    /// Returns whether the plots changed.
+    pub(super) fn left_clicked(&mut self, at: [f32; 2]) -> bool {
+        let entry = self
+            .targets
+            .legend
+            .iter()
+            .find(|entry| entry.rect.contains(at))
+            .cloned();
+        if let Some(entry) = entry {
+            return self.edit_selection(|selection, _| {
+                selection.focus(entry.panel);
+                selection.toggle_hidden(entry.panel, &entry.series)
+            });
+        }
+        let Some(panel) = self.targets.panels.iter().find(|p| p.area.contains(at)) else {
+            return false;
+        };
+        let index = panel.index;
+        self.edit_selection(|selection, _| selection.focus(index))
+    }
+
+    /// The click targets of the last frame (tests).
+    #[cfg(test)]
+    pub(super) fn set_click_targets(&mut self, targets: ClickTargets) {
+        self.targets = targets;
+    }
+
+    fn edit_selection(&mut self, change: impl FnOnce(&mut PlotSelection, &[&str]) -> bool) -> bool {
+        let changed = match &mut self.window {
+            Some(window) => window.change_selection(change),
+            None => {
+                let data = self.energy_data.lock().unwrap_or_else(|e| e.into_inner());
+                change(&mut self.selection, &data.series_names())
+            }
+        };
+        if let Some(window) = &self.window {
+            self.selection = window.selection().clone();
+        }
+        if changed {
+            self.redraw_now();
+        }
+        changed
     }
 
     /// The plot's time range.
@@ -321,6 +437,15 @@ impl EnergyWindowManager {
                 }
                 ElementState::Released => self.pointer.drag = None,
             },
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Left,
+                ..
+            } => {
+                if let Some(at) = self.pointer.cursor {
+                    self.left_clicked(at);
+                }
+            }
             WindowEvent::CursorMoved { position, .. } => {
                 self.pointer_moved([position.x as f32, position.y as f32]);
             }
@@ -347,44 +472,24 @@ impl EnergyWindowManager {
         self.window_id() == Some(window_id)
     }
 
-    /// Toggle or cycle the energy window.
-    ///
-    /// If no window exists, creates one with default mode.
-    /// If window exists and is open, cycles display mode.
-    /// If window was closed, reopens with last mode.
+    /// Open the energy window, or give the focused plot the next energy
+    /// preset while it is open. A reopened window shows the plots it had.
     pub fn toggle(&mut self, window_target: &ActiveEventLoop, main_window: Option<&Window>) {
         let split_layout = main_window
             .and_then(|window| window.current_monitor())
             .or_else(|| window_target.primary_monitor())
             .map(|monitor| split_screen_layout_for_monitor(&monitor));
 
-        if self.window.is_none() {
-            // Create and open energy window with default mode
-            let mut window =
-                EnergyPlotWindow::new(self.energy_data.clone(), DisplayMode::default());
-            if let Err(e) = window.create(window_target, split_layout.map(|layout| layout.energy)) {
-                eprintln!("Failed to create energy window: {}", e);
-                return;
-            }
-            self.window = Some(window);
-        } else if let Some(window) = &mut self.window {
-            if window.is_open() {
-                // Cycle display mode instead of closing
-                window.cycle_display_mode();
-                window.request_redraw();
-            } else {
-                // Reopen if closed with last mode
-                let last_mode = window.get_display_mode();
-                let mut new_window = EnergyPlotWindow::new(self.energy_data.clone(), last_mode);
-                if let Err(e) =
-                    new_window.create(window_target, split_layout.map(|layout| layout.energy))
-                {
-                    eprintln!("Failed to create energy window: {}", e);
-                    return;
-                }
-                self.window = Some(new_window);
-            }
+        if self.window.as_ref().is_some_and(EnergyPlotWindow::is_open) {
+            self.change_plots(PlotChange::CyclePreset);
+            return;
         }
+        let mut window = EnergyPlotWindow::new(self.energy_data.clone(), self.selection.clone());
+        if let Err(e) = window.create(window_target, split_layout.map(|layout| layout.energy)) {
+            eprintln!("Failed to create energy window: {}", e);
+            return;
+        }
+        self.window = Some(window);
     }
 
     /// Close the energy window.
@@ -409,6 +514,14 @@ impl EnergyWindowManager {
                 }
                 true
             }
+            WindowEvent::ModifiersChanged(modifiers) => {
+                let state = modifiers.state();
+                self.modifiers = HeldModifiers {
+                    ctrl: state.control_key(),
+                    alt: state.alt_key(),
+                };
+                true
+            }
             WindowEvent::KeyboardInput { event, .. } => {
                 let Some(input) = key_input(&event) else {
                     return false;
@@ -417,13 +530,10 @@ impl EnergyWindowManager {
                     ElementState::Pressed => KeyPhase::Down,
                     ElementState::Released => KeyPhase::Up,
                 };
-                match energy_window_key(key_map, input, phase) {
+                match energy_window_key(key_map, input, phase, self.modifiers) {
                     Some(EnergyWindowKey::Close) => self.window = None,
-                    Some(EnergyWindowKey::CycleDisplay) => {
-                        if let Some(window) = &mut self.window {
-                            window.cycle_display_mode();
-                            window.request_redraw();
-                        }
+                    Some(EnergyWindowKey::Plot(change)) => {
+                        self.change_plots(change);
                     }
                     Some(EnergyWindowKey::ResetView) => self.reset_plot_view(),
                     None => return false,
@@ -456,6 +566,7 @@ impl EnergyWindowManager {
             .plot_area
             .zip(scene.history)
             .map(|(area, history)| PlotGeometry { area, history });
+        self.targets = ClickTargets::of(&scene);
         Some(PlotFrame {
             window: handle,
             scene,

@@ -300,9 +300,16 @@ Keyboard (press `H` for the same list in the log):
 | `F2` | Toggle rendering. |
 | `F3` | Cycle the cutoff-radius rings. |
 | `T` | Cycle the thermo overlay: Off -> Grid -> Temperature -> Pressure -> Off. |
-| `P` | Cycle the plot content. |
+| `P` | Cycle the plot content (in the plot window: the focused plot's energy preset). |
 | `TAB` | Toggle the energy plot window. |
 | `HOME` | Reset the energy plot's time range (follow the newest sample; also a middle double click in the plot). |
+| `.` | Plot window: show the next series in place of the focused plot's last one. |
+| `,` | Plot window: show the previous series in place of the focused plot's last one. |
+| `Ctrl + P` | Plot window: add the next series to the focused plot. |
+| `Alt + P` | Plot window: remove the last series of the focused plot. |
+| `Ctrl + L` | Plot window: add a plot below the focused one (up to 4). |
+| `Alt + L` | Plot window: remove the focused plot. |
+| `F` | Plot window: focus the next plot (or click a plot; click a legend entry to hide or show its series). |
 | `D` | Toggle the display of real data (SI units, see docs/units.md). |
 | `B` | Toggle the ball statistics overlay. |
 | `F4` | Toggle step timings in the log. |

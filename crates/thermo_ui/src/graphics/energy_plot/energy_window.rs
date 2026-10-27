@@ -2,8 +2,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use super::energy_data::{DisplayMode, SharedEnergyData};
+use super::energy_data::SharedEnergyData;
 use super::plot_layout::PlotScene;
+use super::plot_selection::PlotSelection;
 use super::time_view::TimeView;
 use std::sync::Arc;
 use winit::dpi::{LogicalSize, PhysicalPosition, PhysicalSize};
@@ -67,29 +68,27 @@ pub(super) fn split_screen_layout(
     }
 }
 
-/// Energy plot window: a separate OS window that shows the energy history.
+/// Energy plot window: a separate OS window that shows the history of the
+/// metrics series (#339: any series, several plots).
 ///
-/// This type owns the window and what it shows (data and display mode); it
-/// draws nothing itself. The backend renders [`Self::scene`] into a surface
-/// of its own for [`Self::window_handle`] (the wgpu binary: a surface on the
-/// main window's device).
+/// This type owns the window and what it shows (data and plot selection);
+/// it draws nothing itself. The backend renders [`Self::scene`] into a
+/// surface of its own for [`Self::window_handle`] (the wgpu binary: a
+/// surface on the main window's device).
 pub struct EnergyPlotWindow {
     window: Option<Arc<Window>>,
     energy_data: SharedEnergyData,
-    display_mode: DisplayMode,
+    selection: PlotSelection,
 }
 
 impl EnergyPlotWindow {
-    /// Create new energy plot window (not yet shown).
-    ///
-    /// # Arguments
-    /// * `energy_data` - Shared data synchronized with main simulation
-    /// * `display_mode` - Initial display mode for which energy traces to show
-    pub fn new(energy_data: SharedEnergyData, display_mode: DisplayMode) -> Self {
+    /// A plot window (not yet shown) of `energy_data` with the plots of
+    /// `selection`.
+    pub fn new(energy_data: SharedEnergyData, selection: PlotSelection) -> Self {
         Self {
             window: None,
             energy_data,
-            display_mode,
+            selection,
         }
     }
 
@@ -105,7 +104,7 @@ impl EnergyPlotWindow {
             .unwrap_or(PhysicalSize::new(DEFAULT_WIDTH, DEFAULT_HEIGHT));
 
         let mut attrs = Window::default_attributes()
-            .with_title(window_title(self.display_mode))
+            .with_title(window_title(&self.selection))
             .with_inner_size(initial_size)
             .with_resizable(true)
             .with_min_inner_size(LogicalSize::new(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT));
@@ -164,19 +163,25 @@ impl EnergyPlotWindow {
         &self.energy_data
     }
 
-    pub fn get_display_mode(&self) -> DisplayMode {
-        self.display_mode
+    pub fn selection(&self) -> &PlotSelection {
+        &self.selection
     }
 
-    pub fn set_display_mode(&mut self, mode: DisplayMode) {
-        self.display_mode = mode;
-        if let Some(window) = &self.window {
-            window.set_title(&window_title(mode));
+    /// Change the plots with `change`, given the names of the series on
+    /// offer; the title follows. Returns what `change` returns (whether the
+    /// selection changed).
+    pub fn change_selection(
+        &mut self,
+        change: impl FnOnce(&mut PlotSelection, &[&str]) -> bool,
+    ) -> bool {
+        let changed = {
+            let data = self.energy_data.lock().unwrap_or_else(|e| e.into_inner());
+            change(&mut self.selection, &data.series_names())
+        };
+        if changed && let Some(window) = &self.window {
+            window.set_title(&window_title(&self.selection));
         }
-    }
-
-    pub fn cycle_display_mode(&mut self) {
-        self.set_display_mode(self.display_mode.next());
+        changed
     }
 
     /// What the window shows now, laid out for its current size with
@@ -191,7 +196,7 @@ impl EnergyPlotWindow {
         let data = self.energy_data.lock().unwrap_or_else(|e| e.into_inner());
         Some(PlotScene::build(
             &data,
-            self.display_mode,
+            &self.selection,
             (size.width, size.height),
             window.scale_factor(),
             key_hints,
@@ -200,6 +205,6 @@ impl EnergyPlotWindow {
     }
 }
 
-pub(super) fn window_title(mode: DisplayMode) -> String {
-    format!("Energy Plot - {}", mode.as_str())
+pub(super) fn window_title(selection: &PlotSelection) -> String {
+    format!("Plot - {}", selection.title())
 }

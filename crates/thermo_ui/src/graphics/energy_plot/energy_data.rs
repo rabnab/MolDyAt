@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use thermo_runtime::metrics::{RingBuffer, SharedMetricsRegistry, read_metrics};
 
@@ -36,51 +36,28 @@ fn sync_series<T: Copy>(
     *cursor = Some(now);
 }
 
-/// Energy display mode - controls which energy traces are shown
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum DisplayMode {
-    #[default]
-    Pot = 0, // Potential energy only
-    Kin = 1,   // Kinetic energy only
-    Total = 2, // Total energy only
-    All = 3,   // All three traces
+/// The cached values of one registry series.
+#[derive(Debug, Clone, Default)]
+struct CachedSeries {
+    values: VecDeque<f32>,
+    /// `(epoch, total pushed)` of the registry series at the last sync, to
+    /// append only what is new.
+    cursor: Option<(u64, u64)>,
+    unit: Option<&'static str>,
+    per_species: bool,
 }
 
-impl DisplayMode {
-    /// Cycle to next display mode in sequence: Pot → Kin → Total → All → Pot.
-    pub fn next(self) -> Self {
-        match self {
-            DisplayMode::Pot => DisplayMode::Kin,
-            DisplayMode::Kin => DisplayMode::Total,
-            DisplayMode::Total => DisplayMode::All,
-            DisplayMode::All => DisplayMode::Pot,
-        }
-    }
-
-    /// Get short string representation for display in window title.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            DisplayMode::Pot => "pot",
-            DisplayMode::Kin => "kin",
-            DisplayMode::Total => "total",
-            DisplayMode::All => "all",
-        }
-    }
-}
-
-/// Shared energy data structure for communication between main simulation and energy plot window.
-///
-/// This is now a thin wrapper around MetricsRegistry (decision 8-B). It syncs
-/// its cached values from the registry when requested.
+/// The plot window's copy of the metrics series (#339): every series of the
+/// `MetricsRegistry` (energies, wall momentum, ball count per species) and
+/// the simulation time of each sample, synced from the registry when asked.
+/// The plot picks the series it shows by name.
 #[derive(Clone)]
 pub struct EnergyData {
-    /// Cached kinetic energy samples (synced from MetricsRegistry)
-    pub v_kin: VecDeque<f32>,
-    /// Cached potential energy samples (synced from MetricsRegistry)
-    pub v_pot: VecDeque<f32>,
+    /// The cached series, by registry name.
+    series: BTreeMap<String, CachedSeries>,
     /// Simulation time of each sample (synced from MetricsRegistry), the
     /// plot's x axis. The series end at the newest sample: the last value of
-    /// `v_kin` and `v_pot` belongs to the last time here.
+    /// each series belongs to the last time here.
     pub sample_times: VecDeque<f32>,
     /// How often a sync found the registry starting a new history (a loaded
     /// world): the plot returns to its default view when this changes. A
@@ -88,18 +65,14 @@ pub struct EnergyData {
     pub history_resets: u64,
     pub time: f32,
     pub status_text: Option<String>,
-    /// Monotonically increasing counter that increments each time energy samples
-    /// are synced. Renderers can compare this against a cached version to avoid
-    /// rebuilding the plot when nothing has changed.
+    /// Monotonically increasing counter that increments each time samples
+    /// are synced. Renderers can compare this against a cached version to
+    /// avoid rebuilding the plot when nothing has changed.
     pub version: u64,
     /// Shared reference to the metrics registry
     metrics: Option<SharedMetricsRegistry>,
     /// Registry version of the last sync.
     synced_version: Option<u64>,
-    /// `(epoch, total pushed)` of the registry series at the last sync, to
-    /// append only what is new.
-    kin_cursor: Option<(u64, u64)>,
-    pot_cursor: Option<(u64, u64)>,
     times_cursor: Option<(u64, u64)>,
     /// Clear count (`RingBuffer::epoch`) of the registry's times at the last
     /// sync.
@@ -107,11 +80,11 @@ pub struct EnergyData {
 }
 
 impl EnergyData {
-    /// Create new energy data with pre-allocated capacity of 1000 samples.
+    /// Empty data without a registry (tests, and a window before the first
+    /// sync).
     pub fn new() -> Self {
         Self {
-            v_kin: VecDeque::with_capacity(1000),
-            v_pot: VecDeque::with_capacity(1000),
+            series: BTreeMap::new(),
             sample_times: VecDeque::with_capacity(1000),
             history_resets: 0,
             time: 0.0,
@@ -119,37 +92,65 @@ impl EnergyData {
             version: 0,
             metrics: None,
             synced_version: None,
-            kin_cursor: None,
-            pot_cursor: None,
             times_cursor: None,
             times_epoch: None,
         }
     }
 
-    /// Create new energy data with a reference to MetricsRegistry.
+    /// Empty data that syncs from `metrics`.
     pub fn with_metrics(metrics: SharedMetricsRegistry) -> Self {
         Self {
-            v_kin: VecDeque::with_capacity(1000),
-            v_pot: VecDeque::with_capacity(1000),
-            sample_times: VecDeque::with_capacity(1000),
-            history_resets: 0,
-            time: 0.0,
-            status_text: None,
-            version: 0,
             metrics: Some(metrics),
-            synced_version: None,
-            kin_cursor: None,
-            pot_cursor: None,
-            times_cursor: None,
-            times_epoch: None,
+            ..Self::new()
         }
     }
 
-    /// Take the energy series from the MetricsRegistry if it changed since the
-    /// last sync (appending only the new values when it can), and bump
-    /// `version` then. Called before rendering; without
-    /// a registry, or without news, it does nothing, so the plot is not
-    /// rebuilt for nothing.
+    /// The values of series `name`, oldest first.
+    pub fn series(&self, name: &str) -> Option<&VecDeque<f32>> {
+        self.series.get(name).map(|s| &s.values)
+    }
+
+    /// The unit of series `name`, if it has one.
+    pub fn unit(&self, name: &str) -> Option<&'static str> {
+        self.series.get(name).and_then(|s| s.unit)
+    }
+
+    /// The names of all series, in the order the plot offers them: the
+    /// global series (`E_kin`, `E_pot`, `E_tot`, `wall_momentum`), then the
+    /// per-species ones, each group sorted by name.
+    pub fn series_names(&self) -> Vec<&str> {
+        let global = self.series.iter().filter(|(_, s)| !s.per_species);
+        let species = self.series.iter().filter(|(_, s)| s.per_species);
+        global
+            .chain(species)
+            .map(|(name, _)| name.as_str())
+            .collect()
+    }
+
+    /// Set series `name` to `values` (tests, and data without a registry).
+    /// A name with a `:` counts as per-species, as in the registry.
+    pub fn insert_series(
+        &mut self,
+        name: &str,
+        unit: Option<&'static str>,
+        values: impl IntoIterator<Item = f32>,
+    ) {
+        self.series.insert(
+            name.to_string(),
+            CachedSeries {
+                values: values.into_iter().collect(),
+                cursor: None,
+                unit,
+                per_species: name.contains(':'),
+            },
+        );
+    }
+
+    /// Take the series from the MetricsRegistry if it changed since the last
+    /// sync (appending only the new values when it can), and bump `version`
+    /// then. Series the registry dropped (another species table) are dropped
+    /// here too. Called before rendering; without a registry, or without
+    /// news, it does nothing, so the plot is not rebuilt for nothing.
     pub fn sync_from_metrics(&mut self) {
         let Some(metrics) = &self.metrics else {
             return;
@@ -159,16 +160,16 @@ impl EnergyData {
             return;
         }
         self.synced_version = Some(registry.version());
-        sync_series(
-            &mut self.v_kin,
-            &mut self.kin_cursor,
-            registry.get_series("E_kin"),
-        );
-        sync_series(
-            &mut self.v_pot,
-            &mut self.pot_cursor,
-            registry.get_series("E_pot"),
-        );
+        self.series
+            .retain(|name, _| registry.get_series(name).is_some());
+        for (name, buffer) in registry.all_series() {
+            let cached = self.series.entry(name.clone()).or_default();
+            if let Some(metadata) = registry.get_metadata(name) {
+                cached.unit = metadata.unit;
+                cached.per_species = metadata.is_per_species;
+            }
+            sync_series(&mut cached.values, &mut cached.cursor, Some(buffer));
+        }
         let epoch = registry.times().epoch();
         if self.times_epoch.is_some_and(|seen| seen != epoch) {
             self.history_resets += 1;
@@ -191,16 +192,6 @@ impl EnergyData {
         let epoch = read_metrics(metrics).times().epoch();
         self.times_epoch.is_some_and(|seen| seen != epoch)
     }
-
-    /// Calculate total energy (kinetic + potential) for each time point.
-    /// Returns new VecDeque with element-wise sum.
-    pub fn v_tot(&self) -> VecDeque<f32> {
-        self.v_kin
-            .iter()
-            .zip(self.v_pot.iter())
-            .map(|(k, p)| k + p)
-            .collect()
-    }
 }
 
 impl Default for EnergyData {
@@ -216,95 +207,44 @@ mod tests {
     use super::*;
     use thermo_runtime::metrics::MetricsRegistry;
 
-    #[test]
-    fn test_energy_data_new() {
-        let data = EnergyData::new();
-        assert_eq!(data.v_kin.len(), 0);
-        assert_eq!(data.v_pot.len(), 0);
-        assert_eq!(data.time, 0.0);
-        assert_eq!(data.v_kin.capacity(), 1000);
-        assert_eq!(data.v_pot.capacity(), 1000);
+    fn values(data: &EnergyData, name: &str) -> Vec<f32> {
+        data.series(name)
+            .map(|s| s.iter().copied().collect())
+            .unwrap_or_default()
     }
 
     #[test]
-    fn test_energy_data_default() {
-        let data = EnergyData::default();
-        assert_eq!(data.v_kin.len(), 0);
-        assert_eq!(data.v_pot.len(), 0);
+    fn test_energy_data_new_is_empty() {
+        let data = EnergyData::new();
+        assert!(data.series_names().is_empty());
+        assert_eq!(data.series("E_kin"), None);
         assert_eq!(data.time, 0.0);
     }
 
     #[test]
-    fn test_v_tot_calculation() {
+    fn test_series_names_list_global_series_before_species_counts() {
         let mut data = EnergyData::new();
-        data.v_kin.push_back(10.0);
-        data.v_kin.push_back(20.0);
-        data.v_kin.push_back(30.0);
-        data.v_pot.push_back(5.0);
-        data.v_pot.push_back(15.0);
-        data.v_pot.push_back(25.0);
-
-        let v_tot = data.v_tot();
-        assert_eq!(v_tot.len(), 3);
-        assert_eq!(v_tot[0], 15.0);
-        assert_eq!(v_tot[1], 35.0);
-        assert_eq!(v_tot[2], 55.0);
-    }
-
-    #[test]
-    fn test_v_tot_empty() {
-        let data = EnergyData::new();
-        let v_tot = data.v_tot();
-        assert_eq!(v_tot.len(), 0);
-    }
-
-    #[test]
-    fn test_v_tot_mismatched_lengths() {
-        let mut data = EnergyData::new();
-        data.v_kin.push_back(10.0);
-        data.v_kin.push_back(20.0);
-        data.v_pot.push_back(5.0);
-
-        let v_tot = data.v_tot();
-        // zip stops at shortest sequence
-        assert_eq!(v_tot.len(), 1);
-        assert_eq!(v_tot[0], 15.0);
+        for name in ["N2:count", "E_pot", "Ar:count", "wall_momentum", "E_kin"] {
+            data.insert_series(name, None, []);
+        }
+        assert_eq!(
+            data.series_names(),
+            ["E_kin", "E_pot", "wall_momentum", "Ar:count", "N2:count"]
+        );
     }
 
     #[test]
     fn test_shared_energy_data_thread_safety() {
         let shared_data = Arc::new(Mutex::new(EnergyData::new()));
-
-        // Add data through the mutex
         {
             let mut data = shared_data.lock().unwrap();
-            data.v_kin.push_back(100.0);
-            data.v_pot.push_back(50.0);
+            data.insert_series("E_kin", Some("eps*"), [100.0]);
             data.time = 1.5;
         }
-
-        // Read data through the mutex
-        {
-            let data = shared_data.lock().unwrap();
-            assert_eq!(data.v_kin.len(), 1);
-            assert_eq!(data.v_pot.len(), 1);
-            assert_eq!(data.time, 1.5);
-        }
-    }
-
-    #[test]
-    fn test_energy_data_clone() {
-        let mut data1 = EnergyData::new();
-        data1.v_kin.push_back(10.0);
-        data1.v_pot.push_back(5.0);
-        data1.time = 2.0;
-
-        let data2 = data1.clone();
-        assert_eq!(data2.v_kin.len(), 1);
-        assert_eq!(data2.v_pot.len(), 1);
-        assert_eq!(data2.time, 2.0);
-        assert_eq!(data2.v_kin[0], 10.0);
-        assert_eq!(data2.v_pot[0], 5.0);
+        let data = shared_data.lock().unwrap();
+        assert_eq!(values(&data, "E_kin"), [100.0]);
+        assert_eq!(data.unit("E_kin"), Some("eps*"));
+        assert_eq!(data.time, 1.5);
     }
 
     #[test]
@@ -312,23 +252,26 @@ mod tests {
         let mut data = EnergyData::new();
         data.sync_from_metrics();
         assert_eq!(data.version, 0);
-        assert!(data.v_kin.is_empty());
+        assert!(data.series_names().is_empty());
     }
 
     #[test]
-    fn test_sync_from_metrics_copies_series_and_bumps_version_once() {
+    fn test_sync_from_metrics_copies_every_series_with_units() {
         let metrics = MetricsRegistry::shared();
         {
             let mut registry = metrics.write().unwrap();
             registry.record("E_kin", 7.0);
             registry.record("E_kin", 8.0);
             registry.record("E_pot", 3.0);
-            registry.record("E_pot", 4.0);
+            registry.record("wall_momentum", 0.5);
         }
         let mut data = EnergyData::with_metrics(Arc::clone(&metrics));
         data.sync_from_metrics();
-        assert_eq!(data.v_kin.iter().copied().collect::<Vec<_>>(), [7.0, 8.0]);
-        assert_eq!(data.v_pot.iter().copied().collect::<Vec<_>>(), [3.0, 4.0]);
+        assert_eq!(values(&data, "E_kin"), [7.0, 8.0]);
+        assert_eq!(values(&data, "E_pot"), [3.0]);
+        assert_eq!(values(&data, "wall_momentum"), [0.5]);
+        assert_eq!(data.unit("E_kin"), Some("eps*"));
+        assert_eq!(data.unit("wall_momentum"), Some("m*sigma*/tau*"));
         assert_eq!(data.version, 1);
 
         // Nothing new in the registry: no copy, no new version.
@@ -337,7 +280,7 @@ mod tests {
 
         metrics.write().unwrap().record("E_kin", 9.0);
         data.sync_from_metrics();
-        assert_eq!(data.v_kin.len(), 3);
+        assert_eq!(values(&data, "E_kin"), [7.0, 8.0, 9.0]);
         assert_eq!(data.version, 2);
     }
 
@@ -349,7 +292,27 @@ mod tests {
         data.sync_from_metrics();
         metrics.write().unwrap().clear();
         data.sync_from_metrics();
-        assert!(data.v_kin.is_empty());
+        assert!(values(&data, "E_kin").is_empty());
+    }
+
+    #[test]
+    fn test_sync_drops_series_the_registry_dropped() {
+        use thermo_runtime::metrics::SeriesMetadata;
+        let metrics = MetricsRegistry::shared();
+        metrics.write().unwrap().register_series(
+            "Ar:count".into(),
+            SeriesMetadata {
+                unit: None,
+                description: "test",
+                is_per_species: true,
+            },
+        );
+        let mut data = EnergyData::with_metrics(Arc::clone(&metrics));
+        data.sync_from_metrics();
+        assert!(data.series("Ar:count").is_some());
+        metrics.write().unwrap().clear();
+        data.sync_from_metrics();
+        assert!(data.series("Ar:count").is_none());
     }
 
     #[test]
@@ -379,14 +342,8 @@ mod tests {
                     .copied()
                     .collect()
             };
-            assert_eq!(
-                data.v_kin.iter().copied().collect::<Vec<_>>(),
-                expected("E_kin")
-            );
-            assert_eq!(
-                data.v_pot.iter().copied().collect::<Vec<_>>(),
-                expected("E_pot")
-            );
+            assert_eq!(values(&data, "E_kin"), expected("E_kin"));
+            assert_eq!(values(&data, "E_pot"), expected("E_pot"));
         }
     }
 

@@ -5,14 +5,16 @@
 pub mod energy_data;
 pub mod energy_window;
 pub mod plot_layout;
+pub mod plot_selection;
 pub mod time_view;
 
 #[cfg(test)]
 mod tests;
 
-pub use energy_data::{DisplayMode, EnergyData, SharedEnergyData};
+pub use energy_data::{EnergyData, SharedEnergyData};
 pub use energy_window::{
     EnergyPlotWindow, SplitScreenLayout, WindowGeometry, split_screen_layout_for_monitor,
 };
-pub use plot_layout::{PlotLabel, PlotRect, PlotScene, PlotSegment};
+pub use plot_layout::{LegendEntry, PanelArea, PlotLabel, PlotRect, PlotScene, PlotSegment};
+pub use plot_selection::{MAX_PLOTS, PRESETS, PlotPanel, PlotSelection};
 pub use time_view::{TimeHistory, TimeView};

@@ -22,7 +22,8 @@
 
 use std::borrow::Cow;
 
-use super::energy_data::{DisplayMode, EnergyData};
+use super::energy_data::EnergyData;
+use super::plot_selection::{PlotPanel, PlotSelection};
 use super::time_view::{TimeHistory, TimeView};
 
 /// Size in font pixels of one glyph of the bitmap font (8×8).
@@ -114,8 +115,14 @@ impl PlotRect {
 pub struct PlotScene {
     pub size: (u32, u32),
     pub background: Rgba,
-    /// The area inside the axes, when the window is large enough for one.
+    /// The area of all plots together (from the top of the first to the
+    /// bottom of the last; they share their left and right edges), when the
+    /// window is large enough for one. The time axis maps onto its width.
     pub plot_area: Option<PlotRect>,
+    /// The area inside the axes of each plot, top to bottom.
+    pub panels: Vec<PanelArea>,
+    /// Where each series is named in a plot's legend, for clicks.
+    pub legend: Vec<LegendEntry>,
     /// The time range `(t0, t1)` across the plot area, when there is one.
     pub time_window: Option<(f64, f64)>,
     /// What there was to show, when there were samples.
@@ -124,36 +131,79 @@ pub struct PlotScene {
     pub labels: Vec<PlotLabel>,
 }
 
-/// One curve of the plot.
+/// Colours of the series other than the energies, by their place in the
+/// list of series on offer.
+const PALETTE: [Rgba; 6] = [
+    [0.95, 0.60, 0.20, 1.0],
+    [0.90, 0.85, 0.30, 1.0],
+    [0.85, 0.45, 0.85, 1.0],
+    [0.30, 0.85, 0.85, 1.0],
+    [0.95, 0.55, 0.65, 1.0],
+    [0.75, 0.75, 0.75, 1.0],
+];
+
+/// A hidden series in the legend.
+pub const COLOR_HIDDEN: Rgba = [0.40, 0.40, 0.40, 1.0];
+
+/// The colour of series `name`: fixed for the energies, else from
+/// [`PALETTE`] by its place among the series of `data`, so it stays the same
+/// in every plot.
+pub fn series_color(data: &EnergyData, name: &str) -> Rgba {
+    match name {
+        "E_kin" => COLOR_KINETIC,
+        "E_pot" => COLOR_POTENTIAL,
+        "E_tot" => COLOR_TOTAL,
+        _ => {
+            let others = data
+                .series_names()
+                .into_iter()
+                .filter(|n| !matches!(*n, "E_kin" | "E_pot" | "E_tot"))
+                .position(|n| n == name)
+                .unwrap_or(0);
+            PALETTE[others % PALETTE.len()]
+        }
+    }
+}
+
+/// The area inside the axes of plot `index` of the selection.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PanelArea {
+    pub index: usize,
+    pub area: PlotRect,
+}
+
+/// Series `series` of plot `panel`, named in its legend at `rect`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LegendEntry {
+    pub panel: usize,
+    pub series: String,
+    pub rect: PlotRect,
+}
+
+/// One curve of a plot.
 struct Series {
-    name: &'static str,
+    name: String,
     color: Rgba,
+    hidden: bool,
     values: Vec<f32>,
 }
 
-/// The curves `mode` shows, in legend order.
-fn visible_series(data: &EnergyData, mode: DisplayMode) -> Vec<Series> {
-    let kin = || Series {
-        name: "E_kin",
-        color: COLOR_KINETIC,
-        values: data.v_kin.iter().copied().collect(),
-    };
-    let pot = || Series {
-        name: "E_pot",
-        color: COLOR_POTENTIAL,
-        values: data.v_pot.iter().copied().collect(),
-    };
-    let tot = || Series {
-        name: "E_tot",
-        color: COLOR_TOTAL,
-        values: data.v_tot().into_iter().collect(),
-    };
-    match mode {
-        DisplayMode::Kin => vec![kin()],
-        DisplayMode::Pot => vec![pot()],
-        DisplayMode::Total => vec![tot()],
-        DisplayMode::All => vec![kin(), pot(), tot()],
-    }
+/// The series of `panel` in legend order, with their values from `data`
+/// (none for a series `data` lacks).
+fn panel_series(data: &EnergyData, panel: &PlotPanel) -> Vec<Series> {
+    panel
+        .series()
+        .iter()
+        .map(|name| Series {
+            name: name.clone(),
+            color: series_color(data, name),
+            hidden: panel.is_hidden(name),
+            values: data
+                .series(name)
+                .map(|values| values.iter().copied().collect())
+                .unwrap_or_default(),
+        })
+        .collect()
 }
 
 /// The text size for a window at `scale_factor`: two window pixels per font
@@ -416,6 +466,24 @@ fn multiples_in(step: f64, window: TimeWindow) -> Vec<f64> {
         .collect()
 }
 
+/// The longest leading run of `hints` (separated by two spaces) that `fits`;
+/// empty when not even the first one does.
+fn fitting_hints(hints: &str, fits: impl Fn(&str) -> bool) -> String {
+    let mut shown = String::new();
+    for hint in hints.split("  ").filter(|h| !h.is_empty()) {
+        let longer = if shown.is_empty() {
+            hint.to_string()
+        } else {
+            format!("{shown}  {hint}")
+        };
+        if !fits(&longer) {
+            break;
+        }
+        shown = longer;
+    }
+    shown
+}
+
 /// Builds the scene; keeps track of the free space between the title at the
 /// top and the footer at the bottom.
 struct Layout<'a> {
@@ -475,14 +543,16 @@ impl Layout<'_> {
 }
 
 impl PlotScene {
-    /// The plot of `data` as `mode` selects it, for a window of `size`
-    /// pixels at `scale_factor`: title and `key_hints` at the top, then the
-    /// plot with its axes and ticks (x: simulation time over the range of
-    /// `view`, y: energy), the legend line and the status text at the
-    /// bottom. Without samples a waiting message stands in for the plot.
+    /// The plots of `selection` with their series from `data`, for a window
+    /// of `size` pixels at `scale_factor`: title and `key_hints` at the top,
+    /// then the plots stacked on a shared time axis (the range of `view`;
+    /// time labels under the last plot), each with its legend line above it
+    /// and its own y axis scaled to what it shows, then the info line and
+    /// the status text at the bottom. Without samples a waiting message
+    /// stands in for the plots.
     pub fn build(
         data: &EnergyData,
-        mode: DisplayMode,
+        selection: &PlotSelection,
         size: (u32, u32),
         scale_factor: f64,
         key_hints: &str,
@@ -495,6 +565,8 @@ impl PlotScene {
                 size,
                 background: BACKGROUND,
                 plot_area: None,
+                panels: Vec::new(),
+                legend: Vec::new(),
                 time_window: None,
                 history: None,
                 segments: Vec::new(),
@@ -510,29 +582,43 @@ impl PlotScene {
             key_hints,
             view,
         };
-        layout.build(mode);
+        layout.build(selection);
         layout.scene
     }
 }
 
+/// One plot while it is laid out: its series, their points, its value
+/// range and y ticks.
+struct PanelPlan {
+    index: usize,
+    series: Vec<Series>,
+    curves: Vec<Curve>,
+    range: (f64, f64),
+    ticks: (f64, Vec<f64>),
+    labels: Vec<String>,
+}
+
 impl Layout<'_> {
-    fn build(&mut self, mode: DisplayMode) {
+    fn build(&mut self, selection: &PlotSelection) {
         let (w, h) = (self.scene.size.0 as f32, self.scene.size.1 as f32);
         let (pad, line) = (self.pad, self.line);
 
         let title_w = self.label(
-            format!("Energy plot - {}", mode.as_str()),
+            format!("Plot - {}", selection.title()),
             [pad, pad],
             COLOR_TITLE,
         );
-        // The keys at the right end of the title line, if they fit.
-        let keys_x = w - pad - self.text_width(self.key_hints);
-        if !self.key_hints.is_empty() && keys_x >= pad + title_w + self.glyph * 2.0 {
-            self.label(self.key_hints, [keys_x, pad], COLOR_TEXT);
+        // The keys at the right end of the title line: as many of the
+        // hints (two spaces apart, most important first) as fit.
+        let room = w - pad - (pad + title_w + self.glyph * 2.0);
+        let hints = fitting_hints(self.key_hints, |text| self.text_width(text) <= room);
+        if !hints.is_empty() {
+            let keys_x = w - pad - self.text_width(&hints);
+            self.label(hints, [keys_x, pad], COLOR_TEXT);
         }
         let top = pad + line + pad * 0.5;
 
-        // Status lines at the very bottom, the legend line above them.
+        // Status lines at the very bottom, the info line above them.
         let status: Vec<String> = self
             .data
             .status_text
@@ -547,29 +633,51 @@ impl Layout<'_> {
             bottom -= pad * 0.5;
         }
         bottom -= line;
-        let series = visible_series(self.data, mode);
-        let curves = self.curves(&series);
-        let history = history_of(&curves);
+
+        let mut plans: Vec<PanelPlan> = selection
+            .panels()
+            .iter()
+            .enumerate()
+            .map(|(index, panel)| {
+                let series = panel_series(self.data, panel);
+                let curves = self.curves(&series);
+                PanelPlan {
+                    index,
+                    series,
+                    curves,
+                    range: (-1.0, 1.0),
+                    ticks: (0.0, Vec::new()),
+                    labels: Vec::new(),
+                }
+            })
+            .collect();
+        let shown: Vec<Curve> = plans
+            .iter()
+            .flat_map(|plan| {
+                plan.series
+                    .iter()
+                    .zip(&plan.curves)
+                    .filter(|(s, _)| !s.hidden)
+                    .map(|(_, curve)| curve.clone())
+            })
+            .collect();
+        let history = history_of(&shown);
         self.scene.history = history;
         let window = history.map(|history| {
             let (t0, t1) = self.view.window(&history);
             TimeWindow { t0, t1 }
         });
-        self.legend(&series, window, [pad, bottom]);
+        self.info_line(window, [pad, bottom]);
         bottom -= pad * 0.5;
 
         let Some(window) = window else {
             self.waiting_message(top, bottom, w);
             return;
         };
-        // A range panned or zoomed where no curve is: an empty plot with
-        // its axes, around zero.
-        let (lo, hi) = value_range(&curves, window).unwrap_or((-1.0, 1.0));
-        self.plot(
-            &series,
-            &curves,
+        self.plots(
+            &mut plans,
+            selection.focused(),
             window,
-            (lo, hi),
             PlotRect {
                 left: pad,
                 top,
@@ -579,19 +687,14 @@ impl Layout<'_> {
         );
     }
 
-    /// Legend: each curve in its colour, then the time (not while paused),
-    /// the x axis, and the range shown when the view was zoomed or panned.
-    /// The x axis note is left out when the line would not fit the window.
-    fn legend(&mut self, series: &[Series], window: Option<TimeWindow>, origin: [f32; 2]) {
-        let mut x = origin[0];
-        for s in series {
-            x += self.label(s.name, [x, origin[1]], s.color);
-            x += self.glyph;
-        }
+    /// The line under the plots: the time (not while paused), the x axis,
+    /// and the range shown when the view was zoomed or panned. The x axis
+    /// note is left out when the line would not fit the window.
+    fn info_line(&mut self, window: Option<TimeWindow>, origin: [f32; 2]) {
         // A paused plot shows a frozen history: the current time is not
         // part of it (its range is shown instead).
         let time = if self.view.is_following() {
-            format!(" t = {:.2}", self.data.time)
+            format!("t = {:.2}", self.data.time)
         } else {
             String::new()
         };
@@ -607,20 +710,68 @@ impl Layout<'_> {
                 format!("   {state} {:.1}-{:.1}", window.t0, window.t1)
             })
             .unwrap_or_default();
-        let available = self.scene.size.0 as f32 - self.pad - x;
+        let available = self.scene.size.0 as f32 - self.pad - origin[0];
         let full = format!("{time}{axis}{view}");
-        let rest = if self.text_width(&full) <= available {
+        let text = if self.text_width(&full) <= available {
             full
         } else {
             format!("{time}{view}")
         };
-        self.label(rest, [x, origin[1]], COLOR_TEXT);
+        self.label(text.trim_start().to_string(), origin, COLOR_TEXT);
+    }
+
+    /// One plot's legend line at `origin`: a focus mark when there are
+    /// several plots, each series in its colour (a hidden one grey), then
+    /// the unit when all its series share one. Series that do not fit the
+    /// window's width are counted (`+N`) instead. Records where each series
+    /// is named.
+    fn legend(&mut self, plan: &PanelPlan, focused: Option<bool>, origin: [f32; 2]) {
+        let mut x = origin[0];
+        if let Some(focused) = focused {
+            let mark = if focused { "> " } else { "  " };
+            x += self.label(mark, [x, origin[1]], COLOR_TITLE);
+        }
+        let right = self.scene.size.0 as f32 - self.pad;
+        for (k, s) in plan.series.iter().enumerate() {
+            // Entries that would run past the window are counted instead.
+            let rest = plan.series.len() - k;
+            let more = format!("+{}", rest - 1);
+            let needed = self.text_width(&s.name)
+                + if rest > 1 {
+                    self.glyph + self.text_width(&more)
+                } else {
+                    0.0
+                };
+            if x + needed > right {
+                self.label(format!("+{rest}"), [x, origin[1]], COLOR_TEXT);
+                return;
+            }
+            let color = if s.hidden { COLOR_HIDDEN } else { s.color };
+            let width = self.label(s.name.clone(), [x, origin[1]], color);
+            self.scene.legend.push(LegendEntry {
+                panel: plan.index,
+                series: s.name.clone(),
+                rect: PlotRect {
+                    left: x,
+                    top: origin[1],
+                    right: x + width,
+                    bottom: origin[1] + self.glyph,
+                },
+            });
+            x += width + self.glyph;
+        }
+        let mut units = plan.series.iter().map(|s| self.data.unit(&s.name));
+        if let Some(Some(unit)) = units.next()
+            && units.all(|u| u == Some(unit))
+        {
+            self.label(format!("[{unit}]"), [x, origin[1]], COLOR_TEXT);
+        }
     }
 
     fn waiting_message(&mut self, top: f32, bottom: f32, width: f32) {
         let lines = [
             "Waiting for simulation data...",
-            "Add some balls to see the energy plot",
+            "Add some balls to see the plot",
         ];
         let start = (top + bottom) * 0.5 - self.line;
         for (i, text) in lines.into_iter().enumerate() {
@@ -629,45 +780,98 @@ impl Layout<'_> {
         }
     }
 
-    /// Axes, ticks, grid, zero line and curves inside `free` (the space
-    /// between title and legend): the times of `window` across, the values
-    /// `[lo, hi]` up.
-    fn plot(
+    /// The plots of `plans` stacked inside `free` (the space between title
+    /// and info line), each with its legend line above it, all over the
+    /// times of `window` with the same left and right edges; the time
+    /// labels go under the last one. Each plot's y axis fits what it shows.
+    fn plots(
         &mut self,
-        series: &[Series],
-        curves: &[Curve],
+        plans: &mut [PanelPlan],
+        focused: usize,
         window: TimeWindow,
-        (lo, hi): (f64, f64),
         free: PlotRect,
     ) {
-        let (glyph, line, thin) = (self.glyph, self.line, self.thin);
+        let (glyph, line) = (self.glyph, self.line);
         let tick = glyph * TICK_CELLS;
-
-        // Room for the y tick labels left of the axis and the x tick labels
-        // below it; half a glyph at the top and right so the end labels fit.
-        let max_y_ticks = ((free.height() - line) / (line * 2.5)).clamp(2.0, 10.0) as usize;
-        let (y_step, y_ticks) = nice_ticks(lo, hi, max_y_ticks);
-        let y_labels: Vec<String> = y_ticks.iter().map(|&v| format_tick(v, y_step)).collect();
-        let label_w = y_labels
-            .iter()
-            .map(|label| self.text_width(label))
-            .fold(0.0, f32::max);
-        let area = PlotRect {
-            left: free.left + label_w + tick + glyph * 0.5,
-            top: free.top + glyph * 0.5,
-            right: free.right - glyph,
-            bottom: free.bottom - line - tick,
-        };
-        if area.width() < glyph * 4.0 || area.height() < glyph * 2.0 {
+        let n = plans.len() as f32;
+        // Room for the time labels under the last plot.
+        let x_labels = line + tick;
+        let panel_h = (free.height() - x_labels) / n;
+        // Each plot: its legend line, then the area (half a glyph above it
+        // so the top tick label fits), then a gap to the next legend.
+        let area_h = panel_h - line - glyph;
+        if area_h < glyph * 2.0 {
             return;
         }
-        self.scene.plot_area = Some(area);
+        // A tick label every two lines at most: a short plot (one of
+        // several) still gets a few.
+        let max_y_ticks = (area_h / (line * 2.0)).clamp(2.0, 10.0) as usize;
+        for plan in plans.iter_mut() {
+            let shown: Vec<Curve> = plan
+                .series
+                .iter()
+                .zip(&plan.curves)
+                .filter(|(s, _)| !s.hidden)
+                .map(|(_, curve)| curve.clone())
+                .collect();
+            // A range panned or zoomed where no curve is: an empty plot
+            // with its axes, around zero.
+            plan.range = value_range(&shown, window).unwrap_or((-1.0, 1.0));
+            plan.ticks = nice_ticks(plan.range.0, plan.range.1, max_y_ticks);
+            plan.labels = plan
+                .ticks
+                .1
+                .iter()
+                .map(|&v| format_tick(v, plan.ticks.0))
+                .collect();
+        }
+        // One left edge for all plots, so their times line up.
+        let label_w = plans
+            .iter()
+            .flat_map(|plan| &plan.labels)
+            .map(|label| self.text_width(label))
+            .fold(0.0, f32::max);
+        let (left, right) = (free.left + label_w + tick + glyph * 0.5, free.right - glyph);
+        if right - left < glyph * 4.0 {
+            return;
+        }
         self.scene.time_window = Some((window.t0, window.t1));
+        let several = plans.len() > 1;
+        let last = plans.len() - 1;
+        for (k, plan) in plans.iter().enumerate() {
+            let y0 = free.top + k as f32 * panel_h;
+            self.legend(
+                plan,
+                several.then_some(plan.index == focused),
+                [free.left, y0],
+            );
+            let area = PlotRect {
+                left,
+                top: y0 + line + glyph * 0.5,
+                right,
+                bottom: y0 + line + glyph * 0.5 + area_h,
+            };
+            self.scene.panels.push(PanelArea {
+                index: plan.index,
+                area,
+            });
+            self.panel(plan, window, area, k == last);
+        }
+        let first = self.scene.panels[0].area;
+        let bottom = self.scene.panels[last].area.bottom;
+        self.scene.plot_area = Some(PlotRect { bottom, ..first });
+    }
 
+    /// Grid, y ticks, zero line, axes and curves of one plot in `area`; time
+    /// labels only with `time_labels` (the last plot).
+    fn panel(&mut self, plan: &PanelPlan, window: TimeWindow, area: PlotRect, time_labels: bool) {
+        let (glyph, thin) = (self.glyph, self.thin);
+        let tick = glyph * TICK_CELLS;
+        let (lo, hi) = plan.range;
         let y_of = |v: f64| area.bottom - ((v - lo) / (hi - lo)) as f32 * area.height();
 
         // Horizontal grid lines with their labels.
-        for (&v, label) in y_ticks.iter().zip(&y_labels) {
+        for (&v, label) in plan.ticks.1.iter().zip(&plan.labels) {
             let y = self.snap(y_of(v));
             self.segment([area.left, y], [area.right, y], thin, COLOR_GRID);
             self.segment([area.left - tick, y], [area.left, y], thin, COLOR_AXIS);
@@ -680,7 +884,7 @@ impl Layout<'_> {
         }
 
         let x_axis = XAxis::new(window, area);
-        self.x_ticks(&x_axis, area);
+        self.x_ticks(&x_axis, area, time_labels);
 
         // Axes over the grid, curves over the axes.
         let (left, bottom) = (self.snap(area.left), self.snap(area.bottom));
@@ -688,7 +892,10 @@ impl Layout<'_> {
         self.segment([left, bottom], [area.right, bottom], thin, COLOR_AXIS);
         let to_px = |(t, v): (f64, f64)| [x_axis.x_of(t), y_of(v)];
         let columns = area.width().ceil() as usize;
-        for (s, curve) in series.iter().zip(curves) {
+        for (s, curve) in plan.series.iter().zip(&plan.curves) {
+            if s.hidden {
+                continue;
+            }
             let curve = downsample(curve, window, columns);
             self.curve_segments(&curve, window, &to_px, thin * 2.0, s.color);
         }
@@ -733,7 +940,7 @@ impl Layout<'_> {
     /// Tick marks and time labels below the x axis: ticks every 0.5 time
     /// units when they are far enough apart (else every 1, 2, 5, …), labels
     /// on the smallest multiple of that at which they do not overlap.
-    fn x_ticks(&mut self, x_axis: &XAxis, area: PlotRect) {
+    fn x_ticks(&mut self, x_axis: &XAxis, area: PlotRect, labels: bool) {
         let (glyph, thin) = (self.glyph, self.thin);
         let tick = glyph * TICK_CELLS;
         let scale = x_axis.scale();
@@ -755,7 +962,7 @@ impl Layout<'_> {
         for t in ticks {
             let x = self.snap(x_axis.x_of(t));
             self.segment([x, area.bottom], [x, area.bottom + tick], thin, COLOR_AXIS);
-            if !is_multiple(t, label_interval) {
+            if !labels || !is_multiple(t, label_interval) {
                 continue;
             }
             let label = format_tick(t, label_interval);

@@ -233,10 +233,10 @@ mod tests {
             .lock()
             .expect("energy data lock should succeed");
         // Energy data comes from MetricsRegistry, which we populated above
-        assert_eq!(energy_data.v_kin.len(), 1);
-        assert_eq!(energy_data.v_pot.len(), 1);
-        assert_eq!(energy_data.v_kin[0], 1.5);
-        assert_eq!(energy_data.v_pot[0], 2.5);
+        assert_eq!(energy_data.series("E_kin").unwrap().len(), 1);
+        assert_eq!(energy_data.series("E_pot").unwrap().len(), 1);
+        assert_eq!(energy_data.series("E_kin").unwrap()[0], 1.5);
+        assert_eq!(energy_data.series("E_pot").unwrap()[0], 2.5);
         // Time is set from snapshot in update_from_snapshot
         assert_eq!(energy_data.time, 3.0);
         assert!(
