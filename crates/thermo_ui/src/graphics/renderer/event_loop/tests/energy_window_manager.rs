@@ -591,4 +591,31 @@ mod plot_view {
         let data = shared.lock().unwrap();
         assert_eq!(data.v_kin.iter().copied().collect::<Vec<_>>(), vec![7.0]);
     }
+
+    /// A zoom out on a paused plot near its newest frozen sample keeps the
+    /// pause and does not take the registry's newer samples.
+    #[test]
+    fn zoom_out_keeps_a_paused_plot_frozen() {
+        let metrics = MetricsRegistry::shared();
+        let shared = shared_with_metrics(&metrics);
+        let mut manager = EnergyWindowManager::new(shared.clone());
+        manager.set_plot_geometry(Some(geometry()));
+        let frame_metrics = FrameMetrics::default();
+        record(&metrics, 1.0, 0.0);
+        manager.update_from_snapshot(&make_snapshot(1, 1.0, 0.0), 60.0, 1.0, &frame_metrics);
+        // 10 px back: paused just before the newest sample.
+        send(&mut manager, moved(500.0));
+        send(&mut manager, middle(ElementState::Pressed));
+        send(&mut manager, moved(510.0));
+        send(&mut manager, middle(ElementState::Released));
+        assert!(!manager.plot_view().is_following());
+        record(&metrics, 2.0, 0.0);
+        manager.update_from_snapshot(&make_snapshot(2, 1.0, 0.0), 60.0, 1.0, &frame_metrics);
+
+        for _ in 0..4 {
+            send(&mut manager, wheel(MouseScrollDelta::LineDelta(0.0, -1.0)));
+        }
+        assert!(!manager.plot_view().is_following());
+        assert_eq!(recorded_kin(&shared), 1, "still frozen");
+    }
 }

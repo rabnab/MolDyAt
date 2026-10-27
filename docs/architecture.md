@@ -342,7 +342,8 @@ intervals and the whole history (at least `TIME_SPAN`). A middle-button
 drag pans with the pointer (dragging right shows earlier times) once it
 has moved more than a few pixels (`PAN_THRESHOLD_PX`), so a click with a
 little jitter does not pause the plot; panning away from the newest sample
-leaves follow mode, panning back returns to it. While not following, the
+leaves follow mode, panning back returns to it (a zoom never does, even
+when the range reaches the newest sample). While not following, the
 plot is paused: `update_from_snapshot` does not sync `EnergyData`, so the
 history stays as it was when the pause began and can be examined (the
 status text and the current time still update; the legend shows the

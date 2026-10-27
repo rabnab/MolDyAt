@@ -229,3 +229,24 @@ fn test_zoom_on_a_coarse_history_does_not_panic() {
         assert!(view.span() >= history.min_span() - 1e-12, "{history:?}");
     }
 }
+
+/// Zooming out a paused view until its range reaches the newest sample
+/// keeps it paused (#368 review: a zoom never ends a pause).
+#[test]
+fn test_zoom_never_ends_a_pause() {
+    let h = history(0.0, 50.0);
+    let mut view = TimeView::default();
+    view.pan(-1.0, &h); // [39, 49], paused near the newest sample
+    assert!(!view.is_following());
+
+    for _ in 0..4 {
+        view.zoom(-1.0, 0.5, &h);
+    }
+    let (_, t1) = view.window(&h);
+    assert_eq!(t1, 50.0, "the range reaches the newest sample");
+    assert!(!view.is_following(), "but stays paused");
+
+    // A pan to the newest sample still follows again.
+    view.pan(1.0, &h);
+    assert!(view.is_following());
+}

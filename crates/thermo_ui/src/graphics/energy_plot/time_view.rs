@@ -11,6 +11,7 @@
 //! the span, the range starts at the oldest sample instead (the curves fill
 //! the plot from the left). Panning to earlier times leaves follow mode;
 //! panning back to the newest sample, or [`TimeView::reset`], returns to it.
+//! Zooming never does: a paused view stays paused.
 //!
 //! The view knows nothing of pixels: callers pass the time history and,
 //! for zooming around the pointer, where the pointer is as a fraction of the
@@ -156,6 +157,8 @@ impl TimeView {
     /// the time at `anchor` (the pointer, as a fraction 0–1 of the plot's
     /// width) kept where it is. In follow mode the newest sample stays at
     /// the right edge instead. The span stays within the history's limits.
+    /// A paused view stays paused, even when the range reaches the newest
+    /// sample.
     pub fn zoom(&mut self, notches: f64, anchor: f64, history: &TimeHistory) {
         if !notches.is_finite() || notches == 0.0 {
             return;
@@ -174,8 +177,10 @@ impl TimeView {
         let (t0, _) = self.window(history);
         let anchor_time = t0 + anchor * self.span;
         self.span = new_span;
-        self.right = anchor_time + (1.0 - anchor) * new_span;
-        self.settle(history);
+        // Kept within the history, but a zoom never ends a pause: it looks
+        // closer or wider at the paused data (only a pan to the newest
+        // sample, or a reset, follows again).
+        self.right = self.clamped_right(anchor_time + (1.0 - anchor) * new_span, history);
     }
 
     /// Move the range by `dt` time units (positive: to later times). Moving
