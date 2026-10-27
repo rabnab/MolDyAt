@@ -12,9 +12,13 @@ const HINTS: &str = "Esc: close  TAB / P: mode  HOME: reset";
 /// E_kin, E_pot and their sum E_tot, as the registry records them.
 fn data(kin: &[f32], pot: &[f32], times: &[f32]) -> EnergyData {
     let mut data = EnergyData::new();
-    data.insert_series("E_kin", Some("J"), kin.iter().copied());
-    data.insert_series("E_pot", Some("J"), pot.iter().copied());
-    data.insert_series("E_tot", Some("J"), kin.iter().zip(pot).map(|(k, p)| k + p));
+    data.insert_series("E_kin", Some("eps*"), kin.iter().copied());
+    data.insert_series("E_pot", Some("eps*"), pot.iter().copied());
+    data.insert_series(
+        "E_tot",
+        Some("eps*"),
+        kin.iter().zip(pot).map(|(k, p)| k + p),
+    );
     data.sample_times.extend(times.iter().copied());
     data.time = 1.5;
     data
@@ -746,7 +750,7 @@ fn mixed_data() -> EnergyData {
     let mut d = data(&[1.0; 21], &[-3.0; 21], &times);
     d.insert_series(
         "wall_momentum",
-        Some("kg·m/s"),
+        Some("m*sigma*/tau*"),
         (0..21).map(|i| i as f32 * 100.0),
     );
     d.insert_series("N2:count", None, [50.0; 21]);
@@ -874,9 +878,12 @@ fn test_focus_mark_and_units_in_the_legend() {
         marks[0].origin[1] > scene.panels[0].area.bottom,
         "the second plot is focused"
     );
-    assert!(has_label(&scene, "[J]"), "both energies are in J");
+    assert!(has_label(&scene, "[eps*]"), "both energies are in J");
     assert!(
-        !scene.labels.iter().any(|l| l.text.contains("kg·m/s")),
+        !scene
+            .labels
+            .iter()
+            .any(|l| l.text.contains("m*sigma*/tau*")),
         "mixed units: none shown"
     );
 

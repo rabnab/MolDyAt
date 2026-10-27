@@ -266,8 +266,8 @@ fn plot_pipeline_builds_and_renders_without_validation_errors() {
     }));
 
     let mut data = EnergyData::new();
-    data.insert_series("E_kin", Some("J"), [1.0, 3.0, 2.0, f32::NAN, 4.0]);
-    data.insert_series("E_pot", Some("J"), [-1.0, -2.0, -1.5, -1.0, -3.0]);
+    data.insert_series("E_kin", Some("eps*"), [1.0, 3.0, 2.0, f32::NAN, 4.0]);
+    data.insert_series("E_pot", Some("eps*"), [-1.0, -2.0, -1.5, -1.0, -3.0]);
     data.insert_series("wall_momentum", None, [0.0, 0.5, 1.0, 1.5, 2.0]);
     // Two stacked plots (#339).
     let selection = PlotSelection::from_panels(&[&["E_kin", "E_pot"], &["wall_momentum"]]);

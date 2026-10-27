@@ -238,12 +238,12 @@ mod tests {
         let shared_data = Arc::new(Mutex::new(EnergyData::new()));
         {
             let mut data = shared_data.lock().unwrap();
-            data.insert_series("E_kin", Some("J"), [100.0]);
+            data.insert_series("E_kin", Some("eps*"), [100.0]);
             data.time = 1.5;
         }
         let data = shared_data.lock().unwrap();
         assert_eq!(values(&data, "E_kin"), [100.0]);
-        assert_eq!(data.unit("E_kin"), Some("J"));
+        assert_eq!(data.unit("E_kin"), Some("eps*"));
         assert_eq!(data.time, 1.5);
     }
 
@@ -270,8 +270,8 @@ mod tests {
         assert_eq!(values(&data, "E_kin"), [7.0, 8.0]);
         assert_eq!(values(&data, "E_pot"), [3.0]);
         assert_eq!(values(&data, "wall_momentum"), [0.5]);
-        assert_eq!(data.unit("E_kin"), Some("J"));
-        assert_eq!(data.unit("wall_momentum"), Some("kg·m/s"));
+        assert_eq!(data.unit("E_kin"), Some("eps*"));
+        assert_eq!(data.unit("wall_momentum"), Some("m*sigma*/tau*"));
         assert_eq!(data.version, 1);
 
         // Nothing new in the registry: no copy, no new version.
