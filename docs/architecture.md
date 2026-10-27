@@ -86,7 +86,7 @@ FrameRenderer → RenderGraph → GPU
 | Physics runtime | `PhysicsRuntime`, `DomainCommandHandler` | `crates/thermo_runtime/src/application/physics_thread/` | The thread loop: draining commands, sleep cadence, snapshot cadence, wakeups, shutdown, steps/s reporting |
 | Physics-thread owner | `MainContent` | `crates/thermo_physics/src/application/core/mod.rs` | The world plus `StepConfig` (time step, ball factory), `RuntimeOptions` (step-by-step, timing log, ball-stats display, real-units display; kept across loads, never saved) and `PhysicsRuntimeState` (wait time, snapshot interval, physics FPS, save store, world generation, pause during a window resize) |
 | Snapshots | `SnapshotPublisher`, `CreateSnapshot` | `crates/thermo_runtime/src/application/physics_thread.rs`, `crates/thermo_runtime/src/application/snapshot.rs` | The slot shared with the renderer and the requested layers; building a `RendererSnapshot` from a `MainContent` |
-| Metrics | `MetricsRegistry` | `crates/thermo_runtime/src/metrics/` | Time series (E_kin, E_pot, E_tot, wall momentum, ball count per species) in ring buffers, with the step and simulation time of every sample, sampled from the snapshot once per new step just before it is published, and cleared for a new world generation. `EnergyData` reads the energy series (appending only new values); headless frames print the latest values; `export` writes its series and a per-ball snapshot dump as CSV or JSONL (`Export` world command, `--export-dir`) |
+| Metrics | `MetricsRegistry` | `crates/thermo_runtime/src/metrics/` | Time series (E_kin, E_pot, E_tot, wall momentum, ball count per species; reduced units, labelled `eps*` and `m*sigma*/tau*`) in ring buffers, with the step and simulation time of every sample, sampled from the snapshot once per new step just before it is published, and cleared for a new world generation. `EnergyData` reads the energy series (appending only new values); headless frames print the latest values; `export` writes its series and a per-ball snapshot dump as CSV or JSONL (`Export` world command, `--export-dir`), and `SampleStream` appends every sample to a file as it is taken (`ToggleSampleStream` world command, fed by the physics loop right after sampling, so its writes block that thread; `--export-stream`). Both carry the simulation time of each sample |
 | Run settings | `SimConfig` | `crates/thermo_physics/src/application/sim_config/` | Time step, speed limit, force cap and cutoff, Verlet skin, snapshot interval; built from defaults, a `--config` TOML file and CLI flags, stored in saves (see below) |
 | World state | `SimulationWorld` | `crates/thermo_physics/src/application/core/mod.rs` | Balls, `BallPhysics` constants, cell grid, stats, operator collections (line segments, valves, wall chains, source spheres, thermostats), the ghost wall and thermo field history; physical state only, no UI flags (#305) |
 | Stepping | `SimulationEngine` | `crates/thermo_physics/src/application/core/simulation_engine.rs` | One simulation step over a `SimulationWorld` (see below); holds no state |
@@ -325,13 +325,17 @@ By default it shows a fixed span (`TIME_SPAN`, 10 time units): the time
 step changes only how fast the curves scroll, never the scale. Until the
 history spans that much the curves start at the left edge, then the newest
 sample stays at the right edge (follow mode); a history shorter than the
-span (the registry keeps 1000 samples) leaves the left part empty (#366
-keeps the whole history). Curves are cut at both edges of the range, and
+span (the registry keeps 1000 samples) leaves the left part empty (the
+sample stream keeps the whole history on disk, #366). Curves are cut at
+both edges of the range, and
 the y range (round ticks, 1/2/5 × 10ⁿ) fits what is visible, the cut values
 included. x ticks come every 0.5 time units when there is room (else every
 1, 2, 5, …), with labels only where they fit. Labels and thin lines sit on
-whole pixels so the bitmap glyphs and 1 px lines stay crisp. The layout is
-unit-tested there.
+whole pixels so the bitmap glyphs and 1 px lines stay crisp. A curve with
+more points inside the range than twice the plot's pixel columns is drawn
+with the lowest and highest point of each column only (`downsample`, #366),
+so the draw cost stays constant and one-sample spikes stay visible; fewer
+points are drawn as they are. The layout is unit-tested there.
 
 The mouse changes the range (#367), through the energy window's own event
 path (`EnergyWindowManager::handle_event`; mouse input is not in the

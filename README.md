@@ -294,6 +294,8 @@ Keyboard (press `H` for the same list in the log):
 | `Ctrl + J` | Export the metrics series as JSONL to the save directory. |
 | `Alt + E` | Export the state of every ball as CSV to the save directory. |
 | `Alt + J` | Export the state of every ball as JSONL to the save directory. |
+| `Ctrl + R` | Start or stop streaming every metrics sample as CSV to the save directory (keeps the whole run). |
+| `Alt + R` | Start or stop streaming every metrics sample as JSONL to the save directory. |
 | `0` | Reset the viewport (1.0x zoom, centred). |
 | `F2` | Toggle rendering. |
 | `F3` | Cycle the cutoff-radius rings. |

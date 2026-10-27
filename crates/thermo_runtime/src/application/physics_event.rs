@@ -25,4 +25,19 @@ pub enum PhysicsEvent {
         note: Option<String>,
     },
     ExportFailed(String),
+    /// A sample stream was switched on; its files go to `dir`.
+    StreamEnabled {
+        dir: PathBuf,
+    },
+    /// The sample stream started a file: its first sample, or a new world.
+    StreamFile(PathBuf),
+    /// The sample stream was switched off (or the app quit) after `rows`
+    /// samples in `files`.
+    StreamStopped {
+        files: Vec<PathBuf>,
+        rows: u64,
+    },
+    /// The sample stream could not write and has stopped; the simulation
+    /// goes on. Reported once.
+    StreamFailed(String),
 }

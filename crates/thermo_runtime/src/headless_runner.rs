@@ -4,7 +4,10 @@
 
 use crate::application::CreateSnapshot;
 use crate::application::renderer_snapshot::RendererSnapshot;
-use crate::export::{ExportFormat, ExportKind, series_to_string, snapshot_to_string, write_export};
+use crate::export::{
+    ExportFormat, ExportKind, SampleStream, StreamSettings, series_to_string, snapshot_to_string,
+    write_export,
+};
 use crate::headless_cli::HeadlessConfig;
 use crate::headless_output::{HeadlessSnapshotSink, HeadlessWriter};
 use crate::headless_timings::{RunClock, write_timings};
@@ -51,6 +54,8 @@ pub struct ExportSettings {
     pub format: ExportFormat,
     /// Series to export; `None` exports all.
     pub series: Option<Vec<String>>,
+    /// Also stream every frame's sample to `stream.<ext>` (#366).
+    pub stream: bool,
 }
 
 /// The series of a run being exported (`--export-dir`).
@@ -66,6 +71,74 @@ struct ExportRun {
     stride: u64,
     /// Frames sampled or skipped so far.
     frames: u64,
+    /// `--export-stream`, fed every frame.
+    stream: Option<StreamRun>,
+}
+
+/// The `--export-stream` file and the registry it is fed from: every frame,
+/// not thinned like the series export.
+struct StreamRun {
+    /// Holds just the newest samples; the stream writes each one as it comes.
+    registry: MetricsRegistry,
+    /// `None` once the stream has failed or ended.
+    stream: Option<SampleStream>,
+    files: Vec<PathBuf>,
+    /// The first write error; the run goes on and returns it at the end.
+    error: Option<io::Error>,
+}
+
+impl StreamRun {
+    fn new(settings: &ExportSettings) -> Self {
+        let registry = MetricsRegistry::new(2);
+        let stream = SampleStream::new(
+            StreamSettings {
+                dir: settings.dir.clone(),
+                stem: "stream".into(),
+                format: settings.format,
+                replace_existing: true,
+            },
+            &registry,
+        );
+        Self {
+            registry,
+            stream: Some(stream),
+            files: Vec::new(),
+            error: None,
+        }
+    }
+
+    fn sample(&mut self, snapshot: &RendererSnapshot) {
+        self.registry.sample(snapshot);
+        if let Some(stream) = &mut self.stream {
+            match stream.record(&self.registry) {
+                Ok(started) => self.files.extend(started),
+                Err(error) => self.fail(error),
+            }
+        }
+    }
+
+    /// Stop the stream; the simulation goes on.
+    fn fail(&mut self, error: io::Error) {
+        log::error!("--export-stream stopped: {error}; the run goes on");
+        self.stream = None;
+        self.error = Some(io::Error::new(
+            error.kind(),
+            format!("--export-stream: {error}"),
+        ));
+    }
+
+    /// Flush and close the file; the files written, or the first error.
+    fn finish(&mut self) -> io::Result<Vec<PathBuf>> {
+        if let Some(stream) = self.stream.take()
+            && let Err(error) = stream.finish()
+        {
+            self.fail(error);
+        }
+        match self.error.take() {
+            Some(error) => Err(error),
+            None => Ok(std::mem::take(&mut self.files)),
+        }
+    }
 }
 
 impl ExportRun {
@@ -86,6 +159,7 @@ impl ExportRun {
             frames.div_ceil(capacity - 1)
         };
         Self {
+            stream: settings.stream.then(|| StreamRun::new(&settings)),
             settings,
             registry,
             stride,
@@ -101,6 +175,9 @@ impl ExportRun {
     fn sample(&mut self, snapshot: &RendererSnapshot, last: bool) {
         if last || self.frames.is_multiple_of(self.stride) {
             write_metrics(&self.registry).sample(snapshot);
+        }
+        if let Some(stream) = &mut self.stream {
+            stream.sample(snapshot);
         }
         self.frames += 1;
     }
@@ -259,15 +336,17 @@ impl HeadlessRunner {
                 dir,
                 format: config.export_format,
                 series: config.export_series.clone(),
+                stream: config.export_stream,
             }))
             .build())
     }
 
     /// The export files of `--export-dir`: the series of the whole run and
     /// the per-ball state of the final snapshot, under fixed names so scripts
-    /// find them.
-    fn write_exports(&self, snapshot: &RendererSnapshot) -> io::Result<Vec<PathBuf>> {
-        let Some(export) = &self.export else {
+    /// find them, then the closed `--export-stream` file. A failed stream is
+    /// returned as the error once the other files are written.
+    fn write_exports(&mut self, snapshot: &RendererSnapshot) -> io::Result<Vec<PathBuf>> {
+        let Some(export) = &mut self.export else {
             return Ok(Vec::new());
         };
         let settings = &export.settings;
@@ -278,13 +357,17 @@ impl HeadlessRunner {
             export.sample_interval_steps(self.snapshot_every),
         );
         let snapshot = snapshot_to_string(snapshot, settings.format);
-        [
+        let mut written = [
             (ExportKind::Series, series),
             (ExportKind::Snapshot, snapshot),
         ]
         .into_iter()
         .map(|(kind, text)| write_export(&settings.dir, "", kind, settings.format, &text, false))
-        .collect()
+        .collect::<io::Result<Vec<_>>>()?;
+        if let Some(stream) = &mut export.stream {
+            written.extend(stream.finish()?);
+        }
+        Ok(written)
     }
 
     fn sample_metrics(&self, snapshot: &RendererSnapshot) {

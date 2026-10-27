@@ -11,6 +11,12 @@ use std::sync::{Arc, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use super::series::{RingBuffer, SeriesMetadata, SeriesName};
 
+/// Unit label of the energy series: reduced energy, multiples of ε*.
+pub const ENERGY_UNIT: &str = "eps*";
+
+/// Unit label of the wall momentum: reduced momentum, m*·σ*/τ*.
+pub const MOMENTUM_UNIT: &str = "m*sigma*/tau*";
+
 /// Shared, thread-safe reference to the metrics registry.
 pub type SharedMetricsRegistry = Arc<RwLock<MetricsRegistry>>;
 
@@ -94,6 +100,11 @@ impl MetricsRegistry {
     /// Temperature and pressure are per-cell fields (see `thermo_field.rs`),
     /// not global scalars, and a step time or neighbour count would be
     /// wall-clock or costly to read, so none of them is a built-in series.
+    ///
+    /// The values are in the simulation's reduced Lennard-Jones units
+    /// (`docs/units.md`), and so are the unit labels, in ASCII so every
+    /// output can show them: energies in `eps*` (ε*, 1.312E-21 J for N₂),
+    /// the wall momentum in `m*sigma*/tau*` (m*·σ*/τ*).
     fn register_builtin_series(&mut self) {
         for (name, description) in [
             ("E_kin", "Kinetic Energy"),
@@ -103,7 +114,7 @@ impl MetricsRegistry {
             self.register_series(
                 name.to_string(),
                 SeriesMetadata {
-                    unit: Some("J"),
+                    unit: Some(ENERGY_UNIT),
                     description,
                     is_per_species: false,
                 },
@@ -112,7 +123,7 @@ impl MetricsRegistry {
         self.register_series(
             "wall_momentum".to_string(),
             SeriesMetadata {
-                unit: Some("kg·m/s"),
+                unit: Some(MOMENTUM_UNIT),
                 description: "Wall Momentum",
                 is_per_species: false,
             },
@@ -247,10 +258,12 @@ impl MetricsRegistry {
         self.version = self.version.wrapping_add(1);
     }
 
-    /// Add a sample step without sampling a world (tests).
+    /// Add a sample step without sampling a world (tests); its time is a
+    /// tenth of the step.
     #[cfg(test)]
     pub(crate) fn push_step_for_test(&mut self, step: u64) {
         self.steps.push(step);
+        self.times.push(step as f32 / 10.0);
     }
 
     /// The step of every sample, oldest first; the newest entry of each

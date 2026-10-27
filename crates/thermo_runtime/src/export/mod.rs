@@ -12,15 +12,19 @@
 //! registered later than the others) is exported the same way.
 //!
 //! The functions here only build text; [`write_export`] puts it in a file.
+//! [`SampleStream`] instead appends every sample to a file as it is taken
+//! (#366).
 
 mod series;
 mod snapshot;
+mod stream;
 
 #[cfg(test)]
 mod tests;
 
 pub use series::series_to_string;
 pub use snapshot::snapshot_to_string;
+pub use stream::{SampleStream, StreamSettings};
 
 use std::io;
 use std::path::{Path, PathBuf};

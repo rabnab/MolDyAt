@@ -624,3 +624,77 @@ fn test_scene_reports_its_history_and_time_window() {
     assert_eq!(history.samples, 41);
     assert_eq!(scene.time_window, Some((12.0, 22.0)));
 }
+
+/// `n` samples over the default time span, flat at 1.0 but for a one-sample
+/// spike to 50.0 at `spike` and a dip to -20.0 at `dip`.
+fn dense_data(n: usize, spike: usize, dip: usize) -> EnergyData {
+    let times: Vec<f32> = (0..n)
+        .map(|i| i as f32 * TIME_SPAN as f32 / (n - 1) as f32)
+        .collect();
+    let kin: Vec<f32> = (0..n)
+        .map(|i| match i {
+            _ if i == spike => 50.0,
+            _ if i == dip => -20.0,
+            _ => 1.0 + (i % 7) as f32 * 0.01,
+        })
+        .collect();
+    data(&kin, &vec![0.0; n], &times)
+}
+
+/// The y pixel of each end of the curve's segments.
+fn curve_ys(scene: &PlotScene) -> Vec<f32> {
+    segments_of(scene, COLOR_KINETIC)
+        .iter()
+        .flat_map(|s| [s.from[1], s.to[1]])
+        .collect()
+}
+
+#[test]
+fn test_dense_curve_is_drawn_with_at_most_two_points_per_pixel_column() {
+    let n = 20_000;
+    let scene = build(&dense_data(n, 7_777, 12_345), DisplayMode::Kin, SIZE, 1.0);
+    let area = scene.plot_area.unwrap();
+    let segments = segments_of(&scene, COLOR_KINETIC).len();
+    assert!(
+        segments < 2 * area.width().ceil() as usize,
+        "{segments} segments for {} columns",
+        area.width()
+    );
+
+    // The spike and the dip, one sample each, are the extremes drawn.
+    let ys = curve_ys(&scene);
+    let top = ys.iter().copied().fold(f32::INFINITY, f32::min);
+    let bottom = ys.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+    let y_range = area.height();
+    assert!(top < area.top + y_range * 0.1, "the spike is drawn: {top}");
+    assert!(
+        bottom > area.bottom - y_range * 0.1,
+        "the dip is drawn: {bottom}"
+    );
+}
+
+#[test]
+fn test_dense_curve_keeps_the_extremes_of_the_full_curve() {
+    let n = 20_000;
+    let dense = build(&dense_data(n, 3_000, 15_000), DisplayMode::Kin, SIZE, 1.0);
+    let ys = curve_ys(&dense);
+    // The y range comes from every sample; the drawn curve reaches both its
+    // ends (5% room above and below).
+    let area = dense.plot_area.unwrap();
+    let room = area.height() / 1.1 * 0.05;
+    let top = ys.iter().copied().fold(f32::INFINITY, f32::min);
+    let bottom = ys.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+    assert!((top - (area.top + room)).abs() < 1.0, "max drawn: {top}");
+    assert!(
+        (bottom - (area.bottom - room)).abs() < 1.0,
+        "min drawn: {bottom}"
+    );
+}
+
+#[test]
+fn test_curve_with_fewer_samples_than_columns_is_drawn_as_it_is() {
+    let n = 300;
+    let scene = build(&dense_data(n, 100, 200), DisplayMode::Kin, SIZE, 1.0);
+    assert!(scene.plot_area.unwrap().width() > 2.0 * n as f32);
+    assert_eq!(segments_of(&scene, COLOR_KINETIC).len(), n - 1);
+}

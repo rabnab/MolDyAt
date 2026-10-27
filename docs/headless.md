@@ -61,6 +61,7 @@ the last step even when the interval does not divide the step count.
 | `--export-dir <DIR>`                  | After the last step, write `series.<ext>` (the metrics series of the whole run, one row per snapshot) and `snapshot.<ext>` (state of every ball at the final snapshot) to `DIR`; see [Data export](#data-export)                                                                                                                         |
 | `--export-format <csv\|jsonl>`        | Format of the export files (default `csv`); needs `--export-dir`                                                                                                                                                                                                                                                                         |
 | `--export-series <A,B,..>`            | Export only these series (default: all); an unknown name fails the run; needs `--export-dir`                                                                                                                                                                                                                                             |
+| `--export-stream`                     | Also append the sample of every frame (all series, not thinned) to `stream.<ext>` while the run goes; see [Sample stream](#sample-stream); needs `--export-dir`                                                                                                                                                                          |
 | `--load <PATH>`                       | Start from a saved world (shared with the window mode)                                                                                                                                                                                                                                                                                   |
 | `--save-dir <DIR>`                    | Directory for saves (shared with the window mode)                                                                                                                                                                                                                                                                                        |
 | `--world-scale <F>`                   | Scale the default world's width and height by F around its centre, 0.05..=100; overrides `world.scale` of `--config`; not with `--load` (shared with the window mode, parsed by the binary)                                                                                                                                              |
@@ -143,13 +144,16 @@ their shortest round-trip form, and the same seed, flags and build give
 byte-identical files. JSONL records carry `schema_version: "export.v1"` and a
 `record_kind`; consumers ignore unknown kinds and fields.
 
-| File     | CSV                                                                                                                                                                                        | JSONL                                                                                                                                                 |
-|----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
-| series   | Header `step,<name>[ [<unit>]],…` with the series sorted by name (`E_kin [J]`, `N2:count`), then one row per sampled step. A series registered later has empty cells for the earlier steps | `series_header` (`rows`, `series`: name, unit, description, per_species), then one `series_row` per step (`step`, `values` object)                    |
-| snapshot | `id,species,x,y,vx,vy,mass,contact_radius`, one row per ball sorted by id                                                                                                                  | `snapshot_header` (`step`, `time`, `ball_count`), then one `ball` record per ball (`id`, `species`, `position`, `velocity`, `contact_radius`, `mass`) |
+| File     | CSV                                                                                                                                                                                                                         | JSONL                                                                                                                                                 |
+|----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
+| series   | Header `step,time,<name>[ [<unit>]],…` with the series sorted by name (`E_kin [eps*]`, `N2:count`), then one row per sampled step with its simulation time. A series registered later has empty cells for the earlier steps | `series_header` (`rows`, `series`: name, unit, description, per_species), then one `series_row` per step (`step`, `time`, `values` object)            |
+| snapshot | `id,species,x,y,vx,vy,mass,contact_radius`, one row per ball sorted by id                                                                                                                                                   | `snapshot_header` (`step`, `time`, `ball_count`), then one `ball` record per ball (`id`, `species`, `position`, `velocity`, `contact_radius`, `mass`) |
 
 The series are those of the `MetricsRegistry` (`E_kin`, `E_pot`, `E_tot`,
-`wall_momentum`, `<species>:count`), sampled at snapshot cadence. The registry keeps
+`wall_momentum`, `<species>:count`), sampled at snapshot cadence. Their values are in the
+simulation's reduced units (see [units.md](units.md)) and labelled so in ASCII:
+energies in `eps*` (ε*, 1.312E-21 J for N₂), the wall momentum in `m*sigma*/tau*`;
+the counts have no unit. The registry keeps
 the last 1000 samples, so:
 
 - **Headless runs** export the whole run. The run length is known up front, so the
@@ -167,3 +171,38 @@ the last 1000 samples, so:
 An unknown `--export-series` name (names are trimmed, none may be empty) fails the
 run before the first step. An export error is returned after `run_end` and the
 timings report have been written.
+
+### Sample stream
+
+The series export holds what the registry holds. To keep every sample of a long
+run, a sample stream appends each sample to a file as it is taken (#366):
+
+- **Interactive:** `world.toggle_sample_stream_csv` (`Ctrl + R`) or
+  `world.toggle_sample_stream_jsonl` (`Alt + R`) starts a stream to
+  `export_YYYYMMDD_HHMMSS_stream.<csv|jsonl>` in the save directory, from the next
+  sample on; either key stops it. It is off at start. The physics thread writes it
+  right after each sample (snapshot cadence) and reports `StreamEnabled`,
+  `StreamFile` (a file was started), `StreamStopped` and `StreamFailed` events,
+  which the window logs. Quitting stops the stream with its rows on disk.
+- **Headless:** `--export-stream` (needs `--export-dir`, uses `--export-format`)
+  writes `stream.<ext>` with the sample of every frame (`--snapshot-every`),
+  overwriting an earlier one. It does not change the JSONL records, and
+  `--export-series` does not apply to it. The path is listed with the other
+  export files.
+
+Rows go through a buffered writer that is flushed within about a second
+(`FLUSH_INTERVAL`) and when the stream stops, so a crash loses at most the last
+second. The stream writes on the physics thread (interactively) or the run's
+thread (headless): a slow or stalled target (a network share, a spun-down disk)
+stalls the simulation with it, so point it at a local disk. It is fed after
+every sample; samples the registry evicted before the stream saw them are an
+error, never a silent gap. A new world (a loaded save) or another set of series (another species
+table) starts a new file (`_01`, `_02`, … suffix), so one file never mixes
+worlds. A write error stops the stream and is reported once; the simulation goes
+on. In a headless run the error is returned after `run_end`, the timings report
+and the other export files have been written.
+
+| Format | Contents                                                                                                                                                                                   |
+|--------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| CSV    | Header `step,time,<name>[ [<unit>]],…` (series sorted by name), then one row per sample; non-finite values are empty cells                                                                 |
+| JSONL  | `stream_header` (`series`: name, unit, description, per_species), then one `series_row` per sample (`step`, `time`, `values` object); non-finite values are `null`, `export.v1` throughout |

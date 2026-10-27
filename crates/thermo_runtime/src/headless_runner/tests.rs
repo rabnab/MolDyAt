@@ -128,6 +128,7 @@ fn seeded_headless_output() -> String {
         export_dir: None,
         export_format: Default::default(),
         export_series: None,
+        export_stream: false,
         save_setup: false,
         sim: None,
     };
@@ -1097,10 +1098,10 @@ fn test_export_dir_receives_the_series_and_the_final_snapshot() {
     let series = fs::read_to_string(dir.join("series.csv")).expect("series.csv");
     let lines: Vec<&str> = series.lines().collect();
     for column in [
-        "E_kin [J]",
-        "E_pot [J]",
-        "E_tot [J]",
-        "wall_momentum [kg·m/s]",
+        "E_kin [eps*]",
+        "E_pot [eps*]",
+        "E_tot [eps*]",
+        "wall_momentum [m*sigma*/tau*]",
         "N2:count",
     ] {
         assert!(
@@ -1243,6 +1244,61 @@ fn test_export_samples_every_frame_when_the_run_fits() {
     let series = fs::read_to_string(dir.join("series.jsonl")).unwrap();
     let header: serde_json::Value = serde_json::from_str(series.lines().next().unwrap()).unwrap();
     assert!(header["sample_interval_steps"].is_null());
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn test_export_stream_writes_every_frame_and_leaves_the_frames_alone() {
+    let dir = export_scratch_dir("stream");
+    // 3000 frames: the series export is thinned, the stream is not.
+    let mut config = export_config(&dir, crate::export::ExportFormat::Csv);
+    config.steps = 3000;
+    config.snapshot_every = 1;
+    config.seed_balls = Some(3);
+    let (plain, _) = headless_output(config.clone(), seeded_application(&config));
+    config.export_stream = true;
+    let (streamed, _) = headless_output(config.clone(), seeded_application(&config));
+    assert_eq!(plain, streamed, "the stream does not change the records");
+
+    let stream = fs::read_to_string(dir.join("stream.csv")).expect("stream.csv");
+    let mut lines = stream.lines();
+    assert!(lines.next().unwrap().starts_with("step,time,"));
+    let steps: Vec<u64> = lines
+        .map(|l| l.split(',').next().unwrap().parse().unwrap())
+        .collect();
+    assert_eq!(steps.len(), 3001, "one row per frame");
+    assert_eq!(steps[0], 0);
+    assert_eq!(*steps.last().unwrap(), 3000);
+    assert!(steps.windows(2).all(|w| w[1] == w[0] + 1));
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn test_failed_export_stream_lets_the_run_finish_and_fails_it_at_the_end() {
+    let dir = export_scratch_dir("stream_failing");
+    // A directory where the stream file should go: its header cannot be
+    // renamed into place, while series.csv and snapshot.csv can be written.
+    fs::create_dir_all(dir.join("stream.csv")).unwrap();
+    let mut config = export_config(&dir, crate::export::ExportFormat::Csv);
+    config.export_stream = true;
+    let (output, _guard) = run_output_path("stream_failing");
+    config.output = Some(output.clone());
+    config.stdout = false;
+    let application = seeded_application(&config);
+    let error = HeadlessRunner::from_config(config, application, UNKNOWN_COMMIT)
+        .expect("runner")
+        .run()
+        .err()
+        .expect("the stream fails the run");
+    assert!(error.to_string().contains("--export-stream"), "{error}");
+    let lines = fs::read_to_string(&output).unwrap();
+    assert_eq!(
+        lines.matches("\"record_kind\":\"frame\"").count(),
+        4,
+        "every frame ran"
+    );
+    assert!(lines.lines().last().unwrap().contains("\"run_end\""));
+    assert!(dir.join("series.csv").exists() && dir.join("snapshot.csv").exists());
     fs::remove_dir_all(dir).unwrap();
 }
 
