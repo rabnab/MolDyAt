@@ -641,6 +641,7 @@ fn test_export_flags() {
     assert_eq!(config.export_dir, None);
     assert_eq!(config.export_format, ExportFormat::Csv);
     assert_eq!(config.export_series, None);
+    assert!(!config.export_stream);
 
     let config = parse_headless_args_with_args(&headless_args(&[
         "--export-dir",
@@ -649,9 +650,11 @@ fn test_export_flags() {
         "jsonl",
         "--export-series",
         "E_kin,N2:count",
+        "--export-stream",
     ]))
     .unwrap()
     .unwrap();
+    assert!(config.export_stream);
     assert_eq!(config.export_dir, Some(PathBuf::from("/tmp/out")));
     assert_eq!(config.export_format, ExportFormat::Jsonl);
     assert_eq!(
@@ -670,6 +673,7 @@ fn test_export_flag_errors() {
         // Format and series choose what --export-dir writes.
         &["--export-format", "csv"],
         &["--export-series", "E_kin"],
+        &["--export-stream"],
     ] {
         assert!(
             parse_headless_args_with_args(&headless_args(args)).is_err(),

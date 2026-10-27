@@ -117,6 +117,11 @@ pub const HEADLESS_OPTIONS: &[OptionHelp] = &[
         help: &["Export only these series (default: all), e.g. E_kin,N2:count"],
     },
     OptionHelp {
+        names: &["--export-stream"],
+        value: None,
+        help: &["Also append every frame's sample (all series) to stream.<ext>"],
+    },
+    OptionHelp {
         names: &["--timing-warmup"],
         value: Some("<N>"),
         help: &["Steps before --timings starts measuring (default 0)"],

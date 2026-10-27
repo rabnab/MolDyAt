@@ -283,6 +283,11 @@ fn export(kind: ExportKind, format: ExportFormat) -> DomainCommand {
     WorldCommand::Export { kind, format }.into()
 }
 
+/// Either format's key stops a running stream.
+fn toggle_stream(format: ExportFormat) -> DomainCommand {
+    WorldCommand::ToggleSampleStream { format }.into()
+}
+
 const fn key(key: KeyCode, trigger: Trigger) -> KeyBinding {
     KeyBinding::new(BindKey::Code(key), Modifier::None, trigger)
 }
@@ -465,6 +470,20 @@ pub static COMMANDS: &[CommandDescriptor] = &[
         category: CommandCategory::World,
         default_binding: &[symbol_chord(Alt, 'j', PressOnce)],
         kind: CommandKind::Domain(|| export(ExportKind::Snapshot, ExportFormat::Jsonl)),
+    },
+    CommandDescriptor {
+        id: "world.toggle_sample_stream_csv",
+        label: "Start or stop streaming every metrics sample as CSV to the save directory (keeps the whole run).",
+        category: CommandCategory::World,
+        default_binding: &[symbol_chord(Ctrl, 'r', PressOnce)],
+        kind: CommandKind::Domain(|| toggle_stream(ExportFormat::Csv)),
+    },
+    CommandDescriptor {
+        id: "world.toggle_sample_stream_jsonl",
+        label: "Start or stop streaming every metrics sample as JSONL to the save directory.",
+        category: CommandCategory::World,
+        default_binding: &[symbol_chord(Alt, 'r', PressOnce)],
+        kind: CommandKind::Domain(|| toggle_stream(ExportFormat::Jsonl)),
     },
     // ── View ────────────────────────────────────────────────────────
     CommandDescriptor {

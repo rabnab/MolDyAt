@@ -53,6 +53,14 @@ fn test_every_domain_command_maps_as_before() {
             "world.export_snapshot_jsonl",
             "World(Export { kind: Snapshot, format: Jsonl })",
         ),
+        (
+            "world.toggle_sample_stream_csv",
+            "World(ToggleSampleStream { format: Csv })",
+        ),
+        (
+            "world.toggle_sample_stream_jsonl",
+            "World(ToggleSampleStream { format: Jsonl })",
+        ),
         ("view.toggle_real_data", "View(ToggleRealData)"),
         ("view.toggle_ball_stats", "View(ToggleBallStats)"),
         ("debug.toggle_timings", "View(ToggleTimingDisplay)"),

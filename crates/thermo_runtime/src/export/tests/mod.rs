@@ -10,6 +10,7 @@ use thermo_physics::test_support::create_main_content;
 mod files;
 mod series;
 mod snapshot;
+mod stream;
 
 /// Split one CSV line into cells, honouring `"` quoting.
 fn parse_csv_line(line: &str) -> Vec<String> {

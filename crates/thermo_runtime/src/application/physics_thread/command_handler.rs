@@ -11,8 +11,11 @@ use crate::application::persistence::LoadSource;
 use crate::application::persistence::timestamp_utc;
 use crate::application::scene_layers::SceneLayers;
 use crate::application::{BallCommand, DomainCommand, SimControl, ViewCommand, WorldCommand};
-use crate::export::{ExportFormat, ExportKind, series_to_string, snapshot_to_string, write_export};
-use crate::metrics::{SharedMetricsRegistry, read_metrics};
+use crate::export::{
+    ExportFormat, ExportKind, SampleStream, StreamSettings, series_to_string, snapshot_to_string,
+    write_export,
+};
+use crate::metrics::{MetricsRegistry, SharedMetricsRegistry, read_metrics};
 use crate::objects2d::Rect;
 use std::sync::mpsc::Sender;
 use std::time::SystemTime;
@@ -23,6 +26,8 @@ pub(crate) struct DomainCommandHandler<'a> {
     events: &'a Sender<PhysicsEvent>,
     /// Where `Export` reads the series from.
     metrics: &'a SharedMetricsRegistry,
+    /// The sample stream while it is on; the physics loop feeds it.
+    stream: &'a mut Option<SampleStream>,
     /// The latest `Resize` not applied yet. Applying one costs O(balls) and a
     /// window drag queues one per mouse step, so a run of them is held back
     /// and only its last one is applied.
@@ -37,12 +42,14 @@ impl<'a> DomainCommandHandler<'a> {
         publisher: &'a mut SnapshotPublisher,
         events: &'a Sender<PhysicsEvent>,
         metrics: &'a SharedMetricsRegistry,
+        stream: &'a mut Option<SampleStream>,
     ) -> Self {
         Self {
             main_content,
             publisher,
             events,
             metrics,
+            stream,
             pending_resize: None,
             resizes_applied: 0,
             commands_handled: 0,
@@ -127,6 +134,27 @@ impl<'a> DomainCommandHandler<'a> {
         }
     }
 
+    /// Switch the sample stream off if it runs, else on: it writes
+    /// `export_<timestamp>_stream.<ext>` to the save directory from the next
+    /// sample on.
+    fn toggle_sample_stream(&mut self, format: ExportFormat) -> PhysicsEvent {
+        if let Some(stream) = self.stream.take() {
+            return stop_sample_stream(stream);
+        }
+        let Some(store) = self.main_content.runtime().save_store() else {
+            return PhysicsEvent::StreamFailed("no save directory configured".into());
+        };
+        let settings = StreamSettings {
+            dir: store.dir().to_path_buf(),
+            stem: format!("export_{}_stream", timestamp_utc(SystemTime::now())),
+            format,
+            replace_existing: false,
+        };
+        let dir = settings.dir.clone();
+        *self.stream = Some(SampleStream::new(settings, &read_metrics(self.metrics)));
+        PhysicsEvent::StreamEnabled { dir }
+    }
+
     fn report(&self, event: PhysicsEvent) {
         // The renderer may already be gone (shutdown); nothing to report to then.
         let _ = self.events.send(event);
@@ -194,6 +222,10 @@ impl DomainCommandHandler<'_> {
                 let event = self.export_data(kind, format);
                 self.report(event);
             }
+            WorldCommand::ToggleSampleStream { format } => {
+                let event = self.toggle_sample_stream(format);
+                self.report(event);
+            }
         }
     }
 
@@ -226,5 +258,40 @@ impl CommandHandler<DomainCommand> for DomainCommandHandler<'_> {
 
     fn flush(&mut self) {
         self.apply_pending_resize();
+    }
+}
+
+/// Flush and close `stream`, reported as `StreamStopped` (or `StreamFailed`
+/// when the last rows could not be written).
+pub(crate) fn stop_sample_stream(stream: SampleStream) -> PhysicsEvent {
+    let rows = stream.rows();
+    match stream.finish() {
+        Ok(files) => PhysicsEvent::StreamStopped { files, rows },
+        Err(e) => PhysicsEvent::StreamFailed(e.to_string()),
+    }
+}
+
+/// Feed the sample stream, if it is on, the samples `registry` took (pass
+/// `None` while none were taken, to flush buffered rows in time). A write
+/// error stops the stream and is reported once; the simulation goes on.
+pub(crate) fn feed_sample_stream(
+    stream: &mut Option<SampleStream>,
+    registry: Option<&MetricsRegistry>,
+    events: &Sender<PhysicsEvent>,
+) {
+    let Some(active) = stream else {
+        return;
+    };
+    let result = match registry {
+        Some(registry) => active.record(registry).map(|started| {
+            if let Some(path) = started {
+                let _ = events.send(PhysicsEvent::StreamFile(path));
+            }
+        }),
+        None => active.flush_if_due(),
+    };
+    if let Err(e) = result {
+        *stream = None;
+        let _ = events.send(PhysicsEvent::StreamFailed(e.to_string()));
     }
 }

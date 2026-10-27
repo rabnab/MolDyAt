@@ -20,6 +20,8 @@
 //! the span (the registry keeps a fixed number of samples) leaves the left
 //! part empty.
 
+use std::borrow::Cow;
+
 use super::energy_data::{DisplayMode, EnergyData};
 use super::time_view::{TimeHistory, TimeView};
 
@@ -211,6 +213,97 @@ pub fn format_tick(value: f64, step: f64) -> String {
 /// One curve as `(time, value)` points, oldest first; `None` where the time
 /// or the value is not finite (which breaks the curve).
 type Curve = Vec<Option<(f64, f64)>>;
+
+/// Most points of a curve drawn per pixel column of the plot (its lowest
+/// and its highest) when the curve has more points than the plot has
+/// columns (#366).
+const POINTS_PER_COLUMN: usize = 2;
+
+/// `curve` with at most [`POINTS_PER_COLUMN`] points per pixel column of
+/// `window` (`columns` across), so the draw cost stays the same however many
+/// samples the window holds: each column keeps its lowest and its highest
+/// point, in time order, so spikes stay visible. A curve with no more
+/// points inside the window than that is returned as it is. The points
+/// right before and after the window are kept for the cut at its edges, and
+/// a missing point still breaks the curve.
+fn downsample(
+    curve: &[Option<(f64, f64)>],
+    window: TimeWindow,
+    columns: usize,
+) -> Cow<'_, [Option<(f64, f64)>]> {
+    let inside = |p: &Option<(f64, f64)>| p.is_some_and(|(t, _)| window.contains(t));
+    let count = curve.iter().filter(|p| inside(p)).count();
+    if columns == 0 || count <= POINTS_PER_COLUMN * columns {
+        return Cow::Borrowed(curve);
+    }
+    let (Some(first), Some(last)) = (
+        curve.iter().position(inside),
+        curve.iter().rposition(inside),
+    ) else {
+        return Cow::Borrowed(curve);
+    };
+    let span = window.t1 - window.t0;
+    let column_of = |t: f64| {
+        (((t - window.t0) / span * columns as f64).floor().max(0.0) as usize).min(columns - 1)
+    };
+
+    /// The lowest and highest point of one column, with their indices.
+    struct Bucket {
+        column: usize,
+        low: (usize, (f64, f64)),
+        high: (usize, (f64, f64)),
+    }
+    fn flush(bucket: &mut Option<Bucket>, out: &mut Vec<Option<(f64, f64)>>) {
+        if let Some(b) = bucket.take() {
+            let (a, z) = if b.low.0 <= b.high.0 {
+                (b.low, b.high)
+            } else {
+                (b.high, b.low)
+            };
+            out.push(Some(a.1));
+            if z.0 != a.0 {
+                out.push(Some(z.1));
+            }
+        }
+    }
+
+    let mut out = Vec::with_capacity(POINTS_PER_COLUMN * columns + 2);
+    if first > 0 {
+        out.push(curve[first - 1]);
+    }
+    let mut bucket: Option<Bucket> = None;
+    for (i, point) in curve.iter().enumerate().take(last + 1).skip(first) {
+        let Some(p) = *point else {
+            flush(&mut bucket, &mut out);
+            out.push(None);
+            continue;
+        };
+        let column = column_of(p.0);
+        match &mut bucket {
+            Some(b) if b.column == column => {
+                if p.1 < b.low.1.1 {
+                    b.low = (i, p);
+                }
+                if p.1 > b.high.1.1 {
+                    b.high = (i, p);
+                }
+            }
+            _ => {
+                flush(&mut bucket, &mut out);
+                bucket = Some(Bucket {
+                    column,
+                    low: (i, p),
+                    high: (i, p),
+                });
+            }
+        }
+    }
+    flush(&mut bucket, &mut out);
+    if let Some(&after) = curve.get(last + 1) {
+        out.push(after);
+    }
+    Cow::Owned(out)
+}
 
 /// The time range the plot shows (the [`TimeView`]'s window).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -594,8 +687,10 @@ impl Layout<'_> {
         self.segment([left, area.top], [left, bottom], thin, COLOR_AXIS);
         self.segment([left, bottom], [area.right, bottom], thin, COLOR_AXIS);
         let to_px = |(t, v): (f64, f64)| [x_axis.x_of(t), y_of(v)];
+        let columns = area.width().ceil() as usize;
         for (s, curve) in series.iter().zip(curves) {
-            self.curve_segments(curve, window, &to_px, thin * 2.0, s.color);
+            let curve = downsample(curve, window, columns);
+            self.curve_segments(&curve, window, &to_px, thin * 2.0, s.color);
         }
     }
 

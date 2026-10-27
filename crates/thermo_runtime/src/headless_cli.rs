@@ -59,6 +59,9 @@ pub struct HeadlessConfig {
     pub export_format: ExportFormat,
     /// Series to export (`--export-series`); `None` exports all.
     pub export_series: Option<Vec<String>>,
+    /// `--export-stream`: also append every frame's metrics sample to
+    /// `stream.<ext>` in the export directory while the run goes (#366).
+    pub export_stream: bool,
     /// Save the world to the save directory once it is set up (walls,
     /// valves, seeded balls), before the first step. Perf runs seed a large
     /// world once and `--load` it for every run.
@@ -113,6 +116,7 @@ impl Default for HeadlessConfig {
             export_dir: None,
             export_format: ExportFormat::default(),
             export_series: None,
+            export_stream: false,
             save_setup: false,
             sim: None,
         }
@@ -330,6 +334,10 @@ fn parse_headless_args_with_args(args: &[String]) -> Result<Option<HeadlessConfi
                 config.export_series = Some(names);
                 export_options_given = true;
             }
+            "--export-stream" => {
+                config.export_stream = true;
+                export_options_given = true;
+            }
             other => return Err(CliError::new(format!("Unknown argument: {}", other))),
         }
         i += 1;
@@ -347,7 +355,7 @@ fn parse_headless_args_with_args(args: &[String]) -> Result<Option<HeadlessConfi
 
     if config.export_dir.is_none() && export_options_given {
         return Err(CliError::new(
-            "--export-format and --export-series need --export-dir",
+            "--export-format, --export-series and --export-stream need --export-dir",
         ));
     }
 

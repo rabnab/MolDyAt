@@ -77,6 +77,11 @@ pub enum WorldCommand {
         kind: ExportKind,
         format: ExportFormat,
     },
+    /// Start streaming every metrics sample to a file in the save directory,
+    /// or stop the stream that runs (reported as `PhysicsEvent`s).
+    ToggleSampleStream {
+        format: ExportFormat,
+    },
 }
 
 /// Commands that change what is reported or shown, not the physics.

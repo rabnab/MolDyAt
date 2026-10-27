@@ -2,13 +2,13 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use super::command_handler::DomainCommandHandler;
+use super::command_handler::{DomainCommandHandler, feed_sample_stream, stop_sample_stream};
 use super::{ShutdownSignal, SnapshotPublisher};
 use crate::application::DomainCommand;
 use crate::application::MainContent;
 use crate::application::PhysicsEvent;
 use crate::application::scene_layers::SceneLayers;
-use crate::metrics::{SharedMetricsRegistry, write_metrics};
+use crate::metrics::{SharedMetricsRegistry, read_metrics, write_metrics};
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::{Duration, Instant};
@@ -63,10 +63,13 @@ impl PhysicsRuntime {
         // snapshot is published only then, so a paused, untouched world
         // publishes nothing and the renderer stays idle.
         let mut changed = true;
+        // The sample stream while it is on (`WorldCommand::ToggleSampleStream`).
+        let mut stream = None;
 
         while !shutdown_signal.should_shutdown() {
             let world_resized = {
-                let mut handler = DomainCommandHandler::new(simulation, publisher, events, metrics);
+                let mut handler =
+                    DomainCommandHandler::new(simulation, publisher, events, metrics, &mut stream);
                 self.drain_commands(receiver, &mut handler);
                 changed |= handler.commands_handled() > 0;
                 handler.resizes_applied() > 0
@@ -101,6 +104,10 @@ impl PhysicsRuntime {
                 // finds the metrics of the same step.
                 let snapshot = publisher.snapshot(simulation);
                 write_metrics(metrics).sample(&snapshot);
+                if stream.is_some() {
+                    // A read lock: the stream's writes need not block the plot.
+                    feed_sample_stream(&mut stream, Some(&read_metrics(metrics)), events);
+                }
                 publisher.publish(snapshot);
                 wakeup();
 
@@ -108,6 +115,8 @@ impl PhysicsRuntime {
                 snapshot_count += 1;
                 last_snapshot_time = now;
                 changed = false;
+            } else {
+                feed_sample_stream(&mut stream, None, events);
             }
 
             if now.duration_since(last_perf_report).as_secs() >= 1 {
@@ -141,6 +150,10 @@ impl PhysicsRuntime {
             }
 
             std::thread::yield_now();
+        }
+        // Quitting ends the stream with its last rows on disk.
+        if let Some(stream) = stream.take() {
+            let _ = events.send(stop_sample_stream(stream));
         }
     }
 }

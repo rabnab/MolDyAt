@@ -37,6 +37,23 @@ impl UnifiedRenderState {
                 }
             }
             PhysicsEvent::ExportFailed(error) => log::error!("Export failed: {error}"),
+            PhysicsEvent::StreamEnabled { dir } => {
+                log::info!(
+                    "Streaming samples to {} from the next sample",
+                    dir.display()
+                );
+            }
+            PhysicsEvent::StreamFile(path) => log::info!("Streaming samples to {}", path.display()),
+            PhysicsEvent::StreamStopped { files, rows } => {
+                let files: Vec<_> = files.iter().map(|f| f.display().to_string()).collect();
+                log::info!(
+                    "Sample stream stopped: {rows} samples in {}",
+                    files.join(", ")
+                );
+            }
+            PhysicsEvent::StreamFailed(error) => {
+                log::error!("Sample stream stopped: {error}; the simulation goes on");
+            }
         }
     }
 
