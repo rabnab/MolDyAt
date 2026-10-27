@@ -285,9 +285,12 @@ impl HeadlessRunnerBuilder {
         self
     }
 
-    /// Run the commands of `script` at their steps (#340). The run length
-    /// stays what `.steps()` sets; `from_config` sets it from the script.
+    /// Run the commands of `script` at their steps (#340). The script's
+    /// `step` lines set the run length, replacing `.steps()`.
     pub fn script(mut self, script: Option<Script>) -> Self {
+        if let Some(script) = &script {
+            self.steps = script.total_steps();
+        }
         self.script = script;
         self
     }
@@ -437,6 +440,7 @@ impl HeadlessRunner {
         snapshots_emitted += 1;
         let mut clock = RunClock::start(0);
         for step in 0..self.steps {
+            let steps_before = self.application.world().step_count();
             if step == self.timing_warmup {
                 self.application.reset_phase_timings();
                 clock = RunClock::start(step);
@@ -445,6 +449,14 @@ impl HeadlessRunner {
                 .simulation_step()
                 .map_err(|error| io::Error::other(format!("{error:?}")))?;
             clock.steps += 1;
+            // A paused world returns `Ok` without stepping; a headless run
+            // never pauses, so fail rather than write frames of a world that
+            // stands still.
+            if self.application.world().step_count() == steps_before {
+                return Err(io::Error::other(format!(
+                    "step {step} did not run (simulation paused)"
+                )));
+            }
             // Fail at the first paused step, not after the whole run (see
             // `write_timings`). Headless runs never pause today; defensive.
             if self.timings.is_some()

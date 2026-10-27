@@ -1376,3 +1376,50 @@ fn test_script_command_that_cannot_run_fails_the_run_with_its_line() {
         "{error}"
     );
 }
+
+#[test]
+fn test_paused_world_fails_the_run_without_timings() {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_nanos();
+    let dir = std::env::temp_dir().join(format!("headless-stall-{}-{nanos}", std::process::id()));
+    let store = SaveStore::new(&dir);
+    let mut seeded =
+        build_application(test_world_rect(), &SimConfig::default(), Some(5)).expect("build");
+    seeded.seed_random_balls(20);
+    let saved = seeded.save_world(&store).expect("save");
+    let mut paused =
+        build_application(test_world_rect(), &SimConfig::default(), Some(5)).expect("build");
+    paused
+        .load_world(&store, &LoadSource::Path(saved), true)
+        .expect("load paused");
+    let _ = fs::remove_dir_all(&dir);
+
+    let error = HeadlessRunner::builder()
+        .application(paused)
+        .sink(Box::new(RecordingSink(Rc::new(RefCell::new(Vec::new())))))
+        .steps(5)
+        .build()
+        .run()
+        .err()
+        .expect("a paused run must fail");
+    assert_eq!(error.to_string(), "step 0 did not run (simulation paused)");
+}
+
+#[test]
+fn test_builder_script_sets_the_run_length() {
+    let script = Script::parse("step 3\nballs.clear\nstep 2").expect("script");
+    let frames = Rc::new(RefCell::new(Vec::new()));
+    let application =
+        build_application(window_world_rect(), &SimConfig::default(), None).expect("application");
+    let runner = HeadlessRunner::builder()
+        .application(application)
+        .sink(Box::new(RecordingSink(frames.clone())))
+        .steps(1)
+        .script(Some(script))
+        .build();
+    assert_eq!(runner.steps, 5);
+    runner.run().expect("run");
+    assert_eq!(*frames.borrow(), [0, 5]);
+}

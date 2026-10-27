@@ -51,13 +51,13 @@ fn test_parse_reads_steps_commands_comments_and_semicolons() {
 
 #[test]
 fn test_schedule_puts_each_command_after_the_steps_before_it() {
-    let script = Script::parse("sim.toggle_pause\nstep 3\nstep 4\nworld.save\nstep 1").unwrap();
+    let script = Script::parse("sim.cycle_gravity\nstep 3\nstep 4\nworld.save\nstep 1").unwrap();
     let scheduled = script.schedule();
     let schedule: Vec<(u32, &str)> = scheduled
         .iter()
         .map(|scheduled| (scheduled.at_step, scheduled.item.text.as_str()))
         .collect();
-    assert_eq!(schedule, [(0, "sim.toggle_pause"), (7, "world.save")]);
+    assert_eq!(schedule, [(0, "sim.cycle_gravity"), (7, "world.save")]);
     assert_eq!(script.total_steps(), 8);
 }
 
@@ -71,6 +71,10 @@ fn test_parse_rejects_unknown_and_non_scriptable_ids_with_their_line() {
     );
 
     for id in [
+        "sim.toggle_pause",
+        "sim.toggle_stepwise",
+        "sim.decrease_wait_time",
+        "sim.increase_wait_time",
         "world.load_latest",
         "world.toggle_sample_stream_csv",
         "view.toggle_real_data",
@@ -94,7 +98,7 @@ fn test_parse_rejects_bad_arguments() {
         ("balls.add_random lots", "must be a whole number"),
         ("balls.add_random 2000000", "at most 1000000"),
         ("balls.add_random 1 2", "takes one count"),
-        ("sim.toggle_pause 3", "takes no arguments"),
+        ("sim.cycle_gravity 3", "takes no arguments"),
         ("operator.place_thermostat 1", "wrong number of arguments"),
         ("operator.place_thermostat 1 nan", "not a finite"),
         ("operator.toggle_thermostat -1", "not a valid index"),

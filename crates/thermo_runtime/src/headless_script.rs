@@ -238,8 +238,8 @@ fn parse_command(name: &str, args: &[&str]) -> Result<ScriptAction, String> {
     };
     if !spec.in_scripts {
         return Err(format!(
-            "`{name}` cannot run in a script (only sim.*, balls.*, world.save \
-             and world.export_* can)"
+            "`{name}` cannot run in a script (gravity, time step, balls.*, \
+             world.save and world.export_* can)"
         ));
     }
     parse_domain_arg(spec, args).map(|arg| ScriptAction::Domain { id: spec.id, arg })

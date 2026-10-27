@@ -130,8 +130,9 @@ world.save
 - `step N` runs `N` steps. The run is as long as all `step`s together.
 - Domain commands by their full id of the key registry (`H` in the window
   lists them), from the shared table `DOMAIN_COMMANDS`
-  (`thermo_runtime::application::command_table`): `sim.*`, `balls.*`,
-  `world.save` and `world.export_*`. A command with a parameter takes it
+  (`thermo_runtime::application::command_table`): gravity and time step
+  (`sim.cycle_gravity`, `sim.double_time_step`, `sim.halve_time_step`),
+  `balls.*`, `world.save` and `world.export_*`. A command with a parameter takes it
   as its only argument (`balls.add_random 500`; without it, the key's
   default). Loading, the sample stream and the view and debug commands
   are rejected: they need a window or change the run's inputs.
@@ -154,13 +155,26 @@ world.save
 Commands before the first `step` set the world up: they run after the
 command-line walls, valves and seeded balls and before the first snapshot,
 so `run_start` and the frame at step 0 show them. A command after `step N`
-runs after step `N` and its frame. Every command that ran is a `command`
+runs after step `N` and its frame. Commands after the last `step` run
+after the last frame, so neither `run_end` nor the `--export-dir` files
+show what they change; put `world.save` or `world.export_*` there, not
+commands that change the world. Every command that ran is a `command`
 record. The script is checked when the command line is parsed (unknown or
 rejected ids, wrong arguments: an error with its line); a command that
 cannot run (thermostat `1` when one is placed, `world.save` failing) fails
 the run with `script line N: ...`. `world.save` writes to `--save-dir` and
 `world.export_*` where the window's export keys do; both name the file on
 stderr, outside the records, since the file names hold the time.
+
+Pause, stepwise mode and the wait time (`sim.toggle_pause`,
+`sim.toggle_stepwise`, `sim.*_wait_time`) are rejected too: a headless run
+steps the world itself, and a paused world would make the remaining steps
+no-ops (a step that does not advance the world fails the run). A script
+must run at least one step, and `--script` can be given once.
+
+Script commands run inside the timed loop, so `world.save` and
+`world.export_*` add their file I/O to the `--timings` wall time; measure
+performance (`scripts/headless_perf.sh`) without a script.
 
 Without `--script` the output is unchanged.
 

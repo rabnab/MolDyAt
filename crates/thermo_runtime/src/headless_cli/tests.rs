@@ -773,3 +773,14 @@ fn test_script_errors_name_the_file_and_line() {
             .contains("requires a value")
     );
 }
+
+#[test]
+fn test_script_must_run_steps_and_be_given_once() {
+    let no_steps = ScriptFile::new("no-steps", "balls.add_random 5\nstep 0\n");
+    let error = headless(&["--script", &no_steps.arg()]).unwrap_err();
+    assert!(error.message.contains("runs no steps"), "{error}");
+
+    let script = ScriptFile::new("twice", "step 1\n");
+    let error = headless(&["--script", &script.arg(), "--script", &script.arg()]).unwrap_err();
+    assert!(error.message.contains("only once"), "{error}");
+}

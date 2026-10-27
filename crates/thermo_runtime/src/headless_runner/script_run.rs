@@ -15,8 +15,7 @@ use crate::application::operator_command::thermostat::{
     AdjustThermostatRadius, AdjustThermostatTargetTemperature, PlaceThermostat, ToggleThermostat,
 };
 use crate::application::{
-    CommandHandler, CreateSnapshot, DomainCommandHandler, PhysicsEvent, SnapshotPublisher,
-    domain_command_spec,
+    CommandHandler, DomainCommandHandler, PhysicsEvent, SnapshotPublisher, domain_command_spec,
 };
 use crate::export::SampleStream;
 use crate::headless_script::{
@@ -134,17 +133,14 @@ impl ScriptRun {
 
 /// The id of the `index`-th thermostat or source sphere (creation order).
 fn operator_id(application: &MainContent, index: usize, thermostat: bool) -> Result<usize, String> {
-    let operators = application.create_snapshot().operators;
+    // From the world, not a snapshot: a snapshot copies every ball.
+    let world = application.world();
     let (ids, kind): (Vec<usize>, &str) = if thermostat {
-        (
-            operators.thermostats.iter().map(|t| t.id).collect(),
-            "thermostat",
-        )
+        let thermostats = world.thermostats().thermostats();
+        (thermostats.iter().map(|t| t.id).collect(), "thermostat")
     } else {
-        (
-            operators.source_spheres.iter().map(|s| s.id).collect(),
-            "source sphere",
-        )
+        let spheres = world.source_spheres().spheres();
+        (spheres.iter().map(|s| s.id).collect(), "source sphere")
     };
     ids.get(index)
         .copied()

@@ -34,9 +34,10 @@ pub struct DomainCommandSpec {
     pub id: &'static str,
     pub param: Option<CommandParam>,
     /// Whether a headless script may run it: commands that change the
-    /// simulation (`sim.*`, `balls.*`) and the ones that write files
-    /// (`world.save`, `world.export_*`). Loading, the sample stream and
-    /// display commands are for the window.
+    /// simulation (gravity, time step, `balls.*`) and the ones that write
+    /// files (`world.save`, `world.export_*`). Pause, stepwise mode, the wait
+    /// time, loading, the sample stream and display commands are for the
+    /// window.
     pub in_scripts: bool,
     make: fn(u64) -> DomainCommand,
 }
@@ -72,9 +73,15 @@ fn toggle_stream(format: ExportFormat) -> DomainCommand {
 }
 
 /// Every domain command, in the order of the key registry.
+///
+/// Pause, stepwise mode and the wait time are not scriptable: a headless run
+/// steps the world itself, so a paused world would turn the script's
+/// remaining steps into no-ops, and there is no wait between steps.
 pub const DOMAIN_COMMANDS: &[DomainCommandSpec] = &[
-    spec("sim.toggle_pause", true, |_| SimControl::TogglePause.into()),
-    spec("sim.toggle_stepwise", true, |_| {
+    spec("sim.toggle_pause", false, |_| {
+        SimControl::TogglePause.into()
+    }),
+    spec("sim.toggle_stepwise", false, |_| {
         SimControl::ToggleStepwise.into()
     }),
     spec("sim.cycle_gravity", true, |_| {
@@ -86,10 +93,10 @@ pub const DOMAIN_COMMANDS: &[DomainCommandSpec] = &[
     spec("sim.halve_time_step", true, |_| {
         SimControl::HalveTimeStep.into()
     }),
-    spec("sim.decrease_wait_time", true, |_| {
+    spec("sim.decrease_wait_time", false, |_| {
         SimControl::DecreaseWaitTime.into()
     }),
-    spec("sim.increase_wait_time", true, |_| {
+    spec("sim.increase_wait_time", false, |_| {
         SimControl::IncreaseWaitTime.into()
     }),
     spec("balls.clear", true, |_| BallCommand::Clear.into()),

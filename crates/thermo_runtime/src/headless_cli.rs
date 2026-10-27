@@ -346,6 +346,9 @@ fn parse_headless_args_with_args(args: &[String]) -> Result<Option<HeadlessConfi
                 if i >= args.len() {
                     return Err(CliError::new("--script requires a value"));
                 }
+                if config.script.is_some() {
+                    return Err(CliError::new("--script can be given only once"));
+                }
                 let script = Script::load(Path::new(&args[i]))
                     .map_err(|error| CliError::new(format!("--script {error}")))?;
                 config.script = Some(script);
@@ -376,6 +379,11 @@ fn parse_headless_args_with_args(args: &[String]) -> Result<Option<HeadlessConfi
             ));
         }
         config.steps = script.total_steps();
+        if config.steps == 0 {
+            return Err(CliError::new(
+                "--script runs no steps: add a `step N` line with N > 0",
+            ));
+        }
     }
 
     if config.export_dir.is_none() && export_options_given {
