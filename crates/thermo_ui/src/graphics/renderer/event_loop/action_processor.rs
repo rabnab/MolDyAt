@@ -8,28 +8,18 @@ use thermo_runtime::application::ViewCommand;
 
 /// Runs a registry command: a domain command goes to the physics thread, a
 /// UI command is handled here. Returns true if the view changed.
-pub(super) fn run_command(
-    state: &mut UnifiedRenderState,
-    command: &CommandDescriptor,
-    window_target: Option<&winit::event_loop::ActiveEventLoop>,
-    main_window: Option<&winit::window::Window>,
-) -> bool {
+pub(super) fn run_command(state: &mut UnifiedRenderState, command: &CommandDescriptor) -> bool {
     match command.kind {
         CommandKind::Domain(make) => {
             state.physics.send_command(make());
             false
         }
-        CommandKind::Ui(action) => run_ui_action(state, action, window_target, main_window),
+        CommandKind::Ui(action) => run_ui_action(state, action),
     }
 }
 
 /// Handles a renderer-side command. Returns true if the view changed.
-fn run_ui_action(
-    state: &mut UnifiedRenderState,
-    action: UiAction,
-    window_target: Option<&winit::event_loop::ActiveEventLoop>,
-    main_window: Option<&winit::window::Window>,
-) -> bool {
+fn run_ui_action(state: &mut UnifiedRenderState, action: UiAction) -> bool {
     match action {
         UiAction::PrintHelp => {
             log::info!("{}", state.input.key_map().help_text());
@@ -64,9 +54,8 @@ fn run_ui_action(
             false
         }
         UiAction::ToggleEnergyWindow => {
-            if let Some(target) = window_target {
-                state.toggle_energy_window(target, main_window);
-            }
+            // The backend opens the window (`take_plot_window_requests`).
+            state.toggle_energy_window();
             false
         }
         UiAction::ResetPlotView => {

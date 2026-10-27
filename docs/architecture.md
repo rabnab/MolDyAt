@@ -15,8 +15,8 @@ are in [refactoring-plan.md](plan/refactoring-plan.md).
 |---|---|---|
 | `crates/thermo_physics` | `thermo_physics` | The physics: particles and species, pair potentials and the SIMD force kernel, cell grid and Verlet lists, walls and operators (`objects2d`); the world, `MainContent` and its stepping (`application/core`); run settings (`sim_config`), units, stats, thermo fields and saves (`persistence`). Dependencies: rayon, serde, rand, toml, log |
 | `crates/thermo_runtime` | `thermo_runtime` | Running a simulation without a window: the physics thread and its `SnapshotPublisher`, `DomainCommand` and its handler, `OperatorCommand`s, `PhysicsEvent`, `RendererSnapshot` and its builder (`CreateSnapshot`), scene layers, the metrics store (`metrics`), the data export (`export`), and headless runs (`headless_cli`, `headless_runner`, `headless_output`, `headless_timings`). Dependencies: `thermo_physics`, arc-swap, serde_json, rayon, log |
-| `crates/thermo_ui` | `thermo_ui` | The UI without a GPU backend (`graphics`): event loop and input handling, the keyboard command registry and key map, operator tools, viewport, sidebar model, and the energy plot window with its plot layout (`PlotScene`, drawn by the backend); plus the logger setup and the UI settings file (`ui_settings`: `ui.toml` with the key bindings, #335). Dependencies: `thermo_runtime`, `thermo_physics`, winit, arc-swap, toml, log, env_logger |
-| `wgpu_renderer` | `moldyat_wgpu` | The `moldyat` binary: command line, the wgpu window and render pipelines, and the energy plot window's surface (`plot_surface`). For `--headless` it computes the default world from its window size and calls `thermo_runtime`, handing it the git commit it was built from (`HeadlessRunner::from_config`) |
+| `crates/thermo_ui` | `thermo_ui` | The UI without a GPU backend (`graphics`): event loop and input handling, the keyboard command registry and key map, operator tools, viewport, sidebar model, and the energy plot window's state with its plot layout (`PlotScene`, drawn by the backend, which owns the OS window, #371); plus the logger setup and the UI settings file (`ui_settings`: `ui.toml` with the key bindings, #335). Dependencies: `thermo_runtime`, `thermo_physics`, winit (input types only: keys, mouse and window events), arc-swap, toml, log, env_logger |
+| `wgpu_renderer` | `moldyat_wgpu` | The `moldyat` binary: command line, the wgpu window and render pipelines, and the energy plot's OS window and surface (`plot_surface`, created and closed as `thermo_ui` asks, #371). For `--headless` it computes the default world from its window size and calls `thermo_runtime`, handing it the git commit it was built from (`HeadlessRunner::from_config`) |
 
 Dependencies point one way: `moldyat_wgpu` → `thermo_ui` →
 `thermo_runtime` → `thermo_physics`. `thermo_physics` and `thermo_runtime`
@@ -310,9 +310,8 @@ Every visual layer is one `RenderPipeline` in
 
 ### Energy plot window
 
-`EnergyWindowManager` (`thermo_ui`) opens the window on the energy half of
-the split screen (`split_screen_layout`; the simulation window keeps its
-size, #167), owns its keys and the plot selection, and keeps `EnergyData`
+`EnergyWindowManager` (`thermo_ui`) decides when the window opens and
+closes, owns its keys and the plot selection, and keeps `EnergyData`
 in step with the metrics store: every registry series with its unit and
 the simulation time of each sample (`MetricsRegistry::times`), appending
 only new values. What the window shows is a `PlotSelection`
@@ -390,19 +389,33 @@ and Alt itself (`ModifiersChanged`) for the chords. A left click on a
 legend entry hides or shows that series, a left click in a plot focuses
 it (the targets of the last frame).
 
+The OS window belongs to the binary (#371), so `thermo_ui` uses winit for
+input types only. The manager asks for it with `PlotWindowRequest`s (`Open`
+with the title, `Close`, `SetTitle`, `Redraw`), queued while it handles
+an event and taken by the app after every event
+(`UnifiedRenderState::take_plot_window_requests`). `PlotTarget`
+(`plot_surface.rs`) carries them out (`handle_plot_requests`, tested with a
+fake window): it creates the window on the energy half of the main
+window's monitor (`split_screen_layout`, pure, in `thermo_ui`; the
+simulation window keeps its size, #167), with the minimum size
+`MIN_WINDOW_WIDTH` × `MIN_WINDOW_HEIGHT`, and reports back with
+`plot_window_opened` (size and scale factor) or `plot_window_failed`.
+Later sizes come from the window's own `Resized` / `ScaleFactorChanged`
+events, which the router hands to the manager by window id
+(`PlotTarget::window_id`).
+
 The binary draws it: on a `RedrawRequested` for the plot window,
-`UnifiedRenderState::energy_window_redraw` hands out a `PlotFrame` (window
-and scene), and `PlotTarget` (`plot_surface.rs`) renders it into a surface
+`UnifiedRenderState::energy_window_redraw` hands out a `PlotFrame` (the
+scene, laid out for the reported size), and `PlotTarget` renders it into a surface
 of its own, created from the shared `Instance` and drawn with the shared
 device and queue. `PlotPipeline` (`pipelines/plot_pipeline.rs`) is not part
 of the render graph: it draws a scene, not a snapshot, with two
 `GpuBatch`es, anti-aliased round-capped segments (`plot_segment.wgsl`) and
 coloured 8×8 bitmap text (`plot_text.wgsl`), both in window pixels. The
 surface prefers `Bgra8Unorm` / `Rgba8Unorm` (no sRGB encoding, so the
-colours appear as given). It holds an `Arc` of the window, so the router
-drops it as soon as the window closes (`PlotTarget::sync`); a window whose
-surface cannot be created is logged once and not retried until it is
-replaced. Redraws are throttled to about 12 Hz.
+colours appear as given). `PlotTarget` drops the surface together with the
+window; a window whose surface cannot be created is logged once and not
+retried until it is replaced. Redraws are throttled to about 12 Hz.
 
 ## Persistence
 

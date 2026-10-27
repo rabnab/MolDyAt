@@ -18,7 +18,7 @@
 //! `UnifiedRenderState` exposes the narrowed public surface used by the active
 //! backends.
 
-use crate::graphics::energy_plot::{EnergyData, SharedEnergyData};
+use crate::graphics::energy_plot::{EnergyData, PlotWindowRequest, SharedEnergyData};
 use crate::graphics::renderer::ViewportTransform;
 use crate::graphics::renderer::margins::Margins;
 use crate::graphics::renderer::state_layers::RendererConfig;
@@ -262,15 +262,10 @@ impl UnifiedRenderState {
     /// Returns `true` if the action affects the viewport (caller may still
     /// need to apply zoom/pan to `self.viewport` before the flag matters).
     ///
-    /// # Arguments
-    /// * `window_target` - Optional window target for actions that need to create windows (e.g., ToggleEnergyWindow)
-    pub fn process_action(
-        &mut self,
-        action: InputAction,
-        window_target: Option<&winit::event_loop::ActiveEventLoop>,
-        main_window: Option<&winit::window::Window>,
-    ) -> bool {
-        InputOrchestrator::process_action(self, action, window_target, main_window)
+    /// Opening the plot window only queues a request: the backend creates it
+    /// (see [`Self::take_plot_window_requests`]).
+    pub fn process_action(&mut self, action: InputAction) -> bool {
+        InputOrchestrator::process_action(self, action)
     }
 
     // ── Viewport helpers ─────────────────────────────────────────────
@@ -326,15 +321,18 @@ impl UnifiedRenderState {
 
     // ── Energy window helpers ────────────────────────────────────────
 
-    /// Toggle or cycle the energy plot window.
-    pub fn toggle_energy_window(
-        &mut self,
-        window_target: &winit::event_loop::ActiveEventLoop,
-        main_window: Option<&winit::window::Window>,
-    ) {
-        self.render
-            .energy_manager
-            .toggle(window_target, main_window);
+    /// Open the plot window, or cycle the focused plot's preset while it
+    /// is open.
+    pub fn toggle_energy_window(&mut self) {
+        self.render.energy_manager.toggle();
+    }
+
+    /// What the backend is to do with the plot window (open, close, title,
+    /// redraw), oldest first; the backend takes them after every event and
+    /// reports back through [`Self::energy_manager_mut`]
+    /// (`plot_window_opened`, `plot_window_failed`).
+    pub fn take_plot_window_requests(&mut self) -> Vec<PlotWindowRequest> {
+        self.render.energy_manager.take_requests()
     }
 
     // ── Ball size helpers ────────────────────────────────────────────

@@ -57,7 +57,7 @@ fn zoom_and_pan_mark_view_dirty() {
     for action in actions {
         let mut state = build_test_state();
         let label = format!("{action:?}");
-        assert!(state.process_action(action, None, None), "{label}");
+        assert!(state.process_action(action), "{label}");
         assert!(state.render.view_dirty, "{label}");
     }
 }
@@ -65,7 +65,7 @@ fn zoom_and_pan_mark_view_dirty() {
 #[test]
 fn reset_view_marks_view_dirty() {
     let mut state = build_test_state();
-    assert!(state.process_action(command("view.reset"), None, None));
+    assert!(state.process_action(command("view.reset")));
     assert!(state.render.view_dirty);
 }
 
@@ -74,11 +74,11 @@ fn toggle_rendering_flips_flag_and_tells_the_physics_thread() {
     let (physics, log) = PhysicsCoordinator::new_recording();
     let mut state = build_state_with(physics);
     // Redraws at once with the new layers.
-    let affects = state.process_action(command("view.toggle_rendering"), None, None);
+    let affects = state.process_action(command("view.toggle_rendering"));
     assert!(affects);
     assert!(!state.render.config.render_drawing);
     // Toggle back.
-    state.process_action(command("view.toggle_rendering"), None, None);
+    state.process_action(command("view.toggle_rendering"));
     assert!(state.render.config.render_drawing);
 
     // The physics thread builds only the layers that are drawn.
@@ -104,7 +104,7 @@ fn cycling_the_thermo_overlay_requests_thermo_fields_only_while_shown() {
 
     // Off -> Grid -> Temperature -> Pressure -> Off
     for _ in 0..4 {
-        state.process_action(command("view.cycle_thermo_overlay"), None, None);
+        state.process_action(command("view.cycle_thermo_overlay"));
     }
 
     let without_thermo = SceneLayers::ALL.difference(SceneLayers::THERMO);
@@ -134,7 +134,7 @@ fn renderer_specific_commands_do_not_affect_view() {
         let (physics, log) = PhysicsCoordinator::new_recording();
         let mut state = build_state_with(physics);
         assert!(
-            !state.process_action(command(id), None, None),
+            !state.process_action(command(id)),
             "{id} should not affect view"
         );
         assert!(
@@ -148,7 +148,7 @@ fn renderer_specific_commands_do_not_affect_view() {
 fn domain_commands_go_to_the_physics_thread() {
     let (physics, log) = PhysicsCoordinator::new_recording();
     let mut state = build_state_with(physics);
-    assert!(!state.process_action(command("sim.toggle_pause"), None, None));
+    assert!(!state.process_action(command("sim.toggle_pause")));
     assert_eq!(
         log.lock().unwrap().clone(),
         [format!("{:?}", DomainCommand::Sim(SimControl::TogglePause))]
@@ -214,11 +214,7 @@ fn build_state_with(physics: PhysicsCoordinator) -> UnifiedRenderState {
 fn selecting_ball_tool_enables_cursor_preview_and_marks_view_dirty() {
     let mut state = build_test_state();
 
-    let affects_view = state.process_action(
-        InputAction::SelectOperatorTool(OperatorTool::Ball),
-        None,
-        None,
-    );
+    let affects_view = state.process_action(InputAction::SelectOperatorTool(OperatorTool::Ball));
 
     assert!(!affects_view);
     assert_eq!(state.render.active_tool, OperatorTool::Ball);
@@ -232,11 +228,8 @@ fn switching_away_from_ball_tool_disables_cursor_preview() {
     state.render.active_tool = OperatorTool::Ball;
     state.render.config.draw_cursor = true;
 
-    let affects_view = state.process_action(
-        InputAction::SelectOperatorTool(OperatorTool::LineSegment),
-        None,
-        None,
-    );
+    let affects_view =
+        state.process_action(InputAction::SelectOperatorTool(OperatorTool::LineSegment));
 
     assert!(!affects_view);
     assert_eq!(state.render.active_tool, OperatorTool::LineSegment);
@@ -249,7 +242,7 @@ fn next_species_marks_view_dirty_when_ball_tool_is_active() {
     let mut state = build_test_state();
     state.render.active_tool = OperatorTool::Ball;
 
-    let affects_view = state.process_action(InputAction::NextSpecies, None, None);
+    let affects_view = state.process_action(InputAction::NextSpecies);
 
     assert!(!affects_view);
     assert!(state.render.view_dirty);

@@ -782,3 +782,127 @@ mod plot_view {
         assert_eq!(recorded_kin(&shared), 1, "still frozen");
     }
 }
+
+/// The plot window as requests to the backend (#371): `thermo_ui` asks,
+/// the backend owns the OS window.
+mod window_requests {
+    use super::*;
+    use crate::graphics::energy_plot::PlotWindowRequest;
+    use crate::graphics::renderer::event_loop::KeyMap;
+    use crate::graphics::renderer::event_loop::command_registry::PlotChange;
+    use winit::dpi::PhysicalSize;
+    use winit::event::WindowEvent;
+
+    fn open_manager() -> EnergyWindowManager {
+        let mut manager = make_manager();
+        manager.toggle();
+        assert_eq!(
+            manager.take_requests(),
+            [PlotWindowRequest::Open {
+                title: "Plot - E_pot".into()
+            }]
+        );
+        manager.plot_window_opened((640, 480), 1.0);
+        assert_eq!(manager.take_requests(), [PlotWindowRequest::Redraw]);
+        manager
+    }
+
+    #[test]
+    fn test_toggle_asks_for_the_window_once() {
+        let mut manager = make_manager();
+        assert!(!manager.is_open());
+        manager.toggle();
+        assert!(manager.is_open(), "open as soon as it is asked for");
+        assert!(matches!(
+            manager.take_requests().as_slice(),
+            [PlotWindowRequest::Open { .. }]
+        ));
+        // Not drawn before the backend reports its size.
+        assert!(manager.handle_redraw(&KeyMap::default()).is_none());
+    }
+
+    #[test]
+    fn test_toggle_while_open_cycles_the_preset_and_retitles() {
+        let mut manager = open_manager();
+        manager.toggle();
+        assert_eq!(
+            manager.take_requests(),
+            [
+                PlotWindowRequest::SetTitle("Plot - E_kin".into()),
+                PlotWindowRequest::Redraw
+            ]
+        );
+    }
+
+    #[test]
+    fn test_plot_commands_retitle_only_an_open_window() {
+        let mut manager = make_manager();
+        manager.change_plots(PlotChange::CyclePreset);
+        assert!(manager.take_requests().is_empty(), "closed: nothing to ask");
+
+        let mut manager = open_manager();
+        manager.change_plots(PlotChange::AddPlot);
+        assert_eq!(
+            manager.take_requests().first(),
+            Some(&PlotWindowRequest::SetTitle("Plot - 2 plots".into()))
+        );
+    }
+
+    #[test]
+    fn test_close_button_and_close_ask_to_drop_the_window() {
+        let mut manager = open_manager();
+        assert!(manager.handle_event(WindowEvent::CloseRequested, &KeyMap::default()));
+        assert_eq!(manager.take_requests(), [PlotWindowRequest::Close]);
+        assert!(!manager.is_open());
+        manager.close();
+        assert!(manager.take_requests().is_empty(), "closed once");
+    }
+
+    #[test]
+    fn test_the_scene_follows_the_reported_size() {
+        let mut manager = open_manager();
+        let frame = manager.handle_redraw(&KeyMap::default()).unwrap();
+        assert_eq!(frame.scene.size, (640, 480));
+        manager.handle_event(
+            WindowEvent::Resized(PhysicalSize::new(900, 700)),
+            &KeyMap::default(),
+        );
+        assert_eq!(manager.take_requests(), [PlotWindowRequest::Redraw]);
+        let frame = manager.handle_redraw(&KeyMap::default()).unwrap();
+        assert_eq!(frame.scene.size, (900, 700));
+        // Minimised: nothing to draw.
+        manager.handle_event(
+            WindowEvent::Resized(PhysicalSize::new(0, 0)),
+            &KeyMap::default(),
+        );
+        assert!(manager.handle_redraw(&KeyMap::default()).is_none());
+    }
+
+    #[test]
+    fn test_a_failed_window_counts_as_closed() {
+        let mut manager = make_manager();
+        manager.toggle();
+        manager.take_requests();
+        manager.plot_window_failed();
+        assert!(!manager.is_open());
+        manager.toggle();
+        assert!(matches!(
+            manager.take_requests().as_slice(),
+            [PlotWindowRequest::Open { .. }]
+        ));
+    }
+
+    #[test]
+    fn test_throttled_redraws_become_requests() {
+        let mut manager = open_manager();
+        manager.handle_redraw(&KeyMap::default());
+        manager.set_last_redraw_instant(None);
+        manager.request_redraw();
+        manager.request_redraw();
+        assert_eq!(
+            manager.take_requests(),
+            [PlotWindowRequest::Redraw],
+            "coalesced while one is pending"
+        );
+    }
+}
