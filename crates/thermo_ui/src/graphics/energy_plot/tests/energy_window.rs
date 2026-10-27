@@ -2,27 +2,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+use crate::graphics::energy_plot::PlotSelection;
 use crate::graphics::energy_plot::energy_window::*;
-use crate::graphics::energy_plot::{PlotSelection, TimeView};
 use winit::dpi::{PhysicalPosition, PhysicalSize};
-
-#[test]
-fn test_energy_plot_window_new() {
-    use crate::graphics::energy_plot::EnergyData;
-    use std::sync::{Arc, Mutex};
-
-    let energy_data = Arc::new(Mutex::new(EnergyData::new()));
-    let selection = PlotSelection::from_panels(&[&["E_kin", "E_pot"]]);
-    let window = EnergyPlotWindow::new(energy_data, selection.clone());
-
-    assert!(!window.is_open());
-    assert!(window.window_handle().is_none());
-    assert!(
-        window.scene("", &TimeView::default()).is_none(),
-        "a closed window shows nothing"
-    );
-    assert_eq!(window.selection(), &selection);
-}
 
 #[test]
 fn test_window_title_names_the_series_or_the_plot_count() {

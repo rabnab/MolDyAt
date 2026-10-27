@@ -224,7 +224,7 @@ fn delete_hovered_sends_delete_for_the_highlighted_object() {
     state.select_operator_tool(OperatorTool::LineSegment);
     state.render.cursor_world_pos = Vec2D::new(6.0, 0.0);
 
-    InputOrchestrator::process_action(&mut state, delete_hovered(), None, None);
+    InputOrchestrator::process_action(&mut state, delete_hovered());
 
     let commands = log.lock().expect("command log lock");
     let deletes: Vec<&String> = commands
@@ -242,7 +242,7 @@ fn delete_hovered_does_nothing_when_nothing_is_highlighted() {
     state.select_operator_tool(OperatorTool::LineSegment);
     state.render.cursor_world_pos = Vec2D::new(0.0, 8.0);
 
-    InputOrchestrator::process_action(&mut state, delete_hovered(), None, None);
+    InputOrchestrator::process_action(&mut state, delete_hovered());
 
     assert!(log.lock().expect("command log lock").is_empty());
 }

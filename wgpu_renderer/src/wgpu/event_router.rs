@@ -52,7 +52,7 @@ impl EventRouter {
         let targets_main_window = main_window.is_some_and(|window| window.id() == window_id);
         let route = Self::classify_window_event(
             &event,
-            state.energy_manager().is_energy_window_event(window_id),
+            plot.window_id() == Some(window_id),
             ctx.is_some() && pipelines.is_some() && targets_main_window,
         );
 
@@ -73,9 +73,9 @@ impl EventRouter {
                         plot.draw(ctx, frame);
                     }
                 } else {
+                    // ESC or the close button queue a close request, which
+                    // the app carries out after the event.
                     state.handle_energy_window_event(event);
-                    // ESC or the close button closed it: let the window go.
-                    plot.sync(state.energy_manager().window_id());
                 }
             }
             WindowEventRoute::MainWindow => {
@@ -187,8 +187,7 @@ impl EventRouter {
                 };
 
                 if let Some(action) = action {
-                    let dirty =
-                        execute_input_action(action, state, pipelines, window_target, main_window);
+                    let dirty = execute_input_action(action, state, pipelines);
                     Self::view_changed(state, main_window, dirty);
                 }
             }

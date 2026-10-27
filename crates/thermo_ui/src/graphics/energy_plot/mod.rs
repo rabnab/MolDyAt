@@ -13,7 +13,8 @@ mod tests;
 
 pub use energy_data::{EnergyData, SharedEnergyData};
 pub use energy_window::{
-    EnergyPlotWindow, SplitScreenLayout, WindowGeometry, split_screen_layout_for_monitor,
+    DEFAULT_HEIGHT, DEFAULT_WIDTH, MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, PlotWindowRequest,
+    SplitScreenLayout, WindowGeometry, split_screen_layout, window_title,
 };
 pub use plot_layout::{LegendEntry, PanelArea, PlotLabel, PlotRect, PlotScene, PlotSegment};
 pub use plot_selection::{MAX_PLOTS, PRESETS, PlotPanel, PlotSelection};

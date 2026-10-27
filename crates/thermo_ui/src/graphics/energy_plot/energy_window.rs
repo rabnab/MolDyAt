@@ -2,20 +2,20 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use super::energy_data::SharedEnergyData;
-use super::plot_layout::PlotScene;
-use super::plot_selection::PlotSelection;
-use super::time_view::TimeView;
-use std::sync::Arc;
-use winit::dpi::{LogicalSize, PhysicalPosition, PhysicalSize};
-use winit::event_loop::ActiveEventLoop;
-use winit::monitor::MonitorHandle;
-use winit::window::{Window, WindowId};
+//! The plot window as `thermo_ui` sees it (#371): what to ask the backend
+//! for ([`PlotWindowRequest`]), where the window goes on the split screen
+//! and its title. The OS window itself (creating, placing, closing it) is
+//! the backend's: `thermo_ui` uses winit for input types only.
 
-pub(super) const DEFAULT_WIDTH: u32 = 1024;
-pub(super) const DEFAULT_HEIGHT: u32 = 576;
-pub(super) const MIN_WINDOW_WIDTH: u32 = 320;
-pub(super) const MIN_WINDOW_HEIGHT: u32 = 240;
+use super::plot_selection::PlotSelection;
+use winit::dpi::{PhysicalPosition, PhysicalSize};
+
+/// Size of the plot window when no monitor is known.
+pub const DEFAULT_WIDTH: u32 = 1024;
+pub const DEFAULT_HEIGHT: u32 = 576;
+/// Smallest size of the plot window, in logical pixels.
+pub const MIN_WINDOW_WIDTH: u32 = 320;
+pub const MIN_WINDOW_HEIGHT: u32 = 240;
 /// Keep the energy window anchored to the top while leaving room at the bottom.
 pub(super) const ENERGY_WINDOW_BOTTOM_GAP_PX: u32 = 100;
 
@@ -31,8 +31,25 @@ pub struct SplitScreenLayout {
     pub energy: WindowGeometry,
 }
 
-pub fn split_screen_layout_for_monitor(monitor: &MonitorHandle) -> SplitScreenLayout {
-    split_screen_layout(monitor.position(), monitor.size())
+/// What the backend is asked to do with the plot window. The backend owns
+/// the OS window; it takes the requests after each event
+/// (`UnifiedRenderState::take_plot_window_requests`) and reports back with
+/// `EnergyWindowManager::plot_window_opened` (or `plot_window_failed`) and
+/// the window's own events.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PlotWindowRequest {
+    /// Create the window with `title`, at least [`MIN_WINDOW_WIDTH`] ×
+    /// [`MIN_WINDOW_HEIGHT`], placed on the energy half of the main
+    /// window's monitor ([`split_screen_layout`]), else
+    /// [`DEFAULT_WIDTH`] × [`DEFAULT_HEIGHT`]; the simulation window keeps
+    /// its size (#167).
+    Open { title: String },
+    /// Close the window (and drop what draws into it).
+    Close,
+    /// Set the window's title.
+    SetTitle(String),
+    /// Redraw the window (`RedrawRequested`).
+    Redraw,
 }
 
 pub(super) fn preferred_energy_window_size(available_size: PhysicalSize<u32>) -> PhysicalSize<u32> {
@@ -45,7 +62,10 @@ pub(super) fn preferred_energy_window_size(available_size: PhysicalSize<u32>) ->
     PhysicalSize::new(width, height)
 }
 
-pub(super) fn split_screen_layout(
+/// The simulation window on the left half of a monitor at
+/// `monitor_position` of `monitor_size`, the plot window right-aligned on
+/// the other half, below its top and with room at the bottom.
+pub fn split_screen_layout(
     monitor_position: PhysicalPosition<i32>,
     monitor_size: PhysicalSize<u32>,
 ) -> SplitScreenLayout {
@@ -68,143 +88,7 @@ pub(super) fn split_screen_layout(
     }
 }
 
-/// Energy plot window: a separate OS window that shows the history of the
-/// metrics series (#339: any series, several plots).
-///
-/// This type owns the window and what it shows (data and plot selection);
-/// it draws nothing itself. The backend renders [`Self::scene`] into a
-/// surface of its own for [`Self::window_handle`] (the wgpu binary: a
-/// surface on the main window's device).
-pub struct EnergyPlotWindow {
-    window: Option<Arc<Window>>,
-    energy_data: SharedEnergyData,
-    selection: PlotSelection,
-}
-
-impl EnergyPlotWindow {
-    /// A plot window (not yet shown) of `energy_data` with the plots of
-    /// `selection`.
-    pub fn new(energy_data: SharedEnergyData, selection: PlotSelection) -> Self {
-        Self {
-            window: None,
-            energy_data,
-            selection,
-        }
-    }
-
-    /// Create the OS window, at `geometry` (the energy half of the split
-    /// screen) or with the default size.
-    pub fn create(
-        &mut self,
-        window_target: &ActiveEventLoop,
-        geometry: Option<WindowGeometry>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let initial_size = geometry
-            .map(|geometry| geometry.size)
-            .unwrap_or(PhysicalSize::new(DEFAULT_WIDTH, DEFAULT_HEIGHT));
-
-        let mut attrs = Window::default_attributes()
-            .with_title(window_title(&self.selection))
-            .with_inner_size(initial_size)
-            .with_resizable(true)
-            .with_min_inner_size(LogicalSize::new(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT));
-        if let Some(geometry) = geometry {
-            attrs = attrs.with_position(geometry.position);
-        }
-        self.window = Some(Arc::new(window_target.create_window(attrs)?));
-        Ok(())
-    }
-
-    pub fn is_open(&self) -> bool {
-        self.window.is_some()
-    }
-
-    pub fn close(&mut self) {
-        self.window = None;
-    }
-
-    pub fn window_id(&self) -> Option<WindowId> {
-        self.window.as_ref().map(|w| w.id())
-    }
-
-    /// The OS window, for the backend to create its surface from. A backend
-    /// that keeps it must let go of it once [`Self::window_id`] changes or
-    /// the window closes, or the window stays on screen.
-    pub fn window_handle(&self) -> Option<&Arc<Window>> {
-        self.window.as_ref()
-    }
-
-    pub fn focus(&self) {
-        if let Some(window) = &self.window {
-            window.focus_window();
-        }
-    }
-
-    pub fn request_redraw(&self) {
-        if let Some(window) = &self.window {
-            window.request_redraw();
-        }
-    }
-
-    pub fn handle_resize(&mut self, _width: u32, _height: u32) {
-        self.request_redraw();
-    }
-
-    pub fn get_dimensions(&self) -> (u32, u32) {
-        if let Some(window) = &self.window {
-            let size = window.inner_size();
-            (size.width, size.height)
-        } else {
-            (DEFAULT_WIDTH, DEFAULT_HEIGHT)
-        }
-    }
-
-    pub fn get_energy_data(&self) -> &SharedEnergyData {
-        &self.energy_data
-    }
-
-    pub fn selection(&self) -> &PlotSelection {
-        &self.selection
-    }
-
-    /// Change the plots with `change`, given the names of the series on
-    /// offer; the title follows. Returns what `change` returns (whether the
-    /// selection changed).
-    pub fn change_selection(
-        &mut self,
-        change: impl FnOnce(&mut PlotSelection, &[&str]) -> bool,
-    ) -> bool {
-        let changed = {
-            let data = self.energy_data.lock().unwrap_or_else(|e| e.into_inner());
-            change(&mut self.selection, &data.series_names())
-        };
-        if changed && let Some(window) = &self.window {
-            window.set_title(&window_title(&self.selection));
-        }
-        changed
-    }
-
-    /// What the window shows now, laid out for its current size with
-    /// `key_hints` on the title line and the time range of `view`; `None`
-    /// while it is closed or minimised.
-    pub fn scene(&self, key_hints: &str, view: &TimeView) -> Option<PlotScene> {
-        let window = self.window.as_ref()?;
-        let size = window.inner_size();
-        if size.width == 0 || size.height == 0 {
-            return None;
-        }
-        let data = self.energy_data.lock().unwrap_or_else(|e| e.into_inner());
-        Some(PlotScene::build(
-            &data,
-            &self.selection,
-            (size.width, size.height),
-            window.scale_factor(),
-            key_hints,
-            view,
-        ))
-    }
-}
-
-pub(super) fn window_title(selection: &PlotSelection) -> String {
+/// The plot window's title for `selection`.
+pub fn window_title(selection: &PlotSelection) -> String {
     format!("Plot - {}", selection.title())
 }

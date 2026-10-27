@@ -12,15 +12,10 @@ use thermo_runtime::application::{BallCommand, DomainCommand};
 pub(super) struct InputOrchestrator;
 
 impl InputOrchestrator {
-    pub(super) fn process_action(
-        state: &mut UnifiedRenderState,
-        action: InputAction,
-        window_target: Option<&winit::event_loop::ActiveEventLoop>,
-        main_window: Option<&winit::window::Window>,
-    ) -> bool {
+    pub(super) fn process_action(state: &mut UnifiedRenderState, action: InputAction) -> bool {
         match action {
             InputAction::Command(command) => {
-                let affects_view = run_command(state, command, window_target, main_window);
+                let affects_view = run_command(state, command);
                 if affects_view {
                     state.mark_view_dirty();
                 }
@@ -104,7 +99,7 @@ impl InputOrchestrator {
             } else {
                 tool
             };
-            Self::process_action(state, InputAction::SelectOperatorTool(new_tool), None, None);
+            Self::process_action(state, InputAction::SelectOperatorTool(new_tool));
             return true;
         }
 
@@ -117,8 +112,6 @@ impl InputOrchestrator {
                 InputAction::AddBall {
                     position: world_pos,
                 },
-                None,
-                None,
             );
         }
 
@@ -127,7 +120,7 @@ impl InputOrchestrator {
         }) && resp.consumed
         {
             if let Some(cmd) = resp.action {
-                Self::process_action(state, InputAction::OperatorAction(cmd), None, None);
+                Self::process_action(state, InputAction::OperatorAction(cmd));
             }
             if resp.view_dirty {
                 state.mark_view_dirty();
@@ -142,7 +135,7 @@ impl InputOrchestrator {
             world_pos,
             pan_offset,
         ) {
-            return Self::process_action(state, action, None, None);
+            return Self::process_action(state, action);
         }
         false
     }
@@ -163,7 +156,7 @@ impl InputOrchestrator {
             && resp.consumed
             && let Some(cmd) = resp.action
         {
-            Self::process_action(state, InputAction::OperatorAction(cmd), None, None);
+            Self::process_action(state, InputAction::OperatorAction(cmd));
         }
 
         if let Some(action) = state.input.handle_mouse_motion(x, y) {
@@ -171,7 +164,7 @@ impl InputOrchestrator {
                 state.apply_pan_from_input(*delta);
                 return true;
             }
-            return Self::process_action(state, action, None, None);
+            return Self::process_action(state, action);
         }
         false
     }
@@ -200,7 +193,7 @@ impl InputOrchestrator {
             && resp.consumed
         {
             if let Some(cmd) = resp.action {
-                Self::process_action(state, InputAction::OperatorAction(cmd), None, None);
+                Self::process_action(state, InputAction::OperatorAction(cmd));
             }
             if resp.view_dirty {
                 state.mark_view_dirty();
@@ -212,15 +205,15 @@ impl InputOrchestrator {
             match &action {
                 InputAction::ZoomIn { center } => {
                     state.zoom_at_point(center, 1.1);
-                    Self::process_action(state, action, None, None);
+                    Self::process_action(state, action);
                     true
                 }
                 InputAction::ZoomOut { center } => {
                     state.zoom_at_point(center, 1.0 / 1.1);
-                    Self::process_action(state, action, None, None);
+                    Self::process_action(state, action);
                     true
                 }
-                _ => Self::process_action(state, action, None, None),
+                _ => Self::process_action(state, action),
             }
         } else {
             false
@@ -306,8 +299,6 @@ mod tests {
         let affects_view = InputOrchestrator::process_action(
             &mut state,
             InputAction::SelectOperatorTool(OperatorTool::Ball),
-            None,
-            None,
         );
 
         assert!(!affects_view);
@@ -321,8 +312,7 @@ mod tests {
         let mut state = build_test_state();
         state.render.active_tool = OperatorTool::Ball;
 
-        let affects_view =
-            InputOrchestrator::process_action(&mut state, InputAction::NextSpecies, None, None);
+        let affects_view = InputOrchestrator::process_action(&mut state, InputAction::NextSpecies);
 
         assert!(!affects_view);
         assert!(state.render.view_dirty);
@@ -428,8 +418,6 @@ mod tests {
             InputAction::AddBall {
                 position: sphere_center,
             },
-            None,
-            None,
         );
 
         assert!(!result, "blocked ball placement should return false");

@@ -93,6 +93,15 @@ impl WgpuApp {
         }
     }
 
+    /// Carry out what `thermo_ui` asked of the plot window while handling
+    /// the last event (open, close, title, redraw; #371).
+    fn apply_plot_requests(&mut self, event_loop: &ActiveEventLoop) {
+        if let Some(state) = self.state.as_mut() {
+            self.plot
+                .apply_requests(state, event_loop, self.window.as_deref());
+        }
+    }
+
     fn init_if_needed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_some() {
             return;
@@ -125,7 +134,7 @@ impl ApplicationHandler<UserEvent> for WgpuApp {
         self.init_if_needed(event_loop);
     }
 
-    fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: UserEvent) {
+    fn user_event(&mut self, event_loop: &ActiveEventLoop, event: UserEvent) {
         match event {
             UserEvent::NewSnapshot => {
                 // Pull latest snapshot and request redraws for both windows
@@ -135,6 +144,7 @@ impl ApplicationHandler<UserEvent> for WgpuApp {
                         FrameRenderer::apply_window_size_request(state, window.as_ref(), ctx);
                     }
                 }
+                self.apply_plot_requests(event_loop);
             }
         }
     }
@@ -157,6 +167,7 @@ impl ApplicationHandler<UserEvent> for WgpuApp {
         let window = self.window.as_deref();
 
         EventRouter::route_window_event(window_id, event, gpu, state, event_loop, window);
+        self.apply_plot_requests(event_loop);
     }
 
     fn device_event(

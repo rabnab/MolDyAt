@@ -2,10 +2,12 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Energy window manager: creating and closing the energy plot window, its
-//! keys and mouse gestures, data updates, and when it is redrawn. The
-//! backend draws the [`PlotFrame`] that [`EnergyWindowManager::handle_redraw`]
-//! hands out.
+//! Energy window manager: whether the plot window is open, its keys and
+//! mouse gestures, data updates, and when it is redrawn. The backend owns
+//! the OS window (#371): it carries out the [`PlotWindowRequest`]s this
+//! manager queues (open, close, title, redraw), reports the window's size
+//! back, and draws the [`PlotFrame`] that
+//! [`EnergyWindowManager::handle_redraw`] hands out.
 //!
 //! Mouse (#367): the scroll wheel zooms the plot's time range around the
 //! pointer, a middle-button drag pans it, a middle-button double click (or
@@ -16,17 +18,14 @@ use super::input_handler::key_input;
 use super::key_map::{HeldModifiers, KeyMap, KeyPhase};
 use super::operator_tool_handler::scroll_y_from_delta;
 use crate::graphics::energy_plot::{
-    EnergyPlotWindow, LegendEntry, PanelArea, PlotRect, PlotScene, PlotSelection, SharedEnergyData,
-    TimeHistory, TimeView, split_screen_layout_for_monitor,
+    LegendEntry, PanelArea, PlotRect, PlotScene, PlotSelection, PlotWindowRequest,
+    SharedEnergyData, TimeHistory, TimeView, window_title,
 };
 use crate::graphics::renderer::event_loop::metrics::FrameMetrics;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 use thermo_runtime::application::renderer_snapshot::RendererSnapshot;
 use winit::event::{ElementState, MouseButton, WindowEvent};
-use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::KeyCode;
-use winit::window::{Window, WindowId};
 
 /// What a key does while the energy window has the focus.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -161,16 +160,26 @@ struct PlotPointer {
     last_middle_press: Option<(Instant, [f32; 2])>,
 }
 
-/// One redraw of the energy window: the window to draw into and what to draw.
+/// One redraw of the plot window: what to draw into the backend's window.
 pub struct PlotFrame {
-    pub window: Arc<Window>,
     pub scene: PlotScene,
+}
+
+/// The plot window while it is open, as the backend reported it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct PlotWindow {
+    /// Inner size in physical pixels; `(0, 0)` until the backend reports
+    /// it, and while the window is minimised.
+    size: (u32, u32),
+    scale_factor: f64,
 }
 
 /// Manages the energy plot window lifecycle and data updates.
 pub struct EnergyWindowManager {
-    /// The energy plot window (if open)
-    window: Option<EnergyPlotWindow>,
+    /// The plot window while it is open (the backend owns the OS window).
+    window: Option<PlotWindow>,
+    /// What the backend is to do with the window, oldest first.
+    requests: Vec<PlotWindowRequest>,
     /// Shared energy data (shared with window)
     energy_data: SharedEnergyData,
     /// Instant of the most recent energy window render completion.
@@ -212,6 +221,7 @@ impl EnergyWindowManager {
     pub fn new(energy_data: SharedEnergyData) -> Self {
         Self {
             window: None,
+            requests: Vec::new(),
             energy_data,
             last_redraw_instant: None,
             redraw_pending: false,
@@ -281,20 +291,43 @@ impl EnergyWindowManager {
     }
 
     fn edit_selection(&mut self, change: impl FnOnce(&mut PlotSelection, &[&str]) -> bool) -> bool {
-        let changed = match &mut self.window {
-            Some(window) => window.change_selection(change),
-            None => {
-                let data = self.energy_data.lock().unwrap_or_else(|e| e.into_inner());
-                change(&mut self.selection, &data.series_names())
-            }
+        let changed = {
+            let data = self.energy_data.lock().unwrap_or_else(|e| e.into_inner());
+            change(&mut self.selection, &data.series_names())
         };
-        if let Some(window) = &self.window {
-            self.selection = window.selection().clone();
-        }
-        if changed {
+        if changed && self.window.is_some() {
+            self.requests
+                .push(PlotWindowRequest::SetTitle(window_title(&self.selection)));
             self.redraw_now();
         }
         changed
+    }
+
+    /// Whether the plot window is open (or asked for).
+    pub fn is_open(&self) -> bool {
+        self.window.is_some()
+    }
+
+    /// What the backend is to do with the plot window, oldest first; the
+    /// queue is empty afterwards.
+    pub fn take_requests(&mut self) -> Vec<PlotWindowRequest> {
+        std::mem::take(&mut self.requests)
+    }
+
+    /// The backend created the window asked for with
+    /// [`PlotWindowRequest::Open`]: its inner size (physical pixels) and
+    /// scale factor. It is drawn at once.
+    pub fn plot_window_opened(&mut self, size: (u32, u32), scale_factor: f64) {
+        if let Some(window) = &mut self.window {
+            *window = PlotWindow { size, scale_factor };
+            self.redraw_now();
+        }
+    }
+
+    /// The backend could not create the window: it counts as closed.
+    pub fn plot_window_failed(&mut self) {
+        self.window = None;
+        self.redraw_pending = false;
     }
 
     /// The plot's time range.
@@ -371,8 +404,8 @@ impl EnergyWindowManager {
     /// Redraw promptly after a view change, not waiting for the throttle that
     /// paces redraws for new samples.
     fn redraw_now(&mut self) {
-        if let Some(window) = &self.window {
-            window.request_redraw();
+        if self.window.is_some() {
+            self.requests.push(PlotWindowRequest::Redraw);
             self.redraw_pending = true;
         }
     }
@@ -457,44 +490,33 @@ impl EnergyWindowManager {
         true
     }
 
-    /// Get the window ID if the energy window is open.
-    pub fn window_id(&self) -> Option<WindowId> {
-        self.window.as_ref().and_then(|w| w.window_id())
-    }
-
-    /// Check if this window event is for the energy window.
-    pub fn is_energy_window_event(&self, window_id: WindowId) -> bool {
-        log::trace!(
-            "Checking if event for window {:?} matches energy window {:?}",
-            window_id,
-            self.window_id()
-        );
-        self.window_id() == Some(window_id)
-    }
-
-    /// Open the energy window, or give the focused plot the next energy
+    /// Open the plot window, or give the focused plot the next energy
     /// preset while it is open. A reopened window shows the plots it had.
-    pub fn toggle(&mut self, window_target: &ActiveEventLoop, main_window: Option<&Window>) {
-        let split_layout = main_window
-            .and_then(|window| window.current_monitor())
-            .or_else(|| window_target.primary_monitor())
-            .map(|monitor| split_screen_layout_for_monitor(&monitor));
-
-        if self.window.as_ref().is_some_and(EnergyPlotWindow::is_open) {
+    /// Opening queues a [`PlotWindowRequest::Open`] for the backend, which
+    /// places the window on the split screen (#167).
+    pub fn toggle(&mut self) {
+        if self.window.is_some() {
             self.change_plots(PlotChange::CyclePreset);
             return;
         }
-        let mut window = EnergyPlotWindow::new(self.energy_data.clone(), self.selection.clone());
-        if let Err(e) = window.create(window_target, split_layout.map(|layout| layout.energy)) {
-            eprintln!("Failed to create energy window: {}", e);
-            return;
-        }
-        self.window = Some(window);
+        self.window = Some(PlotWindow {
+            size: (0, 0),
+            scale_factor: 1.0,
+        });
+        self.redraw_pending = false;
+        self.requests.push(PlotWindowRequest::Open {
+            title: window_title(&self.selection),
+        });
     }
 
-    /// Close the energy window.
+    /// Close the plot window (`ESC`, its close button): the backend drops
+    /// it. The plots and the time view stay for the next opening.
     pub fn close(&mut self) {
-        self.window = None;
+        if self.window.take().is_some() {
+            self.requests.push(PlotWindowRequest::Close);
+        }
+        self.redraw_pending = false;
+        self.pointer.drag = None;
     }
 
     /// Handle a window event for the energy window.
@@ -505,13 +527,21 @@ impl EnergyWindowManager {
     pub fn handle_event(&mut self, event: WindowEvent, key_map: &KeyMap) -> bool {
         match event {
             WindowEvent::CloseRequested => {
-                self.window = None;
+                self.close();
                 true
             }
             WindowEvent::Resized(size) => {
                 if let Some(window) = &mut self.window {
-                    window.handle_resize(size.width, size.height);
+                    window.size = (size.width, size.height);
                 }
+                self.redraw_now();
+                true
+            }
+            WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                if let Some(window) = &mut self.window {
+                    window.scale_factor = scale_factor;
+                }
+                self.redraw_now();
                 true
             }
             WindowEvent::ModifiersChanged(modifiers) => {
@@ -531,7 +561,7 @@ impl EnergyWindowManager {
                     ElementState::Released => KeyPhase::Up,
                 };
                 match energy_window_key(key_map, input, phase, self.modifiers) {
-                    Some(EnergyWindowKey::Close) => self.window = None,
+                    Some(EnergyWindowKey::Close) => self.close(),
                     Some(EnergyWindowKey::Plot(change)) => {
                         self.change_plots(change);
                     }
@@ -557,20 +587,34 @@ impl EnergyWindowManager {
     /// `None` without a window, or while it is minimised.
     pub fn handle_redraw(&mut self, key_map: &KeyMap) -> Option<PlotFrame> {
         log::trace!("EnergyWindowManager: handle_redraw called");
-        let window = self.window.as_ref()?;
-        let handle = Arc::clone(window.window_handle()?);
+        let window = *self.window.as_ref()?;
         self.redraw_pending = false;
         self.last_redraw_instant = Some(Instant::now());
-        let scene = window.scene(&energy_window_key_hints(key_map), &self.view)?;
+        let scene = self.scene(window, &energy_window_key_hints(key_map))?;
         self.geometry = scene
             .plot_area
             .zip(scene.history)
             .map(|(area, history)| PlotGeometry { area, history });
         self.targets = ClickTargets::of(&scene);
-        Some(PlotFrame {
-            window: handle,
-            scene,
-        })
+        Some(PlotFrame { scene })
+    }
+
+    /// What the window shows now, laid out for its size; `None` while its
+    /// size is not known yet or it is minimised.
+    fn scene(&self, window: PlotWindow, key_hints: &str) -> Option<PlotScene> {
+        let (width, height) = window.size;
+        if width == 0 || height == 0 {
+            return None;
+        }
+        let data = self.energy_data.lock().unwrap_or_else(|e| e.into_inner());
+        Some(PlotScene::build(
+            &data,
+            &self.selection,
+            window.size,
+            window.scale_factor,
+            key_hints,
+            &self.view,
+        ))
     }
 
     /// Request a redraw for the energy window if it is open.
@@ -600,10 +644,8 @@ impl EnergyWindowManager {
             // stealing frame time from the main simulation.
             return;
         }
-        if let Some(window) = &self.window {
-            window.request_redraw();
-            self.redraw_pending = true;
-        }
+        self.requests.push(PlotWindowRequest::Redraw);
+        self.redraw_pending = true;
     }
 
     /// Update energy data from a snapshot.

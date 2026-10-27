@@ -15,15 +15,15 @@ use super::wgpu_pipelines::WgpuPipelines;
 /// Execute input actions from the centralized InputHandler.
 ///
 /// Only handles actions that target a render pipeline.
-/// All other actions (including ToggleEnergyWindow) are delegated to UnifiedRenderState.
+/// All other actions are delegated to UnifiedRenderState; opening the plot
+/// window there only queues a request, which the app carries out after the
+/// event (#371).
 ///
 /// Returns `true` if the action affects the viewport.
 pub fn execute_input_action(
     action: InputAction,
     state: &mut UnifiedRenderState,
     pipelines: &mut WgpuPipelines,
-    window_target: &winit::event_loop::ActiveEventLoop,
-    main_window: &winit::window::Window,
 ) -> bool {
     // Handle ONLY actions that target a render pipeline
     if action.ui_action() == Some(UiAction::CycleCutoffRings) {
@@ -32,6 +32,5 @@ pub fn execute_input_action(
     }
 
     // Delegate all other actions to UnifiedRenderState (single source of truth)
-    // Pass window_target so ToggleEnergyWindow can be handled
-    state.process_action(action, Some(window_target), Some(main_window))
+    state.process_action(action)
 }
