@@ -2,8 +2,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use crate::graphics::energy_plot::DisplayMode;
 use crate::graphics::energy_plot::energy_window::*;
+use crate::graphics::energy_plot::{DisplayMode, TimeView};
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 
 #[test]
@@ -16,7 +16,10 @@ fn test_energy_plot_window_new() {
 
     assert!(!window.is_open());
     assert!(window.window_handle().is_none());
-    assert!(window.scene("").is_none(), "a closed window shows nothing");
+    assert!(
+        window.scene("", &TimeView::default()).is_none(),
+        "a closed window shows nothing"
+    );
     assert_eq!(window.get_display_mode(), DisplayMode::All);
 }
 

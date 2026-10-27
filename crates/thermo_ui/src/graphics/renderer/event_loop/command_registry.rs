@@ -65,6 +65,8 @@ pub enum UiAction {
     CycleThermoDisplay,
     CyclePlotContent,
     ToggleEnergyWindow,
+    /// The energy plot's time view (zoom and pan, #367) back to its default.
+    ResetPlotView,
     DeleteHovered,
 }
 
@@ -506,6 +508,13 @@ pub static COMMANDS: &[CommandDescriptor] = &[
         category: CommandCategory::View,
         default_binding: &[key(KeyCode::Tab, Release)],
         kind: CommandKind::Ui(UiAction::ToggleEnergyWindow),
+    },
+    CommandDescriptor {
+        id: "view.reset_plot_view",
+        label: "Reset the energy plot's time range (follow the newest sample; also a middle double click in the plot).",
+        category: CommandCategory::View,
+        default_binding: &[key(KeyCode::Home, PressOnce)],
+        kind: CommandKind::Ui(UiAction::ResetPlotView),
     },
     CommandDescriptor {
         id: "view.toggle_real_data",

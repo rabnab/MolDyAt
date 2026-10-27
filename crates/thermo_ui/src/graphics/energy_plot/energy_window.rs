@@ -4,6 +4,7 @@
 
 use super::energy_data::{DisplayMode, SharedEnergyData};
 use super::plot_layout::PlotScene;
+use super::time_view::TimeView;
 use std::sync::Arc;
 use winit::dpi::{LogicalSize, PhysicalPosition, PhysicalSize};
 use winit::event_loop::ActiveEventLoop;
@@ -179,8 +180,9 @@ impl EnergyPlotWindow {
     }
 
     /// What the window shows now, laid out for its current size with
-    /// `key_hints` on the title line; `None` while it is closed or minimised.
-    pub fn scene(&self, key_hints: &str) -> Option<PlotScene> {
+    /// `key_hints` on the title line and the time range of `view`; `None`
+    /// while it is closed or minimised.
+    pub fn scene(&self, key_hints: &str, view: &TimeView) -> Option<PlotScene> {
         let window = self.window.as_ref()?;
         let size = window.inner_size();
         if size.width == 0 || size.height == 0 {
@@ -193,6 +195,7 @@ impl EnergyPlotWindow {
             (size.width, size.height),
             window.scale_factor(),
             key_hints,
+            view,
         ))
     }
 }
