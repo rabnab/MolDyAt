@@ -12,6 +12,7 @@ fn test_series_csv_round_trips_columns_units_and_gaps() {
         rows[0],
         [
             "step",
+            "time",
             "E_kin [J]",
             "E_pot [J]",
             "E_tot [J]",
@@ -20,11 +21,12 @@ fn test_series_csv_round_trips_columns_units_and_gaps() {
         ]
     );
     assert_eq!(rows.len(), 4);
-    assert_eq!(rows[1][0], "10");
-    assert_eq!(rows[3][1].parse::<f32>().unwrap(), 2.5);
+    assert_eq!(rows[1][..2], ["10", "1"]);
+    assert_eq!(rows[3][1], "3", "the simulation time of the sample");
+    assert_eq!(rows[3][2].parse::<f32>().unwrap(), 2.5);
     // `late` has no value at the first step; E_tot and wall_momentum never had any.
-    assert_eq!(rows[1][4], "");
-    assert_eq!(rows[2][4].parse::<f32>().unwrap(), 100.0);
+    assert_eq!(rows[1][5], "");
+    assert_eq!(rows[2][5].parse::<f32>().unwrap(), 100.0);
 }
 
 #[test]
@@ -40,8 +42,8 @@ fn test_series_selection_and_non_finite_values() {
         ExportFormat::Csv,
         None,
     ));
-    assert_eq!(rows[0], ["step", "E_kin [J]"]);
-    assert_eq!(rows[4], ["40", ""]);
+    assert_eq!(rows[0], ["step", "time", "E_kin [J]"]);
+    assert_eq!(rows[4], ["40", "4", ""]);
 }
 
 #[test]
@@ -66,6 +68,8 @@ fn test_series_jsonl_round_trips_with_null_for_gaps() {
     assert_eq!(e_kin["unit"], "J");
     assert_eq!(records[1]["record_kind"], "series_row");
     assert_eq!(records[1]["values"]["E_kin"], 0.5);
+    assert_eq!(records[1]["step"], 10);
+    assert_eq!(records[1]["time"], 1.0);
     assert!(records[1]["values"]["late"].is_null());
     assert!(records[4]["values"]["E_kin"].is_null());
 }

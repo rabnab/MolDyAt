@@ -247,10 +247,12 @@ impl MetricsRegistry {
         self.version = self.version.wrapping_add(1);
     }
 
-    /// Add a sample step without sampling a world (tests).
+    /// Add a sample step without sampling a world (tests); its time is a
+    /// tenth of the step.
     #[cfg(test)]
     pub(crate) fn push_step_for_test(&mut self, step: u64) {
         self.steps.push(step);
+        self.times.push(step as f32 / 10.0);
     }
 
     /// The step of every sample, oldest first; the newest entry of each

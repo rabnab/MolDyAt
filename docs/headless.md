@@ -144,10 +144,10 @@ their shortest round-trip form, and the same seed, flags and build give
 byte-identical files. JSONL records carry `schema_version: "export.v1"` and a
 `record_kind`; consumers ignore unknown kinds and fields.
 
-| File     | CSV                                                                                                                                                                                        | JSONL                                                                                                                                                 |
-|----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
-| series   | Header `step,<name>[ [<unit>]],…` with the series sorted by name (`E_kin [J]`, `N2:count`), then one row per sampled step. A series registered later has empty cells for the earlier steps | `series_header` (`rows`, `series`: name, unit, description, per_species), then one `series_row` per step (`step`, `values` object)                    |
-| snapshot | `id,species,x,y,vx,vy,mass,contact_radius`, one row per ball sorted by id                                                                                                                  | `snapshot_header` (`step`, `time`, `ball_count`), then one `ball` record per ball (`id`, `species`, `position`, `velocity`, `contact_radius`, `mass`) |
+| File     | CSV                                                                                                                                                                                                                      | JSONL                                                                                                                                                 |
+|----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
+| series   | Header `step,time,<name>[ [<unit>]],…` with the series sorted by name (`E_kin [J]`, `N2:count`), then one row per sampled step with its simulation time. A series registered later has empty cells for the earlier steps | `series_header` (`rows`, `series`: name, unit, description, per_species), then one `series_row` per step (`step`, `time`, `values` object)            |
+| snapshot | `id,species,x,y,vx,vy,mass,contact_radius`, one row per ball sorted by id                                                                                                                                                | `snapshot_header` (`step`, `time`, `ball_count`), then one `ball` record per ball (`id`, `species`, `position`, `velocity`, `contact_radius`, `mass`) |
 
 The series are those of the `MetricsRegistry` (`E_kin`, `E_pot`, `E_tot`,
 `wall_momentum`, `<species>:count`), sampled at snapshot cadence. The registry keeps
@@ -189,7 +189,11 @@ run, a sample stream appends each sample to a file as it is taken (#366):
 
 Rows go through a buffered writer that is flushed within about a second
 (`FLUSH_INTERVAL`) and when the stream stops, so a crash loses at most the last
-second. A new world (a loaded save) or another set of series (another species
+second. The stream writes on the physics thread (interactively) or the run's
+thread (headless): a slow or stalled target (a network share, a spun-down disk)
+stalls the simulation with it, so point it at a local disk. It is fed after
+every sample; samples the registry evicted before the stream saw them are an
+error, never a silent gap. A new world (a loaded save) or another set of series (another species
 table) starts a new file (`_01`, `_02`, … suffix), so one file never mixes
 worlds. A write error stops the stream and is reported once; the simulation goes
 on. In a headless run the error is returned after `run_end`, the timings report
