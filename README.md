@@ -550,14 +550,18 @@ wgpu_renderer/
     ├── main.rs                # Entry point, Rayon init, window creation
     ├── cli/                   # Command-line parsing
     └── wgpu/
-        ├── wgpu_context.rs    # Device / queue / surface setup, backend choice
-        ├── wgpu_window.rs     # winit event loop, frame submission
-        ├── render_graph.rs    # RenderGraph orchestrator
-        ├── wgpu_pipelines.rs  # Pipeline registry with named handles
-        ├── pipelines/         # ball, grid, line, wall, valve, thermostat, sidebar, …
-        ├── gpu/               # Textures, embedded icons
-        ├── icons/             # Sidebar tool icons (PNG, embedded at compile time)
-        └── shaders/           # WGSL shader sources
+        ├── shell/             # winit: event loop, main and plot windows, input
+        │   ├── wgpu_window.rs #   ApplicationHandler, wires shell and renderer
+        │   └── plot_window.rs #   Plot window created/closed as thermo_ui asks
+        └── render/            # wgpu, no winit: context, surfaces, pipelines
+            ├── wgpu_context.rs    # Device / queue / surface setup, backend choice
+            ├── frame.rs           # One frame, drawn without a window
+            ├── render_graph.rs    # RenderGraph orchestrator
+            ├── wgpu_pipelines.rs  # Pipeline registry with named handles
+            ├── pipelines/         # ball, grid, line, wall, valve, thermostat, sidebar, …
+            ├── gpu/               # GpuBatch, textures, bitmap text
+            ├── icons/             # Sidebar tool icons (PNG, embedded at compile time)
+            └── shaders/           # WGSL shader sources
 ```
 
 ## Documentation

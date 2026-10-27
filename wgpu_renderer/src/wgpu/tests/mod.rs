@@ -9,6 +9,7 @@ mod gpu_smoke;
 mod highlight_pipeline;
 mod plot_pipeline;
 mod plot_window;
+mod render_guard;
 mod sidebar_pipeline;
 mod source_label_pipeline;
 mod text_pipeline;

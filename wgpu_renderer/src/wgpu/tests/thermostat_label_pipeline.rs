@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use crate::wgpu::pipelines::thermostat_label_pipeline::ThermostatLabelPipeline;
+use crate::wgpu::render::pipelines::thermostat_label_pipeline::ThermostatLabelPipeline;
 use thermo_physics::objects2d::{SimThermostat, Vec2D};
 
 fn identity_view_proj() -> [[f32; 4]; 4] {

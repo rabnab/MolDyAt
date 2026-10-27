@@ -7,7 +7,7 @@ use thermo_physics::objects2d::wall_chain::ObjectRef;
 use thermo_physics::objects2d::{SOURCE_SPHERE_RADIUS, SimLineSegment, SimSourceSphere, Vec2D};
 use thermo_runtime::application::renderer_snapshot::{OperatorSnapshot, ValveSpan, WallSnapshot};
 
-use crate::wgpu::pipelines::highlight_pipeline::highlight_capsule;
+use crate::wgpu::render::pipelines::highlight_pipeline::highlight_capsule;
 
 const EXTENT: f32 = 40.0;
 

@@ -8,9 +8,9 @@
 use thermo_ui::graphics::energy_plot::plot_layout::{BACKGROUND, GLYPH_CELL};
 use thermo_ui::graphics::energy_plot::{PlotLabel, PlotScene, PlotSegment};
 
-use crate::wgpu::gpu::text::ASCII_CHARS;
-use crate::wgpu::pipelines::plot_pipeline::{push_label, segment_instances};
-use crate::wgpu::plot_surface::plot_surface_format;
+use crate::wgpu::render::gpu::text::ASCII_CHARS;
+use crate::wgpu::render::pipelines::plot_pipeline::{push_label, segment_instances};
+use crate::wgpu::render::plot_surface::plot_surface_format;
 
 fn scene(segments: Vec<PlotSegment>, labels: Vec<PlotLabel>) -> PlotScene {
     PlotScene {
@@ -116,4 +116,26 @@ fn plot_surface_prefers_8_bit_formats_without_srgb_encoding() {
     );
     assert_eq!(plot_surface_format(&[Rgba8UnormSrgb]), Some(Rgba8UnormSrgb));
     assert_eq!(plot_surface_format(&[]), None);
+}
+
+/// A surface that could not be made is not retried at every redraw, only
+/// for the next window (#365 review); windows are opaque ids (#372).
+#[test]
+fn plot_surfaces_try_a_failed_window_once() {
+    use crate::wgpu::render::plot_surface::PlotSurfaces;
+
+    let (first, second) = (1_u64, 2_u64);
+    let mut surfaces = PlotSurfaces::default();
+    assert!(surfaces.should_create(first));
+
+    surfaces.mark_failed(first);
+    surfaces.sync(Some(first));
+    assert!(!surfaces.should_create(first), "same window: no retry");
+
+    // Closed, then a new window: it gets its own try.
+    surfaces.sync(None);
+    assert!(surfaces.should_create(first));
+    surfaces.mark_failed(first);
+    surfaces.sync(Some(second));
+    assert!(surfaces.should_create(second));
 }

@@ -3,7 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::wgpu::MARGINS;
-use crate::wgpu::pipelines::text_pipeline::cursor_text_vertices;
+use crate::wgpu::render::pipelines::text_pipeline::cursor_text_vertices;
 
 #[test]
 fn cursor_text_emits_one_quad_per_character() {
@@ -34,7 +34,7 @@ fn cursor_text_sits_in_the_bottom_margin_right_of_the_pane() {
 /// The cursor readout names the species of new balls (#238).
 #[test]
 fn readout_names_the_species_of_new_balls() {
-    use crate::wgpu::pipelines::text_pipeline::cursor_readout;
+    use crate::wgpu::render::pipelines::text_pipeline::cursor_readout;
     use thermo_runtime::application::renderer_snapshot::RendererSnapshot;
     let mut snapshot = RendererSnapshot::new();
     assert_eq!(

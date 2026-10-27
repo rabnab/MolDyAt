@@ -16,7 +16,7 @@ are in [refactoring-plan.md](plan/refactoring-plan.md).
 | `crates/thermo_physics` | `thermo_physics` | The physics: particles and species, pair potentials and the SIMD force kernel, cell grid and Verlet lists, walls and operators (`objects2d`); the world, `MainContent` and its stepping (`application/core`); run settings (`sim_config`), units, stats, thermo fields and saves (`persistence`). Dependencies: rayon, serde, rand, toml, log |
 | `crates/thermo_runtime` | `thermo_runtime` | Running a simulation without a window: the physics thread and its `SnapshotPublisher`, `DomainCommand` and its handler, `OperatorCommand`s, `PhysicsEvent`, `RendererSnapshot` and its builder (`CreateSnapshot`), scene layers, the metrics store (`metrics`), the data export (`export`), and headless runs (`headless_cli`, `headless_runner`, `headless_output`, `headless_timings`). Dependencies: `thermo_physics`, arc-swap, serde_json, rayon, log |
 | `crates/thermo_ui` | `thermo_ui` | The UI without a GPU backend (`graphics`): event loop and input handling, the keyboard command registry and key map, operator tools, viewport, sidebar model, and the energy plot window's state with its plot layout (`PlotScene`, drawn by the backend, which owns the OS window, #371); plus the logger setup and the UI settings file (`ui_settings`: `ui.toml` with the key bindings, #335). Dependencies: `thermo_runtime`, `thermo_physics`, winit (input types only: keys, mouse and window events), arc-swap, toml, log, env_logger |
-| `wgpu_renderer` | `moldyat_wgpu` | The `moldyat` binary: command line, the wgpu window and render pipelines, and the energy plot's OS window and surface (`plot_surface`, created and closed as `thermo_ui` asks, #371). For `--headless` it computes the default world from its window size and calls `thermo_runtime`, handing it the git commit it was built from (`HeadlessRunner::from_config`) |
+| `wgpu_renderer` | `moldyat_wgpu` | The `moldyat` binary: command line, the app shell (`wgpu/shell`: winit event loop, the main and plot windows, the plot window created and closed as `thermo_ui` asks, #371) and the renderer (`wgpu/render`: GPU context, surfaces, render pipelines; no winit, #372). For `--headless` it computes the default world from its window size and calls `thermo_runtime`, handing it the git commit it was built from (`HeadlessRunner::from_config`) |
 
 Dependencies point one way: `moldyat_wgpu` → `thermo_ui` →
 `thermo_runtime` → `thermo_physics`. `thermo_physics` and `thermo_runtime`
@@ -62,7 +62,7 @@ UnifiedRenderState + orchestrators           │
    │                                         │   MainContent::step_recording_thermo_fields
    │  RendererSnapshot ◄── ArcSwap slot ──  SnapshotPublisher (CreateSnapshot)
    │  PhysicsEvent     ◄── mpsc channel ──  (save / load results)
-FrameRenderer → RenderGraph → GPU
+FrameRenderer (shell) → draw_main_frame → RenderGraph → GPU (render)
 ```
 
 - **Main thread.** Owns the window, input handling, the viewport, the active
@@ -145,15 +145,35 @@ split into stateless orchestrators that operate on `RenderStateData`:
 
 ### Backend
 
-| Type | Responsibility |
-|---|---|
-| `WgpuWindow` | winit application shell |
-| `AppLifecycle` | Creates the window, GPU context, pipelines and shared state |
-| `EventRouter` | Classifies window and device events and dispatches them |
-| `FrameRenderer` | Redraws: prepares pipelines from the snapshot and submits the frame |
-| `WgpuContext` | Instance, device, queue, surface and adapter |
-| `PlotSurface` | The energy plot window's surface and `PlotPipeline`, on the main window's device |
-| `RenderGraph` / `WgpuPipelines` | Ordered set of render pipelines with named handles |
+`wgpu_renderer/src/wgpu/` is two modules with a one-way dependency (#372),
+shell → render:
+
+- **`shell/`** talks to the OS: the winit event loop, the main and plot
+  windows, input into `UnifiedRenderState`, redraw requests, sizes.
+- **`render/`** draws: the GPU context and surfaces, the pipelines, the
+  render graph, one frame without a window. It uses no winit (a test,
+  `tests/render_guard.rs`, fails on a `winit` outside comments under
+  `render/`). What it needs of a window is `RenderWindow`
+  (`render/surface_window.rs`: raw window and display handles, size,
+  request a redraw, about to present), which the shell implements for
+  winit's `Window` (`shell/winit_window.rs`).
+
+The data the renderer draws comes from `thermo_ui` (`RendererSnapshot`,
+`PlotScene`), so the split keeps the renderer free of the OS, not of the
+UI. A later crate split (library for `render`, binary for `shell`) is then
+a file move.
+
+| Module | Type | Responsibility |
+|---|---|---|
+| `shell` | `WgpuWindow` | winit `ApplicationHandler`; carries out the plot window requests after every event |
+| `shell` | `AppLifecycle` | Creates the main window, GPU context, pipelines and shared state |
+| `shell` | `EventRouter` | Classifies window and device events and dispatches them |
+| `shell` | `FrameRenderer` | The window side of a frame: redraw requests, the requested window size, acting on a `FrameOutcome` (configure the surface, redraw, exit) |
+| `shell` | `PlotTarget` (`plot_window.rs`) | The plot window's OS window (#371): created, retitled and closed as `thermo_ui` asks |
+| `render` | `WgpuContext` | Instance, device, queue, main surface and adapter, created from a `RenderWindow` and the display handle |
+| `render` | `draw_main_frame` / `encode_frame` (`frame.rs`) | One frame: prepare the pipelines from the snapshot, record into a target view (the surface texture, or an offscreen texture in the GPU smoke tests), present; returns a `FrameOutcome` |
+| `render` | `PlotSurface` / `PlotSurfaces` | The plot window's surface and `PlotPipeline` on the main window's device, kept per window by an opaque id (`u64`, from the shell) |
+| `render` | `RenderGraph` / `WgpuPipelines` | Ordered set of render pipelines with named handles |
 
 ## Command flow
 
@@ -275,7 +295,9 @@ back as `PhysicsEvent`s on a second channel.
    publishes nothing.
 2. A wakeup callback asks the winit event loop for a redraw.
 3. `PhysicsCoordinator` hands the latest snapshot to the orchestrators;
-   `FrameRenderer` prepares the pipelines from it and submits the frame.
+   On the redraw, `FrameRenderer` (shell) has the renderer draw the frame
+   (`draw_main_frame`: prepare the pipelines from the snapshot, record,
+   submit, present) and acts on its `FrameOutcome`.
 
 The renderer chooses which `SceneLayers` it needs (`BASE`, `BALLS`, `THERMO`,
 `READOUTS`) with a `View` command. The physics thread builds only those
@@ -285,7 +307,7 @@ requested. With rendering switched off (F2), only `BASE` is requested.
 ## Render pipelines
 
 Every visual layer is one `RenderPipeline` in
-`wgpu_renderer/src/wgpu/pipelines/`, registered in draw order in
+`wgpu_renderer/src/wgpu/render/pipelines/`, registered in draw order in
 `WgpuPipelines::new`. All of them follow one pattern:
 
 - `new(device, queue, format)`, then `prepare()` fills a `Vec` of
@@ -394,7 +416,7 @@ input types only. The manager asks for it with `PlotWindowRequest`s (`Open`
 with the title, `Close`, `SetTitle`, `Redraw`), queued while it handles
 an event and taken by the app after every event
 (`UnifiedRenderState::take_plot_window_requests`). `PlotTarget`
-(`plot_surface.rs`) carries them out (`handle_plot_requests`, tested with a
+(`shell/plot_window.rs`) carries them out (`handle_plot_requests`, tested with a
 fake window): it creates the window on the energy half of the main
 window's monitor (`split_screen_layout`, pure, in `thermo_ui`; the
 simulation window keeps its size, #167), with the minimum size
@@ -406,16 +428,18 @@ events, which the router hands to the manager by window id
 
 The binary draws it: on a `RedrawRequested` for the plot window,
 `UnifiedRenderState::energy_window_redraw` hands out a `PlotFrame` (the
-scene, laid out for the reported size), and `PlotTarget` renders it into a surface
-of its own, created from the shared `Instance` and drawn with the shared
-device and queue. `PlotPipeline` (`pipelines/plot_pipeline.rs`) is not part
+scene, laid out for the reported size), and `PlotTarget` hands it to the
+renderer's `PlotSurfaces` (`render/plot_surface.rs`), which draws it into a
+surface of its own, created from the shared `Instance` and drawn with the
+shared device and queue; it knows the window as a `RenderWindow` and an
+opaque id. `PlotPipeline` (`pipelines/plot_pipeline.rs`) is not part
 of the render graph: it draws a scene, not a snapshot, with two
 `GpuBatch`es, anti-aliased round-capped segments (`plot_segment.wgsl`) and
 coloured 8×8 bitmap text (`plot_text.wgsl`), both in window pixels. The
 surface prefers `Bgra8Unorm` / `Rgba8Unorm` (no sRGB encoding, so the
-colours appear as given). `PlotTarget` drops the surface together with the
-window; a window whose surface cannot be created is logged once and not
-retried until it is replaced. Redraws are throttled to about 12 Hz.
+colours appear as given). The surface goes with its window
+(`PlotSurfaces::sync` by id); a window whose surface cannot be created is
+logged once and not retried until it is replaced. Redraws are throttled to about 12 Hz.
 
 ## Persistence
 

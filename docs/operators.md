@@ -171,7 +171,7 @@ spheres and thermostats. Live thermostat readings are included only when the
 `ToolContext`.
 
 The wgpu backend draws operators with these pipelines in
-`wgpu_renderer/src/wgpu/pipelines/`:
+`wgpu_renderer/src/wgpu/render/pipelines/`:
 
 | Pipeline | Draws |
 |---|---|

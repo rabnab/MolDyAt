@@ -2,11 +2,11 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use crate::wgpu::gpu::text::TextVertex;
-use crate::wgpu::gpu::textures::{
+use crate::wgpu::render::gpu::text::TextVertex;
+use crate::wgpu::render::gpu::textures::{
     ICON_SOURCE_CLOSED, ICON_SOURCE_OPEN, ICON_THERMO, ICON_VALVE, ICON_WALL, decode_icon,
 };
-use crate::wgpu::pipelines::sidebar_pipeline::*;
+use crate::wgpu::render::pipelines::sidebar_pipeline::*;
 use crate::wgpu::{MARGIN_BOTTOM, MARGIN_LEFT, MARGIN_TOP, MARGINS};
 use thermo_ui::graphics::renderer::event_loop::OperatorTool;
 use thermo_ui::graphics::sidebar::{

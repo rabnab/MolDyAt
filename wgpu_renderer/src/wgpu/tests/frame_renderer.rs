@@ -2,16 +2,16 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use super::super::frame_renderer::{FrameRenderer, SurfaceErrorAction};
+use crate::wgpu::render::frame::{SurfaceErrorAction, surface_error_action};
 
 #[test]
 fn lost_and_outdated_surface_statuses_reconfigure() {
     assert_eq!(
-        FrameRenderer::surface_error_action(&wgpu::CurrentSurfaceTexture::Lost),
+        surface_error_action(&wgpu::CurrentSurfaceTexture::Lost),
         SurfaceErrorAction::Reconfigure
     );
     assert_eq!(
-        FrameRenderer::surface_error_action(&wgpu::CurrentSurfaceTexture::Outdated),
+        surface_error_action(&wgpu::CurrentSurfaceTexture::Outdated),
         SurfaceErrorAction::Reconfigure
     );
 }
@@ -19,7 +19,7 @@ fn lost_and_outdated_surface_statuses_reconfigure() {
 #[test]
 fn transient_surface_statuses_retry_later() {
     assert_eq!(
-        FrameRenderer::surface_error_action(&wgpu::CurrentSurfaceTexture::Timeout),
+        surface_error_action(&wgpu::CurrentSurfaceTexture::Timeout),
         SurfaceErrorAction::RetryLater
     );
 }
@@ -27,7 +27,7 @@ fn transient_surface_statuses_retry_later() {
 #[test]
 fn validation_surface_status_exits() {
     assert_eq!(
-        FrameRenderer::surface_error_action(&wgpu::CurrentSurfaceTexture::Validation),
+        surface_error_action(&wgpu::CurrentSurfaceTexture::Validation),
         SurfaceErrorAction::Exit
     );
 }
@@ -35,7 +35,7 @@ fn validation_surface_status_exits() {
 #[test]
 fn occluded_surface_status_skips_the_frame() {
     assert_eq!(
-        FrameRenderer::surface_error_action(&wgpu::CurrentSurfaceTexture::Occluded),
+        surface_error_action(&wgpu::CurrentSurfaceTexture::Occluded),
         SurfaceErrorAction::Skip
     );
 }
