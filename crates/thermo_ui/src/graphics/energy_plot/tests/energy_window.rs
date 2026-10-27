@@ -3,7 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::graphics::energy_plot::energy_window::*;
-use crate::graphics::energy_plot::{DisplayMode, TimeView};
+use crate::graphics::energy_plot::{PlotSelection, TimeView};
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 
 #[test]
@@ -12,7 +12,8 @@ fn test_energy_plot_window_new() {
     use std::sync::{Arc, Mutex};
 
     let energy_data = Arc::new(Mutex::new(EnergyData::new()));
-    let window = EnergyPlotWindow::new(energy_data, DisplayMode::All);
+    let selection = PlotSelection::from_panels(&[&["E_kin", "E_pot"]]);
+    let window = EnergyPlotWindow::new(energy_data, selection.clone());
 
     assert!(!window.is_open());
     assert!(window.window_handle().is_none());
@@ -20,13 +21,16 @@ fn test_energy_plot_window_new() {
         window.scene("", &TimeView::default()).is_none(),
         "a closed window shows nothing"
     );
-    assert_eq!(window.get_display_mode(), DisplayMode::All);
+    assert_eq!(window.selection(), &selection);
 }
 
 #[test]
-fn test_window_title_names_the_display_mode() {
-    assert_eq!(window_title(DisplayMode::Kin), "Energy Plot - kin");
-    assert_eq!(window_title(DisplayMode::All), "Energy Plot - all");
+fn test_window_title_names_the_series_or_the_plot_count() {
+    assert_eq!(window_title(&PlotSelection::default()), "Plot - E_pot");
+    let one = PlotSelection::from_panels(&[&["E_kin", "E_tot"]]);
+    assert_eq!(window_title(&one), "Plot - E_kin, E_tot");
+    let two = PlotSelection::from_panels(&[&["E_kin"], &["N2:count"]]);
+    assert_eq!(window_title(&two), "Plot - 2 plots");
 }
 
 #[test]

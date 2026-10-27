@@ -44,6 +44,8 @@ pub(super) fn us_char(code: KeyCode) -> Option<char> {
         KeyCode::Minus | KeyCode::NumpadSubtract => Some('-'),
         KeyCode::Equal => Some('='),
         KeyCode::NumpadAdd => Some('+'),
+        KeyCode::Comma => Some(','),
+        KeyCode::Period => Some('.'),
         _ => None,
     }
 }

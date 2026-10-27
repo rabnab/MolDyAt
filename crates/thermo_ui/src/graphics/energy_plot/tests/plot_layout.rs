@@ -3,23 +3,47 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::graphics::energy_plot::plot_layout::*;
-use crate::graphics::energy_plot::{DisplayMode, EnergyData, TimeView};
+use crate::graphics::energy_plot::{EnergyData, PlotSelection, TimeView};
 
 const SIZE: (u32, u32) = (1000, 700);
 
 const HINTS: &str = "Esc: close  TAB / P: mode  HOME: reset";
 
+/// E_kin, E_pot and their sum E_tot, as the registry records them.
 fn data(kin: &[f32], pot: &[f32], times: &[f32]) -> EnergyData {
     let mut data = EnergyData::new();
-    data.v_kin.extend(kin.iter().copied());
-    data.v_pot.extend(pot.iter().copied());
+    data.insert_series("E_kin", Some("J"), kin.iter().copied());
+    data.insert_series("E_pot", Some("J"), pot.iter().copied());
+    data.insert_series("E_tot", Some("J"), kin.iter().zip(pot).map(|(k, p)| k + p));
     data.sample_times.extend(times.iter().copied());
     data.time = 1.5;
     data
 }
 
+/// The plots of the old display modes: one plot of E_kin, or of all three
+/// energies.
+#[derive(Clone, Copy)]
+enum DisplayMode {
+    Kin,
+    All,
+}
+
+fn selection(mode: DisplayMode) -> PlotSelection {
+    match mode {
+        DisplayMode::Kin => PlotSelection::from_panels(&[&["E_kin"]]),
+        DisplayMode::All => PlotSelection::from_panels(&[&["E_kin", "E_pot", "E_tot"]]),
+    }
+}
+
 fn build(data: &EnergyData, mode: DisplayMode, size: (u32, u32), scale_factor: f64) -> PlotScene {
-    PlotScene::build(data, mode, size, scale_factor, HINTS, &TimeView::default())
+    PlotScene::build(
+        data,
+        &selection(mode),
+        size,
+        scale_factor,
+        HINTS,
+        &TimeView::default(),
+    )
 }
 
 fn has_label(scene: &PlotScene, text: &str) -> bool {
@@ -39,7 +63,7 @@ fn segments_of(scene: &PlotScene, color: Rgba) -> Vec<PlotSegment> {
 fn test_empty_data_shows_the_waiting_message_and_no_plot() {
     let scene = build(&EnergyData::new(), DisplayMode::All, SIZE, 1.0);
 
-    assert!(has_label(&scene, "Energy plot - all"));
+    assert!(has_label(&scene, "Plot - E_kin, E_pot, E_tot"));
     assert!(has_label(&scene, "Waiting for simulation data..."));
     assert!(scene.plot_area.is_none());
     assert!(scene.segments.is_empty());
@@ -407,13 +431,20 @@ fn test_key_hints_are_the_ones_passed_in() {
     let d = data(&[1.0, 2.0], &[0.0; 2], &[0.0, 0.5]);
     let rebound = PlotScene::build(
         &d,
-        DisplayMode::Kin,
+        &selection(DisplayMode::Kin),
         SIZE,
         1.0,
         "Esc: close  X: mode",
         &TimeView::default(),
     );
-    let none = PlotScene::build(&d, DisplayMode::Kin, SIZE, 1.0, "", &TimeView::default());
+    let none = PlotScene::build(
+        &d,
+        &selection(DisplayMode::Kin),
+        SIZE,
+        1.0,
+        "",
+        &TimeView::default(),
+    );
 
     assert!(has_label(&rebound, "Esc: close  X: mode"));
     assert!(!has_label(&rebound, HINTS));
@@ -519,7 +550,7 @@ fn panned(pan: f64, d: &EnergyData) -> PlotScene {
     let scene = build(d, DisplayMode::Kin, SIZE, 1.0);
     let mut view = TimeView::default();
     view.pan(pan, &scene.history.expect("history"));
-    PlotScene::build(d, DisplayMode::Kin, SIZE, 1.0, HINTS, &view)
+    PlotScene::build(d, &selection(DisplayMode::Kin), SIZE, 1.0, HINTS, &view)
 }
 
 /// Samples every 0.5 from `start`, 41 of them; a spike of 1000 at the
@@ -605,7 +636,14 @@ fn test_legend_with_a_view_fits_a_narrow_window() {
     let probe = build(&d, DisplayMode::All, (960, 700), 1.0);
     let mut view = TimeView::default();
     view.pan(-5.0, &probe.history.unwrap());
-    let scene = PlotScene::build(&d, DisplayMode::All, (960, 700), 1.0, HINTS, &view);
+    let scene = PlotScene::build(
+        &d,
+        &selection(DisplayMode::All),
+        (960, 700),
+        1.0,
+        HINTS,
+        &view,
+    );
 
     let legend = scene
         .labels
@@ -697,4 +735,239 @@ fn test_curve_with_fewer_samples_than_columns_is_drawn_as_it_is() {
     let scene = build(&dense_data(n, 100, 200), DisplayMode::Kin, SIZE, 1.0);
     assert!(scene.plot_area.unwrap().width() > 2.0 * n as f32);
     assert_eq!(segments_of(&scene, COLOR_KINETIC).len(), n - 1);
+}
+
+// ── Several plots (#339) ────────────────────────────────────────────────────
+
+/// The energies plus wall momentum and a species count, 21 samples over
+/// 10 time units.
+fn mixed_data() -> EnergyData {
+    let times: Vec<f32> = (0..21).map(|i| i as f32 * 0.5).collect();
+    let mut d = data(&[1.0; 21], &[-3.0; 21], &times);
+    d.insert_series(
+        "wall_momentum",
+        Some("kg·m/s"),
+        (0..21).map(|i| i as f32 * 100.0),
+    );
+    d.insert_series("N2:count", None, [50.0; 21]);
+    d
+}
+
+fn build_selection(d: &EnergyData, selection: &PlotSelection) -> PlotScene {
+    PlotScene::build(d, selection, SIZE, 1.0, HINTS, &TimeView::default())
+}
+
+#[test]
+fn test_plots_are_stacked_with_shared_left_and_right_edges() {
+    let selection =
+        PlotSelection::from_panels(&[&["E_kin", "E_pot"], &["wall_momentum"], &["N2:count"]]);
+    let scene = build_selection(&mixed_data(), &selection);
+    assert_eq!(scene.panels.len(), 3);
+    for pair in scene.panels.windows(2) {
+        let (upper, lower) = (pair[0].area, pair[1].area);
+        assert_eq!((upper.left, upper.right), (lower.left, lower.right));
+        assert!(upper.bottom < lower.top, "{upper:?} above {lower:?}");
+    }
+    assert_eq!(
+        scene.panels.iter().map(|p| p.index).collect::<Vec<_>>(),
+        [0, 1, 2]
+    );
+    let all = scene.plot_area.unwrap();
+    assert_eq!(all.top, scene.panels[0].area.top);
+    assert_eq!(all.bottom, scene.panels[2].area.bottom);
+    assert!(has_label(&scene, "Plot - 3 plots"));
+}
+
+#[test]
+fn test_time_labels_only_under_the_last_plot() {
+    let selection = PlotSelection::from_panels(&[&["E_kin"], &["wall_momentum"]]);
+    let scene = build_selection(&mixed_data(), &selection);
+    let upper = scene.panels[0].area;
+    let lower = scene.panels[1].area;
+    let time_labels: Vec<&PlotLabel> = scene
+        .labels
+        .iter()
+        .filter(|l| l.text == "2" || l.text == "4" || l.text == "6")
+        .filter(|l| l.origin[1] > upper.bottom)
+        .collect();
+    assert!(!time_labels.is_empty());
+    assert!(
+        time_labels.iter().all(|l| l.origin[1] > lower.bottom),
+        "{time_labels:?}"
+    );
+}
+
+#[test]
+fn test_each_plot_scales_to_its_own_series() {
+    let selection = PlotSelection::from_panels(&[&["E_kin", "E_pot"], &["wall_momentum"]]);
+    let d = mixed_data();
+    let scene = build_selection(&d, &selection);
+    // The energies' plot has ticks around -3..1, the momentum plot up to 2000.
+    let ticks_in = |area: PlotRect| -> Vec<String> {
+        scene
+            .labels
+            .iter()
+            .filter(|l| {
+                l.origin[0] < area.left
+                    && l.origin[1] + l.height() > area.top
+                    && l.origin[1] < area.bottom
+            })
+            .map(|l| l.text.clone())
+            .collect()
+    };
+    let energies = ticks_in(scene.panels[0].area);
+    let momentum = ticks_in(scene.panels[1].area);
+    assert!(
+        energies.iter().any(|t| t == "-3" || t == "-2"),
+        "{energies:?}"
+    );
+    assert!(
+        momentum.iter().any(|t| t == "2000" || t == "1000"),
+        "{momentum:?}"
+    );
+    // The curves of each plot reach from its bottom to its top (5% room).
+    for (panel, color) in [(0, COLOR_POTENTIAL), (1, series_color(&d, "wall_momentum"))] {
+        let area = scene.panels[panel].area;
+        for s in segments_of(&scene, color) {
+            for [_, y] in [s.from, s.to] {
+                assert!(area.top <= y && y <= area.bottom, "{s:?} in {area:?}");
+            }
+        }
+    }
+}
+
+#[test]
+fn test_legend_entries_are_recorded_where_they_are_drawn() {
+    let selection = PlotSelection::from_panels(&[&["E_kin", "E_pot"], &["N2:count"]]);
+    let scene = build_selection(&mixed_data(), &selection);
+    let names: Vec<(usize, &str)> = scene
+        .legend
+        .iter()
+        .map(|e| (e.panel, e.series.as_str()))
+        .collect();
+    assert_eq!(names, [(0, "E_kin"), (0, "E_pot"), (1, "N2:count")]);
+    for entry in &scene.legend {
+        let label = scene
+            .labels
+            .iter()
+            .find(|l| l.text == entry.series)
+            .expect("legend label");
+        assert_eq!(entry.rect.left, label.origin[0]);
+        assert_eq!(entry.rect.right, label.origin[0] + label.width());
+        let area = scene.panels[entry.panel].area;
+        assert!(
+            entry.rect.bottom <= area.top,
+            "the legend sits above its plot"
+        );
+    }
+}
+
+#[test]
+fn test_focus_mark_and_units_in_the_legend() {
+    let mut selection =
+        PlotSelection::from_panels(&[&["E_kin", "E_pot"], &["N2:count", "wall_momentum"]]);
+    selection.focus(1);
+    let scene = build_selection(&mixed_data(), &selection);
+    let marks: Vec<&PlotLabel> = scene.labels.iter().filter(|l| l.text == "> ").collect();
+    assert_eq!(marks.len(), 1);
+    assert!(
+        marks[0].origin[1] > scene.panels[0].area.bottom,
+        "the second plot is focused"
+    );
+    assert!(has_label(&scene, "[J]"), "both energies are in J");
+    assert!(
+        !scene.labels.iter().any(|l| l.text.contains("kg·m/s")),
+        "mixed units: none shown"
+    );
+
+    let single = build_selection(&mixed_data(), &PlotSelection::from_panels(&[&["E_kin"]]));
+    assert!(
+        !single
+            .labels
+            .iter()
+            .any(|l| l.text == "> " || l.text == "  "),
+        "no mark for one plot"
+    );
+}
+
+#[test]
+fn test_hidden_series_is_listed_grey_not_drawn_and_not_scaled() {
+    let mut selection = PlotSelection::from_panels(&[&["E_kin", "wall_momentum"]]);
+    let d = mixed_data();
+    let both = build_selection(&d, &selection);
+    selection.toggle_hidden(0, "wall_momentum");
+    let hidden = build_selection(&d, &selection);
+
+    let momentum = series_color(&d, "wall_momentum");
+    assert!(!segments_of(&both, momentum).is_empty());
+    assert!(segments_of(&hidden, momentum).is_empty());
+    let label = hidden
+        .labels
+        .iter()
+        .find(|l| l.text == "wall_momentum")
+        .unwrap();
+    assert_eq!(label.color, COLOR_HIDDEN);
+    // Without the momentum the y range is that of E_kin (constant 1): no
+    // tick near 2000 any more.
+    assert!(has_label(&both, "2000") || has_label(&both, "1000"));
+    assert!(!has_label(&hidden, "2000") && !has_label(&hidden, "1000"));
+}
+
+#[test]
+fn test_series_colours_are_fixed_for_energies_and_distinct_otherwise() {
+    let d = mixed_data();
+    assert_eq!(series_color(&d, "E_kin"), COLOR_KINETIC);
+    assert_eq!(series_color(&d, "E_pot"), COLOR_POTENTIAL);
+    assert_eq!(series_color(&d, "E_tot"), COLOR_TOTAL);
+    assert_ne!(
+        series_color(&d, "wall_momentum"),
+        series_color(&d, "N2:count")
+    );
+}
+
+#[test]
+fn test_a_series_without_data_draws_nothing_but_is_listed() {
+    let selection = PlotSelection::from_panels(&[&["E_kin"], &["gone"]]);
+    let scene = build_selection(&mixed_data(), &selection);
+    assert_eq!(scene.panels.len(), 2);
+    assert!(scene.legend.iter().any(|e| e.series == "gone"));
+}
+
+#[test]
+fn test_four_plots_fit_the_default_window() {
+    let selection =
+        PlotSelection::from_panels(&[&["E_kin"], &["E_pot"], &["wall_momentum"], &["N2:count"]]);
+    let scene = build_selection(&mixed_data(), &selection);
+    assert_eq!(scene.panels.len(), 4);
+    for label in &scene.labels {
+        assert!(
+            label.origin[1] + label.height() <= SIZE.1 as f32,
+            "{label:?}"
+        );
+    }
+}
+
+#[test]
+fn test_a_long_legend_is_cut_with_a_count_inside_the_window() {
+    let mut d = mixed_data();
+    let names: Vec<String> = (0..12).map(|i| format!("Species{i:02}:count")).collect();
+    for name in &names {
+        d.insert_series(name, None, [1.0; 21]);
+    }
+    let refs: Vec<&str> = names.iter().map(String::as_str).collect();
+    let scene = build_selection(&d, &PlotSelection::from_panels(&[&refs]));
+    let count = scene
+        .labels
+        .iter()
+        .find(|l| l.text.starts_with('+'))
+        .expect("a +N count");
+    let shown = scene.legend.len();
+    assert!(shown < names.len());
+    assert_eq!(count.text, format!("+{}", names.len() - shown));
+    for label in &scene.labels {
+        assert!(
+            label.origin[0] + label.width() <= SIZE.0 as f32,
+            "{label:?}"
+        );
+    }
 }

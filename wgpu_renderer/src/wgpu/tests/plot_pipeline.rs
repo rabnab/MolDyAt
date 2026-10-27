@@ -17,6 +17,8 @@ fn scene(segments: Vec<PlotSegment>, labels: Vec<PlotLabel>) -> PlotScene {
         size: (400, 300),
         background: BACKGROUND,
         plot_area: None,
+        panels: Vec::new(),
+        legend: Vec::new(),
         time_window: None,
         history: None,
         segments,

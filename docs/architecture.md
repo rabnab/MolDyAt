@@ -75,7 +75,7 @@ FrameRenderer → RenderGraph → GPU
   positions and forces with `par_iter`. The pool has `RAYON_NUM_THREADS`
   workers, or the number of cores minus 2.
 - **Energy plot window.** A separate OS window (`graphics/energy_plot`)
-  with the energy history from the metrics store, drawn on the main
+  with the history of the metrics series in stacked plots, drawn on the main
   thread with wgpu (see [Energy plot window](#energy-plot-window)).
 
 ## Layers
@@ -312,14 +312,28 @@ Every visual layer is one `RenderPipeline` in
 
 `EnergyWindowManager` (`thermo_ui`) opens the window on the energy half of
 the split screen (`split_screen_layout`; the simulation window keeps its
-size, #167), owns its keys and display mode, and keeps `EnergyData` in
-step with the metrics store: the E_kin and E_pot series and the simulation
-time of each sample (`MetricsRegistry::times`), appending only new values.
-`PlotScene::build` (`energy_plot/plot_layout.rs`) lays the plot out in
-window pixels without a GPU: the title, key hints built from the key map
-(`energy_window_key_hints`, so a `ui.toml` rebinding shows), the axes, grid
-and zero line, the curves of the display mode (a sample without a finite
-value or time breaks a curve), the legend and the status text. The x axis
+size, #167), owns its keys and the plot selection, and keeps `EnergyData`
+in step with the metrics store: every registry series with its unit and
+the simulation time of each sample (`MetricsRegistry::times`), appending
+only new values. What the window shows is a `PlotSelection`
+(`energy_plot/plot_selection.rs`, #339): one to `MAX_PLOTS` (4) plots
+stacked on a shared time axis, each with one or more series by registry
+name, some of them hidden, and the focused plot that the plot commands
+change. It lives in the manager and survives closing the window; it is not
+saved between runs. `PlotScene::build` (`energy_plot/plot_layout.rs`) lays
+the plots out in window pixels without a GPU: the title, key hints built
+from the key map (`energy_window_key_hints`; trailing hints are dropped
+when the title line is full, and a `ui.toml` rebinding shows), then per
+plot a legend line (a focus mark with several plots, each series in its
+colour, a hidden one grey, the unit when all share one) above its own
+axes, grid and zero line and curves (a sample without a finite value or
+time breaks a curve), with time labels under the last plot only, then the
+info line (time, zoom state) and the status text. Each plot's y axis fits
+the series it draws (hidden ones excluded); all plots share their left
+edge, so their times line up. The energies keep their colours, other
+series take one from a palette by their place in the series list
+(`series_color`). The scene records each plot's area (`PlotScene::panels`)
+and each legend entry (`PlotScene::legend`) for clicks. The x axis
 is simulation time over the range of a `TimeView` (`energy_plot/time_view.rs`).
 By default it shows a fixed span (`TIME_SPAN`, 10 time units): the time
 step changes only how fast the curves scroll, never the scale. Until the
@@ -362,6 +376,19 @@ the plot area and history of the last frame (`PlotScene::plot_area`,
 `PlotScene::history`). A view change redraws at once instead of waiting for
 the redraw throttle; the legend shows a zoomed or paused range. The view
 lives in the manager and survives closing and reopening the window.
+
+The plots are changed by registry commands (`UiAction::Plot(PlotChange)`),
+which work from both windows: `view.cycle_plot` / `view.toggle_energy_window`
+in the plot window give the focused plot the next energy preset
+(`PRESETS`), `view.plot_next_series` / `view.plot_previous_series`
+(`.` / `,`) replace its last series with the next one not shown,
+`view.plot_add_series` / `view.plot_remove_series` (`Ctrl + P` / `Alt + P`)
+add or remove one, `view.plot_add_plot` / `view.plot_remove_plot`
+(`Ctrl + L` / `Alt + L`) add a plot below the focused one or remove it, and
+`view.plot_focus_next` (`F`) moves the focus. The energy window tracks Ctrl
+and Alt itself (`ModifiersChanged`) for the chords. A left click on a
+legend entry hides or shows that series, a left click in a plot focuses
+it (the targets of the last frame).
 
 The binary draws it: on a `RedrawRequested` for the plot window,
 `UnifiedRenderState::energy_window_redraw` hands out a `PlotFrame` (window

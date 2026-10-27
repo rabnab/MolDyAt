@@ -73,6 +73,10 @@ fn run_ui_action(
             state.render.energy_manager.reset_plot_view();
             false
         }
+        UiAction::Plot(change) => {
+            state.render.energy_manager.change_plots(change);
+            false
+        }
         UiAction::DeleteHovered => {
             state.delete_hovered_object();
             false

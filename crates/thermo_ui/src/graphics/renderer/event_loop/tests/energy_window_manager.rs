@@ -63,7 +63,7 @@ fn update_from_snapshot_increments_version_for_new_samples() {
 
     let data = shared.lock().unwrap();
     assert_eq!(data.version, 1);
-    assert_eq!(data.v_kin.back().copied(), Some(10.0));
+    assert_eq!(data.series("E_kin").unwrap().back().copied(), Some(10.0));
     assert_eq!(data.time, 0.01);
 }
 
@@ -78,7 +78,7 @@ fn update_from_snapshot_ignores_duplicate_step() {
     manager.update_from_snapshot(&snapshot, 60.0, 1.0, &FrameMetrics::default());
 
     let data = shared.lock().unwrap();
-    assert_eq!(data.v_kin.len(), 1);
+    assert_eq!(data.series("E_kin").unwrap().len(), 1);
     assert_eq!(data.version, 1, "no new sample must not bump the version");
 }
 
@@ -106,11 +106,19 @@ fn update_from_snapshot_starts_a_new_history_for_a_new_world() {
 
     let data = shared.lock().unwrap();
     assert_eq!(
-        data.v_kin.iter().copied().collect::<Vec<_>>(),
+        data.series("E_kin")
+            .unwrap()
+            .iter()
+            .copied()
+            .collect::<Vec<_>>(),
         vec![7.0, 9.0]
     );
     assert_eq!(
-        data.v_pot.iter().copied().collect::<Vec<_>>(),
+        data.series("E_pot")
+            .unwrap()
+            .iter()
+            .copied()
+            .collect::<Vec<_>>(),
         vec![8.0, 9.5]
     );
 }
@@ -217,10 +225,11 @@ fn handle_redraw_then_request_redraw_after_interval_is_allowed() {
 mod keys {
     use crate::graphics::renderer::event_loop::KeyCode;
     use crate::graphics::renderer::event_loop::command_registry::KeyInput;
+    use crate::graphics::renderer::event_loop::command_registry::PlotChange;
     use crate::graphics::renderer::event_loop::energy_window_manager::{
         EnergyWindowKey, energy_window_key, energy_window_key_hints,
     };
-    use crate::graphics::renderer::event_loop::key_map::{KeyMap, KeyPhase};
+    use crate::graphics::renderer::event_loop::key_map::{HeldModifiers, KeyMap, KeyPhase};
 
     fn key(code: KeyCode) -> KeyInput {
         crate::graphics::renderer::event_loop::tests::us(code)
@@ -231,18 +240,28 @@ mod keys {
         let key_map = KeyMap::default();
         for code in [KeyCode::KeyP, KeyCode::Tab] {
             assert_eq!(
-                energy_window_key(&key_map, key(code), KeyPhase::Up),
-                Some(EnergyWindowKey::CycleDisplay),
+                energy_window_key(&key_map, key(code), KeyPhase::Up, HeldModifiers::default()),
+                Some(EnergyWindowKey::Plot(PlotChange::CyclePreset)),
                 "{code:?}"
             );
         }
         assert_eq!(
-            energy_window_key(&key_map, key(KeyCode::Escape), KeyPhase::Down),
+            energy_window_key(
+                &key_map,
+                key(KeyCode::Escape),
+                KeyPhase::Down,
+                HeldModifiers::default()
+            ),
             Some(EnergyWindowKey::Close)
         );
         // Keys of other commands do nothing there.
         assert_eq!(
-            energy_window_key(&key_map, key(KeyCode::KeyG), KeyPhase::Up),
+            energy_window_key(
+                &key_map,
+                key(KeyCode::KeyG),
+                KeyPhase::Up,
+                HeldModifiers::default()
+            ),
             None
         );
     }
@@ -259,14 +278,19 @@ mod keys {
         assert!(warnings.is_empty(), "{warnings:?}");
         for code in [KeyCode::KeyP, KeyCode::Tab] {
             assert_eq!(
-                energy_window_key(&key_map, key(code), KeyPhase::Up),
+                energy_window_key(&key_map, key(code), KeyPhase::Up, HeldModifiers::default()),
                 None,
                 "{code:?}"
             );
         }
         assert_eq!(
-            energy_window_key(&key_map, key(KeyCode::KeyX), KeyPhase::Up),
-            Some(EnergyWindowKey::CycleDisplay)
+            energy_window_key(
+                &key_map,
+                key(KeyCode::KeyX),
+                KeyPhase::Up,
+                HeldModifiers::default()
+            ),
+            Some(EnergyWindowKey::Plot(PlotChange::CyclePreset))
         );
     }
 
@@ -274,7 +298,12 @@ mod keys {
     #[test]
     fn test_home_resets_the_plot_view() {
         assert_eq!(
-            energy_window_key(&KeyMap::default(), key(KeyCode::Home), KeyPhase::Down),
+            energy_window_key(
+                &KeyMap::default(),
+                key(KeyCode::Home),
+                KeyPhase::Down,
+                HeldModifiers::default()
+            ),
             Some(EnergyWindowKey::ResetView)
         );
     }
@@ -283,7 +312,7 @@ mod keys {
     fn test_key_hints_name_the_default_keys() {
         assert_eq!(
             energy_window_key_hints(&KeyMap::default()),
-            "Esc: close  TAB / P: mode  HOME: reset"
+            "Esc: close  TAB / P: preset  , / .: series  HOME: reset  F: focus"
         );
     }
 
@@ -298,14 +327,141 @@ mod keys {
         ]);
         assert_eq!(
             energy_window_key_hints(&rebound),
-            "Esc: close  X: mode  HOME: reset"
+            "Esc: close  X: preset  , / .: series  HOME: reset  F: focus"
         );
 
         let (unbound, _) = KeyMap::with_overrides([
             ("view.cycle_plot", none.as_slice()),
             ("view.toggle_energy_window", none.as_slice()),
         ]);
-        assert_eq!(energy_window_key_hints(&unbound), "Esc: close  HOME: reset");
+        assert_eq!(
+            energy_window_key_hints(&unbound),
+            "Esc: close  , / .: series  HOME: reset  F: focus"
+        );
+    }
+}
+
+/// The plot commands in the energy window (#339): plain keys and chords.
+#[test]
+fn test_plot_keys_of_the_energy_window() {
+    use crate::graphics::renderer::event_loop::KeyCode;
+    use crate::graphics::renderer::event_loop::command_registry::PlotChange;
+    use crate::graphics::renderer::event_loop::energy_window_manager::{
+        EnergyWindowKey, energy_window_key,
+    };
+    use crate::graphics::renderer::event_loop::key_map::{HeldModifiers, KeyMap, KeyPhase};
+    use crate::graphics::renderer::event_loop::tests::us;
+    let key_map = KeyMap::default();
+    let plain = HeldModifiers::default();
+    let ctrl = HeldModifiers {
+        ctrl: true,
+        alt: false,
+    };
+    let alt = HeldModifiers {
+        ctrl: false,
+        alt: true,
+    };
+    for (code, phase, held, change) in [
+        (KeyCode::Period, KeyPhase::Up, plain, PlotChange::NextSeries),
+        (
+            KeyCode::Comma,
+            KeyPhase::Up,
+            plain,
+            PlotChange::PreviousSeries,
+        ),
+        (KeyCode::KeyF, KeyPhase::Up, plain, PlotChange::FocusNext),
+        (KeyCode::KeyP, KeyPhase::Down, ctrl, PlotChange::AddSeries),
+        (KeyCode::KeyP, KeyPhase::Down, alt, PlotChange::RemoveSeries),
+        (KeyCode::KeyL, KeyPhase::Down, ctrl, PlotChange::AddPlot),
+        (KeyCode::KeyL, KeyPhase::Down, alt, PlotChange::RemovePlot),
+    ] {
+        assert_eq!(
+            energy_window_key(&key_map, us(code), phase, held),
+            Some(EnergyWindowKey::Plot(change)),
+            "{code:?} {held:?}"
+        );
+    }
+}
+
+/// Plot commands and clicks (#339), without a window.
+mod plots {
+    use super::*;
+    use crate::graphics::energy_plot::{LegendEntry, PanelArea, PlotRect, PlotSelection};
+    use crate::graphics::renderer::event_loop::command_registry::PlotChange;
+    use crate::graphics::renderer::event_loop::energy_window_manager::ClickTargets;
+
+    fn manager_with_series() -> EnergyWindowManager {
+        let mut data = EnergyData::new();
+        for name in ["E_kin", "E_pot", "E_tot", "wall_momentum"] {
+            data.insert_series(name, None, [1.0]);
+        }
+        EnergyWindowManager::new(Arc::new(Mutex::new(data)))
+    }
+
+    fn rect(left: f32, top: f32, right: f32, bottom: f32) -> PlotRect {
+        PlotRect {
+            left,
+            top,
+            right,
+            bottom,
+        }
+    }
+
+    #[test]
+    fn test_plot_commands_change_the_selection_while_the_window_is_closed() {
+        let mut manager = manager_with_series();
+        assert!(manager.change_plots(PlotChange::NextSeries));
+        assert_eq!(manager.selection().panels()[0].series(), ["E_tot"]);
+        assert!(manager.change_plots(PlotChange::AddPlot));
+        assert_eq!(manager.selection().panels().len(), 2);
+        assert_eq!(manager.selection().focused(), 1);
+        assert!(manager.change_plots(PlotChange::FocusNext));
+        assert_eq!(manager.selection().focused(), 0);
+        assert!(manager.change_plots(PlotChange::RemovePlot));
+        assert!(!manager.change_plots(PlotChange::RemovePlot));
+        assert!(!manager.change_plots(PlotChange::FocusNext), "one plot");
+        assert!(manager.change_plots(PlotChange::CyclePreset));
+    }
+
+    #[test]
+    fn test_clicks_hide_series_and_focus_plots() {
+        let mut manager = manager_with_series();
+        manager.change_plots(PlotChange::AddSeries);
+        manager.change_plots(PlotChange::AddPlot);
+        assert_eq!(manager.selection().focused(), 1);
+        manager.set_click_targets(ClickTargets {
+            panels: vec![
+                PanelArea {
+                    index: 0,
+                    area: rect(100.0, 50.0, 900.0, 250.0),
+                },
+                PanelArea {
+                    index: 1,
+                    area: rect(100.0, 300.0, 900.0, 500.0),
+                },
+            ],
+            legend: vec![LegendEntry {
+                panel: 0,
+                series: "E_tot".into(),
+                rect: rect(10.0, 30.0, 80.0, 46.0),
+            }],
+        });
+        // Inside the first plot: focus it.
+        assert!(manager.left_clicked([500.0, 100.0]));
+        assert_eq!(manager.selection().focused(), 0);
+        assert!(!manager.left_clicked([500.0, 100.0]), "focused already");
+        // On its legend entry: hide the series, again: show it.
+        assert!(manager.left_clicked([20.0, 40.0]));
+        assert!(manager.selection().panels()[0].is_hidden("E_tot"));
+        assert!(manager.left_clicked([20.0, 40.0]));
+        assert!(!manager.selection().panels()[0].is_hidden("E_tot"));
+        // Between the plots: nothing.
+        assert!(!manager.left_clicked([500.0, 275.0]));
+        assert_eq!(manager.selection(), &{
+            let mut expected = PlotSelection::from_panels(&[&["E_pot", "E_tot"], &["E_kin"]]);
+            expected.focus(0);
+            expected
+        });
     }
 }
 
@@ -515,7 +671,7 @@ mod plot_view {
     }
 
     fn recorded_kin(shared: &SharedEnergyData) -> usize {
-        shared.lock().unwrap().v_kin.len()
+        shared.lock().unwrap().series("E_kin").unwrap().len()
     }
 
     /// While paused, the plot keeps the history it had when the pause began;
@@ -589,7 +745,14 @@ mod plot_view {
 
         assert!(manager.plot_view().is_default());
         let data = shared.lock().unwrap();
-        assert_eq!(data.v_kin.iter().copied().collect::<Vec<_>>(), vec![7.0]);
+        assert_eq!(
+            data.series("E_kin")
+                .unwrap()
+                .iter()
+                .copied()
+                .collect::<Vec<_>>(),
+            vec![7.0]
+        );
     }
 
     /// A zoom out on a paused plot near its newest frozen sample keeps the
