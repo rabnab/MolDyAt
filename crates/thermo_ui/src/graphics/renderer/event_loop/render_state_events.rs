@@ -88,15 +88,41 @@ impl UnifiedRenderState {
     }
 
     /// The window size a backend should request, once (see
-    /// [`Self::fit_window_to_world`]).
+    /// [`Self::fit_window_to_world`]), at most `max_size`: the backend's
+    /// limit, the monitor and the GPU's largest surface (#363). A world too
+    /// large for that is shown smaller than 1:1, with the world's shape.
     /// Taking it means the backend now asks the OS, so the answer is awaited
     /// from here on.
-    pub fn take_requested_window_size(&mut self) -> Option<(u32, u32)> {
+    pub fn take_requested_window_size(&mut self, max_size: (u32, u32)) -> Option<(u32, u32)> {
         let size = self.render.requested_window_size.take()?;
+        let size = fit_window_size_within(size, self.render.viewport.margins(), max_size);
         self.render.pending_window_request = Some(PendingWindowRequest {
             size,
             at: Instant::now(),
         });
         Some(size)
     }
+}
+
+/// `size` (a window with `margins` around its drawing area) shrunk to fit in
+/// `max_size`. The drawing area is scaled uniformly, so the world it shows
+/// keeps its shape; the margins stay as they are. A size that fits is
+/// returned unchanged.
+fn fit_window_size_within(size: (u32, u32), margins: Margins, max_size: (u32, u32)) -> (u32, u32) {
+    if size.0 <= max_size.0 && size.1 <= max_size.1 {
+        return size;
+    }
+    let (margin_w, margin_h) = (margins.horizontal(), margins.vertical());
+    let area_w = (size.0 as f32 - margin_w).max(1.0);
+    let area_h = (size.1 as f32 - margin_h).max(1.0);
+    let scale = ((max_size.0 as f32 - margin_w) / area_w)
+        .min((max_size.1 as f32 - margin_h) / area_h)
+        .clamp(0.0, 1.0);
+    let fit = |area: f32, margin: f32, max: u32| {
+        ((area * scale + margin).floor() as u32).clamp(1, max.max(1))
+    };
+    (
+        fit(area_w, margin_w, max_size.0),
+        fit(area_h, margin_h, max_size.1),
+    )
 }

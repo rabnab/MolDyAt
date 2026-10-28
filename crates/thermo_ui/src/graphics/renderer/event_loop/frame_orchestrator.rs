@@ -146,6 +146,8 @@ mod tests {
         assert!(state.render.view_dirty);
     }
 
+    const NO_LIMIT: (u32, u32) = (u32::MAX, u32::MAX);
+
     fn load(state: &mut UnifiedRenderState, world_rect: Rect) {
         use thermo_physics::application::persistence::LoadedWorld;
         use thermo_runtime::application::PhysicsEvent;
@@ -162,8 +164,15 @@ mod tests {
         let mut state = build_test_state();
         load(&mut state, Rect::new(-50.0, 50.0, 100.0, -100.0));
         // 1:1 size for a 100x100 world (LEN_TO_PX = 0.1) plus the margins.
-        assert_eq!(state.take_requested_window_size(), Some((1100, 1100)));
-        assert_eq!(state.take_requested_window_size(), None, "asked once");
+        assert_eq!(
+            state.take_requested_window_size(NO_LIMIT),
+            Some((1100, 1100))
+        );
+        assert_eq!(
+            state.take_requested_window_size(NO_LIMIT),
+            None,
+            "asked once"
+        );
         let pending = state
             .render
             .pending_window_request
@@ -172,10 +181,54 @@ mod tests {
     }
 
     #[test]
+    fn a_loaded_world_too_large_for_the_limit_requests_a_window_within_it() {
+        // 1:1 a 1200x600 world needs 12100x6100 px; the GPU allows 8192 (#363).
+        let mut state = build_test_state();
+        load(&mut state, Rect::new(-600.0, 300.0, 1200.0, -600.0));
+        let (w, h) = state
+            .take_requested_window_size((8192, 8192))
+            .expect("a window of the world's shape is requested");
+        assert!(w <= 8192 && h <= 8192, "{w}x{h}");
+        let margins = state.render.viewport.margins();
+        let area_aspect = (w as f32 - margins.horizontal()) / (h as f32 - margins.vertical());
+        assert!(
+            (area_aspect - 2.0).abs() < 0.01,
+            "the world's shape: {area_aspect}"
+        );
+        let pending = state.render.pending_window_request.expect("awaited");
+        assert_eq!(
+            pending.size,
+            (w, h),
+            "the answer is matched to the clamped size"
+        );
+    }
+
+    #[test]
+    fn a_loaded_world_too_large_for_the_window_is_shown_whole() {
+        let mut state = build_test_state();
+        let world = Rect::new(-600.0, 300.0, 1200.0, -600.0);
+        load(&mut state, world);
+        let (w, h) = state
+            .take_requested_window_size((1600, 900))
+            .expect("asked");
+        let margins = state.render.viewport.margins();
+        state.apply_window_size_answer(w as f32, h as f32, margins);
+
+        let viewport = &state.render.viewport;
+        assert_eq!(viewport.world_bounds(), world, "the loaded world is kept");
+        let (area_w, area_h) = viewport.viewport_size_px();
+        assert!(area_w <= w as f32 - margins.horizontal() + 0.5);
+        assert!(area_h <= h as f32 - margins.vertical() + 0.5);
+        // Every world unit is on screen: scaled down, not cut off.
+        assert!((viewport.world_per_px() * area_w - world.w.abs()).abs() < 1e-2);
+        assert!(viewport.world_per_px() > ViewportTransform::LEN_TO_PX);
+    }
+
+    #[test]
     fn an_immediate_os_answer_of_the_current_size_ends_the_wait() {
         let mut state = build_test_state();
         load(&mut state, Rect::new(-50.0, 50.0, 100.0, -100.0));
-        assert!(state.take_requested_window_size().is_some());
+        assert!(state.take_requested_window_size(NO_LIMIT).is_some());
         // The OS keeps the window as it is (maximised): same size back.
         let (w, h) = state.render.viewport.window_size_px();
         let margins = state.render.viewport.margins();
@@ -190,7 +243,7 @@ mod tests {
     fn loaded_world_of_the_window_shape_keeps_the_window() {
         let mut state = build_test_state();
         load(&mut state, Rect::new(-59.0, 31.0, 118.0, -62.0));
-        assert_eq!(state.take_requested_window_size(), None);
+        assert_eq!(state.take_requested_window_size(NO_LIMIT), None);
         assert!(state.render.pending_window_request.is_none());
     }
 

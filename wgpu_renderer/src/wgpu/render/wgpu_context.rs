@@ -138,11 +138,14 @@ pub struct PendingResize {
 
 impl PendingSurfaceSize {
     /// Records `width` x `height` as the size wanted, replacing an earlier
-    /// one. An empty size (a minimised window) is ignored.
-    pub(crate) fn request(&mut self, width: u32, height: u32) {
+    /// one, each side at most `max_dimension` (the GPU's largest texture: a
+    /// larger surface makes wgpu panic, #363). An empty size (a minimised
+    /// window) is ignored.
+    pub(crate) fn request(&mut self, width: u32, height: u32, max_dimension: u32) {
         if width == 0 || height == 0 {
             return;
         }
+        let (width, height) = clamp_surface_size(width, height, max_dimension);
         match &mut self.0 {
             Some(pending) => {
                 pending.size = (width, height);
@@ -162,6 +165,23 @@ impl PendingSurfaceSize {
     pub(crate) fn take(&mut self) -> Option<PendingResize> {
         self.0.take()
     }
+}
+
+/// `width` x `height` with each side clamped to `1..=max_dimension`.
+pub(crate) fn clamp_surface_size(width: u32, height: u32, max_dimension: u32) -> (u32, u32) {
+    let max_dimension = max_dimension.max(1);
+    let clamped = (
+        width.clamp(1, max_dimension),
+        height.clamp(1, max_dimension),
+    );
+    if clamped != (width, height) {
+        log::warn!(
+            "Surface size {width}x{height} exceeds the GPU limit {max_dimension}; using {}x{}",
+            clamped.0,
+            clamped.1
+        );
+    }
+    clamped
 }
 
 /// Core WGPU rendering context containing GPU resources.
@@ -257,7 +277,8 @@ impl WgpuContext {
             .await
             .expect("Failed to create device");
 
-        let (width, height) = (size.0.max(1), size.1.max(1));
+        let (width, height) =
+            clamp_surface_size(size.0, size.1, device.limits().max_texture_dimension_2d);
 
         // Get preferred surface format
         let surface_caps = surface.get_capabilities(&adapter);
@@ -312,10 +333,17 @@ impl WgpuContext {
     /// newest size however many calls came before it.
     ///
     /// # Arguments
-    /// * `width` - New width in pixels (ignored if 0)
-    /// * `height` - New height in pixels (ignored if 0)
+    /// * `width` - New width in pixels (ignored if 0; at most
+    ///   [`Self::max_surface_dimension`])
+    /// * `height` - New height in pixels (ignored if 0; likewise)
     pub fn resize(&mut self, width: u32, height: u32) {
-        self.pending_size.request(width, height);
+        let max_dimension = self.max_surface_dimension();
+        self.pending_size.request(width, height, max_dimension);
+    }
+
+    /// The largest width or height the surface can be configured for.
+    pub fn max_surface_dimension(&self) -> u32 {
+        self.device.limits().max_texture_dimension_2d
     }
 
     /// Configure the surface for the size last asked for with

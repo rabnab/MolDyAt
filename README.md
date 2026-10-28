@@ -395,9 +395,10 @@ step, gravity, the [simulation config](#simulation-config), every ball (`id`, `s
 size class becomes the species of the same name (`XS` to `XL`). The view
 (window size, zoom, pan), the energy plot
 and simulation statistics are not saved; a loaded world is shown in the
-default view. The window is asked to take the world's shape; if the OS gives
-it another size (screen too small, maximised or tiled window), the world is
-letterboxed, never stretched or rescaled. A later window resize refits the
+default view. The window is asked to take the world's shape, at most the
+size of the screen; if the OS gives it another size (screen too small,
+maximised or tiled window), the world is scaled to fit and letterboxed, never
+stretched or cut off. A later window resize refits the
 world to the window as usual. A file that fails validation is rejected and the running world
 is left untouched. Results are logged. Saves from older versions are upgraded
 when they are loaded. A save from a newer MolDyAt is rejected if it has a
