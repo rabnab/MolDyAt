@@ -245,7 +245,7 @@ impl RenderPipeline for ThermoHeatmapPipeline {
             return Ok(());
         };
 
-        if !self.upload_field(ctx, &grid, spec, mode, range) {
+        if !self.upload_field(ctx, grid, spec, mode, range) {
             self.gpu.clear();
         }
         Ok(())
