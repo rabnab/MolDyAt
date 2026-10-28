@@ -71,7 +71,9 @@ impl Default for ShutdownSignal {
 ///
 /// Snapshots are reused (#341): publishing keeps the snapshot it replaces,
 /// and the next one refills it if the renderer has dropped it by then, so
-/// a steady run allocates no new ball, operator or debug vectors.
+/// a steady run allocates no new ball vector or top-level operator
+/// vectors (the per-wall id lists and the debug data of verbose balls are
+/// still built anew; they are small).
 pub struct SnapshotPublisher {
     slot: Arc<ArcSwapOption<RendererSnapshot>>,
     /// Layers the renderer wants in its snapshots (see `SceneLayers`).
