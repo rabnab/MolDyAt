@@ -14,7 +14,7 @@ use thermo_ui::graphics::energy_plot::PlotScene;
 
 use super::pipelines::plot_pipeline::PlotPipeline;
 use super::surface_window::RenderWindow;
-use super::wgpu_context::WgpuContext;
+use super::wgpu_context::{ClampWarning, WgpuContext, clamp_surface_size};
 
 /// The surface format for the plot: 8-bit without sRGB encoding, so the
 /// plot's colours appear as given (`Bgra8Unorm`, then `Rgba8Unorm`), else
@@ -36,6 +36,9 @@ pub(crate) struct PlotSurface {
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
     pipeline: PlotPipeline,
+    /// The GPU's largest surface: the window may be granted more (#363).
+    max_dimension: u32,
+    clamp_warning: ClampWarning,
 }
 
 impl PlotSurface {
@@ -53,12 +56,15 @@ impl PlotSurface {
             .copied()
             .ok_or("the energy window surface supports no alpha mode on this adapter")?;
         let (width, height) = window.inner_size();
+        let max_dimension = ctx.max_surface_dimension();
+        let mut clamp_warning = ClampWarning::default();
+        let (width, height) = clamp_warning.clamp(width, height, max_dimension);
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format,
             color_space: wgpu::SurfaceColorSpace::default(),
-            width: width.max(1),
-            height: height.max(1),
+            width,
+            height,
             // Every surface supports Fifo; the plot redraws at most ~12 Hz.
             present_mode: wgpu::PresentMode::AutoVsync,
             alpha_mode,
@@ -72,19 +78,28 @@ impl PlotSurface {
             surface,
             pipeline: PlotPipeline::new(&ctx.device, &ctx.queue, format, &ctx.glyphs),
             config,
+            max_dimension,
+            clamp_warning,
         })
     }
 
+    /// Configure the surface for a window of `size`, each side clamped to
+    /// the GPU limit (#363).
     fn configure(&mut self, device: &wgpu::Device, (width, height): (u32, u32)) {
-        self.config.width = width.max(1);
-        self.config.height = height.max(1);
+        (self.config.width, self.config.height) =
+            self.clamp_warning.clamp(width, height, self.max_dimension);
         self.surface.configure(device, &self.config);
     }
 
     /// Draw `scene` and present it. A frame that cannot be acquired is
     /// skipped; the next redraw tries again.
     pub(crate) fn render(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, scene: &PlotScene) {
-        if scene.size != (self.config.width, self.config.height) {
+        // Compared after clamping, so a window above the limit is not
+        // reconfigured on every frame.
+        let (width, height) = scene.size;
+        if clamp_surface_size(width, height, self.max_dimension)
+            != (self.config.width, self.config.height)
+        {
             self.configure(device, scene.size);
         }
         let (output, suboptimal) = match self.surface.get_current_texture() {
