@@ -710,3 +710,77 @@ fn test_export_options_check_ignores_flag_values_that_look_like_flags() {
         .unwrap();
     assert_eq!(config.output, Some(PathBuf::from("--export-format")));
 }
+
+/// A script file in the temp dir, removed when dropped.
+struct ScriptFile(std::path::PathBuf);
+
+impl ScriptFile {
+    fn new(name: &str, text: &str) -> Self {
+        let path = env::temp_dir().join(format!("{}-{name}.script", std::process::id()));
+        std::fs::write(&path, text).expect("write script");
+        Self(path)
+    }
+
+    fn arg(&self) -> String {
+        self.0.display().to_string()
+    }
+}
+
+impl Drop for ScriptFile {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
+fn headless(args: &[&str]) -> Result<Option<HeadlessConfig>, CliError> {
+    let mut all = vec!["program".to_string(), "--headless".to_string()];
+    all.extend(args.iter().map(|arg| arg.to_string()));
+    parse_headless_args_with_args(&all)
+}
+
+#[test]
+fn test_script_sets_the_number_of_steps() {
+    let script = ScriptFile::new("steps", "step 10\nsim.cycle_gravity\nstep 5\n");
+    let config = headless(&["--script", &script.arg()]).unwrap().unwrap();
+    assert_eq!(config.steps, 15);
+    assert_eq!(config.script.expect("script").items.len(), 3);
+}
+
+#[test]
+fn test_script_cannot_be_combined_with_steps() {
+    let script = ScriptFile::new("with-steps", "step 10\n");
+    let error = headless(&["--steps", "3", "--script", &script.arg()]).unwrap_err();
+    assert!(error.to_string().contains("cannot be combined"), "{error}");
+}
+
+#[test]
+fn test_script_errors_name_the_file_and_line() {
+    let script = ScriptFile::new("bad", "step 1\nview.toggle_real_data\n");
+    let error = headless(&["--script", &script.arg()]).unwrap_err().message;
+    assert!(error.starts_with("--script "), "{error}");
+    assert!(error.contains(&script.arg()), "{error}");
+    assert!(
+        error.contains("line 2: `view.toggle_real_data` cannot run in a script"),
+        "{error}"
+    );
+
+    let missing = headless(&["--script", "/nonexistent/run.script"]).unwrap_err();
+    assert!(missing.to_string().contains("cannot read"), "{missing}");
+    assert!(
+        headless(&["--script"])
+            .unwrap_err()
+            .to_string()
+            .contains("requires a value")
+    );
+}
+
+#[test]
+fn test_script_must_run_steps_and_be_given_once() {
+    let no_steps = ScriptFile::new("no-steps", "balls.add_random 5\nstep 0\n");
+    let error = headless(&["--script", &no_steps.arg()]).unwrap_err();
+    assert!(error.message.contains("runs no steps"), "{error}");
+
+    let script = ScriptFile::new("twice", "step 1\n");
+    let error = headless(&["--script", &script.arg(), "--script", &script.arg()]).unwrap_err();
+    assert!(error.message.contains("only once"), "{error}");
+}

@@ -3,13 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use super::*;
-use crate::application::operator_command::OperatorCommand;
-use crate::application::operator_command::source::{
-    AdjustSourceSphereEmitPeriod, AdjustSourceSphereSpeed, PlaceSourceSphere, ToggleSourceSphere,
-};
-use crate::application::operator_command::thermostat::{PlaceThermostat, ToggleThermostat};
 use crate::application::renderer_snapshot::RendererSnapshot;
-use crate::headless_cli::{DetailLevel, LineSegmentSpec, OutputFormat, ValveSpec};
+use crate::headless_cli::{DetailLevel, LineSegmentSpec, ValveSpec};
 use crate::headless_output::HeadlessSnapshotSink;
 use std::cell::RefCell;
 use std::fs;
@@ -106,123 +101,70 @@ fn headless_output(mut config: HeadlessConfig, application: MainContent) -> (Str
     (content, report.snapshots_emitted)
 }
 
+/// The checked-in inputs of the fixture runs (#340).
+const FIXTURES_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/headless_runner/fixtures");
+
+/// The run that `fixtures/<name>.args` describes: the command line of
+/// `moldyat` without the program name, run from the fixtures directory
+/// (`--config` and `--script` name files there). Returns the parsed headless
+/// config and the `--config` run settings (defaults without one).
+fn fixture_run(name: &str) -> (HeadlessConfig, SimConfig) {
+    let dir = std::path::Path::new(FIXTURES_DIR);
+    let text = fs::read_to_string(dir.join(format!("{name}.args"))).expect("read fixture args");
+    let mut args = vec!["moldyat".to_string()];
+    let mut sim = SimConfig::default();
+    let mut words = text.split_whitespace();
+    while let Some(word) = words.next() {
+        match word {
+            // A flag of the binary, not of `parse_headless_args`.
+            "--config" => {
+                let file = words.next().expect("--config value");
+                sim = SimConfig::load(&dir.join(file)).expect("fixture config");
+            }
+            "--script" => {
+                let file = words.next().expect("--script value");
+                args.push(word.to_string());
+                args.push(dir.join(file).display().to_string());
+            }
+            _ => args.push(word.to_string()),
+        }
+    }
+    let config = crate::headless_cli::parse_headless_args(&args)
+        .expect("fixture args parse")
+        .expect("fixture args are a headless run");
+    (config, sim)
+}
+
+/// The application of a fixture run, as the binary prepares it.
+fn fixture_application(config: &HeadlessConfig, sim: &SimConfig) -> MainContent {
+    prepare_application(config, sim, &SaveStore::new("saves"), None).expect("prepare")
+}
+
 fn seeded_headless_output() -> String {
-    let world_rect = window_world_rect();
-
-    let config = HeadlessConfig {
-        steps: 6,
-        snapshot_every: 2,
-        output: None,
-        format: OutputFormat::Jsonl,
-        detail: DetailLevel::Summary,
-        rng_seed: Some(12345),
-        stdout: false,
-        seed_balls: Some(24),
-        dt: None,
-        seed_speed: None,
-        seed_species: Vec::new(),
-        line_segments: Vec::new(),
-        valves: Vec::new(),
-        timings: None,
-        timing_warmup: 0,
-        export_dir: None,
-        export_format: Default::default(),
-        export_series: None,
-        export_stream: false,
-        save_setup: false,
-        sim: None,
-    };
-
-    let mut application = build_application(world_rect, &SimConfig::default(), config.rng_seed)
-        .expect("build deterministic app");
-    application.seed_random_balls(config.seed_balls.expect("seed ball count") as usize);
-
+    let (config, sim) = fixture_run("seeded_headless_regression");
+    assert_eq!(sim.world.rect(), window_world_rect());
+    let application = fixture_application(&config, &sim);
     let (content, snapshots_emitted) = headless_output(config, application);
     assert_eq!(snapshots_emitted, 4);
     content
 }
 
-/// Balls seeded in the operator scenario, before the source sphere adds more.
-const OPERATORS_SEED_BALLS: u32 = 32;
-
-/// Config of the seeded operator scenario: two walls and an open valve in a
-/// quarter-size world, so that balls reach the operators within the run.
-fn operators_config(steps: u32, snapshot_every: u32) -> HeadlessConfig {
-    HeadlessConfig {
-        steps,
-        snapshot_every,
-        detail: DetailLevel::Balls,
-        rng_seed: Some(222),
-        seed_balls: Some(OPERATORS_SEED_BALLS),
-        seed_speed: Some(3.0),
-        line_segments: vec![
-            LineSegmentSpec {
-                start: (-2.0, -7.0),
-                end: (-2.0, 7.0),
-                thickness: 2.0,
-            },
-            LineSegmentSpec {
-                start: (2.0, -3.0),
-                end: (12.0, -3.0),
-                thickness: 1.0,
-            },
-        ],
-        valves: vec![ValveSpec {
-            wall: 0,
-            t_start: 0.35,
-            t_end: 0.65,
-            is_closed: false,
-        }],
-        ..HeadlessConfig::default()
-    }
+/// The operator scenario (`fixtures/seeded_headless_operators.*`): two walls
+/// and an open valve from the command line, an active thermostat and an
+/// emitting source sphere from the script, in a quarter-size world from the
+/// config, so that balls reach the operators within the run.
+fn operators_run() -> (HeadlessConfig, SimConfig) {
+    fixture_run("seeded_headless_operators")
 }
 
-/// The operator scenario runs in a quarter-size world (`--world-scale 0.25`).
-fn operators_sim_config() -> SimConfig {
-    let mut sim = SimConfig::default();
-    sim.world.scale = 0.25;
-    sim
-}
-
-/// The operator scenario's world: `config` plus an active thermostat left of
-/// the valve wall and an emitting source sphere right of it. Thermostats and
-/// source spheres have no headless flags, so they go through the same
-/// operator commands as the UI tools.
-fn operators_application(config: &HeadlessConfig) -> MainContent {
-    let mut application = prepare_application(
-        config,
-        &operators_sim_config(),
-        &SaveStore::new("saves"),
-        None,
-    )
-    .expect("prepare");
-
-    Box::new(PlaceThermostat {
-        position: Vec2D::new(-8.0, 0.0),
-    })
-    .execute(&mut application);
-    Box::new(PlaceSourceSphere {
-        center: Vec2D::new(7.0, 3.0),
-    })
-    .execute(&mut application);
-    let operators = application.create_snapshot().operators;
-    let thermostat_id = operators.thermostats[0].id;
-    let sphere_id = operators.source_spheres[0].id;
-    Box::new(ToggleThermostat { thermostat_id }).execute(&mut application);
-    Box::new(ToggleSourceSphere { sphere_id }).execute(&mut application);
-    // Default period 3000 steps -> 20, default speed 0.05 -> 3.0. At 3.0 an
-    // emitted ball moves 0.6 in one period, out of the way of the next one
-    // (emission needs a free spot at the sphere's perimeter).
-    Box::new(AdjustSourceSphereEmitPeriod {
-        sphere_id,
-        delta_steps: -2980,
-    })
-    .execute(&mut application);
-    Box::new(AdjustSourceSphereSpeed {
-        sphere_id,
-        delta: 2.95,
-    })
-    .execute(&mut application);
+/// The operator scenario's world after its script's setup commands (those
+/// before the first `step`), without running any step.
+fn operators_application(config: &HeadlessConfig, sim: &SimConfig) -> MainContent {
+    let mut application = fixture_application(config, sim);
+    let script = config.script.as_ref().expect("operator scenario script");
+    ScriptRun::new(script)
+        .run_due(0, &mut application, None)
+        .expect("setup commands");
     application
 }
 
@@ -242,11 +184,12 @@ struct OperatorsRunState {
 /// `steps` steps on a dedicated Rayon pool of `threads` workers.
 fn operators_run_state(threads: usize, seed_balls: u32, steps: u32) -> OperatorsRunState {
     let run = || {
+        let (config, sim) = operators_run();
         let config = HeadlessConfig {
             seed_balls: Some(seed_balls),
-            ..operators_config(steps, 0)
+            ..config
         };
-        let mut application = operators_application(&config);
+        let mut application = operators_application(&config, &sim);
         let seeded_balls = application.create_snapshot().balls.len();
         let mut energies = Vec::with_capacity(steps as usize);
         let mut wall_momentum = Vec::with_capacity(steps as usize);
@@ -380,16 +323,15 @@ fn test_seeded_headless_regression_fixture_matches_checked_in_jsonl() {
     assert_matches_fixture(SEEDED_HEADLESS_FIXTURE_PATH, &seeded_headless_output());
 }
 
-/// Golden output of the operator scenario. The fixture's `run_start.config`
-/// only records the walls and the valve; the thermostat and the source
-/// sphere (positions, both switched on, emit period 20 steps, emission speed
-/// 3.0) show up as `operator_counts` only. See `operators_config` and
-/// `operators_application` for the whole scenario.
+/// Golden output of the operator scenario (`fixtures/seeded_headless_operators.*`).
+/// The script's setup commands appear as `command` records after
+/// `run_start`, whose `config.script` lists the whole script.
 #[test]
 #[ignore = "suite:headless-regression"]
 fn test_seeded_headless_operators_fixture_matches_checked_in_jsonl() {
-    let config = operators_config(200, 100);
-    let application = operators_application(&config);
+    let (config, sim) = operators_run();
+    assert_eq!(config.steps, 200);
+    let application = fixture_application(&config, &sim);
     let (actual_text, snapshots_emitted) = headless_output(config, application);
     assert_eq!(snapshots_emitted, 3);
     assert_matches_fixture(SEEDED_OPERATORS_FIXTURE_PATH, &actual_text);
@@ -1316,4 +1258,168 @@ fn run_output_path(name: &str) -> (std::path::PathBuf, impl Drop) {
     ));
     let _ = fs::remove_file(&path);
     (path.clone(), Guard(path))
+}
+
+/// Runs `script` on a seeded default world with a frame every `every`
+/// steps; returns the JSONL records.
+fn scripted_run(script: &str, every: u32) -> io::Result<Vec<serde_json::Value>> {
+    let script = Script::parse(script).expect("script parses");
+    let config = HeadlessConfig {
+        steps: script.total_steps(),
+        snapshot_every: every,
+        rng_seed: Some(7),
+        seed_balls: Some(10),
+        script: Some(script),
+        ..HeadlessConfig::default()
+    };
+    let application = prepare_application(
+        &config,
+        &SimConfig::default(),
+        &SaveStore::new("saves"),
+        None,
+    )?;
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_nanos();
+    let path = std::env::temp_dir().join(format!(
+        "headless-script-{}-{nanos}.jsonl",
+        std::process::id()
+    ));
+    let config = HeadlessConfig {
+        output: Some(path.clone()),
+        stdout: false,
+        ..config
+    };
+    let result = HeadlessRunner::from_config(config, application, UNKNOWN_COMMIT)?.run();
+    let text = fs::read_to_string(&path).unwrap_or_default();
+    let _ = fs::remove_file(&path);
+    result.map(|_| parse_jsonl_records(&text))
+}
+
+fn kinds(records: &[serde_json::Value]) -> Vec<String> {
+    records
+        .iter()
+        .map(|record| {
+            let kind = record["record_kind"].as_str().unwrap_or_default();
+            match kind {
+                "frame" => format!("frame@{}", record["step"]),
+                "command" => format!(
+                    "{}@{}",
+                    record["id"].as_str().unwrap_or_default(),
+                    record["step"]
+                ),
+                _ => kind.to_string(),
+            }
+        })
+        .collect()
+}
+
+#[test]
+fn test_script_commands_run_at_their_steps_after_the_frame() {
+    let records = scripted_run(
+        "sim.cycle_gravity\nstep 2\nballs.add_random 5\nstep 2\nballs.clear\n",
+        2,
+    )
+    .expect("run");
+    assert_eq!(
+        kinds(&records),
+        [
+            "run_start",
+            "sim.cycle_gravity@0",
+            "frame@0",
+            "frame@2",
+            "balls.add_random@2",
+            "frame@4",
+            "balls.clear@4",
+            "run_end"
+        ]
+    );
+    // The setup command is in effect before the first frame.
+    assert_ne!(records[0]["initial"]["gravity_force_multiple"], 0);
+    assert_eq!(records[0]["config"]["steps"], 4);
+    assert_eq!(records[0]["config"]["script"][2], "balls.add_random 5");
+    let balls = |index: usize| records[index]["ball_count"].as_u64().expect("ball count");
+    assert_eq!(
+        balls(3),
+        10,
+        "frame@2 shows the world before its step's commands"
+    );
+    assert!(balls(5) > 10, "balls.add_random added balls before step 4");
+    let command = &records[4];
+    assert_eq!(command["schema_version"], "headless.v2");
+    assert_eq!(command["line"], 3);
+    assert_eq!(command["args"], serde_json::json!(["5"]));
+}
+
+#[test]
+fn test_script_of_steps_only_writes_no_command_records() {
+    let records = scripted_run("step 2", 0).expect("run");
+    assert_eq!(
+        kinds(&records),
+        ["run_start", "frame@0", "frame@2", "run_end"]
+    );
+}
+
+#[test]
+fn test_script_command_that_cannot_run_fails_the_run_with_its_line() {
+    let error = scripted_run("step 1\n\noperator.toggle_thermostat 0\nstep 1", 0).unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "script line 3: there is no thermostat 0 (0 placed)"
+    );
+    let error = scripted_run("world.save", 0).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .starts_with("script line 1: saving failed"),
+        "{error}"
+    );
+}
+
+#[test]
+fn test_paused_world_fails_the_run_without_timings() {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_nanos();
+    let dir = std::env::temp_dir().join(format!("headless-stall-{}-{nanos}", std::process::id()));
+    let store = SaveStore::new(&dir);
+    let mut seeded =
+        build_application(test_world_rect(), &SimConfig::default(), Some(5)).expect("build");
+    seeded.seed_random_balls(20);
+    let saved = seeded.save_world(&store).expect("save");
+    let mut paused =
+        build_application(test_world_rect(), &SimConfig::default(), Some(5)).expect("build");
+    paused
+        .load_world(&store, &LoadSource::Path(saved), true)
+        .expect("load paused");
+    let _ = fs::remove_dir_all(&dir);
+
+    let error = HeadlessRunner::builder()
+        .application(paused)
+        .sink(Box::new(RecordingSink(Rc::new(RefCell::new(Vec::new())))))
+        .steps(5)
+        .build()
+        .run()
+        .err()
+        .expect("a paused run must fail");
+    assert_eq!(error.to_string(), "step 0 did not run (simulation paused)");
+}
+
+#[test]
+fn test_builder_script_sets_the_run_length() {
+    let script = Script::parse("step 3\nballs.clear\nstep 2").expect("script");
+    let frames = Rc::new(RefCell::new(Vec::new()));
+    let application =
+        build_application(window_world_rect(), &SimConfig::default(), None).expect("application");
+    let runner = HeadlessRunner::builder()
+        .application(application)
+        .sink(Box::new(RecordingSink(frames.clone())))
+        .steps(1)
+        .script(Some(script))
+        .build();
+    assert_eq!(runner.steps, 5);
+    runner.run().expect("run");
+    assert_eq!(*frames.borrow(), [0, 5]);
 }

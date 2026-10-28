@@ -64,6 +64,7 @@ fn test_run_start_record_contains_config_and_operator_counts() {
         export_stream: false,
         save_setup: false,
         sim: None,
+        script: None,
     };
 
     let line = run_start_to_jsonl(&config, &snapshot);
@@ -374,6 +375,7 @@ fn test_runs_with_same_seed_and_config_emit_identical_jsonl() {
         export_stream: false,
         save_setup: false,
         sim: None,
+        script: None,
     };
     let config_b = HeadlessConfig {
         output: Some(output_path_b.clone()),

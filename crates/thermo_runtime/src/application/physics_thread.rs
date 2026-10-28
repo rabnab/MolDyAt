@@ -27,10 +27,10 @@ use std::thread::{self, JoinHandle};
 mod command_handler;
 mod runtime;
 
-#[cfg(test)]
 pub(crate) use command_handler::DomainCommandHandler;
+pub(crate) use runtime::CommandHandler;
 #[cfg(test)]
-pub(crate) use runtime::{CommandHandler, PhysicsRuntime};
+pub(crate) use runtime::PhysicsRuntime;
 
 /// Shutdown signal shared between threads
 #[derive(Clone)]

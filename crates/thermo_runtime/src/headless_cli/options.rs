@@ -18,6 +18,11 @@ pub const HEADLESS_OPTIONS: &[OptionHelp] = &[
         help: &["Physics steps to run (default 1)"],
     },
     OptionHelp {
+        names: &["--script"],
+        value: Some("<PATH>"),
+        help: &["Run the commands in PATH at their steps; its `step` lines set the length"],
+    },
+    OptionHelp {
         names: &["--snapshot-every"],
         value: Some("<N>"),
         help: &["Write a frame every N steps (default 0: first and last only)"],

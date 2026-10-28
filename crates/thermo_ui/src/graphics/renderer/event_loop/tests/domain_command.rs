@@ -130,3 +130,27 @@ fn test_ui_commands_stay_outside_domain_command() {
         assert_eq!(command.ui_action(), Some(action), "{id}");
     }
 }
+
+/// The key registry and the domain command table (`thermo_runtime`, #340)
+/// name the same commands: every key's domain id has a table entry, and
+/// every table entry has a key command.
+#[test]
+fn test_key_registry_and_domain_table_name_the_same_commands() {
+    use super::super::command_registry::CommandKind;
+    use thermo_runtime::application::{DOMAIN_COMMANDS, domain_command_spec};
+
+    let key_ids: Vec<&str> = COMMANDS
+        .iter()
+        .filter_map(|c| match c.kind {
+            CommandKind::Domain(id) => {
+                assert_eq!(id, c.id, "a key command names its own id");
+                assert!(domain_command_spec(id).is_some(), "{id} not in the table");
+                Some(id)
+            }
+            CommandKind::Ui(_) => None,
+        })
+        .collect();
+    for spec in DOMAIN_COMMANDS {
+        assert!(key_ids.contains(&spec.id), "{} has no key command", spec.id);
+    }
+}

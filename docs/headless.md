@@ -12,7 +12,8 @@ The design history is in
 ## How a run works
 
 The headless code lives in `crates/thermo_runtime/src/` (`headless_cli.rs`,
-`headless_runner.rs`, `headless_output.rs`, `headless_timings.rs`), a crate
+`headless_runner.rs`, `headless_output.rs`, `headless_timings.rs`,
+`headless_script.rs`), a crate
 without a windowing or GPU stack. The same `moldyat` binary runs both
 modes: it parses the command line and the shared options (`--load`,
 `--config`, `--world-scale`, `--save-dir`) and, for `--headless`, hands the
@@ -26,7 +27,8 @@ the git commit it was built from (the `commit` of the timings report).
    same default world as the window (scaled by `world.scale` or
    `--world-scale`), or loads one with `--load`,
    sets the time step, adds walls and valves, then seeds balls, so seeded
-   balls never start inside a wall.
+   balls never start inside a wall. The commands of a `--script` before
+   its first `step` run next (see [Scripts](#scripts)).
 3. It steps the simulation directly on the main thread with
    `MainContent::simulation_step()`; there is no physics thread.
 4. Snapshots come from `CreateSnapshot::create_snapshot()` and are mapped
@@ -36,6 +38,7 @@ the git commit it was built from (the `commit` of the timings report).
 
 Frames are written at step 0, at every `--snapshot-every` boundary, and at
 the last step even when the interval does not divide the step count.
+Script commands due after a step run after that step's frame.
 
 ## Command line
 
@@ -43,6 +46,7 @@ the last step even when the interval does not divide the step count.
 |---------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `--headless`                          | Run without a window; enables the options below                                                                                                                                                                                                                                                                                          |
 | `--steps <N>`                         | Physics steps to run (default 1)                                                                                                                                                                                                                                                                                                         |
+| `--script <PATH>`                     | Run the commands of the script at PATH at their steps; its `step` lines set the run length, so it cannot be combined with `--steps` (see [Scripts](#scripts))                                                                                                                                                                            |
 | `--snapshot-every <N>`                | Write a frame every N steps (default 0: first and last only)                                                                                                                                                                                                                                                                             |
 | `--output <PATH>`                     | Write JSONL records to this file                                                                                                                                                                                                                                                                                                         |
 | `--format jsonl`                      | Output format (only `jsonl`)                                                                                                                                                                                                                                                                                                             |
@@ -91,8 +95,9 @@ unchanged.
 
 | `record_kind` | When                              | Contents                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 |---------------|-----------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `run_start`   | once, first                       | `config` (steps, snapshot interval, format, detail level, RNG seed, seeding, `world_scale` (the run's `world.scale`, `null` for the default world), dt, walls and valves; `seed_species` as `[{species, weight}]` only with `--seed-species`; `sim`, the effective `SimConfig` after `--config`, `--world-scale`, `--dt` and a loaded save, in the layout of a `--config` file: `world` when not the default, `integration`, `potential`, `neighbours`, `display`, and `species` when the run has a `[[species]]` list; written to a `.json` file it is a valid `--config`, e.g. `head -1 run.jsonl \| jq .config.sim > run.json`) and `initial` (step, time, ball count, gravity, operator counts, world rectangle) |
+| `run_start`   | once, first                       | `config` (steps, snapshot interval, format, detail level, RNG seed, seeding, `world_scale` (the run's `world.scale`, `null` for the default world), dt, walls and valves; `seed_species` as `[{species, weight}]` only with `--seed-species`; `script`, the script's commands as parsed, one string per command, only with `--script`; `sim`, the effective `SimConfig` after `--config`, `--world-scale`, `--dt` and a loaded save, in the layout of a `--config` file: `world` when not the default, `integration`, `potential`, `neighbours`, `display`, and `species` when the run has a `[[species]]` list; written to a `.json` file it is a valid `--config`, e.g. `head -1 run.jsonl \| jq .config.sim > run.json`) and `initial` (step, time, ball count, gravity, operator counts, world rectangle) |
 | `frame`       | step 0, every interval, last step | step, time, kinetic and potential energy (with gravity on, the potential energy includes `m·g·h`, `h` the height above the bottom wall, #334), `delta_energy` from the step-0 frame (drift only while gravity and the ball count stay fixed: changing gravity or adding balls shifts it), ball count, gravity, physics FPS, operator counts, `metrics` (latest value of each `MetricsRegistry` series, sorted by name: `E_kin`, `E_pot`, `E_tot`, `wall_momentum`, `<species>:count`; series without a sample are left out), plus the detail sections                                                                                                                                                                |
+| `command`     | each script command, as it runs   | `step` (the simulation step it ran at), `line` (its line in the script), `id` (`balls.add_random`, `operator.place_thermostat`), `args` (as written, strings); setup commands come right after `run_start`, later ones after the frame of their step                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `run_end`     | once, last                        | final step and time, number of frames written, final ball count, operator counts                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 
 Detail sections in `frame` records, chosen with `--detail`:
@@ -106,6 +111,73 @@ Detail sections in `frame` records, chosen with `--detail`:
 Non-finite numbers (`NaN`, `±Inf`) are written as `null` in every numeric
 position, including the thermo grids.
 
+## Scripts
+
+`--script FILE` (#340) runs commands at chosen steps, so a scenario is a
+text file instead of a test or a sequence of key presses:
+
+```text
+# comments run to the end of the line
+operator.place_thermostat -8 0
+operator.toggle_thermostat 0
+step 1000
+balls.add_random 500; sim.cycle_gravity
+step 2000
+world.save
+```
+
+- One command per line, or several separated by `;`.
+- `step N` runs `N` steps. The run is as long as all `step`s together.
+- Domain commands by their full id of the key registry (`H` in the window
+  lists them), from the shared table `DOMAIN_COMMANDS`
+  (`thermo_runtime::application::command_table`): gravity and time step
+  (`sim.cycle_gravity`, `sim.double_time_step`, `sim.halve_time_step`),
+  `balls.*`, `world.save` and `world.export_*`. A command with a parameter takes it
+  as its only argument (`balls.add_random 500`; without it, the key's
+  default). Loading, the sample stream and the view and debug commands
+  are rejected: they need a window or change the run's inputs.
+- Operator commands do what the sidebar tools do. They name a thermostat
+  or source sphere by its place in creation order (`0` is the first
+  placed):
+
+  | Command                                     | Does                                                  |
+  |---------------------------------------------|-------------------------------------------------------|
+  | `operator.place_thermostat X Y`             | place a thermostat (off) at world position `X Y`      |
+  | `operator.toggle_thermostat N`              | switch thermostat `N` on or off                       |
+  | `operator.adjust_thermostat_temperature N S`| change its target temperature by `S` wheel notches    |
+  | `operator.adjust_thermostat_radius N S`     | change its radius by `S` wheel notches                |
+  | `operator.place_source_sphere X Y`          | place a source sphere (off) at `X Y`                  |
+  | `operator.toggle_source_sphere N`           | switch source sphere `N` on or off                    |
+  | `operator.adjust_source_sphere_speed N D`   | change its emission speed by `D`                      |
+  | `operator.adjust_source_sphere_period N S`  | change its emit period by `S` steps (whole number)    |
+  | `operator.cycle_source_sphere_species N`    | emit the next species of the world's table            |
+
+Commands before the first `step` set the world up: they run after the
+command-line walls, valves and seeded balls and before the first snapshot,
+so `run_start` and the frame at step 0 show them. A command after `step N`
+runs after step `N` and its frame. Commands after the last `step` run
+after the last frame, so neither `run_end` nor the `--export-dir` files
+show what they change; put `world.save` or `world.export_*` there, not
+commands that change the world. Every command that ran is a `command`
+record. The script is checked when the command line is parsed (unknown or
+rejected ids, wrong arguments: an error with its line); a command that
+cannot run (thermostat `1` when one is placed, `world.save` failing) fails
+the run with `script line N: ...`. `world.save` writes to `--save-dir` and
+`world.export_*` where the window's export keys do; both name the file on
+stderr, outside the records, since the file names hold the time.
+
+Pause, stepwise mode and the wait time (`sim.toggle_pause`,
+`sim.toggle_stepwise`, `sim.*_wait_time`) are rejected too: a headless run
+steps the world itself, and a paused world would make the remaining steps
+no-ops (a step that does not advance the world fails the run). A script
+must run at least one step, and `--script` can be given once.
+
+Script commands run inside the timed loop, so `world.save` and
+`world.export_*` add their file I/O to the `--timings` wall time; measure
+performance (`scripts/headless_perf.sh`) without a script.
+
+Without `--script` the output is unchanged.
+
 ## Determinism and fixtures
 
 A run with the same `--rng-seed`, flags and build (same target and profile)
@@ -117,6 +189,15 @@ produces byte-identical output. Three tests in
 | `test_seeded_headless_regression_fixture_matches_checked_in_jsonl` | free gas, summary records                                        | `fixtures/seeded_headless_regression.jsonl` |
 | `test_seeded_headless_operators_fixture_matches_checked_in_jsonl`  | walls, a valve, a thermostat and a source sphere, per-ball state | `fixtures/seeded_headless_operators.jsonl`  |
 | `test_seeded_operators_run_does_not_depend_on_thread_count`        | the operator scenario with 1 and 4 Rayon threads                 | compares the f32 bits of both runs          |
+
+Each fixture's run is described by checked-in files next to it:
+`<name>.args`, the command line (without `moldyat`), and for the operator
+scenario its `--config` (`.toml`, the quarter-size world) and `--script`
+(`.script`, the thermostat and the source sphere). Run from the fixtures
+directory, `moldyat $(cat <name>.args)` writes the fixture again; the tests
+parse the same files with `parse_headless_args`. The drift suite stays Rust
+tests (`docs/drift-test.md`): it measures over many runs and has no
+headless output to compare.
 
 The two fixture tests are `#[ignore = "suite:headless-regression"]` and run
 with `cargo ci-test-headless-regression`, in the `test` job of

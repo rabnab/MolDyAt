@@ -4,6 +4,7 @@
 
 use crate::application::renderer_snapshot::{OperatorSnapshot, RendererSnapshot, ThermoGridSpec};
 use crate::headless_cli::{DetailLevel, HeadlessConfig, OutputFormat};
+use crate::headless_script::CommandRecord;
 use crate::metrics::{SharedMetricsRegistry, read_metrics};
 use serde_json::json;
 use std::fs::File;
@@ -14,6 +15,11 @@ use thermo_physics::application::thermo_field::ThermoGrid;
 pub trait HeadlessSnapshotSink {
     fn write_run_start(&mut self, snapshot: &RendererSnapshot) -> io::Result<()>;
     fn write_frame(&mut self, snapshot: &RendererSnapshot) -> io::Result<()>;
+    /// A script command that ran (#340); sinks that do not record commands
+    /// ignore it.
+    fn write_command(&mut self, _command: &CommandRecord) -> io::Result<()> {
+        Ok(())
+    }
     fn write_run_end(
         &mut self,
         final_snapshot: &RendererSnapshot,
@@ -36,6 +42,11 @@ impl HeadlessWriter {
 }
 
 impl HeadlessSnapshotSink for HeadlessWriter {
+    fn write_command(&mut self, command: &CommandRecord) -> io::Result<()> {
+        let line = command_to_jsonl(command);
+        self.write_machine_record(&line)
+    }
+
     fn write_run_start(&mut self, snapshot: &RendererSnapshot) -> io::Result<()> {
         self.initial_total_energy = Some(snapshot.kinetic_energy + snapshot.potential_energy);
         let line = run_start_to_jsonl(&self.config, snapshot);
@@ -212,6 +223,12 @@ fn run_start_to_jsonl(config: &HeadlessConfig, snapshot: &RendererSnapshot) -> S
     if let Some(sim) = &config.sim {
         record["config"]["sim"] = serde_json::to_value(sim).expect("SimConfig serializes");
     }
+    // Only with `--script`, so runs without one keep their bytes: the
+    // script's commands as parsed, one per entry, so the output alone can
+    // reproduce the run.
+    if let Some(script) = &config.script {
+        record["config"]["script"] = script.items.iter().map(|item| item.text.clone()).collect();
+    }
     // Only with `--seed-species`, so runs without it keep their bytes.
     if !config.seed_species.is_empty() {
         record["config"]["seed_species"] = config
@@ -221,6 +238,20 @@ fn run_start_to_jsonl(config: &HeadlessConfig, snapshot: &RendererSnapshot) -> S
             .collect();
     }
     record.to_string()
+}
+
+/// A `command` record (#340): a script command that ran, at the
+/// simulation step it ran at, with its line in the script.
+pub fn command_to_jsonl(command: &CommandRecord) -> String {
+    json!({
+        "schema_version": SCHEMA_VERSION,
+        "record_kind": "command",
+        "step": command.step,
+        "line": command.line,
+        "id": command.id,
+        "args": command.args,
+    })
+    .to_string()
 }
 
 /// `run_start.config.world_scale`: the run's `world.scale`, or `null` for the

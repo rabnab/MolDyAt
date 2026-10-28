@@ -14,7 +14,7 @@ are in [refactoring-plan.md](plan/refactoring-plan.md).
 | Crate | Package | Contents |
 |---|---|---|
 | `crates/thermo_physics` | `thermo_physics` | The physics: particles and species, pair potentials and the SIMD force kernel, cell grid and Verlet lists, walls and operators (`objects2d`); the world, `MainContent` and its stepping (`application/core`); run settings (`sim_config`), units, stats, thermo fields and saves (`persistence`). Dependencies: rayon, serde, rand, toml, log |
-| `crates/thermo_runtime` | `thermo_runtime` | Running a simulation without a window: the physics thread and its `SnapshotPublisher`, `DomainCommand` and its handler, `OperatorCommand`s, `PhysicsEvent`, `RendererSnapshot` and its builder (`CreateSnapshot`), scene layers, the metrics store (`metrics`), the data export (`export`), and headless runs (`headless_cli`, `headless_runner`, `headless_output`, `headless_timings`). Dependencies: `thermo_physics`, arc-swap, serde_json, rayon, log |
+| `crates/thermo_runtime` | `thermo_runtime` | Running a simulation without a window: the physics thread and its `SnapshotPublisher`, `DomainCommand` and its handler, `OperatorCommand`s, `PhysicsEvent`, `RendererSnapshot` and its builder (`CreateSnapshot`), scene layers, the metrics store (`metrics`), the data export (`export`), and headless runs (`headless_cli`, `headless_runner`, `headless_output`, `headless_timings`, `headless_script`). Dependencies: `thermo_physics`, arc-swap, serde_json, rayon, log |
 | `crates/thermo_ui` | `thermo_ui` | The UI without a GPU backend (`graphics`): event loop and input handling, the keyboard command registry and key map, operator tools, viewport, sidebar model, and the energy plot window's state with its plot layout (`PlotScene`, drawn by the backend, which owns the OS window, #371); plus the logger setup and the UI settings file (`ui_settings`: `ui.toml` with the key bindings, #335). Dependencies: `thermo_runtime`, `thermo_physics`, winit (input types only: keys, mouse and window events), arc-swap, toml, log, env_logger |
 | `wgpu_renderer` | `moldyat_wgpu` | The `moldyat` binary: command line, the app shell (`wgpu/shell`: winit event loop, the main and plot windows, the plot window created and closed as `thermo_ui` asks, #371) and the renderer (`wgpu/render`: GPU context, surfaces, render pipelines; no winit, #372). For `--headless` it computes the default world from its window size and calls `thermo_runtime`, handing it the git commit it was built from (`HeadlessRunner::from_config`) |
 
@@ -195,14 +195,14 @@ Every keyboard command is one `CommandDescriptor` in the table `COMMANDS`
 | `label` | One line for the help text and the README key table. It may name a value such as `{normal_gravity}` (`LABEL_VALUES`), so it never repeats a constant |
 | `category` | Help-text group; its prefix starts the id (`sim`, `balls`, `tools`, `world`, `view`, `debug`, `help`) |
 | `default_binding` | `KeyBinding`s: key (`BindKey`), modifier (`None`, `Ctrl`, `Alt`) and trigger (`Press`, `PressOnce` ignores auto-repeat, `Release`). A key is a `Symbol(char)`, the character the key types, wherever the layout puts it: every key that types one is bound so (letters, digits, `+`, `-`, the numpad), so shortcuts sit where they are printed (#327; decision on #354). Only keys that type no character (SPACE, ESC, TAB, DEL, BACKSPACE, Shift, F1–F12) are a physical `Code(KeyCode)` |
-| `kind` | `Ui(UiAction)`, handled in the renderer, or `Domain(fn() -> DomainCommand)`, sent to the physics thread |
+| `kind` | `Ui(UiAction)`, handled in the renderer, or `Domain(id)`, sent to the physics thread: the `DomainCommand` comes from the shared table `DOMAIN_COMMANDS` in `thermo_runtime` (`application::command_table`, #340), which headless scripts use too. A test checks that the key table and the domain table name the same commands |
 
 ```text
 KeyEvent → key_input (physical KeyCode + character typed without modifiers)
         → InputHandler::handle_key_down / handle_key_up (KeyInput)
         → KeyMap::command_for_key(key, phase, held modifiers) → InputAction::Command(&CommandDescriptor)
         → InputOrchestrator::process_action → action_processor::run_command
-              ├─ Domain(make) → PhysicsCoordinator::send_command(make())
+              ├─ Domain(id)   → PhysicsCoordinator::send_command(domain_command_spec(id).build(None))
               └─ Ui(action)   → run_ui_action (viewport, renderer config, help, energy window)
 ```
 
@@ -532,7 +532,10 @@ instead of running it with different physics.
 `moldyat --headless` runs the same `MainContent` without a window
 (`crates/thermo_runtime/src/headless_runner.rs`). It steps the simulation directly on
 the main thread and writes snapshots as versioned JSON Lines
-(`headless.v2`: `run_start`, `frame`, `run_end` records) to stdout or a file.
+(`headless.v2`: `run_start`, `frame`, `command`, `run_end` records) to stdout or a file.
+A `--script` file runs domain commands (by their registry id, through the
+same `DomainCommandHandler` as the physics thread) and operator commands at
+chosen steps (`headless_script.rs`, `headless_runner/script_run.rs`, #340).
 Seeded runs are deterministic; they back the headless regression fixtures
 and the performance scripts. The record format, CLI
 flags and fixtures are described in [headless.md](headless.md).

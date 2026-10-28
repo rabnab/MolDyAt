@@ -15,6 +15,7 @@ pub mod export;
 pub mod headless_cli;
 pub mod headless_output;
 pub mod headless_runner;
+pub mod headless_script;
 pub mod headless_timings;
 pub mod metrics;
 

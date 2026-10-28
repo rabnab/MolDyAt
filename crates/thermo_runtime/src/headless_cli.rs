@@ -3,7 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::export::ExportFormat;
-use std::path::PathBuf;
+use crate::headless_script::Script;
+use std::path::{Path, PathBuf};
 use thermo_physics::application::sim_config::{MAX_TIME_STEP, MIN_TIME_STEP, SimConfig};
 
 mod options;
@@ -66,6 +67,9 @@ pub struct HeadlessConfig {
     /// valves, seeded balls), before the first step. Perf runs seed a large
     /// world once and `--load` it for every run.
     pub save_setup: bool,
+    /// `--script`: the commands to run at their steps (#340); its `step`s
+    /// set the run length (`steps`).
+    pub script: Option<Script>,
     /// The effective run settings (`--config` with `--world-scale`, then
     /// `--dt`, or a loaded save's config), set once the application is prepared and recorded in
     /// `run_start` (#295). `None` until then.
@@ -118,6 +122,7 @@ impl Default for HeadlessConfig {
             export_series: None,
             export_stream: false,
             save_setup: false,
+            script: None,
             sim: None,
         }
     }
@@ -158,6 +163,7 @@ fn parse_headless_args_with_args(args: &[String]) -> Result<Option<HeadlessConfi
     let mut config = HeadlessConfig::default();
     // `--export-format` or `--export-series` seen; both need `--export-dir`.
     let mut export_options_given = false;
+    let mut steps_given = false;
     let mut i = 1;
 
     while i < args.len() {
@@ -174,6 +180,7 @@ fn parse_headless_args_with_args(args: &[String]) -> Result<Option<HeadlessConfi
                 if config.steps == 0 {
                     return Err(CliError::new("--steps value must be greater than 0"));
                 }
+                steps_given = true;
             }
             "--snapshot-every" => {
                 i += 1;
@@ -334,6 +341,18 @@ fn parse_headless_args_with_args(args: &[String]) -> Result<Option<HeadlessConfi
                 config.export_series = Some(names);
                 export_options_given = true;
             }
+            "--script" => {
+                i += 1;
+                if i >= args.len() {
+                    return Err(CliError::new("--script requires a value"));
+                }
+                if config.script.is_some() {
+                    return Err(CliError::new("--script can be given only once"));
+                }
+                let script = Script::load(Path::new(&args[i]))
+                    .map_err(|error| CliError::new(format!("--script {error}")))?;
+                config.script = Some(script);
+            }
             "--export-stream" => {
                 config.export_stream = true;
                 export_options_given = true;
@@ -351,6 +370,20 @@ fn parse_headless_args_with_args(args: &[String]) -> Result<Option<HeadlessConfi
             .any(|pair| pair[0] == "--no-stdout" && pair[1] == "--stdout")
     {
         return Err(CliError::new("--stdout and --no-stdout cannot be combined"));
+    }
+
+    if let Some(script) = &config.script {
+        if steps_given {
+            return Err(CliError::new(
+                "--steps and --script cannot be combined: the script's `step` lines set the run length",
+            ));
+        }
+        config.steps = script.total_steps();
+        if config.steps == 0 {
+            return Err(CliError::new(
+                "--script runs no steps: add a `step N` line with N > 0",
+            ));
+        }
     }
 
     if config.export_dir.is_none() && export_options_given {

@@ -22,12 +22,8 @@ use super::key_names::bind_key_name;
 use crate::graphics::energy_plot::MAX_PLOTS;
 use Modifier::{Alt, Ctrl};
 use Trigger::{Press, PressOnce, Release};
-use thermo_physics::application::persistence::LoadSource;
 use thermo_physics::application::{HIGH_GRAVITY_MPS2, NORMAL_GRAVITY_MPS2};
-use thermo_runtime::application::{
-    BallCommand, DomainCommand, SimControl, ViewCommand, WorldCommand,
-};
-use thermo_runtime::export::{ExportFormat, ExportKind};
+use thermo_runtime::application::{DomainCommand, domain_command_spec};
 use winit::keyboard::KeyCode;
 
 /// One keyboard command.
@@ -51,8 +47,11 @@ pub struct CommandDescriptor {
 pub enum CommandKind {
     /// Handled in the renderer; never reaches the physics thread.
     Ui(UiAction),
-    /// Builds the command sent to the physics thread.
-    Domain(fn() -> DomainCommand),
+    /// Sent to the physics thread: the id of its entry in the domain
+    /// command table (`thermo_runtime::application::DOMAIN_COMMANDS`), which
+    /// a headless script runs by the same id (#340). A key uses the
+    /// default of the command's parameter.
+    Domain(&'static str),
 }
 
 /// Renderer-side commands, handled in `action_processor::run_ui_action`.
@@ -273,7 +272,7 @@ impl CommandDescriptor {
     /// The command for the physics thread, if this is a domain command.
     pub fn domain_command(&self) -> Option<DomainCommand> {
         match self.kind {
-            CommandKind::Domain(make) => Some(make()),
+            CommandKind::Domain(id) => domain_command_spec(id).map(|spec| spec.build(None)),
             CommandKind::Ui(_) => None,
         }
     }
@@ -298,15 +297,6 @@ pub const LABEL_VALUES: &[LabelValue] = &[
     ("{high_gravity}", || format!("{HIGH_GRAVITY_MPS2:.2} m/s^2")),
     ("{max_plots}", || MAX_PLOTS.to_string()),
 ];
-
-fn export(kind: ExportKind, format: ExportFormat) -> DomainCommand {
-    WorldCommand::Export { kind, format }.into()
-}
-
-/// Either format's key stops a running stream.
-fn toggle_stream(format: ExportFormat) -> DomainCommand {
-    WorldCommand::ToggleSampleStream { format }.into()
-}
 
 const fn key(key: KeyCode, trigger: Trigger) -> KeyBinding {
     KeyBinding::new(BindKey::Code(key), Modifier::None, trigger)
@@ -334,35 +324,35 @@ pub static COMMANDS: &[CommandDescriptor] = &[
         label: "Pause or resume the simulation.",
         category: CommandCategory::Simulation,
         default_binding: &[key(KeyCode::Space, Press)],
-        kind: CommandKind::Domain(|| SimControl::TogglePause.into()),
+        kind: CommandKind::Domain("sim.toggle_pause"),
     },
     CommandDescriptor {
         id: "sim.toggle_stepwise",
         label: "Toggle step-by-step mode.",
         category: CommandCategory::Simulation,
         default_binding: &[symbol('s', Release)],
-        kind: CommandKind::Domain(|| SimControl::ToggleStepwise.into()),
+        kind: CommandKind::Domain("sim.toggle_stepwise"),
     },
     CommandDescriptor {
         id: "sim.cycle_gravity",
         label: "Cycle gravity: off -> {normal_gravity} -> {high_gravity}.",
         category: CommandCategory::Simulation,
         default_binding: &[symbol('g', Release)],
-        kind: CommandKind::Domain(|| SimControl::ToggleGravity.into()),
+        kind: CommandKind::Domain("sim.cycle_gravity"),
     },
     CommandDescriptor {
         id: "sim.double_time_step",
         label: "Double the simulation time step.",
         category: CommandCategory::Simulation,
         default_binding: &[symbol('+', Release), symbol('=', Release).hidden()],
-        kind: CommandKind::Domain(|| SimControl::DoubleTimeStep.into()),
+        kind: CommandKind::Domain("sim.double_time_step"),
     },
     CommandDescriptor {
         id: "sim.halve_time_step",
         label: "Halve the simulation time step.",
         category: CommandCategory::Simulation,
         default_binding: &[symbol('-', Release)],
-        kind: CommandKind::Domain(|| SimControl::HalveTimeStep.into()),
+        kind: CommandKind::Domain("sim.halve_time_step"),
     },
     CommandDescriptor {
         id: "sim.decrease_wait_time",
@@ -372,14 +362,14 @@ pub static COMMANDS: &[CommandDescriptor] = &[
             symbol_chord(Alt, '+', Release),
             symbol_chord(Alt, '=', Release).hidden(),
         ],
-        kind: CommandKind::Domain(|| SimControl::DecreaseWaitTime.into()),
+        kind: CommandKind::Domain("sim.decrease_wait_time"),
     },
     CommandDescriptor {
         id: "sim.increase_wait_time",
         label: "Increase the wait time between steps.",
         category: CommandCategory::Simulation,
         default_binding: &[symbol_chord(Alt, '-', Release)],
-        kind: CommandKind::Domain(|| SimControl::IncreaseWaitTime.into()),
+        kind: CommandKind::Domain("sim.increase_wait_time"),
     },
     // ── Balls ───────────────────────────────────────────────────────
     CommandDescriptor {
@@ -387,21 +377,21 @@ pub static COMMANDS: &[CommandDescriptor] = &[
         label: "Clear all balls.",
         category: CommandCategory::Balls,
         default_binding: &[key(KeyCode::Escape, Press)],
-        kind: CommandKind::Domain(|| BallCommand::Clear.into()),
+        kind: CommandKind::Domain("balls.clear"),
     },
     CommandDescriptor {
         id: "balls.stop_all",
         label: "Stop all balls (zero velocities).",
         category: CommandCategory::Balls,
         default_binding: &[key(KeyCode::F1, Release)],
-        kind: CommandKind::Domain(|| BallCommand::StopAll.into()),
+        kind: CommandKind::Domain("balls.stop_all"),
     },
     CommandDescriptor {
         id: "balls.add_random",
         label: "Add 100 random balls.",
         category: CommandCategory::Balls,
         default_binding: &[key(KeyCode::F5, Release)],
-        kind: CommandKind::Domain(|| BallCommand::AddRandom(100).into()),
+        kind: CommandKind::Domain("balls.add_random"),
     },
     CommandDescriptor {
         id: "balls.next_species",
@@ -410,21 +400,21 @@ pub static COMMANDS: &[CommandDescriptor] = &[
         // A letter, not `]` / `[`: bindings are physical keys, and N is N on
         // QWERTY, QWERTZ and AZERTY alike.
         default_binding: &[symbol('n', Release)],
-        kind: CommandKind::Domain(|| BallCommand::NextSpecies.into()),
+        kind: CommandKind::Domain("balls.next_species"),
     },
     CommandDescriptor {
         id: "balls.previous_species",
         label: "New balls and new source spheres get the previous species.",
         category: CommandCategory::Balls,
         default_binding: &[symbol_chord(Alt, 'n', Release)],
-        kind: CommandKind::Domain(|| BallCommand::PreviousSpecies.into()),
+        kind: CommandKind::Domain("balls.previous_species"),
     },
     CommandDescriptor {
         id: "balls.randomize_speeds",
         label: "Randomize all ball speeds.",
         category: CommandCategory::Balls,
         default_binding: &[symbol('r', Release)],
-        kind: CommandKind::Domain(|| BallCommand::RandomizeSpeeds.into()),
+        kind: CommandKind::Domain("balls.randomize_speeds"),
     },
     CommandDescriptor {
         id: "balls.enable_random_speed",
@@ -434,7 +424,7 @@ pub static COMMANDS: &[CommandDescriptor] = &[
             key(KeyCode::ShiftLeft, Press),
             key(KeyCode::ShiftRight, Press),
         ],
-        kind: CommandKind::Domain(|| BallCommand::EnableRandomSpeed.into()),
+        kind: CommandKind::Domain("balls.enable_random_speed"),
     },
     // ── Tools ───────────────────────────────────────────────────────
     CommandDescriptor {
@@ -454,56 +444,56 @@ pub static COMMANDS: &[CommandDescriptor] = &[
         label: "Save the world to a new file in the save directory (--save-dir, default ./saves).",
         category: CommandCategory::World,
         default_binding: &[symbol_chord(Ctrl, 's', PressOnce)],
-        kind: CommandKind::Domain(|| WorldCommand::Save.into()),
+        kind: CommandKind::Domain("world.save"),
     },
     CommandDescriptor {
         id: "world.load_latest",
         label: "Load the newest save from the save directory (paused, default view).",
         category: CommandCategory::World,
         default_binding: &[symbol_chord(Ctrl, 'o', PressOnce)],
-        kind: CommandKind::Domain(|| WorldCommand::Load(LoadSource::Latest).into()),
+        kind: CommandKind::Domain("world.load_latest"),
     },
     CommandDescriptor {
         id: "world.export_series_csv",
         label: "Export the metrics series (energies, wall momentum, species counts) as CSV to the save directory.",
         category: CommandCategory::World,
         default_binding: &[symbol_chord(Ctrl, 'e', PressOnce)],
-        kind: CommandKind::Domain(|| export(ExportKind::Series, ExportFormat::Csv)),
+        kind: CommandKind::Domain("world.export_series_csv"),
     },
     CommandDescriptor {
         id: "world.export_series_jsonl",
         label: "Export the metrics series as JSONL to the save directory.",
         category: CommandCategory::World,
         default_binding: &[symbol_chord(Ctrl, 'j', PressOnce)],
-        kind: CommandKind::Domain(|| export(ExportKind::Series, ExportFormat::Jsonl)),
+        kind: CommandKind::Domain("world.export_series_jsonl"),
     },
     CommandDescriptor {
         id: "world.export_snapshot_csv",
         label: "Export the state of every ball as CSV to the save directory.",
         category: CommandCategory::World,
         default_binding: &[symbol_chord(Alt, 'e', PressOnce)],
-        kind: CommandKind::Domain(|| export(ExportKind::Snapshot, ExportFormat::Csv)),
+        kind: CommandKind::Domain("world.export_snapshot_csv"),
     },
     CommandDescriptor {
         id: "world.export_snapshot_jsonl",
         label: "Export the state of every ball as JSONL to the save directory.",
         category: CommandCategory::World,
         default_binding: &[symbol_chord(Alt, 'j', PressOnce)],
-        kind: CommandKind::Domain(|| export(ExportKind::Snapshot, ExportFormat::Jsonl)),
+        kind: CommandKind::Domain("world.export_snapshot_jsonl"),
     },
     CommandDescriptor {
         id: "world.toggle_sample_stream_csv",
         label: "Start or stop streaming every metrics sample as CSV to the save directory (keeps the whole run).",
         category: CommandCategory::World,
         default_binding: &[symbol_chord(Ctrl, 'r', PressOnce)],
-        kind: CommandKind::Domain(|| toggle_stream(ExportFormat::Csv)),
+        kind: CommandKind::Domain("world.toggle_sample_stream_csv"),
     },
     CommandDescriptor {
         id: "world.toggle_sample_stream_jsonl",
         label: "Start or stop streaming every metrics sample as JSONL to the save directory.",
         category: CommandCategory::World,
         default_binding: &[symbol_chord(Alt, 'r', PressOnce)],
-        kind: CommandKind::Domain(|| toggle_stream(ExportFormat::Jsonl)),
+        kind: CommandKind::Domain("world.toggle_sample_stream_jsonl"),
     },
     // ── View ────────────────────────────────────────────────────────
     CommandDescriptor {
@@ -609,14 +599,14 @@ pub static COMMANDS: &[CommandDescriptor] = &[
         label: "Toggle the display of real data (SI units, see docs/units.md).",
         category: CommandCategory::View,
         default_binding: &[symbol('d', Release)],
-        kind: CommandKind::Domain(|| ViewCommand::ToggleRealData.into()),
+        kind: CommandKind::Domain("view.toggle_real_data"),
     },
     CommandDescriptor {
         id: "view.toggle_ball_stats",
         label: "Toggle the ball statistics overlay.",
         category: CommandCategory::View,
         default_binding: &[symbol('b', Release)],
-        kind: CommandKind::Domain(|| ViewCommand::ToggleBallStats.into()),
+        kind: CommandKind::Domain("view.toggle_ball_stats"),
     },
     // ── Diagnostics ─────────────────────────────────────────────────
     CommandDescriptor {
@@ -624,7 +614,7 @@ pub static COMMANDS: &[CommandDescriptor] = &[
         label: "Toggle step timings in the log.",
         category: CommandCategory::Diagnostics,
         default_binding: &[key(KeyCode::F4, Release)],
-        kind: CommandKind::Domain(|| ViewCommand::ToggleTimingDisplay.into()),
+        kind: CommandKind::Domain("debug.toggle_timings"),
     },
     CommandDescriptor {
         id: "debug.ball_verbosity",
@@ -632,7 +622,7 @@ pub static COMMANDS: &[CommandDescriptor] = &[
                 (c console, m main neighbours, o other neighbours, s speed) in the terminal.",
         category: CommandCategory::Diagnostics,
         default_binding: &[symbol('v', Release)],
-        kind: CommandKind::Domain(|| ViewCommand::StartVerbosityInput.into()),
+        kind: CommandKind::Domain("debug.ball_verbosity"),
     },
     // ── Help ────────────────────────────────────────────────────────
     CommandDescriptor {
