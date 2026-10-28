@@ -41,7 +41,7 @@ pub struct LineVertex {
     pub color: [f32; 4],
 }
 
-const LINE_ATTRS: [wgpu::VertexAttribute; 2] =
+pub(crate) const LINE_ATTRS: [wgpu::VertexAttribute; 2] =
     wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x4];
 
 pub struct LinePipeline {

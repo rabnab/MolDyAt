@@ -15,43 +15,131 @@
 //! This module intentionally contains no ggez or wgpu types so that
 //! unit tests can exercise state logic without a GPU context.
 
+use std::borrow::Cow;
+use thermo_physics::application::thermo_field::{CellFields, ThermoGrid};
 use thermo_runtime::application::scene_layers::SceneLayers;
 
-// ── ThermoDisplayMode ────────────────────────────────────────────────
+// ── Field overlays ───────────────────────────────────────────────────
 
-/// Which thermodynamic field overlay to display.
+/// A scalar per-cell field the heatmap and the value labels can show
+/// (#342). All come from the thermo grid's [`CellFields`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScalarField {
+    Temperature,
+    Pressure,
+    /// Balls per unit area.
+    Density,
+    /// `|v_com|`, the length of the flow arrows.
+    FlowSpeed,
+}
+
+/// How the heatmap shows one [`ScalarField`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ScalarFieldDescriptor {
+    pub field: ScalarField,
+    pub name: &'static str,
+    /// Values mapped to the ends of the colour scale (reduced units).
+    pub range: (f32, f32),
+}
+
+/// Every scalar field, in the order `T` cycles through them. A new field
+/// is one entry here plus its [`ScalarField::grid`] arm.
+pub const SCALAR_FIELDS: &[ScalarFieldDescriptor] = &[
+    ScalarFieldDescriptor {
+        field: ScalarField::Temperature,
+        name: "Temperature",
+        range: (0.0, 5.0),
+    },
+    ScalarFieldDescriptor {
+        field: ScalarField::Pressure,
+        name: "Pressure",
+        range: (-4.0, 4.0),
+    },
+    ScalarFieldDescriptor {
+        field: ScalarField::Density,
+        name: "Density",
+        // A dense LJ liquid has about 0.8 balls per σ².
+        range: (0.0, 1.0),
+    },
+    ScalarFieldDescriptor {
+        field: ScalarField::FlowSpeed,
+        name: "Flow speed",
+        // The thermal speed at T = 1 is about 1.4.
+        range: (0.0, 1.0),
+    },
+];
+
+impl ScalarField {
+    /// The field's descriptor in [`SCALAR_FIELDS`].
+    pub fn descriptor(self) -> &'static ScalarFieldDescriptor {
+        SCALAR_FIELDS
+            .iter()
+            .find(|d| d.field == self)
+            .expect("every scalar field has a descriptor")
+    }
+
+    /// The field's per-cell values.
+    pub fn grid(self, cells: &CellFields) -> Cow<'_, ThermoGrid> {
+        match self {
+            Self::Temperature => Cow::Borrowed(&cells.temperature),
+            Self::Pressure => Cow::Borrowed(&cells.pressure),
+            Self::Density => Cow::Borrowed(&cells.density),
+            Self::FlowSpeed => Cow::Owned(cells.flow_speed()),
+        }
+    }
+}
+
+/// Which field overlay to display.
 ///
-/// Cycled by the `T` key: Off → Grid → Temperature → Pressure → Off.
+/// Cycled by the `T` key: Off → Grid → every scalar field of
+/// [`SCALAR_FIELDS`] → flow arrows → Off.
 ///
 /// - `Off`: no overlay rendered.
 /// - `Grid`: plain cell-grid overlay only (no heatmap or value labels).
-/// - `Temperature`: thermo heatmap + value labels using temperature field.
-/// - `Pressure`: thermo heatmap + value labels using pressure field.
+/// - `Scalar`: heatmap and value labels of one scalar field.
+/// - `FlowArrows`: one arrow per cell along its flow velocity (#342).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ThermoDisplayMode {
     #[default]
     Off,
     Grid,
-    Temperature,
-    Pressure,
+    Scalar(ScalarField),
+    FlowArrows,
 }
 
 impl ThermoDisplayMode {
     /// Next variant in the cycle (wraps around).
     pub fn next(self) -> Self {
+        let scalar_at = |index: usize| {
+            SCALAR_FIELDS
+                .get(index)
+                .map_or(Self::FlowArrows, |d| Self::Scalar(d.field))
+        };
         let next = match self {
             Self::Off => Self::Grid,
-            Self::Grid => Self::Temperature,
-            Self::Temperature => Self::Pressure,
-            Self::Pressure => Self::Off,
+            Self::Grid => scalar_at(0),
+            Self::Scalar(field) => {
+                let index = SCALAR_FIELDS.iter().position(|d| d.field == field);
+                scalar_at(index.map_or(SCALAR_FIELDS.len(), |i| i + 1))
+            }
+            Self::FlowArrows => Self::Off,
         };
         log::info!("Thermo display: {self:?} → {next:?}");
         next
     }
 
-    /// Returns `true` for modes that render the thermo heatmap and value overlay.
+    /// Returns `true` for modes that need the thermo fields (the `THERMO`
+    /// layer): a scalar heatmap or the flow arrows.
     pub fn is_thermo_active(self) -> bool {
-        matches!(self, Self::Temperature | Self::Pressure)
+        matches!(self, Self::Scalar(_) | Self::FlowArrows)
+    }
+
+    /// The scalar field shown, if any.
+    pub fn scalar_field(self) -> Option<ScalarField> {
+        match self {
+            Self::Scalar(field) => Some(field),
+            _ => None,
+        }
     }
 }
 
@@ -74,7 +162,7 @@ pub struct RendererConfig {
     /// layer (operators, previews, labels), see [`Self::scene_layers`].
     pub render_drawing: bool,
 
-    /// Which thermodynamic field overlay to display (cycled by `T`).
+    /// Which field overlay to display (cycled by `T`).
     pub thermo_display: ThermoDisplayMode,
 }
 
@@ -128,7 +216,7 @@ impl RendererConfig {
         }
     }
 
-    /// Cycle the thermodynamic field overlay (T key).
+    /// Cycle the field overlay (T key).
     pub fn cycle_thermo_display(&mut self) {
         self.thermo_display = self.thermo_display.next();
     }
@@ -370,12 +458,42 @@ mod tests {
         assert_eq!(cfg.thermo_display, ThermoDisplayMode::Off);
         cfg.cycle_thermo_display();
         assert_eq!(cfg.thermo_display, ThermoDisplayMode::Grid);
+        for field in [
+            ScalarField::Temperature,
+            ScalarField::Pressure,
+            ScalarField::Density,
+            ScalarField::FlowSpeed,
+        ] {
+            cfg.cycle_thermo_display();
+            assert_eq!(cfg.thermo_display, ThermoDisplayMode::Scalar(field));
+        }
         cfg.cycle_thermo_display();
-        assert_eq!(cfg.thermo_display, ThermoDisplayMode::Temperature);
-        cfg.cycle_thermo_display();
-        assert_eq!(cfg.thermo_display, ThermoDisplayMode::Pressure);
+        assert_eq!(cfg.thermo_display, ThermoDisplayMode::FlowArrows);
         cfg.cycle_thermo_display();
         assert_eq!(cfg.thermo_display, ThermoDisplayMode::Off);
+    }
+
+    #[test]
+    fn every_scalar_field_has_one_descriptor_with_a_range() {
+        for (i, d) in SCALAR_FIELDS.iter().enumerate() {
+            assert_eq!(d.field.descriptor(), d);
+            assert!(d.range.0 < d.range.1, "{}", d.name);
+            assert!(SCALAR_FIELDS[i + 1..].iter().all(|o| o.field != d.field));
+        }
+    }
+
+    #[test]
+    fn scalar_fields_read_their_grid() {
+        let mut cells = CellFields::filled(1, 1, 1.0);
+        cells.pressure = ThermoGrid::filled(1, 1, 2.0);
+        cells.density = ThermoGrid::filled(1, 1, 0.5);
+        cells.velocity_x = ThermoGrid::filled(1, 1, 3.0);
+        cells.velocity_y = ThermoGrid::filled(1, 1, 4.0);
+        let value = |field: ScalarField| field.grid(&cells).get(0, 0);
+        assert_eq!(value(ScalarField::Temperature), 1.0);
+        assert_eq!(value(ScalarField::Pressure), 2.0);
+        assert_eq!(value(ScalarField::Density), 0.5);
+        assert_eq!(value(ScalarField::FlowSpeed), 5.0);
     }
 
     #[test]
@@ -383,15 +501,19 @@ mod tests {
         let mut cfg = RendererConfig::default();
         cfg.cycle_thermo_display();
         cfg.cycle_thermo_display();
-        assert_eq!(cfg.thermo_display, ThermoDisplayMode::Temperature);
+        assert_eq!(
+            cfg.thermo_display,
+            ThermoDisplayMode::Scalar(ScalarField::Temperature)
+        );
     }
 
     #[test]
     fn thermo_display_mode_grid_is_not_thermo_active() {
         assert!(!ThermoDisplayMode::Off.is_thermo_active());
         assert!(!ThermoDisplayMode::Grid.is_thermo_active());
-        assert!(ThermoDisplayMode::Temperature.is_thermo_active());
-        assert!(ThermoDisplayMode::Pressure.is_thermo_active());
+        assert!(ThermoDisplayMode::Scalar(ScalarField::Temperature).is_thermo_active());
+        assert!(ThermoDisplayMode::Scalar(ScalarField::Pressure).is_thermo_active());
+        assert!(ThermoDisplayMode::FlowArrows.is_thermo_active());
     }
 
     #[test]
@@ -402,11 +524,11 @@ mod tests {
         assert_eq!(cfg.scene_layers(), without_thermo);
         cfg.cycle_thermo_display();
         assert_eq!(cfg.scene_layers(), without_thermo);
-        // Temperature and Pressure do.
-        cfg.cycle_thermo_display();
-        assert_eq!(cfg.scene_layers(), SceneLayers::ALL);
-        cfg.cycle_thermo_display();
-        assert_eq!(cfg.scene_layers(), SceneLayers::ALL);
+        // Every scalar field and the flow arrows do.
+        for _ in 0..=SCALAR_FIELDS.len() {
+            cfg.cycle_thermo_display();
+            assert_eq!(cfg.scene_layers(), SceneLayers::ALL);
+        }
         // F2 off: only the base layer, whatever T shows.
         cfg.toggle_rendering();
         assert_eq!(cfg.scene_layers(), SceneLayers::BASE);

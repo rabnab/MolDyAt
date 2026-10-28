@@ -3,8 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::application::thermo_field::{
-    LocalKineticStats, THERMO_CELL_SIZE, THERMO_WINDOW, ThermoFieldHistory, ThermoGrid,
-    compute_cell_thermo, thermo_grid_dims, virial_pressure_2d,
+    CellFields, LocalKineticStats, THERMO_CELL_SIZE, THERMO_WINDOW, ThermoFieldHistory, ThermoGrid,
+    compute_cell_fields, thermo_grid_dims, virial_pressure_2d,
 };
 use crate::objects2d::Rect;
 use crate::objects2d::Vec2D;
@@ -26,6 +26,21 @@ fn make_ball(id: usize, pos: Vec2D, velocity: Vec2D, mass: f32) -> Ball2D {
     b.v = velocity;
     b.mass = mass;
     b
+}
+
+/// Fields with temperature `t` and pressure `p`, the other grids zero.
+fn tp(t: ThermoGrid, p: ThermoGrid) -> CellFields {
+    let (rows, cols) = t.shape();
+    CellFields {
+        temperature: t,
+        pressure: p,
+        ..CellFields::filled(rows, cols, 0.0)
+    }
+}
+
+fn average_tp(h: &ThermoFieldHistory) -> (ThermoGrid, ThermoGrid) {
+    let fields = h.average().expect("should have data");
+    (fields.temperature, fields.pressure)
 }
 
 // ── thermo_grid_dims tests (#290) ────────────────────────────────
@@ -63,7 +78,7 @@ fn test_grid_dims_negative_height() {
     );
 }
 
-// ── compute_cell_thermo tests ────────────────────────────────────
+// ── compute_cell_fields tests ────────────────────────────────────
 
 #[test]
 fn test_sparse_cell_returns_nan() {
@@ -71,7 +86,11 @@ fn test_sparse_cell_returns_nan() {
     let world = Rect::new(0.0, 0.0, 10.0, 10.0);
     let balls = vec![make_ball(0, Vec2D::new(5.0, 5.0), Vec2D::zero(), 1.0)];
     let forces = vec![make_force_result(0.0)];
-    let (t, p) = compute_cell_thermo(&balls, &forces, &world, 0, 0);
+    let CellFields {
+        temperature: t,
+        pressure: p,
+        ..
+    } = compute_cell_fields(&balls, &forces, &world, 0, 0);
     assert!(t.get(0, 0).is_nan(), "T should be NaN for n < 2");
     assert!(p.get(0, 0).is_nan(), "P should be NaN for n < 2");
 }
@@ -85,7 +104,11 @@ fn test_two_resting_balls_zero_tp() {
         make_ball(1, Vec2D::new(5.1, 5.1), Vec2D::zero(), 1.0),
     ];
     let forces = vec![make_force_result(0.0), make_force_result(0.0)];
-    let (t, p) = compute_cell_thermo(&balls, &forces, &world, 0, 0);
+    let CellFields {
+        temperature: t,
+        pressure: p,
+        ..
+    } = compute_cell_fields(&balls, &forces, &world, 0, 0);
     // With only 2 balls the grid is 1×1
     assert_eq!(t.rows(), 1);
     assert_eq!(t.cols(), 1);
@@ -111,7 +134,11 @@ fn test_known_velocities_no_virial() {
         make_ball(1, Vec2D::new(5.1, 5.1), Vec2D::new(-1.0, 0.0), 1.0),
     ];
     let forces = vec![make_force_result(0.0), make_force_result(0.0)];
-    let (t, p) = compute_cell_thermo(&balls, &forces, &world, 0, 0);
+    let CellFields {
+        temperature: t,
+        pressure: p,
+        ..
+    } = compute_cell_fields(&balls, &forces, &world, 0, 0);
     let expected_t = 1.0;
     assert!(
         (t.get(0, 0) - expected_t).abs() < 1e-5,
@@ -147,7 +174,7 @@ fn test_known_virial_pressure() {
         make_ball(1, Vec2D::new(5.1, 5.1), Vec2D::zero(), 1.0),
     ];
     let forces = vec![make_force_result(10.0), make_force_result(10.0)];
-    let (_, p) = compute_cell_thermo(&balls, &forces, &world, 0, 0);
+    let CellFields { pressure: p, .. } = compute_cell_fields(&balls, &forces, &world, 0, 0);
     let expected_p = 0.5 * 10.0 / 100.0;
     assert!(
         (p.get(0, 0) - expected_p).abs() < 1e-5,
@@ -166,7 +193,11 @@ fn test_negative_height_world_rect() {
         make_ball(1, Vec2D::new(0.1, 0.1), Vec2D::new(-1.0, 0.0), 1.0),
     ];
     let forces = vec![make_force_result(0.0), make_force_result(0.0)];
-    let (t, p) = compute_cell_thermo(&balls, &forces, &world, 0, 0);
+    let CellFields {
+        temperature: t,
+        pressure: p,
+        ..
+    } = compute_cell_fields(&balls, &forces, &world, 0, 0);
     // Grid should be 1×1, T should match the positive-h test
     assert_eq!(t.rows(), 1);
     assert_eq!(t.cols(), 1);
@@ -218,7 +249,7 @@ fn test_top_left_pressure_maps_to_grid_0_0() {
         .map(|i| make_force_result(if i < 2 { virial_value } else { 0.0 }))
         .collect();
 
-    let (_, p) = compute_cell_thermo(&balls, &forces, &world, 0, 0);
+    let CellFields { pressure: p, .. } = compute_cell_fields(&balls, &forces, &world, 0, 0);
 
     assert_eq!(p.rows(), 2, "expected 2 rows");
     assert_eq!(p.cols(), 2, "expected 2 cols");
@@ -268,7 +299,7 @@ fn test_top_left_pressure_negative_height() {
         .map(|i| make_force_result(if i < 2 { virial_value } else { 0.0 }))
         .collect();
 
-    let (_, p) = compute_cell_thermo(&balls, &forces, &world, 0, 0);
+    let CellFields { pressure: p, .. } = compute_cell_fields(&balls, &forces, &world, 0, 0);
 
     assert_eq!(p.rows(), 2);
     assert_eq!(p.cols(), 2);
@@ -316,8 +347,8 @@ fn test_history_single_push() {
     let mut h = ThermoFieldHistory::new();
     let t = grid_2x2(1.0, 2.0, 3.0, 4.0);
     let p = grid_2x2(5.0, 6.0, 7.0, 8.0);
-    h.push(t.clone(), p.clone());
-    let (avg_t, avg_p) = h.average().expect("should have data");
+    h.push(tp(t.clone(), p.clone()));
+    let (avg_t, avg_p) = average_tp(&h);
     assert_eq!(avg_t, t);
     assert_eq!(avg_p, p);
 }
@@ -328,9 +359,9 @@ fn test_history_steady_state() {
     let t = grid_2x2(1.0, 2.0, 3.0, 4.0);
     let p = grid_2x2(5.0, 6.0, 7.0, 8.0);
     for _ in 0..10 {
-        h.push(t.clone(), p.clone());
+        h.push(tp(t.clone(), p.clone()));
     }
-    let (avg_t, avg_p) = h.average().expect("should have data");
+    let (avg_t, avg_p) = average_tp(&h);
     assert_eq!(avg_t, t);
     assert_eq!(avg_p, p);
 }
@@ -340,9 +371,9 @@ fn test_history_partial_window() {
     let mut h = ThermoFieldHistory::new();
     // Push 3 grids: values 1, 2, 3 at [0][0]
     for i in 1..=3 {
-        h.push(grid_1x1(i as f32), grid_1x1((i * 10) as f32));
+        h.push(tp(grid_1x1(i as f32), grid_1x1((i * 10) as f32)));
     }
-    let (avg_t, avg_p) = h.average().expect("should have data");
+    let (avg_t, avg_p) = average_tp(&h);
     // Average of 1,2,3 = 2.0; average of 10,20,30 = 20.0
     assert!((avg_t.get(0, 0) - 2.0).abs() < 1e-5);
     assert!((avg_p.get(0, 0) - 20.0).abs() < 1e-5);
@@ -352,12 +383,12 @@ fn test_history_partial_window() {
 fn test_history_nan_handling() {
     let mut h = ThermoFieldHistory::new();
     // Step 1: finite value
-    h.push(grid_1x1(4.0), grid_1x1(8.0));
+    h.push(tp(grid_1x1(4.0), grid_1x1(8.0)));
     // Step 2: NaN
-    h.push(grid_1x1(f32::NAN), grid_1x1(f32::NAN));
+    h.push(tp(grid_1x1(f32::NAN), grid_1x1(f32::NAN)));
     // Step 3: finite value
-    h.push(grid_1x1(6.0), grid_1x1(12.0));
-    let (avg_t, avg_p) = h.average().expect("should have data");
+    h.push(tp(grid_1x1(6.0), grid_1x1(12.0)));
+    let (avg_t, avg_p) = average_tp(&h);
     // Average over 2 finite values: (4+6)/2 = 5, (8+12)/2 = 10
     assert!((avg_t.get(0, 0) - 5.0).abs() < 1e-5);
     assert!((avg_p.get(0, 0) - 10.0).abs() < 1e-5);
@@ -367,14 +398,17 @@ fn test_history_nan_handling() {
 fn test_history_shape_change_clears() {
     let mut h = ThermoFieldHistory::new();
     // Push a 3×4 grid
-    h.push(ThermoGrid::filled(3, 4, 1.0), ThermoGrid::filled(3, 4, 2.0));
+    h.push(tp(
+        ThermoGrid::filled(3, 4, 1.0),
+        ThermoGrid::filled(3, 4, 2.0),
+    ));
 
     // Push a 4×5 grid with different values
     let t_4x5 = ThermoGrid::filled(4, 5, 10.0);
     let p_4x5 = ThermoGrid::filled(4, 5, 20.0);
-    h.push(t_4x5.clone(), p_4x5.clone());
+    h.push(tp(t_4x5.clone(), p_4x5.clone()));
 
-    let (avg_t, avg_p) = h.average().expect("should have data");
+    let (avg_t, avg_p) = average_tp(&h);
     // Only the 4×5 grid should remain
     assert_eq!(avg_t.rows(), 4);
     assert_eq!(avg_t.cols(), 5);
@@ -390,9 +424,9 @@ fn test_history_ring_wraparound() {
     let window = THERMO_WINDOW as u32;
     let total = window + 5;
     for i in 1..=total {
-        h.push(grid_1x1(i as f32), grid_1x1((i * 2) as f32));
+        h.push(tp(grid_1x1(i as f32), grid_1x1((i * 2) as f32)));
     }
-    let (avg_t, avg_p) = h.average().expect("should have data");
+    let (avg_t, avg_p) = average_tp(&h);
     // Kept values: (total-window+1)..=total, i.e. 6..=window+5; the T
     // average is their midpoint and the P values are twice the T values.
     let first_kept = (total - window + 1) as f32;
@@ -428,4 +462,67 @@ fn test_virial_pressure_2d_halves_pair_virial() {
     // Attraction (negative virial) lowers the pressure below the kinetic value.
     let attractive = virial_pressure_2d(3, 1.0, -2.0, 1.0);
     assert!((attractive - (2.0 - 1.0)).abs() < 1e-6, "P={attractive}");
+}
+
+// ── Density and flow velocity (#342) ─────────────────────────────
+
+#[test]
+fn test_density_is_balls_per_area_and_zero_in_empty_cells() {
+    // 20 x 10 world, 2 x 1 cells of 10 x 10: three balls left, none right.
+    let world = Rect::new(0.0, 0.0, 20.0, 10.0);
+    let balls = vec![
+        make_ball(0, Vec2D::new(2.0, 5.0), Vec2D::zero(), 1.0),
+        make_ball(1, Vec2D::new(4.0, 5.0), Vec2D::zero(), 1.0),
+        make_ball(2, Vec2D::new(6.0, 5.0), Vec2D::zero(), 1.0),
+    ];
+    let forces = vec![make_force_result(0.0); 3];
+    let fields = compute_cell_fields(&balls, &forces, &world, 1, 2);
+    assert!((fields.density.get(0, 0) - 3.0 / 100.0).abs() < 1e-7);
+    assert_eq!(fields.density.get(0, 1), 0.0);
+}
+
+#[test]
+fn test_flow_velocity_is_the_mass_weighted_mean_velocity() {
+    // One cell: (2, 0) with mass 1 and (-1, 3) with mass 2 →
+    // v_com = ((2 - 2) / 3, (0 + 6) / 3) = (0, 2).
+    let world = Rect::new(0.0, 0.0, 10.0, 10.0);
+    let balls = vec![
+        make_ball(0, Vec2D::new(5.0, 5.0), Vec2D::new(2.0, 0.0), 1.0),
+        make_ball(1, Vec2D::new(5.5, 5.0), Vec2D::new(-1.0, 3.0), 2.0),
+    ];
+    let forces = vec![make_force_result(0.0); 2];
+    let fields = compute_cell_fields(&balls, &forces, &world, 1, 1);
+    assert!(fields.velocity_x.get(0, 0).abs() < 1e-6);
+    assert!((fields.velocity_y.get(0, 0) - 2.0).abs() < 1e-6);
+    assert!((fields.flow_speed().get(0, 0) - 2.0).abs() < 1e-6);
+}
+
+#[test]
+fn test_one_ball_has_a_flow_velocity_but_no_temperature() {
+    let world = Rect::new(0.0, 0.0, 20.0, 10.0);
+    let balls = vec![make_ball(
+        0,
+        Vec2D::new(2.0, 5.0),
+        Vec2D::new(3.0, 4.0),
+        1.0,
+    )];
+    let forces = vec![make_force_result(0.0)];
+    let fields = compute_cell_fields(&balls, &forces, &world, 1, 2);
+    assert_eq!(fields.flow_speed().get(0, 0), 5.0);
+    assert!(fields.temperature.get(0, 0).is_nan());
+    assert!(fields.velocity_x.get(0, 1).is_nan(), "empty cell");
+    assert!(fields.flow_speed().get(0, 1).is_nan());
+}
+
+#[test]
+fn test_history_averages_every_field() {
+    let mut h = ThermoFieldHistory::with_window(2);
+    let mut a = CellFields::filled(1, 1, 1.0);
+    a.velocity_x = ThermoGrid::filled(1, 1, f32::NAN);
+    h.push(a);
+    h.push(CellFields::filled(1, 1, 3.0));
+    let avg = h.average().unwrap();
+    assert_eq!(avg.density.get(0, 0), 2.0);
+    assert_eq!(avg.velocity_y.get(0, 0), 2.0);
+    assert_eq!(avg.velocity_x.get(0, 0), 3.0, "NaN samples are skipped");
 }

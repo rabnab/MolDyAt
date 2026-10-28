@@ -16,7 +16,7 @@ use crate::application::renderer_snapshot::{
 };
 use crate::application::scene_layers::SceneLayers;
 use crate::application::sim_stats::NORMAL_GRAVITY;
-use crate::application::thermo_field::ThermoGrid;
+use crate::application::thermo_field::CellFields;
 use crate::objects2d::SimThermostat;
 use crate::objects2d::ball_impl::{BallPhysics, SpeciesId, SpeciesSet};
 use crate::objects2d::wall_chain::Joint;
@@ -106,18 +106,11 @@ impl CreateSnapshot for MainContent {
             origin_x: world_rect.x,
             origin_y: world_rect.y,
         };
-        let (temperature, pressure, thermo_grid) = if layers.contains(SceneLayers::THERMO) {
+        (fields.cells, fields.thermo_grid) = if layers.contains(SceneLayers::THERMO) {
             build_thermo_snapshot_fields(world)
         } else {
-            (
-                ThermoGrid::filled(0, 0, 0.0),
-                ThermoGrid::filled(0, 0, 0.0),
-                None,
-            )
+            (CellFields::empty(), None)
         };
-        fields.temperature = temperature;
-        fields.pressure = pressure;
-        fields.thermo_grid = thermo_grid;
     }
 }
 
@@ -228,42 +221,26 @@ fn add_thermostat_readings(world: &SimulationWorld, thermostats: &mut [SimThermo
     }
 }
 
-/// Build the thermo-related fields for the snapshot from the rolling-window history.
-///
-/// Returns `(temperature_grid, pressure_grid, grid_spec)` without constructing
-/// an intermediate `RendererSnapshot`.
-fn build_thermo_snapshot_fields(
-    world: &SimulationWorld,
-) -> (ThermoGrid, ThermoGrid, Option<ThermoGridSpec>) {
+/// The averaged per-cell fields and their grid layout, from the
+/// rolling-window history; empty fields and no layout before the first
+/// sample.
+fn build_thermo_snapshot_fields(world: &SimulationWorld) -> (CellFields, Option<ThermoGridSpec>) {
+    let Some(cells) = world.thermo_history().average() else {
+        return (CellFields::empty(), None);
+    };
     let region = world.world_region();
-    let ww = region.w.abs();
-    let wh = region.h.abs();
-
-    match world.thermo_history().average() {
-        Some((avg_t, avg_p)) => {
-            let (rows, cols) = avg_t.shape();
-            let cell_width = ww / cols as f32;
-            let cell_height = wh / rows as f32;
-
-            // Use the same top-left derivation as compute_cell_thermo
-            // so the spec origin matches the binning origin.
-            let spec = ThermoGridSpec {
-                rows,
-                cols,
-                cell_width,
-                cell_height,
-                origin_x: region.x.min(region.x + region.w),
-                origin_y: region.y.min(region.y + region.h),
-            };
-
-            (avg_t, avg_p, Some(spec))
-        }
-        None => (
-            ThermoGrid::filled(0, 0, 0.0),
-            ThermoGrid::filled(0, 0, 0.0),
-            None,
-        ),
-    }
+    let (rows, cols) = cells.shape();
+    // The same top-left derivation as `compute_cell_fields`, so the spec
+    // origin matches the binning origin.
+    let spec = ThermoGridSpec {
+        rows,
+        cols,
+        cell_width: region.w.abs() / cols as f32,
+        cell_height: region.h.abs() / rows as f32,
+        origin_x: region.x.min(region.x + region.w),
+        origin_y: region.y.min(region.y + region.h),
+    };
+    (cells, Some(spec))
 }
 
 /// Resolved world-space geometry of every valve, in chain order.

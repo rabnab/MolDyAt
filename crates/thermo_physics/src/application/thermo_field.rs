@@ -47,6 +47,15 @@ impl LocalKineticStats {
         Some(self.sum_mv.scaled(1.0 / self.sum_m))
     }
 
+    /// Centre-of-mass velocity of one or more balls (the flow velocity of a
+    /// cell, #342); `None` for none.
+    pub(crate) fn flow_velocity(&self) -> Option<Vec2D> {
+        if self.count == 0 || self.sum_m <= f32::EPSILON {
+            return None;
+        }
+        Some(self.sum_mv.scaled(1.0 / self.sum_m))
+    }
+
     /// Local temperature in the center-of-mass frame.
     pub(crate) fn temperature(&self) -> Option<f32> {
         if self.count < 2 || self.sum_m <= f32::EPSILON {
@@ -82,7 +91,7 @@ impl Default for LocalKineticStats {
 /// A flat, row-major grid of `f32` values with explicit dimensions.
 ///
 /// Single contiguous allocation for cache-friendly iteration. Used for
-/// per-cell temperature and pressure fields.
+/// the per-cell fields ([`CellFields`]).
 ///
 /// **Invariant**: `data.len() == rows * cols` (enforced by constructors).
 #[derive(Clone, Debug)]
@@ -208,21 +217,102 @@ pub fn thermo_grid_dims(world_width: f32, world_height: f32) -> (usize, usize) {
     (cells(world_height), cells(world_width))
 }
 
-/// Compute per-cell temperature and pressure grids from ball state and force results.
+/// The per-cell fields of the thermo grid (#342): every scalar the
+/// heatmap can show, and the flow velocity the arrows show. All grids have
+/// the same shape; row 0 is the bottom of the world.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CellFields {
+    /// Centre-of-mass-frame temperature; NaN for cells with fewer than 2
+    /// balls.
+    pub temperature: ThermoGrid,
+    /// Virial pressure; NaN where the temperature is.
+    pub pressure: ThermoGrid,
+    /// Number density: balls per unit area; 0 for an empty cell.
+    pub density: ThermoGrid,
+    /// x of the centre-of-mass (flow) velocity; NaN for an empty cell.
+    pub velocity_x: ThermoGrid,
+    /// y of the centre-of-mass (flow) velocity; NaN for an empty cell.
+    pub velocity_y: ThermoGrid,
+}
+
+impl CellFields {
+    /// Every grid `rows` x `cols`, filled with `value`.
+    pub fn filled(rows: usize, cols: usize, value: f32) -> Self {
+        let grid = ThermoGrid::filled(rows, cols, value);
+        Self {
+            temperature: grid.clone(),
+            pressure: grid.clone(),
+            density: grid.clone(),
+            velocity_x: grid.clone(),
+            velocity_y: grid,
+        }
+    }
+
+    /// Fields of an empty (0 x 0) grid.
+    pub fn empty() -> Self {
+        Self::filled(0, 0, 0.0)
+    }
+
+    /// `(rows, cols)` of every grid.
+    pub fn shape(&self) -> (usize, usize) {
+        self.temperature.shape()
+    }
+
+    /// Flow speed `|v_com|` per cell, from the (averaged) velocity
+    /// components: the length of the arrows; NaN for an empty cell.
+    pub fn flow_speed(&self) -> ThermoGrid {
+        let (rows, cols) = self.shape();
+        let data = self
+            .velocity_x
+            .as_slice()
+            .iter()
+            .zip(self.velocity_y.as_slice())
+            .map(|(x, y)| x.hypot(*y))
+            .collect();
+        ThermoGrid { data, rows, cols }
+    }
+
+    fn grids(&self) -> [&ThermoGrid; CELL_FIELD_COUNT] {
+        [
+            &self.temperature,
+            &self.pressure,
+            &self.density,
+            &self.velocity_x,
+            &self.velocity_y,
+        ]
+    }
+
+    fn from_grids(
+        [temperature, pressure, density, velocity_x, velocity_y]: [ThermoGrid; CELL_FIELD_COUNT],
+    ) -> Self {
+        Self {
+            temperature,
+            pressure,
+            density,
+            velocity_x,
+            velocity_y,
+        }
+    }
+}
+
+/// Grids in [`CellFields`].
+const CELL_FIELD_COUNT: usize = 5;
+
+/// Compute the per-cell fields from ball state and force results.
 ///
 /// `grid_rows` and `grid_cols` specify the grid dimensions; when either is
 /// zero the function uses [`thermo_grid_dims`] of `world_rect`, the grid the
 /// simulation records.
 ///
-/// Returns `(temperature, pressure)` as flat row-major `ThermoGrid`s.
-/// Cells with fewer than 2 balls contain `f32::NAN`.
-pub fn compute_cell_thermo(
+/// Cells with fewer than 2 balls have no temperature or pressure (NaN),
+/// empty cells no velocity (NaN); the density is always finite.
+pub fn compute_cell_fields(
     balls: &[Ball2D],
     force_results: &[ForceResult],
     world_rect: &Rect,
     grid_rows: usize,
     grid_cols: usize,
-) -> (ThermoGrid, ThermoGrid) {
+) -> CellFields {
     assert_eq!(
         balls.len(),
         force_results.len(),
@@ -259,24 +349,28 @@ pub fn compute_cell_thermo(
     }
 
     let cell_area = cell_w * cell_h;
-    let mut temp_grid = ThermoGrid::filled(rows, cols, 0.0);
-    let mut pres_grid = ThermoGrid::filled(rows, cols, 0.0);
+    let mut fields = CellFields::filled(rows, cols, f32::NAN);
 
     for r in 0..rows {
         for c in 0..cols {
             let cs = &stats[r * cols + c];
+            fields
+                .density
+                .set(r, c, cs.kinetic.count() as f32 / cell_area);
+            if let Some(v) = cs.kinetic.flow_velocity() {
+                fields.velocity_x.set(r, c, v.x);
+                fields.velocity_y.set(r, c, v.y);
+            }
             let Some(t) = cs.kinetic.temperature() else {
-                temp_grid.set(r, c, f32::NAN);
-                pres_grid.set(r, c, f32::NAN);
                 continue;
             };
             let p = virial_pressure_2d(cs.kinetic.count(), t, cs.pair_virial, cell_area);
-            temp_grid.set(r, c, t);
-            pres_grid.set(r, c, p);
+            fields.temperature.set(r, c, t);
+            fields.pressure.set(r, c, p);
         }
     }
 
-    (temp_grid, pres_grid)
+    fields
 }
 
 /// Steps between two T/P field samples (#229). Binning every ball into the
@@ -292,23 +386,21 @@ pub const THERMO_WINDOW_STEPS: usize = 1000;
 /// [`THERMO_SAMPLE_STRIDE`] steps, so it spans [`THERMO_WINDOW_STEPS`] steps.
 pub const THERMO_WINDOW: usize = THERMO_WINDOW_STEPS / THERMO_SAMPLE_STRIDE;
 
-/// Rolling-window averager for per-cell temperature and pressure grids.
+/// Rolling-window averager for the per-cell fields ([`CellFields`]).
 ///
 /// Maintains a ring buffer of the last `window` samples (default
-/// [`THERMO_WINDOW`]) and computes element-wise NaN-aware averages. The
-/// window counts samples, not steps; the caller decides how often to sample
-/// (see `SimulationEngine::record_thermo_fields_if_due`). When the pushed grid
-/// shape differs from the stored shape (a resize), the history is cleared
-/// and starts fresh; the shape does not depend on the species (#290).
+/// [`THERMO_WINDOW`]) and computes element-wise NaN-aware averages of every
+/// field. The window counts samples, not steps; the caller decides how
+/// often to sample (see `SimulationEngine::record_thermo_fields_if_due`).
+/// When the pushed grid shape differs from the stored shape (a resize), the
+/// history is cleared and starts fresh; the shape does not depend on the
+/// species (#290).
 pub struct ThermoFieldHistory {
     window: usize,
-    t_buffer: VecDeque<ThermoGrid>,
-    p_buffer: VecDeque<ThermoGrid>,
+    buffer: VecDeque<CellFields>,
     shape: (usize, usize),
-    t_sum: Vec<f32>,
-    p_sum: Vec<f32>,
-    t_count: Vec<u32>,
-    p_count: Vec<u32>,
+    sums: [Vec<f32>; CELL_FIELD_COUNT],
+    counts: [Vec<u32>; CELL_FIELD_COUNT],
 }
 
 impl Default for ThermoFieldHistory {
@@ -327,104 +419,105 @@ impl ThermoFieldHistory {
         assert!(window > 0, "thermo window must hold at least one sample");
         Self {
             window,
-            t_buffer: VecDeque::with_capacity(window),
-            p_buffer: VecDeque::with_capacity(window),
+            buffer: VecDeque::with_capacity(window),
             shape: (0, 0),
-            t_sum: Vec::new(),
-            p_sum: Vec::new(),
-            t_count: Vec::new(),
-            p_count: Vec::new(),
+            sums: Default::default(),
+            counts: Default::default(),
         }
     }
 
     /// Samples currently buffered (at most the window).
     pub fn len(&self) -> usize {
-        self.t_buffer.len()
+        self.buffer.len()
     }
 
     /// True if no sample is buffered (new, or just cleared).
     pub fn is_empty(&self) -> bool {
-        self.t_buffer.is_empty()
+        self.buffer.is_empty()
     }
 
     /// Discard all buffered grids so the next `push` starts fresh.
     pub(crate) fn clear(&mut self) {
-        self.t_buffer.clear();
-        self.p_buffer.clear();
+        self.buffer.clear();
         self.shape = (0, 0);
-        self.t_sum.clear();
-        self.p_sum.clear();
-        self.t_count.clear();
-        self.p_count.clear();
+        for (sums, counts) in self.sums.iter_mut().zip(&mut self.counts) {
+            sums.clear();
+            counts.clear();
+        }
     }
 
-    /// Push a new pair of T/P grids into the ring buffer.
+    /// Push a new sample of every field into the ring buffer.
     ///
     /// If the grid shape differs from the stored shape, the entire history
     /// is cleared before inserting.
-    pub fn push(&mut self, t_grid: ThermoGrid, p_grid: ThermoGrid) {
-        let new_shape = t_grid.shape();
+    pub fn push(&mut self, fields: CellFields) {
+        let new_shape = fields.shape();
         let new_len = new_shape.0 * new_shape.1;
-        debug_assert_eq!(p_grid.shape(), new_shape, "p_grid shape must match t_grid");
-        debug_assert_eq!(
-            t_grid.data.len(),
-            new_shape.0 * new_shape.1,
-            "t_grid data length must match rows*cols"
-        );
-        debug_assert_eq!(
-            p_grid.data.len(),
-            new_shape.0 * new_shape.1,
-            "p_grid data length must match rows*cols"
+        debug_assert!(
+            fields
+                .grids()
+                .iter()
+                .all(|g| g.shape() == new_shape && g.data.len() == new_len),
+            "every field must have the same shape"
         );
 
         if new_shape != self.shape {
             self.clear();
             self.shape = new_shape;
             self.reset_accumulators(new_len);
-        } else if self.t_sum.len() != new_len {
+        } else if self.sums[0].len() != new_len {
             self.reset_accumulators(new_len);
         }
 
-        if self.t_buffer.len() == self.window {
-            if let Some(old_t) = self.t_buffer.pop_front() {
-                Self::remove_grid(&old_t, &mut self.t_sum, &mut self.t_count);
-            }
-            if let Some(old_p) = self.p_buffer.pop_front() {
-                Self::remove_grid(&old_p, &mut self.p_sum, &mut self.p_count);
+        if self.buffer.len() == self.window
+            && let Some(old) = self.buffer.pop_front()
+        {
+            for ((grid, sums), counts) in old
+                .grids()
+                .into_iter()
+                .zip(&mut self.sums)
+                .zip(&mut self.counts)
+            {
+                Self::remove_grid(grid, sums, counts);
             }
         }
 
-        Self::add_grid(&t_grid, &mut self.t_sum, &mut self.t_count);
-        Self::add_grid(&p_grid, &mut self.p_sum, &mut self.p_count);
-        self.t_buffer.push_back(t_grid);
-        self.p_buffer.push_back(p_grid);
+        for ((grid, sums), counts) in fields
+            .grids()
+            .into_iter()
+            .zip(&mut self.sums)
+            .zip(&mut self.counts)
+        {
+            Self::add_grid(grid, sums, counts);
+        }
+        self.buffer.push_back(fields);
     }
 
-    /// Compute element-wise NaN-aware averages over the buffered grids.
+    /// Compute element-wise NaN-aware averages over the buffered samples.
     ///
     /// For each cell position, the average is taken over all stored samples
-    /// where the value is finite. If every step is NaN at that position,
+    /// where the value is finite. If every sample is NaN at that position,
     /// the output is NaN.
     ///
-    /// Returns `Some((temperature, pressure))` grids, or `None` if the
-    /// buffer is empty (no data pushed yet, or cleared after shape change
-    /// with no subsequent push).
-    pub fn average(&self) -> Option<(ThermoGrid, ThermoGrid)> {
-        if self.t_buffer.is_empty() {
+    /// Returns `None` if the buffer is empty (no data pushed yet, or
+    /// cleared after a shape change with no subsequent push).
+    pub fn average(&self) -> Option<CellFields> {
+        if self.buffer.is_empty() {
             return None;
         }
 
         let (rows, cols) = self.shape;
-        let avg_t = Self::average_from_accumulators(&self.t_sum, &self.t_count, rows, cols);
-        let avg_p = Self::average_from_accumulators(&self.p_sum, &self.p_count, rows, cols);
-        Some((avg_t, avg_p))
+        let grids = std::array::from_fn(|i| {
+            Self::average_from_accumulators(&self.sums[i], &self.counts[i], rows, cols)
+        });
+        Some(CellFields::from_grids(grids))
     }
 
     fn reset_accumulators(&mut self, len: usize) {
-        self.t_sum = vec![0.0; len];
-        self.p_sum = vec![0.0; len];
-        self.t_count = vec![0; len];
-        self.p_count = vec![0; len];
+        for (sums, counts) in self.sums.iter_mut().zip(&mut self.counts) {
+            *sums = vec![0.0; len];
+            *counts = vec![0; len];
+        }
     }
 
     fn add_grid(grid: &ThermoGrid, sums: &mut [f32], counts: &mut [u32]) {

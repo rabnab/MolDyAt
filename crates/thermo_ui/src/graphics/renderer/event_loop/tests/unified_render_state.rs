@@ -102,14 +102,18 @@ fn cycling_the_thermo_overlay_requests_thermo_fields_only_while_shown() {
     let (physics, log) = PhysicsCoordinator::new_recording();
     let mut state = build_state_with(physics);
 
-    // Off -> Grid -> Temperature -> Pressure -> Off
-    for _ in 0..4 {
+    // Off -> Grid -> Temperature -> Pressure -> Density -> Flow speed ->
+    // Flow arrows -> Off
+    for _ in 0..7 {
         state.process_action(command("view.cycle_thermo_overlay"));
     }
 
     let without_thermo = SceneLayers::ALL.difference(SceneLayers::THERMO);
     let expected = [
         without_thermo,
+        SceneLayers::ALL,
+        SceneLayers::ALL,
+        SceneLayers::ALL,
         SceneLayers::ALL,
         SceneLayers::ALL,
         without_thermo,

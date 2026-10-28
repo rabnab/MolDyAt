@@ -6,7 +6,7 @@ use super::step_scratch::{NeighbourStats, RebuildScratch, UpdateScratch};
 use super::{RuntimeOptions, SimulationWorld, StatsAccumulator, StepConfig};
 use crate::application::phase_timings::{Phase, PhaseClock};
 use crate::application::thermo_field::{
-    THERMO_SAMPLE_STRIDE, compute_cell_thermo, thermo_grid_dims,
+    THERMO_SAMPLE_STRIDE, compute_cell_fields, thermo_grid_dims,
 };
 use crate::application::{AppResult, log_util};
 use crate::logging::log_update_hood_start;
@@ -96,8 +96,8 @@ impl SimulationEngine {
         }
     }
 
-    /// Add the per-cell temperature and pressure of the last step to the
-    /// thermo history. Only the heatmap overlay (and headless output) uses
+    /// Add the per-cell fields (temperature, pressure, density, flow
+    /// velocity) of the last step to the thermo history. Only the heatmap overlay (and headless output) uses
     /// them, so the physics thread calls this only while they are shown
     /// (the `THERMO` layer).
     pub(crate) fn record_thermo_fields(world: &mut SimulationWorld, log_timings: bool) {
@@ -108,14 +108,14 @@ impl SimulationEngine {
         // The T/P field has a grid of its own, sized from the world only
         // (#290, docs/simulation.md, Thermodynamic Grid Space).
         let (rows, cols) = thermo_grid_dims(world.world_rect.w, world.world_rect.h);
-        let (t_grid, p_grid) = compute_cell_thermo(
+        let fields = compute_cell_fields(
             &world.balls,
             &world.cached_force_results,
             &world.world_rect,
             rows,
             cols,
         );
-        world.thermo_history.push(t_grid, p_grid);
+        world.thermo_history.push(fields);
         // Booked to `thermo` like the global temperature, but logged under
         // its own name so the two lines of a step can be told apart.
         clock.lap_as(&mut world.phase_timings, Phase::Thermo, "thermo fields");

@@ -519,7 +519,7 @@ pub static COMMANDS: &[CommandDescriptor] = &[
     },
     CommandDescriptor {
         id: "view.cycle_thermo_overlay",
-        label: "Cycle the thermo overlay: Off -> Grid -> Temperature -> Pressure -> Off.",
+        label: "Cycle the field overlay: Off -> Grid -> Temperature -> Pressure -> Density -> Flow speed -> Flow arrows -> Off.",
         category: CommandCategory::View,
         default_binding: &[symbol('t', Release)],
         kind: CommandKind::Ui(UiAction::CycleThermoDisplay),

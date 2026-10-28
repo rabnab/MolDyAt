@@ -235,12 +235,12 @@ fn test_non_finite_values_serialize_as_null() {
 fn test_thermo_detail_serializes_grids_and_non_finite_values_as_null() {
     let mut snapshot = RendererSnapshot::new();
     snapshot.frame.simulation_step = 7;
-    snapshot.fields.temperature =
+    snapshot.fields.cells.temperature =
         thermo_physics::application::thermo_field::ThermoGrid::filled(1, 3, 1.0);
-    snapshot.fields.temperature.set(0, 1, f32::NAN);
-    snapshot.fields.pressure =
+    snapshot.fields.cells.temperature.set(0, 1, f32::NAN);
+    snapshot.fields.cells.pressure =
         thermo_physics::application::thermo_field::ThermoGrid::filled(1, 3, 2.0);
-    snapshot.fields.pressure.set(0, 2, f32::INFINITY);
+    snapshot.fields.cells.pressure.set(0, 2, f32::INFINITY);
     snapshot.fields.thermo_grid = Some(crate::application::renderer_snapshot::ThermoGridSpec {
         rows: 1,
         cols: 3,

@@ -26,7 +26,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use crate::application::scene_layers::SceneLayers;
-use crate::application::thermo_field::ThermoGrid;
+use crate::application::thermo_field::CellFields;
 
 /// A valve resolved to world space (derived from its wall chain).
 ///
@@ -387,13 +387,11 @@ pub struct FieldSnapshot {
     /// Grid specification for drawing cell backgrounds
     pub cell_grid: CellGridSpec,
 
-    /// Per-cell temperature field (row-major flat grid, NaN for underpopulated cells).
-    /// Empty grid (0×0) until at least one step of data is available.
-    pub temperature: ThermoGrid,
-
-    /// Per-cell pressure field (row-major flat grid, NaN for underpopulated cells).
-    /// Empty grid (0×0) until at least one step of data is available.
-    pub pressure: ThermoGrid,
+    /// Per-cell fields of the thermo grid, averaged over the rolling
+    /// window: temperature, pressure, density and flow velocity (#342).
+    /// Empty (0×0) until at least one sample is available, and without the
+    /// `THERMO` layer.
+    pub cells: CellFields,
 
     /// Grid layout for mapping thermo cell indices to world coordinates.
     /// `None` until at least one step of data is available.
@@ -411,8 +409,7 @@ impl Default for FieldSnapshot {
                 origin_x: 0.0,
                 origin_y: 0.0,
             },
-            temperature: ThermoGrid::filled(0, 0, 0.0),
-            pressure: ThermoGrid::filled(0, 0, 0.0),
+            cells: CellFields::empty(),
             thermo_grid: None,
         }
     }

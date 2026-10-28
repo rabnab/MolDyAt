@@ -127,8 +127,8 @@ headless runs; both step with the configured time step.
    invalid (NaN) balls are removed.
 6. **thermo**: global temperature.
 
-While the heatmap is shown, the physics thread also samples the per-cell
-temperature and pressure fields every `THERMO_SAMPLE_STRIDE` steps (see
+While a field overlay is shown, the physics thread also samples the per-cell
+fields (temperature, pressure, density, flow velocity) every `THERMO_SAMPLE_STRIDE` steps (see
 [simulation.md](simulation.md#thermodynamic-grid-space)).
 
 ### Renderer state and orchestration
@@ -309,7 +309,7 @@ new visual adds a section or data derived from one, not a top-level field:
 | `frame` | `FrameInfo` | Step, world generation, layers, time, energies, wall momentum, ball count per species, gravity preset, physics rate, world rectangle, and the numbers of the status lines (`StatusNumbers`, which the UI formats: `energy_plot/status_text.rs`) |
 | `balls` | `BallBuffer` | `BallRenderData` per ball (no heap data), the species table, the species of new balls and its ring radii; derefs to the ball slice |
 | `operators` | `OperatorSnapshot` | Wall pieces, walls, valve spans, source spheres, thermostats |
-| `fields` | `FieldSnapshot` | The cell grid spec and the thermo fields with their grid |
+| `fields` | `FieldSnapshot` | The cell grid spec and the averaged per-cell fields (`CellFields`: temperature, pressure, density, flow velocity) with their grid |
 | `debug` | `Option<DebugSnapshot>` | Neighbour lines of verbose balls; `None` without any |
 
 `PrepareContext` passes the sections, not the snapshot, to the pipelines.

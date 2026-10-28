@@ -21,7 +21,7 @@ use thermo_runtime::application::renderer_snapshot::{
 };
 use thermo_runtime::application::scene_layers::SceneLayers;
 use thermo_ui::graphics::renderer::event_loop::FramePreviews;
-use thermo_ui::graphics::renderer::state_layers::ThermoDisplayMode;
+use thermo_ui::graphics::renderer::state_layers::{ScalarField, ThermoDisplayMode};
 
 use crate::wgpu::MARGINS;
 use crate::wgpu::render::frame::encode_frame;
@@ -88,8 +88,11 @@ fn populated_snapshot() -> RendererSnapshot {
         origin_x: 0.0,
         origin_y: 0.0,
     });
-    snapshot.fields.temperature = ThermoGrid::filled(rows, cols, 1.5);
-    snapshot.fields.pressure = ThermoGrid::filled(rows, cols, f32::NAN);
+    snapshot.fields.cells.temperature = ThermoGrid::filled(rows, cols, 1.5);
+    snapshot.fields.cells.pressure = ThermoGrid::filled(rows, cols, f32::NAN);
+    snapshot.fields.cells.density = ThermoGrid::filled(rows, cols, 0.3);
+    snapshot.fields.cells.velocity_x = ThermoGrid::filled(rows, cols, 0.5);
+    snapshot.fields.cells.velocity_y = ThermoGrid::filled(rows, cols, -0.2);
 
     let ops = &mut snapshot.operators;
     let (a, b) = (Vec2D::new(5.0, 30.0), Vec2D::new(35.0, 30.0));
@@ -194,11 +197,14 @@ fn all_pipelines_build_and_render_without_validation_errors() {
     let modes = [
         (ThermoDisplayMode::Off, true),
         (ThermoDisplayMode::Grid, false),
-        (ThermoDisplayMode::Temperature, true),
+        (ThermoDisplayMode::Scalar(ScalarField::Temperature), true),
         // All-NaN field: heatmap skipped, value labels empty.
-        (ThermoDisplayMode::Pressure, false),
+        (ThermoDisplayMode::Scalar(ScalarField::Pressure), false),
+        (ThermoDisplayMode::Scalar(ScalarField::Density), false),
+        (ThermoDisplayMode::Scalar(ScalarField::FlowSpeed), false),
+        (ThermoDisplayMode::FlowArrows, false),
         // Back to temperature: the heatmap texture is reused.
-        (ThermoDisplayMode::Temperature, false),
+        (ThermoDisplayMode::Scalar(ScalarField::Temperature), false),
     ];
     for (mode, outline) in modes {
         render_frame(
@@ -221,7 +227,7 @@ fn all_pipelines_build_and_render_without_validation_errors() {
             &queue,
             &mut pipelines,
             &snapshot,
-            ThermoDisplayMode::Temperature,
+            ThermoDisplayMode::Scalar(ScalarField::Temperature),
             false,
             layers,
         );
