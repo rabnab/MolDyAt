@@ -24,6 +24,7 @@ pub trait RenderPipeline: Any {
 - `prepare()` clears a reused `Vec<T>` field (no per-frame allocation), fills it with `#[repr(C)] #[derive(Pod, Zeroable)]` instances or vertices, calls `gpu.set_uniforms(...)` and `gpu.flush(device, queue, &instances)`.
 - `render()` only calls `gpu.draw(render_pass)`.
 - `gpu/batch.rs` (`GpuBatch`) is the only place that creates wgpu pipelines, bind groups and buffers. Do not call `device.create_*` in a pipeline.
+- Text: a pipeline that draws text takes the renderer's one `GlyphAtlas` (`gpu/text.rs`, printable ASCII, built once in `WgpuContext`, #303) as a fourth `new` argument and builds a `TextBatch` from it (one batch per colour); `WgpuPipelines::new` passes it on. Lay labels out with `push_label_vertices` (spaces and non-ASCII characters emit no quad). Never build a glyph texture of your own.
 
 ## Shaders
 - Add the file to `wgpu_renderer/src/wgpu/render/shaders/` and register it in the `shaders!` macro in `gpu/shaders.rs`; pipelines take shader source only from there. `common.wgsl` is prepended automatically: it provides the uniforms `u.view_proj` / `u.params`, `quad_corner()`, `aa()` and `ring_band()`. Do not redeclare them.

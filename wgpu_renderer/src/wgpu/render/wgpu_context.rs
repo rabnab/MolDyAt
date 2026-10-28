@@ -8,6 +8,7 @@
 //! This struct manages the GPU connection and rendering surface lifecycle.
 
 use super::surface_window::RenderWindow;
+use crate::wgpu::render::gpu::text::GlyphAtlas;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::Instant;
@@ -202,6 +203,9 @@ pub struct WgpuContext {
     pub surface: Surface<'static>,
     pub config: SurfaceConfiguration,
     pub format: TextureFormat,
+    /// The renderer's one glyph texture, shared by every text pipeline and
+    /// the plot window (#303).
+    pub glyphs: GlyphAtlas,
     pending_size: PendingSurfaceSize,
 }
 
@@ -313,6 +317,7 @@ impl WgpuContext {
             desired_maximum_frame_latency: frame_latency,
         };
         surface.configure(&device, &config);
+        let glyphs = GlyphAtlas::new(&device, &queue);
 
         Self {
             instance,
@@ -322,6 +327,7 @@ impl WgpuContext {
             surface,
             config,
             format,
+            glyphs,
             pending_size: PendingSurfaceSize::default(),
         }
     }

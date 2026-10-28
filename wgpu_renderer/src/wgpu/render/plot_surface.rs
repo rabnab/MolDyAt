@@ -70,7 +70,7 @@ impl PlotSurface {
         Ok(Self {
             window,
             surface,
-            pipeline: PlotPipeline::new(&ctx.device, &ctx.queue, format),
+            pipeline: PlotPipeline::new(&ctx.device, &ctx.queue, format, &ctx.glyphs),
             config,
         })
     }

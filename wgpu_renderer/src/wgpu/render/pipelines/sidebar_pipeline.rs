@@ -26,7 +26,7 @@ use crate::wgpu::render::gpu::batch::{BatchDesc, GpuBatch, SceneUniforms};
 use crate::wgpu::render::gpu::geometry::px_to_ndc;
 use crate::wgpu::render::gpu::shaders;
 use crate::wgpu::render::gpu::text::{
-    ASCII_CHARS, BLACK_TEXT_COLOR, GLYPH_W, TextBatch, TextVertex, push_label_vertices,
+    BLACK_TEXT_COLOR, GLYPH_W, GlyphAtlas, TextBatch, TextVertex, push_label_vertices,
     window_glyph_ndc_size,
 };
 use crate::wgpu::render::gpu::textures::{
@@ -146,7 +146,12 @@ pub struct SidebarPipeline {
 }
 
 impl SidebarPipeline {
-    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat) -> Self {
+    pub fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        format: wgpu::TextureFormat,
+        glyphs: &GlyphAtlas,
+    ) -> Self {
         let atlas = icon_atlas(
             device,
             queue,
@@ -171,7 +176,7 @@ impl SidebarPipeline {
                 queue,
                 format,
                 "Sidebar Ball Label",
-                &ASCII_CHARS,
+                glyphs,
                 BLACK_TEXT_COLOR,
             ),
             last_window_size: (0, 0),
@@ -256,15 +261,7 @@ pub(crate) fn ball_label_vertices(
         win_h,
     );
     let (glyph_ndc_w, glyph_ndc_h) = window_glyph_ndc_size((win_w, win_h), scale);
-    push_label_vertices(
-        &mut verts,
-        &ASCII_CHARS,
-        name,
-        cx,
-        cy,
-        glyph_ndc_w,
-        glyph_ndc_h,
-    );
+    push_label_vertices(&mut verts, name, cx, cy, glyph_ndc_w, glyph_ndc_h);
     verts
 }
 

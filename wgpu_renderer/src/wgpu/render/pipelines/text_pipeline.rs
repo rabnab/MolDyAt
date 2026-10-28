@@ -16,8 +16,7 @@ use thermo_ui::graphics::sidebar::sidebar_ui_scale;
 
 use crate::wgpu::render::gpu::geometry::px_to_ndc;
 use crate::wgpu::render::gpu::text::{
-    ASCII_CHARS, GLYPH_H, GLYPH_W, TextBatch, TextVertex, push_label_vertices,
-    window_glyph_ndc_size,
+    GLYPH_H, GLYPH_W, GlyphAtlas, TextBatch, TextVertex, push_label_vertices, window_glyph_ndc_size,
 };
 use crate::wgpu::render::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
 
@@ -31,14 +30,19 @@ pub struct TextPipeline {
 }
 
 impl TextPipeline {
-    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat) -> Self {
+    pub fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        format: wgpu::TextureFormat,
+        glyphs: &GlyphAtlas,
+    ) -> Self {
         Self {
             text: TextBatch::new(
                 device,
                 queue,
                 format,
                 "Cursor Text",
-                &ASCII_CHARS,
+                glyphs,
                 CURSOR_TEXT_COLOR,
             ),
         }
@@ -78,15 +82,7 @@ pub(crate) fn cursor_text_vertices(
     let (glyph_ndc_w, glyph_ndc_h) = window_glyph_ndc_size((win_w, win_h), ui_scale);
 
     let mut verts = Vec::new();
-    push_label_vertices(
-        &mut verts,
-        &ASCII_CHARS,
-        text,
-        cx,
-        cy,
-        glyph_ndc_w,
-        glyph_ndc_h,
-    );
+    push_label_vertices(&mut verts, text, cx, cy, glyph_ndc_w, glyph_ndc_h);
     verts
 }
 

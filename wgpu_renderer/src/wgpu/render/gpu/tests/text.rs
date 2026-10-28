@@ -2,9 +2,10 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use crate::wgpu::render::gpu::text::{TextVertex, push_label_vertices, window_glyph_ndc_size};
-
-const CHARS: [char; 3] = ['1', '2', '.'];
+use crate::wgpu::render::gpu::text::{
+    ASCII_CHARS, GLYPH_H, GLYPH_W, TextVertex, build_atlas_data, push_label_vertices,
+    window_glyph_ndc_size,
+};
 
 #[test]
 fn window_glyph_size_scales_the_8px_glyph_to_ndc() {
@@ -17,14 +18,14 @@ fn window_glyph_size_scales_the_8px_glyph_to_ndc() {
 #[test]
 fn each_known_glyph_emits_one_quad() {
     let mut verts: Vec<TextVertex> = Vec::new();
-    push_label_vertices(&mut verts, &CHARS, "1.2", 0.0, 0.0, 0.1, 0.2);
+    push_label_vertices(&mut verts, "1.2", 0.0, 0.0, 0.1, 0.2);
     assert_eq!(verts.len(), 3 * 6);
 }
 
 #[test]
 fn unknown_glyphs_are_skipped_but_keep_their_space() {
     let mut verts: Vec<TextVertex> = Vec::new();
-    push_label_vertices(&mut verts, &CHARS, "1x2", 0.0, 0.0, 0.1, 0.2);
+    push_label_vertices(&mut verts, "1Ü2", 0.0, 0.0, 0.1, 0.2);
     assert_eq!(verts.len(), 2 * 6);
     // '2' is the third character: its left edge sits two glyphs right of the start.
     let left_of_two = verts[6].position[0];
@@ -34,7 +35,7 @@ fn unknown_glyphs_are_skipped_but_keep_their_space() {
 #[test]
 fn label_is_centred_on_the_anchor() {
     let mut verts: Vec<TextVertex> = Vec::new();
-    push_label_vertices(&mut verts, &CHARS, "12", 0.5, -0.25, 0.1, 0.2);
+    push_label_vertices(&mut verts, "12", 0.5, -0.25, 0.1, 0.2);
     let min_x = verts
         .iter()
         .map(|v| v.position[0])
@@ -59,15 +60,33 @@ fn label_is_centred_on_the_anchor() {
 /// search, and characters outside the atlas are skipped.
 #[test]
 fn ascii_atlas_lookup_matches_a_search() {
-    use crate::wgpu::render::gpu::text::{ASCII_CHARS, push_label_vertices};
     let mut verts = Vec::new();
-    push_label_vertices(&mut verts, &ASCII_CHARS, "A~Ü ", 0.0, 0.0, 0.1, 0.1);
-    // Six vertices per drawn glyph: 'A', '~' and ' ', not 'Ü'.
-    assert_eq!(verts.len(), 18);
+    push_label_vertices(&mut verts, "A~Ü ", 0.0, 0.0, 0.1, 0.1);
+    // Six vertices per drawn glyph: 'A' and '~'; not 'Ü', and a space
+    // draws nothing.
+    assert_eq!(verts.len(), 12);
     let u0 = |glyph: usize| verts[glyph * 6].uv[0];
     let n = ASCII_CHARS.len() as f32;
-    for (glyph, ch) in [(0, 'A'), (1, '~'), (2, ' ')] {
+    for (glyph, ch) in [(0, 'A'), (1, '~')] {
         let idx = ASCII_CHARS.iter().position(|&c| c == ch).unwrap();
         assert_eq!(u0(glyph), idx as f32 / n, "{ch}");
+    }
+}
+
+/// The shared atlas (#303) has a glyph for every character the former
+/// small atlases of the value and thermostat labels held, so those labels
+/// look the same.
+#[test]
+fn the_ascii_atlas_holds_the_label_characters() {
+    let atlas = build_atlas_data(&ASCII_CHARS);
+    let width = ASCII_CHARS.len() * GLYPH_W as usize;
+    assert_eq!(atlas.len(), width * GLYPH_H as usize);
+    for ch in "0123456789.-:LTOF".chars() {
+        let x0 = (ch as usize - ' ' as usize) * GLYPH_W as usize;
+        let lit = (0..GLYPH_H as usize)
+            .flat_map(|row| (0..GLYPH_W as usize).map(move |col| (row, col)))
+            .filter(|&(row, col)| atlas[row * width + x0 + col] == 255)
+            .count();
+        assert!(lit > 0, "{ch} has no pixels");
     }
 }

@@ -14,8 +14,8 @@ use thermo_ui::graphics::energy_plot::plot_layout::GLYPH_CELL;
 use thermo_ui::graphics::energy_plot::{PlotLabel, PlotScene};
 
 use crate::wgpu::render::gpu::batch::{BatchDesc, GpuBatch, SceneUniforms};
-use crate::wgpu::render::gpu::text::{ASCII_CHARS, GLYPH_H, GLYPH_W, build_atlas_data};
-use crate::wgpu::render::gpu::{shaders, textures};
+use crate::wgpu::render::gpu::shaders;
+use crate::wgpu::render::gpu::text::{ASCII_CHARS, GlyphAtlas, ascii_index};
 
 /// One segment. Layout must match `Inst` in plot_segment.wgsl.
 #[repr(C)]
@@ -66,10 +66,7 @@ pub(crate) fn push_label(label: &PlotLabel, out: &mut Vec<PlotTextVertex>) {
     let [x0, top] = label.origin;
     let bottom = top + glyph;
     for (i, ch) in label.text.chars().enumerate() {
-        let Some(index) = (ch as usize)
-            .checked_sub(' ' as usize)
-            .filter(|&index| index < ASCII_CHARS.len())
-        else {
+        let Some(index) = ascii_index(ch) else {
             continue;
         };
         let (u0, u1) = (index as f32 / atlas_len, (index + 1) as f32 / atlas_len);
@@ -91,28 +88,19 @@ pub(crate) fn push_label(label: &PlotLabel, out: &mut Vec<PlotTextVertex>) {
 pub(crate) struct PlotPipeline {
     segments: GpuBatch<SegmentInstance>,
     text: GpuBatch<PlotTextVertex>,
-    /// Kept alive for the text batch's bind group
-    _atlas: wgpu::Texture,
     /// Reused every frame to avoid reallocating
     segment_scratch: Vec<SegmentInstance>,
     text_scratch: Vec<PlotTextVertex>,
 }
 
 impl PlotPipeline {
+    /// The text is drawn from the renderer's shared `glyphs` (#303).
     pub(crate) fn new(
         device: &wgpu::Device,
-        queue: &wgpu::Queue,
+        _queue: &wgpu::Queue,
         format: wgpu::TextureFormat,
+        glyphs: &GlyphAtlas,
     ) -> Self {
-        let atlas_w = ASCII_CHARS.len() as u32 * GLYPH_W;
-        let (atlas, view) = textures::r8_texture(device, "Plot Glyphs", atlas_w, GLYPH_H);
-        textures::write_r8(
-            queue,
-            &atlas,
-            &build_atlas_data(&ASCII_CHARS),
-            atlas_w,
-            GLYPH_H,
-        );
         Self {
             segments: GpuBatch::new(
                 device,
@@ -129,9 +117,8 @@ impl PlotPipeline {
                     wgpu::PrimitiveTopology::TriangleList,
                 )
                 // Nearest keeps the 8×8 bitmap glyphs crisp.
-                .texture(&view, wgpu::FilterMode::Nearest),
+                .texture(glyphs.view(), wgpu::FilterMode::Nearest),
             ),
-            _atlas: atlas,
             segment_scratch: Vec::new(),
             text_scratch: Vec::new(),
         }
