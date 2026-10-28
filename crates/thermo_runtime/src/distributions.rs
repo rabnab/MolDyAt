@@ -157,13 +157,26 @@ pub fn speed_histogram(balls: &[BallRenderData], bins: usize) -> Option<SpeedHis
 /// is not its own neighbour). Only reference balls at least `r_max` from
 /// every wall count, so every shell lies inside the world; an ideal gas
 /// then gives g ≈ 1 at every r.
+///
+/// `ρ_b` is the mean density of the whole world: g is normalised for a
+/// world of uniform density. Where the density varies on its own (a gas
+/// stratified under gravity, chambers split by walls or valves at
+/// different densities), g levels off above 1 at large r even without
+/// interactions; read that plateau as the density variation, not as
+/// structure. No bins (`bins == 0` or `r_max <= 0`) give no pairs.
 pub fn radial_distribution(
     balls: &[BallRenderData],
     world: &Rect,
     r_max: f32,
     bins: usize,
 ) -> RadialDistribution {
-    let bin_width = r_max / bins.max(1) as f32;
+    if bins == 0 || r_max.is_nan() || r_max <= 0.0 {
+        return RadialDistribution {
+            bin_width: 0.0,
+            pairs: Vec::new(),
+        };
+    }
+    let bin_width = r_max / bins as f32;
     let mut counts_per_species = [0usize; SpeciesSet::CAPACITY];
     for ball in balls {
         if let Some(count) = counts_per_species.get_mut(ball.species.index()) {
@@ -190,45 +203,54 @@ pub fn radial_distribution(
             && y1 - b.position.y >= r_max
     };
 
-    let mut pairs = Vec::new();
-    for (k, &a) in present.iter().enumerate() {
-        for &b in &present[k..] {
-            let mut hist = vec![0u64; bins];
-            let mut reference_balls = 0;
-            for (i, ball) in balls.iter().enumerate() {
-                if ball.species.index() != a || !interior(ball) {
-                    continue;
-                }
-                reference_balls += 1;
-                grid.for_each_near(ball, |j, other| {
-                    if j == i || other.species.index() != b {
-                        return;
-                    }
-                    let r = (other.position.x - ball.position.x)
-                        .hypot(other.position.y - ball.position.y);
-                    if r < r_max {
-                        hist[((r / bin_width) as usize).min(bins - 1)] += 1;
-                    }
-                });
+    // One neighbour pass for every pair: counts per (reference species,
+    // neighbour species), by place in `present`, are added to the pair
+    // with the smaller species first (as `a <= b` below).
+    let p = present.len();
+    let place = |species: SpeciesId| present.iter().position(|&s| s == species.index());
+    let mut hist = vec![0u64; p * p * bins];
+    let mut references = vec![0usize; p];
+    for (i, ball) in balls.iter().enumerate() {
+        let Some(a) = place(ball.species).filter(|_| interior(ball)) else {
+            continue;
+        };
+        references[a] += 1;
+        grid.for_each_near(ball, |j, other| {
+            if j == i {
+                return;
             }
-            let neighbours = counts_per_species[b] - usize::from(a == b);
+            let Some(b) = place(other.species).filter(|&b| b >= a) else {
+                return;
+            };
+            let r = (other.position.x - ball.position.x).hypot(other.position.y - ball.position.y);
+            if r < r_max {
+                hist[(a * p + b) * bins + ((r / bin_width) as usize).min(bins - 1)] += 1;
+            }
+        });
+    }
+
+    let mut pairs = Vec::new();
+    for a in 0..p {
+        for b in a..p {
+            let neighbours = counts_per_species[present[b]] - usize::from(a == b);
             let density = neighbours as f32 / area;
+            let counts = &hist[(a * p + b) * bins..][..bins];
             let g = (0..bins)
                 .map(|i| {
                     let (r0, r1) = (i as f32 * bin_width, (i + 1) as f32 * bin_width);
                     let shell = std::f32::consts::PI * (r1 * r1 - r0 * r0);
-                    let ideal = reference_balls as f32 * density * shell;
+                    let ideal = references[a] as f32 * density * shell;
                     if ideal > 0.0 {
-                        hist[i] as f32 / ideal
+                        counts[i] as f32 / ideal
                     } else {
                         f32::NAN
                     }
                 })
                 .collect();
-            let id = |index: usize| SpeciesId::new(index as u16);
+            let id = |index: usize| SpeciesId::new(present[index] as u16);
             pairs.push(PairDistribution {
                 species: (id(a), id(b)),
-                reference_balls,
+                reference_balls: references[a],
                 g,
             });
         }

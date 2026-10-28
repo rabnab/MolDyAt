@@ -367,8 +367,9 @@ impl HeadlessRunner {
 
     /// The export files of `--export-dir`: the series of the whole run, the
     /// per-ball state of the final snapshot and, with `--distributions`, its
-    /// distributions, under fixed names so scripts find them, then the closed `--export-stream` file. A failed stream is
-    /// returned as the error once the other files are written.
+    /// distributions, under fixed names so scripts find them, then the
+    /// closed `--export-stream` file. A failed stream is returned as the
+    /// error once the other files are written.
     fn write_exports(&mut self, snapshot: &RendererSnapshot) -> io::Result<Vec<PathBuf>> {
         let Some(export) = &mut self.export else {
             return Ok(Vec::new());

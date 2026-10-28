@@ -38,7 +38,8 @@ pub trait CreateSnapshot {
 
     /// Overwrite `snapshot` with the current state and only `layers`,
     /// reusing its allocations (#341): an earlier snapshot refilled this way
-    /// costs no allocation for the balls, operators and debug data.
+    /// allocates no new ball vector or top-level operator vectors (the
+    /// per-wall id lists and verbose balls' neighbour lines are rebuilt).
     fn fill_snapshot(&self, layers: SceneLayers, snapshot: &mut RendererSnapshot);
 }
 

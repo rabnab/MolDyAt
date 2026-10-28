@@ -97,16 +97,16 @@ impl SimulationEngine {
     }
 
     /// Add the per-cell fields (temperature, pressure, density, flow
-    /// velocity) of the last step to the thermo history. Only the heatmap overlay (and headless output) uses
-    /// them, so the physics thread calls this only while they are shown
-    /// (the `THERMO` layer).
+    /// velocity) of the last step to the thermo history. Only the field
+    /// overlay (and headless output) uses them, so the physics thread calls
+    /// this only while they are shown (the `THERMO` layer).
     pub(crate) fn record_thermo_fields(world: &mut SimulationWorld, log_timings: bool) {
         if world.balls.len() != world.cached_force_results.len() {
             return;
         }
         let mut clock = PhaseClock::start(log_timings);
-        // The T/P field has a grid of its own, sized from the world only
-        // (#290, docs/simulation.md, Thermodynamic Grid Space).
+        // The per-cell fields have a grid of their own, sized from the
+        // world only (#290, docs/simulation.md, Thermodynamic Grid Space).
         let (rows, cols) = thermo_grid_dims(world.world_rect.w, world.world_rect.h);
         let fields = compute_cell_fields(
             &world.balls,

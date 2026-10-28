@@ -127,8 +127,9 @@ headless runs; both step with the configured time step.
    invalid (NaN) balls are removed.
 6. **thermo**: global temperature.
 
-While a field overlay is shown, the physics thread also samples the per-cell
-fields (temperature, pressure, density, flow velocity) every `THERMO_SAMPLE_STRIDE` steps (see
+While a field overlay is shown, the physics thread also samples the
+per-cell fields (temperature, pressure, density, flow velocity) every
+`THERMO_SAMPLE_STRIDE` steps (see
 [simulation.md](simulation.md#thermodynamic-grid-space)).
 
 ### Renderer state and orchestration
@@ -292,7 +293,9 @@ back as `PhysicsEvent`s on a second channel.
    requested layers) and its `SnapshotPublisher` stores it in an
    `ArcSwapOption` slot. The publisher keeps the snapshot it replaced and
    refills it next time if the renderer has let go of it, so a steady run
-   allocates no new ball, operator or debug vectors (#341). It publishes at most once per snapshot interval
+   allocates no new ball vector or top-level operator vectors (#341; the
+   per-wall id lists and the neighbour lines of verbose balls are small and
+   rebuilt). It publishes at most once per snapshot interval
    (16.7 ms), and immediately after a resize. A paused, untouched world
    publishes nothing.
 2. A wakeup callback asks the winit event loop for a redraw.

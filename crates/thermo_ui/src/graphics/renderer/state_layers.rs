@@ -15,7 +15,6 @@
 //! This module intentionally contains no ggez or wgpu types so that
 //! unit tests can exercise state logic without a GPU context.
 
-use std::borrow::Cow;
 use thermo_physics::application::thermo_field::{CellFields, ThermoGrid};
 use thermo_runtime::application::scene_layers::SceneLayers;
 
@@ -79,12 +78,12 @@ impl ScalarField {
     }
 
     /// The field's per-cell values.
-    pub fn grid(self, cells: &CellFields) -> Cow<'_, ThermoGrid> {
+    pub fn grid(self, cells: &CellFields) -> &ThermoGrid {
         match self {
-            Self::Temperature => Cow::Borrowed(&cells.temperature),
-            Self::Pressure => Cow::Borrowed(&cells.pressure),
-            Self::Density => Cow::Borrowed(&cells.density),
-            Self::FlowSpeed => Cow::Owned(cells.flow_speed()),
+            Self::Temperature => &cells.temperature,
+            Self::Pressure => &cells.pressure,
+            Self::Density => &cells.density,
+            Self::FlowSpeed => &cells.flow_speed,
         }
     }
 }
@@ -489,6 +488,7 @@ mod tests {
         cells.density = ThermoGrid::filled(1, 1, 0.5);
         cells.velocity_x = ThermoGrid::filled(1, 1, 3.0);
         cells.velocity_y = ThermoGrid::filled(1, 1, 4.0);
+        cells.update_flow_speed();
         let value = |field: ScalarField| field.grid(&cells).get(0, 0);
         assert_eq!(value(ScalarField::Temperature), 1.0);
         assert_eq!(value(ScalarField::Pressure), 2.0);
