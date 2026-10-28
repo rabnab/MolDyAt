@@ -4,30 +4,24 @@
 
 //! Renderer Snapshot Module
 //!
-//! ARCHITECTURAL CONSTRAINT: This module must not depend on ggez.
-//! All ggez-specific code belongs in src/application/ggez/.
-//!
 //! This module provides a framework-independent snapshot of the simulation state
-//! for rendering. It contains only positions, colors (as RGBA arrays), and neighbor
-//! information, using only standard Rust types.
+//! for rendering, in sections (#341): [`FrameInfo`] (step, time, energies),
+//! [`BallBuffer`] (balls and species), [`OperatorSnapshot`], [`FieldSnapshot`]
+//! (cell grid and thermo fields) and an optional [`DebugSnapshot`] (neighbour
+//! lines of verbose balls).
 //!
 //! # Design: Array-of-Structures
 //!
-//! This module uses an **array-of-structures** design (single `Vec<BallRenderData>`)
-//! rather than **structure-of-arrays** (separate vectors for each field).
-//!
-//! Rationale:
-//! - **Type safety**: Impossible to have inconsistent vector lengths.
-//! - **Simplicity**: Data for each ball is grouped together logically.
-//! - **Access pattern**: Rendering typically needs all fields (position, color, radius)
-//!   together for each ball, so SoA cache benefits don't apply.
-//! - **Immutability**: Snapshots are immutable after creation, so no need for
-//!   partial field updates that might benefit from SoA.
+//! The balls are one `Vec<BallRenderData>` rather than separate vectors per
+//! field: lengths cannot disagree, and rendering reads every field of a ball
+//! together. `BallRenderData` holds no heap data, so a reused snapshot
+//! refills the vector without allocating.
 
 use crate::application::log_util::SpeciesCounts;
+use crate::application::sim_stats::StatusNumbers;
 use crate::objects2d::ball_impl::{DEFAULT_SPECIES, SpeciesId, SpeciesSet, SpeciesTable};
 use crate::objects2d::line_segment::valve_half_width;
-use crate::objects2d::{SimLineSegment, SimSourceSphere, SimThermostat, Vec2D};
+use crate::objects2d::{Rect, SimLineSegment, SimSourceSphere, SimThermostat, Vec2D};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -95,7 +89,7 @@ pub struct WallSnapshot {
 /// New operator types add a field here instead of expanding
 /// `RendererSnapshot` directly.  Population is driven by
 /// `create_snapshot()` which iterates the operator collections.
-#[derive(Clone, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct OperatorSnapshot {
     /// Wall pieces (a wall split by valves is several pieces).
     pub line_segments: Vec<SimLineSegment>,
@@ -218,10 +212,9 @@ pub struct ThermoGridSpec {
     pub origin_y: f32,
 }
 
-/// Rendering data for a single ball.
-///
-/// Contains all information needed to render one ball, including visual appearance
-/// and neighbor relationships for visualization.
+/// Rendering data for a single ball: what the ball pipeline, hit-testing,
+/// headless output and export read. Debug data (neighbour lines) of verbose
+/// balls is in [`DebugSnapshot`].
 #[derive(Clone, Debug)]
 pub struct BallRenderData {
     /// Ball ID for debugging and tracking
@@ -240,7 +233,6 @@ pub struct BallRenderData {
     pub mass: f32,
 
     /// Ball color as RGBA [r, g, b, a] in range [0.0, 1.0]
-    /// NOT ggez::Color to maintain framework independence
     pub color: [f32; 4],
 
     /// `σ / 2` of the species: two balls touch (zero pair potential) when
@@ -257,32 +249,13 @@ pub struct BallRenderData {
     /// Half the cutoff of a like pair: the rings of two balls touch where
     /// their pair stops interacting
     pub cutoff_radius: f32,
-
-    /// Whether to draw neighbor lines for this ball (verbose mode)
-    pub show_neighbor_lines: bool,
-
-    /// Whether this ball shows only main neighbors (stronger forces)
-    pub show_main_neighbors_only: bool,
-
-    /// Indices of this ball's neighbors in the snapshot with force magnitudes
-    /// Each entry is (neighbor_index, force_magnitude)
-    /// Used for visualizing neighbor relationships with color-coded force strength
-    pub neighbors: Vec<(usize, f32)>,
-
-    /// Additional fields can be added as needed for rendering
-    pub update_counter: usize,
-    pub tail: Vec<Vec2D>,
 }
 
-/// A snapshot of simulation state for rendering.
-///
-/// Contains only the data needed for visualization, using framework-independent types.
-/// Uses array-of-structures design to guarantee consistency and simplify ball data access.
-#[derive(Clone)]
-pub struct RendererSnapshot {
-    /// All balls in the simulation with their rendering data
-    pub balls: Vec<BallRenderData>,
-
+/// Step, time and the global numbers of the world: every snapshot has
+/// them, whatever its layers (headless output and the metrics store read
+/// them).
+#[derive(Clone, Debug)]
+pub struct FrameInfo {
     /// Simulation step counter (for display)
     pub simulation_step: u64,
 
@@ -295,12 +268,8 @@ pub struct RendererSnapshot {
     /// fresh thermostat readings (rendering off, F2).
     pub layers: SceneLayers,
 
-    /// Ball count per species index (see `SpeciesTable`), whatever the
-    /// layers: the metrics store samples it.
-    pub species_counts: SpeciesCounts,
-
-    /// Magnitude of the momentum given to walls since the start of the run.
-    pub wall_momentum: f32,
+    /// Simulation time
+    pub time: f32,
 
     /// Kinetic energy of the system
     pub kinetic_energy: f32,
@@ -308,77 +277,132 @@ pub struct RendererSnapshot {
     /// Potential energy of the system
     pub potential_energy: f32,
 
-    /// Simulation time
-    pub time: f32,
+    /// Magnitude of the momentum given to walls since the start of the run.
+    pub wall_momentum: f32,
 
-    /// Status text for display (ball count, FPS, etc.)
-    pub status_text: Option<String>,
-
-    /// Cell grid world bounds (for rendering the grid)
-    pub cell_grid_bounds: crate::objects2d::Rect,
-
-    /// Species of new balls, for the cursor preview
-    pub cursor_species: SpeciesId,
-
-    /// The world's species table: names, colours and drawing radii of
-    /// `BallRenderData::species` and `cursor_species`.
-    pub species: Arc<SpeciesTable>,
-
-    /// Equilibrium and cutoff ring radii of `cursor_species` (see
-    /// [`BallRenderData::equilibrium_radius`]), for the cursor preview
-    pub cursor_ring_radii: [f32; 2],
+    /// Ball count per species index (see `SpeciesTable`), whatever the
+    /// layers: the metrics store and the status lines read it.
+    pub species_counts: SpeciesCounts,
 
     /// Current gravity preset as a multiple of Earth gravity (0, 1, or 2).
     pub gravity_force_multiple: u8,
-
-    /// Timestamp for debugging
-    pub created_at: Instant,
-
-    /// Grid specification for drawing cell backgrounds
-    pub grid_spec: CellGridSpec,
 
     /// Actual physics thread step rate (steps per second)
     /// This is the true simulation performance, independent of rendering
     pub physics_fps: f32,
 
-    /// Per-cell temperature field (row-major flat grid, NaN for underpopulated cells).
-    /// Empty grid (0×0) until at least one step of data is available.
-    pub cell_temperature: ThermoGrid,
+    /// The world rectangle (the cell grid's bounds).
+    pub world_rect: Rect,
 
-    /// Per-cell pressure field (row-major flat grid, NaN for underpopulated cells).
-    /// Empty grid (0×0) until at least one step of data is available.
-    pub cell_pressure: ThermoGrid,
+    /// The numbers of the status lines, `None` while ball stats are not
+    /// shown (`B`). The UI formats them into text (#341).
+    pub status: Option<StatusNumbers>,
 
-    /// Grid layout for mapping thermo cell indices to world coordinates.
-    /// `None` until at least one step of data is available.
-    pub thermo_grid_spec: Option<ThermoGridSpec>,
-
-    /// All operator data (line segments, valves, future types).
-    pub operators: OperatorSnapshot,
+    /// Timestamp for debugging
+    pub created_at: Instant,
 }
 
-impl RendererSnapshot {
-    /// Create new empty snapshot with default values.
-    /// Sets timestamp to current instant for debugging snapshot age.
-    pub fn new() -> Self {
+impl Default for FrameInfo {
+    fn default() -> Self {
         Self {
-            balls: Vec::new(),
             simulation_step: 0,
             world_generation: 0,
             layers: SceneLayers::ALL,
-            species_counts: [0; SpeciesSet::CAPACITY],
-            wall_momentum: 0.0,
+            time: 0.0,
             kinetic_energy: 0.0,
             potential_energy: 0.0,
-            time: 0.0,
-            status_text: None,
-            cell_grid_bounds: crate::objects2d::Rect::new(0.0, 0.0, 0.0, 0.0),
-            cursor_species: DEFAULT_SPECIES,
-            species: SpeciesTable::builtin_shared(),
-            cursor_ring_radii: DEFAULT_RING_RADII,
+            wall_momentum: 0.0,
+            species_counts: [0; SpeciesSet::CAPACITY],
             gravity_force_multiple: 0,
+            physics_fps: 0.0,
+            world_rect: Rect::new(0.0, 0.0, 0.0, 0.0),
+            status: None,
             created_at: Instant::now(),
-            grid_spec: CellGridSpec {
+        }
+    }
+}
+
+impl FrameInfo {
+    /// Returns the total energy (kinetic + potential)
+    pub fn total_energy(&self) -> f32 {
+        self.kinetic_energy + self.potential_energy
+    }
+}
+
+/// The balls (the `BALLS` layer) and the species they are drawn with.
+///
+/// Derefs to the ball slice, so `snapshot.balls.len()`, `.iter()` and
+/// indexing read the balls directly.
+#[derive(Clone, Debug)]
+pub struct BallBuffer {
+    /// Render data of every ball, in the world's ball order (empty without
+    /// the `BALLS` layer).
+    pub data: Vec<BallRenderData>,
+
+    /// The world's species table: names, colours and drawing radii of
+    /// `BallRenderData::species` and `cursor_species`.
+    pub species: Arc<SpeciesTable>,
+
+    /// Species of new balls, for the cursor preview
+    pub cursor_species: SpeciesId,
+
+    /// Equilibrium and cutoff ring radii of `cursor_species` (see
+    /// [`BallRenderData::equilibrium_radius`]), for the cursor preview
+    pub cursor_ring_radii: [f32; 2],
+}
+
+impl Default for BallBuffer {
+    fn default() -> Self {
+        Self {
+            data: Vec::new(),
+            species: SpeciesTable::builtin_shared(),
+            cursor_species: DEFAULT_SPECIES,
+            cursor_ring_radii: DEFAULT_RING_RADII,
+        }
+    }
+}
+
+impl std::ops::Deref for BallBuffer {
+    type Target = [BallRenderData];
+
+    fn deref(&self) -> &[BallRenderData] {
+        &self.data
+    }
+}
+
+impl<'a> IntoIterator for &'a BallBuffer {
+    type Item = &'a BallRenderData;
+    type IntoIter = std::slice::Iter<'a, BallRenderData>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.data.iter()
+    }
+}
+
+/// Grids over the world: the physics cell grid (drawn as the grid overlay)
+/// and the thermo fields (the `THERMO` layer).
+#[derive(Clone, Debug)]
+pub struct FieldSnapshot {
+    /// Grid specification for drawing cell backgrounds
+    pub cell_grid: CellGridSpec,
+
+    /// Per-cell temperature field (row-major flat grid, NaN for underpopulated cells).
+    /// Empty grid (0×0) until at least one step of data is available.
+    pub temperature: ThermoGrid,
+
+    /// Per-cell pressure field (row-major flat grid, NaN for underpopulated cells).
+    /// Empty grid (0×0) until at least one step of data is available.
+    pub pressure: ThermoGrid,
+
+    /// Grid layout for mapping thermo cell indices to world coordinates.
+    /// `None` until at least one step of data is available.
+    pub thermo_grid: Option<ThermoGridSpec>,
+}
+
+impl Default for FieldSnapshot {
+    fn default() -> Self {
+        Self {
+            cell_grid: CellGridSpec {
                 rows: 0,
                 cols: 0,
                 cell_width: 0.0,
@@ -386,12 +410,62 @@ impl RendererSnapshot {
                 origin_x: 0.0,
                 origin_y: 0.0,
             },
-            physics_fps: 0.0,
-            cell_temperature: ThermoGrid::filled(0, 0, 0.0),
-            cell_pressure: ThermoGrid::filled(0, 0, 0.0),
-            thermo_grid_spec: None,
-            operators: OperatorSnapshot::default(),
+            temperature: ThermoGrid::filled(0, 0, 0.0),
+            pressure: ThermoGrid::filled(0, 0, 0.0),
+            thermo_grid: None,
         }
+    }
+}
+
+/// Neighbour lines of one verbose ball (`V` / verbose mode).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct NeighborLines {
+    /// Index of the ball in [`BallBuffer::data`].
+    pub ball: usize,
+    /// Draw only the main neighbours (the strongest forces).
+    pub main_only: bool,
+    /// Indices of this ball's neighbours in [`BallBuffer::data`] with their
+    /// force magnitudes, from the last physics step.
+    pub neighbors: Vec<(usize, f32)>,
+}
+
+/// Debug data, only for verbose balls: absent (`None`) in a snapshot
+/// without any, so a normal snapshot carries none.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct DebugSnapshot {
+    /// Neighbour lines of every ball that shows them.
+    pub neighbor_lines: Vec<NeighborLines>,
+}
+
+/// A snapshot of simulation state for rendering, in sections (#341): each
+/// pipeline reads only its section, and a new visual adds a section or
+/// derived data instead of a top-level field.
+///
+/// The physics thread refills the allocations of an earlier snapshot the
+/// renderer has released (see `SnapshotPublisher`).
+#[derive(Clone, Default)]
+pub struct RendererSnapshot {
+    /// Step, time, energies and the other global numbers.
+    pub frame: FrameInfo,
+
+    /// The balls and their species.
+    pub balls: BallBuffer,
+
+    /// All operator data (line segments, valves, future types).
+    pub operators: OperatorSnapshot,
+
+    /// The cell grid and the thermo fields.
+    pub fields: FieldSnapshot,
+
+    /// Neighbour lines of verbose balls, if any.
+    pub debug: Option<DebugSnapshot>,
+}
+
+impl RendererSnapshot {
+    /// Create new empty snapshot with default values.
+    /// Sets timestamp to current instant for debugging snapshot age.
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// Create snapshot with pre-allocated ball capacity to avoid reallocation.
@@ -399,37 +473,9 @@ impl RendererSnapshot {
     /// # Arguments
     /// * `capacity` - Number of balls to pre-allocate space for
     pub fn with_capacity(capacity: usize) -> Self {
-        Self {
-            balls: Vec::with_capacity(capacity),
-            simulation_step: 0,
-            world_generation: 0,
-            layers: SceneLayers::ALL,
-            species_counts: [0; SpeciesSet::CAPACITY],
-            wall_momentum: 0.0,
-            kinetic_energy: 0.0,
-            potential_energy: 0.0,
-            time: 0.0,
-            status_text: None,
-            cell_grid_bounds: crate::objects2d::Rect::new(0.0, 0.0, 0.0, 0.0),
-            cursor_species: DEFAULT_SPECIES,
-            species: SpeciesTable::builtin_shared(),
-            cursor_ring_radii: DEFAULT_RING_RADII,
-            gravity_force_multiple: 0,
-            created_at: Instant::now(),
-            grid_spec: CellGridSpec {
-                rows: 0,
-                cols: 0,
-                cell_width: 0.0,
-                cell_height: 0.0,
-                origin_x: 0.0,
-                origin_y: 0.0,
-            },
-            physics_fps: 0.0,
-            cell_temperature: ThermoGrid::filled(0, 0, 0.0),
-            cell_pressure: ThermoGrid::filled(0, 0, 0.0),
-            thermo_grid_spec: None,
-            operators: OperatorSnapshot::default(),
-        }
+        let mut snapshot = Self::default();
+        snapshot.balls.data.reserve_exact(capacity);
+        snapshot
     }
 
     /// Returns the number of balls in this snapshot
@@ -444,13 +490,7 @@ impl RendererSnapshot {
 
     /// Returns the total energy (kinetic + potential)
     pub fn total_energy(&self) -> f32 {
-        self.kinetic_energy + self.potential_energy
-    }
-}
-
-impl Default for RendererSnapshot {
-    fn default() -> Self {
-        Self::new()
+        self.frame.total_energy()
     }
 }
 
@@ -483,14 +523,15 @@ mod tests {
         let snapshot = RendererSnapshot::new();
         assert_eq!(snapshot.len(), 0);
         assert!(snapshot.is_empty());
-        assert_eq!(snapshot.gravity_force_multiple, 0);
+        assert_eq!(snapshot.frame.gravity_force_multiple, 0);
+        assert!(snapshot.debug.is_none());
     }
 
     #[test]
     fn test_snapshot_with_capacity() {
         let snapshot = RendererSnapshot::with_capacity(100);
         assert_eq!(snapshot.len(), 0);
-        assert_eq!(snapshot.balls.capacity(), 100);
+        assert_eq!(snapshot.balls.data.capacity(), 100);
     }
 
     #[test]

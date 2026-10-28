@@ -10,8 +10,9 @@ use crate::application::MainContent;
 use crate::application::core::SimulationWorld;
 use crate::application::log_util::{SpeciesCounts, count_ball};
 use crate::application::renderer_snapshot::{
-    BallRenderData, OperatorSnapshot, RendererSnapshot, ThermoGridSpec, UNKNOWN_SPECIES_COLOUR,
-    ValveSpan, WallSnapshot, get_special_ball_color,
+    BallRenderData, CellGridSpec, DebugSnapshot, FrameInfo, NeighborLines, OperatorSnapshot,
+    RendererSnapshot, ThermoGridSpec, UNKNOWN_SPECIES_COLOUR, ValveSpan, WallSnapshot,
+    get_special_ball_color,
 };
 use crate::application::scene_layers::SceneLayers;
 use crate::application::sim_stats::NORMAL_GRAVITY;
@@ -29,128 +30,119 @@ pub trait CreateSnapshot {
     }
 
     /// A snapshot with only `layers` (what the renderer asked for).
-    fn create_snapshot_with(&self, layers: SceneLayers) -> RendererSnapshot;
+    fn create_snapshot_with(&self, layers: SceneLayers) -> RendererSnapshot {
+        let mut snapshot = RendererSnapshot::new();
+        self.fill_snapshot(layers, &mut snapshot);
+        snapshot
+    }
+
+    /// Overwrite `snapshot` with the current state and only `layers`,
+    /// reusing its allocations (#341): an earlier snapshot refilled this way
+    /// costs no allocation for the balls, operators and debug data.
+    fn fill_snapshot(&self, layers: SceneLayers, snapshot: &mut RendererSnapshot);
 }
 
 impl CreateSnapshot for MainContent {
-    /// Create renderer snapshot from current simulation state.
-    /// Conditionally clones expensive data (neighbors, tail) only when needed for visualization.
-    /// Uses cached force magnitudes from last physics step for neighbor line rendering.
-    fn create_snapshot_with(&self, layers: SceneLayers) -> RendererSnapshot {
+    /// Fill the snapshot from the current simulation state.
+    /// Debug data (neighbour lines) is built only for verbose balls, from
+    /// the force magnitudes cached by the last physics step.
+    fn fill_snapshot(&self, layers: SceneLayers, snapshot: &mut RendererSnapshot) {
         let world = self.world();
         let step_config = self.step_config();
         // The species counts of the status lines and the metrics store come
         // from the same pass over the balls when the BALLS layer makes one.
         let mut species_counts = [0; SpeciesSet::CAPACITY];
-        let balls = if layers.contains(SceneLayers::BALLS) {
-            build_ball_render_data(world, &mut species_counts)
+        snapshot.balls.data.clear();
+        let mut debug = snapshot.debug.take().unwrap_or_default();
+        debug.neighbor_lines.clear();
+        if layers.contains(SceneLayers::BALLS) {
+            fill_ball_render_data(world, &mut species_counts, snapshot, &mut debug);
         } else {
             for ball in world.balls() {
                 count_ball(&mut species_counts, ball);
             }
-            Vec::new()
-        };
+        }
+        snapshot.debug = (!debug.neighbor_lines.is_empty()).then_some(debug);
         let (wall_px, wall_py) = self.wall_momentum();
+        let new_ball_species = step_config.get_ball_factory().new_ball_species();
 
-        RendererSnapshot {
-            balls,
+        snapshot.frame = FrameInfo {
             simulation_step: world.step_count() as u64,
             world_generation: self.runtime().world_generation(),
             layers,
-            species_counts,
-            wall_momentum: wall_px.hypot(wall_py),
+            time: world.sim().get_time(),
             kinetic_energy: world.sim().get_kinetic_energy(),
             potential_energy: world.sim().get_potential_energy(),
-            time: world.sim().get_time(),
-            // FPS not available during snapshot creation
-            status_text: self.status_text_with_counts(
-                0,
-                step_config.get_time_step(),
-                Some(&species_counts),
-            ),
-            cell_grid_bounds: world.cell_grid().world_rect(),
-            cursor_species: step_config.get_ball_factory().new_ball_species(),
-            species: Arc::clone(world.species()),
-            cursor_ring_radii: ring_radii(
-                world.physics(),
-                step_config.get_ball_factory().new_ball_species(),
-            ),
+            wall_momentum: wall_px.hypot(wall_py),
+            species_counts,
             gravity_force_multiple: current_gravity_force_multiple(
                 world.physics().constants.gravity,
             ),
-            created_at: std::time::Instant::now(),
-            // Create lightweight grid spec instead of cloning the full CellGrid
-            // This avoids cloning the cell vector while providing all info needed for rendering
-            grid_spec: {
-                let (rows, cols) = world.cell_grid().get_grid_size();
-                let (cell_width, cell_height) = world.cell_grid().get_cell_size();
-                let world_rect = world.cell_grid().world_rect();
-                crate::application::renderer_snapshot::CellGridSpec {
-                    rows,
-                    cols,
-                    cell_width,
-                    cell_height,
-                    origin_x: world_rect.x,
-                    origin_y: world_rect.y,
-                }
-            },
             physics_fps: self.runtime().physics_fps(),
-            operators: OperatorSnapshot {
-                line_segments: world.line_segments().segments().to_vec(),
-                walls: world
-                    .wall_chains()
-                    .chains()
-                    .map(|c| WallSnapshot {
-                        chain_id: c.id,
-                        start: c.start,
-                        end: c.end,
-                        piece_ids: c.pieces.iter().map(|p| p.line_id).collect(),
-                        valve_ids: c.valve_ids().collect(),
-                    })
-                    .collect(),
-                valve_spans: valve_spans(world),
-                source_spheres: world.source_spheres().spheres().to_vec(),
-                thermostats: if layers.contains(SceneLayers::READOUTS) {
-                    thermostat_snapshot(world)
-                } else {
-                    world.thermostats().thermostats().to_vec()
-                },
-            },
-            ..if layers.contains(SceneLayers::THERMO) {
-                let (cell_temperature, cell_pressure, thermo_grid_spec) =
-                    build_thermo_snapshot_fields(world);
-                RendererSnapshot {
-                    cell_temperature,
-                    cell_pressure,
-                    thermo_grid_spec,
-                    ..RendererSnapshot::new()
-                }
-            } else {
-                RendererSnapshot::new()
-            }
+            world_rect: world.cell_grid().world_rect(),
+            status: self.status_numbers(step_config.get_time_step()),
+            created_at: std::time::Instant::now(),
+        };
+
+        let balls = &mut snapshot.balls;
+        if !Arc::ptr_eq(&balls.species, world.species()) {
+            balls.species = Arc::clone(world.species());
         }
+        balls.cursor_species = new_ball_species;
+        balls.cursor_ring_radii = ring_radii(world.physics(), new_ball_species);
+
+        fill_operator_snapshot(world, layers, &mut snapshot.operators);
+
+        let fields = &mut snapshot.fields;
+        // A lightweight grid spec instead of a clone of the full CellGrid.
+        let (rows, cols) = world.cell_grid().get_grid_size();
+        let (cell_width, cell_height) = world.cell_grid().get_cell_size();
+        let world_rect = world.cell_grid().world_rect();
+        fields.cell_grid = CellGridSpec {
+            rows,
+            cols,
+            cell_width,
+            cell_height,
+            origin_x: world_rect.x,
+            origin_y: world_rect.y,
+        };
+        let (temperature, pressure, thermo_grid) = if layers.contains(SceneLayers::THERMO) {
+            build_thermo_snapshot_fields(world)
+        } else {
+            (
+                ThermoGrid::filled(0, 0, 0.0),
+                ThermoGrid::filled(0, 0, 0.0),
+                None,
+            )
+        };
+        fields.temperature = temperature;
+        fields.pressure = pressure;
+        fields.thermo_grid = thermo_grid;
     }
 }
 
-/// Per-ball render data (colours, tails, neighbour lines): the `BALLS`
-/// layer, which exists only for drawing.
-/// Also counts the balls per species into `species_counts`.
-fn build_ball_render_data(
+/// Per-ball render data (colours, rings) into `snapshot.balls` and the
+/// neighbour lines of verbose balls into `debug`: the `BALLS` layer, which
+/// exists only for drawing. Also counts the balls per species into
+/// `species_counts`.
+fn fill_ball_render_data(
     world: &SimulationWorld,
     species_counts: &mut SpeciesCounts,
-) -> Vec<BallRenderData> {
-    let ball_count = world.balls().len();
-    let mut balls = Vec::with_capacity(ball_count);
+    snapshot: &mut RendererSnapshot,
+    debug: &mut DebugSnapshot,
+) {
+    let balls = &mut snapshot.balls.data;
+    balls.reserve(world.balls().len());
     let species_table = &**world.species();
     let physics = world.physics();
     // Ring radii per species: half the like pair's equilibrium distance
     // and cutoff.
-    let rings: Vec<[f32; 2]> = species_table
-        .ids()
-        .map(|s| ring_radii(physics, s))
-        .collect();
+    let mut rings = [[0.0; 2]; SpeciesSet::CAPACITY];
+    for (ring, species) in rings.iter_mut().zip(species_table.ids()) {
+        *ring = ring_radii(physics, species);
+    }
+    let force_results = world.cached_force_results();
 
-    // Create BallRenderData for each ball
     for (ball_idx, ball) in world.balls().iter().enumerate() {
         count_ball(species_counts, ball);
         let species = species_table.get(ball.species());
@@ -166,25 +158,16 @@ fn build_ball_render_data(
         .or(species.map(|s| s.colour))
         .unwrap_or(UNKNOWN_SPECIES_COLOUR);
 
-        let show_neighbor_lines = ball.verbose.lines();
-        let show_main_neighbors_only = ball.verbose.is_main();
-
-        // Only clone expensive data if it will actually be used
-        let neighbors: Vec<(usize, f32)> =
-            if show_neighbor_lines && ball_idx < world.cached_force_results().len() {
-                // Use cached force magnitudes from last physics step only if needed
-                world.cached_force_results()[ball_idx]
-                    .neighbor_forces
-                    .clone()
-            } else {
-                // Skip cloning if neighbor lines won't be drawn
-                Vec::new()
-            };
-
-        // Only verbose balls keep a tail
-        let tail = ball
-            .get_tail_positions()
-            .map_or_else(Vec::new, |tail| tail.iter().copied().collect());
+        // Debug data only for verbose balls that show their neighbours.
+        if ball.verbose.lines()
+            && let Some(result) = force_results.get(ball_idx)
+        {
+            debug.neighbor_lines.push(NeighborLines {
+                ball: ball_idx,
+                main_only: ball.verbose.is_main(),
+                neighbors: result.neighbor_forces.clone(),
+            });
+        }
 
         balls.push(BallRenderData {
             id: ball.get_id(),
@@ -197,26 +180,52 @@ fn build_ball_render_data(
             display_radius: species.map_or(ball.get_contact_radius(), |s| s.display_radius),
             equilibrium_radius,
             cutoff_radius,
-            show_neighbor_lines,
-            show_main_neighbors_only,
-            neighbors,
-            update_counter: ball.get_update_counter(),
-            tail,
         });
     }
-    balls
 }
 
-/// The thermostats with a fresh reading each, for their labels (the
-/// `READOUTS` layer). The reading is display data: it is measured here,
-/// read-only, for active and inactive thermostats alike, so a paused
-/// world or a deactivated thermostat still shows live values.
-fn thermostat_snapshot(world: &SimulationWorld) -> Vec<SimThermostat> {
-    let mut thermostats = world.thermostats().thermostats().to_vec();
+/// The operators into `operators`, reusing its vectors.
+fn fill_operator_snapshot(
+    world: &SimulationWorld,
+    layers: SceneLayers,
+    operators: &mut OperatorSnapshot,
+) {
+    operators.line_segments.clear();
+    operators
+        .line_segments
+        .extend_from_slice(world.line_segments().segments());
+    operators.walls.clear();
+    operators
+        .walls
+        .extend(world.wall_chains().chains().map(|c| WallSnapshot {
+            chain_id: c.id,
+            start: c.start,
+            end: c.end,
+            piece_ids: c.pieces.iter().map(|p| p.line_id).collect(),
+            valve_ids: c.valve_ids().collect(),
+        }));
+    fill_valve_spans(world, &mut operators.valve_spans);
+    operators.source_spheres.clear();
+    operators
+        .source_spheres
+        .extend_from_slice(world.source_spheres().spheres());
+    operators.thermostats.clear();
+    operators
+        .thermostats
+        .extend_from_slice(world.thermostats().thermostats());
+    if layers.contains(SceneLayers::READOUTS) {
+        add_thermostat_readings(world, &mut operators.thermostats);
+    }
+}
+
+/// A fresh reading for each thermostat, for their labels (the `READOUTS`
+/// layer). The reading is display data: it is measured here, read-only,
+/// for active and inactive thermostats alike, so a paused world or a
+/// deactivated thermostat still shows live values.
+fn add_thermostat_readings(world: &SimulationWorld, thermostats: &mut [SimThermostat]) {
     for (thermostat, reading) in thermostats.iter_mut().zip(world.thermostat_readings()) {
         thermostat.current_local_temp = reading;
     }
-    thermostats
 }
 
 /// Build the thermo-related fields for the snapshot from the rolling-window history.
@@ -260,9 +269,9 @@ fn build_thermo_snapshot_fields(
 /// Resolved world-space geometry of every valve, in chain order.
 ///
 /// Computed once per snapshot so renderer and hit-testing never repeat
-/// the chain math.
-pub fn valve_spans(world: &SimulationWorld) -> Vec<ValveSpan> {
-    let mut spans = Vec::new();
+/// the chain math. Replaces the contents of `spans`.
+fn fill_valve_spans(world: &SimulationWorld, spans: &mut Vec<ValveSpan>) {
+    spans.clear();
     for chain in world.wall_chains().chains() {
         for (index, joint) in chain.joints.iter().enumerate() {
             let Joint::Valve {
@@ -285,7 +294,6 @@ pub fn valve_spans(world: &SimulationWorld) -> Vec<ValveSpan> {
             });
         }
     }
-    spans
 }
 
 fn current_gravity_force_multiple(gravity: f32) -> u8 {

@@ -28,7 +28,9 @@
 use std::any::Any;
 use std::collections::HashSet;
 use thermo_physics::application::AppResult;
-use thermo_runtime::application::renderer_snapshot::RendererSnapshot;
+use thermo_runtime::application::renderer_snapshot::{
+    BallBuffer, DebugSnapshot, FieldSnapshot, FrameInfo, OperatorSnapshot,
+};
 use thermo_runtime::application::scene_layers::SceneLayers;
 use thermo_ui::graphics::renderer::event_loop::FramePreviews;
 use thermo_ui::graphics::renderer::margins::Margins;
@@ -49,12 +51,21 @@ pub enum ViewportMode {
 
 /// All data a pipeline needs during its `prepare()` phase.
 ///
-/// Bundles snapshot, GPU resources, and viewport parameters into a
-/// single struct so individual pipelines don't need 7+ arguments.
+/// Bundles the snapshot's sections, GPU resources, and viewport parameters
+/// into a single struct so individual pipelines don't need 7+ arguments.
+/// A pipeline reads only the sections it draws (#341).
 pub struct PrepareContext<'a> {
     pub device: &'a wgpu::Device,
     pub queue: &'a wgpu::Queue,
-    pub snapshot: &'a RendererSnapshot,
+    /// Step, energies, gravity, the world rectangle.
+    pub frame: &'a FrameInfo,
+    /// The balls and their species.
+    pub balls: &'a BallBuffer,
+    pub operators: &'a OperatorSnapshot,
+    /// The cell grid and the thermo fields.
+    pub fields: &'a FieldSnapshot,
+    /// Neighbour lines of verbose balls, if any.
+    pub debug: Option<&'a DebugSnapshot>,
     pub view_proj: [[f32; 4]; 4],
     pub cursor_world_pos: (f32, f32),
     pub current_ball_radius: f32,

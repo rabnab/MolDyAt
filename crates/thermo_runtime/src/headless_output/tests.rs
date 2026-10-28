@@ -18,12 +18,12 @@ fn window_world_rect() -> thermo_physics::objects2d::Rect {
 #[test]
 fn test_frame_record_contains_v1_schema_and_summary_fields() {
     let mut snapshot = RendererSnapshot::new();
-    snapshot.simulation_step = 42;
-    snapshot.time = 1.25;
-    snapshot.kinetic_energy = 3.5;
-    snapshot.potential_energy = -1.0;
-    snapshot.gravity_force_multiple = 2;
-    snapshot.physics_fps = 144.0;
+    snapshot.frame.simulation_step = 42;
+    snapshot.frame.time = 1.25;
+    snapshot.frame.kinetic_energy = 3.5;
+    snapshot.frame.potential_energy = -1.0;
+    snapshot.frame.gravity_force_multiple = 2;
+    snapshot.frame.physics_fps = 144.0;
 
     let line = frame_to_jsonl(&snapshot, Some(2.0));
     let value: serde_json::Value = serde_json::from_str(&line).expect("valid json");
@@ -39,8 +39,8 @@ fn test_frame_record_contains_v1_schema_and_summary_fields() {
 #[test]
 fn test_run_start_record_contains_config_and_operator_counts() {
     let mut snapshot = RendererSnapshot::new();
-    snapshot.simulation_step = 0;
-    snapshot.time = 0.0;
+    snapshot.frame.simulation_step = 0;
+    snapshot.frame.time = 0.0;
 
     let config = HeadlessConfig {
         steps: 1000,
@@ -82,8 +82,8 @@ fn test_run_start_record_contains_config_and_operator_counts() {
 #[test]
 fn test_run_end_record_contains_v1_schema_and_summary_fields() {
     let mut snapshot = RendererSnapshot::new();
-    snapshot.simulation_step = 10;
-    snapshot.time = 0.5;
+    snapshot.frame.simulation_step = 10;
+    snapshot.frame.time = 0.5;
 
     let line = run_end_to_jsonl(&snapshot, 7);
     let value: serde_json::Value = serde_json::from_str(&line).expect("valid json");
@@ -98,10 +98,10 @@ fn test_run_end_record_contains_v1_schema_and_summary_fields() {
 #[test]
 fn test_console_summary_contains_required_fields() {
     let mut snapshot = RendererSnapshot::new();
-    snapshot.simulation_step = 12;
-    snapshot.time = 0.12;
-    snapshot.kinetic_energy = 2.5;
-    snapshot.potential_energy = -1.25;
+    snapshot.frame.simulation_step = 12;
+    snapshot.frame.time = 0.12;
+    snapshot.frame.kinetic_energy = 2.5;
+    snapshot.frame.potential_energy = -1.25;
 
     let line = frame_to_console_summary(&snapshot, Some(1.0));
 
@@ -118,16 +118,16 @@ fn test_console_summary_contains_required_fields() {
 #[test]
 fn test_jsonl_records_are_valid_json_lines_and_ordered() {
     let mut start_snapshot = RendererSnapshot::new();
-    start_snapshot.simulation_step = 0;
-    start_snapshot.time = 0.0;
+    start_snapshot.frame.simulation_step = 0;
+    start_snapshot.frame.time = 0.0;
 
     let mut frame_snapshot = RendererSnapshot::new();
-    frame_snapshot.simulation_step = 2;
-    frame_snapshot.time = 0.02;
+    frame_snapshot.frame.simulation_step = 2;
+    frame_snapshot.frame.time = 0.02;
 
     let mut end_snapshot = RendererSnapshot::new();
-    end_snapshot.simulation_step = 3;
-    end_snapshot.time = 0.03;
+    end_snapshot.frame.simulation_step = 3;
+    end_snapshot.frame.time = 0.03;
 
     let start = run_start_to_jsonl(&HeadlessConfig::default(), &start_snapshot);
     let frame = frame_to_jsonl(&frame_snapshot, Some(0.0));
@@ -150,8 +150,8 @@ fn test_jsonl_records_are_valid_json_lines_and_ordered() {
 #[test]
 fn test_summary_frame_excludes_large_ball_payload() {
     let mut snapshot = RendererSnapshot::new();
-    snapshot.simulation_step = 1;
-    snapshot.time = 0.01;
+    snapshot.frame.simulation_step = 1;
+    snapshot.frame.time = 0.01;
 
     let line = frame_to_jsonl(&snapshot, Some(0.0));
     let value: serde_json::Value = serde_json::from_str(&line).expect("valid json");
@@ -164,6 +164,7 @@ fn test_detail_balls_includes_ball_fields() {
     let mut snapshot = RendererSnapshot::new();
     snapshot
         .balls
+        .data
         .push(crate::application::renderer_snapshot::BallRenderData {
             id: 9,
             species: SpeciesId::new(2),
@@ -175,14 +176,10 @@ fn test_detail_balls_includes_ball_fields() {
             display_radius: 0.7,
             equilibrium_radius: 0.8,
             cutoff_radius: 2.8,
-            show_neighbor_lines: false,
-            show_main_neighbors_only: false,
-            neighbors: Vec::new(),
-            update_counter: 0,
-            tail: Vec::new(),
         });
     snapshot
         .balls
+        .data
         .push(crate::application::renderer_snapshot::BallRenderData {
             id: 3,
             species: SpeciesId::new(1),
@@ -194,11 +191,6 @@ fn test_detail_balls_includes_ball_fields() {
             display_radius: 0.5,
             equilibrium_radius: 0.6,
             cutoff_radius: 2.0,
-            show_neighbor_lines: false,
-            show_main_neighbors_only: false,
-            neighbors: Vec::new(),
-            update_counter: 1,
-            tail: Vec::new(),
         });
 
     let config = HeadlessConfig {
@@ -224,11 +216,11 @@ fn test_detail_balls_includes_ball_fields() {
 #[test]
 fn test_non_finite_values_serialize_as_null() {
     let mut snapshot = RendererSnapshot::new();
-    snapshot.simulation_step = 1;
-    snapshot.time = f32::NAN;
-    snapshot.kinetic_energy = f32::INFINITY;
-    snapshot.potential_energy = f32::NEG_INFINITY;
-    snapshot.physics_fps = f32::NAN;
+    snapshot.frame.simulation_step = 1;
+    snapshot.frame.time = f32::NAN;
+    snapshot.frame.kinetic_energy = f32::INFINITY;
+    snapshot.frame.potential_energy = f32::NEG_INFINITY;
+    snapshot.frame.physics_fps = f32::NAN;
 
     let line = frame_to_jsonl(&snapshot, Some(0.0));
     let value: serde_json::Value = serde_json::from_str(&line).expect("valid json");
@@ -242,14 +234,14 @@ fn test_non_finite_values_serialize_as_null() {
 #[test]
 fn test_thermo_detail_serializes_grids_and_non_finite_values_as_null() {
     let mut snapshot = RendererSnapshot::new();
-    snapshot.simulation_step = 7;
-    snapshot.cell_temperature =
+    snapshot.frame.simulation_step = 7;
+    snapshot.fields.temperature =
         thermo_physics::application::thermo_field::ThermoGrid::filled(1, 3, 1.0);
-    snapshot.cell_temperature.set(0, 1, f32::NAN);
-    snapshot.cell_pressure =
+    snapshot.fields.temperature.set(0, 1, f32::NAN);
+    snapshot.fields.pressure =
         thermo_physics::application::thermo_field::ThermoGrid::filled(1, 3, 2.0);
-    snapshot.cell_pressure.set(0, 2, f32::INFINITY);
-    snapshot.thermo_grid_spec = Some(crate::application::renderer_snapshot::ThermoGridSpec {
+    snapshot.fields.pressure.set(0, 2, f32::INFINITY);
+    snapshot.fields.thermo_grid = Some(crate::application::renderer_snapshot::ThermoGridSpec {
         rows: 1,
         cols: 3,
         cell_width: 4.0,
@@ -294,7 +286,7 @@ fn test_stdout_and_file_outputs_stay_separated_for_frame_records() {
         .expect("writer");
 
     let mut snapshot = RendererSnapshot::new();
-    snapshot.simulation_step = 0;
+    snapshot.frame.simulation_step = 0;
 
     writer.write_run_start(&snapshot).expect("run_start");
     writer.write_frame(&snapshot).expect("frame");

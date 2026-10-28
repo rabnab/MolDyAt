@@ -144,7 +144,7 @@ fn test_physics_thread_can_publish_snapshots() {
     // Just verify snapshot exists, simulation_step count depends on pause state
     let snapshot = snapshot.as_ref().unwrap();
     assert!(
-        snapshot.simulation_step <= 5,
+        snapshot.frame.simulation_step <= 5,
         "Snapshot step count should be <= iterations"
     );
 }
@@ -165,7 +165,7 @@ fn test_command_channel_toggle_pause() {
     // Running: the step count advances.
     let first = wait_for_snapshot(&snapshot_slot, "a first snapshot", |_| true);
     wait_for_snapshot(&snapshot_slot, "a running step", |s| {
-        s.simulation_step > first.simulation_step
+        s.frame.simulation_step > first.frame.simulation_step
     });
 
     // Paused once the Pause command is applied (sync_commands returns the
@@ -180,7 +180,7 @@ fn test_command_channel_toggle_pause() {
     // the pause, without a timing window.
     let still_paused = sync_commands(&physics_thread, &snapshot_slot);
     assert_eq!(
-        still_paused.simulation_step, paused.simulation_step,
+        still_paused.frame.simulation_step, paused.frame.simulation_step,
         "Simulation should be paused (step count unchanged)"
     );
 
@@ -188,7 +188,7 @@ fn test_command_channel_toggle_pause() {
         .send_command(SimControl::Resume)
         .expect("Failed to send resume command");
     wait_for_snapshot(&snapshot_slot, "the simulation to resume", |s| {
-        s.simulation_step > paused.simulation_step
+        s.frame.simulation_step > paused.frame.simulation_step
     });
 
     physics_thread
@@ -219,9 +219,10 @@ fn test_command_channel_speed_control() {
 
     // Simulated time per step is the time step: three doublings make it 8x.
     let later = wait_for_snapshot(&snapshot_slot, "later steps", |s| {
-        s.simulation_step >= applied.simulation_step + 10
+        s.frame.simulation_step >= applied.frame.simulation_step + 10
     });
-    let dt = (later.time - applied.time) / (later.simulation_step - applied.simulation_step) as f32;
+    let dt = (later.frame.time - applied.frame.time)
+        / (later.frame.simulation_step - applied.frame.simulation_step) as f32;
     let expected = (initial_dt * 8.0).min(crate::application::sim_config::MAX_TIME_STEP);
     assert!(
         (dt - expected).abs() <= expected * 1e-3,
@@ -386,7 +387,7 @@ fn test_runtime_publishes_a_snapshot_right_after_a_resize() {
     signal.signal_shutdown();
     handle.join().expect("physics loop should not panic");
 
-    assert_eq!(snapshot.cell_grid_bounds, resized);
+    assert_eq!(snapshot.frame.world_rect, resized);
     assert!(wakeups.load(Ordering::SeqCst) >= 1);
 }
 
@@ -466,7 +467,7 @@ fn test_snapshots_follow_changes_for_paused_and_running_by_layers() {
                 .send_command(ViewCommand::SetSnapshotLayers(layers))
                 .expect("send layers");
             physics_thread.send_command(pause).expect("send pause");
-            wait_for("with the requested layers", &|s| s.layers == layers);
+            wait_for("with the requested layers", &|s| s.frame.layers == layers);
             std::thread::sleep(SETTLE);
 
             // Paused, the once-per-second step rate report may publish one
@@ -478,7 +479,7 @@ fn test_snapshots_follow_changes_for_paused_and_running_by_layers() {
                 std::thread::sleep(SETTLE);
                 let after = latest().expect("snapshot");
                 samples += 1;
-                if !paused || after.physics_fps == before.physics_fps || samples == 4 {
+                if !paused || after.frame.physics_fps == before.frame.physics_fps || samples == 4 {
                     break (before, after);
                 }
             };
@@ -489,7 +490,7 @@ fn test_snapshots_follow_changes_for_paused_and_running_by_layers() {
                 );
             } else {
                 assert!(
-                    after.simulation_step > before.simulation_step,
+                    after.frame.simulation_step > before.frame.simulation_step,
                     "{case}: a running world steps and publishes"
                 );
             }
@@ -502,9 +503,9 @@ fn test_snapshots_follow_changes_for_paused_and_running_by_layers() {
             );
             // Thermo fields are recorded only while the heatmap is shown.
             if !layers.contains(SceneLayers::THERMO) {
-                assert!(after.thermo_grid_spec.is_none(), "{case}");
+                assert!(after.fields.thermo_grid.is_none(), "{case}");
             } else if !paused {
-                assert!(after.thermo_grid_spec.is_some(), "{case}");
+                assert!(after.fields.thermo_grid.is_some(), "{case}");
             }
 
             // An edit is published also while paused, at the same step.
@@ -512,10 +513,13 @@ fn test_snapshots_follow_changes_for_paused_and_running_by_layers() {
                 .send_command(BallCommand::NextSpecies)
                 .expect("send edit");
             let edited = wait_for("after the edit", &|s| {
-                s.cursor_species != after.cursor_species
+                s.balls.cursor_species != after.balls.cursor_species
             });
             if paused {
-                assert_eq!(edited.simulation_step, after.simulation_step, "{case}");
+                assert_eq!(
+                    edited.frame.simulation_step, after.frame.simulation_step,
+                    "{case}"
+                );
             }
 
             physics_thread

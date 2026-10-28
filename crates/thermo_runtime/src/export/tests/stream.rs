@@ -36,10 +36,10 @@ fn sample(
     generation: u64,
     step: u64,
 ) -> Option<PathBuf> {
-    snapshot.world_generation = generation;
-    snapshot.simulation_step = step;
-    snapshot.time = step as f32 * 0.5;
-    snapshot.kinetic_energy = step as f32;
+    snapshot.frame.world_generation = generation;
+    snapshot.frame.simulation_step = step;
+    snapshot.frame.time = step as f32 * 0.5;
+    snapshot.frame.kinetic_energy = step as f32;
     registry.sample(snapshot);
     stream.record(registry).unwrap()
 }
@@ -85,7 +85,7 @@ fn test_stream_starts_with_the_next_sample() {
     let dir = temp_dir("next");
     let mut registry = MetricsRegistry::new(100);
     let mut snapshot = base_snapshot();
-    snapshot.simulation_step = 1;
+    snapshot.frame.simulation_step = 1;
     registry.sample(&snapshot);
     let mut stream = SampleStream::new(settings(&dir, ExportFormat::Csv), &registry);
     assert_eq!(stream.record(&registry).unwrap(), None, "nothing new yet");
@@ -105,7 +105,7 @@ fn test_stream_jsonl_round_trips_units_and_non_finite_values() {
     let mut stream = SampleStream::new(settings(&dir, ExportFormat::Jsonl), &registry);
     let mut snapshot = base_snapshot();
     sample(&mut registry, &mut stream, &mut snapshot, 0, 1);
-    snapshot.potential_energy = f32::NAN;
+    snapshot.frame.potential_energy = f32::NAN;
     sample(&mut registry, &mut stream, &mut snapshot, 0, 2);
     let files = stream.finish().unwrap();
 
@@ -195,7 +195,7 @@ fn test_stream_into_an_unwritable_dir_fails_at_the_first_sample() {
     let mut registry = MetricsRegistry::new(100);
     let mut stream = SampleStream::new(settings(&file.join("sub"), ExportFormat::Csv), &registry);
     let mut snapshot = base_snapshot();
-    snapshot.simulation_step = 1;
+    snapshot.frame.simulation_step = 1;
     registry.sample(&snapshot);
     assert!(stream.record(&registry).is_err());
     std::fs::remove_dir_all(dir).unwrap();
@@ -210,7 +210,7 @@ fn test_stream_fails_when_samples_were_evicted_before_it_saw_them() {
     sample(&mut registry, &mut stream, &mut snapshot, 0, 1);
     // Six samples between two calls, two more than the registry holds.
     for step in 2..8 {
-        snapshot.simulation_step = step;
+        snapshot.frame.simulation_step = step;
         registry.sample(&snapshot);
     }
     let error = stream.record(&registry).expect_err("a gap is an error");
@@ -228,9 +228,9 @@ fn test_stream_of_a_new_world_counts_its_evicted_samples_too() {
     let mut stream = SampleStream::new(settings(&dir, ExportFormat::Csv), &registry);
     let mut snapshot = base_snapshot();
     sample(&mut registry, &mut stream, &mut snapshot, 0, 1);
-    snapshot.world_generation = 1;
+    snapshot.frame.world_generation = 1;
     for step in 100..105 {
-        snapshot.simulation_step = step;
+        snapshot.frame.simulation_step = step;
         registry.sample(&snapshot);
     }
     assert!(

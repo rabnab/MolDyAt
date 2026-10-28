@@ -11,11 +11,20 @@ use thermo_physics::test_support::create_main_content;
 fn test_snapshot_reports_gravity_force_multiple() {
     let (mut main_content, _) = create_main_content();
 
-    assert_eq!(main_content.create_snapshot().gravity_force_multiple, 0);
+    assert_eq!(
+        main_content.create_snapshot().frame.gravity_force_multiple,
+        0
+    );
 
     main_content.toggle_gravity();
-    assert_eq!(main_content.create_snapshot().gravity_force_multiple, 1);
+    assert_eq!(
+        main_content.create_snapshot().frame.gravity_force_multiple,
+        1
+    );
 
     main_content.toggle_gravity();
-    assert_eq!(main_content.create_snapshot().gravity_force_multiple, 5);
+    assert_eq!(
+        main_content.create_snapshot().frame.gravity_force_multiple,
+        5
+    );
 }

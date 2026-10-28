@@ -55,7 +55,7 @@ fn test_physics_thread_snapshot_publishing() {
     let snapshot = wait_for_snapshot(&snapshot_slot, "a snapshot with the ball", |s| {
         s.balls.len() == 1
     });
-    assert!(snapshot.time >= 0.0, "Time should be non-negative");
+    assert!(snapshot.frame.time >= 0.0, "Time should be non-negative");
 
     physics_thread
         .shutdown_and_join()

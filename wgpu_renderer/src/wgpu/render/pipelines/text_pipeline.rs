@@ -10,7 +10,7 @@
 //! shared bitmap text renderer (`gpu/text.rs`).
 
 use thermo_physics::application::AppResult;
-use thermo_runtime::application::renderer_snapshot::RendererSnapshot;
+use thermo_runtime::application::renderer_snapshot::{BallBuffer, FrameInfo};
 use thermo_ui::graphics::renderer::margins::Margins;
 use thermo_ui::graphics::sidebar::sidebar_ui_scale;
 
@@ -47,14 +47,14 @@ impl TextPipeline {
 
 /// The readout text: cursor position, gravity multiple and the species of
 /// new balls (from the world's table in the snapshot).
-pub(crate) fn cursor_readout(cursor: (f32, f32), snapshot: &RendererSnapshot) -> String {
-    let species = snapshot
+pub(crate) fn cursor_readout(cursor: (f32, f32), frame: &FrameInfo, balls: &BallBuffer) -> String {
+    let species = balls
         .species
-        .get(snapshot.cursor_species)
+        .get(balls.cursor_species)
         .map_or("?", |species| species.name.as_str());
     format!(
         "({:.2}, {:.2})  {}g  {species}",
-        cursor.0, cursor.1, snapshot.gravity_force_multiple
+        cursor.0, cursor.1, frame.gravity_force_multiple
     )
 }
 
@@ -100,7 +100,7 @@ impl RenderPipeline for TextPipeline {
     }
 
     fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
-        let text = cursor_readout(ctx.cursor_world_pos, ctx.snapshot);
+        let text = cursor_readout(ctx.cursor_world_pos, ctx.frame, ctx.balls);
         let verts = cursor_text_vertices(&text, ctx.window_size, ctx.margin);
         self.text.upload(ctx.device, ctx.queue, &verts);
         Ok(())

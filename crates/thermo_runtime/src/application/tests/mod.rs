@@ -53,9 +53,13 @@ pub(crate) fn sync_commands(
     physics_thread: &PhysicsThread,
     slot: &ArcSwapOption<RendererSnapshot>,
 ) -> Arc<RendererSnapshot> {
-    let before = wait_for_snapshot(slot, "a first snapshot", |_| true).cursor_species;
+    let before = wait_for_snapshot(slot, "a first snapshot", |_| true)
+        .balls
+        .cursor_species;
     physics_thread
         .send_command(BallCommand::NextSpecies)
         .expect("send marker command");
-    wait_for_snapshot(slot, "the marker command", |s| s.cursor_species != before)
+    wait_for_snapshot(slot, "the marker command", |s| {
+        s.balls.cursor_species != before
+    })
 }

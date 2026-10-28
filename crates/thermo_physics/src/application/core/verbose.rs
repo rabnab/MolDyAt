@@ -60,6 +60,13 @@ impl MainContent {
         }
     }
 
+    /// [`Self::apply_verbosity_input`] for tests of other crates (the
+    /// snapshot's debug data, #341).
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn apply_verbosity_input_for_test(&mut self, input: &str) -> bool {
+        self.apply_verbosity_input(input)
+    }
+
     /// Returns true if this switched console mode on for the ball.
     fn toggle_ball_internal(ball_found: &mut Ball2D, mode: &VerboseInfoMode) -> bool {
         match mode {

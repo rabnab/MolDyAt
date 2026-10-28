@@ -7,7 +7,7 @@ use super::*;
 #[test]
 fn test_snapshot_csv_lists_every_ball_sorted_by_id() {
     let mut snapshot = snapshot_with_balls();
-    snapshot.balls[0].velocity.x = f32::NAN;
+    snapshot.balls.data[0].velocity.x = f32::NAN;
     let rows = parse_csv(&snapshot_to_string(&snapshot, ExportFormat::Csv));
     assert_eq!(
         rows[0],

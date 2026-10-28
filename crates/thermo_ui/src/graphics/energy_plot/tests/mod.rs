@@ -7,4 +7,5 @@
 mod energy_window;
 mod plot_layout;
 mod plot_selection;
+mod status_text;
 mod time_view;

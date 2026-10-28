@@ -24,7 +24,7 @@ pub(crate) const ATOMIC_MASS_KG: f64 = 1.660_539_066_60e-27;
 /// The substance whose single-site Lennard-Jones parameters define the
 /// reduced units.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct UnitSystem {
+pub struct UnitSystem {
     pub name: &'static str,
     /// `σ` in Å: the reduced unit of length.
     pub sigma_angstrom: f64,
@@ -43,7 +43,7 @@ impl UnitSystem {
     /// *Molecular Theory of Gases and Liquids* (Wiley, 1954), table I-A.
     /// Published single-site fits for N₂ range over about 70–100 K for
     /// `ε / k_B`, depending on the fitted property; see `docs/units.md`.
-    pub(crate) const N2: UnitSystem = UnitSystem {
+    pub const N2: UnitSystem = UnitSystem {
         name: "N2",
         sigma_angstrom: N2_SIGMA_ANGSTROM,
         epsilon_kelvin: N2_EPSILON_KELVIN,
@@ -74,17 +74,17 @@ impl UnitSystem {
     // ── reduced → physical ─────────────────────────────────────────
 
     /// Reduced temperature (or energy per `k_B`) in K.
-    pub(crate) fn to_kelvin(self, reduced: f32) -> f64 {
+    pub fn to_kelvin(self, reduced: f32) -> f64 {
         reduced as f64 * self.epsilon_kelvin
     }
 
     /// Reduced time in ps.
-    pub(crate) fn to_picoseconds(self, reduced: f32) -> f64 {
+    pub fn to_picoseconds(self, reduced: f32) -> f64 {
         reduced as f64 * self.time_s() * 1e12
     }
 
     /// Reduced time in fs.
-    pub(crate) fn to_femtoseconds(self, reduced: f32) -> f64 {
+    pub fn to_femtoseconds(self, reduced: f32) -> f64 {
         reduced as f64 * self.time_s() * 1e15
     }
 
@@ -95,12 +95,12 @@ impl UnitSystem {
     }
 
     /// Reduced energy in J.
-    pub(crate) fn to_joules(self, reduced: f32) -> f64 {
+    pub fn to_joules(self, reduced: f32) -> f64 {
         reduced as f64 * self.energy_j()
     }
 
     /// Reduced speed in m/s.
-    pub(crate) fn to_metres_per_second(self, reduced: f32) -> f64 {
+    pub fn to_metres_per_second(self, reduced: f32) -> f64 {
         reduced as f64 * self.length_m() / self.time_s()
     }
 

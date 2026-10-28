@@ -67,7 +67,7 @@ impl RenderPipeline for WallPipeline {
         self.instances.clear();
 
         // Committed walls
-        for seg in &ctx.snapshot.operators.line_segments {
+        for seg in &ctx.operators.line_segments {
             self.instances.push(WallInstance {
                 p0: [seg.start.x, seg.start.y],
                 p1: [seg.end.x, seg.end.y],

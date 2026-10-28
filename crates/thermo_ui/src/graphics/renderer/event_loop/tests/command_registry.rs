@@ -36,6 +36,20 @@ fn test_command_ids_are_unique() {
 }
 
 #[test]
+fn test_scene_layers_are_toggled_by_registry_commands() {
+    use thermo_runtime::application::scene_layers::LAYERS;
+    for layer in LAYERS {
+        for id in layer.toggled_by {
+            assert!(
+                command_by_id(id).is_some(),
+                "layer {} names unknown command {id}",
+                layer.name
+            );
+        }
+    }
+}
+
+#[test]
 fn test_command_ids_start_with_their_category_prefix() {
     for command in COMMANDS {
         let (prefix, name) = command

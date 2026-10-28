@@ -92,7 +92,7 @@ pub(crate) fn draw_main_frame(
         let prepare_start = Instant::now();
         let pan = state.viewport().pan_offset();
         let zoom = state.viewport().zoom();
-        let view_proj = compute_view_proj(&snapshot.grid_spec, pan.x, pan.y, zoom);
+        let view_proj = compute_view_proj(&snapshot.fields.cell_grid, pan.x, pan.y, zoom);
 
         let show_ball_outline = state.active_tool() == OperatorTool::Ball;
         let cursor_world_pos = state.cursor_world_pos();
@@ -114,8 +114,9 @@ pub(crate) fn draw_main_frame(
             // The physics thread's species of new balls, looked up in the
             // world's table (the window's own copy may not know the table).
             snapshot
+                .balls
                 .species
-                .get(snapshot.cursor_species)
+                .get(snapshot.balls.cursor_species)
                 .map_or(0.0, |s| s.display_radius),
             show_ball_outline,
             state.config().thermo_display,

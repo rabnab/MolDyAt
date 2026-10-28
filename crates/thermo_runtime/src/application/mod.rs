@@ -27,7 +27,7 @@ pub use command_table::{CommandParam, DOMAIN_COMMANDS, DomainCommandSpec, domain
 pub use domain_command::{BallCommand, DomainCommand, SimControl, ViewCommand, WorldCommand};
 pub use physics_event::PhysicsEvent;
 pub use physics_thread::{PhysicsThread, ShutdownSignal, SnapshotPublisher};
-pub use snapshot::{CreateSnapshot, valve_spans};
+pub use snapshot::CreateSnapshot;
 
 // Headless scripts (#340) run domain commands through the same handler.
 #[cfg(test)]

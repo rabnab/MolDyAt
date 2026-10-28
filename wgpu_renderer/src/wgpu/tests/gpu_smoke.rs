@@ -16,7 +16,8 @@ use thermo_physics::objects2d::{
     OperatorState, Rect, SimLineSegment, SimSourceSphere, SimThermostat, Vec2D,
 };
 use thermo_runtime::application::renderer_snapshot::{
-    BallRenderData, CellGridSpec, RendererSnapshot, ThermoGridSpec, ValveSpan, WallSnapshot,
+    BallRenderData, CellGridSpec, DebugSnapshot, NeighborLines, RendererSnapshot, ThermoGridSpec,
+    ValveSpan, WallSnapshot,
 };
 use thermo_runtime::application::scene_layers::SceneLayers;
 use thermo_ui::graphics::renderer::event_loop::FramePreviews;
@@ -52,19 +53,14 @@ fn ball(id: usize, x: f32, y: f32) -> BallRenderData {
         display_radius: 0.5,
         equilibrium_radius: 0.56,
         cutoff_radius: 2.0,
-        show_neighbor_lines: true,
-        show_main_neighbors_only: false,
-        neighbors: vec![(1 - id, 1.0)],
-        update_counter: 0,
-        tail: Vec::new(),
     }
 }
 
 /// A snapshot that makes every pipeline draw something.
 fn populated_snapshot() -> RendererSnapshot {
     let mut snapshot = RendererSnapshot::new();
-    snapshot.cell_grid_bounds = Rect::new(0.0, 0.0, WORLD, WORLD);
-    snapshot.grid_spec = CellGridSpec {
+    snapshot.frame.world_rect = Rect::new(0.0, 0.0, WORLD, WORLD);
+    snapshot.fields.cell_grid = CellGridSpec {
         rows: 4,
         cols: 4,
         cell_width: WORLD / 4.0,
@@ -72,10 +68,19 @@ fn populated_snapshot() -> RendererSnapshot {
         origin_x: 0.0,
         origin_y: WORLD,
     };
-    snapshot.balls = vec![ball(0, 10.0, 10.0), ball(1, 12.0, 10.0)];
+    snapshot.balls.data = vec![ball(0, 10.0, 10.0), ball(1, 12.0, 10.0)];
+    snapshot.debug = Some(DebugSnapshot {
+        neighbor_lines: (0..2)
+            .map(|ball| NeighborLines {
+                ball,
+                main_only: false,
+                neighbors: vec![(1 - ball, 1.0)],
+            })
+            .collect(),
+    });
 
     let (rows, cols) = (5, 7);
-    snapshot.thermo_grid_spec = Some(ThermoGridSpec {
+    snapshot.fields.thermo_grid = Some(ThermoGridSpec {
         rows,
         cols,
         cell_width: WORLD / cols as f32,
@@ -83,8 +88,8 @@ fn populated_snapshot() -> RendererSnapshot {
         origin_x: 0.0,
         origin_y: 0.0,
     });
-    snapshot.cell_temperature = ThermoGrid::filled(rows, cols, 1.5);
-    snapshot.cell_pressure = ThermoGrid::filled(rows, cols, f32::NAN);
+    snapshot.fields.temperature = ThermoGrid::filled(rows, cols, 1.5);
+    snapshot.fields.pressure = ThermoGrid::filled(rows, cols, f32::NAN);
 
     let ops = &mut snapshot.operators;
     let (a, b) = (Vec2D::new(5.0, 30.0), Vec2D::new(35.0, 30.0));
@@ -133,7 +138,11 @@ fn render_frame(
     let ctx = PrepareContext {
         device,
         queue,
-        snapshot,
+        frame: &snapshot.frame,
+        balls: &snapshot.balls,
+        operators: &snapshot.operators,
+        fields: &snapshot.fields,
+        debug: snapshot.debug.as_ref(),
         view_proj: build_view_proj_matrix(WORLD, WORLD, WORLD * 0.5, WORLD * 0.5, 1.0),
         cursor_world_pos: (20.0, 20.0),
         current_ball_radius: 0.5,

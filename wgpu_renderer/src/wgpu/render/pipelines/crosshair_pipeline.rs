@@ -135,7 +135,7 @@ impl RenderPipeline for CrosshairPipeline {
 
         if ctx.show_ball_outline {
             let ball = ctx.current_ball_radius;
-            let [eq, cutoff] = ctx.snapshot.cursor_ring_radii;
+            let [eq, cutoff] = ctx.balls.cursor_ring_radii;
             let rings = RingsInstance {
                 center: cursor,
                 radii: [ball, eq, cutoff],

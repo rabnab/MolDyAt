@@ -95,12 +95,12 @@ impl RenderPipeline for ThermostatPipeline {
         self.zone.set_uniforms(ctx.queue, uniforms);
         self.icon.set_uniforms(ctx.queue, uniforms);
 
-        let icon_half_size = world_extent(ctx.snapshot) * ICON_HALF_SIZE_FRAC;
+        let icon_half_size = world_extent(ctx.frame) * ICON_HALF_SIZE_FRAC;
 
         self.zone_instances.clear();
         self.icon_instances.clear();
 
-        for thermostat in &ctx.snapshot.operators.thermostats {
+        for thermostat in &ctx.operators.thermostats {
             let center = [thermostat.position.x, thermostat.position.y];
 
             if thermostat.radius > f32::EPSILON {

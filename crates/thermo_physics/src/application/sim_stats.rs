@@ -4,7 +4,6 @@
 
 use crate::application::core::StatsAccumulator;
 use crate::application::thermo_field::LocalKineticStats;
-use crate::application::units::UnitSystem;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::Ball2D;
 use std::collections::VecDeque;
@@ -12,8 +11,6 @@ use std::collections::VecDeque;
 const PLT_SIZE: usize = 1000;
 const PLT_STEP: usize = 100;
 
-/// Units of the real-units display (key `D`): N₂ (see `units`).
-const UNITS: UnitSystem = UnitSystem::N2;
 pub const NORMAL_GRAVITY_MPS2: f32 = 9.81;
 pub const HIGH_GRAVITY_MPS2: f32 = NORMAL_GRAVITY_MPS2 * 5.0;
 
@@ -29,6 +26,27 @@ pub(crate) const HIGH_GRAVITY: f32 = NORMAL_GRAVITY * 5.0;
 /// 1.3157e-13, 2.3 % stronger), so an exact match would miss them.
 pub(super) fn is_normal_gravity(gravity: f32) -> bool {
     (gravity / NORMAL_GRAVITY).round() == 1.0
+}
+
+/// The numbers of the status lines (`B` shows them, `D` switches to
+/// physical units) that are not in every snapshot anyway: the UI formats
+/// them, with the time, energies and ball counts, into text (#341).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StatusNumbers {
+    /// Show physical units of N₂ instead of reduced units.
+    pub real_units: bool,
+    /// Time step.
+    pub dt: f32,
+    /// Neighbour-list rebuilds since the start.
+    pub hood_updates: usize,
+    /// Most neighbours of any ball.
+    pub max_neighbours: usize,
+    /// Temperature (centre-of-mass frame).
+    pub temperature: f32,
+    /// Largest ball speed.
+    pub max_v: f32,
+    /// Centre-of-mass velocity.
+    pub v_com: Vec2D,
 }
 
 /// Simulation statistics updated once per physics step.
@@ -94,54 +112,25 @@ impl SimStats {
         self.v_pot.clear();
     }
 
-    /// Status text in physical units of N₂: time in ps, the time step in fs,
-    /// temperature in K, energies in J, speeds in m/s.
-    pub(crate) fn get_status_text_real(&self, fps: u32, num_balls: usize, dt: f32) -> String {
-        format!(
-            "fps {} | time: {:.1}ps | dt: {:.1}fs\n\
-             #Balls: {} | maxNeig: {}\n\
-             TotalE: {:.3E}J | Ekin: {:.3E}J\n\
-             Epot: {:.3E}J\n\
-             Temp: {:.2}K | maxV: {:.2}m/s\n\
-             vCOM: ({:.2e}, {:.2e})m/s",
-            fps,
-            UNITS.to_picoseconds(self.time),
-            UNITS.to_femtoseconds(dt),
-            num_balls,
-            self.max_neighbours,
-            UNITS.to_joules(self.energy_pot + self.energy_kin),
-            UNITS.to_joules(self.energy_kin),
-            UNITS.to_joules(self.energy_pot),
-            UNITS.to_kelvin(self.temperature),
-            UNITS.to_metres_per_second(self.max_v),
-            UNITS.to_metres_per_second(self.v_com.x),
-            UNITS.to_metres_per_second(self.v_com.y)
-        )
-    }
-
-    pub(crate) fn get_status_text(
+    /// The numbers of the status lines besides the time and the energies
+    /// (which every snapshot carries): the UI formats them (#341).
+    /// `real_units` asks for physical units of N₂ (key `D`); `dt` is the
+    /// time step and `hood_updates` the neighbour-list rebuilds so far.
+    pub(crate) fn status_numbers(
         &self,
-        fps: u32,
-        num_balls: usize,
-        hood_cnt: usize,
+        real_units: bool,
         dt: f32,
-    ) -> String {
-        format!(
-            "fps {} time: {:.1} (dt:{:.4})\n#Balls: {} #hood: {}\nmaxNeig: {}\n\
-                TotalE: {:.3E}\nEkin: {:.3E}\nEpot: {:.3E}\nTemp: {:.3}\nmaxV: {:.2}\nvCOM: {}",
-            fps,
-            self.time,
+        hood_updates: usize,
+    ) -> StatusNumbers {
+        StatusNumbers {
+            real_units,
             dt,
-            num_balls,
-            hood_cnt,
-            self.max_neighbours,
-            self.energy_pot + self.energy_kin,
-            self.energy_kin,
-            self.energy_pot,
-            self.temperature,
-            self.max_v,
-            self.v_com,
-        )
+            hood_updates,
+            max_neighbours: self.max_neighbours,
+            temperature: self.temperature,
+            max_v: self.max_v,
+            v_com: self.v_com,
+        }
     }
 
     /// Update statistics from accumulated physics data.
@@ -239,7 +228,10 @@ impl Default for SimStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::application::units::UnitSystem;
     use crate::objects2d::ball_impl::{Ball2D, DEFAULT_SPECIES};
+
+    const UNITS: UnitSystem = UnitSystem::N2;
 
     fn make_ball(id: usize, velocity: Vec2D) -> Ball2D {
         let mut ball = Ball2D::new(id, Vec2D::zero(), DEFAULT_SPECIES);
@@ -311,17 +303,6 @@ mod tests {
         stats.calculate_temperature_from_balls(&balls);
 
         assert!((stats.temperature - 1.0).abs() < 1e-5);
-    }
-
-    #[test]
-    fn test_status_text_shows_hood_cnt_parameter() {
-        let stats = SimStats::default();
-        let text = stats.get_status_text(60, 10, 42, 0.01);
-        assert!(
-            text.contains("#hood: 42"),
-            "status text should include the '#hood: 42' label/value pair for the passed-in hood_cnt, got: {}",
-            text
-        );
     }
 
     #[test]
@@ -401,18 +382,5 @@ mod tests {
         assert_eq!(NORMAL_GRAVITY, expected);
         let high = UNITS.from_metres_per_second2(HIGH_GRAVITY_MPS2 as f64);
         assert!((HIGH_GRAVITY / high - 1.0).abs() < 1e-6);
-    }
-
-    #[test]
-    fn test_real_status_text_shows_kelvin_and_picoseconds() {
-        let stats = SimStats {
-            time: 100.0,
-            temperature: 1.0,
-            ..SimStats::default()
-        };
-        let text = stats.get_status_text_real(60, 0, 0.01);
-        assert!(text.contains("time: 220.2ps"), "{text}");
-        assert!(text.contains("dt: 22.0fs"), "{text}");
-        assert!(text.contains("Temp: 95.05K"), "{text}");
     }
 }

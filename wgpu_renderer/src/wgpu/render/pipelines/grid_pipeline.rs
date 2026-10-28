@@ -56,7 +56,7 @@ impl RenderPipeline for GridPipeline {
     }
 
     fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
-        let spec = &ctx.snapshot.grid_spec;
+        let spec = &ctx.fields.cell_grid;
         if ctx.thermo_display != ThermoDisplayMode::Grid || spec.cols == 0 || spec.rows == 0 {
             self.gpu.clear();
             return Ok(());

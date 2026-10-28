@@ -288,9 +288,11 @@ back as `PhysicsEvent`s on a second channel.
 ## Snapshot flow
 
 1. After a step or a handled command, the physics thread builds a
-   `RendererSnapshot` (`CreateSnapshot::create_snapshot_with` for the
+   `RendererSnapshot` (`CreateSnapshot::fill_snapshot` for the
    requested layers) and its `SnapshotPublisher` stores it in an
-   `ArcSwapOption` slot. It publishes at most once per snapshot interval
+   `ArcSwapOption` slot. The publisher keeps the snapshot it replaced and
+   refills it next time if the renderer has let go of it, so a steady run
+   allocates no new ball, operator or debug vectors (#341). It publishes at most once per snapshot interval
    (16.7 ms), and immediately after a resize. A paused, untouched world
    publishes nothing.
 2. A wakeup callback asks the winit event loop for a redraw.
@@ -299,8 +301,22 @@ back as `PhysicsEvent`s on a second channel.
    (`draw_main_frame`: prepare the pipelines from the snapshot, record,
    submit, present) and acts on its `FrameOutcome`.
 
+A snapshot is in sections (#341); each pipeline reads only its own, and a
+new visual adds a section or data derived from one, not a top-level field:
+
+| Section | Type | Holds |
+|---|---|---|
+| `frame` | `FrameInfo` | Step, world generation, layers, time, energies, wall momentum, ball count per species, gravity preset, physics rate, world rectangle, and the numbers of the status lines (`StatusNumbers`, which the UI formats: `energy_plot/status_text.rs`) |
+| `balls` | `BallBuffer` | `BallRenderData` per ball (no heap data), the species table, the species of new balls and its ring radii; derefs to the ball slice |
+| `operators` | `OperatorSnapshot` | Wall pieces, walls, valve spans, source spheres, thermostats |
+| `fields` | `FieldSnapshot` | The cell grid spec and the thermo fields with their grid |
+| `debug` | `Option<DebugSnapshot>` | Neighbour lines of verbose balls; `None` without any |
+
+`PrepareContext` passes the sections, not the snapshot, to the pipelines.
+
 The renderer chooses which `SceneLayers` it needs (`BASE`, `BALLS`, `THERMO`,
-`READOUTS`) with a `View` command. The physics thread builds only those
+`READOUTS`) with a `View` command; `LAYERS` (`scene_layers.rs`) describes
+each layer and names the registry commands that switch it. The physics thread builds only those
 parts of the snapshot, and computes the thermo fields only while `THERMO` is
 requested. With rendering switched off (F2), only `BASE` is requested.
 

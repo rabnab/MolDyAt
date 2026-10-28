@@ -66,19 +66,16 @@ impl RenderPipeline for EndpointPipeline {
         self.gpu
             .set_uniforms(ctx.queue, SceneUniforms::new(ctx.view_proj, [0.0; 4]));
 
-        let half_size = world_extent(ctx.snapshot) * MARKER_HALF_SIZE_FRAC;
+        let half_size = world_extent(ctx.frame) * MARKER_HALF_SIZE_FRAC;
         let border = half_size * MARKER_BORDER_FRAC;
 
         self.instances.clear();
         // Only the hovered wall's own endpoints: the piece boundaries next
         // to a valve are not draggable, so they get no marker.
         let hovered_wall = match ctx.operator_previews.hovered {
-            Some(ObjectRef::Wall(chain_id)) => ctx
-                .snapshot
-                .operators
-                .walls
-                .iter()
-                .find(|w| w.chain_id == chain_id),
+            Some(ObjectRef::Wall(chain_id)) => {
+                ctx.operators.walls.iter().find(|w| w.chain_id == chain_id)
+            }
             _ => None,
         };
         if let Some(wall) = hovered_wall {

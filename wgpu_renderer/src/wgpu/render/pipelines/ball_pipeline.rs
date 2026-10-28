@@ -105,7 +105,7 @@ impl RenderPipeline for BallPipeline {
 
         self.instances.clear();
         self.instances
-            .extend(ctx.snapshot.balls.iter().map(GpuBallData::from_render_data));
+            .extend(ctx.balls.iter().map(GpuBallData::from_render_data));
         self.gpu.flush(ctx.device, ctx.queue, &self.instances);
         Ok(())
     }

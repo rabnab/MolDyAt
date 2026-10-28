@@ -6,6 +6,7 @@ pub mod energy_data;
 pub mod energy_window;
 pub mod plot_layout;
 pub mod plot_selection;
+pub mod status_text;
 pub mod time_view;
 
 #[cfg(test)]

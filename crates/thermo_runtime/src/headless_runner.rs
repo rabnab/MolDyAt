@@ -4,6 +4,7 @@
 
 use crate::application::CreateSnapshot;
 use crate::application::renderer_snapshot::RendererSnapshot;
+use crate::application::scene_layers::SceneLayers;
 use crate::export::{
     ExportFormat, ExportKind, SampleStream, StreamSettings, series_to_string, snapshot_to_string,
     write_export,
@@ -471,7 +472,9 @@ impl HeadlessRunner {
                 || (self.snapshot_every != 0 && (step + 1) % self.snapshot_every == 0)
             {
                 let snapshot_start = Instant::now();
-                latest_snapshot = self.application.create_snapshot();
+                // Refilled in place: no allocation for the balls (#341).
+                self.application
+                    .fill_snapshot(SceneLayers::ALL, &mut latest_snapshot);
 
                 let snapshot_done = Instant::now();
                 // Sampling is not part of building a snapshot: it is timed as
