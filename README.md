@@ -335,7 +335,7 @@ Mouse:
 | Scroll wheel | Zoom in / out |
 | Middle-click drag | Pan viewport |
 | Scroll wheel in the energy plot | Show less / more time, around the pointer (the newest sample stays at the right edge while the plot follows it) |
-| Middle-click drag in the energy plot | Move the time range (after a few pixels of movement). The plot pauses: it keeps the samples it had, so they can be examined, until it follows again (drag back to the newest sample, `HOME`, or a middle double click; zooming keeps the pause) |
+| Middle-click drag in the energy plot | Move the time range (after a few pixels of movement). The plot pauses: it keeps the samples it had, so they can be examined, until `HOME` or a middle double click makes it follow again (panning and zooming keep the pause) |
 | Middle double click in the energy plot | Reset the time range (as `HOME`) |
 
 ### Changing the keys

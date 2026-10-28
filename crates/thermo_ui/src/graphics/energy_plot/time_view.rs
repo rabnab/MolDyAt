@@ -143,16 +143,6 @@ impl TimeView {
         right.clamp(lo, hi)
     }
 
-    /// Keep the right edge within the history; reaching the newest sample
-    /// returns to follow mode.
-    fn settle(&mut self, history: &TimeHistory) {
-        self.right = self.clamped_right(self.right, history);
-        let hi = self.follow_right(history);
-        if self.right >= hi - self.span * 1e-9 {
-            self.follow = true;
-        }
-    }
-
     /// Zoom by `notches` wheel notches (positive: in, less time shown), with
     /// the time at `anchor` (the pointer, as a fraction 0–1 of the plot's
     /// width) kept where it is. In follow mode the newest sample stays at
@@ -178,21 +168,27 @@ impl TimeView {
         let anchor_time = t0 + anchor * self.span;
         self.span = new_span;
         // Kept within the history, but a zoom never ends a pause: it looks
-        // closer or wider at the paused data (only a pan to the newest
-        // sample, or a reset, follows again).
+        // closer or wider at the paused data (only a reset follows again).
         self.right = self.clamped_right(anchor_time + (1.0 - anchor) * new_span, history);
     }
 
-    /// Move the range by `dt` time units (positive: to later times). Moving
-    /// it to earlier times leaves follow mode; the range stays within the
-    /// history.
+    /// Move the range by `dt` time units (positive: to later times), within
+    /// the history. A pan that moves a following range to earlier times
+    /// pauses it; a pan never ends a pause, also when the range reaches the
+    /// newest sample (only a reset follows again: `HOME` or a middle double
+    /// click). A following range has nothing later to show, so a pan to
+    /// later times, or one the history is too short for, leaves it
+    /// following.
     pub fn pan(&mut self, dt: f64, history: &TimeHistory) {
         if !dt.is_finite() || dt == 0.0 {
             return;
         }
         let (_, right) = self.window(history);
-        self.right = right + dt;
+        let moved = self.clamped_right(right + dt, history);
+        if self.follow && moved >= right - self.span * 1e-9 {
+            return;
+        }
+        self.right = moved;
         self.follow = false;
-        self.settle(history);
     }
 }
