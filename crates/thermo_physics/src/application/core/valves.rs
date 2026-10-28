@@ -44,6 +44,19 @@ impl MainContent {
             .add_valve_on_piece(line_id, t_start, t_end, is_closed)
     }
 
+    /// Move or resize valve `valve_id` along its wall to the chain fractions
+    /// `t_start..t_end`, clamped so it stays between its neighbouring
+    /// pieces (#203); see `SimulationWorld::set_valve_span`. Returns the
+    /// span applied.
+    pub fn set_valve_span(
+        &mut self,
+        valve_id: usize,
+        t_start: f32,
+        t_end: f32,
+    ) -> Option<(f32, f32)> {
+        self.world.set_valve_span(valve_id, t_start, t_end)
+    }
+
     /// Toggle a valve between open and closed.
     pub fn toggle_valve(&mut self, valve_id: usize) {
         self.world.toggle_valve(valve_id);

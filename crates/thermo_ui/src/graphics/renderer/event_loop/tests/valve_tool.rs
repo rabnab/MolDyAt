@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use super::super::valve_segment_tool::ValveDrawState;
+use super::super::valve_segment_tool::{ValveDrawState, ValveGrab, ValveGrip};
 use thermo_physics::objects2d::Vec2D;
 
 #[test]
@@ -30,16 +30,50 @@ fn valve_pressed_holds_fields() {
     let state = ValveDrawState::Pressed {
         valve_id: 3,
         press_pos: Vec2D::new(1.5, -2.0),
+        grab: None,
+        dragging: false,
     };
     if let ValveDrawState::Pressed {
         valve_id,
         press_pos,
+        grab,
+        dragging,
     } = state
     {
         assert_eq!(valve_id, 3);
+        assert!(grab.is_none() && !dragging);
         assert!((press_pos.x - 1.5).abs() < 1e-6);
         assert!((press_pos.y + 2.0).abs() < 1e-6);
     } else {
         panic!("Expected Pressed state");
     }
+}
+
+/// A grab on a diagonal wall follows the cursor's projection onto it (#203).
+#[test]
+fn valve_grab_follows_the_projection_on_a_slanted_wall() {
+    let grab = ValveGrab {
+        grip: ValveGrip::Middle,
+        chain_start: Vec2D::new(0.0, 0.0),
+        chain_end: Vec2D::new(10.0, 10.0),
+        t_start: 0.4,
+        t_end: 0.5,
+        t_press: 0.45,
+    };
+    // (6.5, 5.5) projects onto the wall at fraction 0.6: a shift of 0.15,
+    // whatever the cursor's distance from the wall.
+    let (s, e) = grab.target(Vec2D::new(6.5, 5.5)).unwrap();
+    assert!(
+        (s - 0.55).abs() < 1e-5 && (e - 0.65).abs() < 1e-5,
+        "{s}..{e}"
+    );
+    let end = ValveGrab {
+        grip: ValveGrip::End,
+        ..grab
+    };
+    let (s, e) = end.target(Vec2D::new(6.5, 5.5)).unwrap();
+    assert!(
+        (s - 0.4).abs() < 1e-5 && (e - 0.65).abs() < 1e-5,
+        "{s}..{e}"
+    );
 }
