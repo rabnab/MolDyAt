@@ -40,17 +40,18 @@ impl LocalKineticStats {
     /// that later modify velocities should use this velocity to isolate the
     /// peculiar component `v - v_com` instead of damping the full drift motion.
     pub(crate) fn center_of_mass_velocity(&self) -> Option<Vec2D> {
-        if self.count < 2 || self.sum_m <= f32::EPSILON {
-            return None;
-        }
-
-        Some(self.sum_mv.scaled(1.0 / self.sum_m))
+        self.mean_velocity(2)
     }
 
     /// Centre-of-mass velocity of one or more balls (the flow velocity of a
     /// cell, #342); `None` for none.
     pub(crate) fn flow_velocity(&self) -> Option<Vec2D> {
-        if self.count == 0 || self.sum_m <= f32::EPSILON {
+        self.mean_velocity(1)
+    }
+
+    /// `Σ m v / Σ m` of at least `min_count` balls.
+    fn mean_velocity(&self, min_count: usize) -> Option<Vec2D> {
+        if self.count < min_count || self.sum_m <= f32::EPSILON {
             return None;
         }
         Some(self.sum_mv.scaled(1.0 / self.sum_m))
@@ -233,19 +234,27 @@ pub struct CellFields {
     pub velocity_x: ThermoGrid,
     /// y of the centre-of-mass (flow) velocity; NaN for an empty cell.
     pub velocity_y: ThermoGrid,
+    /// Flow speed `|v_com|` from `velocity_x` and `velocity_y` (the
+    /// arrows' length), kept so the renderer only borrows it; NaN for an
+    /// empty cell. Derived, not averaged: [`Self::update_flow_speed`]
+    /// refreshes it after the components change.
+    pub flow_speed: ThermoGrid,
 }
 
 impl CellFields {
     /// Every grid `rows` x `cols`, filled with `value`.
     pub fn filled(rows: usize, cols: usize, value: f32) -> Self {
         let grid = ThermoGrid::filled(rows, cols, value);
-        Self {
+        let mut fields = Self {
             temperature: grid.clone(),
             pressure: grid.clone(),
             density: grid.clone(),
             velocity_x: grid.clone(),
-            velocity_y: grid,
-        }
+            velocity_y: grid.clone(),
+            flow_speed: grid,
+        };
+        fields.update_flow_speed();
+        fields
     }
 
     /// Fields of an empty (0 x 0) grid.
@@ -258,18 +267,17 @@ impl CellFields {
         self.temperature.shape()
     }
 
-    /// Flow speed `|v_com|` per cell, from the (averaged) velocity
-    /// components: the length of the arrows; NaN for an empty cell.
-    pub fn flow_speed(&self) -> ThermoGrid {
-        let (rows, cols) = self.shape();
-        let data = self
+    /// Recompute [`Self::flow_speed`] from the velocity components.
+    pub fn update_flow_speed(&mut self) {
+        let speeds = self
             .velocity_x
-            .as_slice()
+            .data
             .iter()
-            .zip(self.velocity_y.as_slice())
-            .map(|(x, y)| x.hypot(*y))
-            .collect();
-        ThermoGrid { data, rows, cols }
+            .zip(&self.velocity_y.data)
+            .map(|(x, y)| x.hypot(*y));
+        self.flow_speed.data.clear();
+        self.flow_speed.data.extend(speeds);
+        (self.flow_speed.rows, self.flow_speed.cols) = self.shape();
     }
 
     fn grids(&self) -> [&ThermoGrid; CELL_FIELD_COUNT] {
@@ -282,20 +290,25 @@ impl CellFields {
         ]
     }
 
+    /// The averaged grids, in the order of [`Self::grids`], with the flow
+    /// speed derived from the averaged velocity.
     fn from_grids(
         [temperature, pressure, density, velocity_x, velocity_y]: [ThermoGrid; CELL_FIELD_COUNT],
     ) -> Self {
-        Self {
+        let mut fields = Self {
             temperature,
             pressure,
             density,
             velocity_x,
             velocity_y,
-        }
+            flow_speed: ThermoGrid::filled(0, 0, 0.0),
+        };
+        fields.update_flow_speed();
+        fields
     }
 }
 
-/// Grids in [`CellFields`].
+/// Averaged grids in [`CellFields`] (all but the derived flow speed).
 const CELL_FIELD_COUNT: usize = 5;
 
 /// Compute the per-cell fields from ball state and force results.
@@ -370,6 +383,7 @@ pub fn compute_cell_fields(
         }
     }
 
+    fields.update_flow_speed();
     fields
 }
 

@@ -494,7 +494,7 @@ fn test_flow_velocity_is_the_mass_weighted_mean_velocity() {
     let fields = compute_cell_fields(&balls, &forces, &world, 1, 1);
     assert!(fields.velocity_x.get(0, 0).abs() < 1e-6);
     assert!((fields.velocity_y.get(0, 0) - 2.0).abs() < 1e-6);
-    assert!((fields.flow_speed().get(0, 0) - 2.0).abs() < 1e-6);
+    assert!((fields.flow_speed.get(0, 0) - 2.0).abs() < 1e-6);
 }
 
 #[test]
@@ -508,10 +508,10 @@ fn test_one_ball_has_a_flow_velocity_but_no_temperature() {
     )];
     let forces = vec![make_force_result(0.0)];
     let fields = compute_cell_fields(&balls, &forces, &world, 1, 2);
-    assert_eq!(fields.flow_speed().get(0, 0), 5.0);
+    assert_eq!(fields.flow_speed.get(0, 0), 5.0);
     assert!(fields.temperature.get(0, 0).is_nan());
     assert!(fields.velocity_x.get(0, 1).is_nan(), "empty cell");
-    assert!(fields.flow_speed().get(0, 1).is_nan());
+    assert!(fields.flow_speed.get(0, 1).is_nan());
 }
 
 #[test]

@@ -127,8 +127,9 @@ headless runs; both step with the configured time step.
    invalid (NaN) balls are removed.
 6. **thermo**: global temperature.
 
-While a field overlay is shown, the physics thread also samples the per-cell
-fields (temperature, pressure, density, flow velocity) every `THERMO_SAMPLE_STRIDE` steps (see
+While a field overlay is shown, the physics thread also samples the
+per-cell fields (temperature, pressure, density, flow velocity) every
+`THERMO_SAMPLE_STRIDE` steps (see
 [simulation.md](simulation.md#thermodynamic-grid-space)).
 
 ### Renderer state and orchestration

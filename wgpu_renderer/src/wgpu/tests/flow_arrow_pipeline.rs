@@ -26,6 +26,7 @@ fn cells(vx: [f32; 2], vy: [f32; 2]) -> CellFields {
         cells.velocity_x.set(0, c, x);
         cells.velocity_y.set(0, c, y);
     }
+    cells.update_flow_speed();
     cells
 }
 
@@ -55,6 +56,7 @@ fn cells_without_flow_get_no_arrow() {
     let mut verts = Vec::new();
     let mut fields = cells([1.0, 0.0], [0.0, 0.0]);
     fields.velocity_x.set(0, 1, f32::NAN);
+    fields.update_flow_speed();
     flow_arrow_vertices(&fields, &spec(), &mut verts);
     assert_eq!(verts.len(), 6, "only the moving cell");
 
