@@ -107,15 +107,45 @@ fn test_pan_moves_the_range_and_stops_at_the_ends() {
 }
 
 #[test]
-fn test_panning_back_to_the_newest_sample_follows_again() {
+fn test_panning_back_to_the_newest_sample_stays_paused() {
     let h = history(0.0, 50.0);
     let mut view = TimeView::default();
     view.pan(-5.0, &h);
     assert!(!view.is_following());
 
     view.pan(100.0, &h);
-    assert!(view.is_following());
+    assert!(!view.is_following(), "only a reset ends a pause");
     assert_eq!(view.window(&h), (40.0, 50.0));
+    // The paused range stays put while new samples arrive.
+    assert_eq!(view.window(&history(0.0, 60.0)), (40.0, 50.0));
+}
+
+/// Zoomed out to the whole history, a paused range cannot move: a pan to
+/// earlier times is clamped at the newest sample and must keep the pause.
+#[test]
+fn test_pan_of_a_zoomed_out_paused_view_keeps_the_pause() {
+    let h = history(0.0, 50.0);
+    let mut view = TimeView::default();
+    view.pan(-5.0, &h);
+    for _ in 0..20 {
+        view.zoom(-1.0, 0.5, &h);
+    }
+    assert_eq!(view.window(&h), (0.0, 50.0), "the whole history");
+    assert!(!view.is_following());
+
+    view.pan(-3.0, &h);
+    assert!(!view.is_following());
+    view.pan(3.0, &h);
+    assert!(!view.is_following());
+}
+
+#[test]
+fn test_pan_to_later_times_keeps_a_following_view_following() {
+    let h = history(0.0, 50.0);
+    let mut view = TimeView::default();
+    view.pan(5.0, &h);
+    assert!(view.is_following());
+    assert!(view.is_default());
 }
 
 #[test]
@@ -246,7 +276,9 @@ fn test_zoom_never_ends_a_pause() {
     assert_eq!(t1, 50.0, "the range reaches the newest sample");
     assert!(!view.is_following(), "but stays paused");
 
-    // A pan to the newest sample still follows again.
+    // A pan to the newest sample keeps it paused too; a reset follows.
     view.pan(1.0, &h);
+    assert!(!view.is_following());
+    view.reset();
     assert!(view.is_following());
 }
