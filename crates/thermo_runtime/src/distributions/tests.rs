@@ -173,6 +173,22 @@ fn a_mixture_has_one_g_per_species_pair() {
 }
 
 #[test]
+fn no_bins_give_no_pairs() {
+    let world = Rect::new(0.0, 0.0, 50.0, 50.0);
+    let gas = ideal_gas(20, &world, DEFAULT_SPECIES, &mut Uniform(2));
+    assert!(
+        radial_distribution(&gas, &world, RDF_MAX_DISTANCE, 0)
+            .pairs
+            .is_empty()
+    );
+    assert!(
+        radial_distribution(&gas, &world, 0.0, RDF_BINS)
+            .pairs
+            .is_empty()
+    );
+}
+
+#[test]
 fn a_world_too_small_for_the_shells_has_no_g() {
     let world = Rect::new(0.0, 0.0, 8.0, 8.0);
     let gas = ideal_gas(20, &world, DEFAULT_SPECIES, &mut Uniform(1));

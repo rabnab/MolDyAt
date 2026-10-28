@@ -76,8 +76,9 @@ pub(crate) fn ascii_index(ch: char) -> Option<usize> {
 }
 
 /// Append one label (6 vertices per glyph of the [`GlyphAtlas`]) centred on
-/// `(center_x, center_y)` in NDC. Spaces and characters outside printable
-/// ASCII emit no quad but keep their width.
+/// `(center_x, center_y)` in NDC. A space emits its blank glyph, so the
+/// vertices span the whole label (label backgrounds are sized from them);
+/// characters outside printable ASCII emit no quad but keep their width.
 pub(crate) fn push_label_vertices(
     verts: &mut Vec<TextVertex>,
     label: &str,
@@ -92,7 +93,7 @@ pub(crate) fn push_label_vertices(
     let atlas_len = ASCII_CHARS.len() as f32;
 
     for (i, ch) in label.chars().enumerate() {
-        let Some(atlas_idx) = ascii_index(ch).filter(|_| ch != ' ') else {
+        let Some(atlas_idx) = ascii_index(ch) else {
             continue;
         };
 

@@ -97,7 +97,6 @@ impl PlotPipeline {
     /// The text is drawn from the renderer's shared `glyphs` (#303).
     pub(crate) fn new(
         device: &wgpu::Device,
-        _queue: &wgpu::Queue,
         format: wgpu::TextureFormat,
         glyphs: &GlyphAtlas,
     ) -> Self {

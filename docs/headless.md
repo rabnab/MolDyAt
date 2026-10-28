@@ -129,7 +129,11 @@ With `--distributions` (#343) every `frame` record also has a
   order), with `species` (two names), `reference_balls` and `g`
   (`RDF_BINS`, 50, bins up to `RDF_MAX_DISTANCE`, 5 σ). Only balls at least
   5 σ from every wall are reference balls, so no shell is cut off; an ideal
-  gas gives g ≈ 1. `g` is `null` where there are no reference balls.
+  gas of uniform density gives g ≈ 1. g is normalised by the mean density of
+  the whole world, so where the density varies on its own (stratified under
+  gravity, chambers at different densities) g levels off above 1 at large r
+  even without interactions. `g` is `null` where there are no reference
+  balls.
 
 Both are computed from the frame's balls, in ball order, off the physics
 step (`thermo_runtime::distributions`); a run without the flag computes

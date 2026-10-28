@@ -4,6 +4,7 @@
 
 //! The distributions view of the plot window (#343).
 
+use crate::graphics::energy_plot::plot_layout::COLOR_KINETIC;
 use crate::graphics::energy_plot::{DistributionData, PlotScene};
 use thermo_physics::objects2d::ball_impl::DEFAULT_SPECIES;
 use thermo_runtime::distributions::{
@@ -48,12 +49,16 @@ fn every_line_stays_in_the_window() {
 #[test]
 fn bars_for_the_non_empty_bins_and_a_curve_for_the_expected_counts() {
     let scene = PlotScene::build_distributions(Some(&data()), (800, 600), 1.0, "");
-    let bar_width = 800.0_f32;
+    // At scale 1 a glyph is 16 px: the plot spans from 12 + 7 glyphs to
+    // 800 - 12, and a bar is 80 % of one of its 4 bins.
+    let bar_width = (800.0 - 12.0 - (12.0 + 7.0 * 16.0)) / 4.0 * 0.8;
     let bars = scene
         .segments
         .iter()
-        .filter(|s| s.from[0] == s.to[0] && s.width > 4.0);
-    assert_eq!(bars.count(), 3, "bins with balls; widths {bar_width}");
+        .filter(|s| (s.width - bar_width).abs() < 1e-3);
+    assert_eq!(bars.count(), 3, "one bar per bin with balls");
+    let curve = scene.segments.iter().filter(|s| s.color == COLOR_KINETIC);
+    assert_eq!(curve.count(), 3, "the expected counts as a line");
     let heading = scene
         .labels
         .iter()

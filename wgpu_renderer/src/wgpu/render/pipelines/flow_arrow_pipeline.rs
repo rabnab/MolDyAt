@@ -57,7 +57,7 @@ pub(crate) fn flow_arrow_vertices(
     out: &mut Vec<LineVertex>,
 ) {
     out.clear();
-    let speeds = cells.flow_speed();
+    let speeds = &cells.flow_speed;
     let max_speed = speeds
         .as_slice()
         .iter()
