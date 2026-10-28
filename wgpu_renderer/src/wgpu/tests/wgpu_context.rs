@@ -3,8 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::wgpu::render::wgpu_context::{
-    PendingSurfaceSize, choose_present_mode, clamp_surface_size, default_present_mode,
-    parse_frame_latency, parse_present_mode,
+    ClampWarning, PendingSurfaceSize, choose_present_mode, clamp_surface_size,
+    default_present_mode, parse_frame_latency, parse_present_mode,
 };
 use std::time::Instant;
 use wgpu::PresentMode;
@@ -100,6 +100,22 @@ fn surface_sizes_are_clamped_per_side() {
     assert_eq!(clamp_surface_size(800, 600, MAX), (800, 600));
     assert_eq!(clamp_surface_size(9000, 9000, MAX), (MAX, MAX));
     assert_eq!(clamp_surface_size(0, 600, MAX), (1, 600));
+}
+
+#[test]
+fn a_clamp_warning_is_logged_once_per_oversized_size() {
+    let mut warning = ClampWarning::default();
+    assert_eq!(warning.clamp(800, 600, MAX), (800, 600));
+    assert!(!warning.is_clamping());
+    // The same oversized size again: clamped, but warned about only once
+    // (the state records the size it warned about).
+    for _ in 0..3 {
+        assert_eq!(warning.clamp(12032, 6275, MAX), (MAX, 6275));
+        assert!(warning.is_clamping());
+    }
+    // Back within the limit: the next oversized size warns again.
+    warning.clamp(800, 600, MAX);
+    assert!(!warning.is_clamping());
 }
 
 #[test]
