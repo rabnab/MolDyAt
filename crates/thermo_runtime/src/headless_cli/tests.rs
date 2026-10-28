@@ -636,6 +636,15 @@ fn every_parsed_flag_is_documented() {
 }
 
 #[test]
+fn test_distributions_flag() {
+    assert!(!HeadlessConfig::default().distributions);
+    let config = parse_headless_args_with_args(&headless_args(&["--distributions"]))
+        .unwrap()
+        .unwrap();
+    assert!(config.distributions);
+}
+
+#[test]
 fn test_export_flags() {
     let config = HeadlessConfig::default();
     assert_eq!(config.export_dir, None);

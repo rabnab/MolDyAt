@@ -312,7 +312,7 @@ mod keys {
     fn test_key_hints_name_the_default_keys() {
         assert_eq!(
             energy_window_key_hints(&KeyMap::default()),
-            "Esc: close  TAB / P: preset  , / .: series  HOME: reset  F: focus"
+            "Esc: close  TAB / P: preset  , / .: series  HOME: reset  F: focus  M: distributions"
         );
     }
 
@@ -327,7 +327,7 @@ mod keys {
         ]);
         assert_eq!(
             energy_window_key_hints(&rebound),
-            "Esc: close  X: preset  , / .: series  HOME: reset  F: focus"
+            "Esc: close  X: preset  , / .: series  HOME: reset  F: focus  M: distributions"
         );
 
         let (unbound, _) = KeyMap::with_overrides([
@@ -336,7 +336,7 @@ mod keys {
         ]);
         assert_eq!(
             energy_window_key_hints(&unbound),
-            "Esc: close  , / .: series  HOME: reset  F: focus"
+            "Esc: close  , / .: series  HOME: reset  F: focus  M: distributions"
         );
     }
 }
@@ -846,6 +846,90 @@ mod window_requests {
             manager.take_requests().first(),
             Some(&PlotWindowRequest::SetTitle("Plot - 2 plots".into()))
         );
+    }
+
+    /// A moving gas of `n` balls in a 100 x 100 world.
+    fn gas_snapshot(n: usize) -> RendererSnapshot {
+        use thermo_physics::objects2d::{Rect, Vec2D};
+        use thermo_runtime::application::renderer_snapshot::BallRenderData;
+        let mut snapshot = make_snapshot(1, 1.0, 0.0);
+        snapshot.frame.world_rect = Rect::new(0.0, 0.0, 100.0, 100.0);
+        snapshot.balls.data = (0..n)
+            .map(|i| BallRenderData {
+                id: i,
+                species: Default::default(),
+                position: Vec2D::new((i * 37 % 97) as f32 + 1.0, (i * 61 % 89) as f32 + 5.0),
+                velocity: Vec2D::new((i % 7) as f32 - 3.0, (i % 5) as f32 - 2.0),
+                mass: 1.0,
+                color: [1.0; 4],
+                contact_radius: 0.5,
+                display_radius: 0.5,
+                equilibrium_radius: 0.56,
+                cutoff_radius: 2.0,
+            })
+            .collect();
+        snapshot
+    }
+
+    #[test]
+    fn test_distributions_open_the_window_and_switch_back() {
+        let mut manager = make_manager();
+        manager.toggle_distributions();
+        assert!(manager.is_open() && manager.shows_distributions());
+        assert_eq!(
+            manager.take_requests(),
+            [PlotWindowRequest::Open {
+                title: "Plot - Distributions".into()
+            }]
+        );
+        manager.plot_window_opened((640, 480), 1.0);
+        manager.take_requests();
+        manager.toggle_distributions();
+        assert!(!manager.shows_distributions());
+        assert_eq!(
+            manager.take_requests(),
+            [
+                PlotWindowRequest::SetTitle("Plot - E_pot".into()),
+                PlotWindowRequest::Redraw
+            ]
+        );
+    }
+
+    #[test]
+    fn test_distributions_are_computed_only_while_shown() {
+        let metrics = FrameMetrics::default();
+        let mut manager = open_manager();
+        manager.update_from_snapshot(&gas_snapshot(200), 60.0, 1.0, &metrics);
+        let frame = manager.handle_redraw(&KeyMap::default()).unwrap();
+        assert!(
+            frame
+                .scene
+                .labels
+                .iter()
+                .all(|l| !l.text.starts_with("Speed"))
+        );
+
+        // Not computed while the time series were shown: nothing yet.
+        manager.toggle_distributions();
+        let waiting = manager.handle_redraw(&KeyMap::default()).unwrap();
+        assert!(
+            waiting
+                .scene
+                .labels
+                .iter()
+                .any(|l| l.text.starts_with("Waiting"))
+        );
+        manager.update_from_snapshot(&gas_snapshot(200), 60.0, 1.0, &metrics);
+        let frame = manager.handle_redraw(&KeyMap::default()).unwrap();
+        assert!(frame.scene.plot_area.is_none(), "no time axis");
+        assert!(
+            frame
+                .scene
+                .labels
+                .iter()
+                .any(|l| l.text.starts_with("Speed"))
+        );
+        assert!(frame.scene.labels.iter().any(|l| l.text == "N2-N2"));
     }
 
     #[test]

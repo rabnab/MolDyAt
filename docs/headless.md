@@ -66,6 +66,7 @@ Script commands due after a step run after that step's frame.
 | `--export-format <csv\|jsonl>`        | Format of the export files (default `csv`); needs `--export-dir`                                                                                                                                                                                                                                                                         |
 | `--export-series <A,B,..>`            | Export only these series (default: all); an unknown name fails the run; needs `--export-dir`                                                                                                                                                                                                                                             |
 | `--export-stream`                     | Also append the sample of every frame (all series, not thinned) to `stream.<ext>` while the run goes; see [Sample stream](#sample-stream); needs `--export-dir`                                                                                                                                                                          |
+| `--distributions`                     | Add the speed histogram and g(r) to every `frame` record (see [Distributions](#distributions)); with `--export-dir` also write `distributions.<ext>`                                                                                                                                                                                     |
 | `--load <PATH>`                       | Start from a saved world (shared with the window mode)                                                                                                                                                                                                                                                                                   |
 | `--save-dir <DIR>`                    | Directory for saves (shared with the window mode)                                                                                                                                                                                                                                                                                        |
 | `--world-scale <F>`                   | Scale the default world's width and height by F around its centre, 0.05..=100; overrides `world.scale` of `--config`; not with `--load` (shared with the window mode, parsed by the binary)                                                                                                                                              |
@@ -109,7 +110,30 @@ Detail sections in `frame` records, chosen with `--detail`:
   [simulation.md](simulation.md#thermodynamic-grid-space)).
 
 Non-finite numbers (`NaN`, `±Inf`) are written as `null` in every numeric
-position, including the thermo grids.
+position, including the thermo grids and the distributions.
+
+### Distributions
+
+With `--distributions` (#343) every `frame` record also has a
+`distributions` object, and `run_start`'s `config` has `distributions: true`
+(runs without the flag keep their bytes):
+
+- `speed` (absent with fewer than two balls or all at rest): `bin_width`,
+  `temperature` (centre-of-mass frame, `Σ m |v - v_com|² / (2 (N - 1))`),
+  `counts` (`SPEED_BINS`, 32, bins from 0 to the largest speed, speeds in
+  the centre-of-mass frame) and `maxwell_boltzmann`, the 2D
+  Maxwell–Boltzmann counts expected in the same bins at that temperature
+  (`Σ_balls exp(-m a²/2T) - exp(-m b²/2T)` for a bin `[a, b)`, exact for
+  mixed masses).
+- `rdf`: `bin_width` and `pairs`, one per species pair present (table
+  order), with `species` (two names), `reference_balls` and `g`
+  (`RDF_BINS`, 50, bins up to `RDF_MAX_DISTANCE`, 5 σ). Only balls at least
+  5 σ from every wall are reference balls, so no shell is cut off; an ideal
+  gas gives g ≈ 1. `g` is `null` where there are no reference balls.
+
+Both are computed from the frame's balls, in ball order, off the physics
+step (`thermo_runtime::distributions`); a run without the flag computes
+nothing.
 
 ## Scripts
 
@@ -214,10 +238,13 @@ evidence.
 `--export-dir` (headless) and the commands `world.export_series_csv` (`Ctrl + E`),
 `world.export_series_jsonl` (`Ctrl + J`), `world.export_snapshot_csv` (`Alt + E`) and
 `world.export_snapshot_jsonl` (`Alt + J`) write the metrics series and the per-ball
-state for analysis outside the app (#337). The commands write timestamped files
-`export_YYYYMMDD_HHMMSS_<series|snapshot>.<csv|jsonl>` to the save directory
-(`--save-dir`) and never overwrite one; a headless run writes `series.<ext>` and
-`snapshot.<ext>`, overwriting earlier ones, so scripts find them.
+state for analysis outside the app (#337); `world.export_distributions_csv`
+(`Ctrl + G`) and `world.export_distributions_jsonl` (`Alt + G`) write the speed
+histogram and g(r) of the current balls (#343). The commands write timestamped files
+`export_YYYYMMDD_HHMMSS_<series|snapshot|distributions>.<csv|jsonl>` to the save directory
+(`--save-dir`) and never overwrite one; a headless run writes `series.<ext>`,
+`snapshot.<ext>` and, with `--distributions`, `distributions.<ext>` of the final
+snapshot, overwriting earlier ones, so scripts find them.
 
 Both formats follow the headless contract: a non-finite `f32` (`NaN`, `±Inf`) and a
 missing value are `null` in JSONL and an empty cell in CSV, floats are written in
@@ -229,6 +256,7 @@ byte-identical files. JSONL records carry `schema_version: "export.v1"` and a
 |----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
 | series   | Header `step,time,<name>[ [<unit>]],…` with the series sorted by name (`E_kin [eps*]`, `N2:count`), then one row per sampled step with its simulation time. A series registered later has empty cells for the earlier steps | `series_header` (`rows`, `series`: name, unit, description, per_species), then one `series_row` per step (`step`, `time`, `values` object)            |
 | snapshot | `id,species,x,y,vx,vy,mass,contact_radius`, one row per ball sorted by id                                                                                                                                                   | `snapshot_header` (`step`, `time`, `ball_count`), then one `ball` record per ball (`id`, `species`, `position`, `velocity`, `contact_radius`, `mass`) |
+| distributions | `distribution,species,x,value,expected`: a `speed` row per bin (centre speed, ball count, Maxwell–Boltzmann count), then `rdf` rows per pair (`N2-Ar`, centre distance, g) | `distributions_header` (`step`, `time`, `ball_count`), `speed_histogram` and one `rdf` record per pair, with the fields of the headless `distributions` object |
 
 The series are those of the `MetricsRegistry` (`E_kin`, `E_pot`, `E_tot`,
 `wall_momentum`, `<species>:count`), sampled at snapshot cadence. Their values are in the

@@ -2,8 +2,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Data export: selected metrics series and a per-ball snapshot dump, as CSV
-//! or JSONL, for analysis outside the app (#337).
+//! Data export: selected metrics series, a per-ball snapshot dump and the
+//! speed and radial distributions (#343), as CSV or JSONL, for analysis
+//! outside the app (#337).
 //!
 //! The formats follow the headless contract: every JSONL record carries a
 //! `schema_version` ([`SCHEMA_VERSION`]) and a `record_kind`, and every `f32`
@@ -15,6 +16,7 @@
 //! [`SampleStream`] instead appends every sample to a file as it is taken
 //! (#366).
 
+mod distributions;
 mod series;
 mod snapshot;
 mod stream;
@@ -22,6 +24,7 @@ mod stream;
 #[cfg(test)]
 mod tests;
 
+pub use distributions::{distributions_json, distributions_to_string};
 pub use series::series_to_string;
 pub use snapshot::snapshot_to_string;
 pub use stream::{SampleStream, StreamSettings};
@@ -40,6 +43,8 @@ pub enum ExportKind {
     Series,
     /// The state of every ball at the latest snapshot.
     Snapshot,
+    /// The speed histogram and g(r) of the latest snapshot.
+    Distributions,
 }
 
 impl ExportKind {
@@ -47,6 +52,7 @@ impl ExportKind {
         match self {
             Self::Series => "series",
             Self::Snapshot => "snapshot",
+            Self::Distributions => "distributions",
         }
     }
 }

@@ -427,6 +427,15 @@ and Alt itself (`ModifiersChanged`) for the chords. A left click on a
 legend entry hides or shows that series, a left click in a plot focuses
 it (the targets of the last frame).
 
+`view.plot_distributions` (`M`, both windows) switches the window to the
+distributions of the balls (#343) and back, opening it if closed:
+`PlotScene::build_distributions` (`energy_plot/distribution_layout.rs`)
+lays out the speed histogram as bars with the 2D Maxwell–Boltzmann counts
+as a line, and g(r) per species pair with g = 1 marked. The manager
+computes them from the snapshot (`thermo_runtime::distributions`, which
+headless output and the export use too) only while the view is shown, at
+most every `DISTRIBUTION_INTERVAL` (0.5 s), off the physics thread.
+
 The OS window belongs to the binary (#371), so `thermo_ui` uses winit for
 input types only. The manager asks for it with `PlotWindowRequest`s (`Open`
 with the title, `Close`, `SetTitle`, `Redraw`), queued while it handles

@@ -69,6 +69,9 @@ pub enum UiAction {
     ResetPlotView,
     /// Change the plots of the plot window (#339).
     Plot(PlotChange),
+    /// Switch the plot window between the time series and the
+    /// distributions (#343).
+    TogglePlotDistributions,
     DeleteHovered,
 }
 
@@ -482,6 +485,20 @@ pub static COMMANDS: &[CommandDescriptor] = &[
         kind: CommandKind::Domain("world.export_snapshot_jsonl"),
     },
     CommandDescriptor {
+        id: "world.export_distributions_csv",
+        label: "Export the speed histogram (with its Maxwell-Boltzmann counts) and g(r) per species pair as CSV to the save directory.",
+        category: CommandCategory::World,
+        default_binding: &[symbol_chord(Ctrl, 'g', PressOnce)],
+        kind: CommandKind::Domain("world.export_distributions_csv"),
+    },
+    CommandDescriptor {
+        id: "world.export_distributions_jsonl",
+        label: "Export the speed histogram and g(r) as JSONL to the save directory.",
+        category: CommandCategory::World,
+        default_binding: &[symbol_chord(Alt, 'g', PressOnce)],
+        kind: CommandKind::Domain("world.export_distributions_jsonl"),
+    },
+    CommandDescriptor {
         id: "world.toggle_sample_stream_csv",
         label: "Start or stop streaming every metrics sample as CSV to the save directory (keeps the whole run).",
         category: CommandCategory::World,
@@ -537,6 +554,13 @@ pub static COMMANDS: &[CommandDescriptor] = &[
         category: CommandCategory::View,
         default_binding: &[key(KeyCode::Tab, Release)],
         kind: CommandKind::Ui(UiAction::ToggleEnergyWindow),
+    },
+    CommandDescriptor {
+        id: "view.plot_distributions",
+        label: "Switch the plot window between the time series and the distributions (speed histogram with Maxwell-Boltzmann, g(r)); opens it if closed.",
+        category: CommandCategory::View,
+        default_binding: &[symbol('m', Press)],
+        kind: CommandKind::Ui(UiAction::TogglePlotDistributions),
     },
     CommandDescriptor {
         id: "view.reset_plot_view",

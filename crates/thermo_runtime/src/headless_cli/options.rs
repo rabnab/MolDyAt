@@ -127,6 +127,14 @@ pub const HEADLESS_OPTIONS: &[OptionHelp] = &[
         help: &["Also append every frame's sample (all series) to stream.<ext>"],
     },
     OptionHelp {
+        names: &["--distributions"],
+        value: None,
+        help: &[
+            "Add the speed histogram and g(r) to every frame",
+            "(with --export-dir also distributions.<ext>)",
+        ],
+    },
+    OptionHelp {
         names: &["--timing-warmup"],
         value: Some("<N>"),
         help: &["Steps before --timings starts measuring (default 0)"],

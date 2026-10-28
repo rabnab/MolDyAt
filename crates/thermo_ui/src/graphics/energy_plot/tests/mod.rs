@@ -4,6 +4,7 @@
 
 //! Tests for the energy plot, one file per topic.
 
+mod distribution_layout;
 mod energy_window;
 mod plot_layout;
 mod plot_selection;

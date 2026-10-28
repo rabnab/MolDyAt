@@ -54,6 +54,14 @@ fn test_every_domain_command_maps_as_before() {
             "World(Export { kind: Snapshot, format: Jsonl })",
         ),
         (
+            "world.export_distributions_csv",
+            "World(Export { kind: Distributions, format: Csv })",
+        ),
+        (
+            "world.export_distributions_jsonl",
+            "World(Export { kind: Distributions, format: Jsonl })",
+        ),
+        (
             "world.toggle_sample_stream_csv",
             "World(ToggleSampleStream { format: Csv })",
         ),

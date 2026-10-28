@@ -301,6 +301,8 @@ Keyboard (press `H` for the same list in the log):
 | `Ctrl + J` | Export the metrics series as JSONL to the save directory. |
 | `Alt + E` | Export the state of every ball as CSV to the save directory. |
 | `Alt + J` | Export the state of every ball as JSONL to the save directory. |
+| `Ctrl + G` | Export the speed histogram (with its Maxwell-Boltzmann counts) and g(r) per species pair as CSV to the save directory. |
+| `Alt + G` | Export the speed histogram and g(r) as JSONL to the save directory. |
 | `Ctrl + R` | Start or stop streaming every metrics sample as CSV to the save directory (keeps the whole run). |
 | `Alt + R` | Start or stop streaming every metrics sample as JSONL to the save directory. |
 | `0` | Reset the viewport (1.0x zoom, centred). |
@@ -309,6 +311,7 @@ Keyboard (press `H` for the same list in the log):
 | `T` | Cycle the field overlay: Off -> Grid -> Temperature -> Pressure -> Density -> Flow speed -> Flow arrows -> Off. |
 | `P` | Cycle the plot content (in the plot window: the focused plot's energy preset). |
 | `TAB` | Toggle the energy plot window. |
+| `M` | Switch the plot window between the time series and the distributions (speed histogram with Maxwell-Boltzmann, g(r)); opens it if closed. |
 | `HOME` | Reset the energy plot's time range (follow the newest sample; also a middle double click in the plot). |
 | `.` | Plot window: show the next series in place of the focused plot's last one. |
 | `,` | Plot window: show the previous series in place of the focused plot's last one. |

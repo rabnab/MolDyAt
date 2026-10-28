@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+pub mod distribution_layout;
 pub mod energy_data;
 pub mod energy_window;
 pub mod plot_layout;
@@ -12,6 +13,7 @@ pub mod time_view;
 #[cfg(test)]
 mod tests;
 
+pub use distribution_layout::{DISTRIBUTIONS_TITLE, DistributionData};
 pub use energy_data::{EnergyData, SharedEnergyData};
 pub use energy_window::{
     DEFAULT_HEIGHT, DEFAULT_WIDTH, MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, PlotWindowRequest,

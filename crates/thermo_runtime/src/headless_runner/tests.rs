@@ -1064,6 +1064,62 @@ fn test_export_dir_receives_the_series_and_the_final_snapshot() {
 }
 
 #[test]
+fn test_distributions_add_a_frame_field_and_an_export_file() {
+    let dir = export_scratch_dir("distributions");
+    let mut config = export_config(&dir, crate::export::ExportFormat::Jsonl);
+    config.distributions = true;
+    let mut application =
+        build_application(window_world_rect(), &SimConfig::default(), config.rng_seed)
+            .expect("build deterministic app");
+    application.seed_random_balls_with_speed(24, 2.0);
+    let (output, _) = headless_output(config, application);
+
+    let records: Vec<serde_json::Value> = output
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(records[0]["config"]["distributions"], true);
+    let frames: Vec<_> = records
+        .iter()
+        .filter(|r| r["record_kind"] == "frame")
+        .collect();
+    assert!(!frames.is_empty());
+    for frame in frames {
+        let speed = &frame["distributions"]["speed"];
+        let counts = speed["counts"].as_array().expect("speed counts");
+        assert_eq!(counts.len(), crate::distributions::SPEED_BINS);
+        let total: u64 = counts.iter().map(|c| c.as_u64().unwrap()).sum();
+        assert_eq!(total, 24, "every ball is in the histogram");
+        let pairs = frame["distributions"]["rdf"]["pairs"].as_array().unwrap();
+        assert_eq!(pairs[0]["species"], serde_json::json!(["N2", "N2"]));
+    }
+
+    let export = fs::read_to_string(dir.join("distributions.jsonl")).expect("export file");
+    let kinds: Vec<String> = export
+        .lines()
+        .map(|line| {
+            serde_json::from_str::<serde_json::Value>(line).unwrap()["record_kind"].to_string()
+        })
+        .collect();
+    assert_eq!(
+        kinds,
+        ["\"distributions_header\"", "\"speed_histogram\"", "\"rdf\""]
+    );
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn test_without_distributions_frames_and_exports_stay_as_they_were() {
+    let dir = export_scratch_dir("no_distributions");
+    let config = export_config(&dir, crate::export::ExportFormat::Csv);
+    let application = seeded_application(&config);
+    let (output, _) = headless_output(config, application);
+    assert!(!output.contains("distributions"));
+    assert!(!dir.join("distributions.csv").exists());
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
 fn test_export_is_deterministic_and_jsonl_series_selection_works() {
     let run = |name: &str| {
         let dir = export_scratch_dir(name);
