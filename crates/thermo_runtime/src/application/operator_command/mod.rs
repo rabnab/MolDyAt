@@ -38,7 +38,8 @@ pub mod valve;
 /// Operator commands encapsulate all data needed for a single operator
 /// mutation. New operator types define concrete structs implementing this
 /// trait — no changes to `DomainCommand`, `InputAction`, or the action
-/// processor are required.
-pub trait OperatorCommand: Send + std::fmt::Debug {
+/// processor are required. `Any` lets tests downcast a tool's command to
+/// its type.
+pub trait OperatorCommand: Send + std::fmt::Debug + std::any::Any {
     fn execute(self: Box<Self>, content: &mut MainContent);
 }

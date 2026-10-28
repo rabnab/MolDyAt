@@ -28,6 +28,26 @@ pub fn valve_span_problem(t_start: f32, t_end: f32) -> Option<String> {
         .then(|| "valve may touch both ends of the wall piece or neither, not only one".to_string())
 }
 
+/// How a valve's span changes when it is dragged along its wall (#203), in
+/// fractions of the wall (chain). The kind is explicit: inferring a move
+/// from two equal edge shifts would depend on rounding (#383 review).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ValveSpanChange {
+    /// Shift the valve so it starts at `t_start`; its width stays as it is.
+    Move { t_start: f32 },
+    /// Set both edges (one of them usually unchanged).
+    Resize { t_start: f32, t_end: f32 },
+}
+
+impl ValveSpanChange {
+    pub(crate) fn is_finite(self) -> bool {
+        match self {
+            Self::Move { t_start } => t_start.is_finite(),
+            Self::Resize { t_start, t_end } => t_start.is_finite() && t_end.is_finite(),
+        }
+    }
+}
+
 impl MainContent {
     /// Add a valve on wall piece `line_id`, given as piece-local fractions
     /// `t_start`/`t_end`, and return its id, or `None` if the piece is
@@ -44,17 +64,15 @@ impl MainContent {
             .add_valve_on_piece(line_id, t_start, t_end, is_closed)
     }
 
-    /// Move or resize valve `valve_id` along its wall to the chain fractions
-    /// `t_start..t_end`, clamped so it stays between its neighbouring
-    /// pieces (#203); see `SimulationWorld::set_valve_span`. Returns the
-    /// span applied.
+    /// Move or resize valve `valve_id` along its wall as `change` says,
+    /// clamped so it stays between its neighbouring pieces (#203); see
+    /// `SimulationWorld::set_valve_span`. Returns the span applied.
     pub fn set_valve_span(
         &mut self,
         valve_id: usize,
-        t_start: f32,
-        t_end: f32,
+        change: ValveSpanChange,
     ) -> Option<(f32, f32)> {
-        self.world.set_valve_span(valve_id, t_start, t_end)
+        self.world.set_valve_span(valve_id, change)
     }
 
     /// Toggle a valve between open and closed.

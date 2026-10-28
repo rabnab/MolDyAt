@@ -12,6 +12,7 @@
 //! moves that end (#203). The physics thread keeps the valve between its
 //! neighbouring pieces (`SetValveSpan`).
 
+use thermo_physics::application::core::ValveSpanChange;
 use thermo_physics::objects2d::Vec2D;
 use thermo_physics::objects2d::line_segment::THICKNESS_TO_WORLD;
 use thermo_physics::objects2d::wall_chain::ObjectRef;
@@ -106,14 +107,23 @@ impl ValveGrab {
         })
     }
 
-    /// The span `(t_start, t_end)` asked for with the cursor at `pos`: the
-    /// grabbed part follows the cursor along the wall.
-    pub fn target(&self, pos: Vec2D) -> Option<(f32, f32)> {
+    /// The change asked for with the cursor at `pos`: the grabbed part
+    /// follows the cursor along the wall. The middle moves the valve (its
+    /// width is kept on the physics side), an end resizes it.
+    pub fn target(&self, pos: Vec2D) -> Option<ValveSpanChange> {
         let delta = chain_fraction(self.chain_start, self.chain_end, pos)? - self.t_press;
         Some(match self.grip {
-            ValveGrip::Middle => (self.t_start + delta, self.t_end + delta),
-            ValveGrip::Start => (self.t_start + delta, self.t_end),
-            ValveGrip::End => (self.t_start, self.t_end + delta),
+            ValveGrip::Middle => ValveSpanChange::Move {
+                t_start: self.t_start + delta,
+            },
+            ValveGrip::Start => ValveSpanChange::Resize {
+                t_start: self.t_start + delta,
+                t_end: self.t_end,
+            },
+            ValveGrip::End => ValveSpanChange::Resize {
+                t_start: self.t_start,
+                t_end: self.t_end + delta,
+            },
         })
     }
 }
@@ -188,11 +198,9 @@ impl ValveSegmentToolHandler {
     /// (none without a grab: a valve the snapshot has no wall for).
     fn drag_to(valve_id: usize, grab: Option<&ValveGrab>, pos: Vec2D) -> ToolResponse {
         match grab.and_then(|grab| grab.target(pos)) {
-            Some((t_start, t_end)) => ToolResponse::consumed_with(Box::new(SetValveSpan {
-                valve_id,
-                t_start,
-                t_end,
-            })),
+            Some(change) => {
+                ToolResponse::consumed_with(Box::new(SetValveSpan { valve_id, change }))
+            }
             None => ToolResponse::consumed_dirty(),
         }
     }
@@ -522,8 +530,8 @@ mod tests {
     }
 
     /// Press on the valve 3..7 at `from`, drag to `to`, release there: the
-    /// span the last command asks for, or `None` without a command.
-    fn drag_valve(from: f32, to: f32) -> Option<(f32, f32)> {
+    /// change the last command asks for, or `None` without a command.
+    fn drag_valve(from: f32, to: f32) -> Option<ValveSpanChange> {
         let seg = SimLineSegment::new(1, Vec2D::new(0.0, 0.0), Vec2D::new(10.0, 0.0));
         let (snap, world) = make_ctx_data(vec![seg], vec![valve_span(5, 3.0, 7.0)]);
         let ctx = make_tool_ctx(&snap, &world, Vec2D::zero());
@@ -540,34 +548,60 @@ mod tests {
             &ctx,
         );
         assert!(matches!(tool.state, ValveDrawState::Idle));
-        let action = resp.action?;
-        let text = format!("{action:?}");
-        assert!(text.starts_with("SetValveSpan"), "{text}");
-        let span = |name: &str| -> f32 {
-            let rest = &text[text.find(name).unwrap() + name.len() + 2..];
-            rest.split([',', ' ', '}']).next().unwrap().parse().unwrap()
-        };
-        Some((span("t_start"), span("t_end")))
+        let action: Box<dyn std::any::Any> = resp.action?;
+        let command = action
+            .downcast::<SetValveSpan>()
+            .expect("a SetValveSpan command");
+        assert_eq!(command.valve_id, 5);
+        Some(command.change)
     }
 
-    fn assert_span(actual: Option<(f32, f32)>, expected: (f32, f32)) {
-        let (s, e) = actual.expect("a valve command");
-        assert!(
-            (s - expected.0).abs() < 1e-5 && (e - expected.1).abs() < 1e-5,
-            "{s}..{e}, expected {expected:?}"
-        );
+    fn assert_change(actual: Option<ValveSpanChange>, expected: ValveSpanChange) {
+        let close = |a: f32, b: f32| (a - b).abs() < 1e-5;
+        let ok = match (actual.expect("a valve command"), expected) {
+            (ValveSpanChange::Move { t_start: a }, ValveSpanChange::Move { t_start: b }) => {
+                close(a, b)
+            }
+            (
+                ValveSpanChange::Resize {
+                    t_start: a,
+                    t_end: b,
+                },
+                ValveSpanChange::Resize {
+                    t_start: c,
+                    t_end: d,
+                },
+            ) => close(a, c) && close(b, d),
+            _ => false,
+        };
+        assert!(ok, "{actual:?}, expected {expected:?}");
     }
 
     #[test]
     fn dragging_a_valve_by_its_middle_moves_it_along_the_wall() {
         // Valve at fractions 0.3..0.7 of the wall; the cursor moves by 0.15.
-        assert_span(drag_valve(5.0, 6.5), (0.45, 0.85));
+        assert_change(
+            drag_valve(5.0, 6.5),
+            ValveSpanChange::Move { t_start: 0.45 },
+        );
     }
 
     #[test]
     fn dragging_a_valve_end_resizes_it() {
-        assert_span(drag_valve(3.4, 2.0), (0.16, 0.7));
-        assert_span(drag_valve(6.8, 8.0), (0.3, 0.82));
+        assert_change(
+            drag_valve(3.4, 2.0),
+            ValveSpanChange::Resize {
+                t_start: 0.16,
+                t_end: 0.7,
+            },
+        );
+        assert_change(
+            drag_valve(6.8, 8.0),
+            ValveSpanChange::Resize {
+                t_start: 0.3,
+                t_end: 0.82,
+            },
+        );
     }
 
     #[test]
@@ -582,7 +616,8 @@ mod tests {
         let jitter = tool.handle_cursor_move(Vec2D::new(5.05, 0.0), &ctx);
         assert!(jitter.action.is_none());
         let resp = tool.handle_mouse_button(MouseButton::Left, ElementState::Released, at, &ctx);
-        assert!(format!("{:?}", resp.action.unwrap()).starts_with("ToggleValve"));
+        let action: Box<dyn std::any::Any> = resp.action.expect("a command");
+        assert!(action.downcast::<ToggleValve>().is_ok());
     }
 
     #[test]

@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use super::super::valve_segment_tool::{ValveDrawState, ValveGrab, ValveGrip};
+use thermo_physics::application::core::ValveSpanChange;
 use thermo_physics::objects2d::Vec2D;
 
 #[test]
@@ -62,18 +63,20 @@ fn valve_grab_follows_the_projection_on_a_slanted_wall() {
     };
     // (6.5, 5.5) projects onto the wall at fraction 0.6: a shift of 0.15,
     // whatever the cursor's distance from the wall.
-    let (s, e) = grab.target(Vec2D::new(6.5, 5.5)).unwrap();
-    assert!(
-        (s - 0.55).abs() < 1e-5 && (e - 0.65).abs() < 1e-5,
-        "{s}..{e}"
-    );
+    let ValveSpanChange::Move { t_start } = grab.target(Vec2D::new(6.5, 5.5)).unwrap() else {
+        panic!("a middle grab moves the valve");
+    };
+    assert!((t_start - 0.55).abs() < 1e-5, "{t_start}");
     let end = ValveGrab {
         grip: ValveGrip::End,
         ..grab
     };
-    let (s, e) = end.target(Vec2D::new(6.5, 5.5)).unwrap();
+    let ValveSpanChange::Resize { t_start, t_end } = end.target(Vec2D::new(6.5, 5.5)).unwrap()
+    else {
+        panic!("an end grab resizes the valve");
+    };
     assert!(
-        (s - 0.4).abs() < 1e-5 && (e - 0.65).abs() < 1e-5,
-        "{s}..{e}"
+        (t_start - 0.4).abs() < 1e-5 && (t_end - 0.65).abs() < 1e-5,
+        "{t_start}..{t_end}"
     );
 }

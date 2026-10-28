@@ -16,7 +16,7 @@ mod source_spheres;
 mod step_scratch;
 mod thermostats;
 mod valves;
-pub use valves::valve_span_problem;
+pub use valves::{ValveSpanChange, valve_span_problem};
 mod verbose;
 
 pub(crate) use runtime_options::RuntimeOptions;

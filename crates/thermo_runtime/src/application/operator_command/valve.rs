@@ -6,6 +6,7 @@
 
 use crate::application::MainContent;
 use crate::application::operator_command::OperatorCommand;
+use thermo_physics::application::core::ValveSpanChange;
 
 /// Add a new valve on an existing wall piece.
 ///
@@ -37,19 +38,18 @@ impl OperatorCommand for ToggleValve {
     }
 }
 
-/// Move or resize a valve along its wall (#203): its span becomes
-/// `t_start..t_end` in fractions of its wall (chain), clamped so it stays
-/// between its neighbouring pieces (see `MainContent::set_valve_span`).
+/// Move or resize a valve along its wall (#203) as `change` says, in
+/// fractions of its wall (chain), clamped so it stays between its
+/// neighbouring pieces (see `MainContent::set_valve_span`).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SetValveSpan {
     pub valve_id: usize,
-    pub t_start: f32,
-    pub t_end: f32,
+    pub change: ValveSpanChange,
 }
 
 impl OperatorCommand for SetValveSpan {
     fn execute(self: Box<Self>, content: &mut MainContent) {
-        content.set_valve_span(self.valve_id, self.t_start, self.t_end);
+        content.set_valve_span(self.valve_id, self.change);
     }
 }
 
@@ -84,8 +84,7 @@ mod tests {
         let valve_id = content.add_valve_segment(0, 0.4, 0.6, true).unwrap();
         Box::new(SetValveSpan {
             valve_id,
-            t_start: 0.1,
-            t_end: 0.3,
+            change: ValveSpanChange::Move { t_start: 0.1 },
         })
         .execute(&mut content);
         use crate::application::CreateSnapshot;
