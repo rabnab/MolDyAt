@@ -52,12 +52,11 @@ pub struct WgpuPipelines {
 impl WgpuPipelines {
     /// Create all rendering pipelines and register them in the graph.
     ///
-    /// Every pipeline is built the same way (`new(device, queue, format)`) and
-    /// registered in execution order (later pipelines draw on top). Each
-    /// pipeline picks its own viewport (full window or inset simulation pane).
-    ///
-    /// The text pipelines share `glyphs`, the renderer's one glyph atlas
-    /// (#303).
+    /// Every pipeline is built the same way (`new(device, queue, format)`,
+    /// text pipelines with the renderer's one glyph atlas `glyphs` as a
+    /// fourth argument, #303) and registered in execution order (later
+    /// pipelines draw on top). Each pipeline picks its own viewport (full
+    /// window or inset simulation pane).
     pub fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,

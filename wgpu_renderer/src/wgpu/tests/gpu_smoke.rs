@@ -293,7 +293,7 @@ fn plot_pipeline_builds_and_renders_without_validation_errors() {
 
     for format in [wgpu::TextureFormat::Bgra8Unorm, FORMAT] {
         let glyphs = GlyphAtlas::new(&device, &queue);
-        let mut pipeline = PlotPipeline::new(&device, &queue, format, &glyphs);
+        let mut pipeline = PlotPipeline::new(&device, format, &glyphs);
         for scene in [&full, &empty, &full] {
             pipeline.prepare(&device, &queue, scene);
             let target = device.create_texture(&wgpu::TextureDescriptor {

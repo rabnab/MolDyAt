@@ -6,10 +6,9 @@ use crate::wgpu::MARGINS;
 use crate::wgpu::render::pipelines::text_pipeline::cursor_text_vertices;
 
 #[test]
-fn cursor_text_emits_one_quad_per_visible_character() {
-    // 16 characters, 3 of them spaces, which draw nothing (#303).
+fn cursor_text_emits_one_quad_per_character() {
     let verts = cursor_text_vertices("(1.00, 2.00)  1g", (1280, 720), MARGINS);
-    assert_eq!(verts.len(), 13 * 6);
+    assert_eq!(verts.len(), 16 * 6);
 }
 
 #[test]

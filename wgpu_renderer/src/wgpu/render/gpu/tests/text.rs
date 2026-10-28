@@ -62,12 +62,12 @@ fn label_is_centred_on_the_anchor() {
 fn ascii_atlas_lookup_matches_a_search() {
     let mut verts = Vec::new();
     push_label_vertices(&mut verts, "A~Ü ", 0.0, 0.0, 0.1, 0.1);
-    // Six vertices per drawn glyph: 'A' and '~'; not 'Ü', and a space
-    // draws nothing.
-    assert_eq!(verts.len(), 12);
+    // Six vertices per drawn glyph: 'A', '~' and ' ' (blank, so the label
+    // bounds include it), not 'Ü'.
+    assert_eq!(verts.len(), 18);
     let u0 = |glyph: usize| verts[glyph * 6].uv[0];
     let n = ASCII_CHARS.len() as f32;
-    for (glyph, ch) in [(0, 'A'), (1, '~')] {
+    for (glyph, ch) in [(0, 'A'), (1, '~'), (2, ' ')] {
         let idx = ASCII_CHARS.iter().position(|&c| c == ch).unwrap();
         assert_eq!(u0(glyph), idx as f32 / n, "{ch}");
     }

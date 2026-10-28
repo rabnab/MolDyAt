@@ -36,8 +36,9 @@ fn one_thermostat_emits_two_label_quads_per_character() {
     let local =
         ThermostatLabelPipeline::build_local_label(&thermostat, thermostat.current_local_temp);
     let target = ThermostatLabelPipeline::build_label_text('T', thermostat.target_temperature);
-    // Spaces keep their width but emit no quad.
-    let glyphs = local.chars().chain(target.chars()).filter(|c| *c != ' ');
+    // Every character is a quad of the shared ASCII atlas, a space too
+    // (#303), so the label background spans the whole text.
+    let glyphs = local.chars().chain(target.chars());
     let expected_vertices = glyphs.count() * 6;
 
     let actual_vertices = ThermostatLabelPipeline::vertex_count_for_thermostats(

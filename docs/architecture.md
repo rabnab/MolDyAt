@@ -329,7 +329,8 @@ Every visual layer is one `RenderPipeline` in
 `wgpu_renderer/src/wgpu/render/pipelines/`, registered in draw order in
 `WgpuPipelines::new`. All of them follow one pattern:
 
-- `new(device, queue, format)`, then `prepare()` fills a `Vec` of
+- `new(device, queue, format)` (text pipelines also take the shared
+  `GlyphAtlas`), then `prepare()` fills a `Vec` of
   `#[repr(C)]` instances or vertices and flushes it to a `GpuBatch`;
   `render()` only calls `draw()`.
 - `gpu/batch.rs` (`GpuBatch`) is the only place that creates wgpu pipelines,
