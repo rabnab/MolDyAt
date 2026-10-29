@@ -57,7 +57,7 @@ pub(crate) fn flow_arrow_vertices(
     out: &mut Vec<LineVertex>,
 ) {
     out.clear();
-    let speeds = &cells.flow_speed;
+    let speeds = cells.flow_speed();
     let max_speed = speeds
         .as_slice()
         .iter()
@@ -80,8 +80,8 @@ pub(crate) fn flow_arrow_vertices(
                 continue;
             }
             let (dx, dy) = (
-                cells.velocity_x.get(r, c) / speed,
-                cells.velocity_y.get(r, c) / speed,
+                cells.velocity_x().get(r, c) / speed,
+                cells.velocity_y().get(r, c) / speed,
             );
             let half = 0.5 * max_length * speed / max_speed;
             let cx = spec.origin_x + (c as f32 + 0.5) * spec.cell_width;

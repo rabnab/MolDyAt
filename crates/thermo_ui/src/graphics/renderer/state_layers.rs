@@ -83,7 +83,7 @@ impl ScalarField {
             Self::Temperature => &cells.temperature,
             Self::Pressure => &cells.pressure,
             Self::Density => &cells.density,
-            Self::FlowSpeed => &cells.flow_speed,
+            Self::FlowSpeed => cells.flow_speed(),
         }
     }
 }
@@ -486,9 +486,7 @@ mod tests {
         let mut cells = CellFields::filled(1, 1, 1.0);
         cells.pressure = ThermoGrid::filled(1, 1, 2.0);
         cells.density = ThermoGrid::filled(1, 1, 0.5);
-        cells.velocity_x = ThermoGrid::filled(1, 1, 3.0);
-        cells.velocity_y = ThermoGrid::filled(1, 1, 4.0);
-        cells.update_flow_speed();
+        cells.set_flow_velocity_grids(ThermoGrid::filled(1, 1, 3.0), ThermoGrid::filled(1, 1, 4.0));
         let value = |field: ScalarField| field.grid(&cells).get(0, 0);
         assert_eq!(value(ScalarField::Temperature), 1.0);
         assert_eq!(value(ScalarField::Pressure), 2.0);

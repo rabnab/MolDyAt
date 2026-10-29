@@ -92,8 +92,10 @@ fn populated_snapshot() -> RendererSnapshot {
     snapshot.fields.cells.temperature = ThermoGrid::filled(rows, cols, 1.5);
     snapshot.fields.cells.pressure = ThermoGrid::filled(rows, cols, f32::NAN);
     snapshot.fields.cells.density = ThermoGrid::filled(rows, cols, 0.3);
-    snapshot.fields.cells.velocity_x = ThermoGrid::filled(rows, cols, 0.5);
-    snapshot.fields.cells.velocity_y = ThermoGrid::filled(rows, cols, -0.2);
+    snapshot.fields.cells.set_flow_velocity_grids(
+        ThermoGrid::filled(rows, cols, 0.5),
+        ThermoGrid::filled(rows, cols, -0.2),
+    );
 
     let ops = &mut snapshot.operators;
     let (a, b) = (Vec2D::new(5.0, 30.0), Vec2D::new(35.0, 30.0));
