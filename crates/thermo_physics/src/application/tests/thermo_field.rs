@@ -31,11 +31,10 @@ fn make_ball(id: usize, pos: Vec2D, velocity: Vec2D, mass: f32) -> Ball2D {
 /// Fields with temperature `t` and pressure `p`, the other grids zero.
 fn tp(t: ThermoGrid, p: ThermoGrid) -> CellFields {
     let (rows, cols) = t.shape();
-    CellFields {
-        temperature: t,
-        pressure: p,
-        ..CellFields::filled(rows, cols, 0.0)
-    }
+    let mut fields = CellFields::filled(rows, cols, 0.0);
+    fields.temperature = t;
+    fields.pressure = p;
+    fields
 }
 
 fn average_tp(h: &ThermoFieldHistory) -> (ThermoGrid, ThermoGrid) {
@@ -492,9 +491,9 @@ fn test_flow_velocity_is_the_mass_weighted_mean_velocity() {
     ];
     let forces = vec![make_force_result(0.0); 2];
     let fields = compute_cell_fields(&balls, &forces, &world, 1, 1);
-    assert!(fields.velocity_x.get(0, 0).abs() < 1e-6);
-    assert!((fields.velocity_y.get(0, 0) - 2.0).abs() < 1e-6);
-    assert!((fields.flow_speed.get(0, 0) - 2.0).abs() < 1e-6);
+    assert!(fields.velocity_x().get(0, 0).abs() < 1e-6);
+    assert!((fields.velocity_y().get(0, 0) - 2.0).abs() < 1e-6);
+    assert!((fields.flow_speed().get(0, 0) - 2.0).abs() < 1e-6);
 }
 
 #[test]
@@ -508,21 +507,24 @@ fn test_one_ball_has_a_flow_velocity_but_no_temperature() {
     )];
     let forces = vec![make_force_result(0.0)];
     let fields = compute_cell_fields(&balls, &forces, &world, 1, 2);
-    assert_eq!(fields.flow_speed.get(0, 0), 5.0);
+    assert_eq!(fields.flow_speed().get(0, 0), 5.0);
     assert!(fields.temperature.get(0, 0).is_nan());
-    assert!(fields.velocity_x.get(0, 1).is_nan(), "empty cell");
-    assert!(fields.flow_speed.get(0, 1).is_nan());
+    assert!(fields.velocity_x().get(0, 1).is_nan(), "empty cell");
+    assert!(fields.flow_speed().get(0, 1).is_nan());
 }
 
 #[test]
 fn test_history_averages_every_field() {
     let mut h = ThermoFieldHistory::with_window(2);
     let mut a = CellFields::filled(1, 1, 1.0);
-    a.velocity_x = ThermoGrid::filled(1, 1, f32::NAN);
+    a.set_flow_velocity_grids(
+        ThermoGrid::filled(1, 1, f32::NAN),
+        ThermoGrid::filled(1, 1, 1.0),
+    );
     h.push(a);
     h.push(CellFields::filled(1, 1, 3.0));
     let avg = h.average().unwrap();
     assert_eq!(avg.density.get(0, 0), 2.0);
-    assert_eq!(avg.velocity_y.get(0, 0), 2.0);
-    assert_eq!(avg.velocity_x.get(0, 0), 3.0, "NaN samples are skipped");
+    assert_eq!(avg.velocity_y().get(0, 0), 2.0);
+    assert_eq!(avg.velocity_x().get(0, 0), 3.0, "NaN samples are skipped");
 }

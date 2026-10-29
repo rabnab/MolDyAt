@@ -23,10 +23,8 @@ fn spec() -> ThermoGridSpec {
 fn cells(vx: [f32; 2], vy: [f32; 2]) -> CellFields {
     let mut cells = CellFields::filled(1, 2, 0.0);
     for (c, (x, y)) in vx.into_iter().zip(vy).enumerate() {
-        cells.velocity_x.set(0, c, x);
-        cells.velocity_y.set(0, c, y);
+        cells.set_flow_velocity(0, c, x, y);
     }
-    cells.update_flow_speed();
     cells
 }
 
@@ -55,8 +53,7 @@ fn the_fastest_cell_gets_the_longest_arrow_along_its_flow() {
 fn cells_without_flow_get_no_arrow() {
     let mut verts = Vec::new();
     let mut fields = cells([1.0, 0.0], [0.0, 0.0]);
-    fields.velocity_x.set(0, 1, f32::NAN);
-    fields.update_flow_speed();
+    fields.set_flow_velocity(0, 1, f32::NAN, 0.0);
     flow_arrow_vertices(&fields, &spec(), &mut verts);
     assert_eq!(verts.len(), 6, "only the moving cell");
 
