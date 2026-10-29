@@ -221,6 +221,10 @@ pub fn thermo_grid_dims(world_width: f32, world_height: f32) -> (usize, usize) {
 /// The per-cell fields of the thermo grid (#342): every scalar the
 /// heatmap can show, and the flow velocity the arrows show. All grids have
 /// the same shape; row 0 is the bottom of the world.
+///
+/// The flow velocity is private and set only through
+/// [`Self::set_flow_velocity`] or [`Self::set_flow_velocity_grids`], which
+/// keep the derived [`Self::flow_speed`] in step with it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CellFields {
     /// Centre-of-mass-frame temperature; NaN for cells with fewer than 2
@@ -230,31 +234,16 @@ pub struct CellFields {
     pub pressure: ThermoGrid,
     /// Number density: balls per unit area; 0 for an empty cell.
     pub density: ThermoGrid,
-    /// x of the centre-of-mass (flow) velocity; NaN for an empty cell.
-    pub velocity_x: ThermoGrid,
-    /// y of the centre-of-mass (flow) velocity; NaN for an empty cell.
-    pub velocity_y: ThermoGrid,
-    /// Flow speed `|v_com|` from `velocity_x` and `velocity_y` (the
-    /// arrows' length), kept so the renderer only borrows it; NaN for an
-    /// empty cell. Derived, not averaged: [`Self::update_flow_speed`]
-    /// refreshes it after the components change.
-    pub flow_speed: ThermoGrid,
+    velocity_x: ThermoGrid,
+    velocity_y: ThermoGrid,
+    flow_speed: ThermoGrid,
 }
 
 impl CellFields {
     /// Every grid `rows` x `cols`, filled with `value`.
     pub fn filled(rows: usize, cols: usize, value: f32) -> Self {
         let grid = ThermoGrid::filled(rows, cols, value);
-        let mut fields = Self {
-            temperature: grid.clone(),
-            pressure: grid.clone(),
-            density: grid.clone(),
-            velocity_x: grid.clone(),
-            velocity_y: grid.clone(),
-            flow_speed: grid,
-        };
-        fields.update_flow_speed();
-        fields
+        Self::from_grids([grid.clone(), grid.clone(), grid.clone(), grid.clone(), grid])
     }
 
     /// Fields of an empty (0 x 0) grid.
@@ -267,8 +256,44 @@ impl CellFields {
         self.temperature.shape()
     }
 
+    /// x of the centre-of-mass (flow) velocity; NaN for an empty cell.
+    pub fn velocity_x(&self) -> &ThermoGrid {
+        &self.velocity_x
+    }
+
+    /// y of the centre-of-mass (flow) velocity; NaN for an empty cell.
+    pub fn velocity_y(&self) -> &ThermoGrid {
+        &self.velocity_y
+    }
+
+    /// Flow speed `|v_com|` (the arrows' length), kept so the renderer only
+    /// borrows it; NaN for an empty cell. Derived from the velocity, not
+    /// averaged.
+    pub fn flow_speed(&self) -> &ThermoGrid {
+        &self.flow_speed
+    }
+
+    /// Set the flow velocity of cell `(row, col)` and its speed.
+    pub fn set_flow_velocity(&mut self, row: usize, col: usize, vx: f32, vy: f32) {
+        self.velocity_x.set(row, col, vx);
+        self.velocity_y.set(row, col, vy);
+        self.flow_speed.set(row, col, vx.hypot(vy));
+    }
+
+    /// Replace the flow velocity grids and recompute the speed. Both grids
+    /// must have the fields' shape.
+    pub fn set_flow_velocity_grids(&mut self, vx: ThermoGrid, vy: ThermoGrid) {
+        assert!(
+            vx.shape() == self.shape() && vy.shape() == self.shape(),
+            "flow velocity grids must have the fields' shape"
+        );
+        self.velocity_x = vx;
+        self.velocity_y = vy;
+        self.update_flow_speed();
+    }
+
     /// Recompute [`Self::flow_speed`] from the velocity components.
-    pub fn update_flow_speed(&mut self) {
+    fn update_flow_speed(&mut self) {
         let speeds = self
             .velocity_x
             .data
@@ -280,18 +305,19 @@ impl CellFields {
         (self.flow_speed.rows, self.flow_speed.cols) = self.shape();
     }
 
-    fn grids(&self) -> [&ThermoGrid; CELL_FIELD_COUNT] {
+    /// The averaged (source) grids, in the order of [`Self::from_grids`].
+    fn into_grids(self) -> [ThermoGrid; CELL_FIELD_COUNT] {
         [
-            &self.temperature,
-            &self.pressure,
-            &self.density,
-            &self.velocity_x,
-            &self.velocity_y,
+            self.temperature,
+            self.pressure,
+            self.density,
+            self.velocity_x,
+            self.velocity_y,
         ]
     }
 
-    /// The averaged grids, in the order of [`Self::grids`], with the flow
-    /// speed derived from the averaged velocity.
+    /// Fields from the source grids, with the flow speed derived from the
+    /// velocity.
     fn from_grids(
         [temperature, pressure, density, velocity_x, velocity_y]: [ThermoGrid; CELL_FIELD_COUNT],
     ) -> Self {
@@ -371,8 +397,7 @@ pub fn compute_cell_fields(
                 .density
                 .set(r, c, cs.kinetic.count() as f32 / cell_area);
             if let Some(v) = cs.kinetic.flow_velocity() {
-                fields.velocity_x.set(r, c, v.x);
-                fields.velocity_y.set(r, c, v.y);
+                fields.set_flow_velocity(r, c, v.x, v.y);
             }
             let Some(t) = cs.kinetic.temperature() else {
                 continue;
@@ -383,7 +408,6 @@ pub fn compute_cell_fields(
         }
     }
 
-    fields.update_flow_speed();
     fields
 }
 
@@ -411,7 +435,7 @@ pub const THERMO_WINDOW: usize = THERMO_WINDOW_STEPS / THERMO_SAMPLE_STRIDE;
 /// species (#290).
 pub struct ThermoFieldHistory {
     window: usize,
-    buffer: VecDeque<CellFields>,
+    buffer: VecDeque<[ThermoGrid; CELL_FIELD_COUNT]>,
     shape: (usize, usize),
     sums: [Vec<f32>; CELL_FIELD_COUNT],
     counts: [Vec<u32>; CELL_FIELD_COUNT],
@@ -467,9 +491,11 @@ impl ThermoFieldHistory {
     pub fn push(&mut self, fields: CellFields) {
         let new_shape = fields.shape();
         let new_len = new_shape.0 * new_shape.1;
+        // Only the source grids are kept: the flow speed is derived again
+        // from the averaged velocity.
+        let grids = fields.into_grids();
         debug_assert!(
-            fields
-                .grids()
+            grids
                 .iter()
                 .all(|g| g.shape() == new_shape && g.data.len() == new_len),
             "every field must have the same shape"
@@ -486,25 +512,15 @@ impl ThermoFieldHistory {
         if self.buffer.len() == self.window
             && let Some(old) = self.buffer.pop_front()
         {
-            for ((grid, sums), counts) in old
-                .grids()
-                .into_iter()
-                .zip(&mut self.sums)
-                .zip(&mut self.counts)
-            {
+            for ((grid, sums), counts) in old.iter().zip(&mut self.sums).zip(&mut self.counts) {
                 Self::remove_grid(grid, sums, counts);
             }
         }
 
-        for ((grid, sums), counts) in fields
-            .grids()
-            .into_iter()
-            .zip(&mut self.sums)
-            .zip(&mut self.counts)
-        {
+        for ((grid, sums), counts) in grids.iter().zip(&mut self.sums).zip(&mut self.counts) {
             Self::add_grid(grid, sums, counts);
         }
-        self.buffer.push_back(fields);
+        self.buffer.push_back(grids);
     }
 
     /// Compute element-wise NaN-aware averages over the buffered samples.
