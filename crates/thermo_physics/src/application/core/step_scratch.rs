@@ -26,7 +26,6 @@
 use super::SimulationWorld;
 use super::line_segments::{Obstacle, OverlapPass};
 use super::simulation_engine::ApplyStats;
-use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::ForceResult;
 use crate::objects2d::ball_impl::ball_core::BounceInfo;
 use crate::objects2d::ball_impl::verlet::HoodRebuild;
@@ -41,8 +40,6 @@ pub(crate) type NeighbourStats = (usize, usize, f32, f32, bool);
 
 #[derive(Default)]
 pub(crate) struct StepScratch {
-    /// Ball positions before the step, to move balls between grid cells.
-    pub(crate) old_positions: Vec<Vec2D>,
     /// Buffers of `SimulationEngine::update_sim`.
     pub(crate) update: UpdateScratch,
     /// Buffers of the neighbour-list rebuild.
@@ -71,8 +68,6 @@ pub(crate) struct UpdateScratch {
 
 #[derive(Default)]
 pub(crate) struct RebuildScratch {
-    /// The flat cell index of each ball.
-    pub(crate) cell_of: Vec<u32>,
     /// What each ball needs (see [`CheckedBall`]).
     pub(crate) checked: Vec<CheckedBall>,
     /// (ball, cell row, cell column) of the rebuilding balls.

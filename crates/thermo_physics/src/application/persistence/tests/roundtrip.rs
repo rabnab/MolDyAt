@@ -136,9 +136,9 @@ fn loaded_world_starts_fresh_and_keeps_running() {
         0,
         "run-time state is not restored"
     );
-    for ball in &target.world().balls {
+    for (i, ball) in target.world().balls.iter().enumerate() {
         assert!(
-            ball.current_cell.is_some(),
+            target.world().cell_grid.cell_of_ball(i).is_some(),
             "ball {} not in a cell",
             ball.get_id()
         );

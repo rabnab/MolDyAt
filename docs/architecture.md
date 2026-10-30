@@ -123,8 +123,17 @@ headless runs; both step with the configured time step.
    `gravity_potential`). Changing gravity or adding balls shifts the total
    energy: it measures drift only while gravity and the ball count stay
    fixed.
-5. **cells**: source spheres emit balls, balls move between grid cells,
-   invalid (NaN) balls are removed.
+5. **cells**: source spheres emit balls, the cell grid is rebuilt from
+   the new positions, invalid (NaN) balls are removed, and every
+   `reorder_interval` steps (`[neighbours]`, 0 = never) the balls are
+   sorted by cell. The grid (`CellGrid`, P4) is a counting sort: each
+   ball's cell is computed in parallel, then one serial pass in ball order
+   fills `sorted` (ball indices cell by cell, ascending within a cell) and
+   `cell_start` (each cell's range). Balls added between two rebuilds go
+   into short per-cell lists that lookups also read. Sorting the balls
+   permutes them by `sorted` and renumbers the Verlet lists
+   (`Verlet::remap`) and the cached force results; it changes the order of
+   f32 sums, so runs with and without it are not bit-identical.
 6. **thermo**: global temperature.
 
 While a field overlay is shown, the physics thread also samples the

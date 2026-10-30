@@ -447,6 +447,7 @@ cutoff_factor = 4.0           # 1.2..10, pair cutoff in units of sigma_ij
 
 [neighbours]
 skin_factor = 0.2             # 0.01..1, Verlet skin as a share of the N2 cutoff
+reorder_interval = 0          # steps between sorts of the balls by cell (memory locality); 0 = never
 
 [display]
 snapshot_interval_us = 16667  # 1000..1000000, least time between two frames sent to the window

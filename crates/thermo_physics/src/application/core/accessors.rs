@@ -236,6 +236,7 @@ impl MainContent {
             },
             neighbours: NeighbourConfig {
                 skin_factor: physics.skin_factor(),
+                reorder_interval: self.world.reorder_interval,
             },
             display: DisplayConfig {
                 snapshot_interval_us: self.runtime.snapshot_interval_us,
