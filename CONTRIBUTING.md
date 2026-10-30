@@ -15,6 +15,7 @@ rustup install nightly
 This project has comprehensive instructions for GitHub Copilot to help with development. If you're using GitHub Copilot, please review:
 
 - **[Copilot Instructions](.github/copilot-instructions.md)** - Complete guidelines for working with Copilot on this project
+- **[Area rules](.github/instructions/)** - Rules for one part of the code (`physics.instructions.md`, `ui.instructions.md`), applied by path
 - **[Quick Reference](.github/instructions/Common_rules)** - IDE-specific quick reference for JetBrains/RustRover
 
 These instructions cover:

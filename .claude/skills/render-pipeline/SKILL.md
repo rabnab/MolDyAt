@@ -45,7 +45,7 @@ pub trait RenderPipeline: Any {
 - `render/gpu/tests/shaders.rs` validates every registered WGSL with naga (runs everywhere, no GPU needed).
 - `wgpu_renderer/src/wgpu/tests/gpu_smoke.rs` builds every pipeline on a real device and records a populated frame with the main window's `encode_frame` into an offscreen target; it is skipped without a GPU adapter, so a green CI run does not prove it ran. Run it locally on a machine with a GPU after pipeline changes.
 - Unit-test geometry builders and instance generation without a device (see `tests/highlight_pipeline.rs`, `tests/sidebar_pipeline.rs`, `tests/thermostat_label_pipeline.rs`).
-- Commands: `cargo test -p moldyat_wgpu`, then `cargo fmt` and `cargo clippy --workspace -- -D warnings`. New `.rs` and `.wgsl` files start with the MPL-2.0 header.
+- Commands: `cargo test -p moldyat_wgpu`.
 
 ## The energy plot window
 `PlotPipeline` (`render/pipelines/plot_pipeline.rs`) is the one pipeline outside the render graph: it draws a `PlotScene` from `thermo_ui` (window pixels, laid out and unit-tested there) into the plot window's own surface (`render/plot_surface.rs`, kept per window by an opaque id; the shell owns the OS window). It still builds only `GpuBatch`es and takes its shaders (`plot_segment.wgsl`, `plot_text.wgsl`) from `gpu/shaders.rs`. A change to what the plot shows belongs in `PlotScene::build`, not in the pipeline.

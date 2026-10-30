@@ -26,9 +26,7 @@ scripts/headless_perf.sh "$TMPDIR/moldyat-base" target/perf/moldyat > perf.json
 
 Ratio of medians per scenario and phase:
 ```bash
-jq -r '.results | group_by(.scenario)[] | .[0] as $a | .[1] as $b
-  | $a.ms_per_step | keys_unsorted[] as $p
-  | "\($a.scenario)\t\($p)\t\($a.ms_per_step[$p].median)\t\($b.ms_per_step[$p].median)\t\(($b.ms_per_step[$p].median / ($a.ms_per_step[$p].median + 1e-12) * 100 - 100) | floor)%"' perf.json
+scripts/perf_ratio.sh perf.json
 ```
 
 ## Reading the phases

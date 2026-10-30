@@ -18,6 +18,7 @@ description: Procedure for diagnosing a failed or warning CI run - finding the f
 The pinned nightly is set in `rust-toolchain.toml` and mirrored in `RUST_NIGHTLY` in `ci.yml`; a mismatch shows up as different clippy or rustfmt results than locally.
 
 ## Getting the facts
+With GitHub MCP tools connected (cloud sessions), use their equivalents of these `gh` commands; see "Tools" in `.github/copilot-instructions.md`.
 ```bash
 gh pr checks <PR>
 gh run list --branch <branch> --limit 5

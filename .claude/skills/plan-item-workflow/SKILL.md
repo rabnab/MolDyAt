@@ -5,7 +5,7 @@ description: End-to-end workflow for implementing one item of docs/plan/refactor
 
 # Plan Item Workflow
 
-Each item in `docs/plan/refactoring-plan.md` is one issue and one PR. IDs (`M1`, `P3`, ...) are plan-local; the issue number is in the plan's §4 issue table. Policies referenced here live in `.github/copilot-instructions.md` and `CONTRIBUTING.md`.
+Each item in `docs/plan/refactoring-plan.md` is one issue and one PR. IDs (`M1`, `P3`, ...) are plan-local; the issue number is in the plan's §4 issue table. Policies referenced here live in `.github/copilot-instructions.md` and `CONTRIBUTING.md`. GitHub steps are written as `gh` commands; with GitHub MCP tools connected (cloud sessions), use their equivalents (see "Tools" in `.github/copilot-instructions.md`).
 
 ## 1. Pick and understand the item
 - Check the item's **Deps** column in §3: all hard prerequisites must have landed (§4 table, "Landed on `master`"). Follow the phase order in §4 unless the user says otherwise.
@@ -32,13 +32,7 @@ Decide first whether the item may change simulation results.
 
 Reproducibility is a hard requirement (plan decision 4): no float `sum`/`reduce` whose order depends on Rayon scheduling. Collect parallel results in index order and reduce serially or in fixed chunks.
 
-Always, before each commit (`.rs`, `.toml` or `.lock` changed):
-```bash
-cargo fmt
-cargo clippy --workspace -- -D warnings
-cargo test -p <package> <filter>      # smallest scope first, then the gates above
-```
-New `.rs` / `.wgsl` files start with the MPL-2.0 header. Tests go in topic files under `tests/`.
+Before each commit: the validation policy in `.github/copilot-instructions.md` (smallest test scope first, then the gates above).
 
 ## 4. Commits
 - Imperative title with the issue number, matching the history: `Reuse step scratch buffers instead of allocating per step (#228)`.

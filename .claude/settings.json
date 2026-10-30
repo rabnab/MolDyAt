@@ -3,7 +3,6 @@
     "allow": [
       "mcp__rustrover__read_file",
       "Bash(cargo test *)",
-      "Bash(sed -n *)",
       "Bash(git --no-pager diff *)",
       "Bash(git --no-pager show *)",
       "Bash(git --no-pager status *)",
@@ -16,6 +15,9 @@
       "Bash(git --no-pager rev-list *)",
       "Bash(git --no-pager branch --list *)",
       "mcp__rustrover__search_text",
+      "mcp__rustrover__search_file",
+      "mcp__rustrover__list_directory_tree",
+      "mcp__rustrover__git_status",
       "Bash(cargo ci-test-headless-regression)",
       "Bash(cargo ci-test-drift)",
       "Bash(git check-ignore *)",
