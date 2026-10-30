@@ -703,7 +703,7 @@ mod plot_view {
     }
 
     #[test]
-    fn panning_back_to_the_newest_sample_resumes_the_series() {
+    fn panning_back_to_the_newest_sample_keeps_the_pause() {
         let metrics = MetricsRegistry::shared();
         let shared = shared_with_metrics(&metrics);
         let mut manager = EnergyWindowManager::new(shared.clone());
@@ -717,6 +717,13 @@ mod plot_view {
         assert_eq!(recorded_kin(&shared), 1);
 
         manager.pan_plot(-1000.0);
+        assert!(
+            !manager.plot_view().is_following(),
+            "only a reset ends a pause"
+        );
+        assert_eq!(recorded_kin(&shared), 1, "still frozen");
+
+        manager.reset_plot_view();
         assert!(manager.plot_view().is_following());
         assert_eq!(recorded_kin(&shared), 2);
     }
