@@ -142,6 +142,7 @@ fn every_key_is_read() {
          cutoff_factor = 3.5\n\
          [neighbours]\n\
          skin_factor = 0.25\n\
+         reorder_interval = 50\n\
          [display]\n\
          snapshot_interval_us = 33333\n",
     )

@@ -11,6 +11,16 @@ use rand::rng;
 use rand_distr::{Distribution, Normal};
 use rayon::prelude::*;
 
+/// How `place_candidate` checks a candidate against the balls.
+enum Collision<'a> {
+    /// Every ball (`is_ball_colliding`).
+    FullScan,
+    /// A batch index kept up to date (`is_ball_colliding_indexed`).
+    Indexed(&'a mut PlacementIndex),
+    /// The grid alone, right after a rebuild (`is_ball_colliding_in_grid`).
+    Grid,
+}
+
 impl MainContent {
     /// Add ball to simulation without collision checks.
     /// Ball is added to both the balls vector and the cell grid.
@@ -341,7 +351,19 @@ impl SimulationWorld {
         margin: f32,
         obstacles: &[Obstacle],
     ) -> AppResult {
-        self.place_candidate(candidate, margin, obstacles, None)
+        self.place_candidate(candidate, margin, obstacles, Collision::FullScan)
+    }
+
+    /// `add_candidate_ball_among` with the collision check from the grid
+    /// alone (`is_ball_colliding_in_grid`): only while the grid holds every
+    /// ball at its position, as right after `CellGrid::rebuild`.
+    pub(crate) fn add_candidate_ball_in_grid(
+        &mut self,
+        candidate: Ball2D,
+        margin: f32,
+        obstacles: &[Obstacle],
+    ) -> AppResult {
+        self.place_candidate(candidate, margin, obstacles, Collision::Grid)
     }
 
     /// `add_candidate_ball_among` for batch placement: the collision check
@@ -353,7 +375,7 @@ impl SimulationWorld {
         obstacles: &[Obstacle],
         index: &mut PlacementIndex,
     ) -> AppResult {
-        self.place_candidate(candidate, margin, obstacles, Some(index))
+        self.place_candidate(candidate, margin, obstacles, Collision::Indexed(index))
     }
 
     fn place_candidate(
@@ -361,16 +383,17 @@ impl SimulationWorld {
         candidate: Ball2D,
         margin: f32,
         obstacles: &[Obstacle],
-        index: Option<&mut PlacementIndex>,
+        check: Collision<'_>,
     ) -> AppResult {
         if !self.is_ball_in_region(&candidate) {
             return Err(AppError::CustomError(
                 "new ball not within region".to_string(),
             ));
         }
-        let colliding = match &index {
-            Some(index) => self.is_ball_colliding_indexed(&candidate, margin, index),
-            None => self.is_ball_colliding(&candidate, margin),
+        let colliding = match &check {
+            Collision::FullScan => self.is_ball_colliding(&candidate, margin),
+            Collision::Indexed(index) => self.is_ball_colliding_indexed(&candidate, margin, index),
+            Collision::Grid => self.is_ball_colliding_in_grid(&candidate, margin),
         };
         if colliding {
             return Err(AppError::CustomError(
@@ -383,7 +406,7 @@ impl SimulationWorld {
         }
 
         self.add_ball_and_register(candidate);
-        if let Some(index) = index {
+        if let Collision::Indexed(index) = check {
             index.note_added(self, self.balls.len() - 1);
         }
         self.sim.clear_energy();
@@ -441,8 +464,8 @@ impl SimulationWorld {
     /// the balls outside the grid in their order), so neighbours in space
     /// are neighbours in memory. Every index changes: the neighbour lists
     /// are renumbered (`Verlet::remap`; they keep the same partners, so no
-    /// rebuild is forced) and the grid is rebuilt now. Call right after a
-    /// grid rebuild, when the grid holds every ball in its sorted arrays.
+    /// rebuild is forced) and the grid is rebuilt now. Call after the grid
+    /// rebuild of a step; balls added since (emitted ones) go last.
     pub(crate) fn reorder_balls_by_cell(&mut self) {
         let n = self.balls.len();
         let mut order: Vec<usize> = Vec::with_capacity(n);

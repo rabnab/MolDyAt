@@ -128,6 +128,68 @@ fn test_indexed_collision_check_finds_balls_with_a_stale_cell() {
     assert!(!same_answer(world, &ball(&factory, 0.1, 0.0, M), 0.0));
 }
 
+/// `is_ball_colliding_in_grid` (#250) right after steps in which the balls
+/// changed cells gives the full scan's answer.
+#[test]
+fn test_grid_collision_check_matches_full_scan_after_balls_moved() {
+    let (mut main_content, _) = create_main_content_for_region(-50.0, 50.0);
+    main_content.seed_random_balls_with_speed(600, 6.0);
+    for _ in 0..30 {
+        main_content.simulation_step().unwrap();
+    }
+    let world = main_content.world();
+    assert!(world.cell_grid.matches_positions(&world.balls));
+
+    let factory = BallFactory::with_seed(3);
+    let mut rng = XorShift(0x2545_F491_4F6C_DD1D);
+    let (cell_x, _) = world.cell_grid.get_cell_size();
+    let margins = [0.0, 0.5, 0.9 * cell_x, 2.0 * cell_x];
+    let (mut hits, mut misses) = (0, 0);
+    for _ in 0..3000 {
+        let candidate = ball(
+            &factory,
+            rng.range(-55.0, 55.0),
+            rng.range(-55.0, 55.0),
+            rng.species(),
+        );
+        for margin in margins {
+            let in_grid = world.is_ball_colliding_in_grid(&candidate, margin);
+            let full = world.is_ball_colliding(&candidate, margin);
+            assert_eq!(
+                in_grid,
+                full,
+                "candidate at {:?}, margin {margin}",
+                candidate.get_position()
+            );
+            if full { hits += 1 } else { misses += 1 }
+        }
+    }
+    assert!(hits > 100 && misses > 100, "hits {hits}, misses {misses}");
+}
+
+/// A ball outside the grid is in no cell; the grid check still finds it
+/// through the grid's outside list.
+#[test]
+fn test_grid_collision_check_finds_balls_outside_the_grid() {
+    let (mut main_content, _) = create_main_content_for_region(-50.0, 50.0);
+    let factory = BallFactory::with_seed(1);
+    let world = main_content.world_mut();
+    world.balls.push(ball(&factory, 50.3, 0.0, M));
+    world.rebuild_cell_grid();
+    assert_eq!(world.cell_grid.outside_balls(), &[0]);
+
+    let inside = ball(&factory, 49.9, 0.0, M);
+    assert!(
+        world
+            .cell_grid
+            .get_cell_indices(inside.get_position())
+            .is_some()
+    );
+    assert!(world.is_ball_colliding_in_grid(&inside, 0.0));
+    assert!(world.is_ball_colliding(&inside, 0.0));
+    assert!(!world.is_ball_colliding_in_grid(&ball(&factory, 0.0, 0.0, M), 0.0));
+}
+
 #[test]
 fn test_indexed_placement_rejects_a_ball_placed_earlier_in_the_batch() {
     let (mut main_content, _) = create_main_content_for_region(-50.0, 50.0);

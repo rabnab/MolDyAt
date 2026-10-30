@@ -111,7 +111,15 @@ impl SimulationWorld {
             // species of new balls (the cursor's).
             let margin = self.species().species(params.ball_species).contact_radius();
 
-            let _ = self.add_candidate_ball_among(candidate, margin, &obstacles);
+            // Emission runs right after the grid rebuild of the `cells`
+            // phase, so the grid holds every ball at its position and the
+            // 3x3 cells around the candidate decide (#250).
+            #[cfg(test)]
+            if self.test_faults.emission_full_scan {
+                let _ = self.add_candidate_ball_among(candidate, margin, &obstacles);
+                continue;
+            }
+            let _ = self.add_candidate_ball_in_grid(candidate, margin, &obstacles);
         }
     }
 

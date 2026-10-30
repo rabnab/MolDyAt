@@ -76,6 +76,9 @@ pub struct CellGrid {
     late: Vec<Vec<u32>>,
     /// Cells with a non-empty `late` list, so a rebuild clears only those.
     late_cells: Vec<u32>,
+    /// Balls whose position was outside the grid when they were put in,
+    /// in ball order.
+    outside: Vec<u32>,
 }
 
 impl CellGrid {
@@ -119,6 +122,7 @@ impl CellGrid {
             fill: Vec::new(),
             late: vec![Vec::new(); cells],
             late_cells: Vec::new(),
+            outside: Vec::new(),
         })
     }
 
@@ -161,6 +165,23 @@ impl CellGrid {
         &self.sorted
     }
 
+    /// Balls the grid holds in no cell because their position was outside
+    /// it when they were put in.
+    pub(crate) fn outside_balls(&self) -> &[u32] {
+        &self.outside
+    }
+
+    /// Whether every ball is held in the cell of its current position (or
+    /// listed outside the grid): true right after a rebuild and the adds
+    /// that follow it, until balls move. O(balls), for debug checks.
+    pub(crate) fn matches_positions(&self, balls: &[Ball2D]) -> bool {
+        self.cell_of.len() == balls.len()
+            && balls
+                .iter()
+                .zip(&self.cell_of)
+                .all(|(ball, &cell)| self.geometry.flat_cell(ball.get_position()) == cell)
+    }
+
     /// Put every ball into the cell of its position, from scratch: the cells
     /// in parallel, then one counting sort in ball order. O(balls + cells).
     pub(crate) fn rebuild(&mut self, balls: &[Ball2D]) {
@@ -186,8 +207,11 @@ impl CellGrid {
         self.fill.extend_from_slice(&self.cell_start[..cells]);
         self.sorted.clear();
         self.sorted.resize(self.cell_start[cells] as usize, 0);
+        self.outside.clear();
         for (ball_idx, &cell) in self.cell_of.iter().enumerate() {
-            if cell != NO_CELL {
+            if cell == NO_CELL {
+                self.outside.push(ball_idx as u32);
+            } else {
                 let slot = &mut self.fill[cell as usize];
                 self.sorted[*slot as usize] = ball_idx as u32;
                 *slot += 1;
@@ -208,7 +232,9 @@ impl CellGrid {
             self.cell_of.resize(ball_idx + 1, NO_CELL);
         }
         self.cell_of[ball_idx] = cell;
-        if cell != NO_CELL {
+        if cell == NO_CELL {
+            self.outside.push(ball_idx as u32);
+        } else {
             let late = &mut self.late[cell as usize];
             if late.is_empty() {
                 self.late_cells.push(cell);
@@ -240,8 +266,7 @@ impl CellGrid {
             let (start, end) = (self.cell_start[first], self.cell_start[last + 1]);
             f(&self.sorted[start as usize..end as usize]);
             if !self.late_cells.is_empty() {
-                for cell in first..=last {
-                    let late = &self.late[cell];
+                for late in &self.late[first..=last] {
                     if !late.is_empty() {
                         f(late);
                     }
