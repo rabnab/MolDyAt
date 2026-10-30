@@ -5,7 +5,6 @@ description: Contract for implementing or changing operators (line segment, valv
 
 # Operator Framework (AI Implementation Contract)
 
-Use this when implementing or changing operators (line segment, valve, thermostat, source sphere).
 `docs/operators.md` describes how operators work today; this file lists the rules for changing them.
 
 ## Sidebar And Tool Order
@@ -32,7 +31,7 @@ Use this when implementing or changing operators (line segment, valve, thermosta
 - The ghost wall (`SetGhostWall`) collides like a wall but must not count toward wall momentum.
 - Keep pressure/momentum accounting wired into collision resolution. `SimStats::wall_contacts` / `wall_overlap_corrections` count exact contacts and fallback corrections; the drift wall scenarios require 0 corrections.
 - Operators that change velocities after the force pass (thermostats) must refresh the velocity-derived stats in the same step (`refresh_velocity_stats`). Operators that add balls (source spheres) run after the velocity update, in the `cells` phase.
-- Physics changes must keep the drift suite green (`cargo ci-test-drift`); threshold changes follow `docs/drift-test.md`.
+- Physics changes follow the `physics-change` skill (drift suite, thresholds).
 
 ## Snapshot, Persistence And Headless Output
 A new operator type, or a new persistent field, must be added in all of these:
@@ -42,7 +41,6 @@ A new operator type, or a new persistent field, must be added in all of these:
 - Headless operator counts in `crates/thermo_runtime/src/headless_output.rs`.
 
 ## Test Requirements For Operator Changes
-- Place tests in topic files under `tests/` directories (no large inline test modules).
 - Minimum coverage:
   - Selection/mapping: icon index ↔ tool, atlas row count (`atlas_holds_one_row_per_textured_tool_in_registry_order`, `tool_list_maps_icons_and_tools_both_ways`)
   - Tool interaction: place, toggle, drag (a valve: move and resize, a click still toggles), scroll, reset on tool switch
@@ -56,4 +54,4 @@ A new operator type, or a new persistent field, must be added in all of these:
   - Simulation effects: `crates/thermo_physics/src/application/core/tests/`
   - Tools, sidebar mapping, hover: `crates/thermo_ui/src/graphics/renderer/event_loop/tests/`
   - WGPU sidebar and pipelines: `wgpu_renderer/src/wgpu/tests/`
-- The seeded operator fixture (`crates/thermo_runtime/src/headless_runner/fixtures/seeded_headless_operators.jsonl`) must match. Refresh it only for intended changes: `UPDATE_HEADLESS_FIXTURE=1 cargo ci-test-headless-regression`, rerun without the variable, and include the fixture diff in the PR.
+- The seeded operator fixture (`crates/thermo_runtime/src/headless_runner/fixtures/seeded_headless_operators.jsonl`) must match; refresh it only for intended changes (`headless-contract` skill, Fixtures).

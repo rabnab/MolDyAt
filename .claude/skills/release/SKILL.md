@@ -5,6 +5,8 @@ description: Procedure for cutting a MolDyAt release - choosing the version, bum
 
 # Release
 
+GitHub steps are written as `gh` commands; with GitHub MCP tools connected (cloud sessions), use their equivalents (see "Tools" in `.github/copilot-instructions.md`).
+
 Releases are built by `.github/workflows/release.yml` when a `v*` tag is pushed (or by `workflow_dispatch` with an existing tag). It builds the `dist` profile (portable `x86-64-v2`, not `native`) for `x86_64-unknown-linux-gnu` and `x86_64-pc-windows-msvc`, packages the `moldyat` binary with `README.md`, `LICENSE` and generated `THIRD_PARTY_LICENSES.md`, adds `.sha256` files, and creates the GitHub release with generated notes. Tags with a SemVer suffix (`v0.3.0-rc.1`) become pre-releases.
 
 Tagging and pushing are outward-facing: confirm the version and the commit with the user before creating or pushing a tag.

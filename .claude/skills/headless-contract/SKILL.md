@@ -47,5 +47,5 @@ A refactor must leave the fixtures untouched. If a fixture changes, the PR chang
 
 ## Checklist for a headless change
 - Tests: CLI parsing (defaults, errors), record serialization (fields, schema version, non-finite values), sequencing, detail levels, stdout vs file.
-- `cargo test -p thermo_runtime` (headless runner, output, timings, CLI options), `cargo test -p moldyat_wgpu` (the binary's command line), `cargo ci-test-headless-regression`, `cargo fmt`, `cargo clippy --workspace -- -D warnings`.
+- `cargo test -p thermo_runtime` (headless runner, output, timings, CLI options), `cargo test -p moldyat_wgpu` (the binary's command line), `cargo ci-test-headless-regression`.
 - Update `docs/headless.md` (flags table, record table, console line). If `scripts/headless_perf.sh` uses the changed flag, run it once.
