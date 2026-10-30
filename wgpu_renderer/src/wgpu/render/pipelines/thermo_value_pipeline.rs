@@ -15,26 +15,28 @@ use thermo_runtime::application::scene_layers::SceneLayers;
 
 use crate::wgpu::render::gpu::geometry::apply_view_proj;
 use crate::wgpu::render::gpu::text::{
-    BLACK_TEXT_COLOR, TextBatch, TextVertex, inset_glyph_ndc_size, push_label_vertices,
+    BLACK_TEXT_COLOR, GlyphAtlas, TextBatch, TextVertex, inset_glyph_ndc_size, push_label_vertices,
 };
 use crate::wgpu::render::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
-
-/// Characters stored in the atlas, in index order.
-const ATLAS_CHARS: [char; 12] = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '-'];
 
 pub struct ThermoValueOverlayPipeline {
     text: TextBatch,
 }
 
 impl ThermoValueOverlayPipeline {
-    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat) -> Self {
+    pub fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        format: wgpu::TextureFormat,
+        glyphs: &GlyphAtlas,
+    ) -> Self {
         Self {
             text: TextBatch::new(
                 device,
                 queue,
                 format,
                 "Thermo Value Overlay",
-                &ATLAS_CHARS,
+                glyphs,
                 BLACK_TEXT_COLOR,
             ),
         }
@@ -65,7 +67,6 @@ impl ThermoValueOverlayPipeline {
                 let (ndc_x, ndc_y) = apply_view_proj(view_proj, cx, cy);
                 push_label_vertices(
                     &mut verts,
-                    &ATLAS_CHARS,
                     &format!("{v:.2}"),
                     ndc_x,
                     ndc_y,

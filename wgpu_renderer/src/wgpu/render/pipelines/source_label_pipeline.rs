@@ -19,12 +19,9 @@ use crate::wgpu::render::gpu::label_background::{
     CapsuleInstance, LabelBackground, capsule_for_label,
 };
 use crate::wgpu::render::gpu::text::{
-    ASCII_CHARS, BLACK_TEXT_COLOR, TextBatch, TextVertex, inset_glyph_ndc_size, push_label_vertices,
+    BLACK_TEXT_COLOR, GlyphAtlas, TextBatch, TextVertex, inset_glyph_ndc_size, push_label_vertices,
 };
 use crate::wgpu::render::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
-
-/// Printable ASCII: species names are user-defined (`[[species]]`).
-const ATLAS_CHARS: [char; 95] = ASCII_CHARS;
 
 /// Distance of the labels from the sphere centre, in sphere radii. The arc
 /// indicators sit at 1.15 and 1.35 radii, so this keeps the labels outside them.
@@ -62,14 +59,19 @@ pub(crate) fn label_texts(
 }
 
 impl SourceLabelPipeline {
-    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat) -> Self {
+    pub fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        format: wgpu::TextureFormat,
+        glyphs: &GlyphAtlas,
+    ) -> Self {
         Self {
             text: TextBatch::new(
                 device,
                 queue,
                 format,
                 "Source Sphere Label",
-                &ATLAS_CHARS,
+                glyphs,
                 BLACK_TEXT_COLOR,
             ),
             background: LabelBackground::new(device, format),
@@ -106,15 +108,7 @@ impl SourceLabelPipeline {
 
             for (label, x, y) in labels {
                 let start = verts.len();
-                push_label_vertices(
-                    &mut verts,
-                    &ATLAS_CHARS,
-                    label,
-                    x,
-                    y,
-                    glyph_ndc_w,
-                    glyph_ndc_h,
-                );
+                push_label_vertices(&mut verts, label, x, y, glyph_ndc_w, glyph_ndc_h);
 
                 if let Some(capsule) = capsule_for_label(&verts[start..], glyph_ndc_w, glyph_ndc_h)
                 {

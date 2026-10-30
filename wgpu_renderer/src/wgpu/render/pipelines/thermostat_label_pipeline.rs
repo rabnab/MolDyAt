@@ -19,13 +19,9 @@ use crate::wgpu::render::gpu::label_background::{
     CapsuleInstance, LabelBackground, capsule_for_label,
 };
 use crate::wgpu::render::gpu::text::{
-    BLACK_TEXT_COLOR, TextBatch, TextVertex, inset_glyph_ndc_size, push_label_vertices,
+    BLACK_TEXT_COLOR, GlyphAtlas, TextBatch, TextVertex, inset_glyph_ndc_size, push_label_vertices,
 };
 use crate::wgpu::render::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
-
-const ATLAS_CHARS: [char; 17] = [
-    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '-', ':', 'L', 'T', 'O', 'F',
-];
 
 /// Added to the local temperature label of a deactivated thermostat: the
 /// value is still measured live, but nothing regulates it.
@@ -79,14 +75,19 @@ pub struct ThermostatLabelPipeline {
 }
 
 impl ThermostatLabelPipeline {
-    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat) -> Self {
+    pub fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        format: wgpu::TextureFormat,
+        glyphs: &GlyphAtlas,
+    ) -> Self {
         Self {
             text: TextBatch::new(
                 device,
                 queue,
                 format,
                 "Thermostat Label",
-                &ATLAS_CHARS,
+                glyphs,
                 BLACK_TEXT_COLOR,
             ),
             background: LabelBackground::new(device, format),
@@ -176,15 +177,7 @@ impl ThermostatLabelPipeline {
 
             for (label, x, y) in labels {
                 let start = verts.len();
-                push_label_vertices(
-                    &mut verts,
-                    &ATLAS_CHARS,
-                    label,
-                    x,
-                    y,
-                    glyph_ndc_w,
-                    glyph_ndc_h,
-                );
+                push_label_vertices(&mut verts, label, x, y, glyph_ndc_w, glyph_ndc_h);
 
                 if let Some(capsule) = capsule_for_label(&verts[start..], glyph_ndc_w, glyph_ndc_h)
                 {

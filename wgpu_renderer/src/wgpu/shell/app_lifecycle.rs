@@ -53,7 +53,7 @@ impl AppLifecycle {
         let ctx = WgpuContext::new(render_window, event_loop.owned_display_handle());
         log::debug!("WGPU context initialized, window size: {:?}", ctx.size());
 
-        let pipelines = WgpuPipelines::new(&ctx.device, &ctx.queue, ctx.format);
+        let pipelines = WgpuPipelines::new(&ctx.device, &ctx.queue, ctx.format, &ctx.glyphs);
 
         let initial_world_bounds = application.world().world_region();
         let window_size = (ctx.size().0 as f32, ctx.size().1 as f32);

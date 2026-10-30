@@ -2,9 +2,11 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Bitmap text: an 8×8 glyph atlas built from `font8x8` plus a [`GpuBatch`]
-//! of glyph quads in NDC. Used by every text overlay (cursor readout, cell
-//! values, thermostat and source-sphere labels). See `text.wgsl`.
+//! Bitmap text: one 8×8 glyph atlas of printable ASCII built from
+//! `font8x8` ([`GlyphAtlas`], one per renderer, #303) plus a [`GpuBatch`]
+//! of glyph quads in NDC per overlay. Used by every text overlay (cursor
+//! readout, cell values, thermostat and source-sphere labels, the sidebar
+//! label) and the plot window. See `text.wgsl`.
 
 use bytemuck::{Pod, Zeroable};
 use font8x8::UnicodeFonts;
@@ -66,12 +68,19 @@ pub(crate) fn window_glyph_ndc_size((win_w, win_h): (f32, f32), scale: f32) -> (
     )
 }
 
-/// Append one label (6 vertices per glyph) centred on `(center_x, center_y)`
-/// in NDC. Characters missing from `atlas_chars` are skipped but keep their
-/// space.
+/// Index of `ch` in the ASCII atlas (code order), `None` outside it.
+pub(crate) fn ascii_index(ch: char) -> Option<usize> {
+    (ch as usize)
+        .checked_sub(' ' as usize)
+        .filter(|&idx| idx < ASCII_CHARS.len())
+}
+
+/// Append one label (6 vertices per glyph of the [`GlyphAtlas`]) centred on
+/// `(center_x, center_y)` in NDC. A space emits its blank glyph, so the
+/// vertices span the whole label (label backgrounds are sized from them);
+/// characters outside printable ASCII emit no quad but keep their width.
 pub(crate) fn push_label_vertices(
     verts: &mut Vec<TextVertex>,
-    atlas_chars: &[char],
     label: &str,
     center_x: f32,
     center_y: f32,
@@ -81,20 +90,10 @@ pub(crate) fn push_label_vertices(
     let half_text_w = label.chars().count() as f32 * glyph_ndc_w * 0.5;
     let top = center_y + glyph_ndc_h * 0.5;
     let bottom = center_y - glyph_ndc_h * 0.5;
-    let atlas_len = atlas_chars.len() as f32;
-    // The printable-ASCII atlas is in code order: index by the code instead
-    // of searching its 95 glyphs for every character.
-    let ascii = atlas_chars == ASCII_CHARS.as_slice();
+    let atlas_len = ASCII_CHARS.len() as f32;
 
     for (i, ch) in label.chars().enumerate() {
-        let atlas_idx = if ascii {
-            (ch as usize)
-                .checked_sub(' ' as usize)
-                .filter(|&idx| idx < ASCII_CHARS.len())
-        } else {
-            atlas_chars.iter().position(|&glyph| glyph == ch)
-        };
-        let Some(atlas_idx) = atlas_idx else {
+        let Some(atlas_idx) = ascii_index(ch) else {
             continue;
         };
 
@@ -123,12 +122,42 @@ pub(crate) fn push_label_vertices(
     }
 }
 
-/// Glyph atlas + vertex batch for one text overlay in a single colour.
-/// Lay out labels with [`push_label_vertices`] using the same `atlas_chars`.
+/// The printable-ASCII glyph texture, built once per renderer and shared by
+/// every text batch and the plot window (#303): a batch keeps only its
+/// colour and vertices.
+pub(crate) struct GlyphAtlas {
+    /// Kept alive for the bind groups that sample `view`.
+    _texture: wgpu::Texture,
+    view: wgpu::TextureView,
+}
+
+impl GlyphAtlas {
+    pub(crate) fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
+        let width = ASCII_CHARS.len() as u32 * GLYPH_W;
+        let (texture, view) = textures::r8_texture(device, "Glyph Atlas", width, GLYPH_H);
+        textures::write_r8(
+            queue,
+            &texture,
+            &build_atlas_data(&ASCII_CHARS),
+            width,
+            GLYPH_H,
+        );
+        Self {
+            _texture: texture,
+            view,
+        }
+    }
+
+    /// The view the text shaders sample.
+    pub(crate) fn view(&self) -> &wgpu::TextureView {
+        &self.view
+    }
+}
+
+/// Vertex batch for one text overlay in a single colour, drawn from the
+/// shared [`GlyphAtlas`]. Lay out labels with [`push_label_vertices`].
 pub(crate) struct TextBatch {
     gpu: GpuBatch<TextVertex>,
-    /// Kept alive for the batch's bind group
-    _atlas: wgpu::Texture,
 }
 
 impl TextBatch {
@@ -137,19 +166,9 @@ impl TextBatch {
         queue: &wgpu::Queue,
         format: wgpu::TextureFormat,
         label: &'static str,
-        atlas_chars: &[char],
+        glyphs: &GlyphAtlas,
         color: [f32; 4],
     ) -> Self {
-        let atlas_w = atlas_chars.len() as u32 * GLYPH_W;
-        let (atlas, view) = textures::r8_texture(device, label, atlas_w, GLYPH_H);
-        textures::write_r8(
-            queue,
-            &atlas,
-            &build_atlas_data(atlas_chars),
-            atlas_w,
-            GLYPH_H,
-        );
-
         let gpu = GpuBatch::new(
             device,
             format,
@@ -160,11 +179,11 @@ impl TextBatch {
                 wgpu::PrimitiveTopology::TriangleList,
             )
             // Nearest keeps the 8×8 bitmap glyphs crisp.
-            .texture(&view, wgpu::FilterMode::Nearest),
+            .texture(glyphs.view(), wgpu::FilterMode::Nearest),
         );
         gpu.set_uniforms(queue, SceneUniforms::ndc(color));
 
-        Self { gpu, _atlas: atlas }
+        Self { gpu }
     }
 
     pub(crate) fn upload(

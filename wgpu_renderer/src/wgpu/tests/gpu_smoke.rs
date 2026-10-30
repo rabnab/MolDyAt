@@ -26,6 +26,7 @@ use thermo_ui::graphics::renderer::state_layers::{ScalarField, ThermoDisplayMode
 use crate::wgpu::MARGINS;
 use crate::wgpu::render::frame::encode_frame;
 use crate::wgpu::render::gpu::geometry::build_view_proj_matrix;
+use crate::wgpu::render::gpu::text::GlyphAtlas;
 use crate::wgpu::render::render_graph::PrepareContext;
 use crate::wgpu::render::wgpu_pipelines::WgpuPipelines;
 
@@ -194,7 +195,8 @@ fn all_pipelines_build_and_render_without_validation_errors() {
         sink.lock().unwrap().push(e.to_string());
     }));
 
-    let mut pipelines = WgpuPipelines::new(&device, &queue, FORMAT);
+    let glyphs = GlyphAtlas::new(&device, &queue);
+    let mut pipelines = WgpuPipelines::new(&device, &queue, FORMAT, &glyphs);
     let snapshot = populated_snapshot();
     let modes = [
         (ThermoDisplayMode::Off, true),
@@ -292,7 +294,8 @@ fn plot_pipeline_builds_and_renders_without_validation_errors() {
     assert!(full.plot_area.is_some() && !full.segments.is_empty());
 
     for format in [wgpu::TextureFormat::Bgra8Unorm, FORMAT] {
-        let mut pipeline = PlotPipeline::new(&device, &queue, format);
+        let glyphs = GlyphAtlas::new(&device, &queue);
+        let mut pipeline = PlotPipeline::new(&device, format, &glyphs);
         for scene in [&full, &empty, &full] {
             pipeline.prepare(&device, &queue, scene);
             let target = device.create_texture(&wgpu::TextureDescriptor {

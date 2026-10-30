@@ -329,13 +329,18 @@ Every visual layer is one `RenderPipeline` in
 `wgpu_renderer/src/wgpu/render/pipelines/`, registered in draw order in
 `WgpuPipelines::new`. All of them follow one pattern:
 
-- `new(device, queue, format)`, then `prepare()` fills a `Vec` of
+- `new(device, queue, format)` (text pipelines also take the shared
+  `GlyphAtlas`), then `prepare()` fills a `Vec` of
   `#[repr(C)]` instances or vertices and flushes it to a `GpuBatch`;
   `render()` only calls `draw()`.
 - `gpu/batch.rs` (`GpuBatch`) is the only place that creates wgpu pipelines,
   bind groups and buffers. It has two draw modes: instanced quads (one
   element is one quad, corners from `quad_corner()` in the shader) or plain
   vertex lists.
+- Text pipelines (cursor readout, cell values, thermostat, source-sphere
+  and sidebar labels) and the plot window draw from one printable-ASCII
+  `GlyphAtlas` per renderer (`gpu/text.rs`, held by `WgpuContext`, #303);
+  each `TextBatch` keeps only its colour and vertices.
 - Every shader is registered in `gpu/shaders.rs`, which prepends
   `shaders/common.wgsl` (uniforms `u.view_proj` / `u.params`, `quad_corner`,
   `aa`, `ring_band`). `u.params` is pipeline-specific and documented at the

@@ -9,6 +9,7 @@
 //! ball pipeline).
 
 use crate::wgpu::render::gpu::geometry::build_view_proj_matrix;
+use crate::wgpu::render::gpu::text::GlyphAtlas;
 use crate::wgpu::render::pipelines::ball_pipeline::BallPipeline;
 use crate::wgpu::render::pipelines::crosshair_pipeline::CrosshairPipeline;
 use crate::wgpu::render::pipelines::endpoint_pipeline::EndpointPipeline;
@@ -51,19 +52,28 @@ pub struct WgpuPipelines {
 impl WgpuPipelines {
     /// Create all rendering pipelines and register them in the graph.
     ///
-    /// Every pipeline is built the same way (`new(device, queue, format)`) and
-    /// registered in execution order (later pipelines draw on top). Each
-    /// pipeline picks its own viewport (full window or inset simulation pane).
-    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat) -> Self {
+    /// Every pipeline is built the same way (`new(device, queue, format)`,
+    /// text pipelines with the renderer's one glyph atlas `glyphs` as a
+    /// fourth argument, #303) and registered in execution order (later
+    /// pipelines draw on top). Each pipeline picks its own viewport (full
+    /// window or inset simulation pane).
+    pub fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        format: wgpu::TextureFormat,
+        glyphs: &GlyphAtlas,
+    ) -> Self {
         let mut graph = RenderGraph::new();
         let mut add = |pipeline: Box<dyn RenderPipeline>| graph.add_pipeline(pipeline);
 
-        add(Box::new(SidebarPipeline::new(device, queue, format)));
+        add(Box::new(SidebarPipeline::new(
+            device, queue, format, glyphs,
+        )));
         add(Box::new(FramePipeline::new(device, queue, format)));
         add(Box::new(GridPipeline::new(device, queue, format)));
         add(Box::new(ThermoHeatmapPipeline::new(device, queue, format)));
         add(Box::new(ThermoValueOverlayPipeline::new(
-            device, queue, format,
+            device, queue, format, glyphs,
         )));
         add(Box::new(FlowArrowPipeline::new(device, queue, format)));
         add(Box::new(WallPipeline::new(device, queue, format)));
@@ -76,10 +86,12 @@ impl WgpuPipelines {
         let ball = add(Box::new(BallPipeline::new(device, queue, format)));
         add(Box::new(CrosshairPipeline::new(device, queue, format)));
         add(Box::new(ThermostatLabelPipeline::new(
-            device, queue, format,
+            device, queue, format, glyphs,
         )));
-        add(Box::new(SourceLabelPipeline::new(device, queue, format)));
-        add(Box::new(TextPipeline::new(device, queue, format)));
+        add(Box::new(SourceLabelPipeline::new(
+            device, queue, format, glyphs,
+        )));
+        add(Box::new(TextPipeline::new(device, queue, format, glyphs)));
 
         log::debug!(
             "{} pipelines registered in RenderGraph",
