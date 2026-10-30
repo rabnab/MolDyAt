@@ -71,6 +71,8 @@ pub struct PrepareContext<'a> {
     pub current_ball_radius: f32,
     pub show_ball_outline: bool,
     pub window_size: (u32, u32),
+    /// The window's scale factor (at least 1): logical to physical pixels.
+    pub ui_scale: f32,
     /// Configured margins (sidebar and other UI in the margins).
     pub margin: Margins,
     /// Margins around the simulation drawing area: `margin` plus any
