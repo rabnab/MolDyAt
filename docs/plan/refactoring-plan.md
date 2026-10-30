@@ -189,7 +189,7 @@ Phase 3 (crate split):              M2, #295, #270, #273, #274, M5, C4, M7, M8, 
 Phase 4 (finish the split):         M9, I8a, #327, C3
 Phase 5 (metrics + plots):          V3, V7, V4a, V4b, C5
 Phase 6 (visuals + tools):          #363, V2, #290, V5, V6, #303, #203
-Phase 7 (performance):              P8a, P4, #250, P6, P8b
+Phase 7 (performance):              P8a, #386, P4, #250, P6, P8b
 Phase 8 (walls + water):            I12, I8b, I9 + I10 (once §7 is decided), I11 (if needed)
 ```
 
@@ -214,7 +214,7 @@ GitHub issues (every open issue is in a phase, as of 2026-10-23):
 | 4 | #329 | M9 #310 | I8a #334, #327, C3 #335, M10 |
 | 5 | #330 | V3 #336, V7 #337, V4a #338, #367, #366, V4b #339, #371, #372, C5 #340 | M10 |
 | 6 | #331 | #363, V2 #341, #290, V5 #342, V6 #343, #303, #203 | M10 |
-| 7 | #332 | P8a #344 | P4 #345, #250, P6 #346, P8b #213, M10 |
+| 7 | #332 | P8a #344 | #386, P4 #345, #250, P6 #346, P8b #213, M10 |
 | 8 | #333 | – | I12 #280, I8b #347, I9 #348, I10 #349, I11 #350, M10 |
 
 "Landed" is taken from the commits on `master` (as of 2026-10-23), not from
@@ -239,7 +239,8 @@ crate work, graphs, visuals, performance and water in two long lists:
   new visuals; #290 gives the heatmap its own grid before V5 generalises it.
 - **Phase 7** measures the f32 precision loss (P8a) before the large
   changes; the flat cell grid (P4, with P5) comes before the hot/cold split
-  (P6), and P8b only if P8a shows it is needed.
+  (P6), and P8b only if P8a shows it is needed. #386 (the crosshair
+  shrinks in large worlds) is small and independent.
 - **Phase 8** holds the physics extensions. I12 has no open prerequisites
   and can be pulled forward; I9 and I10 wait for the water-model decision
   (§7).
