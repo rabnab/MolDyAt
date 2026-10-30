@@ -157,9 +157,10 @@ impl Verlet {
     /// it can run for all balls in parallel; callers log verbose balls.
     pub(crate) fn begin_update(ball: &mut Ball2D, dt: f32, min_movement_threshold: f32) -> bool {
         let needs_update = ball
+            .cold
             .hood
             .needs_update_hood(ball, dt, min_movement_threshold);
-        ball.hood.updates_since_refresh += 1;
+        ball.cold.hood.updates_since_refresh += 1;
         ball.decrement_update_counter();
         if !needs_update {
             return false;
@@ -207,7 +208,7 @@ impl Verlet {
         // partners.
         let mut added = Vec::new();
         let mut removed = Vec::new();
-        let mut old_iter = ball.hood.neighbours.iter().copied().peekable();
+        let mut old_iter = ball.cold.hood.neighbours.iter().copied().peekable();
         for &neighbour_idx in &neighbours {
             while let Some(removed_idx) = old_iter.next_if(|&old_idx| old_idx < neighbour_idx) {
                 removed.push(removed_idx);
@@ -248,12 +249,12 @@ impl Verlet {
                 let radius = physics.list_radius(ball.species(), partner.species());
                 logging::log_neighbour_add(ball, partner, dist_sq, radius * radius);
             }
-            let partner_hood = &mut balls[neighbour_idx].hood;
+            let partner_hood = &mut balls[neighbour_idx].cold.hood;
             partner_hood.add_neighbour(ball_idx);
             partner_hood.hood_dirty = true;
         }
 
-        let hood = &mut balls[ball_idx].hood;
+        let hood = &mut balls[ball_idx].cold.hood;
         hood.neighbours = neighbours;
         hood.updates_since_refresh = 0;
         // Mark the hood as dirty since neighbors were updated
@@ -262,7 +263,7 @@ impl Verlet {
 
     /// Remove `ball_idx` from the list of its former neighbour `partner_idx`.
     fn unlink_partner(balls: &mut [Ball2D], partner_idx: usize, ball_idx: usize) {
-        let partner_hood = &mut balls[partner_idx].hood;
+        let partner_hood = &mut balls[partner_idx].cold.hood;
         partner_hood.remove(ball_idx);
         partner_hood.hood_dirty = true;
     }

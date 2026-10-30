@@ -121,7 +121,8 @@ fn every_pair_inside_its_cutoff_is_listed() {
             let r = balls[i].get_position().dist(balls[j].get_position()).norm();
             if r < world.physics.cutoff(balls[i].species(), balls[j].species()) {
                 assert!(
-                    balls[i].hood.is_a_neighbour_idx(j) && balls[j].hood.is_a_neighbour_idx(i),
+                    balls[i].cold.hood.is_a_neighbour_idx(j)
+                        && balls[j].cold.hood.is_a_neighbour_idx(i),
                     "pair {i}-{j} at {r} is not listed"
                 );
             }
@@ -155,7 +156,7 @@ fn cell_grid_follows_the_species_present() {
         mc.world().cell_grid.list_radius(),
         physics.list_radius(xl, xl)
     );
-    assert!(mc.world().balls[0].hood.is_a_neighbour_idx(1));
+    assert!(mc.world().balls[0].cold.hood.is_a_neighbour_idx(1));
 
     // Once the XL ball is gone, the next full rebuild shrinks the cells again.
     mc.world_mut().balls[1].set_position_and_update_tail(Vec2D::new(f32::NAN, 0.0));
@@ -196,8 +197,8 @@ fn cell_grid_fits_an_overridden_pair() {
         mc.world().cell_grid.list_radius(),
         physics.list_radius(n2, xs)
     );
-    assert!(mc.world().balls[0].hood.is_a_neighbour_idx(1));
-    assert!(mc.world().balls[1].hood.is_a_neighbour_idx(0));
+    assert!(mc.world().balls[0].cold.hood.is_a_neighbour_idx(1));
+    assert!(mc.world().balls[1].cold.hood.is_a_neighbour_idx(0));
 }
 
 #[test]

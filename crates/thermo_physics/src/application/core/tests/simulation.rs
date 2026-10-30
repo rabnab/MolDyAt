@@ -143,11 +143,11 @@ fn test_remove_invalid_balls_clears_neighbor_indices() {
     {
         let balls = &main_content.world().balls;
         assert!(
-            !balls[0].hood.get_neighbour_indices().is_empty(),
+            !balls[0].cold.hood.get_neighbour_indices().is_empty(),
             "Ball 0 should have neighbors before removal"
         );
         assert!(
-            !balls[1].hood.get_neighbour_indices().is_empty(),
+            !balls[1].cold.hood.get_neighbour_indices().is_empty(),
             "Ball 1 should have neighbors before removal"
         );
     }
@@ -173,7 +173,7 @@ fn test_remove_invalid_balls_clears_neighbor_indices() {
         let balls = &main_content.world().balls;
         for (idx, ball) in balls.iter().enumerate() {
             assert_eq!(
-                ball.hood.get_neighbour_indices().len(),
+                ball.cold.hood.get_neighbour_indices().len(),
                 0,
                 "Ball {} should have no neighbors after remove_invalid_balls",
                 idx
@@ -201,7 +201,7 @@ fn test_remove_invalid_balls_clears_neighbor_indices() {
         let balls = &main_content.world().balls;
         let num_balls = balls.len();
         for (ball_idx, ball) in balls.iter().enumerate() {
-            for &neighbor_idx in ball.hood.get_neighbour_indices() {
+            for &neighbor_idx in ball.cold.hood.get_neighbour_indices() {
                 assert!(
                     neighbor_idx < num_balls,
                     "Ball {} has invalid neighbor index {} (only {} balls exist)",

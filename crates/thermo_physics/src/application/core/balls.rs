@@ -185,7 +185,7 @@ impl MainContent {
         let mut pairs: Vec<(usize, usize, f32)> = Vec::new();
 
         for (i, ball) in self.world.balls.iter().enumerate() {
-            for &neighbor_idx in ball.hood.get_neighbour_indices() {
+            for &neighbor_idx in ball.cold.hood.get_neighbour_indices() {
                 // Only count each pair once (i < neighbor_idx)
                 if i < neighbor_idx {
                     let other = &self.world.balls[neighbor_idx];
@@ -305,7 +305,7 @@ impl SimulationWorld {
         // After retain, all indices have changed. Clear neighbor lists and force update.
         // This prevents stale indices from causing incorrect lookups or panics.
         for ball in &mut self.balls {
-            ball.hood.clear_neighbours();
+            ball.cold.hood.clear_neighbours();
             // Reset last_update_hood_pos to infinity to force update_hood on next check
             ball.last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
         }
@@ -501,7 +501,7 @@ impl SimulationWorld {
         }
         self.balls
             .par_iter_mut()
-            .for_each(|ball| ball.hood.remap(&new_index));
+            .for_each(|ball| ball.cold.hood.remap(&new_index));
         self.rebuild_cell_grid();
     }
 

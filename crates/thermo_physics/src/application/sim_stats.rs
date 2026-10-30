@@ -174,7 +174,7 @@ impl SimStats {
 
         for cur in v_balls {
             kinetic.add_ball(cur);
-            max_neighbours = max_neighbours.max(cur.hood.get_number_of_neighbors());
+            max_neighbours = max_neighbours.max(cur.cold.hood.get_number_of_neighbors());
         }
 
         self.max_neighbours = max_neighbours;
