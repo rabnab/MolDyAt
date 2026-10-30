@@ -16,7 +16,7 @@ use crate::application::core::TestFaults;
 const SIDE: usize = 16;
 const SPACING: f32 = 2.4;
 const THERMAL_V: f32 = 1.0;
-const STEPS: usize = 1_000;
+pub(super) const STEPS: usize = 1_000;
 /// Grid columns/rows of head-on projectile pairs: ball (i, j) moves +x and
 /// (i + 1, j) moves -x, so a few pairs are driven into the force-cap region
 /// while the bulk gas stays cool enough not to reach the walls.
@@ -228,7 +228,19 @@ fn run_dense_gas_timed(
     steps: usize,
     sample_every: usize,
 ) -> DenseGasRun {
-    let mut main_content = create_dense_harness_with_seed(404);
+    run_dense_gas_at(Vec2D::zero(), faults, projectiles, dt, steps, sample_every)
+}
+
+/// [`run_dense_gas_timed`] in a drift world centred on `center`.
+pub(super) fn run_dense_gas_at(
+    center: Vec2D,
+    faults: TestFaults,
+    projectiles: bool,
+    dt: f32,
+    steps: usize,
+    sample_every: usize,
+) -> DenseGasRun {
+    let mut main_content = create_dense_harness_at(404, center);
     main_content.world_mut().speed_limit_override = Some(f32::INFINITY);
     main_content.world_mut().test_faults = faults;
     populate_central_grid(&mut main_content, THERMAL_V, projectiles);
