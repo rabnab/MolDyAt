@@ -135,6 +135,7 @@ impl WgpuPipelines {
             current_ball_radius,
             show_ball_outline,
             window_size,
+            ui_scale: crate::wgpu::ui_scale_of_margins(&margin),
             margin,
             inset,
             thermo_display,
