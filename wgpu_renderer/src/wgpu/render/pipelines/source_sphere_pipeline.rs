@@ -82,22 +82,20 @@ impl RenderPipeline for SourceSpherePipeline {
             .set_uniforms(ctx.queue, SceneUniforms::new(ctx.view_proj, [0.0; 4]));
 
         self.instances.clear();
-        self.instances
-            .extend(
-                ctx.snapshot
-                    .operators
-                    .source_spheres
-                    .iter()
-                    .map(|sphere| SphereInstance {
-                        center: [sphere.center.x, sphere.center.y],
-                        half_size: SOURCE_SPHERE_RADIUS,
-                        slot: if sphere.state == OperatorState::On {
-                            SLOT_OPEN
-                        } else {
-                            SLOT_CLOSED
-                        },
-                    }),
-            );
+        self.instances.extend(
+            ctx.operators
+                .source_spheres
+                .iter()
+                .map(|sphere| SphereInstance {
+                    center: [sphere.center.x, sphere.center.y],
+                    half_size: SOURCE_SPHERE_RADIUS,
+                    slot: if sphere.state == OperatorState::On {
+                        SLOT_OPEN
+                    } else {
+                        SLOT_CLOSED
+                    },
+                }),
+        );
         self.gpu.flush(ctx.device, ctx.queue, &self.instances);
         Ok(())
     }

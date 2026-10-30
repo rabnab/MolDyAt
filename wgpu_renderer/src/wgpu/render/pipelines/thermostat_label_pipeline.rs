@@ -224,7 +224,7 @@ impl RenderPipeline for ThermostatLabelPipeline {
     }
 
     fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
-        let thermostats = &ctx.snapshot.operators.thermostats;
+        let thermostats = &ctx.operators.thermostats;
         if thermostats.is_empty() {
             self.text.clear();
             self.background.upload(ctx.device, ctx.queue, &[]);

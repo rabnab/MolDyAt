@@ -111,7 +111,11 @@ impl WgpuPipelines {
         let prepare_ctx = PrepareContext {
             device: &ctx.device,
             queue: &ctx.queue,
-            snapshot,
+            frame: &snapshot.frame,
+            balls: &snapshot.balls,
+            operators: &snapshot.operators,
+            fields: &snapshot.fields,
+            debug: snapshot.debug.as_ref(),
             view_proj,
             cursor_world_pos,
             current_ball_radius,

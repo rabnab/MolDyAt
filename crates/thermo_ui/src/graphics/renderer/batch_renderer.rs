@@ -22,7 +22,9 @@
 
 use std::hash::Hash;
 
-use thermo_runtime::application::renderer_snapshot::BallRenderData;
+use thermo_runtime::application::renderer_snapshot::{
+    BallRenderData, DebugSnapshot, NeighborLines,
+};
 
 // ── Shared color constants ──────────────────────────────────────────
 
@@ -67,42 +69,49 @@ impl Batchable for LineSegment {
 
 // ── Shared neighbor-line collection ─────────────────────────────────
 
-/// Collect neighbor-line segments for all visible balls into `batch`.
+/// Collect the neighbour lines of the verbose balls in `debug` into
+/// `batch`; `balls` gives the positions their indices point at.
 ///
-/// This is the single source of truth for the neighbor-line logic used
-/// by **both** the ggez and wgpu renderers.  Positions are stored in
-/// world coordinates; each backend applies its own projection during
-/// the flush step.
-pub fn collect_neighbor_lines(balls: &[BallRenderData], batch: &mut BatchRenderer<LineSegment>) {
-    for ball in balls {
-        if !ball.show_neighbor_lines {
-            continue;
-        }
-        collect_lines_for_ball(ball, balls, batch);
+/// This is the single source of truth for the neighbor-line logic.
+/// Positions are stored in world coordinates; the backend applies its own
+/// projection during the flush step.
+pub fn collect_neighbor_lines(
+    balls: &[BallRenderData],
+    debug: Option<&DebugSnapshot>,
+    batch: &mut BatchRenderer<LineSegment>,
+) {
+    let Some(debug) = debug else {
+        return;
+    };
+    for lines in &debug.neighbor_lines {
+        collect_lines_for_ball(lines, balls, batch);
     }
 }
 
 /// Collect neighbor lines for a single ball.
 fn collect_lines_for_ball(
-    ball: &BallRenderData,
+    lines: &NeighborLines,
     all_balls: &[BallRenderData],
     batch: &mut BatchRenderer<LineSegment>,
 ) {
+    let Some(ball) = all_balls.get(lines.ball) else {
+        return;
+    };
     let start = [ball.position.x, ball.position.y];
 
     // Find max force to determine main neighbors
-    let max_force = ball
+    let max_force = lines
         .neighbors
         .iter()
         .map(|(_, force)| *force)
         .reduce(f32::max)
         .unwrap_or(0.0);
 
-    for (neighbor_idx, force_magnitude) in &ball.neighbors {
+    for (neighbor_idx, force_magnitude) in &lines.neighbors {
         let is_main = *force_magnitude > 0.5 * max_force;
 
         // Skip non-main neighbors if this ball only shows main neighbors
-        if ball.show_main_neighbors_only && !is_main {
+        if lines.main_only && !is_main {
             continue;
         }
 
@@ -238,6 +247,44 @@ mod tests {
         fn batch_key(&self) -> u32 {
             self.key
         }
+    }
+
+    fn ball_at(x: f32) -> BallRenderData {
+        use thermo_physics::objects2d::Vec2D;
+        use thermo_physics::objects2d::ball_impl::DEFAULT_SPECIES;
+        BallRenderData {
+            id: 0,
+            species: DEFAULT_SPECIES,
+            position: Vec2D::new(x, 0.0),
+            velocity: Vec2D::zero(),
+            mass: 1.0,
+            color: [1.0; 4],
+            contact_radius: 0.5,
+            display_radius: 0.5,
+            equilibrium_radius: 0.56,
+            cutoff_radius: 2.0,
+        }
+    }
+
+    #[test]
+    fn neighbor_lines_come_only_from_the_debug_section() {
+        let balls = [ball_at(0.0), ball_at(1.0), ball_at(2.0)];
+        let mut batch = BatchRenderer::new();
+        collect_neighbor_lines(&balls, None, &mut batch);
+        assert!(batch.is_empty(), "no verbose balls, no lines");
+
+        let debug = DebugSnapshot {
+            neighbor_lines: vec![NeighborLines {
+                ball: 1,
+                main_only: true,
+                neighbors: vec![(0, 1.0), (2, 0.1)],
+            }],
+        };
+        collect_neighbor_lines(&balls, Some(&debug), &mut batch);
+        let lines: Vec<LineSegment> = batch.drain().collect();
+        assert_eq!(lines.len(), 1, "only the main neighbour");
+        assert_eq!(lines[0].points, [[1.0, 0.0], [0.0, 0.0]]);
+        assert_eq!(lines[0].color, CYAN);
     }
 
     #[test]

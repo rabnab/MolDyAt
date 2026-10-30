@@ -6,7 +6,7 @@
 //!
 //! Matrices are column-major `[[f32; 4]; 4]`, as uploaded to WGSL `mat4x4<f32>`.
 
-use thermo_runtime::application::renderer_snapshot::RendererSnapshot;
+use thermo_runtime::application::renderer_snapshot::FrameInfo;
 
 pub const IDENTITY: [[f32; 4]; 4] = [
     [1.0, 0.0, 0.0, 0.0],
@@ -60,6 +60,6 @@ pub fn px_to_ndc(x_px: f32, y_px: f32, win_w: f32, win_h: f32) -> [f32; 2] {
 }
 
 /// Larger side of the simulation world (see `Rect::extent`).
-pub fn world_extent(snapshot: &RendererSnapshot) -> f32 {
-    snapshot.cell_grid_bounds.extent()
+pub fn world_extent(frame: &FrameInfo) -> f32 {
+    frame.world_rect.extent()
 }

@@ -26,10 +26,9 @@ fn n2_ar() -> MainContent {
 }
 
 #[test]
-fn status_lists_the_new_ball_species_and_the_count_per_species() {
+fn snapshot_counts_the_balls_per_species_and_names_the_new_ball_species() {
     let mut publisher = SnapshotPublisher::new();
     let mut mc = n2_ar();
-    assert_eq!(mc.species_status(), "New: N2");
     for x in [-6.0, -3.0, 0.0] {
         mc.add_candidate_at_pos(Vec2D::new(x, 0.0)).unwrap();
     }
@@ -37,20 +36,18 @@ fn status_lists_the_new_ball_species_and_the_count_per_species() {
     for x in [3.0, 6.0] {
         mc.add_candidate_at_pos(Vec2D::new(x, 0.0)).unwrap();
     }
-    assert_eq!(mc.species_status(), "New: Ar\nN2: 3\nAr: 2");
-    let status = mc.status_text(0, 0.01).expect("ball stats are shown");
-    assert!(status.ends_with("\nNew: Ar\nN2: 3\nAr: 2"), "{status}");
     // The snapshot counts in its own pass over the balls (BALLS layer) and
-    // without it; both give the same lines.
-    let snapshot_status = publisher.snapshot(&mc).status_text.expect("ball stats");
-    assert!(
-        snapshot_status.ends_with("\nNew: Ar\nN2: 3\nAr: 2"),
-        "{snapshot_status}"
+    // without it; both give the same counts, which the UI's status lines
+    // show (#341).
+    let snapshot = publisher.snapshot(&mc);
+    let species = &snapshot.balls.species;
+    assert_eq!(
+        species.get(snapshot.balls.cursor_species).unwrap().name,
+        "Ar"
     );
+    assert_eq!(snapshot.frame.species_counts[..2], [3, 2]);
+    assert!(snapshot.frame.status.is_some(), "ball stats are shown");
     publisher.set_layers(&mut mc, crate::application::scene_layers::SceneLayers::BASE);
-    let without_balls = publisher.snapshot(&mc).status_text.expect("ball stats");
-    assert!(
-        without_balls.ends_with("\nNew: Ar\nN2: 3\nAr: 2"),
-        "{without_balls}"
-    );
+    let without_balls = publisher.snapshot(&mc);
+    assert_eq!(without_balls.frame.species_counts[..2], [3, 2]);
 }

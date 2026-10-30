@@ -113,11 +113,10 @@ impl RenderPipeline for HighlightPipeline {
         self.gpu
             .set_uniforms(ctx.queue, SceneUniforms::new(ctx.view_proj, [0.0; 4]));
 
-        let extent = world_extent(ctx.snapshot);
+        let extent = world_extent(ctx.frame);
         self.instances.clear();
         if let Some(target) = ctx.operator_previews.hovered
-            && let Some((p0, p1, radius)) =
-                highlight_capsule(&ctx.snapshot.operators, target, extent)
+            && let Some((p0, p1, radius)) = highlight_capsule(ctx.operators, target, extent)
         {
             self.instances.push(HighlightInstance {
                 p0: [p0.x, p0.y],

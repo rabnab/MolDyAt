@@ -44,7 +44,7 @@ All internal quantities are reduced (marked `*`). The N₂ parameters are single
 
 ## Conversion to SI
 
-`X*` is the reduced value. The real-units display shows time in ps, the time step in fs, temperature in K, energies in J and speeds in m/s (`SimStats::get_status_text_real`).
+`X*` is the reduced value. The real-units display shows time in ps, the time step in fs, temperature in K, energies in J and speeds in m/s (`thermo_ui` `energy_plot/status_text.rs`, from the snapshot's `StatusNumbers`).
 
 | Quantity | Formula |
 |---|---|

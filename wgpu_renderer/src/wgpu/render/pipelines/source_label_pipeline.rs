@@ -137,7 +137,7 @@ impl RenderPipeline for SourceLabelPipeline {
     }
 
     fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
-        let spheres = &ctx.snapshot.operators.source_spheres;
+        let spheres = &ctx.operators.source_spheres;
         if spheres.is_empty() {
             self.text.clear();
             self.background.upload(ctx.device, ctx.queue, &[]);
@@ -148,7 +148,7 @@ impl RenderPipeline for SourceLabelPipeline {
             inset_glyph_ndc_size(ctx.window_size, ctx.margin, ctx.inset);
         let (verts, capsules) = Self::build_geometry(
             spheres,
-            &ctx.snapshot.species,
+            &ctx.balls.species,
             ctx.view_proj,
             glyph_ndc_w,
             glyph_ndc_h,

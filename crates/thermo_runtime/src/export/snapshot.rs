@@ -17,7 +17,11 @@ pub fn snapshot_to_string(snapshot: &RendererSnapshot, format: ExportFormat) -> 
     let mut balls: Vec<_> = snapshot.balls.iter().collect();
     balls.sort_unstable_by_key(|ball| ball.id);
     let species = |ball: &crate::application::renderer_snapshot::BallRenderData| {
-        snapshot.species.get(ball.species).map(|s| s.name.as_str())
+        snapshot
+            .balls
+            .species
+            .get(ball.species)
+            .map(|s| s.name.as_str())
     };
     let mut out = String::new();
     match format {
@@ -41,8 +45,8 @@ pub fn snapshot_to_string(snapshot: &RendererSnapshot, format: ExportFormat) -> 
             let header = json!({
                 "schema_version": SCHEMA_VERSION,
                 "record_kind": "snapshot_header",
-                "step": snapshot.simulation_step,
-                "time": json_f32(Some(snapshot.time)),
+                "step": snapshot.frame.simulation_step,
+                "time": json_f32(Some(snapshot.frame.time)),
                 "ball_count": balls.len(),
             });
             out.push_str(&header.to_string());

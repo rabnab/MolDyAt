@@ -20,10 +20,10 @@ fn make_manager() -> EnergyWindowManager {
 
 fn make_snapshot(step: u64, kin: f32, pot: f32) -> RendererSnapshot {
     let mut s = RendererSnapshot::new();
-    s.simulation_step = step;
-    s.kinetic_energy = kin;
-    s.potential_energy = pot;
-    s.time = step as f32 * 0.01;
+    s.frame.simulation_step = step;
+    s.frame.kinetic_energy = kin;
+    s.frame.potential_energy = pot;
+    s.frame.time = step as f32 * 0.01;
     s
 }
 
@@ -97,11 +97,11 @@ fn update_from_snapshot_starts_a_new_history_for_a_new_world() {
     metrics.write().unwrap().clear();
     record(&metrics, 7.0, 8.0);
     let mut loaded = make_snapshot(30, 7.0, 8.0);
-    loaded.world_generation = 1;
+    loaded.frame.world_generation = 1;
     manager.update_from_snapshot(&loaded, 60.0, 1.0, &frame_metrics);
     record(&metrics, 9.0, 9.5);
     let mut next = make_snapshot(32, 9.0, 9.5);
-    next.world_generation = 1;
+    next.frame.world_generation = 1;
     manager.update_from_snapshot(&next, 60.0, 1.0, &frame_metrics);
 
     let data = shared.lock().unwrap();
@@ -648,7 +648,7 @@ mod plot_view {
         metrics.write().unwrap().clear();
         record(&metrics, 7.0, 8.0);
         let mut loaded = make_snapshot(30, 7.0, 8.0);
-        loaded.world_generation = 1;
+        loaded.frame.world_generation = 1;
         manager.update_from_snapshot(&loaded, 60.0, 1.0, &frame_metrics);
         assert!(manager.plot_view().is_default());
     }
@@ -747,7 +747,7 @@ mod plot_view {
         metrics.write().unwrap().clear();
         record(&metrics, 7.0, 8.0);
         let mut loaded = make_snapshot(30, 7.0, 8.0);
-        loaded.world_generation = 1;
+        loaded.frame.world_generation = 1;
         manager.update_from_snapshot(&loaded, 60.0, 1.0, &frame_metrics);
 
         assert!(manager.plot_view().is_default());

@@ -19,6 +19,7 @@ use crate::application::renderer_snapshot::RendererSnapshot;
 use crate::application::scene_layers::SceneLayers;
 use crate::metrics::SharedMetricsRegistry;
 use arc_swap::ArcSwapOption;
+use std::cell::Cell;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -67,10 +68,18 @@ impl Default for ShutdownSignal {
 
 /// Where the physics thread publishes its snapshots, and which layers they
 /// have. The renderer reads the slot lock-free (see `PhysicsCoordinator`).
+///
+/// Snapshots are reused (#341): publishing keeps the snapshot it replaces,
+/// and the next one refills it if the renderer has dropped it by then, so
+/// a steady run allocates no new ball vector or top-level operator
+/// vectors (the per-wall id lists and the debug data of verbose balls are
+/// still built anew; they are small).
 pub struct SnapshotPublisher {
     slot: Arc<ArcSwapOption<RendererSnapshot>>,
     /// Layers the renderer wants in its snapshots (see `SceneLayers`).
     layers: SceneLayers,
+    /// The snapshot replaced by the last publish, to be refilled.
+    spare: Cell<Option<Arc<RendererSnapshot>>>,
 }
 
 impl SnapshotPublisher {
@@ -79,6 +88,7 @@ impl SnapshotPublisher {
         Self {
             slot: Arc::new(ArcSwapOption::from(None)),
             layers: SceneLayers::ALL,
+            spare: Cell::new(None),
         }
     }
 
@@ -101,15 +111,23 @@ impl SnapshotPublisher {
         self.layers = layers;
     }
 
-    /// A snapshot of `content` with this publisher's layers.
+    /// A snapshot of `content` with this publisher's layers: the spare
+    /// snapshot refilled when no one holds it any more, else a new one.
     pub fn snapshot(&self, content: &MainContent) -> RendererSnapshot {
-        content.create_snapshot_with(self.layers)
+        let mut snapshot = self
+            .spare
+            .take()
+            .and_then(|spare| Arc::try_unwrap(spare).ok())
+            .unwrap_or_default();
+        content.fill_snapshot(self.layers, &mut snapshot);
+        snapshot
     }
 
     /// Replace the published snapshot (an atomic `Arc` swap, so the physics
-    /// thread never waits for the renderer).
+    /// thread never waits for the renderer). The replaced one is kept for
+    /// reuse by [`Self::snapshot`].
     pub fn publish(&self, snapshot: RendererSnapshot) {
-        self.slot.store(Some(Arc::new(snapshot)));
+        self.spare.set(self.slot.swap(Some(Arc::new(snapshot))));
     }
 }
 

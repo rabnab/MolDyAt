@@ -119,7 +119,10 @@ impl PhysicsCoordinator {
 
     /// Mark `snapshot` as displayed and update the step metrics.
     pub fn mark_snapshot_displayed(&mut self, snapshot: &Arc<RendererSnapshot>) {
-        self.track_steps(snapshot.simulation_step, snapshot.world_generation);
+        self.track_steps(
+            snapshot.frame.simulation_step,
+            snapshot.frame.world_generation,
+        );
         self.displayed_snapshot = Some(Arc::clone(snapshot));
     }
 
@@ -314,8 +317,8 @@ mod tests {
     #[test]
     fn test_new_world_restarts_step_tracking() {
         let mut snapshot = RendererSnapshot::new();
-        snapshot.simulation_step = 3;
-        snapshot.world_generation = 1;
+        snapshot.frame.simulation_step = 3;
+        snapshot.frame.world_generation = 1;
         let mut coord = PhysicsCoordinator::with_snapshot(snapshot);
         // The old world had run much further before the load.
         coord.last_displayed_step = 5000;

@@ -192,8 +192,8 @@ impl MetricsRegistry {
     /// step not sampled yet, so a paused world adds no duplicate points. A
     /// new world generation (a loaded world) starts a new history.
     pub fn sample(&mut self, snapshot: &RendererSnapshot) {
-        let generation = snapshot.world_generation;
-        let step = snapshot.simulation_step;
+        let generation = snapshot.frame.world_generation;
+        let step = snapshot.frame.simulation_step;
         if self.last_sampled == Some((generation, step)) {
             return;
         }
@@ -203,13 +203,16 @@ impl MetricsRegistry {
         }
         self.last_sampled = Some((generation, step));
         self.steps.push(step);
-        self.times.push(snapshot.time);
+        self.times.push(snapshot.frame.time);
 
-        let (e_kin, e_pot) = (snapshot.kinetic_energy, snapshot.potential_energy);
+        let (e_kin, e_pot) = (
+            snapshot.frame.kinetic_energy,
+            snapshot.frame.potential_energy,
+        );
         self.record("E_kin", e_kin);
         self.record("E_pot", e_pot);
         self.record("E_tot", e_kin + e_pot);
-        self.record("wall_momentum", snapshot.wall_momentum);
+        self.record("wall_momentum", snapshot.frame.wall_momentum);
 
         self.sample_species_counts(snapshot);
     }
@@ -219,13 +222,14 @@ impl MetricsRegistry {
         let known = self
             .species_table
             .as_ref()
-            .is_some_and(|table| Arc::ptr_eq(table, &snapshot.species));
+            .is_some_and(|table| Arc::ptr_eq(table, &snapshot.balls.species));
         if !known {
-            self.species_table = Some(Arc::clone(&snapshot.species));
+            self.species_table = Some(Arc::clone(&snapshot.balls.species));
             self.count_series = snapshot
+                .balls
                 .species
                 .ids()
-                .map(|id| Self::per_species_name(&snapshot.species.species(id).name, "count"))
+                .map(|id| Self::per_species_name(&snapshot.balls.species.species(id).name, "count"))
                 .collect();
             // Another table: the count series of species it lacks stop for
             // good. Drop them, so every series that is left receives a value
@@ -250,7 +254,7 @@ impl MetricsRegistry {
                 }
             }
         }
-        for (name, &count) in self.count_series.iter().zip(&snapshot.species_counts) {
+        for (name, &count) in self.count_series.iter().zip(&snapshot.frame.species_counts) {
             if let Some(buffer) = self.buffers.get_mut(name) {
                 buffer.push(count as f32);
             }

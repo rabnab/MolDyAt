@@ -17,6 +17,7 @@ use super::command_registry::{KeyInput, PlotChange, UiAction, command_by_id};
 use super::input_handler::key_input;
 use super::key_map::{HeldModifiers, KeyMap, KeyPhase};
 use super::operator_tool_handler::scroll_y_from_delta;
+use crate::graphics::energy_plot::status_text::status_text;
 use crate::graphics::energy_plot::{
     LegendEntry, PanelArea, PlotRect, PlotScene, PlotSelection, PlotWindowRequest,
     SharedEnergyData, TimeHistory, TimeView, window_title,
@@ -682,21 +683,18 @@ impl EnergyWindowManager {
             }
 
             // The time is not a metrics series: it comes with the snapshot.
-            data.time = snapshot.time;
+            data.time = snapshot.frame.time;
 
-            // Update status text with FPS and per-frame metrics
-            if let Some(ref status) = snapshot.status_text {
-                let fps_line = format_metrics_line(
+            // The status lines, from the snapshot's numbers and the rates.
+            data.status_text = snapshot.frame.status.is_some().then(|| {
+                let metrics_line = format_metrics_line(
                     render_fps,
-                    snapshot.physics_fps,
+                    snapshot.frame.physics_fps,
                     steps_per_frame,
                     frame_metrics,
                 );
-                let updated_status = status.replace("fps 0", &fps_line);
-                data.status_text = Some(updated_status);
-            } else {
-                data.status_text = None;
-            }
+                status_text(snapshot, &metrics_line).unwrap_or_default()
+            });
 
             // Release lock before requesting redraw
             drop(data);

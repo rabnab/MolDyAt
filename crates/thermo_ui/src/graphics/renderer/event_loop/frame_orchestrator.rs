@@ -40,7 +40,7 @@ impl FrameOrchestrator {
     pub(super) fn frame_layers(state: &UnifiedRenderState) -> SceneLayers {
         let requested = state.render.config.scene_layers();
         match &state.render.last_snapshot {
-            Some(snapshot) => requested.intersection(snapshot.layers),
+            Some(snapshot) => requested.intersection(snapshot.frame.layers),
             None => requested,
         }
     }
@@ -249,13 +249,22 @@ mod tests {
 
     #[test]
     fn begin_frame_pulls_snapshot_and_updates_energy_window() {
+        use thermo_physics::application::sim_stats::StatusNumbers;
         let mut snapshot = RendererSnapshot::new();
-        snapshot.simulation_step = 7;
-        snapshot.kinetic_energy = 1.5;
-        snapshot.potential_energy = 2.5;
-        snapshot.time = 3.0;
-        snapshot.physics_fps = 120.0;
-        snapshot.status_text = Some("fps 0".to_string());
+        snapshot.frame.simulation_step = 7;
+        snapshot.frame.kinetic_energy = 1.5;
+        snapshot.frame.potential_energy = 2.5;
+        snapshot.frame.time = 3.0;
+        snapshot.frame.physics_fps = 120.0;
+        snapshot.frame.status = Some(StatusNumbers {
+            real_units: false,
+            dt: 0.01,
+            hood_updates: 0,
+            max_neighbours: 0,
+            temperature: 0.0,
+            max_v: 0.0,
+            v_com: Vec2D::zero(),
+        });
 
         let physics = PhysicsCoordinator::with_snapshot(snapshot);
 
@@ -277,7 +286,7 @@ mod tests {
             .last_snapshot
             .as_ref()
             .expect("snapshot should be stored");
-        assert_eq!(snapshot.simulation_step, 7);
+        assert_eq!(snapshot.frame.simulation_step, 7);
 
         let energy_data = state
             .render
@@ -333,7 +342,7 @@ mod tests {
     #[test]
     fn end_frame_advances_displayed_simulation_step() {
         let mut snapshot = RendererSnapshot::new();
-        snapshot.simulation_step = 42;
+        snapshot.frame.simulation_step = 42;
 
         let mut state = build_test_state_with_physics(PhysicsCoordinator::with_snapshot(snapshot));
         // Load the snapshot into render state so end_frame can mark it displayed.
@@ -405,7 +414,7 @@ mod tests {
 
         // F2 was just switched on; the physics thread still sent a light one.
         let mut light = RendererSnapshot::new();
-        light.layers = SceneLayers::BASE;
+        light.frame.layers = SceneLayers::BASE;
         let mut state = build_test_state_with_physics(PhysicsCoordinator::with_snapshot(light));
         FrameOrchestrator::begin_frame(&mut state);
         assert_eq!(FrameOrchestrator::frame_layers(&state), SceneLayers::BASE);

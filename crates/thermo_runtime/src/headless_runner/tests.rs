@@ -37,7 +37,7 @@ impl HeadlessSnapshotSink for RecordingSink {
     }
 
     fn write_frame(&mut self, snapshot: &RendererSnapshot) -> io::Result<()> {
-        self.0.borrow_mut().push(snapshot.simulation_step);
+        self.0.borrow_mut().push(snapshot.frame.simulation_step);
         Ok(())
     }
 
@@ -197,8 +197,8 @@ fn operators_run_state(threads: usize, seed_balls: u32, steps: u32) -> Operators
             application.simulation_step().expect("step");
             let snapshot = application.create_snapshot();
             energies.push([
-                snapshot.kinetic_energy.to_bits(),
-                snapshot.potential_energy.to_bits(),
+                snapshot.frame.kinetic_energy.to_bits(),
+                snapshot.frame.potential_energy.to_bits(),
             ]);
             let (px, py) = application.wall_momentum();
             wall_momentum.push([px.to_bits(), py.to_bits()]);
@@ -449,7 +449,7 @@ fn test_prepare_application_applies_dt_and_line_segments() {
     for _ in 0..config.steps {
         application.simulation_step().expect("step");
     }
-    let time = application.create_snapshot().time;
+    let time = application.create_snapshot().frame.time;
     assert!((time - 4.0 * 0.0025).abs() < 1e-6, "time {time}");
 }
 

@@ -38,13 +38,13 @@ fn readout_names_the_species_of_new_balls() {
     use thermo_runtime::application::renderer_snapshot::RendererSnapshot;
     let mut snapshot = RendererSnapshot::new();
     assert_eq!(
-        cursor_readout((1.0, 2.0), &snapshot),
+        cursor_readout((1.0, 2.0), &snapshot.frame, &snapshot.balls),
         "(1.00, 2.00)  0g  N2"
     );
-    snapshot.cursor_species = snapshot.species.by_name("Ne").unwrap();
-    snapshot.gravity_force_multiple = 1;
+    snapshot.balls.cursor_species = snapshot.balls.species.by_name("Ne").unwrap();
+    snapshot.frame.gravity_force_multiple = 1;
     assert_eq!(
-        cursor_readout((1.0, 2.0), &snapshot),
+        cursor_readout((1.0, 2.0), &snapshot.frame, &snapshot.balls),
         "(1.00, 2.00)  1g  Ne"
     );
 }

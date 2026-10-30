@@ -71,13 +71,13 @@ impl RenderPipeline for ValvePipeline {
         self.gpu
             .set_uniforms(ctx.queue, SceneUniforms::new(ctx.view_proj, [0.0; 4]));
 
-        let world_extent = world_extent(ctx.snapshot);
+        let world_extent = world_extent(ctx.frame);
         let border = world_extent * VALVE_BORDER_FRAC;
 
         self.instances.clear();
 
         // Committed valves (already resolved to world space by the snapshot)
-        for valve in &ctx.snapshot.operators.valve_spans {
+        for valve in &ctx.operators.valve_spans {
             self.instances.push(ValveInstance {
                 p0: [valve.p0.x, valve.p0.y],
                 p1: [valve.p1.x, valve.p1.y],
@@ -94,12 +94,7 @@ impl RenderPipeline for ValvePipeline {
         // Ghost preview while drawing a valve: the tool reports piece-local
         // fractions on the wall piece being drawn on.
         if let Some((line_id, t_start, t_end)) = ctx.operator_previews.valve_segment
-            && let Some(seg) = ctx
-                .snapshot
-                .operators
-                .line_segments
-                .iter()
-                .find(|s| s.id == line_id)
+            && let Some(seg) = ctx.operators.line_segments.iter().find(|s| s.id == line_id)
         {
             let p0 = seg.point_at_t(t_start);
             let p1 = seg.point_at_t(t_end);

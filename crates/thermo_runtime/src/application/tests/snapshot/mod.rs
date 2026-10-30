@@ -129,14 +129,14 @@ fn test_snapshot_updates_on_republish() {
 
     let slot = publisher.slot();
     let snapshot1 = slot.load();
-    assert_eq!(snapshot1.as_ref().unwrap().simulation_step, 100);
+    assert_eq!(snapshot1.as_ref().unwrap().frame.simulation_step, 100);
 
     // Update step count and republish
     main_content.world_mut().set_step_count(200);
     publisher.publish(publisher.snapshot(&main_content));
 
     let snapshot2 = slot.load();
-    assert_eq!(snapshot2.as_ref().unwrap().simulation_step, 200);
+    assert_eq!(snapshot2.as_ref().unwrap().frame.simulation_step, 200);
 
     // Verify they are different snapshots
     assert!(!Arc::ptr_eq(
@@ -147,20 +147,64 @@ fn test_snapshot_updates_on_republish() {
 
 #[test]
 fn test_snapshot_neighbor_indices_valid() {
-    let main_content = create_test_main_content_with_balls(20);
+    let mut main_content = create_test_main_content_with_balls(20);
+    main_content.apply_verbosity_input_for_test("am");
+    main_content.simulation_step().unwrap();
     let snapshot = main_content.create_snapshot();
 
-    // All neighbor indices should be valid (< ball count)
-    for (i, ball_data) in snapshot.balls.iter().enumerate() {
-        for &(neighbor_idx, _force) in &ball_data.neighbors {
+    let debug = snapshot
+        .debug
+        .as_ref()
+        .expect("verbose balls have debug data");
+    assert_eq!(debug.neighbor_lines.len(), 20, "one entry per verbose ball");
+    // All ball and neighbour indices are valid (< ball count)
+    for lines in &debug.neighbor_lines {
+        assert!(lines.ball < snapshot.len());
+        assert!(lines.main_only);
+        for &(neighbor_idx, _force) in &lines.neighbors {
             assert!(
                 neighbor_idx < snapshot.len(),
                 "Ball {} has invalid neighbor index {}",
-                i,
+                lines.ball,
                 neighbor_idx
             );
         }
     }
+}
+
+#[test]
+fn snapshot_without_verbose_balls_has_no_debug_data() {
+    let main_content = create_test_main_content_with_balls(20);
+    assert!(main_content.create_snapshot().debug.is_none());
+}
+
+#[test]
+fn a_released_snapshot_is_refilled_instead_of_allocated() {
+    let publisher = SnapshotPublisher::new();
+    let main_content = create_test_main_content_with_balls(20);
+    let first = publisher.snapshot(&main_content);
+    let first_balls = first.balls.data.as_ptr();
+    publisher.publish(first);
+    // The second publish replaces the first; no one else holds it.
+    publisher.publish(publisher.snapshot(&main_content));
+
+    let third = publisher.snapshot(&main_content);
+    assert_eq!(third.balls.data.as_ptr(), first_balls, "same ball buffer");
+    assert_eq!(third.balls.len(), 20);
+}
+
+#[test]
+fn a_snapshot_the_renderer_still_holds_is_not_reused() {
+    let publisher = SnapshotPublisher::new();
+    let slot = publisher.slot();
+    let main_content = create_test_main_content_with_balls(20);
+    publisher.publish(publisher.snapshot(&main_content));
+    let held = slot.load_full().expect("published");
+    publisher.publish(publisher.snapshot(&main_content));
+
+    let next = publisher.snapshot(&main_content);
+    assert_ne!(next.balls.data.as_ptr(), held.balls.data.as_ptr());
+    assert_eq!(held.balls.len(), 20, "the held snapshot is untouched");
 }
 
 #[test]
@@ -217,10 +261,10 @@ fn test_thermo_snapshot_populated_after_step_with_balls() {
     let mc = create_main_content_and_step(10);
     let snap = mc.create_snapshot();
     // After one step with ≥ 2 balls, thermo fields must be populated
-    assert!(snap.thermo_grid_spec.is_some(), "spec should be Some");
-    let (rows, cols) = snap.cell_temperature.shape();
+    assert!(snap.fields.thermo_grid.is_some(), "spec should be Some");
+    let (rows, cols) = snap.fields.temperature.shape();
     assert!(rows > 0 && cols > 0, "T grid should be non-empty");
-    let (pr, pc) = snap.cell_pressure.shape();
+    let (pr, pc) = snap.fields.pressure.shape();
     assert!(pr > 0 && pc > 0, "P grid should be non-empty");
 }
 
@@ -228,11 +272,15 @@ fn test_thermo_snapshot_populated_after_step_with_balls() {
 fn test_thermo_grid_shape_matches_spec() {
     let mc = create_main_content_and_step(20);
     let snap = mc.create_snapshot();
-    let spec = snap.thermo_grid_spec.as_ref().expect("spec should be Some");
-    let (t_rows, t_cols) = snap.cell_temperature.shape();
+    let spec = snap
+        .fields
+        .thermo_grid
+        .as_ref()
+        .expect("spec should be Some");
+    let (t_rows, t_cols) = snap.fields.temperature.shape();
     assert_eq!(t_rows, spec.rows, "T rows must match spec");
     assert_eq!(t_cols, spec.cols, "T cols must match spec");
-    let (p_rows, p_cols) = snap.cell_pressure.shape();
+    let (p_rows, p_cols) = snap.fields.pressure.shape();
     assert_eq!(p_rows, spec.rows, "P rows must match spec");
     assert_eq!(p_cols, spec.cols, "P cols must match spec");
 }
@@ -243,18 +291,18 @@ fn test_thermo_snapshot_single_ball_all_nan() {
     let snap = mc.create_snapshot();
     // With only 1 ball, all cells are NaN but spec is still populated
     assert!(
-        snap.thermo_grid_spec.is_some(),
+        snap.fields.thermo_grid.is_some(),
         "spec should be Some even with 1 ball"
     );
-    let (rows, cols) = snap.cell_temperature.shape();
+    let (rows, cols) = snap.fields.temperature.shape();
     for r in 0..rows {
         for c in 0..cols {
             assert!(
-                snap.cell_temperature.get(r, c).is_nan(),
+                snap.fields.temperature.get(r, c).is_nan(),
                 "T[{r},{c}] should be NaN with 1 ball"
             );
             assert!(
-                snap.cell_pressure.get(r, c).is_nan(),
+                snap.fields.pressure.get(r, c).is_nan(),
                 "P[{r},{c}] should be NaN with 1 ball"
             );
         }
@@ -265,7 +313,11 @@ fn test_thermo_snapshot_single_ball_all_nan() {
 fn test_thermo_spec_dimensions_match_world() {
     let mc = create_main_content_and_step(50);
     let snap = mc.create_snapshot();
-    let spec = snap.thermo_grid_spec.as_ref().expect("spec should be Some");
+    let spec = snap
+        .fields
+        .thermo_grid
+        .as_ref()
+        .expect("spec should be Some");
     let world = mc.world().world_region();
     let world_w = world.w.abs();
     let world_h = world.h.abs();
@@ -288,27 +340,28 @@ fn snapshot_without_heavy_layers_skips_ball_render_data_and_thermo_grids() {
     let mut publisher = SnapshotPublisher::new();
     let mut main_content = create_test_main_content_with_balls(5);
     let full = publisher.snapshot(&main_content);
-    assert_eq!(full.layers, SceneLayers::ALL);
+    assert_eq!(full.frame.layers, SceneLayers::ALL);
     assert_eq!(full.balls.len(), 5);
 
     // Rendering off (F2): only what operators, labels and stats need.
     let light_layers = SceneLayers::ALL.difference(SceneLayers::HEAVY);
     publisher.set_layers(&mut main_content, light_layers);
     let light = publisher.snapshot(&main_content);
-    assert_eq!(light.layers, light_layers);
+    assert_eq!(light.frame.layers, light_layers);
     assert!(light.balls.is_empty());
-    assert!(light.thermo_grid_spec.is_none());
-    assert_eq!(light.cell_temperature.shape(), (0, 0));
-    assert_eq!(light.kinetic_energy, full.kinetic_energy);
-    // The stats text is built either way. Its content is not compared: it
-    // includes the process-wide neighbour-update counter, which tests running
-    // in parallel change between the two snapshots.
-    assert_eq!(light.status_text.is_some(), full.status_text.is_some());
+    assert!(light.fields.thermo_grid.is_none());
+    assert_eq!(light.fields.temperature.shape(), (0, 0));
+    assert_eq!(light.frame.kinetic_energy, full.frame.kinetic_energy);
+    // The status numbers come either way. Their content is not compared:
+    // they include the process-wide neighbour-update counter, which tests
+    // running in parallel change between the two snapshots.
+    assert_eq!(light.frame.status.is_some(), full.frame.status.is_some());
+    assert_eq!(light.frame.species_counts, full.frame.species_counts);
 
     // Rendering on again: the next snapshot is the full scene.
     publisher.set_layers(&mut main_content, SceneLayers::ALL);
     let again = publisher.snapshot(&main_content);
-    assert_eq!(again.layers, SceneLayers::ALL);
+    assert_eq!(again.frame.layers, SceneLayers::ALL);
     assert_eq!(again.balls.len(), 5);
 }
 
@@ -320,7 +373,13 @@ fn dropping_the_thermo_layer_stops_and_clears_the_thermo_fields() {
     let mut main_content = create_test_main_content_with_balls(20);
     main_content.world_mut().sim_mut().set_pause(false);
     main_content.simulation_step().unwrap();
-    assert!(publisher.snapshot(&main_content).thermo_grid_spec.is_some());
+    assert!(
+        publisher
+            .snapshot(&main_content)
+            .fields
+            .thermo_grid
+            .is_some()
+    );
 
     // Heatmap hidden (T off or F2 off): the history is dropped, and the
     // physics thread records no more fields (see `record_thermo_fields`).
@@ -334,7 +393,13 @@ fn dropping_the_thermo_layer_stops_and_clears_the_thermo_fields() {
     // history is recorded at once, see `record_thermo_fields_if_due`).
     publisher.set_layers(&mut main_content, SceneLayers::ALL);
     main_content.step_recording_thermo_fields(true).unwrap();
-    assert!(publisher.snapshot(&main_content).thermo_grid_spec.is_some());
+    assert!(
+        publisher
+            .snapshot(&main_content)
+            .fields
+            .thermo_grid
+            .is_some()
+    );
 }
 
 // ── Thermo field sampling (#229) ──────────────────────────────────

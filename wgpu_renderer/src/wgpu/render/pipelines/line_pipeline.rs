@@ -149,12 +149,12 @@ impl RenderPipeline for LinePipeline {
         // Neighbour lines belong to the balls; operator arcs and snap
         // crosses are drawn in every frame.
         if ctx.layers.contains(SceneLayers::BALLS) {
-            collect_neighbor_lines(&ctx.snapshot.balls, &mut self.batch);
+            collect_neighbor_lines(ctx.balls, ctx.debug, &mut self.batch);
         }
-        for sphere in &ctx.snapshot.operators.source_spheres {
+        for sphere in &ctx.operators.source_spheres {
             push_source_arcs(&mut self.batch, sphere);
         }
-        let cross_half = world_extent(ctx.snapshot) * SNAP_CROSS_FRAC;
+        let cross_half = world_extent(ctx.frame) * SNAP_CROSS_FRAC;
         for &pos in &ctx.operator_previews.snap_indicators {
             push_snap_cross(&mut self.batch, pos, cross_half);
         }

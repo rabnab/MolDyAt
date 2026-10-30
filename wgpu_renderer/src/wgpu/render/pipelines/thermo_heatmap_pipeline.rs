@@ -238,16 +238,14 @@ impl RenderPipeline for ThermoHeatmapPipeline {
     fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
         let mode = ctx.thermo_display;
         let (grid, range) = match mode {
-            ThermoDisplayMode::Temperature => {
-                (&ctx.snapshot.cell_temperature, (TEMP_MIN, TEMP_MAX))
-            }
-            ThermoDisplayMode::Pressure => (&ctx.snapshot.cell_pressure, (PRES_MIN, PRES_MAX)),
+            ThermoDisplayMode::Temperature => (&ctx.fields.temperature, (TEMP_MIN, TEMP_MAX)),
+            ThermoDisplayMode::Pressure => (&ctx.fields.pressure, (PRES_MIN, PRES_MAX)),
             ThermoDisplayMode::Off | ThermoDisplayMode::Grid => {
                 self.gpu.clear();
                 return Ok(());
             }
         };
-        let Some(spec) = &ctx.snapshot.thermo_grid_spec else {
+        let Some(spec) = &ctx.fields.thermo_grid else {
             log::debug!("ThermoHeatmapPipeline: no thermo_grid_spec, skipping");
             self.gpu.clear();
             return Ok(());

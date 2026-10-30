@@ -94,14 +94,14 @@ impl RenderPipeline for ThermoValueOverlayPipeline {
 
     fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
         let grid = match ctx.thermo_display {
-            ThermoDisplayMode::Temperature => &ctx.snapshot.cell_temperature,
-            ThermoDisplayMode::Pressure => &ctx.snapshot.cell_pressure,
+            ThermoDisplayMode::Temperature => &ctx.fields.temperature,
+            ThermoDisplayMode::Pressure => &ctx.fields.pressure,
             ThermoDisplayMode::Off | ThermoDisplayMode::Grid => {
                 self.text.clear();
                 return Ok(());
             }
         };
-        let Some(spec) = &ctx.snapshot.thermo_grid_spec else {
+        let Some(spec) = &ctx.fields.thermo_grid else {
             self.text.clear();
             return Ok(());
         };

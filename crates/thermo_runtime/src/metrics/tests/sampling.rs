@@ -23,16 +23,19 @@ fn test_sample_records_the_values_of_the_snapshot() {
     registry.sample(&snapshot);
 
     let last = |name: &str| registry.get_series(name).unwrap().latest().copied();
-    assert_eq!(last("E_kin"), Some(snapshot.kinetic_energy));
-    assert_eq!(last("E_pot"), Some(snapshot.potential_energy));
+    assert_eq!(last("E_kin"), Some(snapshot.frame.kinetic_energy));
+    assert_eq!(last("E_pot"), Some(snapshot.frame.potential_energy));
     assert_eq!(
         last("E_tot"),
-        Some(snapshot.kinetic_energy + snapshot.potential_energy)
+        Some(snapshot.frame.kinetic_energy + snapshot.frame.potential_energy)
     );
-    assert_eq!(last("wall_momentum"), Some(snapshot.wall_momentum));
+    assert_eq!(last("wall_momentum"), Some(snapshot.frame.wall_momentum));
 
-    let first_species = snapshot.species.ids().next().unwrap();
-    let name = format!("{}:count", snapshot.species.species(first_species).name);
+    let first_species = snapshot.balls.species.ids().next().unwrap();
+    let name = format!(
+        "{}:count",
+        snapshot.balls.species.species(first_species).name
+    );
     assert_eq!(last(&name), Some(snapshot.balls.len() as f32));
 }
 
@@ -41,17 +44,20 @@ fn test_sample_records_the_time_of_each_sample_next_to_its_step() {
     let mut registry = MetricsRegistry::default();
     let mut snapshot = stepped_snapshot(2);
     registry.sample(&snapshot);
-    snapshot.simulation_step += 1;
-    snapshot.time += 0.25;
+    snapshot.frame.simulation_step += 1;
+    snapshot.frame.time += 0.25;
     registry.sample(&snapshot);
 
     assert_eq!(registry.times().len(), registry.steps().len());
-    assert_eq!(registry.times().latest().copied(), Some(snapshot.time));
+    assert_eq!(
+        registry.times().latest().copied(),
+        Some(snapshot.frame.time)
+    );
     let times: Vec<f32> = registry.times().get().iter().copied().collect();
     assert_eq!(times[1] - times[0], 0.25);
 
     // A new world clears the times with the rest.
-    snapshot.world_generation = 1;
+    snapshot.frame.world_generation = 1;
     registry.sample(&snapshot);
     assert_eq!(registry.times().len(), 1);
 }
@@ -72,12 +78,12 @@ fn test_sample_of_a_new_generation_starts_a_new_history() {
     let mut registry = MetricsRegistry::default();
     let mut snapshot = stepped_snapshot(2);
     registry.sample(&snapshot);
-    snapshot.simulation_step += 1;
+    snapshot.frame.simulation_step += 1;
     registry.sample(&snapshot);
     assert_eq!(registry.get_series("E_kin").unwrap().len(), 2);
 
     // A loaded world may sit at the same step; it still starts afresh.
-    snapshot.world_generation = 1;
+    snapshot.frame.world_generation = 1;
     registry.sample(&snapshot);
     assert_eq!(registry.get_series("E_kin").unwrap().len(), 1);
 }
@@ -89,7 +95,7 @@ fn test_species_series_are_registered_once_per_table() {
     registry.sample(&snapshot);
     let series = registry.all_series().count();
     let mut next = snapshot.clone();
-    next.simulation_step += 1;
+    next.frame.simulation_step += 1;
     registry.sample(&next);
     assert_eq!(registry.all_series().count(), series);
     assert!(

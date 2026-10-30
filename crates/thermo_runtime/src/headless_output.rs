@@ -48,7 +48,8 @@ impl HeadlessSnapshotSink for HeadlessWriter {
     }
 
     fn write_run_start(&mut self, snapshot: &RendererSnapshot) -> io::Result<()> {
-        self.initial_total_energy = Some(snapshot.kinetic_energy + snapshot.potential_energy);
+        self.initial_total_energy =
+            Some(snapshot.frame.kinetic_energy + snapshot.frame.potential_energy);
         let line = run_start_to_jsonl(&self.config, snapshot);
         self.write_machine_record(&line)
     }
@@ -209,12 +210,12 @@ fn run_start_to_jsonl(config: &HeadlessConfig, snapshot: &RendererSnapshot) -> S
                 .collect::<Vec<_>>(),
         },
         "initial": {
-            "step": snapshot.simulation_step,
-            "time": f32_value(snapshot.time),
+            "step": snapshot.frame.simulation_step,
+            "time": f32_value(snapshot.frame.time),
             "ball_count": snapshot.balls.len(),
-            "gravity_force_multiple": snapshot.gravity_force_multiple,
+            "gravity_force_multiple": snapshot.frame.gravity_force_multiple,
             "operator_counts": operator_counts(&snapshot.operators),
-            "world_rect": world_rect_to_json(&snapshot.cell_grid_bounds),
+            "world_rect": world_rect_to_json(&snapshot.frame.world_rect),
         },
     });
     // The effective SimConfig (#295), in the layout of a `--config` file; as
@@ -292,19 +293,19 @@ fn frame_to_jsonl_with_metrics(
     initial_total_energy: Option<f32>,
     metrics: Option<&SharedMetricsRegistry>,
 ) -> String {
-    let total_energy = snapshot.kinetic_energy + snapshot.potential_energy;
+    let total_energy = snapshot.frame.kinetic_energy + snapshot.frame.potential_energy;
     let delta_energy = initial_total_energy.map(|initial| total_energy - initial);
     let mut frame = json!({
         "schema_version": SCHEMA_VERSION,
         "record_kind": "frame",
-        "step": snapshot.simulation_step,
-        "time": f32_value(snapshot.time),
-        "kinetic_energy": f32_value(snapshot.kinetic_energy),
-        "potential_energy": f32_value(snapshot.potential_energy),
+        "step": snapshot.frame.simulation_step,
+        "time": f32_value(snapshot.frame.time),
+        "kinetic_energy": f32_value(snapshot.frame.kinetic_energy),
+        "potential_energy": f32_value(snapshot.frame.potential_energy),
         "delta_energy": delta_energy.map_or(serde_json::Value::Null, f32_value),
         "ball_count": snapshot.balls.len(),
-        "gravity_force_multiple": snapshot.gravity_force_multiple,
-        "physics_fps": f32_value(snapshot.physics_fps),
+        "gravity_force_multiple": snapshot.frame.gravity_force_multiple,
+        "physics_fps": f32_value(snapshot.frame.physics_fps),
         "operator_counts": operator_counts(&snapshot.operators),
     });
 
@@ -328,7 +329,7 @@ fn frame_to_jsonl_with_metrics(
                 json!({
                     "id": ball.id,
                     "species": snapshot
-                        .species
+                        .balls.species
                         .get(ball.species)
                         .map(|s| s.name.as_str()),
                     "position": {
@@ -358,8 +359,8 @@ fn run_end_to_jsonl(snapshot: &RendererSnapshot, snapshots_emitted: u32) -> Stri
     json!({
         "schema_version": SCHEMA_VERSION,
         "record_kind": "run_end",
-        "final_step": snapshot.simulation_step,
-        "final_time": f32_value(snapshot.time),
+        "final_step": snapshot.frame.simulation_step,
+        "final_time": f32_value(snapshot.frame.time),
         "snapshots_emitted": snapshots_emitted,
         "final_ball_count": snapshot.balls.len(),
         "operator_counts": operator_counts(&snapshot.operators),
@@ -371,7 +372,7 @@ fn frame_to_console_summary(
     snapshot: &RendererSnapshot,
     initial_total_energy: Option<f32>,
 ) -> String {
-    let total_energy = snapshot.kinetic_energy + snapshot.potential_energy;
+    let total_energy = snapshot.frame.kinetic_energy + snapshot.frame.potential_energy;
     let delta_energy = initial_total_energy
         .map(|initial| total_energy - initial)
         .unwrap_or(0.0);
@@ -379,11 +380,11 @@ fn frame_to_console_summary(
 
     format!(
         "step={} time={:.5} balls={} kinetic={:.5} potential={:.5} total={:.5} dE={:.5} operators={}/{}/{}/{}",
-        snapshot.simulation_step,
-        snapshot.time,
+        snapshot.frame.simulation_step,
+        snapshot.frame.time,
         snapshot.balls.len(),
-        snapshot.kinetic_energy,
-        snapshot.potential_energy,
+        snapshot.frame.kinetic_energy,
+        snapshot.frame.potential_energy,
         total_energy,
         delta_energy,
         operator_counts.line_segments.len(),
@@ -419,11 +420,11 @@ fn detail_level_name(detail: DetailLevel) -> &'static str {
 
 fn thermo_to_json(snapshot: &RendererSnapshot) -> serde_json::Value {
     let mut thermo = json!({
-        "temperature": thermo_grid_to_json(&snapshot.cell_temperature),
-        "pressure": thermo_grid_to_json(&snapshot.cell_pressure),
+        "temperature": thermo_grid_to_json(&snapshot.fields.temperature),
+        "pressure": thermo_grid_to_json(&snapshot.fields.pressure),
     });
 
-    if let Some(spec) = &snapshot.thermo_grid_spec {
+    if let Some(spec) = &snapshot.fields.thermo_grid {
         thermo["grid_spec"] = thermo_grid_spec_to_json(spec);
     }
 

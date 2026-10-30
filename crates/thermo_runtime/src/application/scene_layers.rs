@@ -50,6 +50,49 @@ impl SceneLayers {
     }
 }
 
+/// One scene layer: what it holds and which commands switch it (#341, the
+/// rest of plan item V1). The commands are ids of the UI's command registry
+/// (`COMMANDS`), whose test checks that each exists.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LayerDescriptor {
+    pub layer: SceneLayers,
+    pub name: &'static str,
+    /// What the layer adds to a snapshot and draws.
+    pub holds: &'static str,
+    /// Commands that switch the layer on or off; none for a layer that is
+    /// always drawn.
+    pub toggled_by: &'static [&'static str],
+}
+
+/// Every layer, in draw order of its first pipeline (the render graph's
+/// registration order decides the exact order within the frame).
+pub const LAYERS: &[LayerDescriptor] = &[
+    LayerDescriptor {
+        layer: SceneLayers::BASE,
+        name: "base",
+        holds: "operators, tool previews, sidebar and text",
+        toggled_by: &[],
+    },
+    LayerDescriptor {
+        layer: SceneLayers::THERMO,
+        name: "thermo",
+        holds: "thermo field grids, their heatmap and value overlays",
+        toggled_by: &["view.toggle_rendering", "view.cycle_thermo_overlay"],
+    },
+    LayerDescriptor {
+        layer: SceneLayers::BALLS,
+        name: "balls",
+        holds: "per-ball render data, neighbour lines of verbose balls, ball sprites",
+        toggled_by: &["view.toggle_rendering"],
+    },
+    LayerDescriptor {
+        layer: SceneLayers::READOUTS,
+        name: "readouts",
+        holds: "thermostat temperature readings and their labels",
+        toggled_by: &["view.toggle_rendering"],
+    },
+];
+
 impl Default for SceneLayers {
     fn default() -> Self {
         Self::ALL
@@ -68,6 +111,31 @@ mod tests {
         assert!(!light.contains(SceneLayers::BALLS));
         assert!(!light.contains(SceneLayers::THERMO));
         assert!(!light.contains(SceneLayers::READOUTS));
+    }
+
+    #[test]
+    fn every_layer_has_one_descriptor() {
+        use super::LAYERS;
+        let mut seen = SceneLayers(0);
+        for descriptor in LAYERS {
+            assert_eq!(
+                seen.intersection(descriptor.layer),
+                SceneLayers(0),
+                "{} twice",
+                descriptor.name
+            );
+            seen = SceneLayers(seen.0 | descriptor.layer.0);
+        }
+        assert_eq!(seen, SceneLayers::ALL);
+        // Only the base layer is always drawn.
+        for descriptor in LAYERS {
+            assert_eq!(
+                descriptor.toggled_by.is_empty(),
+                descriptor.layer == SceneLayers::BASE,
+                "{}",
+                descriptor.name
+            );
+        }
     }
 
     #[test]
