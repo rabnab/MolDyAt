@@ -164,9 +164,15 @@ contribution you agree that it is licensed under the same terms. New `.rs` and
 
 ## Commit Message Guidelines
 
+Use the commit template: `git config commit.template .github/commit_template.txt`
+(once per clone; `git commit` without `-m` then opens it).
+
 - Use imperative mood: "Fix bug" not "Fixed bug" or "Fixes bug"
 - Be specific: "Account for ball radii in collision detection"
 - Reference issues when relevant: "Addresses #18"
+- Mark AI-assisted commits with an `assisted by: <Tool> <email>` trailer,
+  human co-authors with `Co-authored-by: Name <email>`; never add AI session
+  links or IDs (e.g. `Claude-Session:`)
 
 ## Code Review
 
