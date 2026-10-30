@@ -296,18 +296,17 @@ fn scratch_buffers(main_content: &crate::application::MainContent) -> Vec<(usize
     ];
     forces.sort_unstable();
     let mut buffers = vec![
-        buffer(&s.old_positions, s.old_positions.capacity()),
         buffer(&s.neighbour_stats, s.neighbour_stats.capacity()),
         buffer(&u.obstacles, u.obstacles.capacity()),
         buffer(&u.bounce_infos, u.bounce_infos.capacity()),
         buffer(&u.sweep_checks, u.sweep_checks.capacity()),
         buffer(&u.overlap_passes, u.overlap_passes.capacity()),
-        buffer(&r.cell_of, r.cell_of.capacity()),
         buffer(&r.checked, r.checked.capacity()),
         buffer(&r.to_rebuild, r.to_rebuild.capacity()),
         buffer(&r.rebuilds, r.rebuilds.capacity()),
     ];
     buffers.extend(forces);
+    buffers.extend(world.cell_grid.buffers());
     buffers
 }
 

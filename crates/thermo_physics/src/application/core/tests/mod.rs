@@ -4,6 +4,7 @@
 
 mod alloc_count;
 mod ball_management;
+mod ball_reorder;
 mod barrier_energy;
 mod drift_harness;
 mod energy_conservation;

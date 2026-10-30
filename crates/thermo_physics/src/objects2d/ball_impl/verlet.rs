@@ -77,6 +77,15 @@ impl Verlet {
         }
     }
 
+    /// Renumber the partners after the balls were permuted: ball `old` is
+    /// now ball `new_index[old]`. The list stays sorted.
+    pub(crate) fn remap(&mut self, new_index: &[usize]) {
+        for idx in &mut self.neighbours {
+            *idx = new_index[*idx];
+        }
+        self.neighbours.sort_unstable();
+    }
+
     pub(crate) fn clear_neighbours(&mut self) {
         self.neighbours.clear();
         self.num_neighbours = 0;

@@ -200,14 +200,7 @@ fn test_unpause_after_resize_leaves_every_ball_in_its_cell() {
     let (rows, cols) = world.cell_grid.get_grid_size();
     let in_cells: usize = (0..rows)
         .flat_map(|row| (0..cols).map(move |col| (row, col)))
-        .map(|(row, col)| {
-            world
-                .cell_grid
-                .get_cell(row, col)
-                .unwrap()
-                .get_ball_indices()
-                .len()
-        })
+        .map(|(row, col)| world.cell_grid.balls_in_cell(row, col).count())
         .sum();
     assert_eq!(
         in_cells,
@@ -220,15 +213,10 @@ fn test_unpause_after_resize_leaves_every_ball_in_its_cell() {
             .cell_grid
             .get_cell_indices(ball.get_position())
             .expect("ball is inside the grid");
-        assert_eq!(ball.current_cell, Some(cell));
+        assert_eq!(world.cell_grid.cell_of_ball(idx), Some(cell));
         let (row, col) = cell;
         assert!(
-            world
-                .cell_grid
-                .get_cell(row, col)
-                .unwrap()
-                .get_ball_indices()
-                .contains(&idx),
+            world.cell_grid.balls_in_cell(row, col).any(|b| b == idx),
             "ball {idx} is not in the cell its position maps to"
         );
     }
