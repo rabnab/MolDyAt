@@ -67,6 +67,9 @@ Each scenario prints exactly one line, also when it fails:
   max_asymmetric_neighbor_pairs=… trajectory_hash=… result=…`
 - `DRIFT_CONVERGENCE name=…` for the timestep convergence tests, with the
   coarse and fine drift and their ratio.
+- `DRIFT_PRECISION name=… center=…` for the precision measurement
+  (`precision.rs`, see [Precision far from the origin](#precision-far-from-the-origin)):
+  one line per gas and world centre, with the drift at dt, dt/2 and dt/4.
 
 `relative energy drift` is `|E_t - E_0| / max(|E_0|, eps)`.
 
@@ -127,12 +130,67 @@ Notes:
 - `test_dense_gas_is_deterministic` compares a hash of the whole trajectory. It proves in-process reproducibility only, not reproducibility across runners or SIMD targets; the thresholds are the CI gate.
 - Injected regressions are re-runnable: `SimulationWorld::test_faults` (test builds only) scales the Verlet movement threshold or the wall restitution. `test_dense_gas_catches_injected_stale_neighbor_lists` and `test_world_wall_catches_injected_restitution_gain` run the real simulation with a fault and expect the checks to fail. The non-ignored `*_checks_catch_injected_regressions` tests feed synthetic broken runs to the check functions.
 
+## Precision far from the origin
+
+`precision.rs` (P8a, #344) measures what f32 positions cost away from the
+origin. It runs the dense gas (with projectiles) and the cool gas (without)
+in the 100 x 100 drift world centred at x = y = 0, 125, 500 and 2000, each at
+dt, dt/2 and dt/4 over the same physical time (1000, 2000, 4000 steps), and
+prints one `DRIFT_PRECISION` line per gas and centre. It asserts only that the
+dense gas at the origin converges (dt/4 ratio <= 0.125, as
+dense_gas_dt_quartering); the far runs measure, they do not gate. Position ulp
+is the f32 spacing at the largest coordinate the gas reaches (centre + 20).
+
+Max relative energy drift, seeded, dev profile on x86_64 (`d7bcf0c` + this test):
+
+| Gas | Centre | Position ulp | dt | dt/2 | dt/4 | dt/4 ratio |
+|---|---:|---:|---:|---:|---:|---:|
+| dense (projectiles) | 0 | 1.9e-6 | 3.50e-3 | 2.04e-3 | 4.19e-4 | 0.120 |
+| | 125 | 1.5e-5 | 3.52e-3 | 2.10e-3 | 3.51e-4 | 0.100 |
+| | 500 | 6.1e-5 | 3.60e-3 | 2.75e-3 | 5.19e-4 | 0.144 |
+| | 2000 | 1.2e-4 | 3.18e-3 | 2.64e-3 | 1.08e-3 | 0.339 |
+| cool (no projectiles) | 0 | 1.9e-6 | 8.94e-5 | 1.25e-5 | 1.58e-5 | 0.177 |
+| | 125 | 1.5e-5 | 8.35e-5 | 3.88e-5 | 8.45e-5 | 1.01 |
+| | 500 | 6.1e-5 | 1.56e-4 | 8.74e-5 | 3.58e-4 | 2.29 |
+| | 2000 | 1.2e-4 | 1.96e-4 | 3.40e-4 | 2.71e-4 | 1.38 |
+
+Reading:
+
+- The dense gas is dominated by the projectile pairs in the force-cap core,
+  whose error is large at every dt, so rounding shows only at 2000 (the dt/4
+  drift is 2.6x that at the origin, ratio 0.34 instead of 0.12).
+- The cool gas shows the rounding directly. At the origin it reaches a floor
+  of ~1.3e-5 already at dt/2 (the cutoff force jump and f32 sums, see the
+  timestep note above). At 125, where a world of `--world-scale 2` or more
+  already reaches, the floor is ~8e-5: smaller steps no longer help at all
+  (ratio 1.0). At 500 (`--world-scale 8` reaches ~450) the drift *grows*
+  as dt shrinks (ratio 2.3): every step rounds the position update, and more
+  steps round more often. At 2000 the error is ~10x the origin value at dt
+  and ~17x at dt/4.
+- Two effects are mixed: rounding of the accumulated position (grows with
+  the number of steps) and the coarse resolution of the pair distances the
+  forces are computed from (at 2000 an ulp is 5e-5 of the equilibrium
+  distance, which turns into force noise of ~13 x that).
+
+Recommendation for #213 (P8b): **f64 positions** (option 1 of the issue),
+with everything else in f32. Positions are only ever updated by small f32
+increments and read as differences; with f64 the increment is not rounded
+away and pair distances are computed as an f64 difference then narrowed to
+f32 for the SIMD kernel, so neither effect remains. Compensated f32
+integration (option 3) removes only the accumulation and keeps the coarse
+distances (the 2000 row would stay noisy); cell-relative coordinates
+(option 2) fix both but touch every position consumer (cell moves, walls,
+operators, snapshots) for the same result. The cost of f64 positions is 8
+more bytes per ball and an f64 subtraction per gathered neighbour; P6 (#346)
+puts positions into a hot array of their own first, so the change stays
+local to that array, the kernel gather and the position update.
+
 ## CI reporting
 
 The drift steps of the `test` job always upload `drift-harness.log` and write to the job summary:
 
 - the runner arch, CPU model and best host SIMD flag, plus the compiled `target_feature`s, which decide the SIMD path the baselines depend on;
-- every `DRIFT_SCENARIO` and `DRIFT_CONVERGENCE` line (matched anywhere in a log line: tests run in parallel, so a line can start after another test's output);
+- every `DRIFT_SCENARIO`, `DRIFT_CONVERGENCE` and `DRIFT_PRECISION` line (matched anywhere in a log line: tests run in parallel, so a line can start after another test's output);
 - every `DRIFT_WARNING` line, also emitted as a `::warning` annotation. A scenario prints one when a passing metric exceeds 70% (`DRIFT_WARNING_FRACTION`) of its threshold, so shrinking margins show up before they fail the build.
 
 ## Changing thresholds
