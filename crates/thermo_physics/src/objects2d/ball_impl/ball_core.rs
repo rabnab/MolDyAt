@@ -55,6 +55,10 @@ impl BounceInfo {
 /// pointer to the rest ([`BallCold`]), so the hot data of many balls shares
 /// cache lines (P6, #346).
 pub struct Ball2D {
+    /// The position (#213): f64, so the small step increments are not
+    /// rounded away far from the origin. Every move goes through it.
+    exact: [f64; 2],
+    /// `exact` rounded to f32, for everything that reads positions.
     pos: Vec2D,
     pub v: Vec2D,
     pub accel: Vec2D,
@@ -132,6 +136,7 @@ impl Ball2D {
         Ball2D {
             contact_radius: data.contact_radius(),
             species,
+            exact: [f64::from(pos.x), f64::from(pos.y)],
             pos,
             id,
             mass: data.mass,
@@ -157,6 +162,12 @@ impl Ball2D {
     // Basic position and property access methods
     pub fn get_position(&self) -> &Vec2D {
         &self.pos
+    }
+
+    /// The position in f64 (see `exact`): for differences of positions far
+    /// from the origin (the force kernel).
+    pub(crate) fn exact_position(&self) -> [f64; 2] {
+        self.exact
     }
 
     pub fn get_tail_positions(&self) -> Option<&VecDeque<Vec2D>> {
@@ -273,27 +284,29 @@ impl Ball2D {
     /// Resolve one box axis: the ball's centre must stay in `[min, max]`.
     /// Returns the new coordinate and the contact, if the ball reached a wall.
     fn resolve_box_axis(
-        pos: f32,
+        pos: f64,
         velocity: f32,
         accel: f32,
         (min, max): (f32, f32),
         dt: f32,
         restitution: f32,
-    ) -> (f32, Option<(f32, NormalPosition)>) {
-        // Sum the displacement first: adding its terms to a large coordinate
-        // one by one would round away most of the small ½·a·dt² term.
+    ) -> (f64, Option<(f32, NormalPosition)>) {
+        // The displacement is small and computed in f32; added to the f64
+        // position it is not rounded away far from the origin (#213).
         let displacement = velocity * dt + 0.5 * accel * dt * dt;
-        let free = pos + displacement;
+        let free = pos + f64::from(displacement);
+        let (min, max) = (f64::from(min), f64::from(max));
         if free <= min {
             // Normal +axis: distance from the wall is `pos - min`.
-            if let Some(n) = resolve_normal_position(pos - min, velocity, accel, dt, restitution) {
-                return (min + n.distance, Some((1.0, n)));
+            let distance = (pos - min) as f32;
+            if let Some(n) = resolve_normal_position(distance, velocity, accel, dt, restitution) {
+                return (min + f64::from(n.distance), Some((1.0, n)));
             }
         } else if free >= max {
             // Normal -axis: distance from the wall is `max - pos`.
-            if let Some(n) = resolve_normal_position(max - pos, -velocity, -accel, dt, restitution)
-            {
-                return (max - n.distance, Some((-1.0, n)));
+            let distance = (max - pos) as f32;
+            if let Some(n) = resolve_normal_position(distance, -velocity, -accel, dt, restitution) {
+                return (max - f64::from(n.distance), Some((-1.0, n)));
             }
         }
         (free, None)
@@ -322,12 +335,13 @@ impl Ball2D {
         let x_range = (f32::min(x0, x1) + contact, f32::max(x0, x1) - contact);
         let y_range = (f32::min(y0, y1) + contact, f32::max(y0, y1) - contact);
 
+        let [x, y] = self.exact;
         let (x, x_contact) =
-            Self::resolve_box_axis(self.pos.x, self.v.x, self.accel.x, x_range, dt, restitution);
+            Self::resolve_box_axis(x, self.v.x, self.accel.x, x_range, dt, restitution);
         let (y, y_contact) =
-            Self::resolve_box_axis(self.pos.y, self.v.y, self.accel.y, y_range, dt, restitution);
+            Self::resolve_box_axis(y, self.v.y, self.accel.y, y_range, dt, restitution);
 
-        self.set_position_and_update_tail(Vec2D::new(x, y));
+        self.set_exact_position([x, y]);
 
         if self.verbose.console {
             log::debug!(
@@ -363,6 +377,14 @@ impl Ball2D {
     /// # Arguments
     /// * `new_pos` - New position to set
     pub(crate) fn set_position_and_update_tail(&mut self, new_pos: Vec2D) {
+        self.set_exact_position([f64::from(new_pos.x), f64::from(new_pos.y)]);
+    }
+
+    /// Set the f64 position and its f32 copy, and the tail (see
+    /// [`Self::set_position_and_update_tail`]).
+    fn set_exact_position(&mut self, exact: [f64; 2]) {
+        self.exact = exact;
+        let new_pos = Vec2D::new(exact[0] as f32, exact[1] as f32);
         if self.verbose.any() {
             let tail = self.cold.tail.get_or_insert_with(Default::default);
             let far_enough = tail
@@ -453,7 +475,6 @@ mod tests {
     #[test]
     fn test_execute_update_pos_and_bounce() {
         let mut b = Ball2D {
-            pos: Vec2D::new(0.0, 0.0),
             v: Vec2D::new(10.0, 0.0),
             ..Default::default()
         };
@@ -471,7 +492,7 @@ mod tests {
 
         // Now move towards bottom boundary in y
         b.v = Vec2D::new(0.0, -10.0);
-        b.pos = Vec2D::new(0.0, 0.0);
+        b.set_position_and_update_tail(Vec2D::new(0.0, 0.0));
         let bounce_info = b.execute_update_pos(0.2, &bound, 1.0, 1.0); // dy = -2.0 -> bounce at y = -1
         assert!(b.pos.y >= -1.0 - 1e-6, "Position should be reflected");
         assert!(bounce_info.box_y.is_some(), "Should detect y bounce");
@@ -510,12 +531,29 @@ mod tests {
     }
 
     /// The hot part stays small (P6, #346): the passes over all balls read
-    /// about one cache line per ball. A new field that not every pass needs
-    /// belongs in `BallCold`.
+    /// little more than one cache line per ball (96 bytes since the f64
+    /// position of #213). A new field that not every pass needs belongs in
+    /// `BallCold`.
     #[test]
-    fn test_hot_ball_data_fits_in_80_bytes() {
+    fn test_hot_ball_data_fits_in_96_bytes() {
         let size = std::mem::size_of::<Ball2D>();
-        assert!(size <= 80, "Ball2D is {size} bytes");
+        assert!(size <= 96, "Ball2D is {size} bytes");
+    }
+
+    /// Far from the origin, steps smaller than the f32 spacing still move the
+    /// ball (#213): 1000 steps of 1e-5 at x = 2000 (f32 spacing 1.2e-4).
+    #[test]
+    fn test_small_steps_accumulate_far_from_the_origin() {
+        let mut b = Ball2D::new(1, Vec2D::new(2000.0, 0.0), DEFAULT_SPECIES);
+        b.v = Vec2D::new(1e-3, 0.0);
+        b.set_accel(Vec2D::zero());
+        let bound = Rect::new(-4000.0, 4000.0, 8000.0, -8000.0);
+        for _ in 0..1000 {
+            b.execute_update_pos(0.01, &bound, 1.0, 1.0);
+        }
+        let moved = b.exact_position()[0] - 2000.0;
+        assert!((moved - 1e-2).abs() < 1e-9, "moved {moved}");
+        assert!((b.get_position().x - 2000.01).abs() < 2e-4);
     }
 
     #[test]
