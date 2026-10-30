@@ -13,17 +13,27 @@ fn make_content() -> MainContent {
 /// Positions and velocities (as bits) of the balls an emitting source sphere
 /// produced in a world seeded with `seed`.
 fn emitted_ball_state(seed: u64) -> Vec<[u32; 4]> {
+    emitted_ball_state_in_gas(seed, 0, false)
+}
+
+/// [`emitted_ball_state`] in a gas of `gas_balls` moving balls, which block
+/// some emissions; `full_scan` checks emitted balls against every ball
+/// instead of the grid.
+fn emitted_ball_state_in_gas(seed: u64, gas_balls: usize, full_scan: bool) -> Vec<[u32; 4]> {
     let mut mc = crate::application::core::tests::new_main_content_seeded(
         Rect::new(-20.0, 20.0, 40.0, -40.0),
         seed,
     )
     .unwrap();
+    mc.world_mut().test_faults.emission_full_scan = full_scan;
+    mc.seed_random_balls_with_speed(gas_balls, 3.0);
     mc.add_source_sphere(Vec2D::new(0.0, 0.0));
     let id = mc.world().source_spheres.spheres()[0].id;
     mc.toggle_source_sphere(id);
     mc.adjust_source_sphere_emit_period(id, -(MAX_EMIT_PERIOD as i32));
     mc.adjust_source_sphere_speed(id, 1.0);
-    for _ in 0..40 {
+    let steps = if gas_balls == 0 { 40 } else { 400 };
+    for _ in 0..steps {
         mc.simulation_step().unwrap();
     }
     mc.world()
@@ -47,6 +57,16 @@ fn test_seeded_source_sphere_emits_the_same_balls_every_run() {
     assert!(first.len() >= 2, "only {} balls emitted", first.len());
     assert_eq!(first, emitted_ball_state(99));
     assert_ne!(first, emitted_ball_state(100));
+}
+
+/// The grid check emits exactly the balls the full scan emits (#250), in a
+/// gas whose balls change cells every step and block some emissions.
+#[test]
+fn test_grid_emission_check_emits_the_same_balls_as_the_full_scan() {
+    let grid = emitted_ball_state_in_gas(7, 120, false);
+    let full = emitted_ball_state_in_gas(7, 120, true);
+    assert!(grid.len() >= 120 + 10, "only {} balls in total", grid.len());
+    assert_eq!(grid, full);
 }
 
 // ── Placement and lifecycle ─────────────────────────────────────────

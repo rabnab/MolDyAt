@@ -308,6 +308,9 @@ pub(crate) struct TestFaults {
     pub(crate) neighbor_movement_scale: f32,
     /// Multiplies the reflected wall velocity (> 1 injects energy).
     pub(crate) wall_restitution: f32,
+    /// Source spheres check emitted balls against every ball instead of the
+    /// grid (not a fault: the reference the grid check is compared with).
+    pub(crate) emission_full_scan: bool,
 }
 
 #[cfg(test)]
@@ -316,6 +319,7 @@ impl Default for TestFaults {
         Self {
             neighbor_movement_scale: 1.0,
             wall_restitution: 1.0,
+            emission_full_scan: false,
         }
     }
 }

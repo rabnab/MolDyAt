@@ -11,6 +11,11 @@
 //! or a stale cell entry). The answer is the same boolean, so seeding places
 //! exactly the same balls and draws the same random numbers.
 //!
+//! Source-sphere emission (#250) runs right after the step's grid rebuild,
+//! when the grid holds every ball at its position. It needs no index: the
+//! orphans are the grid's balls outside it and the reach comes from the
+//! species present ([`SimulationWorld::is_ball_colliding_in_grid`]).
+//!
 //! The lookup is exact only when every ball the candidate can collide with
 //! lies in those 3x3 cells: a collision needs a centre distance below the
 //! pair's contact distance plus the margin (the "reach";
@@ -77,9 +82,40 @@ impl SimulationWorld {
         margin: f32,
         index: &PlacementIndex,
     ) -> bool {
+        self.is_ball_colliding_near(
+            candidate,
+            margin,
+            index.present,
+            index.orphans.iter().copied(),
+        )
+    }
+
+    /// Same result as [`Self::is_ball_colliding`], from the grid alone, with
+    /// no O(balls) pass: the balls outside the grid are its orphans and the
+    /// species present bound the reach (#250). Exact only while the grid
+    /// holds every ball in the cell of its position, which holds right after
+    /// `CellGrid::rebuild` and the adds that follow it (source-sphere
+    /// emission in the `cells` phase).
+    pub(crate) fn is_ball_colliding_in_grid(&self, candidate: &Ball2D, margin: f32) -> bool {
+        debug_assert!(
+            self.cell_grid.matches_positions(&self.balls),
+            "the grid does not hold every ball at its position"
+        );
+        let outside = self.cell_grid.outside_balls().iter().map(|&b| b as usize);
+        self.is_ball_colliding_near(candidate, margin, self.species_present, outside)
+    }
+
+    /// The 3x3 cells around `candidate` plus `orphans` (balls the grid does
+    /// not hold at their position); the full scan where that is not exact.
+    fn is_ball_colliding_near(
+        &self,
+        candidate: &Ball2D,
+        margin: f32,
+        present: SpeciesSet,
+        mut orphans: impl Iterator<Item = usize>,
+    ) -> bool {
         let grid = &self.cell_grid;
-        let reach = index
-            .present
+        let reach = present
             .iter()
             .map(|s| self.physics.contact_distance(candidate.species(), s))
             .fold(0.0, f32::max)
@@ -112,6 +148,6 @@ impl SimulationWorld {
             hit = hit || balls.iter().map(|&b| b as usize).any(|b| collides(&b));
         });
         //check orphans for collision (balls not on grid)
-        hit || index.orphans.iter().any(collides)
+        hit || orphans.any(|b| collides(&b))
     }
 }
