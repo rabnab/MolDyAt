@@ -255,20 +255,38 @@ fn test_listed_neighbours_beyond_cutoff_do_not_interact() {
 }
 
 #[test]
-fn test_kernel_point_is_one_aligned_16_byte_record() {
-    assert_eq!(std::mem::size_of::<KernelPoint>(), 16);
-    assert_eq!(std::mem::align_of::<KernelPoint>(), 16);
+fn test_kernel_point_is_one_24_byte_record() {
+    assert_eq!(std::mem::size_of::<KernelPoint>(), 24);
 }
 
 #[test]
-fn test_kernel_point_reads_pre_update_pos_species_and_contact_radius() {
+fn test_kernel_point_reads_f64_position_species_and_contact_radius() {
     let m = species("M");
-    let mut ball = Ball2D::new(0, Vec2D::new(1.0, 2.0), m);
-    ball.pre_update_pos = Vec2D::new(4.0, 5.0);
+    let ball = Ball2D::new(0, Vec2D::new(1.0, 2.0), m);
     let point = KernelPoint::from(&ball);
-    assert_eq!((point.x, point.y), (4.0, 5.0));
+    assert_eq!((point.x, point.y), (1.0, 2.0));
     assert_eq!(point.species as usize, m.index());
     assert_eq!(point.contact_radius, ball.contact_radius);
+}
+
+/// Far from the origin the pair difference keeps its resolution (#213):
+/// two balls 2.3 apart at x = 2000, 1e-5 off the f32 grid, give the exact
+/// distance, which the f32 positions round by up to 1.2e-4.
+#[test]
+fn test_kernel_point_difference_is_taken_in_f64() {
+    let m = species("M");
+    let a = KernelPoint {
+        x: 2_000.000_01,
+        y: 0.0,
+        species: m.index() as u32,
+        contact_radius: 0.0,
+    };
+    let b = KernelPoint {
+        x: 2_002.300_02,
+        ..a
+    };
+    let d = a.dist(&b);
+    assert!((f64::from(d.x) - 2.300_01).abs() < 1e-6, "{}", d.x);
 }
 
 #[test]
