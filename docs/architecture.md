@@ -123,8 +123,11 @@ headless runs; both step with the configured time step.
    `gravity_potential`). Changing gravity or adding balls shifts the total
    energy: it measures drift only while gravity and the ball count stay
    fixed.
-5. **cells**: source spheres emit balls, the cell grid is rebuilt from
-   the new positions, invalid (NaN) balls are removed, and every
+5. **cells**: the cell grid is rebuilt from the new positions, source
+   spheres emit balls (checked against the 3x3 cells around each
+   candidate and the grid's list of balls outside it,
+   `is_ball_colliding_in_grid`, exact because the grid was just rebuilt,
+   #250), invalid (NaN) balls are removed, and every
    `reorder_interval` steps (`[neighbours]`, 0 = never) the balls are
    sorted by cell. The grid (`CellGrid`, P4) is a counting sort: each
    ball's cell is computed in parallel, then one serial pass in ball order
