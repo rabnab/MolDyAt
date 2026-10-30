@@ -420,8 +420,8 @@ fn detail_level_name(detail: DetailLevel) -> &'static str {
 
 fn thermo_to_json(snapshot: &RendererSnapshot) -> serde_json::Value {
     let mut thermo = json!({
-        "temperature": thermo_grid_to_json(&snapshot.fields.temperature),
-        "pressure": thermo_grid_to_json(&snapshot.fields.pressure),
+        "temperature": thermo_grid_to_json(&snapshot.fields.cells.temperature),
+        "pressure": thermo_grid_to_json(&snapshot.fields.cells.pressure),
     });
 
     if let Some(spec) = &snapshot.fields.thermo_grid {

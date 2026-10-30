@@ -262,9 +262,9 @@ fn test_thermo_snapshot_populated_after_step_with_balls() {
     let snap = mc.create_snapshot();
     // After one step with ≥ 2 balls, thermo fields must be populated
     assert!(snap.fields.thermo_grid.is_some(), "spec should be Some");
-    let (rows, cols) = snap.fields.temperature.shape();
+    let (rows, cols) = snap.fields.cells.temperature.shape();
     assert!(rows > 0 && cols > 0, "T grid should be non-empty");
-    let (pr, pc) = snap.fields.pressure.shape();
+    let (pr, pc) = snap.fields.cells.pressure.shape();
     assert!(pr > 0 && pc > 0, "P grid should be non-empty");
 }
 
@@ -277,10 +277,10 @@ fn test_thermo_grid_shape_matches_spec() {
         .thermo_grid
         .as_ref()
         .expect("spec should be Some");
-    let (t_rows, t_cols) = snap.fields.temperature.shape();
+    let (t_rows, t_cols) = snap.fields.cells.temperature.shape();
     assert_eq!(t_rows, spec.rows, "T rows must match spec");
     assert_eq!(t_cols, spec.cols, "T cols must match spec");
-    let (p_rows, p_cols) = snap.fields.pressure.shape();
+    let (p_rows, p_cols) = snap.fields.cells.pressure.shape();
     assert_eq!(p_rows, spec.rows, "P rows must match spec");
     assert_eq!(p_cols, spec.cols, "P cols must match spec");
 }
@@ -294,15 +294,15 @@ fn test_thermo_snapshot_single_ball_all_nan() {
         snap.fields.thermo_grid.is_some(),
         "spec should be Some even with 1 ball"
     );
-    let (rows, cols) = snap.fields.temperature.shape();
+    let (rows, cols) = snap.fields.cells.temperature.shape();
     for r in 0..rows {
         for c in 0..cols {
             assert!(
-                snap.fields.temperature.get(r, c).is_nan(),
+                snap.fields.cells.temperature.get(r, c).is_nan(),
                 "T[{r},{c}] should be NaN with 1 ball"
             );
             assert!(
-                snap.fields.pressure.get(r, c).is_nan(),
+                snap.fields.cells.pressure.get(r, c).is_nan(),
                 "P[{r},{c}] should be NaN with 1 ball"
             );
         }
@@ -350,7 +350,7 @@ fn snapshot_without_heavy_layers_skips_ball_render_data_and_thermo_grids() {
     assert_eq!(light.frame.layers, light_layers);
     assert!(light.balls.is_empty());
     assert!(light.fields.thermo_grid.is_none());
-    assert_eq!(light.fields.temperature.shape(), (0, 0));
+    assert_eq!(light.fields.cells.temperature.shape(), (0, 0));
     assert_eq!(light.frame.kinetic_energy, full.frame.kinetic_energy);
     // The status numbers come either way. Their content is not compared:
     // they include the process-wide neighbour-update counter, which tests
@@ -447,7 +447,7 @@ fn a_new_species_keeps_the_thermo_grid_and_its_average() {
     step_with_heatmap(&mut mc, 25);
     let cells_before = mc.world().cell_grid().get_grid_size();
     let samples_before = mc.world().thermo_history().len();
-    let (t_before, _) = mc.world().thermo_history().average().unwrap();
+    let t_before = mc.world().thermo_history().average().unwrap().temperature;
 
     // Species of new balls: N2, XS, S, M, L, XL in the built-in table.
     for _ in 0..5 {
@@ -466,7 +466,7 @@ fn a_new_species_keeps_the_thermo_grid_and_its_average() {
         samples_before + 2,
         "the rolling average was not restarted"
     );
-    let (t_after, _) = mc.world().thermo_history().average().unwrap();
+    let t_after = mc.world().thermo_history().average().unwrap().temperature;
     assert_eq!(t_after.shape(), t_before.shape());
 }
 
@@ -483,7 +483,7 @@ fn the_thermo_grid_has_the_same_resolution_for_any_species() {
     xl.add_candidate_at_pos(Vec2D::new(20.0, 0.0)).unwrap();
     step_with_heatmap(&mut xl, 1);
 
-    let shape = |mc: &MainContent| mc.world().thermo_history().average().unwrap().0.shape();
+    let shape = |mc: &MainContent| mc.world().thermo_history().average().unwrap().shape();
     assert_eq!(shape(&n2), thermo_grid_dims(80.0, 80.0));
     assert_eq!(shape(&n2), shape(&xl));
     let publisher = SnapshotPublisher::new();
@@ -496,7 +496,7 @@ fn the_thermo_grid_has_the_same_resolution_for_any_species() {
 fn test_strided_thermo_average_matches_per_step_average() {
     use crate::application::thermo_field::{
         THERMO_SAMPLE_STRIDE, THERMO_WINDOW, THERMO_WINDOW_STEPS, ThermoFieldHistory,
-        compute_cell_thermo,
+        compute_cell_fields,
     };
 
     // The same run averaged two ways over the same 1000 steps: every step
@@ -511,7 +511,7 @@ fn test_strided_thermo_average_matches_per_step_average() {
         mc.simulation_step().unwrap();
         let world = mc.world();
         let fields = || {
-            compute_cell_thermo(
+            compute_cell_fields(
                 world.balls(),
                 world.cached_force_results(),
                 &world.world_rect(),
@@ -519,16 +519,16 @@ fn test_strided_thermo_average_matches_per_step_average() {
                 0,
             )
         };
-        let (t, p) = fields();
-        every_step.push(t, p);
+        every_step.push(fields());
         if step.is_multiple_of(THERMO_SAMPLE_STRIDE) {
-            let (t, p) = fields();
-            strided.push(t, p);
+            strided.push(fields());
         }
     }
 
-    let (t_all, p_all) = every_step.average().expect("per-step average");
-    let (t_strided, p_strided) = strided.average().expect("strided average");
+    let all = every_step.average().expect("per-step average");
+    let sampled = strided.average().expect("strided average");
+    let (t_all, p_all) = (all.temperature, all.pressure);
+    let (t_strided, p_strided) = (sampled.temperature, sampled.pressure);
     for (name, all, sampled) in [("T", &t_all, &t_strided), ("P", &p_all, &p_strided)] {
         let pairs: Vec<(f32, f32)> = all
             .as_slice()

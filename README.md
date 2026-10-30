@@ -306,7 +306,7 @@ Keyboard (press `H` for the same list in the log):
 | `0` | Reset the viewport (1.0x zoom, centred). |
 | `F2` | Toggle rendering. |
 | `F3` | Cycle the cutoff-radius rings. |
-| `T` | Cycle the thermo overlay: Off -> Grid -> Temperature -> Pressure -> Off. |
+| `T` | Cycle the field overlay: Off -> Grid -> Temperature -> Pressure -> Density -> Flow speed -> Flow arrows -> Off. |
 | `P` | Cycle the plot content (in the plot window: the focused plot's energy preset). |
 | `TAB` | Toggle the energy plot window. |
 | `HOME` | Reset the energy plot's time range (follow the newest sample; also a middle double click in the plot). |

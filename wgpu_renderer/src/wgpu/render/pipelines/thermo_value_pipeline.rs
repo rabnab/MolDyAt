@@ -5,14 +5,13 @@
 //! Per-cell thermodynamic value text overlay pipeline.
 //!
 //! Renders a formatted two-decimal label (e.g., "12.34") centred on each grid
-//! cell that holds a finite T/P value. Hidden unless a thermo display mode
-//! (temperature / pressure) is active.
+//! cell that holds a finite value of the scalar field shown. Hidden unless a
+//! scalar field overlay is active.
 
 use thermo_physics::application::AppResult;
 use thermo_physics::application::thermo_field::ThermoGrid;
 use thermo_runtime::application::renderer_snapshot::ThermoGridSpec;
 use thermo_runtime::application::scene_layers::SceneLayers;
-use thermo_ui::graphics::renderer::state_layers::ThermoDisplayMode;
 
 use crate::wgpu::render::gpu::geometry::apply_view_proj;
 use crate::wgpu::render::gpu::text::{
@@ -93,14 +92,11 @@ impl RenderPipeline for ThermoValueOverlayPipeline {
     }
 
     fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
-        let grid = match ctx.thermo_display {
-            ThermoDisplayMode::Temperature => &ctx.fields.temperature,
-            ThermoDisplayMode::Pressure => &ctx.fields.pressure,
-            ThermoDisplayMode::Off | ThermoDisplayMode::Grid => {
-                self.text.clear();
-                return Ok(());
-            }
+        let Some(field) = ctx.thermo_display.scalar_field() else {
+            self.text.clear();
+            return Ok(());
         };
+        let grid = field.grid(&ctx.fields.cells);
         let Some(spec) = &ctx.fields.thermo_grid else {
             self.text.clear();
             return Ok(());

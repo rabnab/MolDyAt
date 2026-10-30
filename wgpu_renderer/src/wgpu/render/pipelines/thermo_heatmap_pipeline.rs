@@ -4,7 +4,8 @@
 
 //! Thermo heatmap overlay pipeline.
 //!
-//! Draws one quad covering the simulation world area. The scalar T/P field is
+//! Draws one quad covering the simulation world area. The scalar field shown
+//! (temperature, pressure, density or flow speed, see `SCALAR_FIELDS`) is
 //! uploaded as an `R8Unorm` texture (one texel per cell) and reconstructed in
 //! the fragment shader with a cubic B-spline filter, so a coarse grid looks
 //! like a smooth surface. See `thermo_heatmap.wgsl`.
@@ -31,12 +32,6 @@ use crate::wgpu::render::gpu::batch::{BatchDesc, GpuBatch, SceneUniforms};
 use crate::wgpu::render::gpu::shaders;
 use crate::wgpu::render::gpu::textures::{r8_texture, write_r8};
 use crate::wgpu::render::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
-
-// Fixed normalisation ranges of the displayed field.
-const TEMP_MIN: f32 = 0.0;
-const TEMP_MAX: f32 = 5.0;
-const PRES_MIN: f32 = -4.0;
-const PRES_MAX: f32 = 4.0;
 
 /// Number of 3x3 spatial blur passes (weights 1-2-1 per axis) applied to the
 /// field before upload. 0 = off, 1 = gentle, 2 = strong.
@@ -65,7 +60,7 @@ struct TemporalSmoother {
     /// Row-major, all finite
     shown: Vec<f32>,
     dims: (usize, usize),
-    /// Display mode `shown` belongs to (temperature vs pressure).
+    /// Display mode `shown` belongs to (which scalar field).
     mode: Option<ThermoDisplayMode>,
     last: Instant,
 }
@@ -164,7 +159,7 @@ impl TemporalSmoother {
     /// Exponential moving average over time, in place.
     ///
     /// Restarts from the current field when the grid shape or the display mode
-    /// (temperature / pressure) changes. The weight is derived from the elapsed
+    /// (the scalar field shown) changes. The weight is derived from the elapsed
     /// time, so the smoothing doesn't depend on the frame rate, and after a long
     /// pause (e.g. the overlay was switched off) the field snaps to the current
     /// values instead of sliding from stale ones.
@@ -237,14 +232,13 @@ impl RenderPipeline for ThermoHeatmapPipeline {
 
     fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
         let mode = ctx.thermo_display;
-        let (grid, range) = match mode {
-            ThermoDisplayMode::Temperature => (&ctx.fields.temperature, (TEMP_MIN, TEMP_MAX)),
-            ThermoDisplayMode::Pressure => (&ctx.fields.pressure, (PRES_MIN, PRES_MAX)),
-            ThermoDisplayMode::Off | ThermoDisplayMode::Grid => {
-                self.gpu.clear();
-                return Ok(());
-            }
+        let Some(field) = mode.scalar_field() else {
+            self.gpu.clear();
+            return Ok(());
         };
+        // Each field's own fixed normalisation range (`SCALAR_FIELDS`).
+        let range = field.descriptor().range;
+        let grid = field.grid(&ctx.fields.cells);
         let Some(spec) = &ctx.fields.thermo_grid else {
             log::debug!("ThermoHeatmapPipeline: no thermo_grid_spec, skipping");
             self.gpu.clear();

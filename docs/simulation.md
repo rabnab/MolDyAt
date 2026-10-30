@@ -64,13 +64,14 @@ That means a valve's geometry is not stored as two independent world points. Ins
 
 ## Thermodynamic Grid Space
 
-Derived temperature and pressure fields are stored in row-major grid space.
+Derived per-cell fields (temperature, pressure, density, flow velocity) are stored in row-major grid space.
 
 - `ThermoGrid` stores `(rows, cols)` plus flat row-major data.
-- Grid cell `(0, 0)` corresponds to the top-left cell of the world rectangle.
+- Grid cell `(0, 0)` is the cell at the world rectangle's minimum `x` and minimum `y` (bottom-left, with `y` up); rows grow with `y`.
 - Grid indexing is computed from the minimum world-space `x` and `y` corner, so both positive-height and negative-height `Rect` values map consistently.
 - The thermo grid is its own, not the physics `CellGrid` (#290): `thermo_grid_dims` fits as many cells of at least `THERMO_CELL_SIZE` (10, in `σ` of `N2`) into the world rectangle as there is room for, at least one per axis. The default 112 x 62 world has 11 x 6 cells, whatever species it holds. Only a resize or a load changes the shape; `ThermoFieldHistory` restarts its rolling average then, never when species come or go. The physics cells, by contrast, are at least the largest neighbour-list radius among the species present (4.8 with only `N2`, 21.9 with `XL` balls), which the 3x3 neighbour search needs; `ThermoGridSpec` in the snapshot describes the thermo grid, `CellGridSpec` the physics grid (the `Grid` overlay).
-- The T/P field is sampled every `THERMO_SAMPLE_STRIDE` (10) steps, and right away when the history is empty, and only while the heatmap is shown. The rolling average keeps `THERMO_WINDOW` (100) samples, so it still spans `THERMO_WINDOW_STEPS` (1000) steps. The field does not feed back into the physics.
+- Each sample bins the balls into the thermo grid once and gives every per-cell field (`CellFields`, #342): temperature and virial pressure (cells with at least 2 balls), number density (balls per area, 0 for an empty cell) and the flow velocity, the cell's centre-of-mass velocity (cells with at least 1 ball). The overlay (`T`) shows one scalar field as a heatmap with value labels (`SCALAR_FIELDS`: temperature, pressure, density, flow speed `|v_com|`) or the flow velocity as arrows, scaled to the fastest cell.
+- The field is sampled every `THERMO_SAMPLE_STRIDE` (10) steps, and right away when the history is empty, and only while the heatmap is shown. The rolling average keeps `THERMO_WINDOW` (100) samples, so it still spans `THERMO_WINDOW_STEPS` (1000) steps. The field does not feed back into the physics.
 
 This grid space is for visualization and analysis only. It does not replace world-space coordinates for simulation objects.
 

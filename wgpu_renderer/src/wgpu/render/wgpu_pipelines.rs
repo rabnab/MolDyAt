@@ -12,6 +12,7 @@ use crate::wgpu::render::gpu::geometry::build_view_proj_matrix;
 use crate::wgpu::render::pipelines::ball_pipeline::BallPipeline;
 use crate::wgpu::render::pipelines::crosshair_pipeline::CrosshairPipeline;
 use crate::wgpu::render::pipelines::endpoint_pipeline::EndpointPipeline;
+use crate::wgpu::render::pipelines::flow_arrow_pipeline::FlowArrowPipeline;
 use crate::wgpu::render::pipelines::frame_pipeline::FramePipeline;
 use crate::wgpu::render::pipelines::grid_pipeline::GridPipeline;
 use crate::wgpu::render::pipelines::highlight_pipeline::HighlightPipeline;
@@ -64,6 +65,7 @@ impl WgpuPipelines {
         add(Box::new(ThermoValueOverlayPipeline::new(
             device, queue, format,
         )));
+        add(Box::new(FlowArrowPipeline::new(device, queue, format)));
         add(Box::new(WallPipeline::new(device, queue, format)));
         add(Box::new(ValvePipeline::new(device, queue, format)));
         add(Box::new(LinePipeline::new(device, queue, format)));

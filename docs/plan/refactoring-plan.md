@@ -156,7 +156,7 @@ guardrails. Water (I9–I10) follows. See §5 for the model choice behind it.
 | V3 | Metrics/time-series store | `MetricsRegistry` in runtime: named series (E_kin, E_pot, E_tot, T, P, wall momentum, neighbour count, step time, per-species values, …) in ring buffers, sampled at snapshot cadence. `EnergyData` becomes one consumer. Headless JSONL output reads the same store. Unblocks the per-species series of I7. | M | M8 |
 | V4a | Plot window (wgpu) | Separate OS window rendered with wgpu (shared device, own surface) replacing the softbuffer character plot: a line-plot pipeline with axes and ticks for the E_kin / E_pot / E_tot series of V3. `softbuffer` is dropped. Window placement keeps the current split-screen layout. Done (#338): `PlotScene` layout in `thermo_ui`, `PlotSurface` / `PlotPipeline` in the binary; see `docs/architecture.md#energy-plot-window`. | M | V3, M9 |
 | V4b | Plot selection and layout | Any selected series from V3, several plots per window, legend, autoscale. Done (#339): `PlotSelection`, up to 4 plots stacked on a shared time axis, series picked with `,` / `.`, `Ctrl/Alt + P`, plots with `Ctrl/Alt + L`, focus with `F` or a click, a click on a legend entry hides a series; see `docs/architecture.md#energy-plot-window`. | M | V4a |
-| V5 | Field visualisations | Generalise thermo heatmap to any scalar per-cell field (T, P, density, velocity magnitude) and add a vector field (velocity arrows). Field selection cycles through registry. Builds on the thermo grid of its own from #290, so the field resolution does not change with the species present. | M | V2, #290 |
+| V5 | Field visualisations | Generalise thermo heatmap to any scalar per-cell field (T, P, density, velocity magnitude) and add a vector field (velocity arrows). Field selection cycles through registry. Builds on the thermo grid of its own from #290, so the field resolution does not change with the species present. Done (#342): `CellFields` (T, P, density, flow velocity) averaged by `ThermoFieldHistory`; `T` cycles through `SCALAR_FIELDS` (temperature, pressure, density, flow speed) and the flow arrows (`FlowArrowPipeline`). | M | V2, #290 |
 | V6 | Distribution graphs | Speed histogram vs. Maxwell–Boltzmann, radial distribution function g(r) — computed off the hot path at snapshot cadence. Headless output and export (V7) first; the plot needs V4b. | M | V3, V7 (V4b for the plot) |
 | V7 | Data export | CSV/JSONL export of selected series and a snapshot dump from the UI (command) and headless. Done (#337): `thermo_runtime::export` (`Ctrl + E` / `Ctrl + J` series, `Alt + E` / `Alt + J` per-ball snapshot, `--export-dir`, `--export-format`, `--export-series`); see `docs/headless.md#data-export`. | S | V3 |
 
@@ -213,7 +213,7 @@ GitHub issues (every open issue is in a phase, as of 2026-10-23):
 | 3 | #304 | M2 #305, #295, #270, #273, #274, M5 #306, C4 #307, P2 #311, M7 #308, M8 #309 | – |
 | 4 | #329 | M9 #310 | I8a #334, #327, C3 #335, M10 |
 | 5 | #330 | V3 #336, V7 #337, V4a #338, #367, #366, V4b #339, #371, #372, C5 #340 | M10 |
-| 6 | #331 | #363, V2 #341, #290 | V5 #342, V6 #343, #303, #203, M10 |
+| 6 | #331 | #363, V2 #341, #290, V5 #342 | V6 #343, #303, #203, M10 |
 | 7 | #332 | – | P8a #344, P4 #345, #250, P6 #346, P8b #213, M10 |
 | 8 | #333 | – | I12 #280, I8b #347, I9 #348, I10 #349, I11 #350, M10 |
 

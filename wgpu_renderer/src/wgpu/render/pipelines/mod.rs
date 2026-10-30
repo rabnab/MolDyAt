@@ -5,6 +5,7 @@
 pub(crate) mod ball_pipeline;
 pub(crate) mod crosshair_pipeline;
 pub(crate) mod endpoint_pipeline;
+pub(crate) mod flow_arrow_pipeline;
 pub(crate) mod frame_pipeline;
 pub(crate) mod grid_pipeline;
 pub(crate) mod highlight_pipeline;

@@ -4,6 +4,7 @@
 
 mod default_world;
 mod event_router;
+mod flow_arrow_pipeline;
 mod frame_renderer;
 mod gpu_smoke;
 mod highlight_pipeline;
