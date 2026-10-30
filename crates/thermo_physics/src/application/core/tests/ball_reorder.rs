@@ -84,7 +84,7 @@ fn neighbour_pairs(main_content: &MainContent) -> Vec<(u32, u32, u32, u32)> {
     balls
         .iter()
         .flat_map(|b| {
-            b.hood.get_neighbour_indices().iter().map(move |&j| {
+            b.cold.hood.get_neighbour_indices().iter().map(move |&j| {
                 let (p, q) = (b.get_position(), balls[j].get_position());
                 (p.x.to_bits(), p.y.to_bits(), q.x.to_bits(), q.y.to_bits())
             })

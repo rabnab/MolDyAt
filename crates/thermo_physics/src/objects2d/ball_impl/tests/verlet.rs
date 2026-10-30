@@ -229,7 +229,7 @@ fn test_update_hood_respects_effective_cutoff() {
     Verlet::update_hood(0, 0.01, &candidates, &physics, 0.1, &mut balls);
 
     // Ball 0 should have ball 1 as neighbor (within range) but not ball 2 (beyond range)
-    let neighbors = &balls[0].hood.neighbours;
+    let neighbors = &balls[0].cold.hood.neighbours;
     assert!(
         neighbors.contains(&1),
         "Ball 1 should be a neighbor (distance {} < list radius {})",
@@ -262,7 +262,7 @@ fn test_update_hood_removes_distant_neighbors() {
     // Initial update - ball 1 should be a neighbor
     Verlet::update_hood(0, 0.01, &[1], &physics, 0.1, &mut balls);
     assert!(
-        balls[0].hood.neighbours.contains(&1),
+        balls[0].cold.hood.neighbours.contains(&1),
         "Ball 1 should initially be a neighbor"
     );
 
@@ -273,7 +273,7 @@ fn test_update_hood_removes_distant_neighbors() {
     // Update again - ball 1 should be removed
     Verlet::update_hood(0, 0.01, &[1], &physics, 0.1, &mut balls);
     assert!(
-        !balls[0].hood.neighbours.contains(&1),
+        !balls[0].cold.hood.neighbours.contains(&1),
         "Ball 1 should be removed after moving beyond the list radius"
     );
 }
@@ -302,19 +302,19 @@ fn test_hood_dirty_flag_set_when_neighbor_added() {
     let mut balls = vec![ball0, ball1];
 
     // Initially, hood_dirty should be true
-    assert!(balls[0].hood.hood_dirty);
-    assert!(balls[1].hood.hood_dirty);
+    assert!(balls[0].cold.hood.hood_dirty);
+    assert!(balls[1].cold.hood.hood_dirty);
 
     // Perform update_hood which adds a neighbor
     Verlet::update_hood(0, 0.01, &[1], &physics, 0.1, &mut balls);
 
     // After update, hood_dirty should still be true (marks as dirty when neighbors change)
     assert!(
-        balls[0].hood.hood_dirty,
+        balls[0].cold.hood.hood_dirty,
         "Ball 0's hood_dirty should be true after update_hood"
     );
     assert!(
-        balls[1].hood.hood_dirty,
+        balls[1].cold.hood.hood_dirty,
         "Ball 1's hood_dirty should be true since it was added as inverse neighbor"
     );
 }
@@ -335,11 +335,11 @@ fn test_hood_dirty_flag_set_when_neighbor_removed() {
 
     // First, add a neighbor
     Verlet::update_hood(0, 0.01, &[1], &physics, 0.1, &mut balls);
-    assert!(balls[0].hood.neighbours.contains(&1));
+    assert!(balls[0].cold.hood.neighbours.contains(&1));
 
     // Simulate resetting hood_dirty to false (as would happen after stats computation)
-    balls[0].hood.hood_dirty = false;
-    balls[1].hood.hood_dirty = false;
+    balls[0].cold.hood.hood_dirty = false;
+    balls[1].cold.hood.hood_dirty = false;
 
     // Move ball 1 far away and update
     balls[1].set_position_and_update_tail(Vec2D::new(list_radius + 0.5, 0.0));
@@ -350,11 +350,11 @@ fn test_hood_dirty_flag_set_when_neighbor_removed() {
 
     // After removal, hood_dirty should be true again
     assert!(
-        balls[0].hood.hood_dirty,
+        balls[0].cold.hood.hood_dirty,
         "Ball 0's hood_dirty should be true after neighbor removal"
     );
     assert!(
-        balls[1].hood.hood_dirty,
+        balls[1].cold.hood.hood_dirty,
         "Ball 1's hood_dirty should be true since it was removed as inverse neighbor"
     );
 }
@@ -438,24 +438,24 @@ fn test_update_hood_keeps_lists_sorted_and_symmetric() {
 
     // Candidates arrive in cell order, not index order.
     Verlet::update_hood(0, 0.01, &[4, 2, 0, 1, 3], &physics, 0.1, &mut balls);
-    assert_eq!(balls[0].hood.neighbours, vec![1, 2, 3, 4]);
+    assert_eq!(balls[0].cold.hood.neighbours, vec![1, 2, 3, 4]);
     for partner in &balls[1..] {
         assert_eq!(
-            partner.hood.neighbours,
+            partner.cold.hood.neighbours,
             vec![0],
             "ball {}",
             partner.get_id()
         );
-        assert!(partner.hood.hood_dirty);
+        assert!(partner.cold.hood.hood_dirty);
     }
 
     // Ball 3 leaves: ball 0 drops it and ball 3 drops ball 0.
     balls[3].set_position_and_update_tail(far);
     balls[0].last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
     Verlet::update_hood(0, 0.01, &[1, 0, 2, 4], &physics, 0.1, &mut balls);
-    assert_eq!(balls[0].hood.neighbours, vec![1, 2, 4]);
-    assert!(balls[3].hood.neighbours.is_empty());
-    assert_eq!(balls[4].hood.neighbours, vec![0]);
+    assert_eq!(balls[0].cold.hood.neighbours, vec![1, 2, 4]);
+    assert!(balls[3].cold.hood.neighbours.is_empty());
+    assert_eq!(balls[4].cold.hood.neighbours, vec![0]);
 }
 
 /// Balls on a jittered grid; `shift` moves every other ball so a second pass
@@ -517,9 +517,14 @@ fn test_parallel_style_rebuild_matches_serial_update_hood() {
         }
 
         for (s, b) in serial.iter().zip(&batched) {
-            assert_eq!(s.hood.neighbours, b.hood.neighbours, "ball {}", s.get_id());
-            assert!(s.hood.neighbours.is_sorted());
+            assert_eq!(
+                s.cold.hood.neighbours,
+                b.cold.hood.neighbours,
+                "ball {}",
+                s.get_id()
+            );
+            assert!(s.cold.hood.neighbours.is_sorted());
         }
     }
-    assert!(serial.iter().any(|b| !b.hood.neighbours.is_empty()));
+    assert!(serial.iter().any(|b| !b.cold.hood.neighbours.is_empty()));
 }

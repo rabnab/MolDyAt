@@ -123,7 +123,7 @@ fn force_kernel<L: PairLaw>(
     // This avoids expensive allocations and vector pushes in the hot path
     let collect_neighbor_forces = balls[ball_idx].verbose.lines();
     let mut neighbor_forces = if collect_neighbor_forces {
-        Vec::with_capacity(balls[ball_idx].hood.get_number_of_neighbors())
+        Vec::with_capacity(balls[ball_idx].cold.hood.get_number_of_neighbors())
     } else {
         Vec::new()
     };
@@ -133,7 +133,7 @@ fn force_kernel<L: PairLaw>(
     let ball_contact = ball.contact_radius;
     // This ball's potential with each species.
     let pairs = table.row(ball.species());
-    let neighbour_indices = ball.hood.get_neighbour_indices();
+    let neighbour_indices = ball.cold.hood.get_neighbour_indices();
 
     // Process neighbors in chunks of 4 for SIMD
     let (chunks, unchunked) = neighbour_indices.as_chunks::<4>();

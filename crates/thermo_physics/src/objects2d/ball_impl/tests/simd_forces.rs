@@ -33,7 +33,7 @@ fn n2_with_neighbours(neighbours: &[(Vec2D, SpeciesId)]) -> Vec<Ball2D> {
     let mut balls = vec![Ball2D::new(0, Vec2D::new(0.0, 0.0), N2)];
     for (i, &(pos, species)) in neighbours.iter().enumerate() {
         balls.push(Ball2D::new(i + 1, pos, species));
-        balls[0].hood.add_neighbour(i + 1);
+        balls[0].cold.hood.add_neighbour(i + 1);
     }
     balls
 }
