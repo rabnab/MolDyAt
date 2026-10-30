@@ -85,6 +85,7 @@ Toolchain is pinned in `rust-toolchain.toml` (nightly). Use plain `cargo`. Use `
 ## Git/PR details
 
 - Reference issues/PRs in commit messages when relevant; use imperative mood ("Fix index invalidation").
+- Follow `.github/commit_template.txt`. AI-assisted commits end with an `assisted by: <Tool> <email>` trailer and never mention the AI session: no `Claude-Session:` trailer, session link or ID in commits or PR bodies.
 - Squash and merge when appropriate; verify energy conservation for physics changes.
 
 ### GitHub CLI Usage (Issues/PRs)
