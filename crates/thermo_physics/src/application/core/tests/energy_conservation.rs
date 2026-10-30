@@ -298,18 +298,13 @@ fn test_cutoff_energy_loss() {
         initial_separation
     );
 
-    // // Add balls to cell grid
-    // for i in 0..main_content.balls.len() {
-    //     main_content.cell_grid.add_ball(i, &mut main_content.balls);
-    // }
-
     println!(
         "Ball 0 in cell: {:?}",
-        main_content.world().balls[0].current_cell
+        main_content.world().cell_grid.cell_of_ball(0)
     );
     println!(
         "Ball 1 in cell: {:?}",
-        main_content.world().balls[1].current_cell
+        main_content.world().cell_grid.cell_of_ball(1)
     );
 
     // Initialize neighbor lists

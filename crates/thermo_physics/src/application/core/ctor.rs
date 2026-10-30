@@ -84,6 +84,7 @@ impl SimulationWorld {
             step_count: 0,
             speed_limit_factor: config.integration.speed_limit_factor,
             speed_limit_override: None,
+            reorder_interval: config.neighbours.reorder_interval,
             kernel_points: Vec::new(),
             scratch: Default::default(),
             cached_force_results: Vec::new(),

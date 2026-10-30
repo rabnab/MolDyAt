@@ -208,12 +208,24 @@ pub struct NeighbourConfig {
     /// cutoff_factor · σ_N2`). A ball rebuilds its list after moving a third
     /// of the skin.
     pub skin_factor: f32,
+    /// Every this many steps the balls are sorted by cell, so balls that
+    /// are close in space are close in memory (P4, #345). 0 (the default)
+    /// never sorts. Sorting changes the ball order and so the order of f32
+    /// sums: runs with and without it are not bit-identical. Not written
+    /// while 0, so saves stay readable for builds without the key.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub reorder_interval: u32,
+}
+
+fn is_zero(value: &u32) -> bool {
+    *value == 0
 }
 
 impl Default for NeighbourConfig {
     fn default() -> Self {
         Self {
             skin_factor: DEFAULT_SKIN_FACTOR,
+            reorder_interval: 0,
         }
     }
 }

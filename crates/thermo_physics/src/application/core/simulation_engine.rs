@@ -200,25 +200,18 @@ impl SimulationEngine {
         bound_rect: &Rect,
         log_timings: bool,
     ) {
-        world.with_scratch(
-            |s| &mut s.old_positions,
-            |world, old_positions| {
-                old_positions.clear();
-                old_positions.extend(world.balls.iter().map(|ball| *ball.get_position()));
-
-                Self::update_sim(world, dt, bound_rect, log_timings);
-                let mut clock = PhaseClock::start(log_timings);
-                world.emit_from_source_spheres(step_config.get_ball_factory());
-
-                for (i, old_pos) in old_positions.iter().enumerate() {
-                    let new_pos = *world.balls[i].get_position();
-                    world.move_ball_in_cell_grid(i, old_pos, &new_pos);
-                }
-
-                world.remove_invalid_balls();
-                clock.lap(&mut world.phase_timings, Phase::Cells);
-            },
-        );
+        Self::update_sim(world, dt, bound_rect, log_timings);
+        let mut clock = PhaseClock::start(log_timings);
+        world.emit_from_source_spheres(step_config.get_ball_factory());
+        // Every ball, the emitted ones included, into the cell of its new
+        // position: one counting sort (`CellGrid::rebuild`).
+        world.cell_grid.rebuild(&world.balls);
+        world.remove_invalid_balls();
+        let interval = world.reorder_interval as usize;
+        if interval > 0 && (world.step_count + 1).is_multiple_of(interval) {
+            world.reorder_balls_by_cell();
+        }
+        clock.lap(&mut world.phase_timings, Phase::Cells);
     }
 
     /// Rebuild the neighbour lists of the balls that moved far enough.
@@ -244,25 +237,13 @@ impl SimulationEngine {
         let min_movement =
             physics.get_min_movement_for_update_hood() * world.neighbor_movement_fault_scale();
         let cell_grid = &world.cell_grid;
-        let (grid_rows, grid_cols) = cell_grid.get_grid_size();
+        let (_, grid_cols) = cell_grid.get_grid_size();
 
-        // Which cell each ball is in (flat index, `NO_CELL` if none), read from
-        // the grid itself: only balls in a cell take part, as in the per-cell
-        // loop this replaces.
+        // Which cell the grid holds each ball in (flat index, `NO_CELL` if
+        // none): only balls in a cell take part. A ball pushed without
+        // being added to the grid is in none.
         const NO_CELL: u32 = u32::MAX;
-        let cell_of = &mut scratch.cell_of;
-        cell_of.clear();
-        cell_of.resize(world.balls.len(), NO_CELL);
-        for row in 0..grid_rows {
-            for col in 0..grid_cols {
-                if let Some(cell) = cell_grid.get_cell(row, col) {
-                    let flat = (row * grid_cols + col) as u32;
-                    for &ball_idx in cell.get_ball_indices() {
-                        cell_of[ball_idx] = flat;
-                    }
-                }
-            }
-        }
+        let cell_of = cell_grid.flat_cells();
 
         // (ball, row, col, rebuild, verbose) for balls that rebuild or log.
         // One entry per ball (an indexed collect fills the reused buffer in
@@ -271,9 +252,9 @@ impl SimulationEngine {
         world
             .balls
             .par_iter_mut()
-            .zip(cell_of.par_iter())
             .enumerate()
-            .map(|(ball_idx, (ball, &flat))| {
+            .map(|(ball_idx, ball)| {
+                let flat = cell_of.get(ball_idx).copied().unwrap_or(NO_CELL);
                 if flat == NO_CELL {
                     return None;
                 }

@@ -2,88 +2,124 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use super::cell::{Cell, CellBounds};
+//! The cell grid as flat counting-sort arrays (P4, #345).
+//!
+//! Each step [`CellGrid::rebuild`] computes every ball's cell (in parallel)
+//! and sorts the ball indices by cell with one counting sort: `sorted` holds
+//! the indices cell by cell, ascending within a cell, and `cell_start[c]..
+//! cell_start[c + 1]` is the range of cell `c`. There is no heap `Vec` per
+//! cell and no per-ball move bookkeeping.
+//!
+//! Balls added between two rebuilds (placement, seeding, source spheres)
+//! go into short per-cell lists (`late`) that every lookup also reads, so the
+//! grid holds them right away; the next rebuild folds them into the sorted
+//! arrays.
+
 use crate::error::AppResult;
 use crate::objects2d::ball_impl::Ball2D;
 use crate::objects2d::{Rect, Vec2D};
+use rayon::prelude::*;
 use std::fmt::Debug;
 
-/// A spatial grid to partition the simulation area into cells for efficient neighbor searching.
-/// Each cell contains a list of balls currently located within its bounds.
-pub struct CellGrid {
-    cells: Vec<Vec<Cell>>,
+/// `cell_of` value of a ball outside the grid.
+const NO_CELL: u32 = u32::MAX;
+
+/// Where the cells are; `Copy`, so the parallel cell computation can use it
+/// while the grid's arrays are written.
+#[derive(Clone, Copy, Debug)]
+struct GridGeometry {
     cell_size_x: f32,
     cell_size_y: f32,
     grid_width: usize,
     grid_height: usize,
+    /// Top-left corner of the grid in world coordinates.
+    origin: (f32, f32),
+}
+
+impl GridGeometry {
+    fn cell_indices(&self, position: &Vec2D) -> Option<(usize, usize)> {
+        let col = ((position.x - self.origin.0) / self.cell_size_x) as usize;
+        let row = ((self.origin.1 - position.y) / self.cell_size_y) as usize;
+        (col < self.grid_width && row < self.grid_height).then_some((row, col))
+    }
+
+    fn flat_cell(&self, position: &Vec2D) -> u32 {
+        self.cell_indices(position)
+            .map_or(NO_CELL, |(row, col)| (row * self.grid_width + col) as u32)
+    }
+
+    fn cell_count(&self) -> usize {
+        self.grid_width * self.grid_height
+    }
+}
+
+/// A spatial grid that partitions the simulation area into cells for
+/// neighbour searches; see the module docs for its layout.
+#[derive(Clone)]
+pub struct CellGrid {
+    geometry: GridGeometry,
     sim_width: f32,
     sim_height: f32,
-    /// Origin of the grid in world coordinates (top-left corner)
-    grid_origin: (f32, f32), // (top-left x, top-left y)
     /// Neighbour-list radius (centre distance) the cells were sized for.
     list_radius: f32,
+    /// Flat cell (`row * grid_width + col`) of each ball when it was last
+    /// put into the grid, `NO_CELL` outside it.
+    cell_of: Vec<u32>,
+    /// `cell_start[c]..cell_start[c + 1]` is cell `c`'s range in `sorted`.
+    cell_start: Vec<u32>,
+    /// Ball indices sorted by cell, ascending within a cell.
+    sorted: Vec<u32>,
+    /// Scratch of the counting sort: the next free slot of each cell.
+    fill: Vec<u32>,
+    /// Balls added since the last rebuild, per cell. Empty lists do not
+    /// allocate.
+    late: Vec<Vec<u32>>,
+    /// Cells with a non-empty `late` list, so a rebuild clears only those.
+    late_cells: Vec<u32>,
 }
 
 impl CellGrid {
     /// Returns the world rectangle that the grid covers.
     pub fn world_rect(&self) -> Rect {
-        let sim_br = (
-            self.grid_origin.0 + self.sim_width,
-            self.grid_origin.1 + self.sim_height,
-        );
-        Rect::from_tl_br(self.grid_origin, sim_br)
+        let origin = self.geometry.origin;
+        let sim_br = (origin.0 + self.sim_width, origin.1 + self.sim_height);
+        Rect::from_tl_br(origin, sim_br)
     }
-}
 
-impl CellGrid {
-    /// Create a new CellGrid covering the specified world rectangle with cells
-    /// at least `list_radius` wide: the largest centre distance at which two
-    /// balls are neighbours (pair cutoff plus skin).
+    /// Create an empty grid covering `world_rect` with cells at least
+    /// `list_radius` wide: the largest centre distance at which two balls
+    /// are neighbours (pair cutoff plus skin).
     pub(crate) fn new(world_rect: Rect, list_radius: f32) -> AppResult<Self> {
         let sim_width = world_rect.w;
         let sim_height = world_rect.h;
-        let (top_left_x, top_left_y) = world_rect.get_tl();
 
         // Cells at least as wide as the list radius make the 3x3 cells around
         // a ball cover every possible neighbour. Rounding the cell count down
         // keeps every cell at least this large.
         let cell_size = list_radius;
-
         let grid_width = ((sim_width.abs() / cell_size).floor() as usize).max(1);
         let grid_height = ((sim_height.abs() / cell_size).floor() as usize).max(1);
 
-        let cell_size_x = sim_width.abs() / grid_width as f32;
-        let cell_size_y = sim_height.abs() / grid_height as f32;
-
-        let mut cells = Vec::with_capacity(grid_height);
-        for row in 0..grid_height {
-            let mut cell_row = Vec::with_capacity(grid_width);
-            for col in 0..grid_width {
-                let bounds = CellBounds {
-                    min_x: top_left_x + col as f32 * cell_size_x,
-                    max_x: top_left_x + (col + 1) as f32 * cell_size_x,
-                    min_y: top_left_y - row as f32 * cell_size_y,
-                    max_y: top_left_y - (row + 1) as f32 * cell_size_y,
-                };
-
-                cell_row.push(Cell::new(bounds));
-            }
-            cells.push(cell_row);
-        }
-
-        let grid = Self {
-            cells,
-            cell_size_x,
-            cell_size_y,
+        let geometry = GridGeometry {
+            cell_size_x: sim_width.abs() / grid_width as f32,
+            cell_size_y: sim_height.abs() / grid_height as f32,
             grid_width,
             grid_height,
+            origin: world_rect.get_tl(),
+        };
+        let cells = geometry.cell_count();
+        Ok(Self {
+            geometry,
             sim_width,
             sim_height,
-            grid_origin: (top_left_x, top_left_y),
             list_radius,
-        };
-
-        Ok(grid)
+            cell_of: Vec::new(),
+            cell_start: vec![0; cells + 1],
+            sorted: Vec::new(),
+            fill: Vec::new(),
+            late: vec![Vec::new(); cells],
+            late_cells: Vec::new(),
+        })
     }
 
     /// Neighbour-list radius the cells were sized for.
@@ -92,167 +128,178 @@ impl CellGrid {
     }
 
     pub fn get_cell_size(&self) -> (f32, f32) {
-        (self.cell_size_x, self.cell_size_y)
+        (self.geometry.cell_size_x, self.geometry.cell_size_y)
     }
 
     /// Get the number of cells in the grid as (rows, columns).
     pub fn get_grid_size(&self) -> (usize, usize) {
-        (self.grid_height, self.grid_width)
+        (self.geometry.grid_height, self.geometry.grid_width)
     }
 
-    /// Given a position in world coordinates, return the corresponding cell indices (row, column).
-    /// Returns None if the position is outside the grid bounds.
+    /// The cell (row, column) of a position, `None` outside the grid.
     pub(crate) fn get_cell_indices(&self, position: &Vec2D) -> Option<(usize, usize)> {
-        let col = ((position.x - self.grid_origin.0) / self.cell_size_x) as usize;
-        let row = ((self.grid_origin.1 - position.y) / self.cell_size_y) as usize;
-
-        if col < self.grid_width && row < self.grid_height {
-            Some((row, col))
-        } else {
-            None
-        }
+        self.geometry.cell_indices(position)
     }
 
-    pub(crate) fn get_cell_mut(&mut self, row: usize, col: usize) -> Option<&mut Cell> {
-        self.cells.get_mut(row)?.get_mut(col)
+    /// The cell the grid holds ball `ball_idx` in, `None` if it holds it in
+    /// none (outside the grid, or not added since the last rebuild).
+    pub(crate) fn cell_of_ball(&self, ball_idx: usize) -> Option<(usize, usize)> {
+        let flat = *self.cell_of.get(ball_idx)?;
+        let width = self.geometry.grid_width;
+        (flat != NO_CELL).then(|| (flat as usize / width, flat as usize % width))
     }
 
-    pub(crate) fn get_cell(&self, row: usize, col: usize) -> Option<&Cell> {
-        self.cells.get(row)?.get(col)
+    /// The cells of all balls, flat (`row * columns + col`), `u32::MAX` for
+    /// a ball outside the grid. Indexed by ball.
+    pub(crate) fn flat_cells(&self) -> &[u32] {
+        &self.cell_of
     }
 
-    /// Move a ball from its old position to a new position, updating the cells accordingly.
-    /// Returns Some((old_cell, new_cell)) if the ball changed cells, None otherwise.
-    pub(crate) fn move_ball(
-        &mut self,
-        ball_idx: usize,
-        balls: &mut [Ball2D],
-        old_pos: &Vec2D,
-        new_pos: &Vec2D,
-    ) -> Option<((usize, usize), (usize, usize))> {
-        if let (Some((old_row, old_col)), Some((new_row, new_col))) = (
-            self.get_cell_indices(old_pos),
-            self.get_cell_indices(new_pos),
-        ) && (old_row != new_row || old_col != new_col)
-        {
-            // Remove from old cell
-            if let Some(old_cell) = self.get_cell_mut(old_row, old_col) {
-                old_cell.remove_ball(ball_idx);
-            }
-
-            // Add to new cell
-            if let Some(new_cell) = self.get_cell_mut(new_row, new_col) {
-                new_cell.add_ball(ball_idx);
-            }
-
-            // Update the ball's current_cell
-            balls[ball_idx].current_cell = Some((new_row, new_col));
-
-            return Some(((old_row, old_col), (new_row, new_col)));
-        }
-        None
+    /// Ball indices sorted by cell (ascending within a cell) as of the last
+    /// rebuild; balls outside the grid are not in it.
+    pub(crate) fn sorted_balls(&self) -> &[u32] {
+        &self.sorted
     }
 
-    /// Add a ball to the appropriate cell based on its current position.
-    pub(crate) fn add_ball(&mut self, ball_idx: usize, balls: &mut [Ball2D]) {
-        let position = *balls[ball_idx].get_position();
-        if let Some((row, col)) = self.get_cell_indices(&position)
-            && let Some(cell) = self.get_cell_mut(row, col)
-        {
-            cell.add_ball(ball_idx);
-            // Update the ball's current_cell
-            balls[ball_idx].current_cell = Some((row, col));
-        }
-    }
+    /// Put every ball into the cell of its position, from scratch: the cells
+    /// in parallel, then one counting sort in ball order. O(balls + cells).
+    pub(crate) fn rebuild(&mut self, balls: &[Ball2D]) {
+        let geometry = self.geometry;
+        balls
+            .par_iter()
+            .map(|ball| geometry.flat_cell(ball.get_position()))
+            .collect_into_vec(&mut self.cell_of);
 
-    pub(crate) fn clear_all_cells(&mut self) {
-        for row in &mut self.cells {
-            for cell in row {
-                cell.clear();
+        let cells = geometry.cell_count();
+        self.cell_start.clear();
+        self.cell_start.resize(cells + 1, 0);
+        for &cell in &self.cell_of {
+            if cell != NO_CELL {
+                self.cell_start[cell as usize + 1] += 1;
             }
         }
-        // Note: caller is responsible for clearing ball.current_cell if needed
+        for c in 0..cells {
+            self.cell_start[c + 1] += self.cell_start[c];
+        }
+
+        self.fill.clear();
+        self.fill.extend_from_slice(&self.cell_start[..cells]);
+        self.sorted.clear();
+        self.sorted.resize(self.cell_start[cells] as usize, 0);
+        for (ball_idx, &cell) in self.cell_of.iter().enumerate() {
+            if cell != NO_CELL {
+                let slot = &mut self.fill[cell as usize];
+                self.sorted[*slot as usize] = ball_idx as u32;
+                *slot += 1;
+            }
+        }
+
+        for &cell in &self.late_cells {
+            self.late[cell as usize].clear();
+        }
+        self.late_cells.clear();
     }
 
-    /// Iterate over neighbor cells (including self) without allocating.
+    /// Add ball `ball_idx`, just appended to the balls, to the cell of
+    /// `position` without a rebuild.
+    pub(crate) fn add_ball(&mut self, ball_idx: usize, position: &Vec2D) {
+        let cell = self.geometry.flat_cell(position);
+        if self.cell_of.len() <= ball_idx {
+            self.cell_of.resize(ball_idx + 1, NO_CELL);
+        }
+        self.cell_of[ball_idx] = cell;
+        if cell != NO_CELL {
+            let late = &mut self.late[cell as usize];
+            if late.is_empty() {
+                self.late_cells.push(cell);
+            }
+            late.push(ball_idx as u32);
+        }
+    }
+
+    /// Calls `f` with the ball indices of every cell in the 3x3
+    /// neighbourhood around (row, col), the cell itself included, clamped to
+    /// the grid. A cell may be passed in two slices (sorted, then added
+    /// since the last rebuild).
     #[inline]
-    /// Iterate over all cells in the 3x3 neighborhood around (row, col), including the cell itself.
-    /// Handles boundaries by clamping to valid indices.
-    ///
-    /// # Arguments
-    /// * `row` - Row index of center cell
-    /// * `col` - Column index of center cell
-    /// * `f` - Closure called for each neighbor cell
     pub(crate) fn for_each_neighbor<F>(&self, row: usize, col: usize, mut f: F)
     where
-        F: FnMut(&Cell),
+        F: FnMut(&[u32]),
     {
-        if self.grid_height == 0 || self.grid_width == 0 {
+        let (height, width) = (self.geometry.grid_height, self.geometry.grid_width);
+        if height == 0 || width == 0 {
             return;
         }
-
-        let r_min = row.saturating_sub(1);
+        let r_max = (row + 1).min(height - 1);
         let c_min = col.saturating_sub(1);
-        let r_max = (row + 1).min(self.grid_height - 1);
-        let c_max = (col + 1).min(self.grid_width - 1);
-
-        for row_ref in self.cells.iter().take(r_max + 1).skip(r_min) {
-            for cell in row_ref.iter().take(c_max + 1).skip(c_min) {
-                f(cell);
+        let c_max = (col + 1).min(width - 1);
+        for r in row.saturating_sub(1)..=r_max {
+            // The cells of one row are contiguous in `sorted`.
+            let first = r * width + c_min;
+            let last = r * width + c_max;
+            let (start, end) = (self.cell_start[first], self.cell_start[last + 1]);
+            f(&self.sorted[start as usize..end as usize]);
+            if !self.late_cells.is_empty() {
+                for cell in first..=last {
+                    let late = &self.late[cell];
+                    if !late.is_empty() {
+                        f(late);
+                    }
+                }
             }
         }
     }
 
-    /// Collect all ball indices from the 3x3 neighborhood into provided buffer.
-    /// Does not clear the buffer first - caller should clear if fresh contents are needed.
-    ///
-    /// # Arguments
-    /// * `i` - Row index
-    /// * `j` - Column index
-    /// * `out` - Buffer to append indices into
-    pub(crate) fn collect_ball_indices_into(&self, i: usize, j: usize, out: &mut Vec<usize>) {
-        self.for_each_neighbor(i, j, |cell| {
-            out.extend_from_slice(cell.get_ball_indices());
+    /// Append the ball indices of the 3x3 neighbourhood of (row, col) to
+    /// `out`. Does not clear `out` first.
+    pub(crate) fn collect_ball_indices_into(&self, row: usize, col: usize, out: &mut Vec<usize>) {
+        self.for_each_neighbor(row, col, |balls| {
+            out.extend(balls.iter().map(|&b| b as usize));
         });
+    }
+
+    /// The ball indices of one cell, sorted ones first.
+    #[cfg(test)]
+    pub(crate) fn balls_in_cell(&self, row: usize, col: usize) -> impl Iterator<Item = usize> + '_ {
+        let cell = row * self.geometry.grid_width + col;
+        let (start, end) = (self.cell_start[cell], self.cell_start[cell + 1]);
+        self.sorted[start as usize..end as usize]
+            .iter()
+            .chain(&self.late[cell])
+            .map(|&b| b as usize)
+    }
+}
+
+#[cfg(test)]
+impl CellGrid {
+    /// Address and capacity of the arrays a rebuild reuses.
+    pub(crate) fn buffers(&self) -> [(usize, usize); 4] {
+        let buffer = |p: *const u32, capacity: usize| (p as usize, capacity);
+        [
+            buffer(self.cell_of.as_ptr(), self.cell_of.capacity()),
+            buffer(self.cell_start.as_ptr(), self.cell_start.capacity()),
+            buffer(self.sorted.as_ptr(), self.sorted.capacity()),
+            buffer(self.fill.as_ptr(), self.fill.capacity()),
+        ]
     }
 }
 
 impl Debug for CellGrid {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(
+        let g = &self.geometry;
+        write!(
             f,
-            "CellGrid: {}x{} cells, cell size: ({:.2}, {:.2}), sim size: ({:.2}, {:.2}), origin: ({:.2}, {:.2})",
-            self.grid_height,
-            self.grid_width,
-            self.cell_size_x,
-            self.cell_size_y,
+            "CellGrid: {}x{} cells, cell size: ({:.2}, {:.2}), sim size: ({:.2}, {:.2}), origin: ({:.2}, {:.2}), {} balls sorted, {} cells with added balls",
+            g.grid_height,
+            g.grid_width,
+            g.cell_size_x,
+            g.cell_size_y,
             self.sim_width,
             self.sim_height,
-            self.grid_origin.0,
-            self.grid_origin.1
-        )?;
-        for (row_idx, row) in self.cells.iter().enumerate() {
-            for (col_idx, cell) in row.iter().enumerate() {
-                writeln!(f, "Cell ({}, {}): {:?}", row_idx, col_idx, cell)?;
-            }
-        }
-        Ok(())
-    }
-}
-
-impl Clone for CellGrid {
-    fn clone(&self) -> Self {
-        let nu_cells = self.cells.iter().map(|row| row.to_vec()).collect();
-        Self {
-            cells: nu_cells,
-            cell_size_x: self.cell_size_x,
-            cell_size_y: self.cell_size_y,
-            grid_width: self.grid_width,
-            grid_height: self.grid_height,
-            sim_width: self.sim_width,
-            sim_height: self.sim_height,
-            grid_origin: self.grid_origin,
-            list_radius: self.list_radius,
-        }
+            g.origin.0,
+            g.origin.1,
+            self.sorted.len(),
+            self.late_cells.len()
+        )
     }
 }

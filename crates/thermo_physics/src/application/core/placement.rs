@@ -38,27 +38,13 @@ impl PlacementIndex {
     /// Index the world as it is; O(balls + cells).
     pub(crate) fn new(world: &SimulationWorld) -> Self {
         let grid = &world.cell_grid;
-        let (rows, cols) = grid.get_grid_size();
-        // Which cell holds each ball, read from the grid itself.
-        let mut held_in = vec![None; world.balls.len()];
-        for row in 0..rows {
-            for col in 0..cols {
-                if let Some(cell) = grid.get_cell(row, col) {
-                    for &ball_idx in cell.get_ball_indices() {
-                        if let Some(slot) = held_in.get_mut(ball_idx) {
-                            *slot = Some((row, col));
-                        }
-                    }
-                }
-            }
-        }
         let orphans = world
             .balls
             .iter()
             .enumerate()
             .filter(|(i, ball)| {
                 let cell = grid.get_cell_indices(ball.get_position());
-                cell.is_none() || held_in[*i] != cell
+                cell.is_none() || grid.cell_of_ball(*i) != cell
             })
             .map(|(i, _)| i)
             .collect();
@@ -122,8 +108,8 @@ impl SimulationWorld {
         };
         let mut hit = false;
         //check neighbouring cells for collision
-        grid.for_each_neighbor(row, col, |cell| {
-            hit = hit || cell.get_ball_indices().iter().any(collides);
+        grid.for_each_neighbor(row, col, |balls| {
+            hit = hit || balls.iter().map(|&b| b as usize).any(|b| collides(&b));
         });
         //check orphans for collision (balls not on grid)
         hit || index.orphans.iter().any(collides)
