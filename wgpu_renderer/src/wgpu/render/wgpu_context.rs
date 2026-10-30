@@ -124,7 +124,11 @@ const PREFERRED_BACKENDS: wgpu::Backends = wgpu::Backends::PRIMARY;
 /// sizes are only recorded as they arrive and the surface is configured once,
 /// for the newest one, before the next frame is drawn.
 #[derive(Debug, Default)]
-pub(crate) struct PendingSurfaceSize(Option<PendingResize>);
+pub(crate) struct PendingSurfaceSize {
+    pending: Option<PendingResize>,
+    /// Logs a size above the GPU limit once, not on every resize event.
+    clamp_warning: ClampWarning,
+}
 
 /// A surface size waiting to be applied.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -138,18 +142,21 @@ pub struct PendingResize {
 
 impl PendingSurfaceSize {
     /// Records `width` x `height` as the size wanted, replacing an earlier
-    /// one. An empty size (a minimised window) is ignored.
-    pub(crate) fn request(&mut self, width: u32, height: u32) {
+    /// one, each side at most `max_dimension` (the GPU's largest texture: a
+    /// larger surface makes wgpu panic, #363). An empty size (a minimised
+    /// window) is ignored.
+    pub(crate) fn request(&mut self, width: u32, height: u32, max_dimension: u32) {
         if width == 0 || height == 0 {
             return;
         }
-        match &mut self.0 {
+        let (width, height) = self.clamp_warning.clamp(width, height, max_dimension);
+        match &mut self.pending {
             Some(pending) => {
                 pending.size = (width, height);
                 pending.requests += 1;
             }
             None => {
-                self.0 = Some(PendingResize {
+                self.pending = Some(PendingResize {
                     size: (width, height),
                     since: Instant::now(),
                     requests: 1,
@@ -160,7 +167,48 @@ impl PendingSurfaceSize {
 
     /// The size to configure the surface for, once.
     pub(crate) fn take(&mut self) -> Option<PendingResize> {
-        self.0.take()
+        self.pending.take()
+    }
+}
+
+/// `width` x `height` with each side clamped to `1..=max_dimension`.
+pub(crate) fn clamp_surface_size(width: u32, height: u32, max_dimension: u32) -> (u32, u32) {
+    let max_dimension = max_dimension.max(1);
+    (
+        width.clamp(1, max_dimension),
+        height.clamp(1, max_dimension),
+    )
+}
+
+/// [`clamp_surface_size`] that warns when a size is clamped, once per
+/// oversized size: a drag-resize or a compositor repeating the size sends
+/// many events with it, which would flood the log (#377 review).
+#[derive(Debug, Default)]
+pub(crate) struct ClampWarning {
+    /// The oversized size warned about last; `None` after a size that fit.
+    last: Option<(u32, u32)>,
+}
+
+impl ClampWarning {
+    pub(crate) fn clamp(&mut self, width: u32, height: u32, max_dimension: u32) -> (u32, u32) {
+        let clamped = clamp_surface_size(width, height, max_dimension);
+        if clamped == (width, height) {
+            self.last = None;
+        } else if self.last != Some((width, height)) {
+            self.last = Some((width, height));
+            log::warn!(
+                "Surface size {width}x{height} exceeds the GPU limit {max_dimension}; using {}x{}",
+                clamped.0,
+                clamped.1
+            );
+        }
+        clamped
+    }
+
+    /// Whether the last size was clamped (tests).
+    #[cfg(test)]
+    pub(crate) fn is_clamping(&self) -> bool {
+        self.last.is_some()
     }
 }
 
@@ -257,7 +305,12 @@ impl WgpuContext {
             .await
             .expect("Failed to create device");
 
-        let (width, height) = (size.0.max(1), size.1.max(1));
+        let mut pending_size = PendingSurfaceSize::default();
+        let (width, height) = pending_size.clamp_warning.clamp(
+            size.0,
+            size.1,
+            device.limits().max_texture_dimension_2d,
+        );
 
         // Get preferred surface format
         let surface_caps = surface.get_capabilities(&adapter);
@@ -301,7 +354,7 @@ impl WgpuContext {
             surface,
             config,
             format,
-            pending_size: PendingSurfaceSize::default(),
+            pending_size,
         }
     }
 
@@ -312,10 +365,17 @@ impl WgpuContext {
     /// newest size however many calls came before it.
     ///
     /// # Arguments
-    /// * `width` - New width in pixels (ignored if 0)
-    /// * `height` - New height in pixels (ignored if 0)
+    /// * `width` - New width in pixels (ignored if 0; at most
+    ///   [`Self::max_surface_dimension`])
+    /// * `height` - New height in pixels (ignored if 0; likewise)
     pub fn resize(&mut self, width: u32, height: u32) {
-        self.pending_size.request(width, height);
+        let max_dimension = self.max_surface_dimension();
+        self.pending_size.request(width, height, max_dimension);
+    }
+
+    /// The largest width or height the surface can be configured for.
+    pub fn max_surface_dimension(&self) -> u32 {
+        self.device.limits().max_texture_dimension_2d
     }
 
     /// Configure the surface for the size last asked for with

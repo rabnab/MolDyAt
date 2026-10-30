@@ -62,7 +62,8 @@ impl FrameRenderer {
     }
 
     /// Ask the OS for the window size the render state wants (a loaded world
-    /// of another shape). When the OS answers at once, no `Resized` event may
+    /// of another shape), at most the monitor's size and the GPU's largest
+    /// surface (#363). When the OS answers at once, no `Resized` event may
     /// follow, so the answer goes through the same resize handling here; the
     /// window may also end up another size than asked (maximised, tiled), in
     /// which case the normal resize path fits the world to it.
@@ -71,7 +72,9 @@ impl FrameRenderer {
         window: &Window,
         ctx: &mut WgpuContext,
     ) {
-        let Some((width, height)) = state.take_requested_window_size() else {
+        let Some((width, height)) =
+            state.take_requested_window_size(Self::max_window_size(window, ctx))
+        else {
             return;
         };
         if let Some(size) = window.request_inner_size(PhysicalSize::new(width, height)) {
@@ -79,6 +82,21 @@ impl FrameRenderer {
             let margins = margins_for_scale_factor(window.scale_factor());
             state.apply_window_size_answer(size.width as f32, size.height as f32, margins);
         }
+    }
+
+    /// The largest inner size worth asking for: the current monitor's size
+    /// (when known) and the GPU's largest surface.
+    fn max_window_size(window: &Window, ctx: &WgpuContext) -> (u32, u32) {
+        let max_surface = ctx.max_surface_dimension();
+        let (mut width, mut height) = (max_surface, max_surface);
+        if let Some(monitor) = window.current_monitor() {
+            let size = monitor.size();
+            if size.width > 0 && size.height > 0 {
+                width = width.min(size.width);
+                height = height.min(size.height);
+            }
+        }
+        (width, height)
     }
 
     /// Handles the `RedrawRequested` event for the main window: the renderer

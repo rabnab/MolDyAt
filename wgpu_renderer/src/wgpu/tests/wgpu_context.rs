@@ -3,11 +3,14 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::wgpu::render::wgpu_context::{
-    PendingSurfaceSize, choose_present_mode, default_present_mode, parse_frame_latency,
-    parse_present_mode,
+    ClampWarning, PendingSurfaceSize, choose_present_mode, clamp_surface_size,
+    default_present_mode, parse_frame_latency, parse_present_mode,
 };
 use std::time::Instant;
 use wgpu::PresentMode;
+
+/// A GPU limit no test size reaches, except where a test says so.
+const MAX: u32 = 8192;
 
 fn take_size(pending: &mut PendingSurfaceSize) -> Option<(u32, u32)> {
     pending.take().map(|resize| resize.size)
@@ -24,9 +27,9 @@ fn nothing_is_pending_before_the_first_request() {
 fn a_burst_of_requests_leaves_only_the_newest_size() {
     let mut pending = PendingSurfaceSize::default();
 
-    pending.request(800, 600);
-    pending.request(810, 604);
-    pending.request(820, 610);
+    pending.request(800, 600, MAX);
+    pending.request(810, 604, MAX);
+    pending.request(820, 610, MAX);
 
     let resize = pending.take().expect("a resize is pending");
     assert_eq!(resize.size, (820, 610));
@@ -37,9 +40,9 @@ fn a_burst_of_requests_leaves_only_the_newest_size() {
 fn a_merged_resize_keeps_the_time_of_its_first_request() {
     let mut pending = PendingSurfaceSize::default();
     let before_first = Instant::now();
-    pending.request(800, 600);
+    pending.request(800, 600, MAX);
     let before_second = Instant::now();
-    pending.request(810, 604);
+    pending.request(810, 604, MAX);
 
     let resize = pending.take().expect("a resize is pending");
     assert!(before_first <= resize.since);
@@ -52,7 +55,7 @@ fn a_merged_resize_keeps_the_time_of_its_first_request() {
 #[test]
 fn a_size_is_taken_only_once() {
     let mut pending = PendingSurfaceSize::default();
-    pending.request(800, 600);
+    pending.request(800, 600, MAX);
 
     assert_eq!(take_size(&mut pending), Some((800, 600)));
     assert_eq!(take_size(&mut pending), None);
@@ -62,10 +65,10 @@ fn a_size_is_taken_only_once() {
 fn the_same_size_requested_again_is_pending_again() {
     // A lost or outdated surface is reconfigured at an unchanged size.
     let mut pending = PendingSurfaceSize::default();
-    pending.request(800, 600);
+    pending.request(800, 600, MAX);
     pending.take();
 
-    pending.request(800, 600);
+    pending.request(800, 600, MAX);
 
     assert_eq!(take_size(&mut pending), Some((800, 600)));
 }
@@ -73,15 +76,46 @@ fn the_same_size_requested_again_is_pending_again() {
 #[test]
 fn an_empty_size_is_ignored() {
     let mut pending = PendingSurfaceSize::default();
-    pending.request(0, 600);
-    pending.request(800, 0);
+    pending.request(0, 600, MAX);
+    pending.request(800, 0, MAX);
     assert_eq!(take_size(&mut pending), None);
 
-    pending.request(800, 600);
-    pending.request(0, 0);
+    pending.request(800, 600, MAX);
+    pending.request(0, 0, MAX);
     let resize = pending.take().expect("a resize is pending");
     assert_eq!(resize.size, (800, 600));
     assert_eq!(resize.requests, 1);
+}
+
+#[test]
+fn an_oversized_request_is_clamped_to_the_gpu_limit() {
+    // Wayland grants a 12032x6275 window at once (#363).
+    let mut pending = PendingSurfaceSize::default();
+    pending.request(12032, 6275, MAX);
+    assert_eq!(take_size(&mut pending), Some((8192, 6275)));
+}
+
+#[test]
+fn surface_sizes_are_clamped_per_side() {
+    assert_eq!(clamp_surface_size(800, 600, MAX), (800, 600));
+    assert_eq!(clamp_surface_size(9000, 9000, MAX), (MAX, MAX));
+    assert_eq!(clamp_surface_size(0, 600, MAX), (1, 600));
+}
+
+#[test]
+fn a_clamp_warning_is_logged_once_per_oversized_size() {
+    let mut warning = ClampWarning::default();
+    assert_eq!(warning.clamp(800, 600, MAX), (800, 600));
+    assert!(!warning.is_clamping());
+    // The same oversized size again: clamped, but warned about only once
+    // (the state records the size it warned about).
+    for _ in 0..3 {
+        assert_eq!(warning.clamp(12032, 6275, MAX), (MAX, 6275));
+        assert!(warning.is_clamping());
+    }
+    // Back within the limit: the next oversized size warns again.
+    warning.clamp(800, 600, MAX);
+    assert!(!warning.is_clamping());
 }
 
 #[test]

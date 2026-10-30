@@ -456,6 +456,12 @@ Loading replaces the world, increments the
 world generation (the step count starts again, so the renderer can tell the
 new world's snapshots apart), and
 sends `WorldLoaded` so the window can resize to fit the loaded world.
+The size asked for shows the world 1:1 (`LEN_TO_PX`), but at most the
+monitor and the GPU's largest surface (`max_texture_dimension_2d`); a larger
+world is asked for at its shape and shown scaled down, letterboxed. Every
+surface size, the plot window's included, is clamped to that GPU limit as
+well (`WgpuContext::resize`, `PlotSurface::configure`), so no window size can
+make wgpu panic (#363); the warning is logged once per oversized size.
 
 ### Simulation config
 
