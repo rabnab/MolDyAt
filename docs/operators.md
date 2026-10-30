@@ -30,6 +30,15 @@ an independent `SimLineSegment` with its own id and thickness) and joints
 between them; a valve sits in a joint. A wall without valves is a chain with
 one piece and no joints, so adding a valve always splits one piece.
 
+A valve can be moved or resized along its wall (#203, `SetValveSpan`,
+`SimulationWorld::set_valve_span`): its span in chain fractions changes and
+the two pieces on either side give up or take the length. It stays between
+those two pieces, so it never passes another valve or a gap; neither piece
+shrinks below `MIN_VALVE_PIECE_LENGTH` (1) and a resized valve keeps at least
+`MIN_VALVE_LENGTH` (1), or what they have if already shorter. Balls the moved
+pieces or closed valve now overlap are flagged for the overlap fallback, as
+after a wall drag.
+
 Collision code does not know about chains or valve state. Once per step,
 `collect_solid_obstacles` flattens every piece and every closed valve into
 plain capsules; an open valve produces no obstacle. A ball touches a wall
@@ -136,7 +145,7 @@ an `OperatorCommand` for the physics thread. Handlers also supply the frame's
 | Tool | Left button | Right button | Scroll | Ctrl+scroll |
 |---|---|---|---|---|
 | Wall | press–drag–release draws a wall; drags an endpoint of an existing wall; snaps to walls and endpoints | – | – | thickness of the wall under the cursor |
-| Valve | press on a wall and drag to cut a valve; click on a valve toggles open/closed | – | – | – |
+| Valve | press on a wall and drag to cut a valve; click on a valve toggles open/closed; drag a valve by its middle to move it along the wall, by an end (outer quarter) to resize it | – | – | – |
 | Thermostat | click on empty space places one; click on one toggles it; drag moves it | – | target temperature | radius |
 | Source sphere | click on empty space places one, emitting the species of new balls (`N` / `Alt + N`); click on one toggles it | on a sphere: cycles the species it emits | emission speed | emission period |
 
@@ -155,7 +164,7 @@ physics thread against `MainContent`:
 | Module | Commands |
 |---|---|
 | `line` | `AddLineSegment`, `MoveLineSegmentEndpoint`, `ChangeLineThickness`, `SetGhostWall` |
-| `valve` | `AddValveSegment`, `ToggleValve` |
+| `valve` | `AddValveSegment`, `ToggleValve`, `SetValveSpan` |
 | `thermostat` | `PlaceThermostat`, `ToggleThermostat`, `MoveThermostat`, `AdjustThermostatTargetTemperature`, `AdjustThermostatRadius` |
 | `source` | `PlaceSourceSphere`, `ToggleSourceSphere`, `CycleSourceSphereSpecies`, `AdjustSourceSphereSpeed`, `AdjustSourceSphereEmitPeriod` |
 | `delete` | `DeleteObject` (any single operator object) |

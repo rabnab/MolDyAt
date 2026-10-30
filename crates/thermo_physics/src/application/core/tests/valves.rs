@@ -382,3 +382,201 @@ fn ball_passes_open_valve_but_not_solid_piece() {
         "ball should have bounced off the solid piece"
     );
 }
+
+// ── Moving and resizing a valve along its wall (#203) ────────────────
+
+use crate::application::core::ValveSpanChange::{Move, Resize};
+
+/// The span of the only valve, in chain fractions.
+fn valve_fractions(mc: &MainContent) -> (f32, f32) {
+    let id = mc.world().valve_segments.valves()[0].id;
+    let (chain, index) = mc.world().wall_chains.find_valve_joint(id).unwrap();
+    let joint = chain.joints[index];
+    (joint.t_start(), joint.t_end())
+}
+
+fn only_valve_id(mc: &MainContent) -> usize {
+    mc.world().valve_segments.valves()[0].id
+}
+
+#[test]
+fn moving_a_valve_shifts_it_and_its_neighbouring_pieces() {
+    let mut mc = make_content_with_wall(); // 20 long
+    mc.add_valve_segment(0, 0.4, 0.6, true);
+    let id = only_valve_id(&mc);
+
+    let (s, e) = mc
+        .set_valve_span(id, Move { t_start: 0.6 })
+        .expect("a valve");
+    assert_close(s, 0.6);
+    assert_close(e, 0.8);
+
+    let (p0, p1) = mc.world().wall_chains.valve_span(id).unwrap();
+    assert_close(p0.x, 2.0);
+    assert_close(p1.x, 6.0);
+    let segs = mc.world().line_segments.segments();
+    assert_close(segs[0].end.x, 2.0);
+    assert_close(segs[1].start.x, 6.0);
+    assert_close(segs[1].end.x, 10.0);
+    let chain = mc.world().wall_chains.find(0).unwrap();
+    assert_close(chain.pieces[0].t_end, 0.6);
+    assert_close(chain.pieces[1].t_start, 0.8);
+}
+
+#[test]
+fn a_moved_valve_stops_short_of_the_wall_ends() {
+    let mut mc = make_content_with_wall();
+    mc.add_valve_segment(0, 0.4, 0.6, true);
+    let id = only_valve_id(&mc);
+
+    // Far past the end: the trailing piece keeps 1 unit (0.05 of 20).
+    mc.set_valve_span(id, Move { t_start: 1.4 });
+    let (s, e) = valve_fractions(&mc);
+    assert_close(e, 0.95);
+    assert_close(e - s, 0.2);
+    // And past the start.
+    mc.set_valve_span(id, Move { t_start: -2.0 });
+    let (s, e) = valve_fractions(&mc);
+    assert_close(s, 0.05);
+    assert_close(e - s, 0.2);
+    let segs = mc.world().line_segments.segments();
+    assert!(
+        segs.iter()
+            .all(|seg| seg.start.distance_squared(&seg.end) > 0.99)
+    );
+}
+
+#[test]
+fn a_valve_cannot_pass_another_valve() {
+    let mut mc = make_content_with_wall();
+    mc.add_valve_segment(0, 0.1, 0.2, true); // chain 0.1..0.2
+    mc.add_valve_segment(1, 0.5, 0.6, true); // on piece 1 (0.2..1): 0.6..0.68
+    let first = mc.world().valve_segments.valves()[0].id;
+
+    mc.set_valve_span(first, Move { t_start: 0.9 });
+    let chain = mc.world().wall_chains.find(0).unwrap();
+    let (s, e) = (chain.joints[0].t_start(), chain.joints[0].t_end());
+    // The piece between the valves keeps 1 unit (0.05).
+    assert_close(e, chain.joints[1].t_start() - 0.05);
+    assert_close(e - s, 0.1);
+    assert_eq!(chain.pieces.len(), 3);
+    assert!(chain.pieces.iter().all(|p| p.t_end > p.t_start));
+}
+
+#[test]
+fn resizing_moves_one_edge_and_keeps_a_minimum_width() {
+    let mut mc = make_content_with_wall();
+    mc.add_valve_segment(0, 0.4, 0.6, false);
+    let id = only_valve_id(&mc);
+
+    mc.set_valve_span(
+        id,
+        Resize {
+            t_start: 0.4,
+            t_end: 0.7,
+        },
+    );
+    assert_eq!(valve_fractions(&mc), (0.4, 0.7));
+    // Dragging the start edge past the end leaves 1 unit of valve.
+    mc.set_valve_span(
+        id,
+        Resize {
+            t_start: 0.9,
+            t_end: 0.7,
+        },
+    );
+    let (s, e) = valve_fractions(&mc);
+    assert_close(e, 0.7);
+    assert_close(e - s, 0.05);
+}
+
+#[test]
+fn an_unknown_valve_is_not_moved() {
+    let mut mc = make_content_with_wall();
+    assert_eq!(mc.set_valve_span(7, Move { t_start: 0.1 }), None);
+}
+
+#[test]
+fn balls_keep_speed_around_a_moved_open_valve() {
+    // The open valve moves from the middle (gap at x in [-2, 2]) to x in
+    // [4, 8]: a ball falling at x = 6 now passes, one at x = 0 bounces off
+    // the piece, both at their speed.
+    for (start_x, passes) in [(6.0, true), (0.0, false)] {
+        let mut mc = make_content_with_wall();
+        mc.add_valve_segment(0, 0.4, 0.6, false);
+        let id = only_valve_id(&mc);
+        mc.set_valve_span(id, Move { t_start: 0.7 });
+        mc.world_mut().speed_limit_override = Some(f32::INFINITY);
+
+        let mut ball = Ball2D::new(1, Vec2D::new(start_x, 10.0), SPECIES_M);
+        ball.v = Vec2D::new(0.0, -5.0);
+        mc.world_mut().balls.push(ball);
+        mc.world_mut().rebuild_cell_grid();
+        mc.collect_neighbours_by_cell(DT_GOAL);
+        let bound_rect = mc.world().world_region();
+        for _ in 0..400 {
+            mc.update_sim(DT_GOAL, &bound_rect);
+        }
+
+        let ball = &mc.world().balls[0];
+        assert!(
+            (ball.v.norm() - 5.0).abs() < 1e-2,
+            "x={start_x}: {:?}",
+            ball.v
+        );
+        assert_eq!(ball.get_position().y < 0.0, passes, "x={start_x}");
+    }
+}
+
+#[test]
+fn a_piece_moved_onto_a_ball_lets_it_leave_without_gaining_energy() {
+    // A ball sits in the open valve; the valve moves away, so the trailing
+    // piece now covers the ball. The overlap fallback lets it leave on its
+    // own, speed and direction unchanged: it never tunnels into the wall's
+    // other side against its motion.
+    let mut mc = make_content_with_wall();
+    mc.add_valve_segment(0, 0.4, 0.6, false);
+    let mut ball = Ball2D::new(1, Vec2D::new(0.0, 0.1), SPECIES_M);
+    ball.v = Vec2D::new(0.3, -5.0);
+    mc.world_mut().balls.push(ball);
+
+    let id = only_valve_id(&mc);
+    mc.set_valve_span(id, Move { t_start: 0.1 }); // gap now at x in [-8, -4]
+    assert_eq!(*mc.world().balls[0].get_position(), Vec2D::new(0.0, 0.1));
+
+    move_and_collide(&mut mc, 30, 0.02);
+
+    let ball = &mc.world().balls[0];
+    assert!(
+        ball.get_position().y < -(ball.contact_radius + 0.5),
+        "ball should have left the wall downwards: {:?}",
+        ball.get_position()
+    );
+    assert_eq!(
+        ball.v,
+        Vec2D::new(0.3, -5.0),
+        "speed and direction unchanged"
+    );
+}
+
+#[test]
+fn moving_a_valve_on_a_long_slanted_wall_keeps_its_width() {
+    // Far from the origin and slanted, where fractions projected from world
+    // points round differently from the joint's own: a move must still
+    // keep the width (#383 review).
+    let mut mc = crate::application::core::tests::new_main_content(Rect::new(
+        -5000.0, 5000.0, 10000.0, -10000.0,
+    ))
+    .expect("create MainContent");
+    mc.add_line_segment(Vec2D::new(1234.5, -987.25), Vec2D::new(4321.75, 2345.5));
+    mc.add_valve_segment(0, 0.3125, 0.3375, true);
+    let id = only_valve_id(&mc);
+    let (s0, e0) = valve_fractions(&mc);
+    for t_start in [0.31, 0.4567, 0.7, 0.12345] {
+        mc.set_valve_span(id, Move { t_start });
+        let (s, e) = valve_fractions(&mc);
+        // Only the rounding of one addition, never a resize clamp.
+        assert!(((e - s) - (e0 - s0)).abs() < 1e-6, "t_start = {t_start}");
+        assert!((s - t_start).abs() < 1e-6, "{s} vs {t_start}");
+    }
+}

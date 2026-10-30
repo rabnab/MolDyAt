@@ -23,7 +23,7 @@ Use this when implementing or changing operators (line segment, valve, thermosta
 - Operator data lives in `crates/thermo_physics/src/objects2d/` (`line_segment.rs`, `wall_chain.rs`, `operator/`) in world coordinates, owned by a collection in `SimulationWorld`.
 - Shared primitives in `crates/thermo_physics/src/objects2d/operator/mod.rs`: `OperatorState` for ON/OFF, `OperatorIdCounter` (reset to zero on clear; `after()` for loaded collections), `remap_point()` with the `is_degenerate()` guard for resize.
 - Every collection implements `OperatorCollection` and is listed in `operator_collections_mut()` (`crates/thermo_physics/src/application/core/operators.rs`); that list is the only wiring for clear and rescale. Radii and other lengths use an isotropic scale so circles stay circles.
-- Walls and valves: user walls are `WallChain`s of `SimLineSegment` pieces and valve joints. Collision code sees only capsules from `collect_solid_obstacles` (pieces plus closed valves); never look up valve state per contact.
+- Walls and valves: user walls are `WallChain`s of `SimLineSegment` pieces and valve joints. Collision code sees only capsules from `collect_solid_obstacles` (pieces plus closed valves); never look up valve state per contact. A valve moves or resizes only within the pieces on either side (`set_valve_span`, #203): change the joint's and both pieces' chain fractions together, retarget the chain and flag overlapping balls; never re-parent a valve across a joint.
 
 ## Collision And Physics Requirements
 - Wall contacts are resolved during the position update (`SimulationWorld::sweep_wall_contact`), like the box walls: contact time on the step's path, reflection along the surface normal via `ball_impl::wall_contact` (exact for constant acceleration, including several bounces or resting within a step). Forces are then computed at the resolved position, and the velocity update applies the contact (`v_n -> -v_n` at the contact time) and books the momentum as wall momentum.
@@ -45,7 +45,7 @@ A new operator type, or a new persistent field, must be added in all of these:
 - Place tests in topic files under `tests/` directories (no large inline test modules).
 - Minimum coverage:
   - Selection/mapping: icon index ↔ tool, atlas row count (`atlas_holds_one_row_per_textured_tool_in_registry_order`, `tool_list_maps_icons_and_tools_both_ways`)
-  - Tool interaction: place, toggle, drag, scroll, reset on tool switch
+  - Tool interaction: place, toggle, drag (a valve: move and resize, a click still toggles), scroll, reset on tool switch
   - Collision behaviour: reflect / moving away / no collision; energy of bouncing and resting contacts (`test_ball_*_keeps_energy` in `barrier_energy.rs`); box-wall/line-wall handover (`wall_handover.rs`)
   - Rescale invariants (relative position preserved, degenerate-rect guard), clear resets ids
   - Delete and hover for the new `ObjectRef` variant

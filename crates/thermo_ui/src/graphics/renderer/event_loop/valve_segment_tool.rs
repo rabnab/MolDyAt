@@ -2,16 +2,23 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Valve segment operator tool — drawing and toggling valves on walls.
+//! Valve segment operator tool — drawing, toggling, moving and resizing
+//! valves on walls.
 //!
 //! Defines [`ValveSegmentToolHandler`] which implements [`OperatorToolHandler`]
 //! for the valve-segment interaction state machine, hit-testing on existing
-//! line segments, and preview queries.
+//! line segments, and preview queries. A click on a valve toggles it; a drag
+//! from its middle moves it along its wall, a drag from one of its ends
+//! moves that end (#203). The physics thread keeps the valve between its
+//! neighbouring pieces (`SetValveSpan`).
 
+use thermo_physics::application::core::ValveSpanChange;
 use thermo_physics::objects2d::Vec2D;
 use thermo_physics::objects2d::line_segment::THICKNESS_TO_WORLD;
 use thermo_physics::objects2d::wall_chain::ObjectRef;
-use thermo_runtime::application::operator_command::valve::{AddValveSegment, ToggleValve};
+use thermo_runtime::application::operator_command::valve::{
+    AddValveSegment, SetValveSpan, ToggleValve,
+};
 use winit::event::{ElementState, MouseButton};
 
 use super::operator_tool_handler::{OperatorToolHandler, ToolContext, ToolPreview, ToolResponse};
@@ -25,11 +32,108 @@ pub enum ValveDrawState {
     /// Drawing a new valve: user pressed on a line segment and is
     /// dragging to define the valve region.
     Drawing { line_id: usize, t_start: f32 },
-    /// Pressed on an existing valve: a click toggles it on release.
-    ///
-    /// Moving/resizing a valve is not supported by the wall-chain model yet,
-    /// so releasing after a drag does nothing.
-    Pressed { valve_id: usize, press_pos: Vec2D },
+    /// Pressed on an existing valve: a click toggles it on release, a drag
+    /// moves or resizes it ([`ValveGrab`]).
+    Pressed {
+        valve_id: usize,
+        press_pos: Vec2D,
+        /// `None` for a valve the snapshot has no wall for: it can only be
+        /// toggled.
+        grab: Option<ValveGrab>,
+        /// The cursor left the click slop: this is a drag, not a click.
+        dragging: bool,
+    },
+}
+
+/// Which part of a valve a press grabbed, and where the valve and its wall
+/// were then, so every drag step targets an absolute span.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ValveGrab {
+    pub grip: ValveGrip,
+    /// The wall's (chain's) own endpoints.
+    pub chain_start: Vec2D,
+    pub chain_end: Vec2D,
+    /// The valve's span at the press, in chain fractions.
+    pub t_start: f32,
+    pub t_end: f32,
+    /// The chain fraction of the press.
+    pub t_press: f32,
+}
+
+/// A valve's grabbed part.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ValveGrip {
+    /// The middle: the whole valve moves.
+    Middle,
+    /// The end nearer the chain's start: only that end moves.
+    Start,
+    /// The end nearer the chain's end.
+    End,
+}
+
+/// Part of a valve's length at each end that grabs that end (resize); the
+/// rest moves the whole valve.
+const END_GRIP_FRAC: f32 = 0.25;
+
+impl ValveGrab {
+    /// The grab of a press at `pos` on valve `valve_id`, from the snapshot;
+    /// `None` for a valve without a wall or a wall without length.
+    fn at(valve_id: usize, pos: Vec2D, ctx: &ToolContext) -> Option<Self> {
+        let wall = ctx.operators.wall_of_valve(valve_id)?;
+        let span = ctx
+            .operators
+            .valve_spans
+            .iter()
+            .find(|v| v.valve_id == valve_id)?;
+        let (a, b) = (wall.start, wall.end);
+        let fraction = |p: Vec2D| chain_fraction(a, b, p);
+        let (t_start, t_end, t_press) = (fraction(span.p0)?, fraction(span.p1)?, fraction(pos)?);
+        let width = (t_end - t_start).max(f32::EPSILON);
+        let along = (t_press - t_start) / width;
+        let grip = if along < END_GRIP_FRAC {
+            ValveGrip::Start
+        } else if along > 1.0 - END_GRIP_FRAC {
+            ValveGrip::End
+        } else {
+            ValveGrip::Middle
+        };
+        Some(Self {
+            grip,
+            chain_start: a,
+            chain_end: b,
+            t_start,
+            t_end,
+            t_press,
+        })
+    }
+
+    /// The change asked for with the cursor at `pos`: the grabbed part
+    /// follows the cursor along the wall. The middle moves the valve (its
+    /// width is kept on the physics side), an end resizes it.
+    pub fn target(&self, pos: Vec2D) -> Option<ValveSpanChange> {
+        let delta = chain_fraction(self.chain_start, self.chain_end, pos)? - self.t_press;
+        Some(match self.grip {
+            ValveGrip::Middle => ValveSpanChange::Move {
+                t_start: self.t_start + delta,
+            },
+            ValveGrip::Start => ValveSpanChange::Resize {
+                t_start: self.t_start + delta,
+                t_end: self.t_end,
+            },
+            ValveGrip::End => ValveSpanChange::Resize {
+                t_start: self.t_start,
+                t_end: self.t_end + delta,
+            },
+        })
+    }
+}
+
+/// The fraction of `p`'s projection along `a..b` (not clamped); `None` for a
+/// wall without length.
+fn chain_fraction(a: Vec2D, b: Vec2D, p: Vec2D) -> Option<f32> {
+    let (dx, dy) = (b.x - a.x, b.y - a.y);
+    let length_sq = dx * dx + dy * dy;
+    (length_sq > f32::EPSILON).then(|| ((p.x - a.x) * dx + (p.y - a.y) * dy) / length_sq)
 }
 
 /// Snap threshold for parametric distance on a line segment.
@@ -84,6 +188,23 @@ impl ValveSegmentToolHandler {
         ctx.operators.valve_at(pos, ctx.world_bounds.extent())
     }
 
+    /// Whether the cursor at `pos` is farther than the click slop from the
+    /// press at `press_pos`.
+    fn beyond_click_slop(press_pos: Vec2D, pos: Vec2D, ctx: &ToolContext) -> bool {
+        press_pos.dist(&pos).norm() > ctx.world_bounds.extent() * CLICK_SLOP_FRAC
+    }
+
+    /// The command that moves the grabbed valve with the cursor at `pos`
+    /// (none without a grab: a valve the snapshot has no wall for).
+    fn drag_to(valve_id: usize, grab: Option<&ValveGrab>, pos: Vec2D) -> ToolResponse {
+        match grab.and_then(|grab| grab.target(pos)) {
+            Some(change) => {
+                ToolResponse::consumed_with(Box::new(SetValveSpan { valve_id, change }))
+            }
+            None => ToolResponse::consumed_dirty(),
+        }
+    }
+
     /// Snap parametric coordinate to 0.0 or 1.0 if within threshold.
     fn snap_t(t: f32) -> f32 {
         if t < T_SNAP_THRESHOLD {
@@ -114,6 +235,8 @@ impl OperatorToolHandler for ValveSegmentToolHandler {
                     self.state = ValveDrawState::Pressed {
                         valve_id,
                         press_pos: world_pos,
+                        grab: ValveGrab::at(valve_id, world_pos, ctx),
+                        dragging: false,
                     };
                 } else if let Some((line_id, t)) = Self::find_line_at(world_pos, ctx) {
                     let t = Self::snap_t(t);
@@ -148,12 +271,14 @@ impl OperatorToolHandler for ValveSegmentToolHandler {
                     ValveDrawState::Pressed {
                         valve_id,
                         press_pos,
+                        grab,
+                        dragging,
                     } => {
-                        let slop = ctx.world_bounds.extent() * CLICK_SLOP_FRAC;
-                        if press_pos.dist(&world_pos).norm() <= slop {
-                            ToolResponse::consumed_with(Box::new(ToggleValve { valve_id }))
+                        if dragging || Self::beyond_click_slop(press_pos, world_pos, ctx) {
+                            // The final position of a drag.
+                            Self::drag_to(valve_id, grab.as_ref(), world_pos)
                         } else {
-                            ToolResponse::consumed_dirty()
+                            ToolResponse::consumed_with(Box::new(ToggleValve { valve_id }))
                         }
                     }
                     ValveDrawState::Idle => ToolResponse::consumed_dirty(),
@@ -164,11 +289,23 @@ impl OperatorToolHandler for ValveSegmentToolHandler {
         }
     }
 
-    fn handle_cursor_move(&mut self, _world_pos: Vec2D, _ctx: &ToolContext) -> ToolResponse {
-        if matches!(self.state, ValveDrawState::Idle) {
-            ToolResponse::default()
-        } else {
-            ToolResponse::consumed_dirty()
+    fn handle_cursor_move(&mut self, world_pos: Vec2D, ctx: &ToolContext) -> ToolResponse {
+        match &mut self.state {
+            ValveDrawState::Idle => ToolResponse::default(),
+            ValveDrawState::Drawing { .. } => ToolResponse::consumed_dirty(),
+            ValveDrawState::Pressed {
+                valve_id,
+                press_pos,
+                grab,
+                dragging,
+            } => {
+                *dragging |= Self::beyond_click_slop(*press_pos, world_pos, ctx);
+                if *dragging {
+                    Self::drag_to(*valve_id, grab.as_ref(), world_pos)
+                } else {
+                    ToolResponse::consumed_dirty()
+                }
+            }
         }
     }
 
@@ -225,15 +362,27 @@ impl OperatorToolHandler for ValveSegmentToolHandler {
 mod tests {
     use super::*;
     use thermo_physics::objects2d::{Rect, SimLineSegment};
-    use thermo_runtime::application::renderer_snapshot::{OperatorSnapshot, ValveSpan};
+    use thermo_runtime::application::renderer_snapshot::{
+        OperatorSnapshot, ValveSpan, WallSnapshot,
+    };
 
+    /// The operators of `segments` and `valves`; every valve is cut into
+    /// one wall from (0, 0) to (10, 0).
     fn make_ctx_data(
         segments: Vec<SimLineSegment>,
         valves: Vec<ValveSpan>,
     ) -> (OperatorSnapshot, Rect) {
+        let walls = vec![WallSnapshot {
+            chain_id: 0,
+            start: Vec2D::new(0.0, 0.0),
+            end: Vec2D::new(10.0, 0.0),
+            piece_ids: segments.iter().map(|s| s.id).collect(),
+            valve_ids: valves.iter().map(|v| v.valve_id).collect(),
+        }];
         let snap = OperatorSnapshot {
             line_segments: segments,
             valve_spans: valves,
+            walls,
             ..Default::default()
         };
         let world = Rect::new(-18.0, 12.0, 36.0, -24.0);
@@ -380,28 +529,113 @@ mod tests {
         assert!(resp.action.is_some(), "Should emit ToggleValve command");
     }
 
-    #[test]
-    fn release_after_drag_on_valve_does_nothing() {
+    /// Press on the valve 3..7 at `from`, drag to `to`, release there: the
+    /// change the last command asks for, or `None` without a command.
+    fn drag_valve(from: f32, to: f32) -> Option<ValveSpanChange> {
         let seg = SimLineSegment::new(1, Vec2D::new(0.0, 0.0), Vec2D::new(10.0, 0.0));
         let (snap, world) = make_ctx_data(vec![seg], vec![valve_span(5, 3.0, 7.0)]);
         let ctx = make_tool_ctx(&snap, &world, Vec2D::zero());
 
         let mut tool = ValveSegmentToolHandler::new();
-        tool.handle_mouse_button(
-            MouseButton::Left,
-            ElementState::Pressed,
-            Vec2D::new(5.0, 0.0),
-            &ctx,
-        );
+        let press = Vec2D::new(from, 0.0);
+        tool.handle_mouse_button(MouseButton::Left, ElementState::Pressed, press, &ctx);
+        let moved = tool.handle_cursor_move(Vec2D::new(to, 0.2), &ctx);
+        assert!(moved.consumed);
         let resp = tool.handle_mouse_button(
             MouseButton::Left,
             ElementState::Released,
-            Vec2D::new(6.5, 0.0),
+            Vec2D::new(to, 0.2),
             &ctx,
         );
-        assert!(resp.consumed);
-        assert!(resp.action.is_none(), "Dragging a valve is unsupported");
         assert!(matches!(tool.state, ValveDrawState::Idle));
+        let action: Box<dyn std::any::Any> = resp.action?;
+        let command = action
+            .downcast::<SetValveSpan>()
+            .expect("a SetValveSpan command");
+        assert_eq!(command.valve_id, 5);
+        Some(command.change)
+    }
+
+    fn assert_change(actual: Option<ValveSpanChange>, expected: ValveSpanChange) {
+        let close = |a: f32, b: f32| (a - b).abs() < 1e-5;
+        let ok = match (actual.expect("a valve command"), expected) {
+            (ValveSpanChange::Move { t_start: a }, ValveSpanChange::Move { t_start: b }) => {
+                close(a, b)
+            }
+            (
+                ValveSpanChange::Resize {
+                    t_start: a,
+                    t_end: b,
+                },
+                ValveSpanChange::Resize {
+                    t_start: c,
+                    t_end: d,
+                },
+            ) => close(a, c) && close(b, d),
+            _ => false,
+        };
+        assert!(ok, "{actual:?}, expected {expected:?}");
+    }
+
+    #[test]
+    fn dragging_a_valve_by_its_middle_moves_it_along_the_wall() {
+        // Valve at fractions 0.3..0.7 of the wall; the cursor moves by 0.15.
+        assert_change(
+            drag_valve(5.0, 6.5),
+            ValveSpanChange::Move { t_start: 0.45 },
+        );
+    }
+
+    #[test]
+    fn dragging_a_valve_end_resizes_it() {
+        assert_change(
+            drag_valve(3.4, 2.0),
+            ValveSpanChange::Resize {
+                t_start: 0.16,
+                t_end: 0.7,
+            },
+        );
+        assert_change(
+            drag_valve(6.8, 8.0),
+            ValveSpanChange::Resize {
+                t_start: 0.3,
+                t_end: 0.82,
+            },
+        );
+    }
+
+    #[test]
+    fn a_click_still_toggles_and_a_drag_does_not() {
+        let seg = SimLineSegment::new(1, Vec2D::new(0.0, 0.0), Vec2D::new(10.0, 0.0));
+        let (snap, world) = make_ctx_data(vec![seg], vec![valve_span(5, 3.0, 7.0)]);
+        let ctx = make_tool_ctx(&snap, &world, Vec2D::zero());
+        let mut tool = ValveSegmentToolHandler::new();
+        let at = Vec2D::new(5.0, 0.0);
+        tool.handle_mouse_button(MouseButton::Left, ElementState::Pressed, at, &ctx);
+        // A jitter inside the click slop is no drag.
+        let jitter = tool.handle_cursor_move(Vec2D::new(5.05, 0.0), &ctx);
+        assert!(jitter.action.is_none());
+        let resp = tool.handle_mouse_button(MouseButton::Left, ElementState::Released, at, &ctx);
+        let action: Box<dyn std::any::Any> = resp.action.expect("a command");
+        assert!(action.downcast::<ToggleValve>().is_ok());
+    }
+
+    #[test]
+    fn every_drag_step_moves_the_valve_live() {
+        let seg = SimLineSegment::new(1, Vec2D::new(0.0, 0.0), Vec2D::new(10.0, 0.0));
+        let (snap, world) = make_ctx_data(vec![seg], vec![valve_span(5, 3.0, 7.0)]);
+        let ctx = make_tool_ctx(&snap, &world, Vec2D::zero());
+        let mut tool = ValveSegmentToolHandler::new();
+        let at = Vec2D::new(5.0, 0.0);
+        tool.handle_mouse_button(MouseButton::Left, ElementState::Pressed, at, &ctx);
+        for x in [5.5, 6.0, 6.5] {
+            let step = tool.handle_cursor_move(Vec2D::new(x, 0.0), &ctx);
+            assert!(step.action.is_some(), "x = {x}");
+        }
+        assert!(matches!(
+            tool.state,
+            ValveDrawState::Pressed { dragging: true, .. }
+        ));
     }
 
     #[test]

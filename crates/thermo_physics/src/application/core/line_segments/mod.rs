@@ -14,6 +14,7 @@ mod sweep;
 pub(crate) use obstacles::Obstacle;
 pub(crate) use overlap::OverlapPass;
 
+use super::valves::ValveSpanChange;
 use super::{MainContent, SimulationWorld};
 use crate::objects2d::Vec2D;
 use crate::objects2d::line_segment::{DEFAULT_THICKNESS, GhostWall, MAX_THICKNESS, MIN_THICKNESS};
@@ -331,4 +332,64 @@ impl SimulationWorld {
 
         Some(valve_id)
     }
+
+    /// Move or resize valve `valve_id` along its wall (#203), as `change`
+    /// says, in fractions of the chain and as far as the pieces on either
+    /// side allow. The valve stays between its two neighbouring pieces,
+    /// which give up or take the length it moves by, and neither shrinks
+    /// below [`MIN_VALVE_PIECE_LENGTH`] (or below its length now, if it is
+    /// already shorter). A move keeps the valve's width exactly; a resize
+    /// keeps it at least [`MIN_VALVE_LENGTH`] wide (or its width now, if
+    /// narrower).
+    ///
+    /// Balls the moved pieces or valve now overlap are flagged for the
+    /// overlap fallback, as after a wall drag. Returns the span applied, or
+    /// `None` for an unknown valve or a wall without length.
+    pub(crate) fn set_valve_span(
+        &mut self,
+        valve_id: usize,
+        change: ValveSpanChange,
+    ) -> Option<(f32, f32)> {
+        let (chain, index) = self.wall_chains.find_valve_joint_mut(valve_id)?;
+        let length = chain.start.distance_squared(&chain.end).sqrt();
+        if length <= f32::EPSILON || !change.is_finite() {
+            return None;
+        }
+        let joint = chain.joints[index];
+        let (s0, e0) = (joint.t_start(), joint.t_end());
+        let (before, after) = (chain.pieces[index], chain.pieces[index + 1]);
+        let min_piece = MIN_VALVE_PIECE_LENGTH / length;
+        let lower = before.t_start + min_piece.min(s0 - before.t_start).max(0.0);
+        let upper = after.t_end - min_piece.min(after.t_end - e0).max(0.0);
+        let (s, e) = match change {
+            ValveSpanChange::Move { t_start } => {
+                let shift = (t_start - s0).clamp(lower - s0, upper - e0);
+                (s0 + shift, e0 + shift)
+            }
+            ValveSpanChange::Resize { t_start, t_end } => {
+                let min_width = (MIN_VALVE_LENGTH / length).min(e0 - s0);
+                let e = t_end.clamp(lower + min_width, upper);
+                let s = t_start.clamp(lower, e - min_width);
+                (s, e)
+            }
+        };
+        chain.joints[index] = Joint::Valve {
+            valve_id,
+            t_start: s,
+            t_end: e,
+        };
+        chain.pieces[index].t_end = s;
+        chain.pieces[index + 1].t_start = e;
+        let (chain_id, piece_id) = (chain.id, before.line_id);
+        self.retarget_chain(piece_id);
+        self.flag_balls_overlapping_chain(chain_id);
+        Some((s, e))
+    }
 }
+
+/// Shortest a wall piece next to a valve gets when the valve is moved or
+/// resized (world units, `σ` of `N2`).
+pub(crate) const MIN_VALVE_PIECE_LENGTH: f32 = 1.0;
+
+/// Narrowest a valve gets when resized (world units).
+pub(crate) const MIN_VALVE_LENGTH: f32 = 1.0;
