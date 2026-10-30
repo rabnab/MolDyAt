@@ -451,8 +451,8 @@ fn pair_step_stats(main_content: &MainContent, step: usize) -> PairStepStats {
             stats.pair_count += 1;
             stats.min_edge_distance = stats.min_edge_distance.min(edge_dist);
 
-            let i_lists_j = balls[i].hood.is_a_neighbour_idx(j);
-            let j_lists_i = balls[j].hood.is_a_neighbour_idx(i);
+            let i_lists_j = balls[i].cold.hood.is_a_neighbour_idx(j);
+            let j_lists_i = balls[j].cold.hood.is_a_neighbour_idx(i);
             if i_lists_j != j_lists_i {
                 stats.asymmetric_neighbor_pairs += 1;
             }

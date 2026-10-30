@@ -384,8 +384,8 @@ fn test_cutoff_energy_loss() {
             println!("    Centre distance: {:.6}", center_dist);
 
             // Check neighbor lists
-            let neighbors0 = ball0.hood.get_neighbour_indices().len();
-            let neighbors1 = ball1.hood.get_neighbour_indices().len();
+            let neighbors0 = ball0.cold.hood.get_neighbour_indices().len();
+            let neighbors1 = ball1.cold.hood.get_neighbour_indices().len();
             println!("    Ball0 neighbors: {}", neighbors0);
             println!("    Ball1 neighbors: {}", neighbors1);
         }
@@ -427,8 +427,8 @@ fn test_cutoff_energy_loss() {
                 (system_p_drift_x * system_p_drift_x + system_p_drift_y * system_p_drift_y).sqrt();
 
             // Check neighbor lists
-            let ball0_neighbors = ball0.hood.get_neighbour_indices();
-            let ball1_neighbors = ball1.hood.get_neighbour_indices();
+            let ball0_neighbors = ball0.cold.hood.get_neighbour_indices();
+            let ball1_neighbors = ball1.cold.hood.get_neighbour_indices();
 
             println!(
                 "Step {}: center_dist={:.6}, KE={:.6}, PE={:.6}, Total={:.6}, Drift={:.6} ({:.4}%)",
@@ -503,7 +503,7 @@ fn listed_pair_potential(main_content: &MainContent) -> f64 {
     let world = main_content.world();
     let mut potential = 0.0f64;
     for (i, ball) in world.balls.iter().enumerate() {
-        for &j in ball.hood.get_neighbour_indices() {
+        for &j in ball.cold.hood.get_neighbour_indices() {
             if j > i {
                 let other = &world.balls[j];
                 let center_dist = ball.get_position().dist(other.get_position()).norm();
@@ -555,7 +555,7 @@ fn test_neighbour_list_rebuild_does_not_change_energy() {
         mc.world()
             .balls
             .iter()
-            .map(|b| b.hood.get_neighbour_indices().len())
+            .map(|b| b.cold.hood.get_neighbour_indices().len())
             .sum()
     };
 

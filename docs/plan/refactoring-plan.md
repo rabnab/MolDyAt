@@ -171,7 +171,7 @@ Each item reports before/after numbers from G1 and must keep drift + energy test
 | P3 | Thermo field at snapshot cadence | Bin T/P every `THERMO_SAMPLE_STRIDE` steps instead of every step; the rolling window counts samples and still spans 1000 steps. A fixed step stride (not wall-clock snapshot time) keeps headless runs deterministic. | S | G1 |
 | P4 | Flat cell grid (CSR) and spatial reordering | `CellGrid` as counting-sort arrays (`cell_start`, `ball_idx`) rebuilt per step in parallel instead of `Vec<Vec<Cell>>` with per-cell `Vec`s. Includes P5: the counting sort gives the cell order, so periodically sort `balls` by it for cache locality, following the index contract (clear lists, rebuild grid). Done (#345): `CellGrid` holds `cell_start` / `sorted`, rebuilt every step in the `cells` phase (cells computed in parallel, one serial counting pass in ball order), with per-cell lists for balls added between rebuilds; same results bit for bit. The sort is `[neighbours] reorder_interval` (default 0, off), which renumbers the Verlet lists instead of clearing them; it changes the order of f32 sums, so it is off by default. On a 4-core cloud host P4 cut `total` by 9–35 % in all G1 scenarios; sorting every 100 steps cut `forces` in `large` by another 21 %. | M | P1 |
 | P5 | ~~Spatial reordering of balls~~ | Folded into P4. | – | – |
-| P6 | Hot/cold split of `Ball2D` | Hot SoA arrays (pos, v, accel, mass, species) vs cold per-ball data (verbose, tail, counters). Large mechanical change, after the crate split to limit churn. | L | M7, P4 |
+| P6 | Hot/cold split of `Ball2D` | Hot SoA arrays (pos, v, accel, mass, species) vs cold per-ball data (verbose, tail, counters). Large mechanical change, after the crate split to limit churn. Done in part (#346, scope agreed with the owner): `Ball2D` holds only the hot fields (pos, v, accel, mass, species, contact radius, pre-update and last-rebuild positions, id, the four verbose flags, two state flags; at most 80 bytes, tested) and a `Box<BallCold>` with the Verlet list, the tail and the update counter; same results bit for bit. Separate SoA arrays (`Balls` container instead of `Vec<Ball2D>`, ~900 call sites) remain open in #392. | L | M7, P4 |
 | P7 | ~~Snapshot reuse~~ | Folded into V2. The snapshot phase is about 1 % of a step even at 200k balls (`docs/perf-baseline.md`), too little for its own item. | – | – |
 | P8a | Measure precision loss in large worlds (#213) | A test or headless scenario that shows how far f32 positions and drift degrade with world size and distance from the origin, so P8b is sized by numbers. Done (#344): `precision.rs` runs the dense and the cool gas at four distances from the origin, at dt, dt/2 and dt/4; results and the recommendation (f64 positions) in `docs/drift-test.md#precision-far-from-the-origin`. | S | – |
 | P8b | Precision in large worlds (#213) | Cell-relative coordinates or f64 positions with f32 kernel offsets, as P8a shows is needed. | L | P6, P8a |
@@ -189,7 +189,7 @@ Phase 3 (crate split):              M2, #295, #270, #273, #274, M5, C4, M7, M8, 
 Phase 4 (finish the split):         M9, I8a, #327, C3
 Phase 5 (metrics + plots):          V3, V7, V4a, V4b, C5
 Phase 6 (visuals + tools):          #363, V2, #290, V5, V6, #303, #203
-Phase 7 (performance):              P8a, #386, P4, #250, P6, P8b
+Phase 7 (performance):              P8a, #386, P4, #250, P6, P8b, #392
 Phase 8 (walls + water):            I12, I8b, I9 + I10 (once §7 is decided), I11 (if needed)
 ```
 
@@ -214,7 +214,7 @@ GitHub issues (every open issue is in a phase, as of 2026-10-23):
 | 4 | #329 | M9 #310 | I8a #334, #327, C3 #335, M10 |
 | 5 | #330 | V3 #336, V7 #337, V4a #338, #367, #366, V4b #339, #371, #372, C5 #340 | M10 |
 | 6 | #331 | #363, V2 #341, #290, V5 #342, V6 #343, #303, #203 | M10 |
-| 7 | #332 | P8a #344, #386, P4 #345, #250 | P6 #346, P8b #213, M10 |
+| 7 | #332 | P8a #344, #386, P4 #345, #250, P6 #346 (hot/cold part) | P8b #213, #392 (SoA arrays), M10 |
 | 8 | #333 | – | I12 #280, I8b #347, I9 #348, I10 #349, I11 #350, M10 |
 
 "Landed" is taken from the commits on `master` (as of 2026-10-23), not from

@@ -322,12 +322,12 @@ impl SimulationEngine {
             .map(|i| {
                 let ball = &balls[i];
 
-                if !ball.hood.hood_dirty {
+                if !ball.cold.hood.hood_dirty {
                     return (i, 0, f32::NAN, f32::NAN, false);
                 }
 
                 let ball_pos = *ball.get_position();
-                let neighbour_indices = ball.hood.get_neighbour_indices();
+                let neighbour_indices = ball.cold.hood.get_neighbour_indices();
                 let verbose_lines = ball.verbose.lines();
 
                 let (num_neighbours, nearest, farthest) =
@@ -344,8 +344,8 @@ impl SimulationEngine {
             .collect_into_vec(stats);
 
         for &(i, num_neighbours, nearest, farthest, should_toggle) in stats.iter() {
-            if world.balls[i].hood.hood_dirty {
-                let ball_hood = &mut world.balls[i].hood;
+            if world.balls[i].cold.hood.hood_dirty {
+                let ball_hood = &mut world.balls[i].cold.hood;
                 ball_hood.num_neighbours = num_neighbours;
                 ball_hood.nearest = nearest;
                 ball_hood.farthest = farthest;

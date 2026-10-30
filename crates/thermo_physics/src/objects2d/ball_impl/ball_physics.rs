@@ -292,8 +292,8 @@ impl BallPhysics {
                 dt,
                 ball.get_position(),
                 ball.v,
-                ball.hood.nearest,
-                ball.hood.farthest
+                ball.cold.hood.nearest,
+                ball.cold.hood.farthest
             );
         }
 

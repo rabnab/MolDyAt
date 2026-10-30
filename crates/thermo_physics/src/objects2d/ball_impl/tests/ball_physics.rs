@@ -224,8 +224,8 @@ fn test_energy_conservation_two_balls_integration() {
     ball2.pre_update_pos = *ball2.get_position();
 
     // Set up neighbor lists (each ball sees the other)
-    ball1.hood.add_neighbour(1);
-    ball2.hood.add_neighbour(0);
+    ball1.cold.hood.add_neighbour(1);
+    ball2.cold.hood.add_neighbour(0);
 
     let mut balls = vec![ball1, ball2];
 

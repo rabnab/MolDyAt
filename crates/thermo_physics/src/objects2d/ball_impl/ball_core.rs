@@ -51,29 +51,41 @@ impl BounceInfo {
     }
 }
 
+/// A ball: the data the step reads or writes for every ball (hot), plus a
+/// pointer to the rest ([`BallCold`]), so the hot data of many balls shares
+/// cache lines (P6, #346).
 pub struct Ball2D {
+    pos: Vec2D,
+    pub v: Vec2D,
+    pub accel: Vec2D,
+    pub mass: f32,
+    pub species: SpeciesId,
     /// `σ / 2` of the species: the ball's size for overlap and placement
     /// checks. Wall contacts take their distance from the `WallLaw`.
     pub contact_radius: f32,
-    pub species: SpeciesId,
-    pos: Vec2D,
+    pub pre_update_pos: Vec2D,
+    pub last_update_hood_pos: Vec2D,
     pub(crate) id: BallId,
-    pub mass: f32,
-    pub v: Vec2D,
-    pub(crate) hood: Verlet,
+    /// Four flags, checked in every pass, so they stay hot.
     pub verbose: VerboseInfo,
     pub braking: bool,
-    pub pre_update_pos: Vec2D,
-    pub accel: Vec2D,
-    pub last_update_hood_pos: Vec2D,
-    /// Position history, kept only while the ball is verbose (allocated lazily;
-    /// `None` otherwise).
-    tail: Option<VecDeque<Vec2D>>,
-    pub show_update_count: usize,
     /// A wall appeared or changed on top of this ball (a valve closed, a wall
     /// was drawn, moved or thickened over it). Until it no longer touches any
     /// wall, it passes through the walls it overlaps instead of being pushed.
     pub leaving_wall: bool,
+    pub(crate) cold: Box<BallCold>,
+}
+
+/// The part of a ball kept out of line: the neighbour list (read once per
+/// ball in the force pass and the rebuild, through its own heap buffer
+/// anyway), the tail of verbose balls and the update counter.
+#[derive(Default)]
+pub(crate) struct BallCold {
+    pub(crate) hood: Verlet,
+    /// Position history, kept only while the ball is verbose (allocated
+    /// lazily; `None` otherwise).
+    tail: Option<VecDeque<Vec2D>>,
+    show_update_count: usize,
 }
 
 /// A ball of the built-in default species (`N2`) at the origin. Test builds
@@ -124,15 +136,13 @@ impl Ball2D {
             id,
             mass: data.mass,
             v: Vec2D::zero(),
-            hood: Verlet::default(),
             verbose: VerboseInfo::default(),
             braking: false,
             pre_update_pos: pos,
             accel: Vec2D::zero(),
             last_update_hood_pos: pos,
-            tail: None,
-            show_update_count: 0,
             leaving_wall: false,
+            cold: Box::default(),
         }
     }
 
@@ -150,7 +160,7 @@ impl Ball2D {
     }
 
     pub fn get_tail_positions(&self) -> Option<&VecDeque<Vec2D>> {
-        self.tail.as_ref().filter(|tail| !tail.is_empty())
+        self.cold.tail.as_ref().filter(|tail| !tail.is_empty())
     }
 
     pub fn get_velocity(&self) -> &Vec2D {
@@ -193,20 +203,19 @@ impl Ball2D {
     /// Callers relying on long-lived trajectory visuals should be aware that
     /// invoking this method will drop the existing tail points.
     pub(crate) fn reset_update_counter(&mut self) {
-        self.show_update_count = 200;
-        if let Some(tail) = self.tail.as_mut() {
+        self.cold.show_update_count = 200;
+        if let Some(tail) = self.cold.tail.as_mut() {
             tail.clear();
         }
     }
 
     pub(crate) fn decrement_update_counter(&mut self) {
-        if self.show_update_count > 0 {
-            self.show_update_count -= 1;
-        }
+        let count = &mut self.cold.show_update_count;
+        *count = count.saturating_sub(1);
     }
 
     pub fn get_update_counter(&self) -> usize {
-        self.show_update_count
+        self.cold.show_update_count
     }
 
     /// Calculate linear momentum (mass × velocity).
@@ -355,7 +364,7 @@ impl Ball2D {
     /// * `new_pos` - New position to set
     pub(crate) fn set_position_and_update_tail(&mut self, new_pos: Vec2D) {
         if self.verbose.any() {
-            let tail = self.tail.get_or_insert_with(Default::default);
+            let tail = self.cold.tail.get_or_insert_with(Default::default);
             let far_enough = tail
                 .back()
                 .is_none_or(|last| last.dist(&new_pos).norm_sq() > TAIL_RESOLUTION_DELTA_SQ);
@@ -365,15 +374,15 @@ impl Ball2D {
                     tail.pop_front();
                 }
             }
-        } else {
-            self.tail = None;
+        } else if self.cold.tail.is_some() {
+            self.cold.tail = None;
         }
         self.pos = new_pos;
     }
 
     #[cfg(test)]
     pub(crate) fn get_neighbour_names(&self, balls: &[Ball2D]) -> Vec<String> {
-        self.hood.get_neighbour_names(balls)
+        self.cold.hood.get_neighbour_names(balls)
     }
 
     #[cfg(test)]
@@ -498,6 +507,15 @@ mod tests {
 
         assert_eq!(b1, b2);
         assert_ne!(b1, b3);
+    }
+
+    /// The hot part stays small (P6, #346): the passes over all balls read
+    /// about one cache line per ball. A new field that not every pass needs
+    /// belongs in `BallCold`.
+    #[test]
+    fn test_hot_ball_data_fits_in_80_bytes() {
+        let size = std::mem::size_of::<Ball2D>();
+        assert!(size <= 80, "Ball2D is {size} bytes");
     }
 
     #[test]

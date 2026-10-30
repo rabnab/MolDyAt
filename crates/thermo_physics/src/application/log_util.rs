@@ -38,8 +38,8 @@ pub(crate) fn log_closeness_update(ball: &Ball2D) {
             target: crate::logging::VERBOSE_TARGET,
             "update_closeness: {} nearest/farthest: {}/{}",
             ball.get_name(),
-            ball.hood.nearest,
-            ball.hood.farthest
+            ball.cold.hood.nearest,
+            ball.cold.hood.farthest
         );
     }
 }
