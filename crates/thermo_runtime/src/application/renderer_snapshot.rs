@@ -192,10 +192,11 @@ pub struct CellGridSpec {
     pub origin_y: f32,
 }
 
-/// Specification for the visualization thermo grid layout.
+/// Specification for the thermo field grid layout.
 ///
-/// Separate from `CellGridSpec` because the visualization grid dimensions
-/// (based on ~2-ball occupancy) differ from the simulation CellGrid.
+/// Separate from `CellGridSpec`: the thermo field has a grid of its own,
+/// sized from the world with cells of about `THERMO_CELL_SIZE` (#290), while
+/// the physics cells follow the largest species present.
 #[derive(Debug, Clone)]
 pub struct ThermoGridSpec {
     /// Number of rows in the visualization grid

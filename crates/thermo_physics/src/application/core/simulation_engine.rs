@@ -5,7 +5,9 @@
 use super::step_scratch::{NeighbourStats, RebuildScratch, UpdateScratch};
 use super::{RuntimeOptions, SimulationWorld, StatsAccumulator, StepConfig};
 use crate::application::phase_timings::{Phase, PhaseClock};
-use crate::application::thermo_field::{THERMO_SAMPLE_STRIDE, compute_cell_thermo};
+use crate::application::thermo_field::{
+    THERMO_SAMPLE_STRIDE, compute_cell_thermo, thermo_grid_dims,
+};
 use crate::application::{AppResult, log_util};
 use crate::logging::log_update_hood_start;
 use crate::objects2d::ball_impl::ForceResult;
@@ -103,15 +105,15 @@ impl SimulationEngine {
             return;
         }
         let mut clock = PhaseClock::start(log_timings);
-        // The T/P overlay uses the physics cell grid's shape (see
-        // docs/simulation.md, Thermodynamic Grid Space).
-        let (phys_rows, phys_cols) = world.cell_grid.get_grid_size();
+        // The T/P field has a grid of its own, sized from the world only
+        // (#290, docs/simulation.md, Thermodynamic Grid Space).
+        let (rows, cols) = thermo_grid_dims(world.world_rect.w, world.world_rect.h);
         let (t_grid, p_grid) = compute_cell_thermo(
             &world.balls,
             &world.cached_force_results,
             &world.world_rect,
-            phys_rows.max(1),
-            phys_cols.max(1),
+            rows,
+            cols,
         );
         world.thermo_history.push(t_grid, p_grid);
         // Booked to `thermo` like the global temperature, but logged under

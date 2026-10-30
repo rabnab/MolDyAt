@@ -432,6 +432,66 @@ fn test_thermo_fields_are_sampled_every_stride_steps() {
     assert_eq!(mc.world().thermo_history().len(), 1 + strided);
 }
 
+/// Steps `mc` with the thermo fields recorded (the heatmap is shown).
+fn step_with_heatmap(mc: &mut MainContent, steps: usize) {
+    for _ in 0..steps {
+        mc.step_recording_thermo_fields(true).unwrap();
+    }
+}
+
+#[test]
+fn a_new_species_keeps_the_thermo_grid_and_its_average() {
+    // #290: a ball of a larger species rebuilds the physics cell grid; the
+    // thermo grid is the world's own, so its average goes on.
+    let mut mc = seeded_gas(290, 40);
+    step_with_heatmap(&mut mc, 25);
+    let cells_before = mc.world().cell_grid().get_grid_size();
+    let samples_before = mc.world().thermo_history().len();
+    let (t_before, _) = mc.world().thermo_history().average().unwrap();
+
+    // Species of new balls: N2, XS, S, M, L, XL in the built-in table.
+    for _ in 0..5 {
+        mc.next_species();
+    }
+    mc.add_candidate_at_pos(Vec2D::new(30.0, -30.0)).unwrap();
+    step_with_heatmap(&mut mc, 20);
+
+    assert_ne!(
+        mc.world().cell_grid().get_grid_size(),
+        cells_before,
+        "the physics grid follows the largest species"
+    );
+    assert_eq!(
+        mc.world().thermo_history().len(),
+        samples_before + 2,
+        "the rolling average was not restarted"
+    );
+    let (t_after, _) = mc.world().thermo_history().average().unwrap();
+    assert_eq!(t_after.shape(), t_before.shape());
+}
+
+#[test]
+fn the_thermo_grid_has_the_same_resolution_for_any_species() {
+    use crate::application::thermo_field::thermo_grid_dims;
+    let mut n2 = seeded_gas(290, 20);
+    step_with_heatmap(&mut n2, 1);
+    let mut xl = seeded_gas(290, 0);
+    for _ in 0..5 {
+        xl.next_species();
+    }
+    xl.add_candidate_at_pos(Vec2D::new(0.0, 0.0)).unwrap();
+    xl.add_candidate_at_pos(Vec2D::new(20.0, 0.0)).unwrap();
+    step_with_heatmap(&mut xl, 1);
+
+    let shape = |mc: &MainContent| mc.world().thermo_history().average().unwrap().0.shape();
+    assert_eq!(shape(&n2), thermo_grid_dims(80.0, 80.0));
+    assert_eq!(shape(&n2), shape(&xl));
+    let publisher = SnapshotPublisher::new();
+    let spec = publisher.snapshot(&xl).fields.thermo_grid.unwrap();
+    assert_eq!((spec.rows, spec.cols), shape(&xl));
+    assert_eq!(spec.cell_width, 80.0 / spec.cols as f32);
+}
+
 #[test]
 fn test_strided_thermo_average_matches_per_step_average() {
     use crate::application::thermo_field::{
@@ -450,14 +510,13 @@ fn test_strided_thermo_average_matches_per_step_average() {
     for step in 1..=THERMO_WINDOW_STEPS {
         mc.simulation_step().unwrap();
         let world = mc.world();
-        let (rows, cols) = world.cell_grid().get_grid_size();
         let fields = || {
             compute_cell_thermo(
                 world.balls(),
                 world.cached_force_results(),
                 &world.world_rect(),
-                rows.max(1),
-                cols.max(1),
+                0,
+                0,
             )
         };
         let (t, p) = fields();

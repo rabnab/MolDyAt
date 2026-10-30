@@ -3,8 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::application::thermo_field::{
-    LocalKineticStats, THERMO_WINDOW, ThermoFieldHistory, ThermoGrid, compute_cell_thermo,
-    compute_viz_grid_dims, virial_pressure_2d,
+    LocalKineticStats, THERMO_CELL_SIZE, THERMO_WINDOW, ThermoFieldHistory, ThermoGrid,
+    compute_cell_thermo, thermo_grid_dims, virial_pressure_2d,
 };
 use crate::objects2d::Rect;
 use crate::objects2d::Vec2D;
@@ -28,56 +28,39 @@ fn make_ball(id: usize, pos: Vec2D, velocity: Vec2D, mass: f32) -> Ball2D {
     b
 }
 
-// ── compute_viz_grid_dims tests ──────────────────────────────────
+// ── thermo_grid_dims tests (#290) ────────────────────────────────
 
 #[test]
 fn test_grid_dims_minimum_one() {
-    assert_eq!(compute_viz_grid_dims(0, 10.0, 10.0), (1, 1));
-    assert_eq!(compute_viz_grid_dims(1, 10.0, 10.0), (1, 1));
+    assert_eq!(thermo_grid_dims(0.0, 0.0), (1, 1));
+    assert_eq!(thermo_grid_dims(5.0, 5.0), (1, 1));
 }
 
 #[test]
-fn test_grid_dims_invariants() {
-    let cases: Vec<(usize, f32, f32)> = vec![
-        (100, 10.0, 10.0),
-        (200, 20.0, 10.0),
-        (500, 10.0, 30.0),
-        (1000, 50.0, 50.0),
-        (50, 5.0, 20.0),
-        // High aspect ratio (H/W = 40) to exercise extreme shapes
-        (1000, 5.0, 200.0),
-    ];
-    for (n, w, h) in cases {
-        let (rows, cols) = compute_viz_grid_dims(n, w, h);
-        assert!(rows >= 1, "rows must be >= 1 for N={n}, W={w}, H={h}");
-        assert!(cols >= 1, "cols must be >= 1 for N={n}, W={w}, H={h}");
-        let cells = rows * cols;
-        // Occupancy >= 2 is a heuristic goal, not a hard guarantee.
-        // Extreme aspect ratios or small N may violate this.
-        let occupancy = n as f32 / cells as f32;
-        assert!(
-            occupancy >= 1.0,
-            "occupancy must be >= 1: N={n}, cells={cells}, occ={occupancy}"
-        );
-        let aspect_ratio = rows as f32 / cols as f32;
-        let world_aspect = h / w;
-        let rel_err = (aspect_ratio - world_aspect).abs() / world_aspect;
-        assert!(
-            rel_err < 0.5,
-            "aspect mismatch: grid={aspect_ratio:.2}, world={world_aspect:.2}, err={rel_err:.2} for N={n}"
-        );
+fn test_default_world_gets_its_resolution_from_before_234() {
+    // The default 112 x 62 world: 11 x 6 cells, whatever the species.
+    assert_eq!(thermo_grid_dims(112.0, 62.0), (6, 11));
+}
+
+#[test]
+fn test_grid_cells_are_at_least_the_target_size() {
+    for (w, h) in [(10.0, 10.0), (112.0, 62.0), (35.0, 200.0), (1000.0, 999.0)] {
+        let (rows, cols) = thermo_grid_dims(w, h);
+        assert!(w / cols as f32 >= THERMO_CELL_SIZE, "{w} / {cols}");
+        assert!(h / rows as f32 >= THERMO_CELL_SIZE, "{h} / {rows}");
+        // One more cell would be smaller than the target.
+        assert!(w / ((cols + 1) as f32) < THERMO_CELL_SIZE);
+        assert!(h / ((rows + 1) as f32) < THERMO_CELL_SIZE);
     }
 }
 
 #[test]
 fn test_grid_dims_negative_height() {
     // Production uses negative h for top-down coords
-    let (rows, cols) = compute_viz_grid_dims(100, 10.0, -10.0);
-    assert!(rows >= 1);
-    assert!(cols >= 1);
-    assert!(100.0 / (rows * cols) as f32 >= 2.0);
-    // Should give the same result as positive h
-    assert_eq!((rows, cols), compute_viz_grid_dims(100, 10.0, 10.0));
+    assert_eq!(
+        thermo_grid_dims(112.0, -62.0),
+        thermo_grid_dims(112.0, 62.0)
+    );
 }
 
 // ── compute_cell_thermo tests ────────────────────────────────────

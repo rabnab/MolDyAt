@@ -190,38 +190,29 @@ pub(crate) fn virial_pressure_2d(
     (kinetic_term + INV_DIMENSION * pair_virial) / area
 }
 
-/// Compute the visualization grid dimensions (rows, cols) aiming for an average
-/// cell occupancy of roughly 2 balls while matching the world aspect ratio.
-///
-/// This is a heuristic: extreme aspect ratios or small ball counts may produce
-/// grids where the actual average occupancy falls below 2.
-///
-/// Uses absolute values of width/height to handle top-down coordinate systems
-/// where `Rect.h` may be negative.
-///
-/// Returns `(rows, cols)` with both >= 1.
-pub(crate) fn compute_viz_grid_dims(
-    n_balls: usize,
-    world_width: f32,
-    world_height: f32,
-) -> (usize, usize) {
-    let ww = world_width.abs();
-    let wh = world_height.abs();
-    if n_balls < 2 || ww == 0.0 || wh == 0.0 {
-        return (1, 1);
-    }
-    let aspect = wh / ww;
-    let cols = ((n_balls as f32 / (2.0 * aspect)).sqrt().floor() as usize).max(1);
-    let rows = ((cols as f32 * aspect).floor() as usize).max(1);
-    (rows, cols)
+/// Target edge length of a thermo field cell, in reduced units (`σ` of
+/// `N2`). The thermo field has a grid of its own (#290), not the physics
+/// cell grid's, whose cells follow the largest species present: the overlay
+/// keeps its resolution and its rolling average whatever species are in the
+/// world. 10 gives the default 112 x 62 world 11 x 6 cells, its resolution
+/// before #234.
+pub const THERMO_CELL_SIZE: f32 = 10.0;
+
+/// Thermo grid dimensions `(rows, cols)` for a world of `world_width` x
+/// `world_height`: as many cells of at least [`THERMO_CELL_SIZE`] as fit,
+/// at least one per axis. Depends on the world's size only, so a resize or a
+/// load (a new world) is the only thing that changes it. Signs are ignored
+/// (`Rect.h` may be negative).
+pub fn thermo_grid_dims(world_width: f32, world_height: f32) -> (usize, usize) {
+    let cells = |extent: f32| ((extent.abs() / THERMO_CELL_SIZE).floor() as usize).max(1);
+    (cells(world_height), cells(world_width))
 }
 
 /// Compute per-cell temperature and pressure grids from ball state and force results.
 ///
-/// `grid_rows` and `grid_cols` specify the desired grid dimensions (e.g. from the
-/// physics `CellGrid`).  When either is zero the function falls back to
-/// `compute_viz_grid_dims` so behaviour is unchanged during start-up before the
-/// cell grid is fully initialised.
+/// `grid_rows` and `grid_cols` specify the grid dimensions; when either is
+/// zero the function uses [`thermo_grid_dims`] of `world_rect`, the grid the
+/// simulation records.
 ///
 /// Returns `(temperature, pressure)` as flat row-major `ThermoGrid`s.
 /// Cells with fewer than 2 balls contain `f32::NAN`.
@@ -241,7 +232,7 @@ pub fn compute_cell_thermo(
     let ww = world_rect.w.abs();
     let wh = world_rect.h.abs();
     let (rows, cols) = if grid_rows == 0 || grid_cols == 0 {
-        compute_viz_grid_dims(balls.len(), ww, wh)
+        thermo_grid_dims(ww, wh)
     } else {
         (grid_rows, grid_cols)
     };
@@ -307,8 +298,8 @@ pub const THERMO_WINDOW: usize = THERMO_WINDOW_STEPS / THERMO_SAMPLE_STRIDE;
 /// [`THERMO_WINDOW`]) and computes element-wise NaN-aware averages. The
 /// window counts samples, not steps; the caller decides how often to sample
 /// (see `SimulationEngine::record_thermo_fields_if_due`). When the pushed grid
-/// shape differs from the stored shape, the history is cleared and starts
-/// fresh.
+/// shape differs from the stored shape (a resize), the history is cleared
+/// and starts fresh; the shape does not depend on the species (#290).
 pub struct ThermoFieldHistory {
     window: usize,
     t_buffer: VecDeque<ThermoGrid>,
