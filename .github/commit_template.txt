@@ -1,0 +1,21 @@
+
+# Title: <Verb> <what changes> (#<issue>)
+#   Imperative, sentence case, no period, at most 65 characters
+#   (GitHub appends " (#PR)" on squash merge; 72 in total).
+#   e.g. "Keep the energy plot paused when a pan reaches the newest sample"
+#
+# Body, after one blank line, wrapped at 72:
+#   - Why: the problem or goal, in a sentence or two.
+#   - What: the behaviour that changes; bullets for separate parts.
+#   - Tests and docs added or changed.
+#   - Physics and headless impact, e.g. "No physics change; headless
+#     fixtures and drift thresholds unchanged."
+#
+# Relations: Closes #N / Part of #N / Related to #N
+#   Never start a line with "#": git drops it as a comment.
+#
+# Attribution: trailers in the last paragraph, one blank line above.
+#   AI-assisted:      assisted by: Claude <noreply@anthropic.com>
+#   Human co-author:  Co-authored-by: Name <email>
+#   Your own work alone gets no trailer.
+#   No AI session links or IDs (no "Claude-Session:" or similar).
