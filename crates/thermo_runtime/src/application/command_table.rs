@@ -139,6 +139,12 @@ pub const DOMAIN_COMMANDS: &[DomainCommandSpec] = &[
     spec("world.export_snapshot_jsonl", true, |_| {
         export(ExportKind::Snapshot, ExportFormat::Jsonl)
     }),
+    spec("world.export_distributions_csv", true, |_| {
+        export(ExportKind::Distributions, ExportFormat::Csv)
+    }),
+    spec("world.export_distributions_jsonl", true, |_| {
+        export(ExportKind::Distributions, ExportFormat::Jsonl)
+    }),
     spec("world.toggle_sample_stream_csv", false, |_| {
         toggle_stream(ExportFormat::Csv)
     }),

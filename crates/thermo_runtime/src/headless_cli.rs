@@ -63,6 +63,10 @@ pub struct HeadlessConfig {
     /// `--export-stream`: also append every frame's metrics sample to
     /// `stream.<ext>` in the export directory while the run goes (#366).
     pub export_stream: bool,
+    /// `--distributions`: add the speed histogram and g(r) to every frame
+    /// record, and with `--export-dir` write `distributions.<ext>` at the end
+    /// (#343).
+    pub distributions: bool,
     /// Save the world to the save directory once it is set up (walls,
     /// valves, seeded balls), before the first step. Perf runs seed a large
     /// world once and `--load` it for every run.
@@ -121,6 +125,7 @@ impl Default for HeadlessConfig {
             export_format: ExportFormat::default(),
             export_series: None,
             export_stream: false,
+            distributions: false,
             save_setup: false,
             script: None,
             sim: None,
@@ -357,6 +362,7 @@ fn parse_headless_args_with_args(args: &[String]) -> Result<Option<HeadlessConfi
                 config.export_stream = true;
                 export_options_given = true;
             }
+            "--distributions" => config.distributions = true,
             other => return Err(CliError::new(format!("Unknown argument: {}", other))),
         }
         i += 1;

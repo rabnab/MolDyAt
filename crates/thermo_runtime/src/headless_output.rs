@@ -3,6 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::application::renderer_snapshot::{OperatorSnapshot, RendererSnapshot, ThermoGridSpec};
+use crate::distributions::distributions;
+use crate::export::distributions_json;
 use crate::headless_cli::{DetailLevel, HeadlessConfig, OutputFormat};
 use crate::headless_script::CommandRecord;
 use crate::metrics::{SharedMetricsRegistry, read_metrics};
@@ -230,6 +232,10 @@ fn run_start_to_jsonl(config: &HeadlessConfig, snapshot: &RendererSnapshot) -> S
     if let Some(script) = &config.script {
         record["config"]["script"] = script.items.iter().map(|item| item.text.clone()).collect();
     }
+    // Only with `--distributions`, so runs without it keep their bytes.
+    if config.distributions {
+        record["config"]["distributions"] = json!(true);
+    }
     // Only with `--seed-species`, so runs without it keep their bytes.
     if !config.seed_species.is_empty() {
         record["config"]["seed_species"] = config
@@ -350,6 +356,10 @@ fn frame_to_jsonl_with_metrics(
 
     if config.detail.includes_thermo() {
         frame["thermo"] = thermo_to_json(snapshot);
+    }
+
+    if config.distributions {
+        frame["distributions"] = distributions_json(snapshot, &distributions(snapshot));
     }
 
     frame.to_string()

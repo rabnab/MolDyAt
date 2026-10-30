@@ -15,6 +15,7 @@ description: Contract for changing headless mode - CLI flags, the JSONL headless
 | World setup order, step loop, frame cadence | `crates/thermo_runtime/src/headless_runner.rs` | `headless_runner/tests.rs` |
 | JSONL records, console line, non-finite policy | `crates/thermo_runtime/src/headless_output.rs` | `headless_output/tests.rs` |
 | `--script` parsing, command ids, operator commands | `crates/thermo_runtime/src/headless_script.rs` (domain ids from `application::command_table`), run in `headless_runner/script_run.rs` | `headless_script/tests.rs`, `headless_runner/tests.rs` |
+| Speed histogram and g(r) of `--distributions` (#343) | `crates/thermo_runtime/src/distributions.rs`, JSON in `export/distributions.rs` | `distributions/tests.rs`, `export/tests/distributions.rs` |
 | `--timings` report (`headless-timings.v1`) | `crates/thermo_runtime/src/headless_timings.rs` | read by `scripts/headless_perf.sh` |
 
 ## Rules

@@ -7,6 +7,7 @@ use crate::application::CreateSnapshot;
 use crate::metrics::{MetricsRegistry, SeriesMetadata};
 use thermo_physics::test_support::create_main_content;
 
+mod distributions;
 mod files;
 mod series;
 mod snapshot;

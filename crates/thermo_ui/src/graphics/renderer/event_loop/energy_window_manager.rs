@@ -19,12 +19,14 @@ use super::key_map::{HeldModifiers, KeyMap, KeyPhase};
 use super::operator_tool_handler::scroll_y_from_delta;
 use crate::graphics::energy_plot::status_text::status_text;
 use crate::graphics::energy_plot::{
-    LegendEntry, PanelArea, PlotRect, PlotScene, PlotSelection, PlotWindowRequest,
-    SharedEnergyData, TimeHistory, TimeView, window_title,
+    DISTRIBUTIONS_TITLE, DistributionData, LegendEntry, PanelArea, PlotRect, PlotScene,
+    PlotSelection, PlotWindowRequest, SharedEnergyData, TimeHistory, TimeView, window_title,
 };
 use crate::graphics::renderer::event_loop::metrics::FrameMetrics;
 use std::time::{Duration, Instant};
 use thermo_runtime::application::renderer_snapshot::RendererSnapshot;
+use thermo_runtime::application::scene_layers::SceneLayers;
+use thermo_runtime::distributions::distributions;
 use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::keyboard::KeyCode;
 
@@ -37,6 +39,8 @@ pub(super) enum EnergyWindowKey {
     Plot(PlotChange),
     /// Return the plot to its default time view.
     ResetView,
+    /// Switch between the time series and the distributions (#343).
+    Distributions,
 }
 
 /// The energy window's action for a key event. The keys come from the key
@@ -62,6 +66,7 @@ pub(super) fn energy_window_key(
         }
         UiAction::Plot(change) => Some(EnergyWindowKey::Plot(change)),
         UiAction::ResetPlotView => Some(EnergyWindowKey::ResetView),
+        UiAction::TogglePlotDistributions => Some(EnergyWindowKey::Distributions),
         _ => None,
     }
 }
@@ -98,6 +103,7 @@ pub(super) fn energy_window_key_hints(key_map: &KeyMap) -> String {
         ),
         (&["view.reset_plot_view"][..], "reset"),
         (&["view.plot_focus_next"][..], "focus"),
+        (&["view.plot_distributions"][..], "distributions"),
     ] {
         let keys = keys(ids);
         if !keys.is_empty() {
@@ -106,6 +112,23 @@ pub(super) fn energy_window_key_hints(key_map: &KeyMap) -> String {
     }
     hints.join("  ")
 }
+
+/// The key hints of the distributions view: `Esc` and the key back to the
+/// time series.
+pub(super) fn distribution_key_hints(key_map: &KeyMap) -> String {
+    let mut hints = vec!["Esc: close".to_string()];
+    let keys = command_by_id("view.plot_distributions")
+        .map(|command| key_map.binding_display(command).join(" / "))
+        .unwrap_or_default();
+    if !keys.is_empty() {
+        hints.push(format!("{keys}: time series"));
+    }
+    hints.join("  ")
+}
+
+/// Least time between two distribution computations: g(r) costs a pass over
+/// the neighbours of every ball, so it follows the snapshots at about 2 Hz.
+const DISTRIBUTION_INTERVAL: Duration = Duration::from_millis(500);
 
 /// Two middle-button presses at most this far apart in time and space are
 /// a double click (reset the view).
@@ -204,6 +227,10 @@ pub struct EnergyWindowManager {
     /// `EnergyData::history_resets` the view last saw: a new world history
     /// returns the view to its default.
     seen_history_resets: u64,
+    /// The window shows the distributions instead of the time series (#343).
+    show_distributions: bool,
+    /// The distributions shown and when they were computed.
+    distributions: Option<(DistributionData, Instant)>,
 }
 
 /// Minimum interval between energy-window redraws (≈12 Hz).
@@ -233,7 +260,70 @@ impl EnergyWindowManager {
             modifiers: HeldModifiers::default(),
             pointer: PlotPointer::default(),
             seen_history_resets: 0,
+            show_distributions: false,
+            distributions: None,
         }
+    }
+
+    /// Whether the window shows the distributions (#343).
+    pub fn shows_distributions(&self) -> bool {
+        self.show_distributions
+    }
+
+    /// Switch the window between the time series and the distributions;
+    /// a closed window opens with the distributions.
+    pub fn toggle_distributions(&mut self) {
+        if self.window.is_none() {
+            self.show_distributions = true;
+            self.open();
+            return;
+        }
+        self.show_distributions = !self.show_distributions;
+        self.requests
+            .push(PlotWindowRequest::SetTitle(self.title()));
+        self.redraw_now();
+    }
+
+    /// The window title for what it shows.
+    fn title(&self) -> String {
+        if self.show_distributions {
+            DISTRIBUTIONS_TITLE.to_string()
+        } else {
+            window_title(&self.selection)
+        }
+    }
+
+    /// The distributions of `snapshot`, when the window shows them, the
+    /// snapshot has its balls and the last ones are older than
+    /// [`DISTRIBUTION_INTERVAL`]. Computed here, off the physics thread.
+    fn update_distributions(&mut self, snapshot: &RendererSnapshot) {
+        let due = self
+            .distributions
+            .as_ref()
+            .is_none_or(|(_, at)| at.elapsed() >= DISTRIBUTION_INTERVAL);
+        if !self.show_distributions
+            || self.window.is_none()
+            || !due
+            || !snapshot.frame.layers.contains(SceneLayers::BALLS)
+        {
+            return;
+        }
+        let distributions = distributions(snapshot);
+        let table = &snapshot.balls.species;
+        let name = |id| table.get(id).map_or("?", |s| s.name.as_str());
+        let pair_names = distributions
+            .radial
+            .pairs
+            .iter()
+            .map(|p| format!("{}-{}", name(p.species.0), name(p.species.1)))
+            .collect();
+        self.distributions = Some((
+            DistributionData {
+                distributions,
+                pair_names,
+            },
+            Instant::now(),
+        ));
     }
 
     /// The plots shown (also while the window is closed).
@@ -298,7 +388,7 @@ impl EnergyWindowManager {
         };
         if changed && self.window.is_some() {
             self.requests
-                .push(PlotWindowRequest::SetTitle(window_title(&self.selection)));
+                .push(PlotWindowRequest::SetTitle(self.title()));
             self.redraw_now();
         }
         changed
@@ -500,13 +590,17 @@ impl EnergyWindowManager {
             self.change_plots(PlotChange::CyclePreset);
             return;
         }
+        self.open();
+    }
+
+    fn open(&mut self) {
         self.window = Some(PlotWindow {
             size: (0, 0),
             scale_factor: 1.0,
         });
         self.redraw_pending = false;
         self.requests.push(PlotWindowRequest::Open {
-            title: window_title(&self.selection),
+            title: self.title(),
         });
     }
 
@@ -567,6 +661,7 @@ impl EnergyWindowManager {
                         self.change_plots(change);
                     }
                     Some(EnergyWindowKey::ResetView) => self.reset_plot_view(),
+                    Some(EnergyWindowKey::Distributions) => self.toggle_distributions(),
                     None => return false,
                 }
                 true
@@ -591,7 +686,12 @@ impl EnergyWindowManager {
         let window = *self.window.as_ref()?;
         self.redraw_pending = false;
         self.last_redraw_instant = Some(Instant::now());
-        let scene = self.scene(window, &energy_window_key_hints(key_map))?;
+        let hints = if self.show_distributions {
+            distribution_key_hints(key_map)
+        } else {
+            energy_window_key_hints(key_map)
+        };
+        let scene = self.scene(window, &hints)?;
         self.geometry = scene
             .plot_area
             .zip(scene.history)
@@ -606,6 +706,14 @@ impl EnergyWindowManager {
         let (width, height) = window.size;
         if width == 0 || height == 0 {
             return None;
+        }
+        if self.show_distributions {
+            return Some(PlotScene::build_distributions(
+                self.distributions.as_ref().map(|(data, _)| data),
+                window.size,
+                window.scale_factor,
+                key_hints,
+            ));
         }
         let data = self.energy_data.lock().unwrap_or_else(|e| e.into_inner());
         Some(PlotScene::build(
@@ -668,6 +776,7 @@ impl EnergyWindowManager {
         steps_per_frame: f32,
         frame_metrics: &FrameMetrics,
     ) {
+        self.update_distributions(snapshot);
         if let Ok(mut data) = self.energy_data.lock() {
             // A paused plot keeps its history so it can be examined: only a
             // following one takes new samples. A loaded world (a cleared

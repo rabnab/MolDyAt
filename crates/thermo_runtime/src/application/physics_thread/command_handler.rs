@@ -12,8 +12,8 @@ use crate::application::persistence::timestamp_utc;
 use crate::application::scene_layers::SceneLayers;
 use crate::application::{BallCommand, DomainCommand, SimControl, ViewCommand, WorldCommand};
 use crate::export::{
-    ExportFormat, ExportKind, SampleStream, StreamSettings, series_to_string, snapshot_to_string,
-    write_export,
+    ExportFormat, ExportKind, SampleStream, StreamSettings, distributions_to_string,
+    series_to_string, snapshot_to_string, write_export,
 };
 use crate::metrics::{MetricsRegistry, SharedMetricsRegistry, read_metrics};
 use crate::objects2d::Rect;
@@ -119,12 +119,17 @@ impl<'a> DomainCommandHandler<'a> {
                 }
                 series_to_string(&registry, None, format, None)
             }
-            ExportKind::Snapshot => {
+            ExportKind::Snapshot | ExportKind::Distributions => {
                 // Only the balls matter here; the thermo grids would cost for nothing.
                 let layers = SceneLayers::ALL
                     .difference(SceneLayers::THERMO)
                     .difference(SceneLayers::READOUTS);
-                snapshot_to_string(&self.main_content.create_snapshot_with(layers), format)
+                let snapshot = self.main_content.create_snapshot_with(layers);
+                if kind == ExportKind::Snapshot {
+                    snapshot_to_string(&snapshot, format)
+                } else {
+                    distributions_to_string(&snapshot, format)
+                }
             }
         };
         let prefix = format!("export_{}", timestamp_utc(SystemTime::now()));

@@ -6,8 +6,8 @@ use crate::application::CreateSnapshot;
 use crate::application::renderer_snapshot::RendererSnapshot;
 use crate::application::scene_layers::SceneLayers;
 use crate::export::{
-    ExportFormat, ExportKind, SampleStream, StreamSettings, series_to_string, snapshot_to_string,
-    write_export,
+    ExportFormat, ExportKind, SampleStream, StreamSettings, distributions_to_string,
+    series_to_string, snapshot_to_string, write_export,
 };
 use crate::headless_cli::HeadlessConfig;
 use crate::headless_output::{HeadlessSnapshotSink, HeadlessWriter};
@@ -63,6 +63,9 @@ pub struct ExportSettings {
     pub series: Option<Vec<String>>,
     /// Also stream every frame's sample to `stream.<ext>` (#366).
     pub stream: bool,
+    /// Also write the final snapshot's distributions to
+    /// `distributions.<ext>` (`--distributions`, #343).
+    pub distributions: bool,
 }
 
 /// The series of a run being exported (`--export-dir`).
@@ -357,14 +360,16 @@ impl HeadlessRunner {
                 format: config.export_format,
                 series: config.export_series.clone(),
                 stream: config.export_stream,
+                distributions: config.distributions,
             }))
             .build())
     }
 
-    /// The export files of `--export-dir`: the series of the whole run and
-    /// the per-ball state of the final snapshot, under fixed names so scripts
-    /// find them, then the closed `--export-stream` file. A failed stream is
-    /// returned as the error once the other files are written.
+    /// The export files of `--export-dir`: the series of the whole run, the
+    /// per-ball state of the final snapshot and, with `--distributions`, its
+    /// distributions, under fixed names so scripts find them, then the
+    /// closed `--export-stream` file. A failed stream is returned as the
+    /// error once the other files are written.
     fn write_exports(&mut self, snapshot: &RendererSnapshot) -> io::Result<Vec<PathBuf>> {
         let Some(export) = &mut self.export else {
             return Ok(Vec::new());
@@ -376,14 +381,25 @@ impl HeadlessRunner {
             settings.format,
             export.sample_interval_steps(self.snapshot_every),
         );
-        let snapshot = snapshot_to_string(snapshot, settings.format);
-        let mut written = [
+        let mut files = vec![
             (ExportKind::Series, series),
-            (ExportKind::Snapshot, snapshot),
-        ]
-        .into_iter()
-        .map(|(kind, text)| write_export(&settings.dir, "", kind, settings.format, &text, false))
-        .collect::<io::Result<Vec<_>>>()?;
+            (
+                ExportKind::Snapshot,
+                snapshot_to_string(snapshot, settings.format),
+            ),
+        ];
+        if settings.distributions {
+            files.push((
+                ExportKind::Distributions,
+                distributions_to_string(snapshot, settings.format),
+            ));
+        }
+        let mut written = files
+            .into_iter()
+            .map(|(kind, text)| {
+                write_export(&settings.dir, "", kind, settings.format, &text, false)
+            })
+            .collect::<io::Result<Vec<_>>>()?;
         if let Some(stream) = &mut export.stream {
             written.extend(stream.finish()?);
         }

@@ -11,6 +11,7 @@
 #![cfg_attr(not(test), warn(clippy::print_stdout))]
 
 pub mod application;
+pub mod distributions;
 pub mod export;
 pub mod headless_cli;
 pub mod headless_output;

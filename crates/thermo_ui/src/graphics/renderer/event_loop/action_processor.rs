@@ -68,6 +68,10 @@ fn run_ui_action(state: &mut UnifiedRenderState, action: UiAction) -> bool {
             state.render.energy_manager.change_plots(change);
             false
         }
+        UiAction::TogglePlotDistributions => {
+            state.render.energy_manager.toggle_distributions();
+            false
+        }
         UiAction::DeleteHovered => {
             state.delete_hovered_object();
             false
