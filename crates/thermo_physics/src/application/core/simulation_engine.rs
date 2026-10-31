@@ -202,10 +202,11 @@ impl SimulationEngine {
     ) {
         Self::update_sim(world, dt, bound_rect, log_timings);
         let mut clock = PhaseClock::start(log_timings);
-        world.emit_from_source_spheres(step_config.get_ball_factory());
-        // Every ball, the emitted ones included, into the cell of its new
-        // position: one counting sort (`CellGrid::rebuild`).
+        // Every ball into the cell of its new position: one counting sort
+        // (`CellGrid::rebuild`). Emission comes after it, so the grid holds
+        // every ball at its position and can check the emitted balls (#250).
         world.cell_grid.rebuild(&world.balls);
+        world.emit_from_source_spheres(step_config.get_ball_factory());
         world.remove_invalid_balls();
         let interval = world.reorder_interval as usize;
         if interval > 0 && (world.step_count + 1).is_multiple_of(interval) {
