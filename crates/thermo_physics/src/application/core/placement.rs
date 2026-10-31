@@ -13,7 +13,8 @@
 //!
 //! Source-sphere emission (#250) runs right after the step's grid rebuild,
 //! when the grid holds every ball at its position. It needs no index: the
-//! orphans are the grid's balls outside it and the reach comes from the
+//! orphans are the grid's balls right of or below it (`outside_balls`;
+//! left of or above it they clamp into the edge cells) and the reach comes from the
 //! species present ([`SimulationWorld::is_ball_colliding_in_grid`]).
 //!
 //! The lookup is exact only when every ball the candidate can collide with
@@ -96,11 +97,10 @@ impl SimulationWorld {
     /// holds every ball in the cell of its position, which holds right after
     /// `CellGrid::rebuild` and the adds that follow it (source-sphere
     /// emission in the `cells` phase).
+    /// The caller checks that once per batch (`emit_from_source_spheres`
+    /// asserts `CellGrid::matches_positions` in debug builds); the adds of
+    /// the batch keep it true.
     pub(crate) fn is_ball_colliding_in_grid(&self, candidate: &Ball2D, margin: f32) -> bool {
-        debug_assert!(
-            self.cell_grid.matches_positions(&self.balls),
-            "the grid does not hold every ball at its position"
-        );
         let outside = self.cell_grid.outside_balls().iter().map(|&b| b as usize);
         self.is_ball_colliding_near(candidate, margin, self.species_present, outside)
     }

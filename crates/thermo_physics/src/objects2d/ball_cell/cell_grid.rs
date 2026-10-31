@@ -37,6 +37,11 @@ struct GridGeometry {
 }
 
 impl GridGeometry {
+    /// The cell of `position`, `None` right of or below the grid. The `as
+    /// usize` casts saturate: a position left of or above the grid (and a
+    /// NaN one) clamps into column or row 0. Lookups stay exact, because they
+    /// measure real distances and the 3x3 cells around a cell in column or
+    /// row 0 include those balls.
     fn cell_indices(&self, position: &Vec2D) -> Option<(usize, usize)> {
         let col = ((position.x - self.origin.0) / self.cell_size_x) as usize;
         let row = ((self.origin.1 - position.y) / self.cell_size_y) as usize;
@@ -76,8 +81,9 @@ pub struct CellGrid {
     late: Vec<Vec<u32>>,
     /// Cells with a non-empty `late` list, so a rebuild clears only those.
     late_cells: Vec<u32>,
-    /// Balls whose position was outside the grid when they were put in,
-    /// in ball order.
+    /// Balls whose position was right of or below the grid when they were
+    /// put in, in ball order (left and above clamp into the first column or
+    /// row, see `GridGeometry::cell_indices`).
     outside: Vec<u32>,
 }
 
@@ -165,8 +171,9 @@ impl CellGrid {
         &self.sorted
     }
 
-    /// Balls the grid holds in no cell because their position was outside
-    /// it when they were put in.
+    /// Balls the grid holds in no cell because their position was right of
+    /// or below it when they were put in. A position left of or above the
+    /// grid clamps into the first column or row instead.
     pub(crate) fn outside_balls(&self) -> &[u32] {
         &self.outside
     }

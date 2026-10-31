@@ -125,7 +125,8 @@ headless runs; both step with the configured time step.
    fixed.
 5. **cells**: the cell grid is rebuilt from the new positions, source
    spheres emit balls (checked against the 3x3 cells around each
-   candidate and the grid's list of balls outside it,
+   candidate and the grid's list of balls right of or below it; balls
+   left of or above it clamp into the first column or row,
    `is_ball_colliding_in_grid`, exact because the grid was just rebuilt,
    #250), invalid (NaN) balls are removed, and every
    `reorder_interval` steps (`[neighbours]`, 0 = never) the balls are

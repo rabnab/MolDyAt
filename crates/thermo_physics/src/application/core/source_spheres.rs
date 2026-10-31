@@ -88,6 +88,12 @@ impl SimulationWorld {
             return;
         }
         let obstacles = self.collect_solid_obstacles();
+        // The grid check below is exact only while the grid holds every
+        // ball at its position; checked once here, not per candidate (O(n)).
+        debug_assert!(
+            self.cell_grid.matches_positions(&self.balls),
+            "the grid does not hold every ball at its position"
+        );
 
         for params in emissions {
             // From the factory's RNG, not the thread RNG: a seeded run must
