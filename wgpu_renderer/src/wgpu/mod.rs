@@ -39,12 +39,6 @@ pub fn ui_scale_factor(scale_factor: f64) -> f32 {
     scale_factor.max(1.0) as f32
 }
 
-/// The UI scale that [`margins_for_scale_factor`] applied to `margins`:
-/// the window's scale factor, at least 1.
-pub fn ui_scale_of_margins(margins: &Margins) -> f32 {
-    (margins.left / MARGIN_LEFT).max(1.0)
-}
-
 pub fn margins_for_scale_factor(scale_factor: f64) -> Margins {
     let ui_scale = ui_scale_factor(scale_factor);
     Margins::new(

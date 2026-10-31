@@ -19,12 +19,12 @@ use crate::wgpu::render::gpu::shaders;
 use crate::wgpu::render::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
 
 /// Size of the crosshair in logical pixels when the system does not give
-/// one: the usual X11/Wayland cursor size (`XCURSOR_SIZE`). It is drawn at
-/// this size on screen whatever the world size or zoom (#386); the window's
-/// scale factor turns it into physical pixels.
+/// one: the usual X11/Wayland cursor size. The window's scale factor turns
+/// it into physical pixels. The crosshair is drawn at its size on screen
+/// whatever the world size or zoom (#386).
 const DEFAULT_CURSOR_SIZE: f32 = 24.0;
-/// Accepted range of a system cursor size, in logical pixels.
-const CURSOR_SIZE_RANGE: std::ops::RangeInclusive<f32> = 8.0..=256.0;
+/// Accepted range of `XCURSOR_SIZE`, in physical pixels.
+const CURSOR_SIZE_RANGE: std::ops::RangeInclusive<f32> = 8.0..=512.0;
 /// Distance of each bar's centre from the cursor, as a fraction of the size.
 const BAR_OFFSET: f32 = 0.3;
 /// Bar length and thickness, as fractions of the size.
@@ -61,22 +61,29 @@ const RINGS_ATTRS: [wgpu::VertexAttribute; 2] =
 pub struct CrosshairPipeline {
     bars: GpuBatch<RectInstance>,
     rings: GpuBatch<RingsInstance>,
-    /// Crosshair size in logical pixels ([`system_cursor_size`]).
-    cursor_size: f32,
+    /// The system's cursor size in physical pixels, if it gives one
+    /// ([`system_cursor_size`]).
+    system_size: Option<f32>,
 }
 
-/// The system's cursor size in logical pixels: `XCURSOR_SIZE` where it is
-/// set to a sensible value, otherwise [`DEFAULT_CURSOR_SIZE`]. winit offers
-/// no way to ask the window system.
-fn system_cursor_size() -> f32 {
+/// The system's cursor size in physical pixels: `XCURSOR_SIZE` where it is
+/// set to a sensible value. The cursor theme is loaded at that size in
+/// device pixels (desktops set it already scaled on HiDPI), so it is not
+/// scaled again. winit offers no way to ask the window system.
+fn system_cursor_size() -> Option<f32> {
     cursor_size_from(std::env::var("XCURSOR_SIZE").ok().as_deref())
 }
 
-fn cursor_size_from(xcursor_size: Option<&str>) -> f32 {
+fn cursor_size_from(xcursor_size: Option<&str>) -> Option<f32> {
     xcursor_size
         .and_then(|v| v.trim().parse::<f32>().ok())
         .filter(|size| CURSOR_SIZE_RANGE.contains(size))
-        .unwrap_or(DEFAULT_CURSOR_SIZE)
+}
+
+/// The crosshair size in physical pixels: the system's size as it is, or
+/// [`DEFAULT_CURSOR_SIZE`] scaled by the window's scale factor.
+fn cursor_size_px(system_size: Option<f32>, ui_scale: f32) -> f32 {
+    system_size.unwrap_or(DEFAULT_CURSOR_SIZE * ui_scale)
 }
 
 impl CrosshairPipeline {
@@ -92,7 +99,7 @@ impl CrosshairPipeline {
                 format,
                 BatchDesc::quads("Placement Rings", shaders::PLACEMENT_RINGS, &RINGS_ATTRS),
             ),
-            cursor_size: system_cursor_size(),
+            system_size: system_cursor_size(),
         }
     }
 }
@@ -125,18 +132,12 @@ fn crosshair_bars(cursor: [f32; 2], size: f32) -> [RectInstance; 8] {
     })
 }
 
-/// `logical_size` logical pixels in world units: the window's scale factor
-/// gives physical pixels, and the view projection (with zoom) maps world x
-/// onto the drawing area of `area_width` physical pixels.
-fn cursor_size_in_world(
-    logical_size: f32,
-    ui_scale: f32,
-    view_proj: &[[f32; 4]; 4],
-    area_width: f32,
-) -> f32 {
+/// `size_px` physical pixels in world units: the view projection (with zoom)
+/// maps world x onto the drawing area of `area_width` physical pixels.
+fn cursor_size_in_world(size_px: f32, view_proj: &[[f32; 4]; 4], area_width: f32) -> f32 {
     let px_per_world = view_proj[0][0].abs() * area_width * 0.5;
     if px_per_world > 0.0 && px_per_world.is_finite() {
-        logical_size * ui_scale / px_per_world
+        size_px / px_per_world
     } else {
         0.0
     }
@@ -176,7 +177,8 @@ impl RenderPipeline for CrosshairPipeline {
 
         let cursor = [ctx.cursor_world_pos.0, ctx.cursor_world_pos.1];
         let area_width = (ctx.window_size.0 as f32 - ctx.inset.horizontal()).max(1.0);
-        let size = cursor_size_in_world(self.cursor_size, ctx.ui_scale, &ctx.view_proj, area_width);
+        let size_px = cursor_size_px(self.system_size, ctx.ui_scale);
+        let size = cursor_size_in_world(size_px, &ctx.view_proj, area_width);
         self.bars
             .flush(ctx.device, ctx.queue, &crosshair_bars(cursor, size));
 
@@ -213,9 +215,19 @@ mod tests {
     }
 
     fn span_in_pixels(world_width: f32, zoom: f32, ui_scale: f32) -> f32 {
+        span_in_pixels_with(world_width, zoom, ui_scale, None)
+    }
+
+    fn span_in_pixels_with(
+        world_width: f32,
+        zoom: f32,
+        ui_scale: f32,
+        system_size: Option<f32>,
+    ) -> f32 {
         let area_width = 800.0;
         let view_proj = build_view_proj_matrix(world_width, world_width, 0.0, 0.0, zoom);
-        let size = cursor_size_in_world(DEFAULT_CURSOR_SIZE, ui_scale, &view_proj, area_width);
+        let size_px = cursor_size_px(system_size, ui_scale);
+        let size = cursor_size_in_world(size_px, &view_proj, area_width);
         let px_per_world = view_proj[0][0].abs() * area_width * 0.5;
         crosshair_span(&crosshair_bars([0.0, 0.0], size)) * px_per_world
     }
@@ -238,13 +250,23 @@ mod tests {
         assert!((two - 2.0 * one).abs() < 1e-3, "{one} vs {two}");
     }
 
+    /// `XCURSOR_SIZE` is already in physical pixels: it is not scaled again
+    /// on a HiDPI display.
+    #[test]
+    fn system_cursor_size_is_not_scaled_twice() {
+        let at_1x = span_in_pixels_with(100.0, 1.0, 1.0, Some(48.0));
+        let at_2x = span_in_pixels_with(100.0, 1.0, 2.0, Some(48.0));
+        assert!((at_1x - 48.0).abs() < 1e-3, "{at_1x}");
+        assert!((at_2x - 48.0).abs() < 1e-3, "{at_2x}");
+    }
+
     #[test]
     fn cursor_size_comes_from_xcursor_size_when_sensible() {
-        assert_eq!(cursor_size_from(Some("32")), 32.0);
-        assert_eq!(cursor_size_from(Some(" 48 ")), 48.0);
-        assert_eq!(cursor_size_from(None), DEFAULT_CURSOR_SIZE);
-        assert_eq!(cursor_size_from(Some("big")), DEFAULT_CURSOR_SIZE);
-        assert_eq!(cursor_size_from(Some("0")), DEFAULT_CURSOR_SIZE);
-        assert_eq!(cursor_size_from(Some("4096")), DEFAULT_CURSOR_SIZE);
+        assert_eq!(cursor_size_from(Some("32")), Some(32.0));
+        assert_eq!(cursor_size_from(Some(" 48 ")), Some(48.0));
+        assert_eq!(cursor_size_from(None), None);
+        assert_eq!(cursor_size_from(Some("big")), None);
+        assert_eq!(cursor_size_from(Some("0")), None);
+        assert_eq!(cursor_size_from(Some("4096")), None);
     }
 }

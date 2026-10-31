@@ -13,6 +13,8 @@ use wgpu::rwh::{HasDisplayHandle, HasWindowHandle};
 pub(crate) trait RenderWindow: HasWindowHandle + HasDisplayHandle + Send + Sync {
     /// Inner size in physical pixels.
     fn inner_size(&self) -> (u32, u32);
+    /// Physical pixels per logical pixel (HiDPI scale).
+    fn scale_factor(&self) -> f64;
     /// Ask for another redraw (a frame that could not be drawn now).
     fn request_redraw(&self);
     /// Called right before a frame is presented (some platforms pace frames

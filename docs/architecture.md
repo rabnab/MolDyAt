@@ -349,8 +349,9 @@ Every visual layer is one `RenderPipeline` in
   keep the identity `view_proj`.
 - The cursor crosshair (`crosshair_pipeline.rs`; the system cursor is
   hidden) is drawn in world space but sized in screen pixels: the system
-  cursor size (`XCURSOR_SIZE`, else 24 logical px) times the window's scale
-  factor (`PrepareContext::ui_scale`), converted to world units each frame
+  cursor size: `XCURSOR_SIZE` as it is (physical pixels), else 24 logical
+  px times the window's scale factor (`PrepareContext::ui_scale`, from the
+  window via `WgpuContext::ui_scale`), converted to world units each frame
   from `view_proj`, so world size and zoom do not change it (#386). The
   placement preview rings show physical radii and stay in world units.
 - Tests: `gpu/tests/shaders.rs` validates all WGSL with naga, and
