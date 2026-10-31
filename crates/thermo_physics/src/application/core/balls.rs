@@ -9,6 +9,7 @@ use crate::application::{AppError, AppResult};
 use crate::objects2d::ball_impl::ball_core::gravity_acceleration;
 use rand::rng;
 use rand_distr::{Distribution, Normal};
+use rayon::prelude::*;
 
 impl MainContent {
     /// Add ball to simulation without collision checks.
@@ -295,7 +296,6 @@ impl SimulationWorld {
         // This prevents stale indices from causing incorrect lookups or panics.
         for ball in &mut self.balls {
             ball.hood.clear_neighbours();
-            ball.current_cell = None;
             // Reset last_update_hood_pos to infinity to force update_hood on next check
             ball.last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
         }
@@ -397,8 +397,9 @@ impl SimulationWorld {
         // cell.
         self.species_present.insert(candidate.species());
         let ball_idx = self.balls.len();
+        let position = *candidate.get_position();
         self.balls.push(candidate);
-        self.cell_grid.add_ball(ball_idx, &mut self.balls);
+        self.cell_grid.add_ball(ball_idx, &position);
     }
 
     pub(crate) fn clear_balls(&mut self) {
@@ -415,10 +416,7 @@ impl SimulationWorld {
             self.cell_grid = CellGrid::new(self.world_rect, list_radius)
                 .expect("Failed to create cell grid for the species present");
         }
-        self.cell_grid.clear_all_cells();
-        for i in 0..self.balls.len() {
-            self.cell_grid.add_ball(i, &mut self.balls);
-        }
+        self.cell_grid.rebuild(&self.balls);
     }
 
     /// Rebuild the grid if the species added since the last rebuild need
@@ -439,14 +437,49 @@ impl SimulationWorld {
         (self.physics.equilibrium_distance(species, species) - contact).max(0.0)
     }
 
-    pub(crate) fn move_ball_in_cell_grid(
-        &mut self,
-        ball_idx: usize,
-        old_pos: &Vec2D,
-        new_pos: &Vec2D,
-    ) {
-        self.cell_grid
-            .move_ball(ball_idx, &mut self.balls, old_pos, new_pos);
+    /// Sort the balls by cell (the order of `CellGrid::sorted_balls`, then
+    /// the balls outside the grid in their order), so neighbours in space
+    /// are neighbours in memory. Every index changes: the neighbour lists
+    /// are renumbered (`Verlet::remap`; they keep the same partners, so no
+    /// rebuild is forced) and the grid is rebuilt now. Call right after a
+    /// grid rebuild, when the grid holds every ball in its sorted arrays.
+    ///
+    /// Every per-ball state keyed by ball index that lives across steps must
+    /// be permuted here (today: the Verlet lists and `cached_force_results`),
+    /// just as it must be cleared after `retain` in `remove_invalid_balls`.
+    pub(crate) fn reorder_balls_by_cell(&mut self) {
+        let n = self.balls.len();
+        let mut order: Vec<usize> = Vec::with_capacity(n);
+        order.extend(self.cell_grid.sorted_balls().iter().map(|&b| b as usize));
+        if order.len() < n {
+            let mut placed = vec![false; n];
+            for &b in &order {
+                placed[b] = true;
+            }
+            order.extend((0..n).filter(|&b| !placed[b]));
+        }
+        debug_assert_eq!(order.len(), n);
+
+        let mut old: Vec<Option<Ball2D>> = std::mem::take(&mut self.balls)
+            .into_iter()
+            .map(Some)
+            .collect();
+        self.balls = order
+            .iter()
+            .map(|&b| old[b].take().expect("each ball once"))
+            .collect();
+        if self.cached_force_results.len() == n {
+            let results = std::mem::take(&mut self.cached_force_results);
+            self.cached_force_results = order.iter().map(|&b| results[b].clone()).collect();
+        }
+        let mut new_index = vec![0; n];
+        for (new, &old) in order.iter().enumerate() {
+            new_index[old] = new;
+        }
+        self.balls
+            .par_iter_mut()
+            .for_each(|ball| ball.hood.remap(&new_index));
+        self.rebuild_cell_grid();
     }
 
     pub(crate) fn resize_cell_grid(&mut self, world_rect: crate::objects2d::Rect) {

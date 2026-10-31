@@ -80,6 +80,9 @@ pub struct SimulationWorld {
 
     /// Speed limit as a share of the shorter world side (`SimConfig`).
     pub(crate) speed_limit_factor: f32,
+    /// Steps between two sorts of the balls by cell; 0 never sorts
+    /// (`NeighbourConfig::reorder_interval`).
+    pub(crate) reorder_interval: u32,
     /// Override for speed limit (None = use default calculation, Some(f32::INFINITY) = disable)
     pub(crate) speed_limit_override: Option<f32>,
     /// Cached force results from last physics step for reuse in rendering

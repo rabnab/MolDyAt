@@ -42,6 +42,7 @@ fn custom() -> SimConfig {
     config.potential.core_stiffness = 150.0;
     config.potential.cutoff_factor = 3.5;
     config.neighbours.skin_factor = 0.25;
+    config.neighbours.reorder_interval = 50;
     config.display.snapshot_interval_us = 33_333;
     config
 }
@@ -57,6 +58,7 @@ fn defaults_are_the_documented_values() {
     assert_eq!(config.potential.core_stiffness, 200.0);
     assert_eq!(config.potential.cutoff_factor, 4.0);
     assert_eq!(config.neighbours.skin_factor, 0.2);
+    assert_eq!(config.neighbours.reorder_interval, 0);
     assert_eq!(config.display.snapshot_interval_us, 16_667);
     assert_eq!(config.snapshot_interval(), Duration::from_micros(16_667));
     config.validate().expect("the defaults are valid");
@@ -140,6 +142,7 @@ fn every_key_is_read() {
          cutoff_factor = 3.5\n\
          [neighbours]\n\
          skin_factor = 0.25\n\
+         reorder_interval = 50\n\
          [display]\n\
          snapshot_interval_us = 33333\n",
     )
