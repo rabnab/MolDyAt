@@ -240,8 +240,7 @@ impl CellGrid {
             let (start, end) = (self.cell_start[first], self.cell_start[last + 1]);
             f(&self.sorted[start as usize..end as usize]);
             if !self.late_cells.is_empty() {
-                for cell in first..=last {
-                    let late = &self.late[cell];
+                for late in &self.late[first..=last] {
                     if !late.is_empty() {
                         f(late);
                     }

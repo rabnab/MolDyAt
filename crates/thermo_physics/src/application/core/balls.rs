@@ -443,6 +443,10 @@ impl SimulationWorld {
     /// are renumbered (`Verlet::remap`; they keep the same partners, so no
     /// rebuild is forced) and the grid is rebuilt now. Call right after a
     /// grid rebuild, when the grid holds every ball in its sorted arrays.
+    ///
+    /// Every per-ball state keyed by ball index that lives across steps must
+    /// be permuted here (today: the Verlet lists and `cached_force_results`),
+    /// just as it must be cleared after `retain` in `remove_invalid_balls`.
     pub(crate) fn reorder_balls_by_cell(&mut self) {
         let n = self.balls.len();
         let mut order: Vec<usize> = Vec::with_capacity(n);
