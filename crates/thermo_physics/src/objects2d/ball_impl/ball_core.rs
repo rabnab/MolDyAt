@@ -52,8 +52,9 @@ impl BounceInfo {
 }
 
 /// A ball: the data the step reads or writes for every ball (hot), plus a
-/// pointer to the rest ([`BallCold`]), so the hot data of many balls shares
-/// cache lines (P6, #346).
+/// pointer to the rest ([`BallCold`]), so the passes over all balls touch
+/// less memory per ball (P6, #346; about 80 bytes instead of ~200, which
+/// still spans two 64-byte lines for most balls).
 pub struct Ball2D {
     pos: Vec2D,
     pub v: Vec2D,
@@ -509,8 +510,9 @@ mod tests {
         assert_ne!(b1, b3);
     }
 
-    /// The hot part stays small (P6, #346): the passes over all balls read
-    /// about one cache line per ball. A new field that not every pass needs
+    /// The hot part stays small (P6, #346), so the passes over all balls
+    /// touch less memory per ball; 80 bytes is the layout after the split,
+    /// not a cache-line bound. A new field that not every pass needs
     /// belongs in `BallCold`.
     #[test]
     fn test_hot_ball_data_fits_in_80_bytes() {
