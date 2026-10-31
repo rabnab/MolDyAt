@@ -338,9 +338,12 @@ fn test_neighbor_lists_survive_balls_removed_and_added() {
             HOT_BALLS - removed
         ));
     }
-    if added < 20 {
+    // Validity: enough new balls to exercise the add path, as a share of the
+    // tries so it scales with them (20 of 120; baseline 46).
+    let min_added = ADD_TRIES / 6;
+    if added < min_added {
         violations.push(format!(
-            "scenario invalid: only {added} balls could be added"
+            "scenario invalid: only {added} of {ADD_TRIES} balls could be added (min {min_added})"
         ));
     }
     if third.final_sample.ball_count != after_removal + added {
