@@ -347,6 +347,13 @@ Every visual layer is one `RenderPipeline` in
   top of each shader. An optional texture lives at `@group(1)`.
 - Screen-space layers (sidebar, text, labels, frame) build NDC positions and
   keep the identity `view_proj`.
+- The cursor crosshair (`crosshair_pipeline.rs`; the system cursor is
+  hidden) is drawn in world space but sized in screen pixels: the system
+  cursor size: `XCURSOR_SIZE` as it is (physical pixels), else 24 logical
+  px times the window's scale factor (`PrepareContext::ui_scale`, from the
+  window via `WgpuContext::ui_scale`), converted to world units each frame
+  from `view_proj`, so world size and zoom do not change it (#386). The
+  placement preview rings show physical radii and stay in world units.
 - Tests: `gpu/tests/shaders.rs` validates all WGSL with naga, and
   `tests/gpu_smoke.rs` builds every pipeline on a real device and renders a
   populated frame (skipped without a GPU adapter), the energy plot's

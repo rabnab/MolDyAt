@@ -235,6 +235,8 @@ pub struct WgpuContext {
     /// the plot window (#303).
     pub glyphs: GlyphAtlas,
     pending_size: PendingSurfaceSize,
+    /// The window drawn into, for its current scale factor.
+    window: Arc<dyn RenderWindow>,
 }
 
 impl WgpuContext {
@@ -276,7 +278,7 @@ impl WgpuContext {
         // long as the surface.
         let size = window.inner_size();
         let surface = instance
-            .create_surface(window)
+            .create_surface(Arc::clone(&window))
             .expect("Failed to create surface");
 
         // Request an adapter (GPU)
@@ -361,7 +363,13 @@ impl WgpuContext {
             format,
             glyphs,
             pending_size,
+            window,
         }
+    }
+
+    /// The window's scale factor now (at least 1, as the UI uses it).
+    pub fn ui_scale(&self) -> f32 {
+        crate::wgpu::ui_scale_factor(self.window.scale_factor())
     }
 
     /// Ask for the rendering surface to be resized.

@@ -4,7 +4,8 @@
 
 //! Cursor crosshair pipeline.
 //!
-//! Draws a white crosshair with a dark outline at the cursor and, while the
+//! Draws a white crosshair with a dark outline at the cursor, at the system
+//! cursor size in screen pixels whatever the world size (#386), and, while the
 //! ball tool is active, the placement preview rings (ball, equilibrium and
 //! cutoff radius). Rendered over the full window so it also shows over the
 //! margins. See `solid_rect.wgsl` and `placement_rings.wgsl`.
@@ -17,13 +18,20 @@ use crate::wgpu::render::gpu::geometry::mat4_mul;
 use crate::wgpu::render::gpu::shaders;
 use crate::wgpu::render::render_graph::{PrepareContext, RenderPipeline, ViewportMode};
 
-/// Distance of each bar's centre from the cursor (world units).
-const BAR_OFFSET: f32 = 0.5;
-/// Bar length and thickness (world units).
-const BAR_LENGTH: f32 = 0.4;
-const BAR_THICKNESS: f32 = 0.1;
-/// Dark outline around each bar (world units).
-const OUTLINE: f32 = 0.06;
+/// Size of the crosshair in logical pixels when the system does not give
+/// one: the usual X11/Wayland cursor size. The window's scale factor turns
+/// it into physical pixels. The crosshair is drawn at its size on screen
+/// whatever the world size or zoom (#386).
+const DEFAULT_CURSOR_SIZE: f32 = 24.0;
+/// Accepted range of `XCURSOR_SIZE`, in physical pixels.
+const CURSOR_SIZE_RANGE: std::ops::RangeInclusive<f32> = 8.0..=512.0;
+/// Distance of each bar's centre from the cursor, as a fraction of the size.
+const BAR_OFFSET: f32 = 0.3;
+/// Bar length and thickness, as fractions of the size.
+const BAR_LENGTH: f32 = 0.3;
+const BAR_THICKNESS: f32 = 0.08;
+/// Dark outline around each bar, as a fraction of the size.
+const OUTLINE: f32 = 0.05;
 const BAR_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 const OUTLINE_COLOR: [f32; 4] = [0.0, 0.0, 0.0, 0.85];
 
@@ -53,6 +61,29 @@ const RINGS_ATTRS: [wgpu::VertexAttribute; 2] =
 pub struct CrosshairPipeline {
     bars: GpuBatch<RectInstance>,
     rings: GpuBatch<RingsInstance>,
+    /// The system's cursor size in physical pixels, if it gives one
+    /// ([`system_cursor_size`]).
+    system_size: Option<f32>,
+}
+
+/// The system's cursor size in physical pixels: `XCURSOR_SIZE` where it is
+/// set to a sensible value. The cursor theme is loaded at that size in
+/// device pixels (desktops set it already scaled on HiDPI), so it is not
+/// scaled again. winit offers no way to ask the window system.
+fn system_cursor_size() -> Option<f32> {
+    cursor_size_from(std::env::var("XCURSOR_SIZE").ok().as_deref())
+}
+
+fn cursor_size_from(xcursor_size: Option<&str>) -> Option<f32> {
+    xcursor_size
+        .and_then(|v| v.trim().parse::<f32>().ok())
+        .filter(|size| CURSOR_SIZE_RANGE.contains(size))
+}
+
+/// The crosshair size in physical pixels: the system's size as it is, or
+/// [`DEFAULT_CURSOR_SIZE`] scaled by the window's scale factor.
+fn cursor_size_px(system_size: Option<f32>, ui_scale: f32) -> f32 {
+    system_size.unwrap_or(DEFAULT_CURSOR_SIZE * ui_scale)
 }
 
 impl CrosshairPipeline {
@@ -68,24 +99,28 @@ impl CrosshairPipeline {
                 format,
                 BatchDesc::quads("Placement Rings", shaders::PLACEMENT_RINGS, &RINGS_ATTRS),
             ),
+            system_size: system_cursor_size(),
         }
     }
 }
 
-/// Four outlines first, then the four white bars on top.
-fn crosshair_bars(cursor: [f32; 2]) -> [RectInstance; 8] {
-    let horizontal = [BAR_LENGTH * 0.5, BAR_THICKNESS * 0.5];
-    let vertical = [BAR_THICKNESS * 0.5, BAR_LENGTH * 0.5];
+/// Four outlines first, then the four white bars on top. `size` is the
+/// crosshair size in world units, so it is the same on screen at any world
+/// scale ([`cursor_size_in_world`]).
+fn crosshair_bars(cursor: [f32; 2], size: f32) -> [RectInstance; 8] {
+    let (offset, length, thickness) = (BAR_OFFSET * size, BAR_LENGTH * size, BAR_THICKNESS * size);
+    let horizontal = [length * 0.5, thickness * 0.5];
+    let vertical = [thickness * 0.5, length * 0.5];
     let bars = [
-        ([-BAR_OFFSET, 0.0], horizontal),
-        ([BAR_OFFSET, 0.0], horizontal),
-        ([0.0, BAR_OFFSET], vertical),
-        ([0.0, -BAR_OFFSET], vertical),
+        ([-offset, 0.0], horizontal),
+        ([offset, 0.0], horizontal),
+        ([0.0, offset], vertical),
+        ([0.0, -offset], vertical),
     ];
     std::array::from_fn(|i| {
         let (offset, half) = bars[i % 4];
         let (grow, color) = if i < 4 {
-            (OUTLINE, OUTLINE_COLOR)
+            (OUTLINE * size, OUTLINE_COLOR)
         } else {
             (0.0, BAR_COLOR)
         };
@@ -95,6 +130,17 @@ fn crosshair_bars(cursor: [f32; 2]) -> [RectInstance; 8] {
             color,
         }
     })
+}
+
+/// `size_px` physical pixels in world units: the view projection (with zoom)
+/// maps world x onto the drawing area of `area_width` physical pixels.
+fn cursor_size_in_world(size_px: f32, view_proj: &[[f32; 4]; 4], area_width: f32) -> f32 {
+    let px_per_world = view_proj[0][0].abs() * area_width * 0.5;
+    if px_per_world > 0.0 && px_per_world.is_finite() {
+        size_px / px_per_world
+    } else {
+        0.0
+    }
 }
 
 /// View-projection for the full-window viewport: the inset `view_proj`
@@ -130,8 +176,11 @@ impl RenderPipeline for CrosshairPipeline {
         self.rings.set_uniforms(ctx.queue, uniforms);
 
         let cursor = [ctx.cursor_world_pos.0, ctx.cursor_world_pos.1];
+        let area_width = (ctx.window_size.0 as f32 - ctx.inset.horizontal()).max(1.0);
+        let size_px = cursor_size_px(self.system_size, ctx.ui_scale);
+        let size = cursor_size_in_world(size_px, &ctx.view_proj, area_width);
         self.bars
-            .flush(ctx.device, ctx.queue, &crosshair_bars(cursor));
+            .flush(ctx.device, ctx.queue, &crosshair_bars(cursor, size));
 
         if ctx.show_ball_outline {
             let ball = ctx.current_ball_radius;
@@ -150,5 +199,74 @@ impl RenderPipeline for CrosshairPipeline {
     fn render<'rp>(&'rp self, render_pass: &mut wgpu::RenderPass<'rp>) {
         self.bars.draw(render_pass);
         self.rings.draw(render_pass);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::wgpu::render::gpu::geometry::build_view_proj_matrix;
+
+    /// Width of the crosshair's outlined horizontal bars, outer edge to outer
+    /// edge, in world units.
+    fn crosshair_span(bars: &[RectInstance; 8]) -> f32 {
+        let (left, right) = (bars[0], bars[1]);
+        (right.center[0] + right.half_size[0]) - (left.center[0] - left.half_size[0])
+    }
+
+    fn span_in_pixels(world_width: f32, zoom: f32, ui_scale: f32) -> f32 {
+        span_in_pixels_with(world_width, zoom, ui_scale, None)
+    }
+
+    fn span_in_pixels_with(
+        world_width: f32,
+        zoom: f32,
+        ui_scale: f32,
+        system_size: Option<f32>,
+    ) -> f32 {
+        let area_width = 800.0;
+        let view_proj = build_view_proj_matrix(world_width, world_width, 0.0, 0.0, zoom);
+        let size_px = cursor_size_px(system_size, ui_scale);
+        let size = cursor_size_in_world(size_px, &view_proj, area_width);
+        let px_per_world = view_proj[0][0].abs() * area_width * 0.5;
+        crosshair_span(&crosshair_bars([0.0, 0.0], size)) * px_per_world
+    }
+
+    #[test]
+    fn crosshair_keeps_its_screen_size_at_any_world_scale() {
+        let small = span_in_pixels(100.0, 1.0, 1.0);
+        let large = span_in_pixels(2000.0, 1.0, 1.0);
+        let zoomed = span_in_pixels(2000.0, 3.0, 1.0);
+        assert!((small - large).abs() < 1e-3, "{small} vs {large}");
+        assert!((small - zoomed).abs() < 1e-3, "{small} vs {zoomed}");
+        // Offset + half a bar + outline is half the size on each side.
+        assert!((small - DEFAULT_CURSOR_SIZE).abs() < 1e-3, "{small}");
+    }
+
+    #[test]
+    fn crosshair_follows_the_display_scale_factor() {
+        let one = span_in_pixels(100.0, 1.0, 1.0);
+        let two = span_in_pixels(100.0, 1.0, 2.0);
+        assert!((two - 2.0 * one).abs() < 1e-3, "{one} vs {two}");
+    }
+
+    /// `XCURSOR_SIZE` is already in physical pixels: it is not scaled again
+    /// on a HiDPI display.
+    #[test]
+    fn system_cursor_size_is_not_scaled_twice() {
+        let at_1x = span_in_pixels_with(100.0, 1.0, 1.0, Some(48.0));
+        let at_2x = span_in_pixels_with(100.0, 1.0, 2.0, Some(48.0));
+        assert!((at_1x - 48.0).abs() < 1e-3, "{at_1x}");
+        assert!((at_2x - 48.0).abs() < 1e-3, "{at_2x}");
+    }
+
+    #[test]
+    fn cursor_size_comes_from_xcursor_size_when_sensible() {
+        assert_eq!(cursor_size_from(Some("32")), Some(32.0));
+        assert_eq!(cursor_size_from(Some(" 48 ")), Some(48.0));
+        assert_eq!(cursor_size_from(None), None);
+        assert_eq!(cursor_size_from(Some("big")), None);
+        assert_eq!(cursor_size_from(Some("0")), None);
+        assert_eq!(cursor_size_from(Some("4096")), None);
     }
 }

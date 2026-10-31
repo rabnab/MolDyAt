@@ -154,6 +154,7 @@ fn render_frame(
         current_ball_radius: 0.5,
         show_ball_outline,
         window_size: SIZE,
+        ui_scale: 1.0,
         margin: MARGINS,
         inset: MARGINS,
         thermo_display,

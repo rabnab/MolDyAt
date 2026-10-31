@@ -14,6 +14,10 @@ impl RenderWindow for Window {
         (size.width, size.height)
     }
 
+    fn scale_factor(&self) -> f64 {
+        Window::scale_factor(self)
+    }
+
     fn request_redraw(&self) {
         Window::request_redraw(self);
     }
