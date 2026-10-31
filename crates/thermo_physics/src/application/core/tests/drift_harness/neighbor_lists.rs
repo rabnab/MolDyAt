@@ -288,6 +288,7 @@ fn run_after_structural_change(main_content: &mut MainContent, steps: usize) -> 
 #[ignore = "suite:drift"]
 fn test_neighbor_lists_survive_balls_removed_and_added() {
     const SEGMENT: usize = 300;
+    const ADD_TRIES: usize = 120;
     let mut main_content = hot_gas_world(TestFaults::default());
     let first = run_drift_harness(&mut main_content, hot_gas_config(SEGMENT));
 
@@ -306,14 +307,16 @@ fn test_neighbor_lists_survive_balls_removed_and_added() {
     let after_removal = main_content.world().balls.len();
     let second = run_after_structural_change(&mut main_content, SEGMENT);
 
-    // Add balls at free spots (rejected where they would overlap).
+    // Add balls at free spots (rejected where they would overlap). 120 tries,
+    // so the count stays well above the validity bound whatever the
+    // trajectory (60 tries left 21, then 19 after #213).
     let factory = scenario_factory();
     let world_rect = main_content.world().world_region();
     let (tl_x, tl_y) = world_rect.get_tl();
     let (br_x, br_y) = world_rect.get_br();
     let mut added = 0;
-    for k in 0..60 {
-        let t = k as f32 / 60.0;
+    for k in 0..ADD_TRIES {
+        let t = k as f32 / ADD_TRIES as f32;
         let pos = Vec2D::new(
             tl_x + (br_x - tl_x) * (0.05 + 0.9 * (t * 7.3).fract()),
             br_y + (tl_y - br_y) * (0.05 + 0.9 * t),
@@ -335,9 +338,12 @@ fn test_neighbor_lists_survive_balls_removed_and_added() {
             HOT_BALLS - removed
         ));
     }
-    if added < 20 {
+    // Validity: enough new balls to exercise the add path, as a share of the
+    // tries so it scales with them (20 of 120; baseline 46).
+    let min_added = ADD_TRIES / 6;
+    if added < min_added {
         violations.push(format!(
-            "scenario invalid: only {added} balls could be added"
+            "scenario invalid: only {added} of {ADD_TRIES} balls could be added (min {min_added})"
         ));
     }
     if third.final_sample.ball_count != after_removal + added {

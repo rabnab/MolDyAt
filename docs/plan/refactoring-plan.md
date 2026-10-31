@@ -174,7 +174,7 @@ Each item reports before/after numbers from G1 and must keep drift + energy test
 | P6 | Hot/cold split of `Ball2D` | Hot SoA arrays (pos, v, accel, mass, species) vs cold per-ball data (verbose, tail, counters). Large mechanical change, after the crate split to limit churn. Done in part (#346, scope agreed with the owner): `Ball2D` holds only the hot fields (pos, v, accel, mass, species, contact radius, pre-update and last-rebuild positions, id, the four verbose flags, two state flags; at most 80 bytes, tested) and a `Box<BallCold>` with the Verlet list, the tail and the update counter; same results bit for bit. Separate SoA arrays (`Balls` container instead of `Vec<Ball2D>`, ~900 call sites) remain open in #392. | L | M7, P4 |
 | P7 | ~~Snapshot reuse~~ | Folded into V2. The snapshot phase is about 1 % of a step even at 200k balls (`docs/perf-baseline.md`), too little for its own item. | – | – |
 | P8a | Measure precision loss in large worlds (#213) | A test or headless scenario that shows how far f32 positions and drift degrade with world size and distance from the origin, so P8b is sized by numbers. Done (#344): `precision.rs` runs the dense and the cool gas at four distances from the origin, at dt, dt/2 and dt/4; results and the recommendation (f64 positions) in `docs/drift-test.md#precision-far-from-the-origin`. | S | – |
-| P8b | Precision in large worlds (#213) | Cell-relative coordinates or f64 positions with f32 kernel offsets, as P8a shows is needed. | L | P6, P8a |
+| P8b | Precision in large worlds (#213) | Cell-relative coordinates or f64 positions with f32 kernel offsets, as P8a shows is needed. Done (#213): f64 positions (`Ball2D::exact`, f32 copy for readers), f64 box-wall position update, f64 pair differences in the force kernel; far runs converge like the origin, gated by `precision.rs`. | L | P6, P8a |
 | P9 | ~~Half neighbour lists~~ | Dropped: the force reduction it needs makes results depend on thread scheduling, and reproducibility is required. | – | – |
 | P10 | ~~GPU-side ball buffer~~ | Done: `GpuBatch::flush` writes into a persistent buffer and reallocates only when the element count outgrows it (to the next power of two). | – | – |
 
@@ -214,7 +214,7 @@ GitHub issues (every open issue is in a phase, as of 2026-10-23):
 | 4 | #329 | M9 #310 | I8a #334, #327, C3 #335, M10 |
 | 5 | #330 | V3 #336, V7 #337, V4a #338, #367, #366, V4b #339, #371, #372, C5 #340 | M10 |
 | 6 | #331 | #363, V2 #341, #290, V5 #342, V6 #343, #303, #203 | M10 |
-| 7 | #332 | P8a #344, #386, P4 #345, #250, P6 #346 (hot/cold part) | P8b #213, #392 (SoA arrays), M10 |
+| 7 | #332 | P8a #344, #386, P4 #345, #250, P6 #346 (hot/cold part), P8b #213 | #392 (SoA arrays), M10 |
 | 8 | #333 | – | I12 #280, I8b #347, I9 #348, I10 #349, I11 #350, M10 |
 
 "Landed" is taken from the commits on `master` (as of 2026-10-23), not from

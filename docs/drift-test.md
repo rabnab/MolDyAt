@@ -90,7 +90,11 @@ up before they fail the build.
 | | | same pair deeper than 0.5 x contact radius, consecutive steps | <= 5 | 0 | |
 | | | force-cap region reached (validity) | >= 1 hit | 93 | |
 | | | balls lost / wall clearance (validity) | none / >= 1.0 | none / 10.55 | |
-| dense_gas_dt_quartering (dense gas at dt and dt/4, same physical time) | `dense_gas.rs` | max energy drift at dt/4 over that at dt | <= 0.125 | 0.120 | ~1.04x (dt^2 gives 0.0625); 96 % of the threshold, CI warns, see the #234 entry in [Baseline history](#baseline-history) |
+| dense_gas_dt_quartering (dense gas at dt and dt/4, same physical time) | `dense_gas.rs` | max energy drift at dt/4 over that at dt | <= 0.125 | 0.122 | ~1.03x (dt^2 gives 0.0625); 97 % of the threshold, CI warns, see the #234 entry in [Baseline history](#baseline-history) |
+| precision by distance (dense and cool gas centred at 0, 125, 500, 2000, each at dt, dt/2, dt/4) | `precision.rs` | dense gas: dt/4 drift over that at the origin | <= 1.6 | 1.07 (at 2000) | ~1.5x; f32 positions gave 2.57 |
+| | | cool gas: dt/4 drift over that at the origin | <= 4.0 | 2.01 (at 2000) | 2x; f32 positions gave 22.6 (at 500) |
+| walled_gas (dense gas inside a square of line segments, half side 22, at 0 and 2000) | `precision.rs` | dt/4 drift over that at the origin | <= 1.6 | 1.07 | ~1.5x, as the dense gas |
+| | | line-wall contacts per run (validity) | >= 50 | 120..127 | |
 | binary_mixture (256 balls, checkerboard of `N2` and `XS` with pair overrides to σ = 1.2, ε = 1.5 and Lorentz–Berthelot cross pairs, 1000 steps) | `binary_mixture.rs` | max relative energy drift | 1.0e-3 | 5.67e-4 | ~1.8x; nearby starts give 5.7e-4..2.2e-3, see the #235 entry in [Baseline history](#baseline-history) |
 | | | relative momentum drift | 1.0e-7 | 1.8e-8 | ~1.9x the largest of the nearby starts (1.6e-8..5.4e-8); f32 rounding noise |
 | | | in-cutoff pairs missing / listed by one ball (every step) | 0 / 0 | 0 / 0 | exact |
@@ -136,10 +140,43 @@ Notes:
 origin. It runs the dense gas (with projectiles) and the cool gas (without)
 in the 100 x 100 drift world centred at x = y = 0, 125, 500 and 2000, each at
 dt, dt/2 and dt/4 over the same physical time (1000, 2000, 4000 steps), and
-prints one `DRIFT_PRECISION` line per gas and centre. It asserts only that the
+prints one `DRIFT_PRECISION` line per gas and centre. It asserts that the
 dense gas at the origin converges (dt/4 ratio <= 0.125, as
-dense_gas_dt_quartering); the far runs measure, they do not gate. Position ulp
-is the f32 spacing at the largest coordinate the gas reaches (centre + 20).
+dense_gas_dt_quartering) and, since positions are f64 (#213), that the dt/4
+drift at every centre stays within 1.6x (dense gas) or 4.0x (cool gas) of the
+drift at the origin; see the scenario table. Position ulp is the f32 spacing
+at the largest coordinate the gas reaches (centre + 20).
+
+With f64 positions (#213, P8b), same runs:
+
+| Gas | Centre | dt | dt/2 | dt/4 | dt/4 ratio | dt/4 over origin |
+|---|---:|---:|---:|---:|---:|---:|
+| dense (projectiles) | 0 | 3.51e-3 | 2.04e-3 | 4.26e-4 | 0.122 | 1.00 |
+| | 125 | 3.52e-3 | 2.04e-3 | 4.25e-4 | 0.121 | 1.00 |
+| | 500 | 3.51e-3 | 2.05e-3 | 4.51e-4 | 0.128 | 1.06 |
+| | 2000 | 3.54e-3 | 2.04e-3 | 4.57e-4 | 0.129 | 1.07 |
+| cool (no projectiles) | 0 | 9.00e-5 | 1.30e-5 | 1.50e-5 | 0.167 | 1.00 |
+| | 125 | 9.11e-5 | 1.46e-5 | 1.46e-5 | 0.160 | 0.97 |
+| | 500 | 9.75e-5 | 1.63e-5 | 1.22e-5 | 0.125 | 0.81 |
+| | 2000 | 1.07e-4 | 1.98e-5 | 3.03e-5 | 0.283 | 2.01 |
+
+The far runs now converge like the origin: the cool gas at 500 goes from
+3.6e-4 to 1.2e-5 at dt/4 (30x), the dense gas at 2000 from 1.08e-3 to
+4.6e-4. The small rest at 2000 (cool gas 2x the origin) comes from the parts
+still in f32 (wall distances, the f32 copy of the position that other code
+reads).
+
+Limit: a contact with a line segment, valve or wall chain places the ball in
+f32 (`sweep_wall_contact` and the overlap pass), so the ball loses its f64
+bits at that step; f64 placement there let the rounded position end inside
+the wall, which the overlap pass then corrected. `test_walled_gas_precision_far_from_origin`
+measures the cost: the dense gas inside a square of line segments
+(~120 contacts per run) gives the same dt/4 drift as without walls, at the
+origin (4.26e-4) and at 2000 (4.57e-4, 1.07x the origin). The envelope is
+set by the core collisions; the f32 placements at contacts do not show in
+it.
+
+The P8a measurement with f32 positions, which led to the change:
 
 Max relative energy drift, seeded, dev profile on x86_64 (`d7bcf0c` + this test):
 
@@ -172,7 +209,7 @@ Reading:
   forces are computed from (at 2000 an ulp is 5e-5 of the equilibrium
   distance, which turns into force noise of ~13 x that).
 
-Recommendation for #213 (P8b): **f64 positions** (option 1 of the issue),
+Recommendation for #213 (P8b), implemented there: **f64 positions** (option 1 of the issue),
 with everything else in f32. Positions are only ever updated by small f32
 increments and read as differences; with f64 the increment is not rounded
 away and pair distances are computed as an f64 difference then narrowed to
@@ -252,3 +289,5 @@ stated.
 **Binary mixture (#235).** New scenario binary_mixture (`binary_mixture.rs`): `N2` and a second species with σ ratio 1 : 1.2 and ε ratio 1 : 1.5, made from the built-in `XS` (mass 1) by two `[[potential.pair_override]]` entries (`XS`–`XS` σ = 1.2, ε = 1.5; `N2`–`XS` σ = 1.1, ε = √1.5), on a checkerboard at spacing 1.3 with thermal speed 1.5. Baseline on `feature/master/235-pair-overrides` (x86_64, dev profile): max relative energy drift 5.67e-4, final 2.39e-4, relative momentum drift 1.79e-8, 4 cap hits, rebuild rate 2.5e-2, no missed or asymmetric pairs, wall clearance 22.27, the same trajectory hash on 1 and 4 threads. Thresholds: energy 1.0e-3 (~1.8x), momentum 1.0e-7. The energy value depends on the realisation: thermal speeds 1.4 / 1.6 and spacings 1.28 / 1.32 / 1.31 (at 1.45) give 5.66e-4, 8.22e-4, 5.98e-4, 2.18e-3 and 6.69e-4, growing with the number of cap hits (0..13); momentum 1.6e-8..5.4e-8. A change to the start state therefore needs a new baseline. Momentum threshold basis: ~2x the largest value over the nearby starts (5.4e-8), as for dense_gas. Overlaps (`min_edge_distance` -0.093) are measured from each pair's contact distance `σ_ij` (`BallPhysics::edge_gap`, which follows the overrides). The other scenarios have no overrides and are bit-identical to `master` (same `trajectory_hash` values).
 
 **Default time step 0.01 -> 0.005.** New worlds now start at dt = 0.005 (`DEFAULT_TIME_STEP`, about 11 fs in N2 units). The drift suite and the core tests keep their own step (`DT_GOAL` = 0.01): their worlds come from `test_config()` / `new_main_content()` in `core/tests/mod.rs`, so every scenario and threshold is bit-identical to `master`. The accepted range moved with the default (÷16..×16: 0.0003125..0.08). Both headless fixtures changed, because they run with the default step.
+
+**f64 positions (#213).** A ball's position is f64 (`Ball2D::exact`, with an f32 copy for every reader); the box-wall position update runs in f64 and the force kernel takes pair differences in f64 (`KernelPoint` holds f64 coordinates) before narrowing them to f32. Line-wall contacts still place the ball in f32. Every trajectory moves by rounding, also at the origin. Re-measured against #346 (dev profile, x86_64), thresholds unchanged: dense_gas max relative energy drift 3.504e-3 -> 3.506e-3 (88 % of its threshold, CI warns as before), final 2.706e-3 -> 2.704e-3, momentum 8.0e-9 -> 2.9e-8 (19 % of 1.5e-7; f32 rounding noise, see the cutoff entry); dense_gas_dt_quartering 0.120 -> 0.122 (97 %, warns as before); binary_mixture 5.668e-4 -> 5.674e-4, momentum 1.8e-8 -> 5.8e-8 (58 % of 1.0e-7, below the warning line); hot_sparse_gas 1.373e-3 -> 4.643e-4; elastic_line_segment 3.0e-7 -> 4.2e-7; mixed_sizes_cell_borders 3.72e-1 -> 3.74e-1; two_body_lj_baseline, force_cap_transition and elastic_world_wall unchanged. balls_removed_and_added now tries 120 spots instead of 60 to re-add balls: with 60 it added 21 before and 19 after the change, below its validity bound of 20; with 120 it adds 46 (max drift 5.46e-4). The bound is now a share of the tries, at least 1/6 (20 of 120), signed off by the owner in #394. Its max overlap depth is ~1.1 on both sides (1.26 before the change); the 2.8e-2 recorded in the #276 entry no longer applies. `precision.rs` became a gate (see [Precision far from the origin](#precision-far-from-the-origin)). Both headless fixtures changed (positions and energies in the last digits).

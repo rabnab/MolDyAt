@@ -57,6 +57,9 @@ impl SimulationWorld {
             restitution,
         )?;
         let free_distance = touch.dist(&end).dot(&normal);
+        // Placed in f32, as the overlap pass measures it, so the ball never
+        // ends a rounding step inside the wall; a line-wall contact drops the
+        // ball's f64 position bits (#213).
         ball.set_position_and_update_tail(
             end.add_scaled(&normal, resolved.distance - free_distance),
         );

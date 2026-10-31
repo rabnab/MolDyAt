@@ -36,18 +36,20 @@ use crate::objects2d::ball_impl::{Ball2D, BallPhysics, ForceResult};
 use std::simd::prelude::SimdFloat;
 use std::simd::{StdFloat, f32x4};
 
-/// The 16 bytes of a ball the force kernel reads for every neighbour: position
-/// (`pre_update_pos`), species and contact radius.
+/// The 24 bytes of a ball the force kernel reads for every neighbour: the f64
+/// position at the start of the force pass, species and contact radius.
 ///
-/// Neighbour lookups are random accesses, so one packed 16-byte record (4 per
-/// cache line) costs one cache line per neighbour, where a full `Ball2D` or
-/// separate arrays would cost one or more. Rebuilt every step by
-/// `KernelPoint::from`, so it never holds indices that could go stale.
+/// Neighbour lookups are random accesses, so one packed record costs about
+/// one cache line per neighbour, where a full `Ball2D` or separate arrays
+/// would cost one or more. The position is f64 so pair differences far from
+/// the origin keep their resolution (#213): they are taken in f64, then
+/// narrowed to f32 for the lanes. Rebuilt every step by `KernelPoint::from`,
+/// so it never holds indices that could go stale.
 #[derive(Debug, Clone, Copy, Default)]
-#[repr(C, align(16))]
+#[repr(C)]
 pub(crate) struct KernelPoint {
-    pub x: f32,
-    pub y: f32,
+    pub x: f64,
+    pub y: f64,
     /// Index of the ball's species.
     pub species: u32,
     /// `σ / 2` of the species, for the overlap gap in `ForceResult::min_dist`.
@@ -55,11 +57,14 @@ pub(crate) struct KernelPoint {
 }
 
 impl From<&Ball2D> for KernelPoint {
+    /// Taken right after `update_old_pos`, so the position is the ball's
+    /// `pre_update_pos` in f64.
     #[inline]
     fn from(ball: &Ball2D) -> Self {
+        let [x, y] = ball.exact_position();
         Self {
-            x: ball.pre_update_pos.x,
-            y: ball.pre_update_pos.y,
+            x,
+            y,
             species: ball.species().index() as u32,
             contact_radius: ball.contact_radius,
         }
@@ -67,10 +72,11 @@ impl From<&Ball2D> for KernelPoint {
 }
 
 impl KernelPoint {
-    /// Vector from this point to `to` (same as `Vec2D::dist`: `to - self`).
+    /// Vector from this point to `to` (same as `Vec2D::dist`: `to - self`),
+    /// taken in f64.
     #[inline]
-    fn dist(&self, to: &Vec2D) -> Vec2D {
-        Vec2D::new(to.x - self.x, to.y - self.y)
+    pub(crate) fn dist(&self, to: &KernelPoint) -> Vec2D {
+        Vec2D::new((to.x - self.x) as f32, (to.y - self.y) as f32)
     }
 }
 
@@ -129,7 +135,7 @@ fn force_kernel<L: PairLaw>(
     };
 
     let ball = &balls[ball_idx];
-    let ball_pos = ball.get_position();
+    let ball_pos = &points[ball_idx];
     let ball_contact = ball.contact_radius;
     // This ball's potential with each species.
     let pairs = table.row(ball.species());
