@@ -93,6 +93,8 @@ up before they fail the build.
 | dense_gas_dt_quartering (dense gas at dt and dt/4, same physical time) | `dense_gas.rs` | max energy drift at dt/4 over that at dt | <= 0.125 | 0.122 | ~1.03x (dt^2 gives 0.0625); 97 % of the threshold, CI warns, see the #234 entry in [Baseline history](#baseline-history) |
 | precision by distance (dense and cool gas centred at 0, 125, 500, 2000, each at dt, dt/2, dt/4) | `precision.rs` | dense gas: dt/4 drift over that at the origin | <= 1.6 | 1.07 (at 2000) | ~1.5x; f32 positions gave 2.57 |
 | | | cool gas: dt/4 drift over that at the origin | <= 4.0 | 2.01 (at 2000) | 2x; f32 positions gave 22.6 (at 500) |
+| walled_gas (dense gas inside a square of line segments, half side 22, at 0 and 2000) | `precision.rs` | dt/4 drift over that at the origin | <= 1.6 | 1.07 | ~1.5x, as the dense gas |
+| | | line-wall contacts per run (validity) | >= 50 | 120..127 | |
 | binary_mixture (256 balls, checkerboard of `N2` and `XS` with pair overrides to σ = 1.2, ε = 1.5 and Lorentz–Berthelot cross pairs, 1000 steps) | `binary_mixture.rs` | max relative energy drift | 1.0e-3 | 5.67e-4 | ~1.8x; nearby starts give 5.7e-4..2.2e-3, see the #235 entry in [Baseline history](#baseline-history) |
 | | | relative momentum drift | 1.0e-7 | 1.8e-8 | ~1.9x the largest of the nearby starts (1.6e-8..5.4e-8); f32 rounding noise |
 | | | in-cutoff pairs missing / listed by one ball (every step) | 0 / 0 | 0 / 0 | exact |
@@ -162,7 +164,19 @@ The far runs now converge like the origin: the cool gas at 500 goes from
 3.6e-4 to 1.2e-5 at dt/4 (30x), the dense gas at 2000 from 1.08e-3 to
 4.6e-4. The small rest at 2000 (cool gas 2x the origin) comes from the parts
 still in f32 (wall distances, the f32 copy of the position that other code
-reads). The P8a measurement with f32 positions, which led to the change:
+reads).
+
+Limit: a contact with a line segment, valve or wall chain places the ball in
+f32 (`sweep_wall_contact` and the overlap pass), so the ball loses its f64
+bits at that step; f64 placement there let the rounded position end inside
+the wall, which the overlap pass then corrected. `test_walled_gas_precision_far_from_origin`
+measures the cost: the dense gas inside a square of line segments
+(~120 contacts per run) gives the same dt/4 drift as without walls, at the
+origin (4.26e-4) and at 2000 (4.57e-4, 1.07x the origin). The envelope is
+set by the core collisions; the f32 placements at contacts do not show in
+it.
+
+The P8a measurement with f32 positions, which led to the change:
 
 Max relative energy drift, seeded, dev profile on x86_64 (`d7bcf0c` + this test):
 

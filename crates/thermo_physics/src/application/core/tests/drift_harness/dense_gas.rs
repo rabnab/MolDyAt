@@ -204,6 +204,10 @@ pub(super) struct DenseGasRun {
     pub(super) metrics: DriftRunMetrics,
     min_clearance: f32,
     ball_radius: f32,
+    /// Wall contacts of the run (`SimStats::wall_contacts`).
+    pub(super) wall_contacts: u64,
+    /// Line-segment pieces in the world.
+    pub(super) line_pieces: usize,
 }
 
 impl DenseGasRun {
@@ -228,12 +232,22 @@ fn run_dense_gas_timed(
     steps: usize,
     sample_every: usize,
 ) -> DenseGasRun {
-    run_dense_gas_at(Vec2D::zero(), faults, projectiles, dt, steps, sample_every)
+    run_dense_gas_at(
+        Vec2D::zero(),
+        None,
+        faults,
+        projectiles,
+        dt,
+        steps,
+        sample_every,
+    )
 }
 
-/// [`run_dense_gas_timed`] in a drift world centred on `center`.
+/// [`run_dense_gas_timed`] in a drift world centred on `center`, optionally
+/// inside a square of line segments with half side `line_box` around it.
 pub(super) fn run_dense_gas_at(
     center: Vec2D,
+    line_box: Option<f32>,
     faults: TestFaults,
     projectiles: bool,
     dt: f32,
@@ -243,6 +257,14 @@ pub(super) fn run_dense_gas_at(
     let mut main_content = create_dense_harness_at(404, center);
     main_content.world_mut().speed_limit_override = Some(f32::INFINITY);
     main_content.world_mut().test_faults = faults;
+    if let Some(h) = line_box {
+        let corners = [(-h, -h), (h, -h), (h, h), (-h, h), (-h, -h)];
+        for pair in corners.windows(2) {
+            let (a, b) = (pair[0], pair[1]);
+            main_content
+                .add_line_segment(center + Vec2D::new(a.0, a.1), center + Vec2D::new(b.0, b.1));
+        }
+    }
     populate_central_grid(&mut main_content, THERMAL_V, projectiles);
     let ball_radius = main_content.world().balls[0].contact_radius;
 
@@ -260,6 +282,8 @@ pub(super) fn run_dense_gas_at(
         metrics,
         min_clearance,
         ball_radius,
+        wall_contacts: main_content.world().sim.wall_contacts,
+        line_pieces: main_content.world().line_segments.segments().len(),
     }
 }
 
