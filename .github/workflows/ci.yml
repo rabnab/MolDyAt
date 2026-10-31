@@ -244,7 +244,7 @@ jobs:
           [ -f drift-harness.log ] || exit 0
           # Tests run in parallel, so a line can start after another test's
           # output on the same line: match anywhere, keep from the tag on.
-          results=$(grep -oE 'DRIFT_(SCENARIO|CONVERGENCE) .*' drift-harness.log || true)
+          results=$(grep -oE 'DRIFT_(SCENARIO|CONVERGENCE|PRECISION) .*' drift-harness.log || true)
           warnings=$(grep -oE 'DRIFT_WARNING .*' drift-harness.log || true)
           {
             echo "### Drift scenarios"

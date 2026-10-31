@@ -240,7 +240,14 @@ pub fn warn_near_threshold(scenario: &str, metric: &str, value: f32, threshold: 
 /// positions get coarse (~3e-5 at 500), and that rounding, not the
 /// integrator, then dominates the energy error (see docs/drift-test.md).
 pub fn create_dense_harness_with_seed(seed: u64) -> MainContent {
-    let (main_content, _) = create_main_content_for_region(-50.0, 50.0);
+    create_dense_harness_at(seed, Vec2D::zero())
+}
+
+/// The drift world of [`create_dense_harness_with_seed`] (100 x 100) centred
+/// on `center` instead of the origin, to measure how f32 position rounding
+/// grows with the distance from the origin (`precision.rs`).
+pub fn create_dense_harness_at(seed: u64, center: Vec2D) -> MainContent {
+    let (main_content, _) = create_main_content_for_region(center.x - 50.0, center.y + 50.0);
     let world_rect = main_content.world().world_region();
     MainContent::with_config(world_rect, &test_config(), Some(seed))
         .expect("Could not create deterministic world")
@@ -538,6 +545,8 @@ mod binary_mixture;
 mod dense_gas;
 #[cfg(test)]
 mod neighbor_lists;
+#[cfg(test)]
+mod precision;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
