@@ -91,7 +91,7 @@ FrameRenderer (shell) → draw_main_frame → RenderGraph → GPU (render)
 | World state | `SimulationWorld` | `crates/thermo_physics/src/application/core/mod.rs` | Balls, `BallPhysics` constants, cell grid, stats, operator collections (line segments, valves, wall chains, source spheres, thermostats), the ghost wall and thermo field history; physical state only, no UI flags (#305) |
 | Stepping | `SimulationEngine` | `crates/thermo_physics/src/application/core/simulation_engine.rs` | One simulation step over a `SimulationWorld` (see below); holds no state |
 | Operator mutations | `OperatorCommand` structs | `crates/thermo_runtime/src/application/operator_command/` | Placing, changing and deleting operators |
-| Physics primitives | `Ball2D`, `SpeciesTable`, `BallPhysics`, `CellGrid`, operators | `crates/thermo_physics/src/objects2d/` | Ball data, particle species, pair potential and SIMD force kernel, Verlet lists, wall contact, operator data models |
+| Physics primitives | `Ball2D`, `SpeciesTable`, `BallPhysics`, `CellGrid`, operators | `crates/thermo_physics/src/objects2d/` | Ball data (`Ball2D` keeps the fields every pass reads in line and the rest, the Verlet list, tail and update counter, in a boxed `BallCold`), particle species, pair potential and SIMD force kernel, Verlet lists, wall contact, operator data models |
 | Renderer state | `UnifiedRenderState` | `crates/thermo_ui/src/graphics/renderer/event_loop/` | Input handler, physics bridge, and `RenderStateData` (viewport, energy window, renderer config, cursor and tool state, last snapshot, frame metrics) |
 | Backend | `WgpuWindow` and friends | `wgpu_renderer/src/wgpu/` | Window, GPU context, event routing, frame submission, render pipelines |
 
