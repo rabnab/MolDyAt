@@ -383,7 +383,7 @@ impl Ball2D {
 
     /// Set the f64 position and its f32 copy, and the tail (see
     /// [`Self::set_position_and_update_tail`]).
-    fn set_exact_position(&mut self, exact: [f64; 2]) {
+    pub(crate) fn set_exact_position(&mut self, exact: [f64; 2]) {
         self.exact = exact;
         let new_pos = Vec2D::new(exact[0] as f32, exact[1] as f32);
         if self.verbose.any() {

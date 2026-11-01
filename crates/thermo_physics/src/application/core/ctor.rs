@@ -85,7 +85,7 @@ impl SimulationWorld {
             speed_limit_factor: config.integration.speed_limit_factor,
             speed_limit_override: None,
             reorder_interval: config.neighbours.reorder_interval,
-            kernel_points: Vec::new(),
+            kernel_points: Default::default(),
             scratch: Default::default(),
             cached_force_results: Vec::new(),
             thermo_history: ThermoFieldHistory::new(),

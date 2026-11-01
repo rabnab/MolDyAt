@@ -7,7 +7,9 @@ use crate::objects2d::ball_impl::ball_physics::{BallPhysics, ForceResult, Physic
 use crate::objects2d::ball_impl::pair_potential::{
     CapSettings, PairOverride, PairPotential, Potential,
 };
-use crate::objects2d::ball_impl::simd_forces::{KernelPoint, force_simd, kernel_points};
+use crate::objects2d::ball_impl::simd_forces::{
+    KernelFrame, KernelPoint, force_simd, kernel_points,
+};
 use crate::objects2d::ball_impl::{Ball2D, DEFAULT_SPECIES, SpeciesId, SpeciesTable};
 use std::simd::f32x4;
 
@@ -254,39 +256,51 @@ fn test_listed_neighbours_beyond_cutoff_do_not_interact() {
     assert_eq!(result.virial, 0.0);
 }
 
+/// A frame of 16 x 16 cells with its top-left corner at (0, 4096).
+const FRAME: KernelFrame = KernelFrame {
+    origin: [0.0, 4096.0],
+    cell: [16.0, 16.0],
+    cols: 512,
+    rows: 512,
+};
+
+fn ball_at_exact(x: f64, y: f64, species: SpeciesId) -> Ball2D {
+    let mut ball = Ball2D::new(0, Vec2D::zero(), species);
+    ball.set_exact_position([x, y]);
+    ball
+}
+
+/// Four records per cache line, none split across two (#392).
 #[test]
-fn test_kernel_point_is_one_24_byte_record() {
-    assert_eq!(std::mem::size_of::<KernelPoint>(), 24);
+fn test_kernel_point_is_one_aligned_16_byte_record() {
+    assert_eq!(std::mem::size_of::<KernelPoint>(), 16);
+    assert_eq!(std::mem::align_of::<KernelPoint>(), 16);
 }
 
 #[test]
-fn test_kernel_point_reads_f64_position_species_and_contact_radius() {
+fn test_kernel_point_holds_cell_offset_and_species() {
     let m = species("M");
-    let ball = Ball2D::new(0, Vec2D::new(1.0, 2.0), m);
-    let point = KernelPoint::from(&ball);
-    assert_eq!((point.x, point.y), (1.0, 2.0));
-    assert_eq!(point.species as usize, m.index());
-    assert_eq!(point.contact_radius, ball.contact_radius);
+    let point = FRAME.point(&ball_at_exact(33.0, 4096.0 - 50.0, m));
+    // Column 2 starts at x = 32; row 3 at y = 4096 - 48.
+    assert_eq!(point.col, 2);
+    assert_eq!((point.x, point.y), (1.0, -2.0));
+    assert_eq!(point.species(), m.index());
 }
 
 /// Far from the origin the pair difference keeps its resolution (#213):
-/// two balls 2.3 apart at x = 2000, 1e-5 off the f32 grid, give the exact
-/// distance, which the f32 positions round by up to 1.2e-4.
+/// two balls 2.3 apart near x = 2000, in neighbouring cells and 1e-5 off
+/// the f32 grid, give the f64 distance; f32 positions would round each by
+/// up to 1.2e-4.
 #[test]
-fn test_kernel_point_difference_is_taken_in_f64() {
+fn test_kernel_point_difference_keeps_f64_resolution() {
     let m = species("M");
-    let a = KernelPoint {
-        x: 2_000.000_01,
-        y: 0.0,
-        species: m.index() as u32,
-        contact_radius: 0.0,
-    };
-    let b = KernelPoint {
-        x: 2_002.300_02,
-        ..a
-    };
-    let d = a.dist(&b);
-    assert!((f64::from(d.x) - 2.300_01).abs() < 1e-6, "{}", d.x);
+    let (xa, xb) = (2_015.000_01, 2_017.300_02);
+    let a = FRAME.point(&ball_at_exact(xa, 3000.0, m));
+    let b = FRAME.point(&ball_at_exact(xb, 3000.0 - 0.5, m));
+    assert_ne!(a.col, b.col, "the pair must straddle a cell border");
+    let d = a.dist(&b, FRAME.cell);
+    assert!((f64::from(d.x) - (xb - xa)).abs() < 2e-6, "{}", d.x);
+    assert!((f64::from(d.y) + 0.5).abs() < 2e-6, "{}", d.y);
 }
 
 #[test]

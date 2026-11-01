@@ -17,6 +17,7 @@
 
 use crate::error::AppResult;
 use crate::objects2d::ball_impl::Ball2D;
+use crate::objects2d::ball_impl::simd_forces::KernelFrame;
 use crate::objects2d::{Rect, Vec2D};
 use rayon::prelude::*;
 use std::fmt::Debug;
@@ -135,6 +136,17 @@ impl CellGrid {
     /// Neighbour-list radius the cells were sized for.
     pub(crate) fn list_radius(&self) -> f32 {
         self.list_radius
+    }
+
+    /// The grid as the frame of the force kernel's points (#392).
+    pub(crate) fn kernel_frame(&self) -> KernelFrame {
+        let g = &self.geometry;
+        KernelFrame {
+            origin: [f64::from(g.origin.0), f64::from(g.origin.1)],
+            cell: [g.cell_size_x, g.cell_size_y],
+            cols: g.grid_width as u32,
+            rows: g.grid_height as u32,
+        }
     }
 
     pub fn get_cell_size(&self) -> (f32, f32) {

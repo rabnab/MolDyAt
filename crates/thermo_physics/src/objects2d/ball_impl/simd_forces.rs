@@ -36,54 +36,134 @@ use crate::objects2d::ball_impl::{Ball2D, BallPhysics, ForceResult};
 use std::simd::prelude::SimdFloat;
 use std::simd::{StdFloat, f32x4};
 
-/// The 24 bytes of a ball the force kernel reads for every neighbour: the f64
-/// position at the start of the force pass, species and contact radius.
+/// Bits of `KernelPoint::row_species` that hold the species index.
+const SPECIES_BITS: u32 = 8;
+const SPECIES_MASK: u32 = (1 << SPECIES_BITS) - 1;
+/// Largest row index `KernelPoint` can hold (24 bits).
+const MAX_ROW: u32 = u32::MAX >> SPECIES_BITS;
+
+/// The 16 bytes of a ball the force kernel reads for every neighbour: its
+/// position at the start of the force pass as an f32 offset from the corner
+/// of its cell, the cell, and the species (#392).
 ///
-/// Neighbour lookups are random accesses, so one packed record costs about
-/// one cache line per neighbour, where a full `Ball2D` or separate arrays
-/// would cost one or more. The position is f64 so pair differences far from
-/// the origin keep their resolution (#213): they are taken in f64, then
-/// narrowed to f32 for the lanes. Rebuilt every step by `KernelPoint::from`,
-/// so it never holds indices that could go stale.
+/// Neighbour lookups are random accesses, so a 16-byte record (4 per cache
+/// line, never split) costs one cache line per neighbour. The cell corners
+/// are computed in f64 from the grid origin, so far from the origin the
+/// offsets keep their resolution (#213), and the difference of two points
+/// is `Δcell · cell size + Δoffset`, both small, in f32: as exact as the
+/// f64 difference narrowed to f32 for pairs a few cells apart. Rebuilt every
+/// step (`KernelFrame::point`), so it never holds indices that could go
+/// stale.
 #[derive(Debug, Clone, Copy, Default)]
-#[repr(C)]
+#[repr(C, align(16))]
 pub(crate) struct KernelPoint {
-    pub x: f64,
-    pub y: f64,
-    /// Index of the ball's species.
-    pub species: u32,
-    /// `σ / 2` of the species, for the overlap gap in `ForceResult::min_dist`.
-    pub contact_radius: f32,
+    /// Offset from the left edge of the cell column.
+    pub x: f32,
+    /// Offset from the top edge of the cell row.
+    pub y: f32,
+    pub col: u32,
+    /// Row (high 24 bits) and species index (low 8 bits).
+    pub row_species: u32,
 }
 
-impl From<&Ball2D> for KernelPoint {
-    /// Taken right after `update_old_pos`, so the position is the ball's
-    /// `pre_update_pos` in f64.
+impl KernelPoint {
     #[inline]
-    fn from(ball: &Ball2D) -> Self {
+    pub(crate) fn species(&self) -> usize {
+        (self.row_species & SPECIES_MASK) as usize
+    }
+
+    #[inline]
+    fn row(&self) -> u32 {
+        self.row_species >> SPECIES_BITS
+    }
+
+    /// Vector from this point to `to` (same as `Vec2D::dist`: `to - self`),
+    /// for cells of `cell` size.
+    #[inline]
+    pub(crate) fn dist(&self, to: &KernelPoint, cell: [f32; 2]) -> Vec2D {
+        let d_col = to.col.wrapping_sub(self.col) as i32 as f32;
+        // Rows grow downwards, y upwards.
+        let d_row = to.row().wrapping_sub(self.row()) as i32 as f32;
+        Vec2D::new(
+            d_col * cell[0] + (to.x - self.x),
+            -(d_row * cell[1]) + (to.y - self.y),
+        )
+    }
+}
+
+/// The grid the kernel points are taken against: its top-left corner (f64)
+/// and cell size. Any frame works; offsets stay small where its cells do.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct KernelFrame {
+    pub origin: [f64; 2],
+    pub cell: [f32; 2],
+    pub cols: u32,
+    pub rows: u32,
+}
+
+impl KernelFrame {
+    /// The kernel point of `ball`, taken right after `update_old_pos`, so
+    /// the position is the ball's `pre_update_pos` in f64. A ball outside
+    /// the frame takes the nearest edge cell (a larger offset, still exact
+    /// for its neighbours); a NaN position gives NaN offsets.
+    #[inline]
+    pub(crate) fn point(&self, ball: &Ball2D) -> KernelPoint {
         let [x, y] = ball.exact_position();
-        Self {
-            x,
-            y,
-            species: ball.species().index() as u32,
-            contact_radius: ball.contact_radius,
+        let cell = [f64::from(self.cell[0]), f64::from(self.cell[1])];
+        // Any cell is a valid anchor (the offset only has to stay small), so
+        // a multiplication by the reciprocal that rounds into the next cell
+        // is fine; no division per ball.
+        let inv = [1.0 / cell[0], 1.0 / cell[1]];
+        let col = (((x - self.origin[0]) * inv[0]).max(0.0) as u32).min(self.cols - 1);
+        let row = (((self.origin[1] - y) * inv[1]).max(0.0) as u32)
+            .min(self.rows - 1)
+            .min(MAX_ROW);
+        let anchor_x = self.origin[0] + f64::from(col) * cell[0];
+        let anchor_y = self.origin[1] - f64::from(row) * cell[1];
+        let species = ball.species().index() as u32;
+        debug_assert!(species <= SPECIES_MASK, "species index {species} too large");
+        KernelPoint {
+            x: (x - anchor_x) as f32,
+            y: (y - anchor_y) as f32,
+            col,
+            row_species: (row << SPECIES_BITS) | (species & SPECIES_MASK),
         }
     }
 }
 
-impl KernelPoint {
-    /// Vector from this point to `to` (same as `Vec2D::dist`: `to - self`),
-    /// taken in f64.
-    #[inline]
-    pub(crate) fn dist(&self, to: &KernelPoint) -> Vec2D {
-        Vec2D::new((to.x - self.x) as f32, (to.y - self.y) as f32)
-    }
+/// What the force kernel reads besides the balls: one [`KernelPoint`] per
+/// ball, the cell size of their frame, and `σ / 2` per species index for
+/// the overlap gap in `ForceResult::min_dist`.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct KernelPoints {
+    pub points: Vec<KernelPoint>,
+    pub cell: [f32; 2],
+    pub contacts: Vec<f32>,
 }
 
-/// `KernelPoint`s for all balls, as the simulation step builds them.
+/// `KernelPoints` for all balls in a frame of 16 x 16 cells around the
+/// origin, with the contact radii of the balls' species.
 #[cfg(test)]
-pub(crate) fn kernel_points(balls: &[Ball2D]) -> Vec<KernelPoint> {
-    balls.iter().map(KernelPoint::from).collect()
+pub(crate) fn kernel_points(balls: &[Ball2D]) -> KernelPoints {
+    let frame = KernelFrame {
+        origin: [-4096.0, 4096.0],
+        cell: [16.0, 16.0],
+        cols: 512,
+        rows: 512,
+    };
+    let mut contacts = Vec::new();
+    for ball in balls {
+        let i = ball.species().index();
+        if contacts.len() <= i {
+            contacts.resize(i + 1, 0.0);
+        }
+        contacts[i] = ball.contact_radius;
+    }
+    KernelPoints {
+        points: balls.iter().map(|b| frame.point(b)).collect(),
+        cell: frame.cell,
+        contacts,
+    }
 }
 
 /// Calculate Lennard-Jones forces for multiple ball pairs using SIMD vectorization.
@@ -103,7 +183,7 @@ pub(crate) fn force_simd(
     physics: &BallPhysics,
     ball_idx: usize,
     balls: &[Ball2D],
-    points: &[KernelPoint],
+    points: &KernelPoints,
 ) -> ForceResult {
     // Static dispatch: one match per ball, outside the neighbour loop; the
     // kernel below is monomorphised for each law, with no branch per neighbour.
@@ -118,8 +198,9 @@ fn force_kernel<L: PairLaw>(
     table: &PairTable<L>,
     ball_idx: usize,
     balls: &[Ball2D],
-    points: &[KernelPoint],
+    kernel: &KernelPoints,
 ) -> ForceResult {
+    let (points, cell, contacts_of) = (&kernel.points, kernel.cell, &kernel.contacts);
     let mut force = Vec2D::new(0., 0.);
     let mut min_dist = f32::NAN;
     let mut total_pot = 0.;
@@ -154,11 +235,12 @@ fn force_kernel<L: PairLaw>(
         // Gather data for 4 neighbors
         for (i, &neighbour_idx) in chunk.iter().enumerate() {
             if let Some(neighbour) = points.get(neighbour_idx) {
-                let dist_vec = neighbour.dist(ball_pos);
+                let dist_vec = neighbour.dist(ball_pos, cell);
                 dx[i] = dist_vec.x;
                 dy[i] = dist_vec.y;
-                contacts[i] = neighbour.contact_radius;
-                chunk_pairs[i] = &pairs[neighbour.species as usize];
+                let species = neighbour.species();
+                contacts[i] = contacts_of[species];
+                chunk_pairs[i] = &pairs[species];
             } else {
                 panic!("Invalid neighbor index in SIMD force calculation");
             }
@@ -218,10 +300,11 @@ fn force_kernel<L: PairLaw>(
     // Process remaining neighbors with scalar code
     for &neighbour_idx in unchunked {
         if let Some(b) = points.get(neighbour_idx) {
-            let dist_vec = b.dist(ball_pos);
+            let dist_vec = b.dist(ball_pos, cell);
             let center_dist = dist_vec.norm();
-            let gap = center_dist - (b.contact_radius + ball_contact);
-            let potential = &pairs[b.species as usize];
+            let species = b.species();
+            let gap = center_dist - (contacts_of[species] + ball_contact);
+            let potential = &pairs[species];
 
             let lj_force = potential.force(center_dist);
 
