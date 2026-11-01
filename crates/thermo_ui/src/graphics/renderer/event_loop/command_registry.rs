@@ -557,7 +557,7 @@ pub static COMMANDS: &[CommandDescriptor] = &[
     },
     CommandDescriptor {
         id: "view.plot_distributions",
-        label: "Switch the plot window between the time series and the distributions (speed histogram with Maxwell-Boltzmann, g(r)); opens it if closed.",
+        label: "Switch the plot window between the time series and the distributions (speed histogram with Maxwell-Boltzmann, g(r)); opens it if closed. Click a species pair in the g(r) heading to hide or show its curve.",
         category: CommandCategory::View,
         default_binding: &[symbol('m', Press)],
         kind: CommandKind::Ui(UiAction::TogglePlotDistributions),
