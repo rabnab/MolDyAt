@@ -459,7 +459,11 @@ it (the targets of the last frame).
 distributions of the balls (#343) and back, opening it if closed:
 `PlotScene::build_distributions` (`energy_plot/distribution_layout.rs`)
 lays out the speed histogram as bars with the 2D Maxwell–Boltzmann counts
-as a line, and g(r) per species pair with g = 1 marked. The manager
+as a line, and g(r) per species pair with g = 1 marked. Each pair's name
+in the g(r) heading is a legend entry (`PlotScene::legend`): a left click
+hides or shows that pair (`EnergyWindowManager::hidden_pairs`, kept while
+the window is closed); a hidden pair's name is grey, its curve is not
+drawn and the g axis follows the pairs drawn. The manager
 computes them from the snapshot (`thermo_runtime::distributions`, which
 headless output and the export use too) only while the view is shown, at
 most every `DISTRIBUTION_INTERVAL` (0.5 s), off the physics thread.

@@ -231,6 +231,10 @@ pub struct EnergyWindowManager {
     show_distributions: bool,
     /// The distributions shown and when they were computed.
     distributions: Option<(DistributionData, Instant)>,
+    /// g(r) pairs hidden in the distributions view, by name (`"N2-Ar"`);
+    /// a click on a pair's legend entry hides or shows it. Kept when the
+    /// window is closed and reopened.
+    hidden_pairs: Vec<String>,
 }
 
 /// Minimum interval between energy-window redraws (≈12 Hz).
@@ -262,7 +266,13 @@ impl EnergyWindowManager {
             seen_history_resets: 0,
             show_distributions: false,
             distributions: None,
+            hidden_pairs: Vec::new(),
         }
+    }
+
+    /// g(r) pairs hidden in the distributions view.
+    pub fn hidden_pairs(&self) -> &[String] {
+        &self.hidden_pairs
     }
 
     /// Whether the window shows the distributions (#343).
@@ -353,8 +363,9 @@ impl EnergyWindowManager {
     }
 
     /// A left click at `at` (window pixels) in the last frame: on a legend
-    /// entry it hides or shows that series, in a plot it focuses the plot.
-    /// Returns whether the plots changed.
+    /// entry it hides or shows that series (in the distributions view that
+    /// g(r) pair), in a plot it focuses the plot. Returns whether anything
+    /// changed.
     pub(super) fn left_clicked(&mut self, at: [f32; 2]) -> bool {
         let entry = self
             .targets
@@ -362,6 +373,20 @@ impl EnergyWindowManager {
             .iter()
             .find(|entry| entry.rect.contains(at))
             .cloned();
+        if self.show_distributions {
+            let Some(entry) = entry else {
+                return false;
+            };
+            if let Some(i) = self.hidden_pairs.iter().position(|p| *p == entry.series) {
+                self.hidden_pairs.remove(i);
+            } else {
+                self.hidden_pairs.push(entry.series);
+            }
+            if self.window.is_some() {
+                self.redraw_now();
+            }
+            return true;
+        }
         if let Some(entry) = entry {
             return self.edit_selection(|selection, _| {
                 selection.focus(entry.panel);
@@ -710,6 +735,7 @@ impl EnergyWindowManager {
         if self.show_distributions {
             return Some(PlotScene::build_distributions(
                 self.distributions.as_ref().map(|(data, _)| data),
+                &self.hidden_pairs,
                 window.size,
                 window.scale_factor,
                 key_hints,

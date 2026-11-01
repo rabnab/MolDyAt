@@ -463,6 +463,40 @@ mod plots {
             expected
         });
     }
+
+    /// In the distributions view a click on a g(r) legend entry hides or
+    /// shows that pair; the series plots are left alone.
+    #[test]
+    fn test_clicks_on_g_legend_entries_hide_and_show_pairs() {
+        let mut manager = manager_with_series();
+        manager.toggle_distributions();
+        assert!(manager.shows_distributions());
+        let before = manager.selection().clone();
+        manager.set_click_targets(ClickTargets {
+            panels: Vec::new(),
+            legend: vec![
+                LegendEntry {
+                    panel: 0,
+                    series: "N2-N2".into(),
+                    rect: rect(10.0, 300.0, 50.0, 316.0),
+                },
+                LegendEntry {
+                    panel: 0,
+                    series: "N2-Ar".into(),
+                    rect: rect(80.0, 300.0, 120.0, 316.0),
+                },
+            ],
+        });
+        assert!(manager.left_clicked([90.0, 308.0]));
+        assert_eq!(manager.hidden_pairs(), ["N2-Ar"]);
+        assert!(manager.left_clicked([20.0, 308.0]));
+        assert_eq!(manager.hidden_pairs(), ["N2-Ar", "N2-N2"]);
+        assert!(manager.left_clicked([90.0, 308.0]));
+        assert_eq!(manager.hidden_pairs(), ["N2-N2"]);
+        // Off the legend: nothing.
+        assert!(!manager.left_clicked([500.0, 500.0]));
+        assert_eq!(manager.selection(), &before);
+    }
 }
 
 /// The plot's mouse gestures (#367), against a set plot geometry: the plot

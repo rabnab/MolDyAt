@@ -8,9 +8,9 @@
 //! window pixels (see `plot_layout.rs` for the conventions).
 
 use super::plot_layout::{
-    BACKGROUND, COLOR_AXIS, COLOR_KINETIC, COLOR_TEXT, COLOR_TITLE, COLOR_TOTAL, COLOR_ZERO,
-    GLYPH_CELL, PlotLabel, PlotRect, PlotScene, PlotSegment, Rgba, format_tick, nice_ticks,
-    text_scale,
+    BACKGROUND, COLOR_AXIS, COLOR_HIDDEN, COLOR_KINETIC, COLOR_TEXT, COLOR_TITLE, COLOR_TOTAL,
+    COLOR_ZERO, GLYPH_CELL, LegendEntry, PlotLabel, PlotRect, PlotScene, PlotSegment, Rgba,
+    format_tick, nice_ticks, text_scale,
 };
 use thermo_runtime::distributions::Distributions;
 
@@ -37,8 +37,10 @@ pub struct DistributionData {
 }
 
 /// Builds the scene: `layout` places text and lines in window pixels.
-struct Layout {
+struct Layout<'a> {
     scene: PlotScene,
+    /// g(r) pairs not drawn, by name (`"N2-Ar"`); their legend entry is grey.
+    hidden_pairs: &'a [String],
     scale: f32,
     glyph: f32,
     line: f32,
@@ -46,7 +48,7 @@ struct Layout {
     thin: f32,
 }
 
-impl Layout {
+impl Layout<'_> {
     fn label(&mut self, text: impl Into<String>, origin: [f32; 2], color: Rgba) {
         self.scene.labels.push(PlotLabel {
             text: text.into(),
@@ -131,9 +133,12 @@ impl PlotScene {
     /// The distributions view for a window of `size` pixels at
     /// `scale_factor`: the title and `key_hints`, the speed histogram (bars)
     /// with its Maxwell–Boltzmann counts (line) above, g(r) per species pair
-    /// below with g = 1 marked. Without data a waiting message.
+    /// below with g = 1 marked. Pairs named in `hidden_pairs` are not drawn
+    /// and their legend entry is grey; every g(r) legend entry is a click
+    /// target in `legend` (panel 0). Without data a waiting message.
     pub fn build_distributions(
         data: Option<&DistributionData>,
+        hidden_pairs: &[String],
         size: (u32, u32),
         scale_factor: f64,
         key_hints: &str,
@@ -141,6 +146,7 @@ impl PlotScene {
         let scale = text_scale(scale_factor);
         let glyph = GLYPH_CELL * scale;
         let mut layout = Layout {
+            hidden_pairs,
             scene: PlotScene {
                 size,
                 background: BACKGROUND,
@@ -163,7 +169,7 @@ impl PlotScene {
     }
 }
 
-impl Layout {
+impl Layout<'_> {
     fn build(&mut self, data: Option<&DistributionData>, key_hints: &str) {
         let (w, h) = (self.scene.size.0 as f32, self.scene.size.1 as f32);
         let (pad, line, glyph) = (self.pad, self.line, self.glyph);
@@ -251,28 +257,57 @@ impl Layout {
     fn rdf_panel(&mut self, area: PlotRect, data: &DistributionData) {
         let radial = &data.distributions.radial;
         let bins = radial.pairs.first().map_or(0, |p| p.g.len());
+        let hidden_pairs = self.hidden_pairs;
+        let hidden = |k: usize| {
+            data.pair_names
+                .get(k)
+                .is_some_and(|name| hidden_pairs.contains(name))
+        };
+        // The y range follows the pairs drawn, so hiding a tall curve
+        // magnifies the others.
         let max_g = radial
             .pairs
             .iter()
-            .flat_map(|p| p.g.iter().copied())
+            .enumerate()
+            .filter(|(k, _)| !hidden(*k))
+            .flat_map(|(_, p)| p.g.iter().copied())
             .filter(|g| g.is_finite())
             .fold(1.5_f32, f32::max);
         let x = (0.0, bins.max(1) as f64 * f64::from(radial.bin_width));
         let (to_x, to_y) = self.axes(area, x, (0.0, f64::from(max_g) * 1.05));
-        // The legend in the heading line: "g(r)" and one name per pair.
+        // The legend in the heading line: "g(r)" and one name per pair, a
+        // click target each; a hidden pair's name is grey.
         let mut lx = area.left;
         let ly = area.top - self.line;
         self.label("g(r)", [lx, ly], COLOR_TEXT);
         lx += self.text_width("g(r)  ");
         for (k, name) in data.pair_names.iter().enumerate() {
-            let color = PAIR_COLORS[k % PAIR_COLORS.len()];
+            let color = if hidden(k) {
+                COLOR_HIDDEN
+            } else {
+                PAIR_COLORS[k % PAIR_COLORS.len()]
+            };
             self.label(name.clone(), [lx, ly], color);
-            lx += self.text_width(name) + self.glyph * 2.0;
+            let width = self.text_width(name);
+            self.scene.legend.push(LegendEntry {
+                panel: 0,
+                series: name.clone(),
+                rect: PlotRect {
+                    left: lx,
+                    top: ly,
+                    right: lx + width,
+                    bottom: ly + self.glyph,
+                },
+            });
+            lx += width + self.glyph * 2.0;
         }
         let one = to_y(1.0);
         self.segment([area.left, one], [area.right, one], self.thin, COLOR_ZERO);
         let width = self.thin * 2.0;
         for (k, pair) in radial.pairs.iter().enumerate() {
+            if hidden(k) {
+                continue;
+            }
             let color = PAIR_COLORS[k % PAIR_COLORS.len()];
             let points: Vec<Option<[f32; 2]>> = pair
                 .g
