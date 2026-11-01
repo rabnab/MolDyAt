@@ -29,7 +29,7 @@ use crate::application::sim_config::{SpeciesConfig, WorldConfig};
 use crate::application::sim_stats::SimStats;
 use crate::application::thermo_field::ThermoFieldHistory;
 use crate::objects2d::ball_cell::cell_grid::CellGrid;
-use crate::objects2d::ball_impl::simd_forces::KernelPoint;
+use crate::objects2d::ball_impl::simd_forces::KernelPoints;
 use crate::objects2d::ball_impl::{
     Ball2D, BallPhysics, ForceResult, SpeciesId, SpeciesSet, SpeciesTable,
 };
@@ -68,7 +68,7 @@ pub struct SimulationWorld {
     /// (same indices as `balls`). Scratch data: valid only inside `update_sim`,
     /// from `update_old_positions` to `compute_forces`. Balls are removed and
     /// added between steps, so read `balls` everywhere else.
-    pub(crate) kernel_points: Vec<KernelPoint>,
+    pub(crate) kernel_points: KernelPoints,
     /// Buffers the step reuses instead of allocating (see `StepScratch`).
     pub(crate) scratch: StepScratch,
     pub(crate) cell_grid: CellGrid,

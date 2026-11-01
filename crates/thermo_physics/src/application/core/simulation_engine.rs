@@ -397,18 +397,26 @@ impl SimulationEngine {
     }
 
     /// Store each ball's position before the force pass and copy what the
-    /// force kernel reads into `kernel_points`.
+    /// force kernel reads into `kernel_points`, in the frame of the cell
+    /// grid (#392).
     fn update_old_positions(world: &mut SimulationWorld) {
-        world
-            .kernel_points
+        let frame = world.cell_grid.kernel_frame();
+        let kernel = &mut world.kernel_points;
+        kernel.cell = frame.cell;
+        kernel.contacts.clear();
+        kernel
+            .contacts
+            .extend(world.physics.species().iter().map(|s| s.contact_radius()));
+        kernel
+            .points
             .resize(world.balls.len(), KernelPoint::default());
         world
             .balls
             .par_iter_mut()
-            .zip(world.kernel_points.par_iter_mut())
+            .zip(kernel.points.par_iter_mut())
             .for_each(|(ball, point)| {
                 ball.update_old_pos();
-                *point = KernelPoint::from(&*ball);
+                *point = frame.point(ball);
             });
     }
 

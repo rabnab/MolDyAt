@@ -53,8 +53,9 @@ impl BounceInfo {
 
 /// A ball: the data the step reads or writes for every ball (hot), plus a
 /// pointer to the rest ([`BallCold`]), so the passes over all balls touch
-/// less memory per ball (P6, #346; about 80 bytes instead of ~200, which
-/// still spans two 64-byte lines for most balls).
+/// less memory per ball (P6, #346; about 96 bytes instead of ~200, 80
+/// before the f64 position of #213, which still spans two 64-byte lines
+/// for most balls).
 pub struct Ball2D {
     /// The position (#213): f64, so the small step increments are not
     /// rounded away far from the origin. Every move goes through it.
@@ -383,7 +384,7 @@ impl Ball2D {
 
     /// Set the f64 position and its f32 copy, and the tail (see
     /// [`Self::set_position_and_update_tail`]).
-    fn set_exact_position(&mut self, exact: [f64; 2]) {
+    pub(crate) fn set_exact_position(&mut self, exact: [f64; 2]) {
         self.exact = exact;
         let new_pos = Vec2D::new(exact[0] as f32, exact[1] as f32);
         if self.verbose.any() {
