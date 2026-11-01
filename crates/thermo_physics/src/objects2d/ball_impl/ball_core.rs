@@ -535,10 +535,9 @@ mod tests {
     /// The hot part stays small (P6, #346), so the passes over all balls
     /// touch less memory per ball; the bound is the layout, not a cache-line
     /// bound. It rose from 80 to 96 bytes with the f64 position (#213),
-    /// which duplicates `pos` (its f32 copy) and overlaps `pre_update_pos`;
-    /// #392 (separate arrays) is expected to bring it back down, so do not
-    /// treat 96 as room to grow. A new field that not every pass needs
-    /// belongs in `BallCold`.
+    /// which duplicates `pos` (its f32 copy) and overlaps `pre_update_pos`.
+    /// Do not treat 96 as room to grow: a new field that not every pass
+    /// needs belongs in `BallCold`.
     #[test]
     fn test_hot_ball_data_fits_in_96_bytes() {
         let size = std::mem::size_of::<Ball2D>();
