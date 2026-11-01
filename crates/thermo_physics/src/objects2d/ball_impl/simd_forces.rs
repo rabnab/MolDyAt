@@ -32,7 +32,7 @@ use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::pair_potential::{
     CappedLanes, PairLaw, PairPotential, PairTable, Potential,
 };
-use crate::objects2d::ball_impl::{Ball2D, BallPhysics, ForceResult};
+use crate::objects2d::ball_impl::{Ball2D, BallPhysics, ForceResult, SpeciesSet};
 use std::simd::prelude::SimdFloat;
 use std::simd::{StdFloat, f32x4};
 
@@ -41,6 +41,9 @@ const SPECIES_BITS: u32 = 8;
 const SPECIES_MASK: u32 = (1 << SPECIES_BITS) - 1;
 /// Largest row index `KernelPoint` can hold (24 bits).
 const MAX_ROW: u32 = u32::MAX >> SPECIES_BITS;
+// Every species index must fit in `SPECIES_BITS`, also in release builds:
+// raising `SpeciesSet::CAPACITY` past it has to fail here.
+const _: () = assert!(SpeciesSet::CAPACITY <= 1 << SPECIES_BITS);
 
 /// The 16 bytes of a ball the force kernel reads for every neighbour: its
 /// position at the start of the force pass as an f32 offset from the corner

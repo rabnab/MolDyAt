@@ -53,8 +53,9 @@ impl BounceInfo {
 
 /// A ball: the data the step reads or writes for every ball (hot), plus a
 /// pointer to the rest ([`BallCold`]), so the passes over all balls touch
-/// less memory per ball (P6, #346; about 80 bytes instead of ~200, which
-/// still spans two 64-byte lines for most balls).
+/// less memory per ball (P6, #346; about 96 bytes instead of ~200, 80
+/// before the f64 position of #213, which still spans two 64-byte lines
+/// for most balls).
 pub struct Ball2D {
     /// The position (#213): f64, so the small step increments are not
     /// rounded away far from the origin. Every move goes through it.

@@ -72,7 +72,7 @@ runner adds `snapshot`, `output` and `total`:
 | `thermo` | global temperature and the per-cell T/P fields |
 | `snapshot` | `create_snapshot` |
 | `output` | writing the snapshot record |
-| `other` | `total` minus all of the above (old-position copy, loop overhead) |
+| `other` | `total` minus all of the above (loop overhead) |
 | `total` | wall clock of the measured steps / steps |
 
 All values are ms per measured step. Snapshot costs are spread over all steps.
@@ -103,6 +103,9 @@ Median ms/step:
 
 `output` is about 0.004 ms in every scenario. `total` `spread_pct`: dilute
 22.5 %, dense 5.8 %, walls_valves 12.4 %, box_walls 10.2 %, large 10.3 %.
+`other` (0.04–2.2 ms in the previous baseline) is now about 0.001 ms: most
+of it was the per-step copy of every ball's old position for the grid moves,
+which the counting-sort grid (#390) no longer needs.
 
 Previous baseline, for reference only (`6b50e9e`, 2026-10-08, `release`
 profile, 2.80 GHz host), total ms/step: dilute 3.24, dense 18.96,
