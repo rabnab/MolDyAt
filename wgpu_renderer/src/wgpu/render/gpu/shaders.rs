@@ -5,7 +5,7 @@
 //! Every WGSL source, with `common.wgsl` prepended at compile time.
 //!
 //! WGSL has no `#include`, so the shared header (uniforms `u`, `quad_corner`,
-//! `aa`, `ring_band`) is concatenated in front of each shader here. Pipelines
+//! `aa`, `ring_band`, `rainbow`) is concatenated in front of each shader here. Pipelines
 //! take their shader from this module only.
 
 macro_rules! shaders {
@@ -24,6 +24,7 @@ macro_rules! shaders {
 
 shaders! {
     BALL => "ball.wgsl",
+    COLOR_BAR => "color_bar.wgsl",
     ENDPOINT => "endpoint.wgsl",
     FRAME => "frame.wgsl",
     GRID => "grid.wgsl",

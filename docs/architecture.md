@@ -350,13 +350,13 @@ Every visual layer is one `RenderPipeline` in
   bind groups and buffers. It has two draw modes: instanced quads (one
   element is one quad, corners from `quad_corner()` in the shader) or plain
   vertex lists.
-- Text pipelines (cursor readout, cell values, thermostat, source-sphere
+- Text pipelines (cursor readout, field colour bar labels, thermostat, source-sphere
   and sidebar labels) and the plot window draw from one printable-ASCII
   `GlyphAtlas` per renderer (`gpu/text.rs`, held by `WgpuContext`, #303);
   each `TextBatch` keeps only its colour and vertices.
 - Every shader is registered in `gpu/shaders.rs`, which prepends
   `shaders/common.wgsl` (uniforms `u.view_proj` / `u.params`, `quad_corner`,
-  `aa`, `ring_band`). `u.params` is pipeline-specific and documented at the
+  `aa`, `ring_band`, the field colour map `rainbow`). `u.params` is pipeline-specific and documented at the
   top of each shader. An optional texture lives at `@group(1)`.
 - Screen-space layers (sidebar, text, labels, frame) build NDC positions and
   keep the identity `view_proj`.

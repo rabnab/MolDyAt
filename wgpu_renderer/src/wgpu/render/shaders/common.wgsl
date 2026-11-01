@@ -41,6 +41,24 @@ fn inset_band(d: f32, width: f32) -> f32 {
     return max(aa(d) - aa(d + width), 0.0);
 }
 
+// Rainbow colour map of the field overlays: blue (t=0) -> cyan -> green ->
+// yellow -> red (t=1). The heatmap and its colour bar both use it.
+fn rainbow(t: f32) -> vec3<f32> {
+    let s = clamp(t, 0.0, 1.0) * 4.0;
+    // Cap the segment index at 3: at t = 1.0 exactly, floor(s) would be 4, which
+    // wrapped back to yellow (and values a hair below 1.0 stayed red).
+    let i = min(floor(s), 3.0);
+    let f = s - i;
+    if i < 1.0 {
+        return vec3<f32>(0.0, f, 1.0);         // blue -> cyan
+    } else if i < 2.0 {
+        return vec3<f32>(0.0, 1.0, 1.0 - f);   // cyan -> green
+    } else if i < 3.0 {
+        return vec3<f32>(f, 1.0, 0.0);         // green -> yellow
+    }
+    return vec3<f32>(1.0, 1.0 - f, 0.0);       // yellow -> red
+}
+
 // Coverage of a circular outline of `width` centred on `radius`, at distance
 // `dist` from the centre (all world units). Zero outside the band, with a fixed
 // 0.05 soft edge (no derivatives, so it is safe inside branches).

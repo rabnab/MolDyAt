@@ -43,23 +43,6 @@ fn vs_main(@builtin(vertex_index) vi: u32, inst: Inst) -> VOut {
     return out;
 }
 
-// Rainbow colormap: blue (t=0) -> cyan -> green -> yellow -> red (t=1).
-fn rainbow(t: f32) -> vec3<f32> {
-    let s = clamp(t, 0.0, 1.0) * 4.0;
-    // Cap the segment index at 3: at t = 1.0 exactly, floor(s) would be 4, which
-    // wrapped back to yellow (and values a hair below 1.0 stayed red).
-    let i = min(floor(s), 3.0);
-    let f = s - i;
-    if i < 1.0 {
-        return vec3<f32>(0.0, f, 1.0);         // blue -> cyan
-    } else if i < 2.0 {
-        return vec3<f32>(0.0, 1.0, 1.0 - f);   // cyan -> green
-    } else if i < 3.0 {
-        return vec3<f32>(f, 1.0, 0.0);         // green -> yellow
-    }
-    return vec3<f32>(1.0, 1.0 - f, 0.0);       // yellow -> red
-}
-
 // Cubic B-spline weights for the four texels around a sample point,
 // where `f` in [0,1) is the fractional position between the middle two.
 fn bspline_weights(f: f32) -> vec4<f32> {
