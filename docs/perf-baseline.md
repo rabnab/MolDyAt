@@ -79,28 +79,36 @@ All values are ms per measured step. Snapshot costs are spread over all steps.
 
 ## Baseline
 
-Captured from commit `6b50e9e` (the binary reports it; see
-[`perf-baseline.json`](perf-baseline.json), schema `headless-perf.v2`), on
-2026-10-08:
+Captured from commit `34f9825` (Phase 7: flat cell grid, emission after the
+grid update, hot/cold ball split, f64 positions, 16-byte kernel record; the
+binary reports the commit; see [`perf-baseline.json`](perf-baseline.json),
+schema `headless-perf.v2`), on 2026-11-01:
 
-- **CPU:** Intel Xeon @ 2.80 GHz, 4 vCPUs (cloud container, shared host)
+- **CPU:** Intel Xeon @ 2.10 GHz, 4 vCPUs (cloud container, shared host). The
+  previous baseline ran on a 2.80 GHz host of the same container class, so
+  absolute numbers of the two are not directly comparable.
 - **Threads:** 2 rayon workers (default: cores - 2)
-- **Profile:** `release` (`target-cpu=native`, fat LTO), captured before the
-  `perf` profile existed; new runs use `perf`, so their absolute numbers are
-  not directly comparable with this baseline
+- **Profile:** `perf` (`target-cpu=native`, thin LTO)
 - **OS:** Linux 6.18
 
 Median ms/step:
 
 | Scenario | Balls | total | neighbours | positions | forces | apply | cells | thermo | snapshot | other |
 |---|---|---|---|---|---|---|---|---|---|---|
-| dilute | 10 000 | 3.24 | 1.22 | 0.70 | 0.39 | 0.27 | 0.26 | 0.33 | 0.04 | 0.04 |
-| dense | 50 000 | 18.96 | 2.89 | 3.03 | 6.36 | 2.51 | 1.96 | 1.69 | 0.23 | 0.28 |
-| walls_valves | 20 000 | 8.28 | 2.36 | 1.57 | 2.06 | 1.11 | 0.50 | 0.46 | 0.08 | 0.10 |
-| box_walls | 6 000 | 2.64 | 1.20 | 0.43 | 0.49 | 0.18 | 0.18 | 0.10 | 0.02 | 0.02 |
-| large | 200 000 | 113.93 | 25.42 | 14.20 | 34.12 | 11.62 | 11.13 | 13.60 | 1.33 | 2.20 |
+| dilute | 10 000 | 3.14 | 1.22 | 0.52 | 0.46 | 0.30 | 0.44 | 0.15 | 0.03 | 0.00 |
+| dense | 50 000 | 11.56 | 2.53 | 1.68 | 4.63 | 1.03 | 1.03 | 0.51 | 0.11 | 0.00 |
+| walls_valves | 20 000 | 6.55 | 2.24 | 1.16 | 1.57 | 0.87 | 0.42 | 0.20 | 0.04 | 0.00 |
+| box_walls | 6 000 | 2.23 | 1.11 | 0.29 | 0.44 | 0.17 | 0.15 | 0.05 | 0.01 | 0.00 |
+| large | 200 000 | 57.94 | 15.37 | 5.92 | 24.05 | 4.56 | 4.77 | 3.05 | 0.47 | 0.00 |
 
-`output` is about 0.003 ms in every scenario.
+`output` is about 0.004 ms in every scenario. `total` `spread_pct`: dilute
+22.5 %, dense 5.8 %, walls_valves 12.4 %, box_walls 10.2 %, large 10.3 %.
+
+Previous baseline, for reference only (`6b50e9e`, 2026-10-08, `release`
+profile, 2.80 GHz host), total ms/step: dilute 3.24, dense 18.96,
+walls_valves 8.28, box_walls 2.64, large 113.93. The Phase 7 PRs measured
+their gains binary against binary on one host; see their PRs (#390, #393,
+#394 and the #392 PR).
 
 `box_walls` replaces the former `test_wall_momentum_performance_impact`,
 which timed 1000 balls but asserted nothing. All scenarios except `large`
@@ -112,7 +120,8 @@ the baseline on the machine you compare on.
 
 ### Variance
 
-All five captures ran on the machine above with code whose timed paths are
+These five captures predate the current baseline: they ran on the 2.80 GHz
+host of the previous baseline, with code whose timed paths are
 the same as in `6b50e9e` (#245 changed only seeding, which is not timed).
 Runs 1 to 3 are from earlier versions of #221 before its history was
 consolidated: runs 1 and 2 are two full invocations one after the other
