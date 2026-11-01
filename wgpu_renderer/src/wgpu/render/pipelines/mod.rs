@@ -5,6 +5,7 @@
 pub(crate) mod ball_pipeline;
 pub(crate) mod crosshair_pipeline;
 pub(crate) mod endpoint_pipeline;
+pub(crate) mod field_color_bar_pipeline;
 pub(crate) mod flow_arrow_pipeline;
 pub(crate) mod frame_pipeline;
 pub(crate) mod grid_pipeline;
@@ -16,7 +17,6 @@ pub(crate) mod source_label_pipeline;
 pub(crate) mod source_sphere_pipeline;
 pub(crate) mod text_pipeline;
 pub(crate) mod thermo_heatmap_pipeline;
-pub(crate) mod thermo_value_pipeline;
 pub(crate) mod thermostat_label_pipeline;
 pub(crate) mod thermostat_pipeline;
 pub(crate) mod valve_pipeline;

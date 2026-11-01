@@ -13,6 +13,7 @@ use crate::wgpu::render::gpu::text::GlyphAtlas;
 use crate::wgpu::render::pipelines::ball_pipeline::BallPipeline;
 use crate::wgpu::render::pipelines::crosshair_pipeline::CrosshairPipeline;
 use crate::wgpu::render::pipelines::endpoint_pipeline::EndpointPipeline;
+use crate::wgpu::render::pipelines::field_color_bar_pipeline::FieldColorBarPipeline;
 use crate::wgpu::render::pipelines::flow_arrow_pipeline::FlowArrowPipeline;
 use crate::wgpu::render::pipelines::frame_pipeline::FramePipeline;
 use crate::wgpu::render::pipelines::grid_pipeline::GridPipeline;
@@ -23,7 +24,6 @@ use crate::wgpu::render::pipelines::source_label_pipeline::SourceLabelPipeline;
 use crate::wgpu::render::pipelines::source_sphere_pipeline::SourceSpherePipeline;
 use crate::wgpu::render::pipelines::text_pipeline::TextPipeline;
 use crate::wgpu::render::pipelines::thermo_heatmap_pipeline::ThermoHeatmapPipeline;
-use crate::wgpu::render::pipelines::thermo_value_pipeline::ThermoValueOverlayPipeline;
 use crate::wgpu::render::pipelines::thermostat_label_pipeline::ThermostatLabelPipeline;
 use crate::wgpu::render::pipelines::thermostat_pipeline::ThermostatPipeline;
 use crate::wgpu::render::pipelines::valve_pipeline::ValvePipeline;
@@ -72,7 +72,7 @@ impl WgpuPipelines {
         add(Box::new(FramePipeline::new(device, queue, format)));
         add(Box::new(GridPipeline::new(device, queue, format)));
         add(Box::new(ThermoHeatmapPipeline::new(device, queue, format)));
-        add(Box::new(ThermoValueOverlayPipeline::new(
+        add(Box::new(FieldColorBarPipeline::new(
             device, queue, format, glyphs,
         )));
         add(Box::new(FlowArrowPipeline::new(device, queue, format)));

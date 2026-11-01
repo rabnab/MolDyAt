@@ -5,7 +5,7 @@
 //! Bitmap text: one 8×8 glyph atlas of printable ASCII built from
 //! `font8x8` ([`GlyphAtlas`], one per renderer, #303) plus a [`GpuBatch`]
 //! of glyph quads in NDC per overlay. Used by every text overlay (cursor
-//! readout, cell values, thermostat and source-sphere labels, the sidebar
+//! readout, field colour bar labels, thermostat and source-sphere labels, the sidebar
 //! label) and the plot window. See `text.wgsl`.
 
 use bytemuck::{Pod, Zeroable};

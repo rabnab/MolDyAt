@@ -20,7 +20,7 @@ use thermo_runtime::application::scene_layers::SceneLayers;
 
 // ── Field overlays ───────────────────────────────────────────────────
 
-/// A scalar per-cell field the heatmap and the value labels can show
+/// A scalar per-cell field the heatmap (with its colour bar) can show
 /// (#342). All come from the thermo grid's [`CellFields`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScalarField {
@@ -94,8 +94,9 @@ impl ScalarField {
 /// [`SCALAR_FIELDS`] → flow arrows → Off.
 ///
 /// - `Off`: no overlay rendered.
-/// - `Grid`: plain cell-grid overlay only (no heatmap or value labels).
-/// - `Scalar`: heatmap and value labels of one scalar field.
+/// - `Grid`: plain cell-grid overlay only (no heatmap).
+/// - `Scalar`: heatmap of one scalar field, with a labelled colour bar in
+///   the left margin (#398).
 /// - `FlowArrows`: one arrow per cell along its flow velocity (#342).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ThermoDisplayMode {

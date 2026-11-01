@@ -203,7 +203,7 @@ fn all_pipelines_build_and_render_without_validation_errors() {
         (ThermoDisplayMode::Off, true),
         (ThermoDisplayMode::Grid, false),
         (ThermoDisplayMode::Scalar(ScalarField::Temperature), true),
-        // All-NaN field: heatmap skipped, value labels empty.
+        // All-NaN field: heatmap skipped, colour bar still drawn.
         (ThermoDisplayMode::Scalar(ScalarField::Pressure), false),
         (ThermoDisplayMode::Scalar(ScalarField::Density), false),
         (ThermoDisplayMode::Scalar(ScalarField::FlowSpeed), false),

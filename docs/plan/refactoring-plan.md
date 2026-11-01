@@ -188,7 +188,7 @@ Phase 2 (mixed species):            I1, I2, I3, I4, M6, I5, I6, C2, I7
 Phase 3 (crate split):              M2, #295, #270, #273, #274, M5, C4, M7, M8, P2
 Phase 4 (finish the split):         M9, I8a, #327, C3
 Phase 5 (metrics + plots):          V3, V7, V4a, V4b, C5
-Phase 6 (visuals + tools):          #363, V2, #290, V5, V6, #303, #203
+Phase 6 (visuals + tools):          #363, V2, #290, V5, V6, #303, #203, #398
 Phase 7 (performance):              P8a, #386, P4, #250, P6, P8b, #392 (16-byte kernel record only)
 Phase 8 (walls + water):            I12, I8b, I9 + I10 (once §7 is decided), I11 (if needed)
 ```
@@ -213,7 +213,7 @@ GitHub issues (every open issue is in a phase, as of 2026-10-23):
 | 3 | #304 | M2 #305, #295, #270, #273, #274, M5 #306, C4 #307, P2 #311, M7 #308, M8 #309 | – |
 | 4 | #329 | M9 #310 | I8a #334, #327, C3 #335, M10 |
 | 5 | #330 | V3 #336, V7 #337, V4a #338, #367, #366, V4b #339, #371, #372, C5 #340 | M10 |
-| 6 | #331 | #363, V2 #341, #290, V5 #342, V6 #343, #303, #203 | M10 |
+| 6 | #331 | #363, V2 #341, #290, V5 #342, V6 #343, #303, #203, #398 | M10 |
 | 7 | #332 | P8a #344, #386, P4 #345, #250, P6 #346 (hot/cold part), P8b #213, #392 (16-byte kernel record; SoA arrays dropped) | M10 |
 | 8 | #333 | – | I12 #280, I8b #347, I9 #348, I10 #349, I11 #350, M10 |
 
