@@ -8,6 +8,8 @@
 //
 // u.params: unused
 
+const OVERLAY_ALPHA: f32 = 0.55;
+
 struct Inst {
     @location(0) center: vec2<f32>,
     @location(1) half_size: vec2<f32>,
@@ -30,5 +32,5 @@ fn vs_main(@builtin(vertex_index) vi: u32, inst: Inst) -> VOut {
 
 @fragment
 fn fs_main(in: VOut) -> @location(0) vec4<f32> {
-    return vec4<f32>(rainbow(in.t), 1.0);
+    return vec4<f32>(rainbow(in.t), OVERLAY_ALPHA);
 }
