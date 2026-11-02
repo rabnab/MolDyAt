@@ -19,8 +19,6 @@
 //
 // u.params: unused
 
-const OVERLAY_ALPHA: f32 = 0.55;
-
 @group(1) @binding(0) var field_texture: texture_2d<f32>;
 @group(1) @binding(1) var field_sampler: sampler;
 
@@ -88,5 +86,5 @@ fn sample_field(uv: vec2<f32>) -> f32 {
 
 @fragment
 fn fs_main(in: VOut) -> @location(0) vec4<f32> {
-    return vec4<f32>(rainbow(sample_field(in.uv)), OVERLAY_ALPHA);
+    return vec4<f32>(rainbow(sample_field(in.uv)), FIELD_OVERLAY_ALPHA);
 }

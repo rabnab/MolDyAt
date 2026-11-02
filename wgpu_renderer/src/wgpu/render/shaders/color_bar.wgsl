@@ -6,9 +6,13 @@
 // NDC, filled with the heatmap's rainbow colour map from blue at the bottom
 // (low end of the field's range) to red at the top (high end).
 //
+// The heatmap is drawn at FIELD_OVERLAY_ALPHA over the world, whose
+// background is black, so the field shows rainbow * FIELD_OVERLAY_ALPHA.
+// The bar draws exactly that, opaque: blending it with alpha here would mix
+// in whatever lies behind the bar (the margin and the light outline rect)
+// and make it paler than the field.
+//
 // u.params: unused
-
-const OVERLAY_ALPHA: f32 = 0.55;
 
 struct Inst {
     @location(0) center: vec2<f32>,
@@ -32,5 +36,5 @@ fn vs_main(@builtin(vertex_index) vi: u32, inst: Inst) -> VOut {
 
 @fragment
 fn fs_main(in: VOut) -> @location(0) vec4<f32> {
-    return vec4<f32>(rainbow(in.t), OVERLAY_ALPHA);
+    return vec4<f32>(rainbow(in.t) * FIELD_OVERLAY_ALPHA, 1.0);
 }
