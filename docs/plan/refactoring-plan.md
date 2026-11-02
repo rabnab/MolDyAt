@@ -188,9 +188,10 @@ Phase 2 (mixed species):            I1, I2, I3, I4, M6, I5, I6, C2, I7
 Phase 3 (crate split):              M2, #295, #270, #273, #274, M5, C4, M7, M8, P2
 Phase 4 (finish the split):         M9, I8a, #327, C3
 Phase 5 (metrics + plots):          V3, V7, V4a, V4b, C5
-Phase 6 (visuals + tools):          #363, V2, #290, V5, V6, #303, #203, #398, #400
+Phase 6 (visuals + tools):          #363, V2, #290, V5, V6, #303, #203, #398, #400, #384
 Phase 7 (performance):              P8a, #386, P4, #250, P6, P8b, #392 (16-byte kernel record only)
 Phase 8 (walls + water):            I12, I8b, I9 + I10 (once §7 is decided), I11 (if needed)
+Phase 9 (GPU compute):              #358, #359, #360, #361
 ```
 
 Every ID of §3 is in this order, except these, which need no work of their own:
@@ -204,20 +205,21 @@ Every ID of §3 is in this order, except these, which need no work of their own:
 | P10 | Done. |
 | M10 | Part of every PR (see §3). |
 
-GitHub issues (every open issue is in a phase, as of 2026-10-23):
+GitHub issues (every open issue is in a phase, as of 2026-11-02):
 
 | Phase | Parent | Landed on `master`                                                                                                 | Open |
 |---|---|--------------------------------------------------------------------------------------------------------------------|---|
 | 1 | #219 | G1 #221, G2 #222, G3 #223, M1 #224, M3 #225, M4 #226, C1 #227, P1 #228, P3 #229                                    | – |
 | 2 | #220 | I1 #230, I2 #233, I3 #234, M6 #231, I4 #235, I5 #236, C2 #232, I6 #237, I7 #238                                    | – |
 | 3 | #304 | M2 #305, #295, #270, #273, #274, M5 #306, C4 #307, P2 #311, M7 #308, M8 #309                                       | – |
-| 4 | #329 | M9 #310                                                                                                            | I8a #334, #327, C3 #335, M10 |
+| 4 | #329 | M9 #310, I8a #334, #327, C3 #335                                                                                   | M10 |
 | 5 | #330 | V3 #336, V7 #337, V4a #338, #367, #366, V4b #339, #371, #372, C5 #340                                              | M10 |
-| 6 | #331 | #363, V2 #341, #290, V5 #342, V6 #343, #303, #203, #398, #400                                                      | M10 |
+| 6 | #331 | #363, V2 #341, #290, V5 #342, V6 #343, #303, #203, #398, #400                                                      | #384, M10 |
 | 7 | #332 | P8a #344, #386, P4 #345, #250, P6 #346 (hot/cold part), P8b #213, #392 (16-byte kernel record; SoA arrays dropped) | M10 |
 | 8 | #333 | –                                                                                                                  | I12 #280, I8b #347, I9 #348, I10 #349, I11 #350, M10 |
+| 9 | #357 | –                                                                                                                  | #358, #359, #360, #361, M10 |
 
-"Landed" is taken from the commits on `master` (as of 2026-10-23), not from
+"Landed" is taken from the commits on `master` (as of 2026-11-02), not from
 the issue states. Every item has an issue except M10, which is part of
 every PR. A new issue goes into
 the phase whose items it depends on or touches; add it to both lists above
@@ -244,6 +246,9 @@ crate work, graphs, visuals, performance and water in two long lists:
 - **Phase 8** holds the physics extensions. I12 has no open prerequisites
   and can be pulled forward; I9 and I10 wait for the water-model decision
   (§7).
+- **Phase 9** ports the Lennard-Jones force pass to wgpu compute shaders
+  (#357): buffers and WGSL setup, the all-pairs kernel, zero-copy
+  rendering, then validation of energy conservation.
 - **M10** is not a step of its own: every PR keeps the docs, skills and
   this plan in line with its change, so they never lag behind a phase.
 
