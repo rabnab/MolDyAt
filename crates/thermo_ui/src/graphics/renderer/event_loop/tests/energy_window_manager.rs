@@ -497,6 +497,24 @@ mod plots {
         assert!(!manager.left_clicked([500.0, 500.0]));
         assert_eq!(manager.selection(), &before);
     }
+
+    /// Switching views drops the last frame's click targets, so a click
+    /// before the next frame cannot reach the other view's legend.
+    #[test]
+    fn test_switching_views_drops_the_old_click_targets() {
+        let mut manager = manager_with_series();
+        manager.set_click_targets(ClickTargets {
+            panels: Vec::new(),
+            legend: vec![LegendEntry {
+                panel: 0,
+                series: "E_tot".into(),
+                rect: rect(10.0, 30.0, 80.0, 46.0),
+            }],
+        });
+        manager.toggle_distributions();
+        assert!(!manager.left_clicked([20.0, 40.0]));
+        assert!(manager.hidden_pairs().is_empty(), "a series name leaked in");
+    }
 }
 
 /// The plot's mouse gestures (#367), against a set plot geometry: the plot

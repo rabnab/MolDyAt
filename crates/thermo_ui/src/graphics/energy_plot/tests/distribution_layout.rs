@@ -89,7 +89,9 @@ fn without_data_the_view_waits() {
     assert!(scene.segments.is_empty());
 }
 
-/// `data()` with a second pair, `N2-Ar`, whose g(r) peaks at 6.
+/// `data()` with a second pair, `N2-Ar`, whose g(r) peaks at 6. Its
+/// `species` field repeats the first pair's: the view identifies pairs by
+/// name (`pair_names`), never by species, which these tests rely on.
 fn two_pairs() -> DistributionData {
     let mut data = data();
     data.distributions.radial.pairs.push(PairDistribution {
