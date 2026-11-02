@@ -231,6 +231,10 @@ pub struct EnergyWindowManager {
     show_distributions: bool,
     /// The distributions shown and when they were computed.
     distributions: Option<(DistributionData, Instant)>,
+    /// g(r) pairs hidden in the distributions view, by name (`"N2-Ar"`);
+    /// a click on a pair's legend entry hides or shows it. Kept when the
+    /// window is closed and reopened, cleared with a new world history.
+    hidden_pairs: Vec<String>,
 }
 
 /// Minimum interval between energy-window redraws (≈12 Hz).
@@ -262,7 +266,13 @@ impl EnergyWindowManager {
             seen_history_resets: 0,
             show_distributions: false,
             distributions: None,
+            hidden_pairs: Vec::new(),
         }
+    }
+
+    /// g(r) pairs hidden in the distributions view.
+    pub fn hidden_pairs(&self) -> &[String] {
+        &self.hidden_pairs
     }
 
     /// Whether the window shows the distributions (#343).
@@ -273,6 +283,9 @@ impl EnergyWindowManager {
     /// Switch the window between the time series and the distributions;
     /// a closed window opens with the distributions.
     pub fn toggle_distributions(&mut self) {
+        // The click targets belong to the view just left; until the next
+        // frame a click must hit nothing rather than the other view's legend.
+        self.targets = ClickTargets::default();
         if self.window.is_none() {
             self.show_distributions = true;
             self.open();
@@ -353,8 +366,9 @@ impl EnergyWindowManager {
     }
 
     /// A left click at `at` (window pixels) in the last frame: on a legend
-    /// entry it hides or shows that series, in a plot it focuses the plot.
-    /// Returns whether the plots changed.
+    /// entry it hides or shows that series (in the distributions view that
+    /// g(r) pair), in a plot it focuses the plot. Returns whether anything
+    /// changed.
     pub(super) fn left_clicked(&mut self, at: [f32; 2]) -> bool {
         let entry = self
             .targets
@@ -362,6 +376,20 @@ impl EnergyWindowManager {
             .iter()
             .find(|entry| entry.rect.contains(at))
             .cloned();
+        if self.show_distributions {
+            let Some(entry) = entry else {
+                return false;
+            };
+            if let Some(i) = self.hidden_pairs.iter().position(|p| *p == entry.series) {
+                self.hidden_pairs.remove(i);
+            } else {
+                self.hidden_pairs.push(entry.series);
+            }
+            if self.window.is_some() {
+                self.redraw_now();
+            }
+            return true;
+        }
         if let Some(entry) = entry {
             return self.edit_selection(|selection, _| {
                 selection.focus(entry.panel);
@@ -710,6 +738,7 @@ impl EnergyWindowManager {
         if self.show_distributions {
             return Some(PlotScene::build_distributions(
                 self.distributions.as_ref().map(|(data, _)| data),
+                &self.hidden_pairs,
                 window.size,
                 window.scale_factor,
                 key_hints,
@@ -784,11 +813,13 @@ impl EnergyWindowManager {
             if self.view.is_following() || data.registry_history_changed() {
                 data.sync_from_metrics();
             }
-            // A new world starts a new history: back to the default view.
+            // A new world starts a new history: back to the default view,
+            // and every g(r) pair shown again (its species may differ).
             if data.history_resets != self.seen_history_resets {
                 self.seen_history_resets = data.history_resets;
                 self.view.reset();
                 self.geometry = None;
+                self.hidden_pairs.clear();
             }
 
             // The time is not a metrics series: it comes with the snapshot.

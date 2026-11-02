@@ -41,6 +41,10 @@ fn inset_band(d: f32, width: f32) -> f32 {
     return max(aa(d) - aa(d + width), 0.0);
 }
 
+// Opacity of the field heatmap over the world (its background is cleared to
+// black). The colour bar shows the same result, rainbow * this, opaque.
+const FIELD_OVERLAY_ALPHA: f32 = 0.55;
+
 // Rainbow colour map of the field overlays: blue (t=0) -> cyan -> green ->
 // yellow -> red (t=1). The heatmap and its colour bar both use it.
 fn rainbow(t: f32) -> vec3<f32> {

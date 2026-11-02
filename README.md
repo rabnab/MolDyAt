@@ -311,7 +311,7 @@ Keyboard (press `H` for the same list in the log):
 | `T` | Cycle the field overlay: Off -> Grid -> Temperature -> Pressure -> Density -> Flow speed -> Flow arrows -> Off. |
 | `P` | Cycle the plot content (in the plot window: the focused plot's energy preset). |
 | `TAB` | Toggle the energy plot window. |
-| `M` | Switch the plot window between the time series and the distributions (speed histogram with Maxwell-Boltzmann, g(r)); opens it if closed. |
+| `M` | Switch the plot window between the time series and the distributions (speed histogram with Maxwell-Boltzmann, g(r)); opens it if closed. Click a species pair in the g(r) heading to hide or show its curve. |
 | `HOME` | Reset the energy plot's time range (follow the newest sample; also a middle double click in the plot). |
 | `.` | Plot window: show the next series in place of the focused plot's last one. |
 | `,` | Plot window: show the previous series in place of the focused plot's last one. |
