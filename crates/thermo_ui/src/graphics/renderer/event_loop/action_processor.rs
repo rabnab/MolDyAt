@@ -51,6 +51,10 @@ fn run_ui_action(state: &mut UnifiedRenderState, action: UiAction) -> bool {
                 .send_command(ViewCommand::SetSnapshotLayers(config.scene_layers()));
             true
         }
+        UiAction::ToggleFieldScaleLock => {
+            state.render.config.toggle_field_scale_lock();
+            true
+        }
         UiAction::CyclePlotContent => {
             state.render.config.cycle_plot_content();
             false

@@ -7,14 +7,16 @@
 //! While a scalar field (temperature, pressure, density, flow speed) is
 //! shown, a vertical bar with the heatmap's rainbow colour map stands in the
 //! left margin below the tool icons, bottom-aligned with the simulation area:
-//! the field's name above it, the high end of its fixed range
-//! (`SCALAR_FIELDS`) at the top, the low end at the bottom. The field itself
-//! shows no numbers. Screen space (NDC, full window); the layout is in window
+//! the field's name above it, then the reference its colours are relative to
+//! (`avg 1.37`, `vth 1.17`, or `lock 1.37` while frozen; see `field_scale`,
+//! #402), the high end of the range at the top of the bar, the low end at the
+//! bottom. The field itself shows no numbers. Screen space (NDC, full window); the layout is in window
 //! pixels ([`color_bar_layout`]). See `color_bar.wgsl`.
 
 use bytemuck::{Pod, Zeroable};
 use thermo_physics::application::AppResult;
 use thermo_runtime::application::scene_layers::SceneLayers;
+use thermo_ui::graphics::renderer::field_scale::FieldScale;
 use thermo_ui::graphics::renderer::margins::Margins;
 use thermo_ui::graphics::sidebar::{
     ICON_COUNT, icon_display_size_for_margin, icon_spacing_for_margin, sidebar_ui_scale,
@@ -64,8 +66,10 @@ pub(crate) struct ColorBarLayout {
     pub bar_bottom: f32,
     pub bar_half_width: f32,
     pub outline: f32,
-    /// Vertical centres of the field name, the high and the low value.
+    /// Vertical centres of the field name, the reference, the high and the
+    /// low value.
     pub name_y: f32,
+    pub reference_y: f32,
     pub high_y: f32,
     pub low_y: f32,
     /// UI scale of the margin (glyph pixels per font pixel).
@@ -87,7 +91,8 @@ pub(crate) fn color_bar_layout(window_size: (u32, u32), margin: Margins) -> Opti
     let icons_bottom = margin.top + spacing + ICON_COUNT as f32 * (icon + spacing);
 
     let name_y = icons_bottom + gap + glyph * 0.5;
-    let high_y = name_y + glyph + gap * 0.5;
+    let reference_y = name_y + glyph + gap * 0.5;
+    let high_y = reference_y + glyph + gap;
     let bar_top = high_y + glyph * 0.5 + gap * 0.5;
     let low_y = window_size.1 as f32 - margin.bottom - glyph * 0.5;
     let bar_bottom = low_y - glyph * 0.5 - gap * 0.5;
@@ -98,15 +103,39 @@ pub(crate) fn color_bar_layout(window_size: (u32, u32), margin: Margins) -> Opti
         bar_half_width: BAR_HALF_WIDTH_PX * s,
         outline: OUTLINE_PX * s,
         name_y,
+        reference_y,
         high_y,
         low_y,
         ui_scale: s,
     })
 }
 
-/// A range end as the bar shows it: `5`, `-4`, `0.5`.
+/// A number as the bar shows it: three significant digits without trailing
+/// zeros (`1.37`, `-4`, `0.0521`, `123`), so it fits the margin.
 pub(crate) fn range_label(value: f32) -> String {
-    format!("{value}")
+    if value == 0.0 || !value.is_finite() {
+        return "0".to_string();
+    }
+    let decimals = (2 - value.abs().log10().floor() as i32).clamp(0, 6) as usize;
+    let text = format!("{value:.decimals$}");
+    let text = if text.contains('.') {
+        text.trim_end_matches('0').trim_end_matches('.')
+    } else {
+        &text
+    };
+    // `-0.0001` rounds to `-0`.
+    if text == "-0" { "0" } else { text }.to_string()
+}
+
+/// The reference line: what the colours are relative to, e.g. `avg 1.37`,
+/// or `lock 1.37` while the scale is frozen.
+pub(crate) fn reference_label(scale: &FieldScale) -> String {
+    let name = if scale.locked {
+        "lock"
+    } else {
+        scale.reference_name
+    };
+    format!("{name} {}", range_label(scale.reference))
 }
 
 /// NDC centre and half size of the pixel rectangle `[left, right] x [top, bottom]`.
@@ -119,17 +148,19 @@ fn ndc_rect(
     (center, half)
 }
 
-/// Glyph quads of the field name and the two range ends.
+/// Glyph quads of the field name, the reference and the two range ends.
 pub(crate) fn color_bar_text(
     layout: &ColorBarLayout,
     name: &str,
-    (low, high): (f32, f32),
+    scale: &FieldScale,
     (win_w, win_h): (f32, f32),
 ) -> Vec<TextVertex> {
     let (glyph_w, glyph_h) = window_glyph_ndc_size((win_w, win_h), layout.ui_scale);
+    let (low, high) = scale.range;
     let mut verts = Vec::new();
     for (text, y) in [
         (name.to_string(), layout.name_y),
+        (reference_label(scale), layout.reference_y),
         (range_label(high), layout.high_y),
         (range_label(low), layout.low_y),
     ] {
@@ -195,14 +226,16 @@ impl RenderPipeline for FieldColorBarPipeline {
     }
 
     fn prepare(&mut self, ctx: &PrepareContext) -> AppResult {
-        let (Some(field), Some(layout)) = (
+        let (Some(field), Some(reference), Some(layout)) = (
             ctx.thermo_display.scalar_field(),
+            ctx.field_reference,
             color_bar_layout(ctx.window_size, ctx.margin),
         ) else {
             self.clear();
             return Ok(());
         };
         let descriptor = field.descriptor();
+        let scale = reference.scale(field);
         let win = (ctx.window_size.0 as f32, ctx.window_size.1 as f32);
         let uniforms = SceneUniforms::ndc([0.0; 4]);
 
@@ -229,7 +262,7 @@ impl RenderPipeline for FieldColorBarPipeline {
         self.bar
             .flush(ctx.device, ctx.queue, &[BarInstance { center, half_size }]);
 
-        let verts = color_bar_text(&layout, descriptor.name, descriptor.range, win);
+        let verts = color_bar_text(&layout, descriptor.name, &scale, win);
         self.text.upload(ctx.device, ctx.queue, &verts);
         Ok(())
     }
@@ -257,7 +290,8 @@ mod tests {
                 * (icon_display_size_for_margin(MARGINS.left)
                     + icon_spacing_for_margin(MARGINS.left));
         assert!(layout.name_y > icons_bottom, "label overlaps the icons");
-        assert!(layout.name_y < layout.high_y && layout.high_y < layout.bar_top);
+        assert!(layout.name_y < layout.reference_y && layout.reference_y < layout.high_y);
+        assert!(layout.high_y < layout.bar_top);
         assert!(layout.bar_top < layout.bar_bottom && layout.bar_bottom < layout.low_y);
         // Bottom-aligned with the simulation area.
         assert!(layout.low_y <= WINDOW.1 as f32 - MARGINS.bottom);
@@ -281,20 +315,39 @@ mod tests {
         assert_eq!(at_2x.center_x, 2.0 * at_1x.center_x);
     }
 
+    fn scale(locked: bool) -> FieldScale {
+        FieldScale {
+            range: (0.0, 2.74),
+            reference: 1.37,
+            reference_name: "avg",
+            locked,
+        }
+    }
+
     #[test]
-    fn range_ends_are_printed_without_trailing_zeros() {
+    fn numbers_have_three_significant_digits_without_trailing_zeros() {
         assert_eq!(range_label(5.0), "5");
         assert_eq!(range_label(-4.0), "-4");
         assert_eq!(range_label(0.0), "0");
         assert_eq!(range_label(0.5), "0.5");
+        assert_eq!(range_label(1.3749), "1.37");
+        assert_eq!(range_label(0.052_14), "0.0521");
+        assert_eq!(range_label(123.4), "123");
+        assert_eq!(range_label(-0.000_000_1), "0");
     }
 
     #[test]
-    fn labels_hold_the_name_and_both_range_ends() {
+    fn reference_line_names_the_reference_or_the_lock() {
+        assert_eq!(reference_label(&scale(false)), "avg 1.37");
+        assert_eq!(reference_label(&scale(true)), "lock 1.37");
+    }
+
+    #[test]
+    fn labels_hold_the_name_the_reference_and_both_range_ends() {
         let layout = color_bar_layout(WINDOW, MARGINS).unwrap();
-        let verts = color_bar_text(&layout, "Temperature", (0.0, 5.0), (1200.0, 800.0));
-        // 6 vertices per glyph: "Temperature" + "5" + "0".
-        assert_eq!(verts.len(), 6 * (11 + 1 + 1));
+        let verts = color_bar_text(&layout, "Temperature", &scale(false), (1200.0, 800.0));
+        // 6 vertices per glyph: "Temperature" + "avg 1.37" + "2.74" + "0".
+        assert_eq!(verts.len(), 6 * (11 + 8 + 4 + 1));
         // Every glyph lies in the left margin (NDC x below the margin edge).
         let margin_edge = -1.0 + 2.0 * MARGINS.left / 1200.0;
         assert!(verts.iter().all(|v| v.position[0] < margin_edge));

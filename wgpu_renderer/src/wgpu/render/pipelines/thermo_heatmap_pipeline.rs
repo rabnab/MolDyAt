@@ -15,7 +15,8 @@
 //!   2. a small spatial blur removes cell-to-cell noise,
 //!   3. an exponential moving average over time removes frame-to-frame jiggle.
 //!
-//! Encoding (R8Unorm): the field value normalised to `[0, 1]` maps to bytes
+//! Encoding (R8Unorm): the field value normalised to `[0, 1]` over its colour
+//! range (relative to the world's averages, `field_scale`) maps to bytes
 //! `0..=255`. There is no "no data" sentinel: NaN cells are filled first, and an
 //! all-NaN field simply isn't drawn.
 
@@ -236,8 +237,12 @@ impl RenderPipeline for ThermoHeatmapPipeline {
             self.gpu.clear();
             return Ok(());
         };
-        // Each field's own fixed normalisation range (`SCALAR_FIELDS`).
-        let range = field.descriptor().range;
+        // Relative to the world's averages (`field_scale`, #402).
+        let Some(reference) = ctx.field_reference else {
+            self.gpu.clear();
+            return Ok(());
+        };
+        let range = reference.scale(field).range;
         let grid = field.grid(&ctx.fields.cells);
         let Some(spec) = &ctx.fields.thermo_grid else {
             log::debug!("ThermoHeatmapPipeline: no thermo_grid_spec, skipping");

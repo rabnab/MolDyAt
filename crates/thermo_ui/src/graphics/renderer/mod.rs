@@ -4,6 +4,7 @@
 
 pub mod batch_renderer;
 pub mod event_loop;
+pub mod field_scale;
 pub mod interpolation;
 pub mod margins;
 pub(crate) mod mat3;

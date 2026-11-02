@@ -32,39 +32,33 @@ pub enum ScalarField {
     FlowSpeed,
 }
 
-/// How the heatmap shows one [`ScalarField`].
+/// How the heatmap names one [`ScalarField`]. Its colour range is relative
+/// to the world's averages (see `field_scale`).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ScalarFieldDescriptor {
     pub field: ScalarField,
     pub name: &'static str,
-    /// Values mapped to the ends of the colour scale (reduced units).
-    pub range: (f32, f32),
 }
 
 /// Every scalar field, in the order `T` cycles through them. A new field
-/// is one entry here plus its [`ScalarField::grid`] arm.
+/// is one entry here plus its [`ScalarField::grid`] arm and its scale in
+/// `FieldReference::scale`.
 pub const SCALAR_FIELDS: &[ScalarFieldDescriptor] = &[
     ScalarFieldDescriptor {
         field: ScalarField::Temperature,
         name: "Temperature",
-        range: (0.0, 5.0),
     },
     ScalarFieldDescriptor {
         field: ScalarField::Pressure,
         name: "Pressure",
-        range: (-4.0, 4.0),
     },
     ScalarFieldDescriptor {
         field: ScalarField::Density,
         name: "Density",
-        // A dense LJ liquid has about 0.8 balls per σ².
-        range: (0.0, 1.0),
     },
     ScalarFieldDescriptor {
         field: ScalarField::FlowSpeed,
         name: "Flow speed",
-        // The thermal speed at T = 1 is about 1.4.
-        range: (0.0, 1.0),
     },
 ];
 
@@ -164,6 +158,10 @@ pub struct RendererConfig {
 
     /// Which field overlay to display (cycled by `T`).
     pub thermo_display: ThermoDisplayMode,
+
+    /// Whether the field overlay's colour scale is frozen (Alt + T, #402)
+    /// instead of following the world's averages.
+    pub field_scale_locked: bool,
 }
 
 impl Default for RendererConfig {
@@ -173,6 +171,7 @@ impl Default for RendererConfig {
             draw_cursor: false,
             render_drawing: true,
             thermo_display: ThermoDisplayMode::Off,
+            field_scale_locked: false,
         }
     }
 }
@@ -219,6 +218,19 @@ impl RendererConfig {
     /// Cycle the field overlay (T key).
     pub fn cycle_thermo_display(&mut self) {
         self.thermo_display = self.thermo_display.next();
+    }
+
+    /// Freeze or release the field overlay's colour scale.
+    pub fn toggle_field_scale_lock(&mut self) {
+        self.field_scale_locked = !self.field_scale_locked;
+        log::info!(
+            "Field colour scale: {}",
+            if self.field_scale_locked {
+                "locked"
+            } else {
+                "follows the world"
+            }
+        );
     }
 }
 
@@ -334,6 +346,16 @@ mod tests {
         assert!(!cfg.draw_cursor);
         assert!(cfg.render_drawing);
         assert_eq!(cfg.thermo_display, ThermoDisplayMode::Off);
+    }
+
+    #[test]
+    fn config_toggle_field_scale_lock() {
+        let mut cfg = RendererConfig::default();
+        assert!(!cfg.field_scale_locked);
+        cfg.toggle_field_scale_lock();
+        assert!(cfg.field_scale_locked);
+        cfg.toggle_field_scale_lock();
+        assert!(!cfg.field_scale_locked);
     }
 
     #[test]
@@ -474,10 +496,9 @@ mod tests {
     }
 
     #[test]
-    fn every_scalar_field_has_one_descriptor_with_a_range() {
+    fn every_scalar_field_has_one_descriptor() {
         for (i, d) in SCALAR_FIELDS.iter().enumerate() {
             assert_eq!(d.field.descriptor(), d);
-            assert!(d.range.0 < d.range.1, "{}", d.name);
             assert!(SCALAR_FIELDS[i + 1..].iter().all(|o| o.field != d.field));
         }
     }

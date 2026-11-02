@@ -21,6 +21,7 @@ use thermo_runtime::application::renderer_snapshot::{
 };
 use thermo_runtime::application::scene_layers::SceneLayers;
 use thermo_ui::graphics::renderer::event_loop::FramePreviews;
+use thermo_ui::graphics::renderer::field_scale::FieldReference;
 use thermo_ui::graphics::renderer::state_layers::{ScalarField, ThermoDisplayMode};
 
 use crate::wgpu::MARGINS;
@@ -158,6 +159,7 @@ fn render_frame(
         margin: MARGINS,
         inset: MARGINS,
         thermo_display,
+        field_reference: FieldReference::from_cells(&snapshot.fields.cells, 1.0),
         operator_previews: previews(),
         layers,
     };
