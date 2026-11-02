@@ -130,6 +130,66 @@ fn every_g_pair_is_a_legend_click_target() {
     }
 }
 
+/// `count` pairs named like those of a 4-species mixture, each g = 1.
+fn many_pairs(count: usize) -> DistributionData {
+    let mut data = data();
+    data.distributions.radial.pairs.clear();
+    data.pair_names.clear();
+    for k in 0..count {
+        data.distributions.radial.pairs.push(PairDistribution {
+            species: (DEFAULT_SPECIES, DEFAULT_SPECIES),
+            reference_balls: 10,
+            g: vec![0.0, 1.0, 1.0],
+        });
+        data.pair_names.push(format!("CH4-CH4-{k}"));
+    }
+    data
+}
+
+/// Too many pairs for one line: the legend wraps, every entry stays inside
+/// the window (so it can be clicked), entries do not overlap, and the g(r)
+/// plot starts below the last legend line.
+#[test]
+fn a_long_g_legend_wraps_inside_the_window() {
+    let (w, h) = (500, 600);
+    let scene = PlotScene::build_distributions(Some(&many_pairs(10)), &[], (w, h), 1.0, "");
+    assert_eq!(scene.legend.len(), 10);
+    for entry in &scene.legend {
+        assert!(
+            entry.rect.right <= w as f32,
+            "{entry:?} runs off the window"
+        );
+    }
+    let rows: Vec<f32> = scene
+        .legend
+        .iter()
+        .map(|e| e.rect.top)
+        .fold(Vec::new(), |mut rows, y| {
+            if !rows.contains(&y) {
+                rows.push(y);
+            }
+            rows
+        });
+    assert!(rows.len() > 1, "the legend did not wrap");
+    for (i, a) in scene.legend.iter().enumerate() {
+        for b in &scene.legend[i + 1..] {
+            let overlap = a.rect.left < b.rect.right
+                && b.rect.left < a.rect.right
+                && a.rect.top < b.rect.bottom
+                && b.rect.top < a.rect.bottom;
+            assert!(!overlap, "{a:?} overlaps {b:?}");
+        }
+    }
+    // The g = 1 line of the g(r) plot lies below the legend.
+    let last_row = rows.iter().copied().fold(0.0, f32::max);
+    let one_line = scene
+        .segments
+        .iter()
+        .find(|s| s.color == crate::graphics::energy_plot::plot_layout::COLOR_ZERO)
+        .unwrap();
+    assert!(one_line.from[1] > last_row + 16.0);
+}
+
 #[test]
 fn a_hidden_pair_is_grey_in_the_legend_and_not_drawn() {
     let hidden = vec!["N2-Ar".to_string()];

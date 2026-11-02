@@ -460,7 +460,9 @@ distributions of the balls (#343) and back, opening it if closed:
 `PlotScene::build_distributions` (`energy_plot/distribution_layout.rs`)
 lays out the speed histogram as bars with the 2D Maxwell–Boltzmann counts
 as a line, and g(r) per species pair with g = 1 marked. Each pair's name
-in the g(r) heading is a legend entry (`PlotScene::legend`): a left click
+in the g(r) heading is a legend entry (`PlotScene::legend`; the heading
+wraps onto more lines when the names do not fit the width, so every entry
+stays in the window): a left click
 hides or shows that pair (`EnergyWindowManager::hidden_pairs`, kept while
 the window is closed); a hidden pair's name is grey, its curve is not
 drawn and the g axis follows the pairs drawn. The manager

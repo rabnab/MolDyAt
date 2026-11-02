@@ -188,7 +188,10 @@ impl Layout<'_> {
             self.label("Waiting for balls ...", [pad, top + line], COLOR_TEXT);
             return;
         };
-        // Two panels, each with a heading line above and x labels below.
+        // Two panels, each with a heading above and x labels below; the g(r)
+        // heading wraps its legend onto as many lines as the width needs.
+        let legend = self.pair_legend(&data.pair_names, left, right);
+        let rows = legend.iter().map(|&(row, _)| row + 1).max().unwrap_or(1);
         let panel_h = (bottom - top) / 2.0;
         let speed_area = PlotRect {
             left,
@@ -198,12 +201,35 @@ impl Layout<'_> {
         };
         let rdf_area = PlotRect {
             left,
-            top: top + panel_h + line,
+            top: top + panel_h + line * rows as f32,
             right,
             bottom: bottom - line * 1.5,
         };
         self.speed_panel(speed_area, data);
-        self.rdf_panel(rdf_area, data);
+        self.rdf_panel(rdf_area, data, &legend, rows);
+    }
+
+    /// Where each g(r) pair's name goes in the heading: `(row, x)`. Row 0
+    /// starts after "g(r)", every row at the same x; a name that would run
+    /// past `right` starts the next row, so every entry stays in the window
+    /// and clickable.
+    fn pair_legend(&self, names: &[String], left: f32, right: f32) -> Vec<(usize, f32)> {
+        let start = left + self.text_width("g(r)  ");
+        let gap = self.glyph * 2.0;
+        let (mut row, mut x) = (0, start);
+        names
+            .iter()
+            .map(|name| {
+                let width = self.text_width(name);
+                if x > start && x + width > right {
+                    row += 1;
+                    x = start;
+                }
+                let at = (row, x);
+                x += width + gap;
+                at
+            })
+            .collect()
     }
 
     fn speed_panel(&mut self, area: PlotRect, data: &DistributionData) {
@@ -254,7 +280,13 @@ impl Layout<'_> {
         }
     }
 
-    fn rdf_panel(&mut self, area: PlotRect, data: &DistributionData) {
+    fn rdf_panel(
+        &mut self,
+        area: PlotRect,
+        data: &DistributionData,
+        legend: &[(usize, f32)],
+        rows: usize,
+    ) {
         let radial = &data.distributions.radial;
         let bins = radial.pairs.first().map_or(0, |p| p.g.len());
         let hidden_pairs = self.hidden_pairs;
@@ -275,18 +307,19 @@ impl Layout<'_> {
             .fold(1.5_f32, f32::max);
         let x = (0.0, bins.max(1) as f64 * f64::from(radial.bin_width));
         let (to_x, to_y) = self.axes(area, x, (0.0, f64::from(max_g) * 1.05));
-        // The legend in the heading line: "g(r)" and one name per pair, a
-        // click target each; a hidden pair's name is grey.
-        let mut lx = area.left;
-        let ly = area.top - self.line;
-        self.label("g(r)", [lx, ly], COLOR_TEXT);
-        lx += self.text_width("g(r)  ");
-        for (k, name) in data.pair_names.iter().enumerate() {
+        // The legend in the heading lines above the plot (`legend`, from
+        // `pair_legend`): "g(r)" and one name per pair, a click target each;
+        // a hidden pair's name is grey.
+        let line = self.line;
+        let row_y = |row: usize| area.top - line * (rows - row) as f32;
+        self.label("g(r)", [area.left, row_y(0)], COLOR_TEXT);
+        for (k, (name, &(row, lx))) in data.pair_names.iter().zip(legend).enumerate() {
             let color = if hidden(k) {
                 COLOR_HIDDEN
             } else {
                 PAIR_COLORS[k % PAIR_COLORS.len()]
             };
+            let ly = row_y(row);
             self.label(name.clone(), [lx, ly], color);
             let width = self.text_width(name);
             self.scene.legend.push(LegendEntry {
@@ -299,7 +332,6 @@ impl Layout<'_> {
                     bottom: ly + self.glyph,
                 },
             });
-            lx += width + self.glyph * 2.0;
         }
         let one = to_y(1.0);
         self.segment([area.left, one], [area.right, one], self.thin, COLOR_ZERO);
