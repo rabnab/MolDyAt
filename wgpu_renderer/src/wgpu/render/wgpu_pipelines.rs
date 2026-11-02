@@ -37,6 +37,7 @@ use thermo_runtime::application::renderer_snapshot::{CellGridSpec, RendererSnaps
 use thermo_runtime::application::scene_layers::SceneLayers;
 use thermo_ui::graphics::renderer::Margins;
 use thermo_ui::graphics::renderer::event_loop::FramePreviews;
+use thermo_ui::graphics::renderer::field_scale::FieldReferenceTracker;
 use thermo_ui::graphics::renderer::state_layers::ThermoDisplayMode;
 
 /// Collection of all rendering pipelines, backed by a [`RenderGraph`].
@@ -47,6 +48,9 @@ use thermo_ui::graphics::renderer::state_layers::ThermoDisplayMode;
 pub struct WgpuPipelines {
     graph: RenderGraph,
     ball: PipelineHandle,
+    /// References of the field overlay's colour scale, shared by the
+    /// heatmap and its colour bar (#402).
+    field_reference: FieldReferenceTracker,
 }
 
 impl WgpuPipelines {
@@ -98,7 +102,11 @@ impl WgpuPipelines {
             graph.pipeline_count()
         );
 
-        Self { graph, ball }
+        Self {
+            graph,
+            ball,
+            field_reference: FieldReferenceTracker::default(),
+        }
     }
 
     /// Prepare all pipelines from snapshot data.
@@ -115,12 +123,25 @@ impl WgpuPipelines {
         current_ball_radius: f32,
         show_ball_outline: bool,
         thermo_display: ThermoDisplayMode,
+        field_scale_locked: bool,
         margin: Margins,
         inset: Margins,
         operator_previews: FramePreviews,
         layers: SceneLayers,
     ) -> AppResult {
         let window_size = ctx.size();
+        // Only a frame that shows a scalar field moves the references.
+        let field_reference = (thermo_display.scalar_field().is_some()
+            && layers.contains(SceneLayers::THERMO))
+        .then(|| {
+            self.field_reference.update(
+                &snapshot.fields.cells,
+                snapshot.frame.world_generation,
+                field_scale_locked,
+                std::time::Instant::now(),
+            )
+        })
+        .flatten();
 
         let prepare_ctx = PrepareContext {
             device: &ctx.device,
@@ -139,6 +160,7 @@ impl WgpuPipelines {
             margin,
             inset,
             thermo_display,
+            field_reference,
             operator_previews,
             layers,
         };

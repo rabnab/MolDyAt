@@ -63,6 +63,8 @@ pub enum UiAction {
     /// Drawn by the backend's ball pipeline; the backend handles it.
     CycleCutoffRings,
     CycleThermoDisplay,
+    /// Freeze or release the field overlay's colour scale (#402).
+    ToggleFieldScaleLock,
     CyclePlotContent,
     ToggleEnergyWindow,
     /// The energy plot's time view (zoom and pan, #367) back to its default.
@@ -540,6 +542,13 @@ pub static COMMANDS: &[CommandDescriptor] = &[
         category: CommandCategory::View,
         default_binding: &[symbol('t', Release)],
         kind: CommandKind::Ui(UiAction::CycleThermoDisplay),
+    },
+    CommandDescriptor {
+        id: "view.lock_field_scale",
+        label: "Lock or release the field overlay's colour scale (it follows the world's averages while released).",
+        category: CommandCategory::View,
+        default_binding: &[symbol_chord(Alt, 't', Release)],
+        kind: CommandKind::Ui(UiAction::ToggleFieldScaleLock),
     },
     CommandDescriptor {
         id: "view.cycle_plot",

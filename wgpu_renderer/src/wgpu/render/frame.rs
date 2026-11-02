@@ -120,6 +120,7 @@ pub(crate) fn draw_main_frame(
                 .map_or(0.0, |s| s.display_radius),
             show_ball_outline,
             state.config().thermo_display,
+            state.config().field_scale_locked,
             state.viewport().margins(),
             state.viewport().inset_margins(),
             operator_previews,

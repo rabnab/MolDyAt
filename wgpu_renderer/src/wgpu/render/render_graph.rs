@@ -33,6 +33,7 @@ use thermo_runtime::application::renderer_snapshot::{
 };
 use thermo_runtime::application::scene_layers::SceneLayers;
 use thermo_ui::graphics::renderer::event_loop::FramePreviews;
+use thermo_ui::graphics::renderer::field_scale::FieldReference;
 use thermo_ui::graphics::renderer::margins::Margins;
 use thermo_ui::graphics::renderer::state_layers::ThermoDisplayMode;
 
@@ -79,6 +80,10 @@ pub struct PrepareContext<'a> {
     /// letterbox bars (see `ViewportTransform::inset_margins`).
     pub inset: Margins,
     pub thermo_display: ThermoDisplayMode,
+    /// The world's averages the scalar field's colours are relative to
+    /// (#402); `None` while there are none (no balls, or no scalar field
+    /// shown).
+    pub field_reference: Option<FieldReference>,
     /// All operator preview geometry for the current frame.
     pub operator_previews: FramePreviews,
     /// Layers drawn this frame. Pipelines outside them are skipped; a

@@ -309,6 +309,7 @@ Keyboard (press `H` for the same list in the log):
 | `F2` | Toggle rendering. |
 | `F3` | Cycle the cutoff-radius rings. |
 | `T` | Cycle the field overlay: Off -> Grid -> Temperature -> Pressure -> Density -> Flow speed -> Flow arrows -> Off. |
+| `Alt + T` | Lock or release the field overlay's colour scale (it follows the world's averages while released). |
 | `P` | Cycle the plot content (in the plot window: the focused plot's energy preset). |
 | `TAB` | Toggle the energy plot window. |
 | `M` | Switch the plot window between the time series and the distributions (speed histogram with Maxwell-Boltzmann, g(r)); opens it if closed. Click a species pair in the g(r) heading to hide or show its curve. |
