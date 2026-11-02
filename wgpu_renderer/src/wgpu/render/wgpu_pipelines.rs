@@ -37,7 +37,7 @@ use thermo_runtime::application::renderer_snapshot::{CellGridSpec, RendererSnaps
 use thermo_runtime::application::scene_layers::SceneLayers;
 use thermo_ui::graphics::renderer::Margins;
 use thermo_ui::graphics::renderer::event_loop::FramePreviews;
-use thermo_ui::graphics::renderer::field_scale::FieldReferenceTracker;
+use thermo_ui::graphics::renderer::field_scale::{FieldReferenceTracker, mean_mass};
 use thermo_ui::graphics::renderer::state_layers::ThermoDisplayMode;
 
 /// Collection of all rendering pipelines, backed by a [`RenderGraph`].
@@ -134,8 +134,10 @@ impl WgpuPipelines {
         let field_reference = (thermo_display.scalar_field().is_some()
             && layers.contains(SceneLayers::THERMO))
         .then(|| {
+            let mass = mean_mass(&snapshot.frame.species_counts, &snapshot.balls.species);
             self.field_reference.update(
                 &snapshot.fields.cells,
+                mass.unwrap_or(1.0),
                 snapshot.frame.world_generation,
                 field_scale_locked,
                 std::time::Instant::now(),

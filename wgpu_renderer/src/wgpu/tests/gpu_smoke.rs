@@ -159,7 +159,7 @@ fn render_frame(
         margin: MARGINS,
         inset: MARGINS,
         thermo_display,
-        field_reference: FieldReference::from_cells(&snapshot.fields.cells),
+        field_reference: FieldReference::from_cells(&snapshot.fields.cells, 1.0),
         operator_previews: previews(),
         layers,
     };
