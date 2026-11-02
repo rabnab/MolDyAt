@@ -323,9 +323,9 @@ Keyboard (press `H` for the same list in the log):
 | `T` | Cycle the field overlay: Off -> Grid -> Temperature -> Pressure -> Density -> Flow speed -> Flow arrows -> Off. |
 | `Alt + T` | Lock or release the field overlay's colour scale (it follows the world's averages while released). |
 | `P` | Cycle the plot content (in the plot window: the focused plot's energy preset). |
-| `TAB` | Toggle the energy plot window. |
+| `TAB` | Toggle the plot window. |
 | `M` | Switch the plot window between the time series and the distributions (speed histogram with Maxwell-Boltzmann, g(r)); opens it if closed. Click a species pair in the g(r) heading to hide or show its curve. |
-| `HOME` | Reset the energy plot's time range (follow the newest sample; also a middle double click in the plot). |
+| `HOME` | Reset the plot window's time range (follow the newest sample; also a middle double click in the plot). |
 | `.` | Plot window: show the next series in place of the focused plot's last one. |
 | `,` | Plot window: show the previous series in place of the focused plot's last one. |
 | `Ctrl + P` | Plot window: add the next series to the focused plot. |
@@ -350,9 +350,9 @@ Mouse:
 | Right click on a source sphere (source tool) | Next species that sphere emits |
 | Scroll wheel | Zoom in / out |
 | Middle-click drag | Pan viewport |
-| Scroll wheel in the energy plot | Show less / more time, around the pointer (the newest sample stays at the right edge while the plot follows it) |
-| Middle-click drag in the energy plot | Move the time range (after a few pixels of movement). The plot pauses: it keeps the samples it had, so they can be examined, until `HOME` or a middle double click makes it follow again (panning and zooming keep the pause) |
-| Middle double click in the energy plot | Reset the time range (as `HOME`) |
+| Scroll wheel in the plot window | Show less / more time, around the pointer (the newest sample stays at the right edge while the plot follows it) |
+| Middle-click drag in the plot window | Move the time range (after a few pixels of movement). The plot pauses: it keeps the samples it had, so they can be examined, until `HOME` or a middle double click makes it follow again (panning and zooming keep the pause) |
+| Middle double click in the plot window | Reset the time range (as `HOME`) |
 
 ### Changing the keys
 
@@ -410,7 +410,7 @@ step, gravity, the [simulation config](#simulation-config), every ball (`id`, `s
 `accel`) and all operators. Saves of formats 1 and 2 still load: in format 1
 saves each size class becomes the species of the same name (`XS` to `XL`), and
 the separate operator lists of format 2 become the one `operators` list. The view
-(window size, zoom, pan), the energy plot
+(window size, zoom, pan), the plot window
 and simulation statistics are not saved; a loaded world is shown in the
 default view. The window is asked to take the world's shape, at most the
 size of the screen; if the OS gives it another size (screen too small,

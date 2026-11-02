@@ -5,6 +5,9 @@
 #   scripts/check_release_files.sh            # all checks
 #   TAG=v1.4.0 scripts/check_release_files.sh # also: tag matches Cargo.toml version
 #
+# Every run checks that CITATION.cff and the README's download examples name
+# the workspace version, so a version bump must update both.
+#
 # cargo-about is needed for the third-party notices check; without it that one
 # check is skipped locally (CI installs it and fails if missing).
 set -uo pipefail
@@ -39,6 +42,15 @@ cff_license=$(sed -n 's/^license: *\(.*[^ ]\) *$/\1/p' CITATION.cff)
   || err "CITATION.cff version '$cff_version' != Cargo.toml version '$version'"
 [ "$cff_license" = "$license" ] && ok "CITATION.cff license $license" \
   || err "CITATION.cff license '$cff_license' != Cargo.toml license '$license'"
+cff_date=$(sed -n 's/^date-released: *"\{0,1\}\([^"]*\)"\{0,1\} *$/\1/p' CITATION.cff)
+if [[ "$cff_date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then ok "CITATION.cff date-released $cff_date"
+else err "CITATION.cff date-released '$cff_date' must be the release date (YYYY-MM-DD)"; fi
+
+# 3b. The README's download examples name the current release.
+for example in "\$tag = \"v$version\"" "tag=v$version"; do
+  grep -qF "$example" README.md && ok "README download example: $example" \
+    || err "README download example must read '$example' (Getting Started)"
+done
 
 # 4. Every crate inherits the workspace license.
 for toml in crates/*/Cargo.toml wgpu_renderer/Cargo.toml; do

@@ -24,7 +24,8 @@ git switch master && git pull --rebase
 git switch -c feature/master/release-vX.Y.Z
 ```
 - Set `version` in the root `Cargo.toml`.
-- Set `version` (and `date-released`, if present) in `CITATION.cff`.
+- Set `version` and `date-released` (the planned tag date, `YYYY-MM-DD`; correct it if the tag lands on another day) in `CITATION.cff`.
+- Set the tag in the README's download examples (Getting Started: `$tag = "vX.Y.Z"` and `tag=vX.Y.Z`).
 - `cargo update -w` so `Cargo.lock` records the new version (release builds use `--locked`).
 - Check that README and docs mention no unreleased flags as missing, and no removed ones as present.
 
