@@ -1069,7 +1069,7 @@ dependencies = [
 
 [[package]]
 name = "moldyat_wgpu"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "bytemuck",
  "font8x8",
@@ -2128,7 +2128,7 @@ dependencies = [
 
 [[package]]
 name = "thermo_physics"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "float-cmp",
  "log",
@@ -2143,7 +2143,7 @@ dependencies = [
 
 [[package]]
 name = "thermo_runtime"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "arc-swap",
  "log",
@@ -2154,7 +2154,7 @@ dependencies = [
 
 [[package]]
 name = "thermo_ui"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "arc-swap",
  "env_logger",
