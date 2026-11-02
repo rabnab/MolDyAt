@@ -2,7 +2,8 @@
 
 **Mol**ecular **Dy**namics: **At**oms. A molecular dynamics simulation of a Lennard-Jones gas in a finite box, written in Rust.
 
-MolDyAt was formerly called ThermoSolver (releases up to v1.3.0).
+MolDyAt was formerly called ThermoSolver (versions up to 1.3.1); the rename
+reset the version to 0.2.0.
 
 [![Release](https://img.shields.io/github/v/release/rabnab/MolDyAt)](https://github.com/rabnab/MolDyAt/releases/latest)
 ![Rust](https://img.shields.io/badge/Rust-nightly-orange)
@@ -26,6 +27,7 @@ MolDyAt was formerly called ThermoSolver (releases up to v1.3.0).
 * **Verlet neighbor lists** with automatic rebuild based on movement threshold
 * **Spatial partitioning** via cell grid for O(N) neighbor lookups
 * **Species library**: N₂ (the unit), Ar, Ne, CH₄, O₂ with literature Lennard-Jones parameters, plus the former size classes XS to XL; a config file can define its own species list (see "Simulation config")
+* **Gravity** (`G`), with its potential energy in the stats
 * **Physics thread** — simulation runs independently from the render loop
 
 ### Operators
@@ -36,6 +38,18 @@ Placeable tools from the sidebar:
 * **Valves** — openable barriers between regions
 * **Thermostats** — control the temperature inside a circular region
 * **Source spheres** — emit new balls, can be opened and closed
+
+### Analysis and export
+
+* **Plot window** — up to four stacked time-series plots of any metric
+  (energies, wall momentum, species counts, …), or the speed distribution
+  with its Maxwell-Boltzmann curve and g(r) per species pair
+* **Field overlay** — temperature, pressure, density or flow speed per cell as
+  a heatmap with a colour bar, or flow arrows
+* **Export** — metrics series, per-ball state and distributions as CSV or
+  JSONL, or every metrics sample streamed to disk while the simulation runs
+* **Headless mode** — runs without a window, with JSONL output, command
+  scripts and the same exports (see [Headless Mode](docs/headless.md))
 
 ### Persistence
 
@@ -53,11 +67,13 @@ Placeable tools from the sidebar:
 ### Renderer
 
 * **RenderGraph architecture** — `RenderPipeline` trait with named pipeline handles
-* **6 GPU pipelines** — frame border, checkerboard grid, lines, balls, crosshair, text overlay
+* **One GPU pipeline per kind of object** — balls, walls, valves, thermostats,
+  source spheres, sidebar, field heatmap and colour bar, flow arrows, plots,
+  text, …
 * **Instanced ball rendering** — position/radius/color uploaded via GPU storage buffer
 * **SDF circles** — anti-aliased ball fill, equilibrium ring (magenta), cutoff ring (gray)
 * **Viewport** — zoom (scroll wheel), pan (middle-click drag), reset (`0`)
-* **Energy plot window** — dockable overlay toggled at runtime (`TAB`)
+* **Plot window** — a separate OS window, toggled with `TAB`
 
 ## Getting Started
 
@@ -69,7 +85,7 @@ Prebuilt binaries for Windows and Linux (x86_64) are attached to each
 **Windows (PowerShell):**
 
 ```powershell
-$tag = "vX.Y.Z"  # a release from the releases page, newer than v1.3.1
+$tag = "v0.3.0"  # or another release from the releases page
 $name = "moldyat-$tag-x86_64-pc-windows-msvc"
 Invoke-WebRequest "https://github.com/rabnab/MolDyAt/releases/download/$tag/$name.zip" -OutFile "$name.zip"
 Expand-Archive "$name.zip" -DestinationPath .
@@ -79,16 +95,12 @@ Expand-Archive "$name.zip" -DestinationPath .
 **Linux:**
 
 ```bash
-tag=vX.Y.Z  # a release from the releases page, newer than v1.3.1
+tag=v0.3.0  # or another release from the releases page
 name=moldyat-$tag-x86_64-unknown-linux-gnu
 curl -LO "https://github.com/rabnab/MolDyAt/releases/download/$tag/$name.tar.gz"
 tar xzf "$name.tar.gz"
 ./"$name"/moldyat
 ```
-
-The archives and the executable are called `moldyat` in releases after v1.3.1;
-v1.3.1 and earlier use `rust_thermo_wgpu` instead (adjust `$name` and the
-executable name).
 
 Verify a download against its `.sha256` file (`sha256sum -c` on Linux,
 `Get-FileHash` in PowerShell).
@@ -311,9 +323,9 @@ Keyboard (press `H` for the same list in the log):
 | `T` | Cycle the field overlay: Off -> Grid -> Temperature -> Pressure -> Density -> Flow speed -> Flow arrows -> Off. |
 | `Alt + T` | Lock or release the field overlay's colour scale (it follows the world's averages while released). |
 | `P` | Cycle the plot content (in the plot window: the focused plot's energy preset). |
-| `TAB` | Toggle the energy plot window. |
+| `TAB` | Toggle the plot window. |
 | `M` | Switch the plot window between the time series and the distributions (speed histogram with Maxwell-Boltzmann, g(r)); opens it if closed. Click a species pair in the g(r) heading to hide or show its curve. |
-| `HOME` | Reset the energy plot's time range (follow the newest sample; also a middle double click in the plot). |
+| `HOME` | Reset the plot window's time range (follow the newest sample; also a middle double click in the plot). |
 | `.` | Plot window: show the next series in place of the focused plot's last one. |
 | `,` | Plot window: show the previous series in place of the focused plot's last one. |
 | `Ctrl + P` | Plot window: add the next series to the focused plot. |
@@ -338,9 +350,9 @@ Mouse:
 | Right click on a source sphere (source tool) | Next species that sphere emits |
 | Scroll wheel | Zoom in / out |
 | Middle-click drag | Pan viewport |
-| Scroll wheel in the energy plot | Show less / more time, around the pointer (the newest sample stays at the right edge while the plot follows it) |
-| Middle-click drag in the energy plot | Move the time range (after a few pixels of movement). The plot pauses: it keeps the samples it had, so they can be examined, until `HOME` or a middle double click makes it follow again (panning and zooming keep the pause) |
-| Middle double click in the energy plot | Reset the time range (as `HOME`) |
+| Scroll wheel in the plot window | Show less / more time, around the pointer (the newest sample stays at the right edge while the plot follows it) |
+| Middle-click drag in the plot window | Move the time range (after a few pixels of movement). The plot pauses: it keeps the samples it had, so they can be examined, until `HOME` or a middle double click makes it follow again (panning and zooming keep the pause) |
+| Middle double click in the plot window | Reset the time range (as `HOME`) |
 
 ### Changing the keys
 
@@ -393,11 +405,12 @@ cargo run -p moldyat_wgpu -- --load saves/world_20260101_120000.json
 cargo run -p moldyat_wgpu -- --save-dir ~/lj-worlds
 ```
 
-The file is versioned JSON (`"version": 2`) holding the world rectangle, time
+The file is versioned JSON (`"version": 3`) holding the world rectangle, time
 step, gravity, the [simulation config](#simulation-config), every ball (`id`, `species`, `pos`, `v`, `pre_update_pos`,
-`accel`) and all operators. Saves of format 1 (size classes) still load: each
-size class becomes the species of the same name (`XS` to `XL`). The view
-(window size, zoom, pan), the energy plot
+`accel`) and all operators. Saves of formats 1 and 2 still load: in format 1
+saves each size class becomes the species of the same name (`XS` to `XL`), and
+the separate operator lists of format 2 become the one `operators` list. The view
+(window size, zoom, pan), the plot window
 and simulation statistics are not saved; a loaded world is shown in the
 default view. The window is asked to take the world's shape, at most the
 size of the screen; if the OS gives it another size (screen too small,
@@ -530,7 +543,7 @@ If you use MolDyAt in scientific work, please cite it; see
 ## Project Structure
 
 ```
-Cargo.toml                     # Workspace root (members: core, crates/thermo_physics, crates/thermo_runtime, wgpu_renderer)
+Cargo.toml                     # Workspace root (members: crates/thermo_physics, crates/thermo_runtime, crates/thermo_ui, wgpu_renderer)
 crates/thermo_physics/         # The physics; no windowing or GPU dependencies
 └── src/
     ├── application/
@@ -548,11 +561,15 @@ crates/thermo_runtime/         # Running without a window; no windowing or GPU d
     │   └── physics_thread/    # Physics thread internals
     ├── headless_cli/          # Headless option parsing
     ├── headless_runner/       # Headless simulation driver + regression fixtures
-    └── headless_output/       # JSONL record writer
+    ├── headless_output/       # JSONL record writer
+    ├── headless_script/       # Headless command scripts
+    ├── metrics/               # Metrics time-series store
+    ├── distributions/         # Speed distribution and g(r)
+    └── export/                # CSV / JSONL export and streaming
 crates/thermo_ui/              # The UI without a GPU backend
 └── src/
     ├── graphics/
-    │   ├── energy_plot/       # Energy plot window
+    │   ├── energy_plot/       # Plot window: time series and distributions
     │   └── renderer/          # Renderer trait, viewport, batch renderer
     │       ├── event_loop/    # InputHandler, PhysicsCoordinator, Metrics, …
     │       └── viewport/      # ViewportTransform, coordinate mapping

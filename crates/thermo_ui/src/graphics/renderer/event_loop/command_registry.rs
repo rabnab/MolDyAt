@@ -67,7 +67,7 @@ pub enum UiAction {
     ToggleFieldScaleLock,
     CyclePlotContent,
     ToggleEnergyWindow,
-    /// The energy plot's time view (zoom and pan, #367) back to its default.
+    /// The plot window's time view (zoom and pan, #367) back to its default.
     ResetPlotView,
     /// Change the plots of the plot window (#339).
     Plot(PlotChange),
@@ -559,7 +559,7 @@ pub static COMMANDS: &[CommandDescriptor] = &[
     },
     CommandDescriptor {
         id: "view.toggle_energy_window",
-        label: "Toggle the energy plot window.",
+        label: "Toggle the plot window.",
         category: CommandCategory::View,
         default_binding: &[key(KeyCode::Tab, Release)],
         kind: CommandKind::Ui(UiAction::ToggleEnergyWindow),
@@ -573,7 +573,7 @@ pub static COMMANDS: &[CommandDescriptor] = &[
     },
     CommandDescriptor {
         id: "view.reset_plot_view",
-        label: "Reset the energy plot's time range (follow the newest sample; also a middle double click in the plot).",
+        label: "Reset the plot window's time range (follow the newest sample; also a middle double click in the plot).",
         category: CommandCategory::View,
         default_binding: &[key(KeyCode::Home, PressOnce)],
         kind: CommandKind::Ui(UiAction::ResetPlotView),

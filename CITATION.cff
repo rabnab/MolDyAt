@@ -8,4 +8,5 @@ authors:
     given-names: "Rainer"
 repository-code: "https://github.com/rabnab/MolDyAt"
 license: MPL-2.0
-version: 0.2.0
+version: 0.3.0
+date-released: "2026-11-02"
