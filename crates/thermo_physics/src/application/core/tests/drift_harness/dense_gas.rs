@@ -14,8 +14,9 @@ use super::*;
 use crate::application::core::TestFaults;
 
 const SIDE: usize = 16;
-const SPACING: f32 = 2.4;
-const THERMAL_V: f32 = 1.0;
+/// Lengths and speeds in N₂ units, scaled to Ar units (#405).
+const SPACING: f32 = 2.4 * N2_LENGTH;
+const THERMAL_V: f32 = 1.0 * N2_SPEED;
 pub(super) const STEPS: usize = 1_000;
 /// Grid columns/rows of head-on projectile pairs: ball (i, j) moves +x and
 /// (i + 1, j) moves -x, so a few pairs are driven into the force-cap region
@@ -25,7 +26,7 @@ const PROJECTILE_SLOTS: [usize; 3] = [4, 8, 11];
 /// `U(r_cap) ≈ 14.5·ε` of the `M`–`M` pair into the sloped core (#234; the
 /// edge-distance core of the size classes started at ≈ 4.4·ε, which ±2.0
 /// reached, and ±2.0 no longer gets there).
-const PROJECTILE_V: f32 = 3.5;
+const PROJECTILE_V: f32 = 3.5 * N2_SPEED;
 
 // Thresholds: see docs/drift-test.md for the calibration process.
 const MAX_REL_ENERGY_DRIFT: f32 = 4.0e-3;

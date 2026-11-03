@@ -14,10 +14,10 @@ const PLT_STEP: usize = 100;
 pub const NORMAL_GRAVITY_MPS2: f32 = 9.81;
 pub const HIGH_GRAVITY_MPS2: f32 = NORMAL_GRAVITY_MPS2 * 5.0;
 
-/// 9.81 m/s² in N₂ units (`g·τ²/σ`), as
-/// `UnitSystem::N2.from_metres_per_second2` gives it; a constant because the
+/// 9.81 m/s² in Ar units (`g·τ²/σ`, #405), as
+/// `UnitSystem::AR.from_metres_per_second2` gives it; a constant because the
 /// gravity presets are compared with `==` (`test_gravity_in_reduced_units`).
-pub const NORMAL_GRAVITY: f32 = 1.285_924_5e-13;
+pub const NORMAL_GRAVITY: f32 = 1.339_646_4e-13;
 pub(crate) const HIGH_GRAVITY: f32 = NORMAL_GRAVITY * 5.0;
 
 /// Whether `gravity` is the 1 g preset: the nearest whole multiple of
@@ -229,12 +229,12 @@ impl Default for SimStats {
 mod tests {
     use super::*;
     use crate::application::units::UnitSystem;
-    use crate::objects2d::ball_impl::{Ball2D, DEFAULT_SPECIES};
+    use crate::objects2d::ball_impl::{Ball2D, SPECIES_AR};
 
-    const UNITS: UnitSystem = UnitSystem::N2;
+    const UNITS: UnitSystem = UnitSystem::REDUCED;
 
     fn make_ball(id: usize, velocity: Vec2D) -> Ball2D {
-        let mut ball = Ball2D::new(id, Vec2D::zero(), DEFAULT_SPECIES);
+        let mut ball = Ball2D::new(id, Vec2D::zero(), SPECIES_AR);
         ball.v = velocity;
         ball
     }
@@ -377,7 +377,7 @@ mod tests {
 
     #[test]
     fn test_gravity_in_reduced_units() {
-        // a* = g tau^2 / sigma ~ 1.29e-13 for 9.81 m/s^2 in N2 units
+        // a* = g tau^2 / sigma ~ 1.34e-13 for 9.81 m/s^2 in Ar units
         let expected = UNITS.from_metres_per_second2(NORMAL_GRAVITY_MPS2 as f64);
         assert_eq!(NORMAL_GRAVITY, expected);
         let high = UNITS.from_metres_per_second2(HIGH_GRAVITY_MPS2 as f64);

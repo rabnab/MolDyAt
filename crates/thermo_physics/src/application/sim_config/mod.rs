@@ -40,7 +40,7 @@
 //! classes `XS` to `XL`, `Ar`, `Ne`, `CH4`, `O2`); with it, exactly the listed
 //! species, in that order, the first being the default for new balls. Entries
 //! give literature single-site Lennard-Jones values (Å, K, u), converted into
-//! N₂ units. Pair overrides and saved balls name species of this table.
+//! Ar units (#405). Pair overrides and saved balls name species of this table.
 
 mod sections;
 mod species;
@@ -124,10 +124,10 @@ pub(crate) const MIN_FIELD_STIFFNESS: f32 = 1e-6;
 pub(crate) const MAX_FIELD_STIFFNESS: f32 = 100.0;
 /// `[[fields]] center`: within the largest world (scale 100 is ±5600).
 pub(crate) const MAX_FIELD_CENTER: f32 = 1e5;
-/// Mass of a `[[species]]` entry in N₂ units (about 1.4 u to 2800 u).
+/// Mass of a `[[species]]` entry in Ar units (about 2.0 u to 3995 u).
 pub(crate) const MIN_SPECIES_MASS: f32 = 0.05;
 pub(crate) const MAX_SPECIES_MASS: f32 = 100.0;
-/// Drawing radius of a `[[species]]` entry in N₂ units.
+/// Drawing radius of a `[[species]]` entry in Ar units.
 pub(crate) const MIN_DISPLAY_RADIUS: f32 = 0.05;
 pub(crate) const MAX_DISPLAY_RADIUS: f32 = MAX_PAIR_SIGMA;
 /// 1 ms to 1 s between two snapshots for the window.

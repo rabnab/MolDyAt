@@ -10,11 +10,11 @@ use crate::objects2d::ball_impl::pair_potential::{
 use crate::objects2d::ball_impl::simd_forces::{
     KernelFrame, KernelPoint, force_simd, kernel_points,
 };
-use crate::objects2d::ball_impl::{Ball2D, DEFAULT_SPECIES, SpeciesId, SpeciesTable};
+use crate::objects2d::ball_impl::{Ball2D, SPECIES_AR, SpeciesId, SpeciesTable};
 use std::simd::f32x4;
 
-/// The reference species (`σ = 1`).
-const N2: SpeciesId = DEFAULT_SPECIES;
+/// The unit species (Ar, `σ = ε = m = 1`, #405; named `N2` from before #405).
+const N2: SpeciesId = SPECIES_AR;
 
 fn approx(a: f32, b: f32, eps: f32) {
     assert!(

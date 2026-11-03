@@ -18,8 +18,15 @@ fn species(name: &str) -> SpeciesId {
     SpeciesTable::builtin().by_name(name).unwrap()
 }
 
+/// Lengths, speeds and energies of these tests were chosen in N₂ units;
+/// they are scaled to Ar units (#405), so the scenarios stay the same.
+const LENGTH: f32 = 1.086_05;
+const SPEED: f32 = 1.063_68;
+const ENERGY: f32 = 0.793_406;
+
 /// A 60 x 60 box with an 8 x 8 grid of alternating `N2` and `M` balls at
-/// spacing 3.5, with small deterministic velocities, using `physics`.
+/// spacing 3.5 (N₂ units), with small deterministic velocities, using
+/// `physics`.
 fn mixed_world(physics: BallPhysics) -> MainContent {
     let mut mc = crate::application::core::tests::new_main_content_seeded(
         Rect::new(-30.0, 30.0, 60.0, -60.0),
@@ -31,9 +38,10 @@ fn mixed_world(physics: BallPhysics) -> MainContent {
     let kinds = [species("N2"), species("M")];
     for i in 0..8 {
         for j in 0..8 {
-            let pos = Vec2D::new(-12.25 + 3.5 * i as f32, -12.25 + 3.5 * j as f32);
+            let pos = Vec2D::new(-12.25 + 3.5 * i as f32, -12.25 + 3.5 * j as f32).scaled(LENGTH);
             let mut ball = Ball2D::new(i * 8 + j, pos, kinds[(i + j) % 2]);
-            ball.v = Vec2D::new(((i * 7 + j) as f32).sin(), ((i + 3 * j) as f32).cos());
+            ball.v =
+                Vec2D::new(((i * 7 + j) as f32).sin(), ((i + 3 * j) as f32).cos()).scaled(SPEED);
             mc.world_mut().balls.push(ball);
         }
     }
@@ -175,23 +183,23 @@ fn cell_grid_fits_an_overridden_pair() {
     config.potential.pair_overrides.push(PairOverrideConfig {
         a: "XS".into(),
         b: "N2".into(),
-        sigma: Some(3.0),
+        sigma: Some(3.5),
         epsilon: None,
     });
     let rect = Rect::new(-50.0, 50.0, 100.0, -100.0);
     let mut mc = MainContent::with_config(rect, &config, Some(3)).unwrap();
     let (n2, xs) = (species("N2"), species("XS"));
     let physics = mc.world().physics.clone();
-    assert_eq!(physics.cutoff(n2, xs), 4.0 * 3.0);
-    assert_eq!(physics.cutoff(xs, n2), 4.0 * 3.0);
+    assert_eq!(physics.cutoff(n2, xs), 4.0 * 3.5);
+    assert_eq!(physics.cutoff(xs, n2), 4.0 * 3.5);
 
-    // 11.9 apart: inside the overridden cutoff, but more than two cells of
+    // 13.9 apart: inside the overridden cutoff, but more than two cells of
     // the widest like pair, so only cells sized for the override find it.
     let like = physics.list_radius(n2, n2).max(physics.list_radius(xs, xs));
-    assert!(11.9 < physics.cutoff(n2, xs));
-    assert!(11.9 > 2.0 * like);
-    mc.add_candidate_to_vec(Ball2D::new(1, Vec2D::new(-5.95, 0.0), n2));
-    mc.add_candidate_to_vec(Ball2D::new(2, Vec2D::new(5.95, 0.0), xs));
+    assert!(13.9 < physics.cutoff(n2, xs));
+    assert!(13.9 > 2.0 * like);
+    mc.add_candidate_to_vec(Ball2D::new(1, Vec2D::new(-6.95, 0.0), n2));
+    mc.add_candidate_to_vec(Ball2D::new(2, Vec2D::new(6.95, 0.0), xs));
     mc.collect_neighbours_by_cell(DT_GOAL);
     assert_eq!(
         mc.world().cell_grid.list_radius(),
@@ -208,14 +216,14 @@ fn overridden_pairs_conserve_energy() {
         PairOverride {
             a: n2,
             b: m,
-            sigma: Some(2.0),
-            epsilon: Some(1.5),
+            sigma: Some(2.0 * LENGTH),
+            epsilon: Some(1.5 * ENERGY),
         },
         PairOverride {
             a: m,
             b: m,
             sigma: None,
-            epsilon: Some(0.8),
+            epsilon: Some(0.8 * ENERGY),
         },
     ];
     let physics = BallPhysics::with_pair_overrides(
@@ -232,7 +240,9 @@ fn overridden_pairs_conserve_energy() {
         max_rel_drift = max_rel_drift.max((total_energy(&mc) - start).abs() / start.abs());
     }
     println!("start energy {start}, max relative drift {max_rel_drift:.3e}");
-    assert!(max_rel_drift < 1e-3, "energy drift {max_rel_drift}");
+    // 8.3e-4 in N₂ units, 1.1e-3 in Ar units (#405: the same scenario,
+    // rounded differently); ~1.4x margin.
+    assert!(max_rel_drift < 1.5e-3, "energy drift {max_rel_drift}");
 }
 
 fn config_with(pairs: &[(&str, &str, Option<f32>)]) -> SimConfig {

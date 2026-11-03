@@ -6,7 +6,7 @@ use super::DT_GOAL;
 use crate::application::MainContent;
 use crate::application::core::StatsAccumulator;
 use crate::application::thermo_field::LocalKineticStats;
-use crate::objects2d::ball_impl::{BallFactory, SpeciesId};
+use crate::objects2d::ball_impl::{BallFactory, SPECIES_AR, SpeciesId};
 use crate::objects2d::{
     DEFAULT_THERMOSTAT_CHAIN_LENGTH, OperatorCollection, OperatorState, Rect, Vec2D,
 };
@@ -188,12 +188,7 @@ fn hot_thermostat_heats_cold_cluster_without_changing_com_drift() {
         } else {
             Vec2D::new(-rel_speed, 0.0)
         };
-        add_ball_of_species(
-            &mut mc,
-            pos,
-            drift_velocity + thermal_velocity,
-            SpeciesId::new(0),
-        );
+        add_ball_of_species(&mut mc, pos, drift_velocity + thermal_velocity, SPECIES_AR);
     }
 
     assert_eq!(mc.world().balls.len(), 10);

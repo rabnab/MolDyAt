@@ -8,10 +8,10 @@
 use super::test_config;
 use crate::application::sim_config::{FieldConfig, FieldKind};
 use crate::application::{MainContent, SimConfig};
-use crate::objects2d::ball_impl::BallFactory;
 use crate::objects2d::ball_impl::external_field::{
     ExternalField, Field, HarmonicTrap, UniformField,
 };
+use crate::objects2d::ball_impl::{BallFactory, SPECIES_AR};
 use crate::objects2d::{Rect, Vec2D};
 
 const STIFFNESS: f32 = 0.05;
@@ -83,7 +83,7 @@ fn trapped_gas_conserves_its_energy() {
         let pos = Vec2D::new(angle.cos(), angle.sin()).scaled(radius);
         let v = Vec2D::new(-angle.sin(), angle.cos()).scaled(0.6);
         mc.world_mut()
-            .add_ball_and_register(factory.create_massive_with_velocity(pos, v));
+            .add_ball_and_register(factory.create_with_species_and_velocity(pos, SPECIES_AR, v));
     }
     mc.collect_neighbours_by_cell(super::DT_GOAL);
     mc.simulation_step().unwrap();

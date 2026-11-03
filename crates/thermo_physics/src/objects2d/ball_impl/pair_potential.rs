@@ -16,23 +16,33 @@
 //! once whose parameters may differ: [`PairLaw::lanes`] and
 //! [`CappedLanes::gather`] load them into one lane each.
 
-use crate::objects2d::ball_impl::species::{Species, SpeciesId, SpeciesTable};
+use crate::objects2d::ball_impl::species::{
+    AR_EPSILON_KELVIN, AR_SIGMA_ANGSTROM, N2_EPSILON_KELVIN, N2_SIGMA_ANGSTROM, Species, SpeciesId,
+    SpeciesTable,
+};
 use std::simd::Select;
 use std::simd::f32x4;
 use std::simd::prelude::{SimdFloat, SimdPartialOrd};
 
-/// `σ` of the reference species: the skin is a fixed share of its cutoff.
-pub(crate) const LJ_SIG: f32 = crate::objects2d::ball_impl::species::N2_SIGMA;
+/// `σ` of `N2` in Ar units (#405): the skin is a fixed share of its cutoff,
+/// so it keeps its physical size.
+pub(crate) const LJ_SIG: f32 = (N2_SIGMA_ANGSTROM / AR_SIGMA_ANGSTROM) as f32;
 const LJ_EPS: f32 = 1.;
 pub(crate) const SQRT6_OF_TWO: f32 = 1.122_462; // == 2^(1/6)
 
-const MAX_FORCE: f32 = 100.0; // max repulsive force to cap at
+/// `σ_N2 / σ_Ar` and `ε_N2 / ε_Ar`: the cap was chosen in N₂ units
+/// (100 ε/σ and 200 ε/σ²) and keeps its physical value in Ar units (#405).
+const N2_LENGTH_IN_AR: f64 = N2_SIGMA_ANGSTROM / AR_SIGMA_ANGSTROM;
+const N2_ENERGY_IN_AR: f64 = N2_EPSILON_KELVIN / AR_EPSILON_KELVIN;
+/// Max repulsive force to cap at: 100 ε_N2/σ_N2 ≈ 73.05 in Ar units.
+const MAX_FORCE: f32 = (100.0 * (N2_ENERGY_IN_AR / N2_LENGTH_IN_AR)) as f32;
 /// Slope of the repulsion below `r_cap`: the force grows by this much per unit
 /// of extra compression, so deeper overlaps push harder than shallow ones.
-/// Stability: smallest reduced mass 0.5 gives ω = 20, so ω·dt ≈ 0.1 at the
-/// default dt = 0.005 and ≈ 1.6 at `MAX_TIME_STEP` (0.08), below the
-/// Verlet limit of 2.
-const CORE_STIFFNESS: f32 = 200.0;
+/// 200 ε_N2/σ_N2² ≈ 134.5 in Ar units. Stability: the smallest reduced mass
+/// (two `N2`, 0.35) gives ω ≈ 19.6, so ω·dt ≈ 0.1 at the default dt = 0.005
+/// and ≈ 1.6 at `MAX_TIME_STEP` (0.08), below the Verlet limit of 2.
+const CORE_STIFFNESS: f32 =
+    (200.0 * (N2_ENERGY_IN_AR / (N2_LENGTH_IN_AR * N2_LENGTH_IN_AR))) as f32;
 const CUTOFF_FACTOR: f32 = 4.0;
 
 /// Force cap and cutoff settings of a [`CappedPotential`], fixed when it is built.
@@ -129,10 +139,11 @@ pub(crate) struct LennardJones {
     pub epsilon: f32,
 }
 
+/// The unit species' law (Ar, `σ = ε = 1`).
 impl Default for LennardJones {
     fn default() -> Self {
         LennardJones {
-            sigma: LJ_SIG,
+            sigma: 1.0,
             epsilon: LJ_EPS,
         }
     }

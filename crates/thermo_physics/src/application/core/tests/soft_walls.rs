@@ -10,7 +10,7 @@ use crate::application::MainContent;
 use crate::application::core::wall_forces::soft_wall_force;
 use crate::objects2d::ball_impl::pair_potential::CapSettings;
 use crate::objects2d::ball_impl::wall_law::{SoftWalls, WallSettings};
-use crate::objects2d::ball_impl::{BallFactory, DEFAULT_SPECIES, SpeciesTable};
+use crate::objects2d::ball_impl::{BallFactory, SPECIES_AR, SpeciesTable};
 use crate::objects2d::{Rect, Vec2D};
 
 const WORLD_TOP_LEFT: (f32, f32) = (-50.0, 95.0);
@@ -37,13 +37,13 @@ fn wall_force_is_minus_the_derivative_of_its_potential() {
             attractive,
             ..WallSettings::default()
         });
-        let cutoff = walls.cutoff(DEFAULT_SPECIES);
+        let cutoff = walls.cutoff(SPECIES_AR);
         let h = 1e-3;
         let mut z = 0.1;
         while z < cutoff - 2.0 * h {
-            let (force, _) = walls.force_and_potential(DEFAULT_SPECIES, z);
-            let (_, up) = walls.force_and_potential(DEFAULT_SPECIES, z + h);
-            let (_, down) = walls.force_and_potential(DEFAULT_SPECIES, z - h);
+            let (force, _) = walls.force_and_potential(SPECIES_AR, z);
+            let (_, up) = walls.force_and_potential(SPECIES_AR, z + h);
+            let (_, down) = walls.force_and_potential(SPECIES_AR, z - h);
             let numeric = -(up - down) / (2.0 * h);
             assert!(
                 (force - numeric).abs() < 2e-2 * force.abs().max(1.0),
@@ -51,7 +51,7 @@ fn wall_force_is_minus_the_derivative_of_its_potential() {
             );
             z += 0.01;
         }
-        let (force, potential) = walls.force_and_potential(DEFAULT_SPECIES, cutoff);
+        let (force, potential) = walls.force_and_potential(SPECIES_AR, cutoff);
         assert_eq!((force, potential), (0.0, 0.0), "zero at the cutoff");
     }
 }
@@ -59,13 +59,13 @@ fn wall_force_is_minus_the_derivative_of_its_potential() {
 #[test]
 fn default_wall_is_purely_repulsive_with_the_hard_contact_distance() {
     let walls = soft_walls(&WallSettings::default());
-    // σ_iw = σ_N2 / 2: zero potential (before the shift) at the hard
+    // σ_iw = σ_Ar / 2: zero potential (before the shift) at the hard
     // contact distance, minimum and cutoff at 2^(1/6) of it.
-    let cutoff = walls.cutoff(DEFAULT_SPECIES);
+    let cutoff = walls.cutoff(SPECIES_AR);
     assert!((cutoff - 0.5 * 1.122_462).abs() < 1e-5, "cutoff {cutoff}");
     let mut z = 0.05;
     while z < cutoff {
-        let (force, potential) = walls.force_and_potential(DEFAULT_SPECIES, z);
+        let (force, potential) = walls.force_and_potential(SPECIES_AR, z);
         assert!(
             force >= 0.0 && potential >= 0.0,
             "z={z}: F {force}, U {potential}"
@@ -73,7 +73,7 @@ fn default_wall_is_purely_repulsive_with_the_hard_contact_distance() {
         z += 0.005;
     }
     // Behind the surface (an overshoot) it keeps pushing outward.
-    let (force, _) = walls.force_and_potential(DEFAULT_SPECIES, -0.1);
+    let (force, _) = walls.force_and_potential(SPECIES_AR, -0.1);
     assert!(force > 0.0);
 }
 
@@ -97,8 +97,12 @@ fn ball_bouncing_on_soft_walls_keeps_its_energy() {
         }
         // 1.5 above the surface (the line wall is 1 thick).
         let start_y = if on_wall { 22.0 } else { -3.5 };
-        let ball = BallFactory::new()
-            .create_massive_with_velocity(Vec2D::new(0.3, start_y), Vec2D::new(0.7, 0.0));
+        // The unit species (Ar since #405), as before #405 with `N2`.
+        let ball = BallFactory::new().create_with_species_and_velocity(
+            Vec2D::new(0.3, start_y),
+            SPECIES_AR,
+            Vec2D::new(0.7, 0.0),
+        );
         mc.world_mut().add_ball_and_register(ball);
         mc.collect_neighbours_by_cell(super::DT_GOAL);
         mc.simulation_step().unwrap();

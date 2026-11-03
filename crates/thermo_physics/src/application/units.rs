@@ -8,13 +8,18 @@
 //! A `UnitSystem` says which substance those units stand for and converts
 //! both ways: literature parameters (Å, K, u) into reduced values for new
 //! species, and reduced results (temperature, time, energy, speed) into SI or
-//! common units for display. The reference is N₂ (`UnitSystem::N2`), the
-//! built-in species `N2` with `σ* = ε* = m* = 1`.
+//! common units for display. The reference is argon (`UnitSystem::AR`,
+//! #405), the built-in species `Ar` with `σ* = ε* = m* = 1`. N₂
+//! (`UnitSystem::N2`) was the reference from #236 to #405; saves written
+//! then are rescaled from it on load ([`UnitScale`]).
 //!
 //! Conversions use f64; the simulation stores f32. The parameters are fitted
 //! to 3D gases, so in this 2D simulation the SI values are qualitative.
 
-use crate::objects2d::ball_impl::{N2_EPSILON_KELVIN, N2_MASS_U, N2_SIGMA_ANGSTROM};
+use crate::objects2d::ball_impl::{
+    AR_EPSILON_KELVIN, AR_MASS_U, AR_SIGMA_ANGSTROM, N2_EPSILON_KELVIN, N2_MASS_U,
+    N2_SIGMA_ANGSTROM,
+};
 
 /// Boltzmann constant (exact, SI 2019).
 pub(crate) const BOLTZMANN_J_PER_K: f64 = 1.380_649e-23;
@@ -39,7 +44,20 @@ pub struct UnitSystem {
 // `from_*` convert a physical value into this unit system, so they need it.
 #[allow(clippy::wrong_self_convention)]
 impl UnitSystem {
-    /// N₂, from second virial coefficients: Hirschfelder, Curtiss and Bird,
+    /// Argon, the reference (#405), from second virial coefficients:
+    /// Hirschfelder, Curtiss and Bird (1954), table I-A.
+    pub const AR: UnitSystem = UnitSystem {
+        name: "Ar",
+        sigma_angstrom: AR_SIGMA_ANGSTROM,
+        epsilon_kelvin: AR_EPSILON_KELVIN,
+        mass_u: AR_MASS_U,
+        source: "Hirschfelder, Curtiss & Bird (1954), second virial coefficients",
+    };
+
+    /// The reference of the reduced units the simulation runs in.
+    pub const REDUCED: UnitSystem = UnitSystem::AR;
+
+    /// N₂, the reference from #236 to #405, from second virial coefficients: Hirschfelder, Curtiss and Bird,
     /// *Molecular Theory of Gases and Liquids* (Wiley, 1954), table I-A.
     /// Published single-site fits for N₂ range over about 70–100 K for
     /// `ε / k_B`, depending on the fitted property; see `docs/units.md`.
@@ -131,6 +149,16 @@ impl UnitSystem {
         (accel * self.time_s() * self.time_s() / self.length_m()) as f32
     }
 
+    /// The factors that turn a reduced value of `self` into one of `to`.
+    pub(crate) fn scale_to(&self, to: &UnitSystem) -> UnitScale {
+        UnitScale {
+            length: self.sigma_angstrom / to.sigma_angstrom,
+            energy: self.epsilon_kelvin / to.epsilon_kelvin,
+            mass: self.mass_u / to.mass_u,
+            time: self.time_s() / to.time_s(),
+        }
+    }
+
     /// Reduced `(σ*, ε*, m*)` of a species from its literature single-site
     /// Lennard-Jones parameters.
     #[cfg(test)]
@@ -148,11 +176,65 @@ impl UnitSystem {
     }
 }
 
+/// Factors between two unit systems (`UnitSystem::scale_to`): a reduced
+/// length `x` of one is `x · length` in the other, and so on.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct UnitScale {
+    pub length: f64,
+    pub energy: f64,
+    pub mass: f64,
+    pub time: f64,
+}
+
+impl UnitScale {
+    pub(crate) fn speed(&self) -> f64 {
+        self.length / self.time
+    }
+
+    pub(crate) fn acceleration(&self) -> f64 {
+        self.length / (self.time * self.time)
+    }
+
+    /// Spring constant (energy per length squared).
+    pub(crate) fn stiffness(&self) -> f64 {
+        self.energy / (self.length * self.length)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     const N2: UnitSystem = UnitSystem::N2;
+    const AR: UnitSystem = UnitSystem::AR;
+
+    #[test]
+    fn argon_is_the_unit_species() {
+        assert_eq!(UnitSystem::REDUCED, AR);
+        assert_eq!(
+            AR.reduced_lennard_jones(3.405, 119.8, 39.948),
+            (1.0, 1.0, 1.0)
+        );
+        approx(AR.time_s(), 2.1564e-12, 1e-4);
+    }
+
+    /// N₂ in Ar units, as listed in `docs/units.md`.
+    #[test]
+    fn n2_in_argon_units() {
+        let (sigma, epsilon, mass) = AR.reduced_lennard_jones(3.698, 95.05, 28.0134);
+        approx(sigma as f64, 1.0861, 1e-4);
+        approx(epsilon as f64, 0.7934, 1e-4);
+        approx(mass as f64, 0.7012, 1e-3);
+        let scale = N2.scale_to(&AR);
+        approx(scale.length, 1.0861, 1e-4);
+        approx(scale.time, 1.0210, 1e-4);
+        approx(scale.acceleration(), 1.0418, 1e-4);
+    }
+
+    #[test]
+    fn gravity_is_about_1_34e_13_in_argon_units() {
+        approx(AR.from_metres_per_second2(9.81) as f64, 1.3397e-13, 1e-4);
+    }
 
     fn approx(a: f64, b: f64, rel: f64) {
         assert!((a - b).abs() <= rel * b.abs(), "{a} vs {b}");
@@ -184,7 +266,7 @@ mod tests {
         approx(mass as f64, 1.4260, 1e-3);
     }
 
-    /// The built-in species are converted with this unit system.
+    /// The built-in species are converted with the reduced unit system.
     #[test]
     fn library_species_use_these_units() {
         use crate::objects2d::ball_impl::{LIBRARY, SpeciesTable};
@@ -193,7 +275,11 @@ mod tests {
             let s = table.species(table.by_name(lib.name).unwrap());
             assert_eq!(
                 (s.sigma, s.epsilon, s.mass),
-                N2.reduced_lennard_jones(lib.sigma_angstrom, lib.epsilon_kelvin, lib.mass_u),
+                UnitSystem::REDUCED.reduced_lennard_jones(
+                    lib.sigma_angstrom,
+                    lib.epsilon_kelvin,
+                    lib.mass_u
+                ),
                 "{}",
                 lib.name
             );
