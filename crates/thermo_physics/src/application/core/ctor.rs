@@ -63,6 +63,7 @@ impl SimulationWorld {
             table,
             pair_overrides,
             walls,
+            fields,
         } = resolved;
         let physics = BallPhysics::with_pair_overrides(
             PhysicsConstants::default(),
@@ -71,6 +72,7 @@ impl SimulationWorld {
             pair_overrides,
         )
         .with_walls(walls)
+        .with_fields(fields)
         .with_skin_factor(config.neighbours.skin_factor);
         let species_present = SpeciesSet::default();
         let cell_grid = CellGrid::new(world_rect, physics.max_list_radius(species_present))?;

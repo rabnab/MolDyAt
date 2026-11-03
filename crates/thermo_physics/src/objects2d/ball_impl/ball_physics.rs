@@ -5,6 +5,7 @@
 use crate::objects2d::Rect;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::ball_core::BounceInfo;
+use crate::objects2d::ball_impl::external_field::Field;
 use crate::objects2d::ball_impl::pair_potential::{CapSettings, LJ_SIG, PairOverride, Potential};
 use crate::objects2d::ball_impl::species::{
     DEFAULT_SPECIES, Species, SpeciesId, SpeciesSet, SpeciesTable,
@@ -75,6 +76,9 @@ pub struct BallPhysics {
     walls: WallSettings,
     /// The soft wall potential per species, if `walls.soft`.
     soft_walls: Option<SoftWalls>,
+    /// External fields from the config (`[[fields]]`, #347); gravity is in
+    /// `constants`.
+    fields: Vec<Field>,
     /// Wall contact distance of each species, from `wall_law`: the hard
     /// contact, or the backstop behind a soft wall.
     wall_contact: Vec<f32>,
@@ -144,6 +148,7 @@ impl BallPhysics {
             skin_factor: DEFAULT_SKIN_FACTOR,
             walls: WallSettings::hard(),
             soft_walls: None,
+            fields: Vec::new(),
             wall_contact: Vec::new(),
             contact,
             species_count: species.len(),
@@ -189,6 +194,18 @@ impl BallPhysics {
         }
         self.walls = walls;
         self
+    }
+
+    /// The same physics with the external fields `fields`.
+    pub(crate) fn with_fields(mut self, fields: Vec<Field>) -> Self {
+        self.fields = fields;
+        self
+    }
+
+    /// The external fields besides gravity, in config order.
+    #[inline]
+    pub(crate) fn fields(&self) -> &[Field] {
+        &self.fields
     }
 
     /// The wall model.

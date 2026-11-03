@@ -471,6 +471,12 @@ backstop = 0.3                # 0.05..0.5, hard contact behind a soft wall at ba
 # sigma = 0.6                 # 0.1..8
 # epsilon = 2.0               # 0.1..10
 
+## Optional, one block per external field besides gravity (G toggles gravity).
+# [[fields]]
+# kind = "harmonic"           # harmonic trap U = 1/2 k |r - center|^2
+# center = [0.0, 0.0]         # world coordinates, within +-1e5
+# stiffness = 0.05            # 1e-6..100, k in epsilon/sigma^2
+
 [neighbours]
 skin_factor = 0.2             # 0.01..1, Verlet skin as a share of the N2 cutoff
 reorder_interval = 0          # steps between sorts of the balls by cell (memory locality); 0 = never

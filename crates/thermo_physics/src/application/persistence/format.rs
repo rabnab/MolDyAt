@@ -50,7 +50,8 @@ use std::collections::HashSet;
 /// existing one (`builtin_table_is_pinned`).
 /// - v4 (#280): `config.walls`; soft walls became the default, so older
 ///   files with a config get `walls.model = "hard"`.
-pub(crate) const WORLD_FILE_VERSION: u32 = 4;
+/// - v5 (#347): `config.fields`, external fields besides gravity.
+pub(crate) const WORLD_FILE_VERSION: u32 = 5;
 
 /// Everything needed to rebuild a world. Energy plot data and simulation
 /// statistics are deliberately not part of it.

@@ -6,8 +6,8 @@ use super::*;
 use crate::application::AppResult;
 use crate::application::phase_timings::PhaseTimings;
 use crate::application::sim_config::{
-    DisplayConfig, IntegrationConfig, NeighbourConfig, PairOverrideConfig, PotentialConfig,
-    SimConfig, WallsConfig,
+    DisplayConfig, FieldConfig, IntegrationConfig, NeighbourConfig, PairOverrideConfig,
+    PotentialConfig, SimConfig, WallsConfig,
 };
 use crate::application::sim_stats::{HIGH_GRAVITY, NORMAL_GRAVITY, is_normal_gravity};
 use crate::objects2d::Rect;
@@ -258,6 +258,11 @@ impl MainContent {
                 snapshot_interval_us: self.runtime.snapshot_interval_us,
             },
             species: self.world.species_config.clone(),
+            fields: physics
+                .fields()
+                .iter()
+                .map(FieldConfig::from_field)
+                .collect(),
         }
     }
 

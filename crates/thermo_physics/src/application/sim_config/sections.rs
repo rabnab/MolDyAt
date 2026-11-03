@@ -9,6 +9,8 @@ use super::*;
 
 use crate::error::AppResult;
 use crate::objects2d::Rect;
+use crate::objects2d::Vec2D;
+use crate::objects2d::ball_impl::external_field::{Field, HarmonicTrap};
 use crate::objects2d::ball_impl::pair_potential::{CapSettings, PairOverride};
 use crate::objects2d::ball_impl::wall_law::{WallOverride, WallSettings};
 use crate::objects2d::ball_impl::{DEFAULT_SKIN_FACTOR, SpeciesTable};
@@ -357,6 +359,61 @@ pub struct WallOverrideConfig {
     pub sigma: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub epsilon: Option<f32>,
+}
+
+/// Kind of a configured external field (`[[fields]] kind`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FieldKind {
+    /// Harmonic trap `U = ½·k·|r - c|²` (`center`, `stiffness`).
+    Harmonic,
+}
+
+/// One `[[fields]]` entry (#347): an external field besides gravity.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FieldConfig {
+    pub kind: FieldKind,
+    /// Centre of the trap, world coordinates.
+    pub center: [f32; 2],
+    /// Spring constant `k` (ε/σ²).
+    pub stiffness: f32,
+}
+
+impl FieldConfig {
+    pub(crate) fn from_field(field: &Field) -> Self {
+        match field {
+            Field::Harmonic(trap) => Self {
+                kind: FieldKind::Harmonic,
+                center: [trap.center.x, trap.center.y],
+                stiffness: trap.stiffness,
+            },
+        }
+    }
+
+    /// Check the values; `key` names the entry in errors.
+    pub(crate) fn resolve(&self, key: &str) -> AppResult<Field> {
+        for (axis, value) in ["x", "y"].iter().zip(self.center) {
+            check_range(
+                value,
+                -MAX_FIELD_CENTER,
+                MAX_FIELD_CENTER,
+                &format!("{key}.center.{axis}"),
+            )?;
+        }
+        check_range(
+            self.stiffness,
+            MIN_FIELD_STIFFNESS,
+            MAX_FIELD_STIFFNESS,
+            &format!("{key}.stiffness"),
+        )?;
+        Ok(match self.kind {
+            FieldKind::Harmonic => Field::Harmonic(HarmonicTrap {
+                center: Vec2D::new(self.center[0], self.center[1]),
+                stiffness: self.stiffness,
+            }),
+        })
+    }
 }
 
 /// Verlet neighbour lists.

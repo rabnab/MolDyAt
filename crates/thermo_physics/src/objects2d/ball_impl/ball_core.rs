@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::objects2d::Rect;
+use crate::objects2d::ball_impl::external_field::{ExternalField, UniformField};
 #[cfg(test)]
 use crate::objects2d::ball_impl::species::DEFAULT_SPECIES;
 #[cfg(any(test, feature = "test-support"))]
@@ -107,19 +108,18 @@ impl Default for Ball2D {
     }
 }
 
-/// Uniform gravity of strength `gravity`, defined once for the kick and the
-/// energy stats: the acceleration `-g ŷ` and its potential energy `m·g·h`
-/// at height `h` above the reference, so that `-dU/dh / m` is the
-/// acceleration (test `gravity_potential_matches_its_acceleration`). The
-/// `ExternalField` of plan item I8b replaces both.
+/// Gravity of strength `gravity` as the [`UniformField`] it is (#347): the
+/// acceleration `-g ŷ`. Shorthand for the call sites that only shift
+/// accelerations when gravity changes.
 pub(crate) fn gravity_acceleration(gravity: f32) -> Vec2D {
-    Vec2D::new(0., -gravity)
+    UniformField::gravity(gravity).acceleration(Vec2D::zero(), 1.0)
 }
 
-/// The potential energy of mass `mass` at height `height` (see
-/// [`gravity_acceleration`]).
+/// The potential energy of mass `mass` at height `height` above the floor
+/// in gravity `gravity` (see [`UniformField`]).
+#[cfg(test)]
 pub(crate) fn gravity_potential(mass: f32, gravity: f32, height: f32) -> f32 {
-    mass * gravity * height
+    UniformField::gravity(gravity).potential(Vec2D::new(0.0, height), mass)
 }
 
 impl Ball2D {

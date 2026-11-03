@@ -10,7 +10,9 @@
 use super::scratch_dir;
 use crate::application::persistence::migrate;
 use crate::application::persistence::{LoadSource, SaveStore, WORLD_FILE_VERSION, WorldFile};
-use crate::application::sim_config::{WallModel, WallOverrideConfig, WallsConfig};
+use crate::application::sim_config::{
+    FieldConfig, FieldKind, WallModel, WallOverrideConfig, WallsConfig,
+};
 use crate::application::{MainContent, SimConfig};
 use crate::objects2d::ball_impl::{SpeciesId, SpeciesTable};
 use crate::objects2d::operator::OperatorState;
@@ -48,6 +50,11 @@ const FIXTURES: &[Fixture] = &[
         version: 4,
         file: "v4.json",
         check: check_v4,
+    },
+    Fixture {
+        version: 5,
+        file: "v5.json",
+        check: check_v5,
     },
 ];
 
@@ -230,6 +237,7 @@ fn check_v1(mc: &MainContent) {
         ["XS", "S", "M", "L", "XS", "S", "M", "L"],
         ["M", "S"],
         WallsConfig::hard(),
+        Vec::new(),
     );
 }
 
@@ -243,6 +251,7 @@ fn check_v2(mc: &MainContent) {
         ["XS", "S", "M", "L", "N2", "XL", "M", "L"],
         ["M", "N2"],
         WallsConfig::hard(),
+        Vec::new(),
     );
 }
 
@@ -271,6 +280,29 @@ fn check_v4(mc: &MainContent) {
         ["XS", "S", "M", "L", "N2", "XL", "M", "L"],
         ["M", "N2"],
         v4_walls(),
+        Vec::new(),
+    );
+}
+
+/// The trap of the v5 reference save.
+fn v5_fields() -> Vec<FieldConfig> {
+    vec![FieldConfig {
+        kind: FieldKind::Harmonic,
+        center: [1.5, -2.0],
+        stiffness: 0.05,
+    }]
+}
+
+/// v5 (#347): the v4 world with a harmonic trap in `config.fields`.
+/// Written by the #347 build: `v4.json` loaded, `WorldFile::capture`d, its
+/// `sim_config()` with `fields = v5_fields()` set as `config`, `to_json`.
+fn check_v5(mc: &MainContent) {
+    check_world(
+        mc,
+        ["XS", "S", "M", "L", "N2", "XL", "M", "L"],
+        ["M", "N2"],
+        v4_walls(),
+        v5_fields(),
     );
 }
 
@@ -281,6 +313,7 @@ fn check_world(
     ball_species: [&str; 8],
     sphere_species: [&str; 2],
     walls: WallsConfig,
+    fields: Vec<FieldConfig>,
 ) {
     let world = mc.world();
     assert_eq!(mc.time_step(), 0.005);
@@ -290,6 +323,7 @@ fn check_world(
     // `config_less_save_keeps_its_time_step` covers a step that differs.
     let mut config = SimConfig {
         walls,
+        fields,
         ..SimConfig::default()
     };
     config.integration.time_step = 0.005;

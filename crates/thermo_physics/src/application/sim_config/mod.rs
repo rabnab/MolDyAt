@@ -46,8 +46,8 @@ mod sections;
 mod species;
 
 pub use sections::{
-    DisplayConfig, IntegrationConfig, NeighbourConfig, PairOverrideConfig, PotentialConfig,
-    WallModel, WallOverrideConfig, WallsConfig, WorldConfig,
+    DisplayConfig, FieldConfig, FieldKind, IntegrationConfig, NeighbourConfig, PairOverrideConfig,
+    PotentialConfig, WallModel, WallOverrideConfig, WallsConfig, WorldConfig,
 };
 pub(crate) use species::{ResolvedSpecies, SpeciesConfig};
 
@@ -118,6 +118,12 @@ pub(crate) const MIN_WALL_PAIR_SIGMA: f32 = 0.1;
 /// thermal balls, shallow enough to stay in front of the wall surface.
 pub(crate) const MIN_BACKSTOP_FACTOR: f32 = 0.05;
 pub(crate) const MAX_BACKSTOP_FACTOR: f32 = 0.5;
+/// `[[fields]] stiffness` (ε/σ²): from a barely felt trap to one that
+/// holds balls within a σ of its centre at T* = 1.
+pub(crate) const MIN_FIELD_STIFFNESS: f32 = 1e-6;
+pub(crate) const MAX_FIELD_STIFFNESS: f32 = 100.0;
+/// `[[fields]] center`: within the largest world (scale 100 is ±5600).
+pub(crate) const MAX_FIELD_CENTER: f32 = 1e5;
 /// Mass of a `[[species]]` entry in N₂ units (about 1.4 u to 2800 u).
 pub(crate) const MIN_SPECIES_MASS: f32 = 0.05;
 pub(crate) const MAX_SPECIES_MASS: f32 = 100.0;
@@ -153,6 +159,10 @@ pub struct SimConfig {
     /// such a save stays readable for builds without the key.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub species: Vec<SpeciesConfig>,
+    /// `[[fields]]` (#347): external fields besides gravity, applied in
+    /// list order. Not written while empty.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub fields: Vec<FieldConfig>,
 }
 
 fn invalid(message: impl Into<String>) -> AppError {
@@ -307,6 +317,12 @@ impl SimConfig {
         let table = self.species_table()?;
         let pair_overrides = self.potential.resolve_pair_overrides(&table)?;
         let walls = self.walls.resolve(&table)?;
+        let fields = self
+            .fields
+            .iter()
+            .enumerate()
+            .map(|(i, f)| f.resolve(&format!("fields[{i}]")))
+            .collect::<AppResult<Vec<_>>>()?;
 
         check_range(
             self.neighbours.skin_factor,
@@ -324,6 +340,7 @@ impl SimConfig {
             table,
             pair_overrides,
             walls,
+            fields,
         })
     }
 
