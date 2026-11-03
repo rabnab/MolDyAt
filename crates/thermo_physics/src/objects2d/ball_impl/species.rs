@@ -129,6 +129,14 @@ pub const N2_MASS_U: f64 = 28.0134;
 const HCB_1954: &str = "Hirschfelder, Curtiss & Bird, Molecular Theory of Gases and Liquids \
      (Wiley, 1954), table I-A, second virial coefficients; mass: IUPAC standard atomic weights";
 
+/// Source of `CH4` (#409): TraPPE united-atom methane.
+const TRAPPE_UA_CH4: &str = "TraPPE-UA: Martin & Siepmann, J. Phys. Chem. B 102, 2569 (1998); \
+     mass: IUPAC standard atomic weights";
+
+/// Source of `NH3` (#409): single-site Lennard-Jones from viscosity.
+const SVEHLA_1962: &str = "Svehla, NASA Technical Report R-132 (1962), from viscosity; \
+     mass: IUPAC standard atomic weights";
+
 /// One real gas of the built-in library, in literature units.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LibrarySpecies {
@@ -144,7 +152,7 @@ pub struct LibrarySpecies {
 /// The real gases of the built-in table, after `N2` and the size classes.
 /// Append new ones at the end: saves name species, and the order is the order
 /// the UI steps through.
-pub const LIBRARY: [LibrarySpecies; 4] = [
+pub const LIBRARY: [LibrarySpecies; 6] = [
     LibrarySpecies {
         name: "Ar",
         sigma_angstrom: AR_SIGMA_ANGSTROM,
@@ -163,11 +171,11 @@ pub const LIBRARY: [LibrarySpecies; 4] = [
     },
     LibrarySpecies {
         name: "CH4",
-        sigma_angstrom: 3.817,
-        epsilon_kelvin: 148.2,
+        sigma_angstrom: 3.73,
+        epsilon_kelvin: 148.0,
         mass_u: 16.043,
         colour: [0.55, 0.85, 0.35, 1.0], // light green
-        source: HCB_1954,
+        source: TRAPPE_UA_CH4,
     },
     LibrarySpecies {
         name: "O2",
@@ -177,7 +185,30 @@ pub const LIBRARY: [LibrarySpecies; 4] = [
         colour: [0.95, 0.45, 0.55, 1.0], // pink
         source: HCB_1954,
     },
+    // #409: polar and hydrogen-bonding in reality; the single-site LJ model
+    // ignores both (see `docs/units.md`).
+    LibrarySpecies {
+        name: "NH3",
+        sigma_angstrom: 2.900,
+        epsilon_kelvin: 558.3,
+        mass_u: 17.031,
+        colour: [0.3, 0.55, 1.0, 1.0], // sky blue
+        source: SVEHLA_1962,
+    },
+    // `CH4` before #409, kept for saves that used it (format v7 renames
+    // their `CH4` to this).
+    LibrarySpecies {
+        name: "CH4_HCB",
+        sigma_angstrom: 3.817,
+        epsilon_kelvin: 148.2,
+        mass_u: 16.043,
+        colour: [0.4, 0.65, 0.25, 1.0], // darker green
+        source: HCB_1954,
+    },
 ];
+
+/// Name of the former `CH4` (Hirschfelder, Curtiss & Bird) in the table.
+pub(crate) const CH4_HCB_NAME: &str = "CH4_HCB";
 /// 2^(-1/6): a size class of radius `R` adds `2·R·2^(-1/6)` to `σ`.
 const INV_SIXTH_ROOT_OF_TWO: f32 = 0.890_898_7;
 /// Radius of the smallest former size class. Each further one doubles it.
@@ -433,20 +464,20 @@ mod tests {
     fn next_wraps_around() {
         let table = SpeciesTable::builtin();
         assert_eq!(table.next(SpeciesId::new(5)), SpeciesId::new(6));
-        assert_eq!(table.next(SpeciesId::new(9)), SpeciesId::new(0));
-        assert_eq!(table.previous(SpeciesId::new(0)), SpeciesId::new(9));
+        assert_eq!(table.next(SpeciesId::new(11)), SpeciesId::new(0));
+        assert_eq!(table.previous(SpeciesId::new(0)), SpeciesId::new(11));
         assert_eq!(table.previous(SpeciesId::new(6)), SpeciesId::new(5));
         // An id outside the table wraps into it in both directions.
-        assert_eq!(table.next(SpeciesId::new(13)), SpeciesId::new(4));
-        assert_eq!(table.previous(SpeciesId::new(13)), SpeciesId::new(2));
+        assert_eq!(table.next(SpeciesId::new(13)), SpeciesId::new(2));
+        assert_eq!(table.previous(SpeciesId::new(13)), SpeciesId::new(0));
     }
 
     #[test]
     fn id_rejects_indices_outside_the_table() {
         let table = SpeciesTable::builtin();
-        assert_eq!(table.id(9), Some(SpeciesId::new(9)));
-        assert_eq!(table.id(10), None);
-        assert!(table.get(SpeciesId::new(10)).is_none());
+        assert_eq!(table.id(11), Some(SpeciesId::new(11)));
+        assert_eq!(table.id(12), None);
+        assert!(table.get(SpeciesId::new(12)).is_none());
         assert_eq!(table.by_name("M"), Some(SpeciesId::new(3)));
         assert_eq!(table.by_name("M"), Some(SPECIES_M));
         assert_eq!(table.by_name("Ar"), Some(SpeciesId::new(6)));
@@ -486,6 +517,28 @@ mod tests {
         }
     }
 
+    /// CH₄ (TraPPE-UA) and NH₃ (Svehla 1962) in Ar units, as listed in
+    /// `docs/units.md` (#409); the former CH₄ stays as `CH4_HCB`.
+    #[test]
+    fn ch4_and_nh3_have_their_documented_reduced_values() {
+        let table = SpeciesTable::builtin();
+        let close = |a: f32, b: f32| (a - b).abs() < 5e-5;
+        for (name, sigma, epsilon, mass) in [
+            ("CH4", 1.0954, 1.2354, 0.4016),
+            ("NH3", 0.8517, 4.6603, 0.4263),
+            ("CH4_HCB", 1.1210, 1.2371, 0.4016),
+        ] {
+            let s = table.species(table.by_name(name).unwrap());
+            assert!(
+                close(s.sigma, sigma) && close(s.epsilon, epsilon) && close(s.mass, mass),
+                "{name}: {} {} {}",
+                s.sigma,
+                s.epsilon,
+                s.mass
+            );
+        }
+    }
+
     /// The built-in table is part of the save format: a file names a species,
     /// and its mass, `σ` and `ε` come from this table when the file is loaded.
     /// If this test fails, read "Built-in species" in the `save-format` skill
@@ -494,8 +547,9 @@ mod tests {
     #[test]
     fn builtin_table_is_pinned() {
         // (name, f32 bits of mass, sigma, epsilon, display_radius), in table
-        // order, in Ar units (#405, format v6).
-        const PINNED: [(&str, u32, u32, u32, u32); 10] = [
+        // order, in Ar units (#405, format v6; #409, v7: TraPPE CH4, NH3,
+        // the former CH4 as CH4_HCB).
+        const PINNED: [(&str, u32, u32, u32, u32); 12] = [
             ("N2", 0x3f3384e6, 0x3f8b03af, 0x3f4b1ca2, 0x3f0b03af), // 0.7012466, 1.08605, 0.7934057
             ("XS", 0x3f3384e6, 0x3fb02b31, 0x3f4b1ca2, 0x3f302b31), // 0.7012466, 1.376318, 0.7934057
             ("S", 0x3f576c48, 0x3fd552b2, 0x3f4b1ca2, 0x3f5552b2),  // 0.841496, 1.666586, 0.7934057
@@ -504,8 +558,10 @@ mod tests {
             ("XL", 0x408a25a6, 0x40b75ef2, 0x3f4b1ca2, 0x40375ef2), // 4.317096, 5.73034, 0.7934057
             ("Ar", 0x3f800000, 0x3f800000, 0x3f800000, 0x3f000000), // 1, 1, 1
             ("Ne", 0x3f0151f3, 0x3f4eadfa, 0x3e98259c, 0x3eceadfa), // 0.5051567, 0.8073422, 0.2971619
-            ("CH4", 0x3ecd9e22, 0x3f8f7ce1, 0x3f9e580a, 0x3f0f7ce1), // 0.4015971, 1.120999, 1.237062
+            ("CH4", 0x3ecd9e22, 0x3f8c37a3, 0x3f9e2156, 0x3f0c37a3), // 0.4015971, 1.095448, 1.235392
             ("O2", 0x3f4d0f68, 0x3f86941d, 0x3f7b15cc, 0x3f06941d), // 0.8010163, 1.051395, 0.9808013
+            ("NH3", 0x3eda47d3, 0x3f5a0845, 0x409520e8, 0x3eda0845), // 0.4263292, 0.8516887, 4.660267
+            ("CH4_HCB", 0x3ecd9e22, 0x3f8f7ce1, 0x3f9e580a, 0x3f0f7ce1), // 0.4015971, 1.120999, 1.237062
         ];
         let actual: Vec<_> = SpeciesTable::builtin()
             .iter()

@@ -37,7 +37,8 @@
 //!
 //! `[[species]]` (#237) replaces the species table: without it a world uses
 //! the built-in library (`SpeciesTable::builtin()`: `N2`, the former size
-//! classes `XS` to `XL`, `Ar`, `Ne`, `CH4`, `O2`); with it, exactly the listed
+//! classes `XS` to `XL`, `Ar`, `Ne`, `CH4`, `O2`, `NH3`, `CH4_HCB`); with it,
+//! exactly the listed
 //! species, in that order, the first being the default for new balls. Entries
 //! give literature single-site Lennard-Jones values (Å, K, u), converted into
 //! Ar units (#405). Pair overrides and saved balls name species of this table.

@@ -22,9 +22,13 @@ Without a `[[species]]` list in the config, every world uses this table (`Specie
 | XS, S, M, L, XL | – | 95.05 | – | `(2·R·2^(-1/6) + 1)·1.0860` (1.376, 1.667, 2.247, 3.408, 5.730) | 0.7934 | 0.701 … 4.317 | the former size classes of radius `R` = 0.15 … 2.4 in N₂ units, kept for migrated saves |
 | Ar | 3.405 | 119.8 | 39.948 | 1 | 1 | 1 | (a); the unit species |
 | Ne | 2.749 | 35.60 | 20.180 | 0.8073 | 0.2972 | 0.5052 | (a) |
-| CH4 | 3.817 | 148.2 | 16.043 | 1.1210 | 1.2371 | 0.4016 | (a) |
+| CH4 | 3.73 | 148.0 | 16.043 | 1.0954 | 1.2354 | 0.4016 | (b), united atom |
 | O2 | 3.58 | 117.5 | 31.999 | 1.0514 | 0.9808 | 0.8010 | (a) |
+| NH3 | 2.900 | 558.3 | 17.031 | 0.8517 | 4.6603 | 0.4263 | (c) |
+| CH4_HCB | 3.817 | 148.2 | 16.043 | 1.1210 | 1.2371 | 0.4016 | (a); `CH4` before #409, for saves that used it |
 
+- (b) TraPPE united atom: Martin and Siepmann, *J. Phys. Chem. B* 102, 2569 (1998) (#409). Saves from before format v7 on the built-in table name their `CH4` `CH4_HCB`, so they keep the old values.
+- (c) Svehla, *Estimated viscosities and thermal conductivities of gases at high temperatures*, NASA Technical Report R-132 (1962), from viscosity (#409). NH₃ is polar and forms hydrogen bonds; single-site Lennard-Jones ignores both, so it is only a rough, sticky sphere. With `ε* ≈ 4.7` and `m* ≈ 0.43` its timescale `σ* √(m*/ε*)` is 0.26 of Ar's: use about a quarter of the time step for NH₃-rich runs.
 - (a) `σ` and `ε/k_B`: Hirschfelder, Curtiss and Bird, *Molecular Theory of Gases and Liquids* (Wiley, 1954), table I-A, from second virial coefficients, the same source as N₂. Masses: IUPAC standard atomic weights. The library is `LIBRARY` in `crates/thermo_physics/src/objects2d/ball_impl/species.rs`, converted with the Ar constants there (`UnitSystem::AR` uses the same ones). `builtin_table_is_pinned` pins the whole table: saves name species, so changing an entry is a format change (see the `save-format` skill); add new ones at the end.
 
 A config file's `[[species]]` list (README, "Simulation config") replaces the whole table: `name`, `sigma_angstrom`, `epsilon_kelvin`, `mass_u`, `colour` (RGB or RGBA), optional `display_radius_angstrom` and `source`. The values are converted with `σ* = σ / 3.405 Å`, `ε* = (ε/k_B) / 119.8 K`, `m* = m / 39.948 u` and must lie in `σ* ∈ 0.5..8`, `ε* ∈ 0.1..10`, `m* ∈ 0.05..100`. The first entry is the default for new balls and source spheres. The units stay Ar's whether or not the list contains `Ar`. A save carries the list in its `config`, so it loads with the species it was saved with.

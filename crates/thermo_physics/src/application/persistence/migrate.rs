@@ -36,7 +36,7 @@
 use super::format::{WORLD_FILE_VERSION, invalid};
 use crate::application::units::{UnitScale, UnitSystem};
 use crate::error::AppResult;
-use crate::objects2d::ball_impl::species::SIZE_CLASS_NAMES;
+use crate::objects2d::ball_impl::species::{CH4_HCB_NAME, SIZE_CLASS_NAMES};
 use crate::objects2d::line_segment::{MAX_THICKNESS, MIN_THICKNESS};
 use crate::objects2d::operator::{
     MAX_EMISSION_SPEED, MAX_THERMOSTAT_RADIUS, MIN_EMISSION_SPEED, MIN_THERMOSTAT_RADIUS,
@@ -76,7 +76,73 @@ pub(crate) const MIGRATIONS: &[Migration] = &[
         from: 5,
         apply: migrate_v5_to_v6,
     },
+    Migration {
+        from: 6,
+        apply: migrate_v6_to_v7,
+    },
 ];
+
+/// v6 → v7 (#409): the built-in `CH4` became TraPPE-UA methane; the former
+/// one (Hirschfelder, Curtiss & Bird) stays as `CH4_HCB`. A file that uses
+/// the built-in table (no `[[species]]` list in its config) names its
+/// `CH4` balls, source spheres, pair overrides and wall overrides
+/// `CH4_HCB`, so it keeps its physics. A file with its own list keeps its
+/// names: they are that list's species.
+fn migrate_v6_to_v7(file: &mut Value) -> AppResult {
+    let config = file.get("config").filter(|c| !c.is_null());
+    let own_table = config
+        .and_then(|c| c.get("species"))
+        .and_then(Value::as_array)
+        .is_some_and(|list| !list.is_empty());
+    if own_table {
+        return Ok(());
+    }
+    let rename = |value: &mut Value| {
+        if value.as_str() == Some("CH4") {
+            *value = Value::from(CH4_HCB_NAME);
+        }
+    };
+    for ball in list_mut(file, "balls")? {
+        if let Some(name) = ball.get_mut("species") {
+            rename(name);
+        }
+    }
+    for entry in list_mut(file, "operators")? {
+        if let Some(name) = entry
+            .get_mut("source_sphere")
+            .and_then(|s| s.get_mut("ball_species"))
+        {
+            rename(name);
+        }
+    }
+    if let Some(config) = file.get_mut("config").filter(|c| !c.is_null()) {
+        if let Some(overrides) = config
+            .get_mut("potential")
+            .and_then(|p| p.get_mut("pair_override"))
+            .and_then(Value::as_array_mut)
+        {
+            for o in overrides {
+                for key in ["a", "b"] {
+                    if let Some(name) = o.get_mut(key) {
+                        rename(name);
+                    }
+                }
+            }
+        }
+        if let Some(overrides) = config
+            .get_mut("walls")
+            .and_then(|w| w.get_mut("override"))
+            .and_then(Value::as_array_mut)
+        {
+            for o in overrides {
+                if let Some(name) = o.get_mut("species") {
+                    rename(name);
+                }
+            }
+        }
+    }
+    Ok(())
+}
 
 /// v5 → v6 (#405): Ar replaced N₂ as the unit species. Every physical
 /// quantity is rescaled from N₂ to Ar units, so the file holds the same
