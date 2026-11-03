@@ -321,6 +321,8 @@ fn test_simulation_step_keeps_every_scratch_buffer_while_it_fits() {
     // allocation count in `test_warm_simulation_steps_do_not_allocate` does
     // not depend on that.
     let (mut main_content, _) = create_main_content();
+    // Hard walls, so the balls make wall contacts.
+    main_content.use_hard_walls();
     main_content.add_line_segment(Vec2D::new(-5.0, -30.0), Vec2D::new(85.0, -30.0));
     for i in 0..20 {
         let pos = Vec2D::new(4.0 * i as f32, -25.0);

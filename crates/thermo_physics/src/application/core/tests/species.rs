@@ -375,6 +375,7 @@ fn box_walls_reflect_at_half_sigma() {
             5,
         )
         .unwrap();
+        mc.use_hard_walls();
         mc.world_mut().speed_limit_override = Some(f32::INFINITY);
         let s = species(name);
         let contact = SpeciesTable::builtin().species(s).sigma / 2.0;

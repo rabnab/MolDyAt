@@ -16,6 +16,7 @@ mod source_spheres;
 mod step_scratch;
 mod thermostats;
 mod valves;
+mod wall_forces;
 pub use valves::{ValveSpanChange, valve_span_problem};
 mod verbose;
 

@@ -58,7 +58,29 @@ pub(crate) const MIGRATIONS: &[Migration] = &[
         from: 2,
         apply: migrate_v2_to_v3,
     },
+    Migration {
+        from: 3,
+        apply: migrate_v3_to_v4,
+    },
 ];
+
+/// v3 → v4 (#280): soft walls became the default. A save with a `config`
+/// ran with hard walls, so it gets `config.walls.model = "hard"`; a save
+/// without one already runs with hard walls (`ResolvedSpecies::builtin`).
+fn migrate_v3_to_v4(file: &mut Value) -> AppResult {
+    let Some(config) = file.get_mut("config") else {
+        return Ok(());
+    };
+    if config.is_null() {
+        return Ok(());
+    }
+    let config = object_mut(config, "`config`")?;
+    if config.contains_key("walls") {
+        return Err(invalid("a v3 `config` cannot have `walls`"));
+    }
+    config.insert("walls".into(), serde_json::json!({ "model": "hard" }));
+    Ok(())
+}
 
 /// v1 → v2 (#234): size classes became species. A ball's `size_idx` becomes
 /// `species` with the name of the former size class (`XS` to `XL`), whose `σ`

@@ -19,7 +19,7 @@
 //! view (window size, zoom, pan) are never written.
 
 use crate::application::sim_config::{
-    MAX_TIME_STEP, MIN_TIME_STEP, ResolvedSpecies, SimConfig, check_time_step,
+    MAX_TIME_STEP, MIN_TIME_STEP, ResolvedSpecies, SimConfig, WallsConfig, check_time_step,
 };
 use crate::error::{AppError, AppResult};
 use crate::objects2d::operator::{
@@ -48,7 +48,9 @@ use std::collections::HashSet;
 /// file uses. Changing a built-in species is a breaking change: bump this
 /// version and add a migration, or add a new species instead of changing an
 /// existing one (`builtin_table_is_pinned`).
-pub(crate) const WORLD_FILE_VERSION: u32 = 3;
+/// - v4 (#280): `config.walls`; soft walls became the default, so older
+///   files with a config get `walls.model = "hard"`.
+pub(crate) const WORLD_FILE_VERSION: u32 = 4;
 
 /// Everything needed to rebuild a world. Energy plot data and simulation
 /// statistics are deliberately not part of it.
@@ -480,9 +482,13 @@ impl WorldFile {
     }
 
     /// The config to run this world with: the saved one, or the default for
-    /// files without one, with the file's time step.
+    /// files without one (with hard walls, as they ran: #280), with the
+    /// file's time step.
     pub fn sim_config(&self) -> SimConfig {
-        let mut config = self.config.clone().unwrap_or_default();
+        let mut config = self.config.clone().unwrap_or_else(|| SimConfig {
+            walls: WallsConfig::hard(),
+            ..SimConfig::default()
+        });
         config.integration.time_step = self.time_step;
         config
     }

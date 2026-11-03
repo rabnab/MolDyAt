@@ -459,6 +459,18 @@ cutoff_factor = 4.0           # 1.2..10, pair cutoff in units of sigma_ij
 # sigma = 1.1                 # 0.5..8
 # epsilon = 1.2               # 0.1..10
 
+[walls]
+model = "soft"                # "soft" (default) or "hard"; saves from before v4 run "hard"
+sigma = 0.0                   # 0..8, wall sigma_w: sigma_iw = (sigma_i + sigma_w) / 2
+epsilon = 1.0                 # 0.1..10, wall epsilon_w: epsilon_iw = sqrt(epsilon_i * epsilon_w)
+attractive = false            # false: cut at the minimum (WCA, repulsive); true: LJ well up to the cutoff
+backstop = 0.3                # 0.05..0.5, hard contact behind a soft wall at backstop * sigma_i
+## Optional, one block per species: replaces its mixed sigma_iw and/or epsilon_iw.
+# [[walls.override]]
+# species = "Ar"
+# sigma = 0.6                 # 0.1..8
+# epsilon = 2.0               # 0.1..10
+
 [neighbours]
 skin_factor = 0.2             # 0.01..1, Verlet skin as a share of the N2 cutoff
 reorder_interval = 0          # steps between sorts of the balls by cell (memory locality); 0 = never

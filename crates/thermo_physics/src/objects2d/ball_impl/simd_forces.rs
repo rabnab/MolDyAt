@@ -346,5 +346,7 @@ fn force_kernel<L: PairLaw>(
         potential_energy: total_pot,
         neighbor_forces,
         virial,
+        wall_force: Vec2D::zero(),
+        wall_potential: 0.0,
     }
 }

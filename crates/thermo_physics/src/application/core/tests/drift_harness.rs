@@ -4,6 +4,7 @@
 
 use super::{DT_GOAL, create_main_content_for_region, test_config};
 use crate::application::MainContent;
+use crate::application::core::wall_forces::soft_wall_force;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::{BallFactory, BallId, SPECIES_M, SpeciesId};
 use std::collections::hash_map::DefaultHasher;
@@ -520,6 +521,14 @@ fn sample_step(main_content: &MainContent, step: usize) -> DriftSample {
         }
     }
 
+    // Soft walls (#280): the balls' energy in the box and line walls.
+    if let Some(walls) = world.physics.soft_walls() {
+        let obstacles = world.collect_solid_obstacles();
+        for ball in &world.balls {
+            potential += soft_wall_force(walls, ball, &world.world_rect, &obstacles).potential;
+        }
+    }
+
     let cap_hit_ratio = if pair_count == 0 {
         0.0
     } else {
@@ -547,6 +556,8 @@ mod dense_gas;
 mod neighbor_lists;
 #[cfg(test)]
 mod precision;
+#[cfg(test)]
+mod soft_walls;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

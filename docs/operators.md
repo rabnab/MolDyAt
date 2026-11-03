@@ -41,10 +41,22 @@ after a wall drag.
 
 Collision code does not know about chains or valve state. Once per step,
 `collect_solid_obstacles` flattens every piece and every closed valve into
-plain capsules; an open valve produces no obstacle. A ball touches a wall
-when its centre is its wall contact distance from the surface
-(`BallPhysics::wall_contact_distance`, from the `WallLaw`: hard contact at
-`σ_i / 2` of its species). Contacts are then resolved in two places:
+plain capsules; an open valve produces no obstacle.
+
+With soft walls (#280, the default), every capsule acts on nearby balls
+through the wall potential of their species in the distance `z` from its
+surface (negative inside it); only the nearest capsule acts, so the pieces
+and closed valves of a chain, which overlap at their joints, add no bump or
+well there (`core::wall_forces`). The wall force books wall momentum
+(`-F·dt`), except the ghost wall's. Thin walls and valves still need a hard
+contact: once a centre crosses the centre line the soft force flips. That
+backstop sits at `0.3 σ_i`, far up the wall potential; thermal balls never
+reach it (`SimStats::wall_contacts` counts its hits).
+
+A ball touches a wall when its centre is its wall contact distance from the
+surface (`BallPhysics::wall_contact_distance`, from the `WallLaw`: the
+backstop behind soft walls, `σ_i / 2` of its species with hard walls).
+Contacts are then resolved in two places:
 
 - **Position update.** `SimulationWorld::sweep_wall_contact` finds the
   contact time on the ball's path and reflects it along the surface normal

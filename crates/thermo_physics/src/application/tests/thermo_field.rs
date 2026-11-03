@@ -18,6 +18,8 @@ fn make_force_result(virial: f32) -> ForceResult {
         potential_energy: 0.0,
         neighbor_forces: Vec::new(),
         virial,
+        wall_force: Vec2D::zero(),
+        wall_potential: 0.0,
     }
 }
 

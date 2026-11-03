@@ -171,6 +171,8 @@ fn test_separating_overlaps_conserves_energy() {
     // overlaps goes into kinetic energy, nothing is lost or gained. The
     // speed limit (a deliberate brake) is switched off.
     let (mut main_content, transform) = create_main_content_for_region(-10., 10.);
+    // `total_energy` holds no wall energy: hard walls.
+    main_content.use_hard_walls();
     main_content.world_mut().speed_limit_override = Some(f32::INFINITY);
     let full = transform;
     let rect = Rect::new(full.x, full.y, BOX, -BOX);

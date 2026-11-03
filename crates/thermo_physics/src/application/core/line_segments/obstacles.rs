@@ -151,6 +151,36 @@ impl Obstacle {
         }
     }
 
+    /// The wall being drawn or dragged (its force books no wall momentum).
+    #[inline]
+    pub(crate) fn is_ghost(&self) -> bool {
+        self.ghost
+    }
+
+    /// Signed distance from `pos` to the obstacle's surface (negative
+    /// inside the capsule) and the unit outward normal there, if it is below
+    /// `range`. A degenerate obstacle has no surface, as for the contact
+    /// sweep and the overlap pass.
+    #[inline]
+    pub(crate) fn surface_distance(&self, pos: &Vec2D, range: f32) -> Option<(f32, Vec2D)> {
+        let reach = range + self.half_thickness;
+        if self.is_degenerate() || !self.near_bounds(pos, reach) {
+            return None;
+        }
+        let out = self.closest_point(pos).dist(pos);
+        let dist_sq = out.norm_sq();
+        if dist_sq >= reach * reach {
+            return None;
+        }
+        let dist = dist_sq.sqrt();
+        let normal = if dist > 1e-12 {
+            out.scaled(1.0 / dist)
+        } else {
+            self.outward_normal(pos, pos)
+        };
+        Some((dist - self.half_thickness, normal))
+    }
+
     /// Squared distance from `pos` to the centre line.
     pub(super) fn distance_sq(&self, pos: &Vec2D) -> f32 {
         self.closest_point(pos).dist(pos).norm_sq()

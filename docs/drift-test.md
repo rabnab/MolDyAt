@@ -16,10 +16,17 @@ cargo ci-test-drift   # = cargo test -p thermo_physics -- --ignored --nocapture
 All scenarios are `#[ignore = "suite:drift"]`, so a plain `cargo test` skips
 them. CI runs the alias in a step of the `test` job, after the unit tests and
 reusing their build. The alias runs every ignored test of `thermo_physics`, so
-it also runs the two `#[ignore = "suite:physics (slow)"]` tests
+it also runs the three `#[ignore = "suite:physics (slow)"]` tests
 (`test_overlap_fallback_stays_rare_in_a_gas_with_walls`,
-`test_virial_pressure_2d_matches_wall_pressure`); they are not drift
+`test_virial_pressure_2d_matches_wall_pressure`,
+`soft_wall_pressure_matches_the_hard_wall`); they are not drift
 scenarios and print no summary line.
+
+Walls: worlds have soft walls by default (#280). Scenarios that measure the
+hard contact (elastic_world_wall, elastic_line_segment, walled_gas and the
+two hard-wall slow tests) switch to hard walls (`use_hard_walls`); the
+soft_walled_gas scenario covers soft walls. The harness energy includes the
+soft wall energy.
 
 Commands follow the
 [cargo command policy](../.github/copilot-instructions.md#cargo-command-policy-source-of-truth).
@@ -94,7 +101,10 @@ up before they fail the build.
 | precision by distance (dense and cool gas centred at 0, 125, 500, 2000, each at dt, dt/2, dt/4) | `precision.rs` | dense gas: dt/4 drift over that at the origin | <= 1.6 | 1.07 (at 2000) | ~1.5x; f32 positions gave 2.57 |
 | | | cool gas: dt/4 drift over that at the origin | <= 4.0 | 2.01 (at 2000) | 2x; f32 positions gave 22.6 (at 500) |
 | walled_gas (dense gas inside a square of line segments, half side 22, at 0 and 2000) | `precision.rs` | dt/4 drift over that at the origin | <= 1.6 | 1.07 | ~1.5x, as the dense gas |
-| | | line-wall contacts per run (validity) | >= 50 | 120..127 | |
+| | | line-wall contacts per run (validity) | >= 50 | 120..127 | hard walls |
+| soft_walled_gas (the dense gas with projectiles inside the same square of soft line walls, at the origin, 1000 steps) | `soft_walls.rs` | max relative energy drift (with the wall energy) | 5.5e-3 | 3.51e-3 | ~1.6x; the projectile pairs in the force cap set it, as in dense_gas |
+| | | backstop hits (`wall_contacts`) | 0 | 0 | exact |
+| | | balls lost | none | none | |
 | binary_mixture (256 balls, checkerboard of `N2` and `XS` with pair overrides to σ = 1.2, ε = 1.5 and Lorentz–Berthelot cross pairs, 1000 steps) | `binary_mixture.rs` | max relative energy drift | 1.0e-3 | 5.67e-4 | ~1.8x; nearby starts give 5.7e-4..2.2e-3, see the #235 entry in [Baseline history](#baseline-history) |
 | | | relative momentum drift | 1.0e-7 | 1.8e-8 | ~1.9x the largest of the nearby starts (1.6e-8..5.4e-8); f32 rounding noise |
 | | | in-cutoff pairs missing / listed by one ball (every step) | 0 / 0 | 0 / 0 | exact |
@@ -106,7 +116,7 @@ up before they fail the build.
 | | | relative momentum drift | 3.0e-3 | 0 | |
 | | | force-cap region reached (max cap-hit ratio) | >= 1.0e-2 | 1.0 | |
 | two_body_dt_halving (two-body scenario at dt and dt/2, same physical time) | `tests.rs` | relative energy drift at dt/2 vs at dt | <= 2 x coarse | 1.41e-3 vs 2.83e-3 (ratio 0.50) | weak check: it only rejects drift that grows when dt shrinks; the two-body drift converges ~linearly in dt, not as dt^2 |
-| hot_sparse_gas (400 balls over the whole world, speeds up to ~8, 1000 steps) | `neighbor_lists.rs` | max relative energy drift | 8.0e-3 | 1.44e-3 | ~5.6x (18 % of the threshold); kept at 8.0e-3 because the value is realisation noise: last-digit changes move it between 4.6e-4 and 1.44e-3 (#213, #392), nearby starting speeds between 1.9e-3 and 6.5e-3 (#240), see [Baseline history](#baseline-history) |
+| hot_sparse_gas (400 balls over the whole world, speeds up to ~8, 1000 steps) | `neighbor_lists.rs` | max relative energy drift | 8.0e-3 | 1.51e-3 | ~5.3x (19 % of the threshold); kept at 8.0e-3 because the value is realisation noise: last-digit changes move it between 4.6e-4 and 1.51e-3 (#213, #392, #280), nearby starting speeds between 1.9e-3 and 6.5e-3 (#240), see [Baseline history](#baseline-history) |
 | | | per-ball rebuild rate | [1.0e-1, 4.0e-1] | 2.2e-1 | cadence band, ~10x the dense gas |
 | | | in-cutoff pairs missing / listed by one ball (every step) | 0 / 0 | 0 / 0 | exact |
 | | | balls lost | none | none | |
@@ -293,3 +303,5 @@ stated.
 **f64 positions (#213).** A ball's position is f64 (`Ball2D::exact`, with an f32 copy for every reader); the box-wall position update runs in f64 and the force kernel takes pair differences in f64 (`KernelPoint` holds f64 coordinates) before narrowing them to f32. Line-wall contacts still place the ball in f32. Every trajectory moves by rounding, also at the origin. Re-measured against #346 (dev profile, x86_64), thresholds unchanged: dense_gas max relative energy drift 3.504e-3 -> 3.506e-3 (88 % of its threshold, CI warns as before), final 2.706e-3 -> 2.704e-3, momentum 8.0e-9 -> 2.9e-8 (19 % of 1.5e-7; f32 rounding noise, see the cutoff entry); dense_gas_dt_quartering 0.120 -> 0.122 (97 %, warns as before); binary_mixture 5.668e-4 -> 5.674e-4, momentum 1.8e-8 -> 5.8e-8 (58 % of 1.0e-7, below the warning line); hot_sparse_gas 1.373e-3 -> 4.643e-4; elastic_line_segment 3.0e-7 -> 4.2e-7; mixed_sizes_cell_borders 3.72e-1 -> 3.74e-1; two_body_lj_baseline, force_cap_transition and elastic_world_wall unchanged. balls_removed_and_added now tries 120 spots instead of 60 to re-add balls: with 60 it added 21 before and 19 after the change, below its validity bound of 20; with 120 it adds 46 (max drift 5.46e-4). The bound is now a share of the tries, at least 1/6 (20 of 120), signed off by the owner in #394. Its max overlap depth is ~1.1 on both sides (1.26 before the change); the 2.8e-2 recorded in the #276 entry no longer applies. `precision.rs` became a gate (see [Precision far from the origin](#precision-far-from-the-origin)). Both headless fixtures changed (positions and energies in the last digits).
 
 **16-byte kernel record (#392).** `KernelPoint` holds the position as an f32 offset from the corner of its cell (corners in f64 from the grid origin), the cell and the species; the pair difference is `Δcell · cell size + Δoffset` in f32, and the contact radius comes from a per-species table. The record shrank from 24 to 16 bytes. Pair differences round slightly differently from the f64 difference, so trajectories move by rounding. Re-measured against #394, thresholds unchanged: dense_gas max 3.506e-3 -> 3.506e-3, final 2.704e-3 -> 2.706e-3, momentum 2.9e-8 -> 3.2e-8; dense_gas_dt_quartering 0.122 -> 0.122; binary_mixture 5.674e-4 -> 5.677e-4, momentum 5.8e-8 -> 3.2e-8; hot_sparse_gas 4.64e-4 -> 1.44e-3 (threshold 8.0e-3, 18 %, below the warning line; back to its f32-position value; realisation noise: the #240 entry measured 1.9e-3..6.5e-3 over five nearby starting speeds, and the threshold was set above that whole band); balls_removed_and_added 5.46e-4 -> 3.53e-4; the other scenarios unchanged. Precision gates: dense gas at 2000 1.08x the origin (was 1.07x), cool gas at 2000 1.71x (was 2.01x), walled gas at 2000 1.09x (was 1.07x). Both headless fixtures changed (last digits).
+
+**Soft walls (#280).** Walls are a Lennard-Jones potential in the wall distance by default (WCA, `σ_iw = σ_i/2`, `ε_iw = 1` for `N2`), with the hard contact as a backstop at `0.3 σ_i`; new balls are placed no closer than the potential minimum (`0.56 σ_i`). The harness energy now includes the wall energy. The scenarios that measure the hard contact run with hard walls (elastic_world_wall, elastic_line_segment, walled_gas, and the slow pressure and overlap-fallback tests) and are bit-identical to `master`, as are every scenario that never reaches a wall (dense_gas, its dt quartering, binary_mixture, the two-body and force-cap scenarios, the precision gates; same `trajectory_hash` values). Re-measured against `master` at `0ca74f9` (dev profile, x86_64), thresholds unchanged: hot_sparse_gas max relative energy drift 1.437e-3 -> 1.510e-3 (19 % of 8.0e-3; its balls now meet soft box walls at speeds up to ~8), final 1.316e-3 -> 1.089e-3, momentum 3.4e-2 -> 2.3e-2 (walls take momentum by design), cap hits 13833 -> 13392; balls_removed_and_added 3.53e-4 -> 6.26e-4; mixed_sizes_cell_borders (no energy threshold) 3.74e-1 -> 2.38e-1. New scenario soft_walled_gas: max 3.506e-3, final 2.747e-3, 93 cap hits, 0 backstop hits, threshold 5.5e-3 (~1.6x). Both headless fixtures changed: seeded placement now keeps balls at the soft wall's minimum, and the soft walls act.

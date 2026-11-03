@@ -66,6 +66,9 @@ fn bulk_virial_pressure(main_content: &MainContent) -> f64 {
 #[ignore = "suite:physics (slow)"]
 fn test_virial_pressure_2d_matches_wall_pressure() {
     let mut main_content = create_dense_harness_with_seed(12345);
+    // `wall_impulse` reads velocity flips at a hard contact; the soft wall
+    // pressure is compared with the hard one in `soft_walls.rs`.
+    main_content.use_hard_walls();
     main_content.world_mut().speed_limit_override = Some(f32::INFINITY);
     populate_grid_balls(&mut main_content, 900, 2.0);
     let rect = main_content.world().world_region();

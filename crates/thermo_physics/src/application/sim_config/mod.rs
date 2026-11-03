@@ -47,7 +47,7 @@ mod species;
 
 pub use sections::{
     DisplayConfig, IntegrationConfig, NeighbourConfig, PairOverrideConfig, PotentialConfig,
-    WorldConfig,
+    WallModel, WallOverrideConfig, WallsConfig, WorldConfig,
 };
 pub(crate) use species::{ResolvedSpecies, SpeciesConfig};
 
@@ -108,6 +108,16 @@ pub(crate) const MAX_PAIR_SIGMA: f32 = 8.0;
 /// `ε_ij` of a pair override. The built-in species all have `ε = 1`.
 pub(crate) const MIN_PAIR_EPSILON: f32 = 0.1;
 pub(crate) const MAX_PAIR_EPSILON: f32 = 10.0;
+/// `walls.sigma` (`σ_w`); 0 gives the hard contact distance `σ_i / 2`.
+pub(crate) const MIN_WALL_SIGMA: f32 = 0.0;
+pub(crate) const MAX_WALL_SIGMA: f32 = MAX_PAIR_SIGMA;
+/// `σ_iw` of a `[[walls.override]]`. Smaller than for pairs: the default
+/// `σ_iw` of the smallest built-in species is already below 0.5.
+pub(crate) const MIN_WALL_PAIR_SIGMA: f32 = 0.1;
+/// `walls.backstop`, a share of `σ_i`: deep enough that the soft wall holds
+/// thermal balls, shallow enough to stay in front of the wall surface.
+pub(crate) const MIN_BACKSTOP_FACTOR: f32 = 0.05;
+pub(crate) const MAX_BACKSTOP_FACTOR: f32 = 0.5;
 /// Mass of a `[[species]]` entry in N₂ units (about 1.4 u to 2800 u).
 pub(crate) const MIN_SPECIES_MASS: f32 = 0.05;
 pub(crate) const MAX_SPECIES_MASS: f32 = 100.0;
@@ -133,6 +143,9 @@ pub struct SimConfig {
     pub world: WorldConfig,
     pub integration: IntegrationConfig,
     pub potential: PotentialConfig,
+    /// `[walls]` (#280). Not written at its default (soft walls).
+    #[serde(skip_serializing_if = "WallsConfig::is_default")]
+    pub walls: WallsConfig,
     pub neighbours: NeighbourConfig,
     pub display: DisplayConfig,
     /// `[[species]]`: the species table of the run, replacing the built-in
@@ -293,6 +306,7 @@ impl SimConfig {
         )?;
         let table = self.species_table()?;
         let pair_overrides = self.potential.resolve_pair_overrides(&table)?;
+        let walls = self.walls.resolve(&table)?;
 
         check_range(
             self.neighbours.skin_factor,
@@ -309,6 +323,7 @@ impl SimConfig {
         Ok(ResolvedSpecies {
             table,
             pair_overrides,
+            walls,
         })
     }
 

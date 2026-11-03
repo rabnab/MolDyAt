@@ -46,6 +46,7 @@ fn dropped_ball(on_wall: bool, height: f32) -> (MainContent, f32) {
 /// [`dropped_ball`] in the 100 x 100 world with this top-left corner.
 fn dropped_ball_in(top_left: (f32, f32), on_wall: bool, height: f32) -> (MainContent, f32) {
     let (mut main_content, _) = create_main_content_for_region(top_left.0, top_left.1);
+    main_content.use_hard_walls();
     main_content.world_mut().speed_limit_override = Some(f32::INFINITY);
     main_content.world_mut().physics.constants.gravity = GRAVITY;
     let factory = BallFactory::new();
@@ -250,6 +251,7 @@ fn ball_among_walls(
     velocity: Vec2D,
 ) -> MainContent {
     let (mut main_content, _) = create_main_content_for_region(WORLD_TOP_LEFT.0, WORLD_TOP_LEFT.1);
+    main_content.use_hard_walls();
     main_content.world_mut().speed_limit_override = Some(f32::INFINITY);
     main_content.world_mut().physics.constants.gravity = GRAVITY;
     add_walls(&mut main_content);

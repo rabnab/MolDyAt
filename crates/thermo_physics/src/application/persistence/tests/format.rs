@@ -9,7 +9,7 @@ use crate::application::persistence::format::{
     BallData, ChainPieceData, JointData, MAX_ID, OperatorData, SourceSphereData, ThermostatData,
     WORLD_FILE_VERSION, WallChainData,
 };
-use crate::application::sim_config::{MAX_TIME_STEP, MIN_TIME_STEP};
+use crate::application::sim_config::{MAX_TIME_STEP, MIN_TIME_STEP, WallsConfig};
 use crate::objects2d::Vec2D;
 
 fn error_text(file: &WorldFile) -> String {
@@ -287,10 +287,13 @@ fn rejects_ids_that_would_overflow_the_id_counters() {
 }
 
 #[test]
-fn file_without_config_runs_with_the_default_config() {
+fn file_without_config_runs_with_the_default_config_and_hard_walls() {
     let file = sample_file();
     assert_eq!(file.config, None);
-    let mut expected = SimConfig::default();
+    let mut expected = SimConfig {
+        walls: WallsConfig::hard(),
+        ..SimConfig::default()
+    };
     expected.integration.time_step = file.time_step;
     assert_eq!(file.sim_config(), expected);
 }

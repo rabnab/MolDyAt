@@ -2,7 +2,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+use super::line_segments::Obstacle;
 use super::step_scratch::{NeighbourStats, RebuildScratch, UpdateScratch};
+use super::wall_forces::soft_wall_force;
 use super::{RuntimeOptions, SimulationWorld, StatsAccumulator, StepConfig};
 use crate::application::phase_timings::{Phase, PhaseClock};
 use crate::application::thermo_field::{
@@ -147,7 +149,12 @@ impl SimulationEngine {
                 Self::update_old_positions(world);
                 clock.lap(&mut world.phase_timings, Phase::Positions);
 
-                Self::compute_forces(world, &mut scratch.force_results);
+                Self::compute_forces(
+                    world,
+                    &scratch.obstacles,
+                    bound_rect,
+                    &mut scratch.force_results,
+                );
                 clock.lap(&mut world.phase_timings, Phase::Forces);
 
                 world.sim.wall_distance_checks += sweep_checks;
@@ -420,14 +427,28 @@ impl SimulationEngine {
             });
     }
 
-    /// Pair forces of every ball, into `results` (replaced, in ball order).
-    fn compute_forces(world: &SimulationWorld, results: &mut Vec<ForceResult>) {
+    /// Pair forces of every ball, plus the soft wall forces of the box
+    /// `bound` and `obstacles` (see `wall_forces`), into `results`
+    /// (replaced, in ball order).
+    fn compute_forces(
+        world: &SimulationWorld,
+        obstacles: &[Obstacle],
+        bound: &Rect,
+        results: &mut Vec<ForceResult>,
+    ) {
         let physics = &world.physics;
         let balls = &world.balls;
         let points = &world.kernel_points;
+        let soft_walls = physics.soft_walls();
         (0..balls.len())
             .into_par_iter()
-            .map(|i| force_simd(physics, i, balls, points))
+            .map(|i| {
+                let mut result = force_simd(physics, i, balls, points);
+                if let Some(walls) = soft_walls {
+                    soft_wall_force(walls, &balls[i], bound, obstacles).add_to(&mut result);
+                }
+                result
+            })
             .collect_into_vec(results);
     }
 
@@ -473,6 +494,11 @@ impl SimulationEngine {
         }
         ball.v = v_new;
 
+        // Soft walls: the impulse their force gives the ball over the step
+        // is taken from the walls (zero with hard walls).
+        wall_px -= result.wall_force.x * dt;
+        wall_py -= result.wall_force.y * dt;
+
         ball.accel = accel;
 
         if ball.verbose.console {
@@ -487,6 +513,7 @@ impl SimulationEngine {
         let speed_sq = ball.v.norm_sq();
         let momentum = ball.moment();
         stats.pot += result.potential_energy * 0.5;
+        stats.pot += result.wall_potential;
         stats.px += momentum.x;
         stats.py += momentum.y;
         stats.kin += speed_sq * ball.mass * 0.5;

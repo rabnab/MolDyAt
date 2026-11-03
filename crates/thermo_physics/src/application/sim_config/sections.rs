@@ -2,14 +2,15 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! The `[world]`, `[integration]`, `[potential]`, `[neighbours]` and
-//! `[display]` sections of a [`SimConfig`].
+//! The `[world]`, `[integration]`, `[potential]`, `[walls]`, `[neighbours]`
+//! and `[display]` sections of a [`SimConfig`].
 
 use super::*;
 
 use crate::error::AppResult;
 use crate::objects2d::Rect;
 use crate::objects2d::ball_impl::pair_potential::{CapSettings, PairOverride};
+use crate::objects2d::ball_impl::wall_law::{WallOverride, WallSettings};
 use crate::objects2d::ball_impl::{DEFAULT_SKIN_FACTOR, SpeciesTable};
 use serde::{Deserialize, Serialize};
 
@@ -198,6 +199,164 @@ impl PairOverrideConfig {
             epsilon: self.epsilon,
         })
     }
+}
+
+/// Which wall model a run uses (`[walls] model`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum WallModel {
+    /// Wall potential with a hard backstop (#280), the default.
+    #[default]
+    Soft,
+    /// Hard contact at `σ_i / 2` only, as before #280.
+    Hard,
+}
+
+/// The walls (`[walls]`): box walls, wall pieces and closed valves. See
+/// `wall_law` for the models. Not written at its default.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct WallsConfig {
+    pub model: WallModel,
+    /// `σ_w` of the wall pseudo-species: `σ_iw = (σ_i + σ_w) / 2`.
+    pub sigma: f32,
+    /// `ε_w` of the wall pseudo-species: `ε_iw = √(ε_i · ε_w)`.
+    pub epsilon: f32,
+    /// Keep the attractive well up to the pair cutoff instead of cutting the
+    /// potential at its minimum (WCA, purely repulsive).
+    pub attractive: bool,
+    /// Distance of the hard backstop behind a soft wall, as a share of `σ_i`.
+    pub backstop: f32,
+    /// `[[walls.override]]`: species whose `σ_iw` / `ε_iw` replace the mixed
+    /// values. Not written while empty.
+    #[serde(rename = "override", skip_serializing_if = "Vec::is_empty")]
+    pub overrides: Vec<WallOverrideConfig>,
+}
+
+impl Default for WallsConfig {
+    fn default() -> Self {
+        Self::from_settings(&WallSettings::default(), SpeciesTable::builtin())
+    }
+}
+
+impl WallsConfig {
+    /// The hard walls of a run from before #280.
+    pub fn hard() -> Self {
+        Self {
+            model: WallModel::Hard,
+            ..Self::default()
+        }
+    }
+
+    pub(super) fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// `settings` with species named after `species`.
+    pub(crate) fn from_settings(settings: &WallSettings, species: &SpeciesTable) -> Self {
+        Self {
+            model: if settings.soft {
+                WallModel::Soft
+            } else {
+                WallModel::Hard
+            },
+            sigma: settings.sigma,
+            epsilon: settings.epsilon,
+            attractive: settings.attractive,
+            backstop: settings.backstop,
+            overrides: settings
+                .overrides
+                .iter()
+                .map(|o| WallOverrideConfig {
+                    species: species.species(o.species).name.clone(),
+                    sigma: o.sigma,
+                    epsilon: o.epsilon,
+                })
+                .collect(),
+        }
+    }
+
+    /// Check the values and look up the species of the overrides.
+    pub(crate) fn resolve(&self, species: &SpeciesTable) -> AppResult<WallSettings> {
+        check_range(self.sigma, MIN_WALL_SIGMA, MAX_WALL_SIGMA, "walls.sigma")?;
+        check_range(
+            self.epsilon,
+            MIN_PAIR_EPSILON,
+            MAX_PAIR_EPSILON,
+            "walls.epsilon",
+        )?;
+        check_range(
+            self.backstop,
+            MIN_BACKSTOP_FACTOR,
+            MAX_BACKSTOP_FACTOR,
+            "walls.backstop",
+        )?;
+        let mut overrides: Vec<WallOverride> = Vec::with_capacity(self.overrides.len());
+        for (i, entry) in self.overrides.iter().enumerate() {
+            let key = format!("walls.override[{i}]");
+            let id = species.by_name(&entry.species).ok_or_else(|| {
+                let known: Vec<&str> = species.iter().map(|s| s.name.as_str()).collect();
+                invalid(format!(
+                    "{key}.species: unknown species \"{}\" (known: {})",
+                    entry.species,
+                    known.join(", ")
+                ))
+            })?;
+            if overrides.iter().any(|o| o.species == id) {
+                return Err(invalid(format!(
+                    "{key} overrides species {} again",
+                    entry.species
+                )));
+            }
+            if entry.sigma.is_none() && entry.epsilon.is_none() {
+                return Err(invalid(format!(
+                    "{key} ({}) sets neither sigma nor epsilon",
+                    entry.species
+                )));
+            }
+            if let Some(sigma) = entry.sigma {
+                check_range(
+                    sigma,
+                    MIN_WALL_PAIR_SIGMA,
+                    MAX_PAIR_SIGMA,
+                    &format!("{key}.sigma"),
+                )?;
+            }
+            if let Some(epsilon) = entry.epsilon {
+                check_range(
+                    epsilon,
+                    MIN_PAIR_EPSILON,
+                    MAX_PAIR_EPSILON,
+                    &format!("{key}.epsilon"),
+                )?;
+            }
+            overrides.push(WallOverride {
+                species: id,
+                sigma: entry.sigma,
+                epsilon: entry.epsilon,
+            });
+        }
+        Ok(WallSettings {
+            soft: self.model == WallModel::Soft,
+            sigma: self.sigma,
+            epsilon: self.epsilon,
+            attractive: self.attractive,
+            backstop: self.backstop,
+            overrides,
+        })
+    }
+}
+
+/// One `[[walls.override]]` entry: species `species` meets the walls with
+/// this `σ_iw` and / or `ε_iw` instead of the mixed one.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WallOverrideConfig {
+    pub species: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sigma: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub epsilon: Option<f32>,
 }
 
 /// Verlet neighbour lists.

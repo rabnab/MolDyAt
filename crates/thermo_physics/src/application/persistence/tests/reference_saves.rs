@@ -10,6 +10,7 @@
 use super::scratch_dir;
 use crate::application::persistence::migrate;
 use crate::application::persistence::{LoadSource, SaveStore, WORLD_FILE_VERSION, WorldFile};
+use crate::application::sim_config::{WallModel, WallOverrideConfig, WallsConfig};
 use crate::application::{MainContent, SimConfig};
 use crate::objects2d::ball_impl::{SpeciesId, SpeciesTable};
 use crate::objects2d::operator::OperatorState;
@@ -42,6 +43,11 @@ const FIXTURES: &[Fixture] = &[
         version: 3,
         file: "v3.json",
         check: check_v2,
+    },
+    Fixture {
+        version: 4,
+        file: "v4.json",
+        check: check_v4,
     },
 ];
 
@@ -169,7 +175,10 @@ fn config_less_save_keeps_its_time_step() {
     mc.load_world(&store, &LoadSource::Path(path), true)
         .unwrap();
     assert_eq!(mc.time_step(), TIME_STEP);
-    let mut config = SimConfig::default();
+    let mut config = SimConfig {
+        walls: WallsConfig::hard(),
+        ..SimConfig::default()
+    };
     config.integration.time_step = TIME_STEP;
     assert_eq!(mc.config(), config);
 }
@@ -216,7 +225,12 @@ fn species_name(id: SpeciesId) -> &'static str {
 /// v1: written by the build that introduced the format. Its size classes
 /// load as the species of the same name (`size_idx` 0 to 3: `XS` to `L`).
 fn check_v1(mc: &MainContent) {
-    check_world(mc, ["XS", "S", "M", "L", "XS", "S", "M", "L"], ["M", "S"]);
+    check_world(
+        mc,
+        ["XS", "S", "M", "L", "XS", "S", "M", "L"],
+        ["M", "S"],
+        WallsConfig::hard(),
+    );
 }
 
 /// v2 (#234): the v1 world saved by the species build, with ball 14 and the
@@ -224,18 +238,60 @@ fn check_v1(mc: &MainContent) {
 /// same world in the operator list layout, written by the build that
 /// introduced it (`v2_upgrades_to_the_v3_reference_save`).
 fn check_v2(mc: &MainContent) {
-    check_world(mc, ["XS", "S", "M", "L", "N2", "XL", "M", "L"], ["M", "N2"]);
+    check_world(
+        mc,
+        ["XS", "S", "M", "L", "N2", "XL", "M", "L"],
+        ["M", "N2"],
+        WallsConfig::hard(),
+    );
 }
 
-/// Content shared by the reference saves; they differ only in species.
-fn check_world(mc: &MainContent, ball_species: [&str; 8], sphere_species: [&str; 2]) {
+/// The walls of the v4 reference save: soft, with every key off its default.
+fn v4_walls() -> WallsConfig {
+    WallsConfig {
+        model: WallModel::Soft,
+        sigma: 0.5,
+        epsilon: 2.0,
+        attractive: true,
+        backstop: 0.25,
+        overrides: vec![WallOverrideConfig {
+            species: "N2".into(),
+            sigma: None,
+            epsilon: Some(0.5),
+        }],
+    }
+}
+
+/// v4 (#280): the v3 world with a config whose `walls` set every key.
+/// Written by the #280 build: `v3.json` loaded, `WorldFile::capture`d, its
+/// `sim_config()` with `walls = v4_walls()` set as `config`, `to_json`.
+fn check_v4(mc: &MainContent) {
+    check_world(
+        mc,
+        ["XS", "S", "M", "L", "N2", "XL", "M", "L"],
+        ["M", "N2"],
+        v4_walls(),
+    );
+}
+
+/// Content shared by the reference saves; they differ only in species and
+/// walls.
+fn check_world(
+    mc: &MainContent,
+    ball_species: [&str; 8],
+    sphere_species: [&str; 2],
+    walls: WallsConfig,
+) {
     let world = mc.world();
     assert_eq!(mc.time_step(), 0.005);
-    // None has a saved config (#231; v1 and v2 predate it, v3 is the v2
-    // world): they run with the defaults and their own time step. 0.005 is
-    // also the default now (#301); `config_less_save_keeps_its_time_step`
-    // covers a step that differs.
-    let mut config = SimConfig::default();
+    // Up to v3 none has a saved config (#231; v1 and v2 predate it, v3 is the
+    // v2 world): they run with the defaults, hard walls (#280) and their own
+    // time step. 0.005 is also the default now (#301);
+    // `config_less_save_keeps_its_time_step` covers a step that differs.
+    let mut config = SimConfig {
+        walls,
+        ..SimConfig::default()
+    };
     config.integration.time_step = 0.005;
     assert_eq!(mc.config(), config);
     assert_eq!(world.physics.constants.gravity, 0.5);

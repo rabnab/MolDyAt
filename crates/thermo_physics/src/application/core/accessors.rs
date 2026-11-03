@@ -7,11 +7,13 @@ use crate::application::AppResult;
 use crate::application::phase_timings::PhaseTimings;
 use crate::application::sim_config::{
     DisplayConfig, IntegrationConfig, NeighbourConfig, PairOverrideConfig, PotentialConfig,
-    SimConfig,
+    SimConfig, WallsConfig,
 };
 use crate::application::sim_stats::{HIGH_GRAVITY, NORMAL_GRAVITY, is_normal_gravity};
 use crate::objects2d::Rect;
 use crate::objects2d::ball_impl::ball_core::gravity_acceleration;
+#[cfg(any(test, feature = "test-support"))]
+use crate::objects2d::ball_impl::wall_law::WallSettings;
 use crate::objects2d::operator::{is_degenerate, remap_point};
 use std::time::Duration;
 
@@ -55,6 +57,13 @@ impl MainContent {
     #[cfg(any(test, feature = "test-support"))]
     pub fn world_mut(&mut self) -> &mut SimulationWorld {
         &mut self.world
+    }
+
+    /// Switch the world to hard walls (the model before #280), for tests of
+    /// the hard contact. Balls keep their state.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn use_hard_walls(&mut self) {
+        self.world.set_walls(WallSettings::hard());
     }
 
     #[cfg(not(any(test, feature = "test-support")))]
@@ -196,6 +205,12 @@ impl MainContent {
 }
 
 impl SimulationWorld {
+    /// Rebuild the physics with the wall model `walls`.
+    #[cfg(any(test, feature = "test-support"))]
+    pub(crate) fn set_walls(&mut self, walls: WallSettings) {
+        self.physics = self.physics.clone().with_walls(walls);
+    }
+
     /// Get world boundary rectangle for simulation area.
     pub fn world_region(&self) -> Rect {
         self.world_rect
@@ -234,6 +249,7 @@ impl MainContent {
                     .collect(),
                 ..PotentialConfig::from(*physics.cap_settings())
             },
+            walls: WallsConfig::from_settings(physics.walls(), physics.species()),
             neighbours: NeighbourConfig {
                 skin_factor: physics.skin_factor(),
                 reorder_interval: self.world.reorder_interval,

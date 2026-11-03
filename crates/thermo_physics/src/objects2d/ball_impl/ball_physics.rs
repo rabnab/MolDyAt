@@ -9,7 +9,9 @@ use crate::objects2d::ball_impl::pair_potential::{CapSettings, LJ_SIG, PairOverr
 use crate::objects2d::ball_impl::species::{
     DEFAULT_SPECIES, Species, SpeciesId, SpeciesSet, SpeciesTable,
 };
-use crate::objects2d::ball_impl::wall_law::{HardContact, WallLaw};
+use crate::objects2d::ball_impl::wall_law::{
+    Backstop, HardContact, SoftWalls, WallLaw, WallSettings,
+};
 use crate::objects2d::ball_impl::{Ball2D, Named};
 use std::sync::Arc;
 
@@ -44,6 +46,13 @@ pub struct ForceResult {
     /// accumulating into per-cell statistics. The 2D virial theorem's own 1/2
     /// (1/d) is applied in `thermo_field::virial_pressure_2d`.
     pub virial: f32,
+    /// Force of the soft walls that count towards the wall momentum
+    /// (included in `force`; the ghost wall's is not in here). Zero with
+    /// hard walls.
+    pub wall_force: Vec2D,
+    /// Potential energy of the ball in the soft walls (not double counted,
+    /// unlike `potential_energy`). Zero with hard walls.
+    pub wall_potential: f32,
 }
 
 /// Default Verlet skin as a share of the reference cutoff (see
@@ -62,7 +71,12 @@ pub struct BallPhysics {
     pair_overrides: Vec<PairOverride>,
     /// Skin as a share of the reference cutoff.
     skin_factor: f32,
-    /// Wall contact distance of each species, from `wall_law`.
+    /// The wall model (hard contact, or soft potential with a backstop).
+    walls: WallSettings,
+    /// The soft wall potential per species, if `walls.soft`.
+    soft_walls: Option<SoftWalls>,
+    /// Wall contact distance of each species, from `wall_law`: the hard
+    /// contact, or the backstop behind a soft wall.
     wall_contact: Vec<f32>,
     /// Contact distance (`σ_ij`) of each species pair, row-major.
     contact: Vec<f32>,
@@ -105,23 +119,12 @@ impl BallPhysics {
         overrides: Vec<PairOverride>,
     ) -> Self {
         let species = &*species_table;
-        let wall_law = HardContact;
         let sigma_override = |a: SpeciesId, b: SpeciesId| {
             overrides
                 .iter()
                 .find(|o| o.is_for(a, b))
                 .and_then(|o| o.sigma)
         };
-        let wall_contact = species
-            .ids()
-            .map(|id| {
-                let s = species.species(id);
-                match sigma_override(id, id) {
-                    Some(sigma) => wall_law.contact_distance(&Species { sigma, ..s.clone() }),
-                    None => wall_law.contact_distance(s),
-                }
-            })
-            .collect();
         // Without an override, the sum of the contact radii, as
         // `Ball2D::get_edge_distance` computes it (`σ_ij` up to rounding).
         let contact = species
@@ -139,10 +142,74 @@ impl BallPhysics {
             pair_potential: Potential::lennard_jones(species, cap, &overrides),
             pair_overrides: overrides,
             skin_factor: DEFAULT_SKIN_FACTOR,
-            wall_contact,
+            walls: WallSettings::hard(),
+            soft_walls: None,
+            wall_contact: Vec::new(),
             contact,
             species_count: species.len(),
         }
+        .with_walls(WallSettings::hard())
+    }
+
+    /// The same physics with the wall model `walls`. A `σ_ii` pair override
+    /// also sets the species' `σ_i` for the walls.
+    pub(crate) fn with_walls(mut self, walls: WallSettings) -> Self {
+        let species = &*self.species;
+        let sigma_of = |id: SpeciesId| {
+            self.pair_overrides
+                .iter()
+                .find(|o| o.is_for(id, id))
+                .and_then(|o| o.sigma)
+                .unwrap_or(species.species(id).sigma)
+        };
+        let contact_of = |law: &dyn WallLaw| -> Vec<f32> {
+            species
+                .ids()
+                .map(|id| {
+                    law.contact_distance(&Species {
+                        sigma: sigma_of(id),
+                        ..species.species(id).clone()
+                    })
+                })
+                .collect()
+        };
+        if walls.soft {
+            self.wall_contact = contact_of(&Backstop {
+                factor: walls.backstop,
+            });
+            self.soft_walls = Some(SoftWalls::new(
+                species,
+                sigma_of,
+                &walls,
+                *self.cap_settings(),
+            ));
+        } else {
+            self.wall_contact = contact_of(&HardContact);
+            self.soft_walls = None;
+        }
+        self.walls = walls;
+        self
+    }
+
+    /// The wall model.
+    pub(crate) fn walls(&self) -> &WallSettings {
+        &self.walls
+    }
+
+    /// The soft wall potential, or `None` for hard walls.
+    #[inline]
+    pub(crate) fn soft_walls(&self) -> Option<&SoftWalls> {
+        self.soft_walls.as_ref()
+    }
+
+    /// Wall distance at which new balls are placed at the earliest: the
+    /// hard contact, or the minimum of the soft wall potential, where it
+    /// pushes no more.
+    pub(crate) fn wall_placement_distance(&self, species: SpeciesId) -> f32 {
+        let contact = self.wall_contact_distance(species);
+        self.soft_walls
+            .as_ref()
+            .map_or(contact, |w| w.equilibrium_distance(species).max(contact))
     }
 
     /// The same physics with a Verlet skin of `skin_factor` times the
