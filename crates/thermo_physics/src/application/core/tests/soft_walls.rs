@@ -11,6 +11,7 @@ use crate::application::core::wall_forces::soft_wall_force;
 use crate::objects2d::ball_impl::pair_potential::CapSettings;
 use crate::objects2d::ball_impl::wall_law::{SoftWalls, WallSettings};
 use crate::objects2d::ball_impl::{BallFactory, DEFAULT_SPECIES, SpeciesTable};
+use crate::objects2d::line_segment::GhostWall;
 use crate::objects2d::{Rect, Vec2D};
 
 const WORLD_TOP_LEFT: (f32, f32) = (-50.0, 95.0);
@@ -19,7 +20,7 @@ fn soft_walls(settings: &WallSettings) -> SoftWalls {
     let table = SpeciesTable::builtin();
     SoftWalls::new(
         table,
-        |id| table.species(id).sigma,
+        |id| (table.species(id).sigma, table.species(id).epsilon),
         settings,
         CapSettings::default(),
     )
@@ -331,4 +332,81 @@ fn soft_walls_book_the_momentum_they_give() {
         ((wall + gas - gravity) / gravity).abs() < 0.01,
         "wall {wall} + gas {gas} vs gravity impulse {gravity}"
     );
+}
+
+/// A wall drawn on top of a ball at rest does not kick it out: a ball
+/// flagged `leaving_wall` feels no line wall until it is out of reach.
+#[test]
+fn ghost_wall_over_a_resting_ball_adds_no_energy() {
+    let (mut mc, _) = create_main_content_for_region(-10.0, 10.0);
+    mc.add_candidate_to_vec(
+        BallFactory::new().create_massive_with_velocity(Vec2D::new(40.0, -50.0), Vec2D::zero()),
+    );
+    mc.set_ghost_wall(Some(GhostWall {
+        start: Vec2D::new(20.0, -50.2),
+        end: Vec2D::new(60.0, -50.2),
+        thickness: 1.0,
+    }));
+    assert!(mc.world().balls[0].leaving_wall);
+    for _ in 0..50 {
+        mc.simulation_step().unwrap();
+    }
+    let v = mc.world().balls[0].v.norm();
+    assert!(v < 1e-6, "the ghost wall kicked the ball: |v| = {v}");
+}
+
+/// Two separate walls closer than two wall cutoffs both push on a ball
+/// between them: the nearest-feature rule holds per chain only.
+#[test]
+fn separate_walls_both_act_on_a_ball_between_them() {
+    let (mut mc, _) = create_main_content_for_region(-10.0, 10.0);
+    mc.add_line_segment(Vec2D::new(5.0, -50.0), Vec2D::new(85.0, -50.0));
+    mc.add_line_segment(Vec2D::new(5.0, -51.6), Vec2D::new(85.0, -51.6));
+    let world = mc.world();
+    let walls = world.physics.soft_walls().expect("soft walls by default");
+    let obstacles = world.collect_solid_obstacles();
+    assert_ne!(obstacles[0].chain(), obstacles[1].chain());
+    let ball =
+        BallFactory::new().create_massive_with_velocity(Vec2D::new(40.0, -50.8), Vec2D::zero());
+    let both = soft_wall_force(walls, &ball, &world.world_rect, &obstacles);
+    let one = soft_wall_force(walls, &ball, &world.world_rect, &obstacles[..1]);
+    assert!(one.potential > 0.0, "the ball must be within the cutoff");
+    assert!(
+        (both.potential - 2.0 * one.potential).abs() <= 1e-5 * one.potential,
+        "U {} vs 2 × {}",
+        both.potential,
+        one.potential
+    );
+    assert!(
+        both.force.norm() <= 1e-3 * one.force.norm(),
+        "the forces cancel"
+    );
+}
+
+/// An `ε_ii` pair override sets the species' `ε_i` for the walls too, as a
+/// `σ_ii` override sets its `σ_i`.
+#[test]
+fn like_pair_epsilon_override_reaches_the_wall() {
+    use crate::application::sim_config::PairOverrideConfig;
+    let rect = Rect::new(-50.0, 50.0, 100.0, -100.0);
+    let plain = MainContent::with_config(rect, &crate::test_support::test_config(), None).unwrap();
+    let mut config = crate::test_support::test_config();
+    let name = SpeciesTable::builtin()
+        .species(DEFAULT_SPECIES)
+        .name
+        .clone();
+    config.potential.pair_overrides.push(PairOverrideConfig {
+        a: name.clone(),
+        b: name,
+        sigma: None,
+        epsilon: Some(4.0 * SpeciesTable::builtin().species(DEFAULT_SPECIES).epsilon),
+    });
+    let overridden = MainContent::with_config(rect, &config, None).unwrap();
+    let u = |mc: &MainContent| {
+        let walls = mc.world().physics.soft_walls().expect("soft walls");
+        let z = 0.9 * walls.equilibrium_distance(DEFAULT_SPECIES);
+        walls.force_and_potential(DEFAULT_SPECIES, z).1
+    };
+    let ratio = u(&overridden) / u(&plain);
+    assert!((ratio - 2.0).abs() < 1e-4, "ε_iw ratio {ratio}, want √4");
 }
