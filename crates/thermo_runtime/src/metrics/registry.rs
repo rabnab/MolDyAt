@@ -211,7 +211,7 @@ impl MetricsRegistry {
         );
         self.record("E_kin", e_kin);
         self.record("E_pot", e_pot);
-        self.record("E_tot", e_kin + e_pot);
+        self.record("E_tot", snapshot.frame.total_energy());
         self.record("wall_momentum", snapshot.frame.wall_momentum);
 
         self.sample_species_counts(snapshot);

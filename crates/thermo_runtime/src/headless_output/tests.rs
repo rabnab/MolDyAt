@@ -22,6 +22,8 @@ fn test_frame_record_contains_v1_schema_and_summary_fields() {
     snapshot.frame.time = 1.25;
     snapshot.frame.kinetic_energy = 3.5;
     snapshot.frame.potential_energy = -1.0;
+    snapshot.frame.energy_total =
+        f64::from(snapshot.frame.kinetic_energy) + f64::from(snapshot.frame.potential_energy);
     snapshot.frame.gravity_force_multiple = 2;
     snapshot.frame.physics_fps = 144.0;
 
@@ -103,6 +105,8 @@ fn test_console_summary_contains_required_fields() {
     snapshot.frame.time = 0.12;
     snapshot.frame.kinetic_energy = 2.5;
     snapshot.frame.potential_energy = -1.25;
+    snapshot.frame.energy_total =
+        f64::from(snapshot.frame.kinetic_energy) + f64::from(snapshot.frame.potential_energy);
 
     let line = frame_to_console_summary(&snapshot, Some(1.0));
 
@@ -223,6 +227,8 @@ fn test_non_finite_values_serialize_as_null() {
     snapshot.frame.time = f32::NAN;
     snapshot.frame.kinetic_energy = f32::INFINITY;
     snapshot.frame.potential_energy = f32::NEG_INFINITY;
+    snapshot.frame.energy_total =
+        f64::from(snapshot.frame.kinetic_energy) + f64::from(snapshot.frame.potential_energy);
     snapshot.frame.physics_fps = f32::NAN;
 
     let line = frame_to_jsonl(&snapshot, Some(0.0));

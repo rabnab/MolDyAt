@@ -106,6 +106,8 @@ fn test_stream_jsonl_round_trips_units_and_non_finite_values() {
     let mut snapshot = base_snapshot();
     sample(&mut registry, &mut stream, &mut snapshot, 0, 1);
     snapshot.frame.potential_energy = f32::NAN;
+    snapshot.frame.energy_total =
+        f64::from(snapshot.frame.kinetic_energy) + f64::from(snapshot.frame.potential_energy);
     sample(&mut registry, &mut stream, &mut snapshot, 0, 2);
     let files = stream.finish().unwrap();
 
