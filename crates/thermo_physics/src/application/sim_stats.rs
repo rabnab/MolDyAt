@@ -66,7 +66,10 @@ pub struct SimStats {
     max_v: f32,
     max_id: usize,
     v_com: Vec2D,
-    time: f32,
+    /// Simulation time, summed in f64: in f32, `time += dt` stops advancing
+    /// once `dt` is below half the spacing of f32 at `time` (after about
+    /// 2^24 steps), which froze the energy plot's time axis.
+    time: f64,
     step: usize,
     pause: bool,
 
@@ -161,7 +164,7 @@ impl SimStats {
 
         self.max_v = stats_acumulator.max_v;
         self.max_id = stats_acumulator.max_id;
-        self.time += dt;
+        self.advance_time(dt);
         self.step += 1;
         self.v_com = stats_acumulator.v_com;
     }
@@ -197,7 +200,11 @@ impl SimStats {
     }
 
     pub fn get_time(&self) -> f32 {
-        self.time
+        self.time as f32
+    }
+
+    fn advance_time(&mut self, dt: f32) {
+        self.time += f64::from(dt);
     }
 
     #[cfg(test)]
@@ -277,6 +284,23 @@ mod tests {
 
         stats.time = 123.456;
         assert_eq!(stats.get_time(), 123.456);
+    }
+
+    /// Far into a run, every step still advances the time (an f32 sum
+    /// froze at about 2^24 steps).
+    #[test]
+    fn test_time_keeps_advancing_in_long_runs() {
+        let dt = 0.005_f32;
+        let mut stats = SimStats {
+            time: 200_000.0,
+            ..Default::default()
+        };
+        let start = stats.get_time();
+        for _ in 0..10_000 {
+            stats.advance_time(dt);
+        }
+        let advanced = stats.get_time() - start;
+        assert!((advanced - 50.0).abs() < 0.05, "advanced {advanced}");
     }
 
     #[test]
