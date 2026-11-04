@@ -38,6 +38,10 @@ pub struct SpeciesConfig {
     /// Where the parameters come from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
+    /// Moment of inertia about the centre in u·Å² (#348); missing means the
+    /// species has no orientation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub moment_of_inertia_u_angstrom2: Option<f64>,
 }
 
 impl SpeciesConfig {
@@ -63,7 +67,7 @@ impl SpeciesConfig {
                 self.colour
             )));
         }
-        let species = Species::from_literature(
+        let mut species = Species::from_literature(
             &self.name,
             self.sigma_angstrom,
             self.epsilon_kelvin,
@@ -95,6 +99,19 @@ impl SpeciesConfig {
             self.mass_u,
             &format!("{key}.mass_u"),
         )?;
+        if let Some(inertia) = self.moment_of_inertia_u_angstrom2 {
+            let unit = AR_MASS_U * AR_SIGMA_ANGSTROM * AR_SIGMA_ANGSTROM;
+            let reduced = (inertia / unit) as f32;
+            check_literature(
+                reduced,
+                MIN_SPECIES_INERTIA,
+                MAX_SPECIES_INERTIA,
+                unit,
+                inertia,
+                &format!("{key}.moment_of_inertia_u_angstrom2"),
+            )?;
+            species.inertia = Some(reduced);
+        }
         if let Some(radius) = self.display_radius_angstrom {
             check_literature(
                 species.display_radius,

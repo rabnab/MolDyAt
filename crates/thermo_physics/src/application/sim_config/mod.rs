@@ -128,6 +128,10 @@ pub(crate) const MAX_FIELD_CENTER: f32 = 1e5;
 /// Mass of a `[[species]]` entry in Ar units (about 2.0 u to 3995 u).
 pub(crate) const MIN_SPECIES_MASS: f32 = 0.05;
 pub(crate) const MAX_SPECIES_MASS: f32 = 100.0;
+/// Moment of inertia of a `[[species]]` entry in Ar units (`m_Ar σ_Ar²` =
+/// 463 u·Å²): from far below a dumbbell's to a large molecule's.
+pub(crate) const MIN_SPECIES_INERTIA: f32 = 0.001;
+pub(crate) const MAX_SPECIES_INERTIA: f32 = 100.0;
 /// Drawing radius of a `[[species]]` entry in Ar units.
 pub(crate) const MIN_DISPLAY_RADIUS: f32 = 0.05;
 pub(crate) const MAX_DISPLAY_RADIUS: f32 = MAX_PAIR_SIGMA;

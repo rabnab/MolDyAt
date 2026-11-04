@@ -105,7 +105,8 @@ headless runs; both step with the configured time step.
 
 1. **neighbours**: balls whose displacement since their last rebuild exceeds
    skin/3 rebuild their Verlet lists from the 3x3 surrounding cells.
-2. **positions**: velocity-Verlet position update. Hard contacts with the
+2. **positions**: velocity-Verlet position update (and `θ += ω dt + ½ α dt²`
+   for balls with an orientation, #348). Hard contacts with the
    box walls and with line-segment walls are resolved along the wall normal
    (`ball_impl::wall_contact`): at `σ_i / 2` with hard walls, at the
    backstop (`0.3 σ_i`) behind soft walls.
@@ -115,7 +116,9 @@ headless runs; both step with the configured time step.
    it, and the nearest line wall only (nearest-feature rule, so a chain has
    no energy step at its joints). Line walls are found by bounding-box
    rejection against the step's obstacle list, as in the contact sweep.
-4. **apply**: velocity update, kinetic, pair and wall potential energy, wall
+4. **apply**: velocity update (and `ω += ½ (α_old + α_new) dt`, `α = torque / I`
+   for balls with an orientation), kinetic (with `½ I ω²`), pair and wall
+   potential energy, wall
    momentum bookkeeping (contacts, and the soft wall forces times `dt`), the
    overlap fallback for balls still inside a
    wall, and the Nosé–Hoover thermostats. The velocity update runs in

@@ -80,7 +80,19 @@ pub(crate) const MIGRATIONS: &[Migration] = &[
         from: 6,
         apply: migrate_v6_to_v7,
     },
+    Migration {
+        from: 7,
+        apply: migrate_v7_to_v8,
+    },
 ];
+
+/// v7 → v8 (#348): the orientation of balls and the moment of inertia of
+/// `[[species]]` entries. Older files have none, which the defaults fill
+/// in; the version only changes so that older builds refuse rotating
+/// worlds.
+fn migrate_v7_to_v8(_file: &mut Value) -> AppResult {
+    Ok(())
+}
 
 /// v6 → v7 (#409): the built-in `CH4` became TraPPE-UA methane; the former
 /// one (Hirschfelder, Curtiss & Bird) stays as `CH4_HCB`. A file that uses

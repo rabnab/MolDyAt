@@ -68,7 +68,9 @@ Gravity (key `G`) is 1 g = 9.81 m/s², `a* = 1.3396E-13` in Ar units, or 5 g. In
 
 ## Temperature (2D)
 
-With `k_B* = 1`: `T* = 1/N Σᵢ E_kin,i*`, where `E_kin* = ½ m* v*²` (2 degrees of freedom per ball).
+With `k_B* = 1`: `T* = 1/N Σᵢ E_kin,i*`, where `E_kin* = ½ m* v*²` (2 degrees of freedom per ball). The code measures it in the centre-of-mass frame: `T* = (Σ m |v − v_com|² + Σ I ω²) / (2 (N − 1) + N_rot)` (`LocalKineticStats`), where a ball of a species with a moment of inertia (#348) adds one rotational degree of freedom and its `½ I ω²` (equipartition). The thermostats use the same count and scale `ω` with the peculiar velocity.
+
+A `[[species]]` entry can give `moment_of_inertia_u_angstrom2` (`I* = I / (m_Ar σ_Ar²)`, `m_Ar σ_Ar²` = 463.2 u·Å², `I* ∈ 0.001..100`); such a species has an orientation `θ` and an angular velocity `ω`, integrated by the rotational velocity-Verlet step from the torque of the force pass. The built-in species have none.
 
 ## Equation of motion
 

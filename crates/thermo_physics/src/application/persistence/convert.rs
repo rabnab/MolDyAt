@@ -136,6 +136,9 @@ impl BallData {
             v: ball.v,
             pre_update_pos: ball.pre_update_pos,
             accel: ball.accel,
+            theta: ball.theta,
+            omega: ball.omega,
+            alpha: ball.alpha,
         }
     }
 
@@ -146,6 +149,13 @@ impl BallData {
         ball.v = self.v;
         ball.pre_update_pos = self.pre_update_pos;
         ball.accel = self.accel;
+        // A species without orientation keeps 0 (`validate` rejects a
+        // rotation state for it).
+        if ball.inertia > 0.0 {
+            ball.theta = self.theta;
+            ball.omega = self.omega;
+            ball.alpha = self.alpha;
+        }
         ball
     }
 }

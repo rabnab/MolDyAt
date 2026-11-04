@@ -348,5 +348,6 @@ fn force_kernel<L: PairLaw>(
         virial,
         wall_force: Vec2D::zero(),
         wall_potential: 0.0,
+        torque: 0.0,
     }
 }

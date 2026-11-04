@@ -66,6 +66,15 @@ pub struct Ball2D {
     pub v: Vec2D,
     pub accel: Vec2D,
     pub mass: f32,
+    /// Moment of inertia of the species (#348); 0 for a species without
+    /// orientation, whose `theta`, `omega` and `alpha` stay 0.
+    pub inertia: f32,
+    /// Orientation in radians, in `[-π, π)`.
+    pub theta: f32,
+    /// Angular velocity.
+    pub omega: f32,
+    /// Angular acceleration (torque / inertia) of the last force pass.
+    pub alpha: f32,
     pub species: SpeciesId,
     /// `σ / 2` of the species: the ball's size for overlap and placement
     /// checks. Wall contacts take their distance from the `WallLaw`.
@@ -108,6 +117,16 @@ impl Default for Ball2D {
     }
 }
 
+/// `angle` wrapped into `[-π, π)`.
+pub(crate) fn wrap_angle(angle: f32) -> f32 {
+    use std::f32::consts::{PI, TAU};
+    if (-PI..PI).contains(&angle) {
+        angle
+    } else {
+        angle - TAU * ((angle + PI) / TAU).floor()
+    }
+}
+
 /// Gravity of strength `gravity` as the [`UniformField`] it is (#347): the
 /// acceleration `-g ŷ`. Shorthand for the call sites that only shift
 /// accelerations when gravity changes.
@@ -142,6 +161,10 @@ impl Ball2D {
             pos,
             id,
             mass: data.mass,
+            inertia: data.inertia.unwrap_or(0.0),
+            theta: 0.0,
+            omega: 0.0,
+            alpha: 0.0,
             v: Vec2D::zero(),
             verbose: VerboseInfo::default(),
             braking: false,
@@ -229,6 +252,27 @@ impl Ball2D {
 
     pub fn get_update_counter(&self) -> usize {
         self.cold.show_update_count
+    }
+
+    /// Rotational half of the velocity-Verlet drift (#348):
+    /// `θ += ω·dt + ½·α·dt²`, wrapped into `[-π, π)`.
+    pub(crate) fn advance_orientation(&mut self, dt: f32) {
+        let theta = self.theta + self.omega * dt + 0.5 * self.alpha * dt * dt;
+        self.theta = wrap_angle(theta);
+    }
+
+    /// Rotational kick (#348): `ω += ½·(α_old + α_new)·dt` with
+    /// `α_new = torque / inertia`. Only for balls with an orientation.
+    pub(crate) fn kick_rotation(&mut self, torque: f32, dt: f32) {
+        let alpha = torque / self.inertia;
+        self.omega += 0.5 * (self.alpha + alpha) * dt;
+        self.alpha = alpha;
+    }
+
+    /// Rotational kinetic energy `½·I·ω²` (0 without orientation).
+    #[inline]
+    pub(crate) fn rotational_energy(&self) -> f32 {
+        0.5 * self.inertia * self.omega * self.omega
     }
 
     /// Calculate linear momentum (mass × velocity).
@@ -535,13 +579,14 @@ mod tests {
     /// The hot part stays small (P6, #346), so the passes over all balls
     /// touch less memory per ball; the bound is the layout, not a cache-line
     /// bound. It rose from 80 to 96 bytes with the f64 position (#213),
-    /// which duplicates `pos` (its f32 copy) and overlaps `pre_update_pos`.
-    /// Do not treat 96 as room to grow: a new field that not every pass
-    /// needs belongs in `BallCold`.
+    /// which duplicates `pos` (its f32 copy) and overlaps `pre_update_pos`,
+    /// and to 112 with the orientation (#348: inertia, θ, ω, α; owner
+    /// decision to keep them hot). Do not treat 112 as room to grow: a new
+    /// field that not every pass needs belongs in `BallCold`.
     #[test]
-    fn test_hot_ball_data_fits_in_96_bytes() {
+    fn test_hot_ball_data_fits_in_112_bytes() {
         let size = std::mem::size_of::<Ball2D>();
-        assert!(size <= 96, "Ball2D is {size} bytes");
+        assert!(size <= 112, "Ball2D is {size} bytes");
     }
 
     /// Far from the origin, steps smaller than the f32 spacing still move the
