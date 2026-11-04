@@ -8,10 +8,16 @@
 //! - Box walls: each of the four sides acts on its own, through the signed
 //!   distance of the centre from it, so the force keeps pointing inward after
 //!   an overshoot; in a corner two sides add up.
-//! - Line walls (pieces, closed valves, the ghost wall): only the nearest
-//!   obstacle acts (nearest-feature rule). The surfaces of a chain's pieces
-//!   overlap at its joints; the minimum of their distances is the distance
-//!   from the union, so the energy has no bump or well at a joint.
+//! - Line walls (pieces, closed valves, the ghost wall): of each chain only
+//!   the nearest obstacle acts (nearest-feature rule); the chains add up, so
+//!   a ball between two separate walls feels both. The surfaces of a chain's
+//!   pieces overlap at its joints; the minimum of their distances is the
+//!   distance from the union, so the energy has no bump or well at a joint.
+//!   (The two ends of a gap in one chain count as one wall too.)
+//! - A ball flagged `leaving_wall` (a wall was drawn or closed on top of it)
+//!   feels no line wall until it is out of their reach, as it passes through
+//!   them in the contact pass: a force there would kick it out and add
+//!   energy.
 //!
 //! The obstacles are checked against their bounding boxes first, as in the
 //! contact sweep, so the potential is evaluated only for nearby balls.
@@ -79,16 +85,31 @@ pub(crate) fn soft_wall_force(
         }
     }
 
-    let mut nearest: Option<(f32, Vec2D, bool)> = None;
+    if ball.leaving_wall {
+        return out;
+    }
+    // Obstacles come chain by chain: keep the nearest of the current chain
+    // and add it when the next chain starts.
+    let mut nearest: Option<(u32, f32, Vec2D, bool)> = None;
     for obstacle in obstacles {
-        if let Some((z, normal)) = obstacle.surface_distance(&pos, cutoff)
-            && z < cutoff
-            && nearest.is_none_or(|(best, _, _)| z < best)
-        {
-            nearest = Some((z, normal, !obstacle.is_ghost()));
+        let Some((z, normal)) = obstacle.surface_distance(&pos, cutoff) else {
+            continue;
+        };
+        let candidate = (obstacle.chain(), z, normal, !obstacle.is_ghost());
+        match nearest {
+            Some((chain, best, _, _)) if chain == obstacle.chain() => {
+                if z < best {
+                    nearest = Some(candidate);
+                }
+            }
+            Some((_, z0, n0, counts)) => {
+                out.add(n0, walls.force_and_potential(species, z0), counts);
+                nearest = Some(candidate);
+            }
+            None => nearest = Some(candidate),
         }
     }
-    if let Some((z, normal, counts)) = nearest {
+    if let Some((_, z, normal, counts)) = nearest {
         out.add(normal, walls.force_and_potential(species, z), counts);
     }
     out
