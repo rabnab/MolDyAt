@@ -290,6 +290,10 @@ pub struct FrameInfo {
     /// Potential energy of the system
     pub potential_energy: f32,
 
+    /// Kinetic plus potential energy, summed in f64 from the f64 totals
+    /// (#421); `delta_energy` and `E_tot` are formed from it.
+    pub energy_total: f64,
+
     /// Magnitude of the momentum given to walls since the start of the run.
     pub wall_momentum: f32,
 
@@ -326,6 +330,7 @@ impl Default for FrameInfo {
             safety_nets: SafetyNets::default(),
             kinetic_energy: 0.0,
             potential_energy: 0.0,
+            energy_total: 0.0,
             wall_momentum: 0.0,
             species_counts: [0; SpeciesSet::CAPACITY],
             gravity_force_multiple: 0,
@@ -338,9 +343,10 @@ impl Default for FrameInfo {
 }
 
 impl FrameInfo {
-    /// Returns the total energy (kinetic + potential)
+    /// Returns the total energy (kinetic + potential), narrowed to f32 for
+    /// display; [`Self::energy_total`] holds it in f64.
     pub fn total_energy(&self) -> f32 {
-        self.kinetic_energy + self.potential_energy
+        self.energy_total as f32
     }
 }
 

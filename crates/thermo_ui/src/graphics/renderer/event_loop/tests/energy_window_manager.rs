@@ -23,6 +23,7 @@ fn make_snapshot(step: u64, kin: f32, pot: f32) -> RendererSnapshot {
     s.frame.simulation_step = step;
     s.frame.kinetic_energy = kin;
     s.frame.potential_energy = pot;
+    s.frame.energy_total = f64::from(s.frame.kinetic_energy) + f64::from(s.frame.potential_energy);
     s.frame.time = step as f32 * 0.01;
     s
 }

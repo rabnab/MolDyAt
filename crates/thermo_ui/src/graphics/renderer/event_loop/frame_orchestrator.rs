@@ -254,6 +254,8 @@ mod tests {
         snapshot.frame.simulation_step = 7;
         snapshot.frame.kinetic_energy = 1.5;
         snapshot.frame.potential_energy = 2.5;
+        snapshot.frame.energy_total =
+            f64::from(snapshot.frame.kinetic_energy) + f64::from(snapshot.frame.potential_energy);
         snapshot.frame.time = 3.0;
         snapshot.frame.physics_fps = 120.0;
         snapshot.frame.status = Some(StatusNumbers {

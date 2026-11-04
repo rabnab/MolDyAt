@@ -242,6 +242,12 @@ impl SimStats {
         self.energy_pot as f32
     }
 
+    /// Kinetic plus potential energy in f64 (#421): the sum and the drift
+    /// from it keep the digits the f32 energies would cancel.
+    pub fn total_energy(&self) -> f64 {
+        self.energy_kin + self.energy_pot
+    }
+
     pub fn get_time(&self) -> f32 {
         self.time as f32
     }

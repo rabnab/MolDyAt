@@ -34,7 +34,7 @@ pub struct HeadlessWriter {
     stdout: Option<BufWriter<io::Stdout>>,
     file: Option<BufWriter<File>>,
     config: HeadlessConfig,
-    initial_total_energy: Option<f32>,
+    initial_total_energy: Option<f64>,
     metrics: Option<SharedMetricsRegistry>,
 }
 
@@ -51,8 +51,7 @@ impl HeadlessSnapshotSink for HeadlessWriter {
     }
 
     fn write_run_start(&mut self, snapshot: &RendererSnapshot) -> io::Result<()> {
-        self.initial_total_energy =
-            Some(snapshot.frame.kinetic_energy + snapshot.frame.potential_energy);
+        self.initial_total_energy = Some(snapshot.frame.energy_total);
         let line = run_start_to_jsonl(&self.config, snapshot);
         self.write_machine_record(&line)
     }
@@ -285,7 +284,7 @@ fn world_rect_to_json(rect: &thermo_physics::objects2d::Rect) -> serde_json::Val
 }
 
 #[cfg(test)]
-fn frame_to_jsonl(snapshot: &RendererSnapshot, initial_total_energy: Option<f32>) -> String {
+fn frame_to_jsonl(snapshot: &RendererSnapshot, initial_total_energy: Option<f64>) -> String {
     frame_to_jsonl_with_metrics(
         &HeadlessConfig::default(),
         snapshot,
@@ -297,11 +296,12 @@ fn frame_to_jsonl(snapshot: &RendererSnapshot, initial_total_energy: Option<f32>
 fn frame_to_jsonl_with_metrics(
     config: &HeadlessConfig,
     snapshot: &RendererSnapshot,
-    initial_total_energy: Option<f32>,
+    initial_total_energy: Option<f64>,
     metrics: Option<&SharedMetricsRegistry>,
 ) -> String {
-    let total_energy = snapshot.frame.kinetic_energy + snapshot.frame.potential_energy;
-    let delta_energy = initial_total_energy.map(|initial| total_energy - initial);
+    // In f64 (#421), narrowed only for the record.
+    let delta_energy =
+        initial_total_energy.map(|initial| (snapshot.frame.energy_total - initial) as f32);
     let mut frame = json!({
         "schema_version": SCHEMA_VERSION,
         "record_kind": "frame",
@@ -383,11 +383,11 @@ fn run_end_to_jsonl(snapshot: &RendererSnapshot, snapshots_emitted: u32) -> Stri
 
 fn frame_to_console_summary(
     snapshot: &RendererSnapshot,
-    initial_total_energy: Option<f32>,
+    initial_total_energy: Option<f64>,
 ) -> String {
-    let total_energy = snapshot.frame.kinetic_energy + snapshot.frame.potential_energy;
+    let total_energy = snapshot.frame.total_energy();
     let delta_energy = initial_total_energy
-        .map(|initial| total_energy - initial)
+        .map(|initial| (snapshot.frame.energy_total - initial) as f32)
         .unwrap_or(0.0);
     let operator_counts = &snapshot.operators;
 
