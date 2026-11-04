@@ -21,6 +21,7 @@ Commands and process rules for AI assistants; other docs link here instead of co
 
 - Work on feature/bugfix branches only (`feature/master/*`, `bugfix/master/*`).
 - Never commit directly to `master`; all changes go through PR review and CI.
+- A PR with a user-visible change adds its entry at the top of `## Unreleased` in `CHANGELOG.md`; see the `changelog` skill.
 
 ### Drift threshold policy (source of truth)
 
