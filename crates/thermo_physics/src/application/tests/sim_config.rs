@@ -436,7 +436,7 @@ fn invalid_pair_overrides_are_rejected() {
     for (pairs, expected) in [
         (
             vec![pair("N2", "Kr", Some(1.1), None)],
-            "potential.pair_override[0].b: unknown species \"Kr\" (known: N2, XS, S, M, L, XL, Ar, Ne, CH4, O2, NH3, CH4_HCB, H2O)",
+            "potential.pair_override[0].b: unknown species \"Kr\" (known: N2, XS, S, M, L, XL, Ar, Ne, CH4, O2, NH3, CH4_HCB, H2O, N2_2S)",
         ),
         (
             vec![pair("n2", "N2", Some(1.1), None)],

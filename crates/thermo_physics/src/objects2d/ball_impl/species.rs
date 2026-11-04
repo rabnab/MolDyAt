@@ -22,6 +22,7 @@
 //! A config file can replace the whole table with its own `[[species]]` list
 //! (`SimConfig::species_table`); a world keeps the table it was built with.
 
+use crate::objects2d::ball_impl::molecule::LinearMolecule;
 use crate::objects2d::ball_impl::water::MbWater;
 use std::sync::{Arc, LazyLock};
 
@@ -58,6 +59,10 @@ pub struct Species {
     pub inertia: Option<f32>,
     /// Mercedes-Benz hydrogen-bond arms (#349), for water.
     pub water: Option<MbWater>,
+    /// Lennard-Jones sites of a rigid linear molecule (#406). Its own `σ`
+    /// is then the envelope of the sites (placement, the cell grid) and its
+    /// `ε` is 0: it interacts only through its sites.
+    pub molecule: Option<LinearMolecule>,
 }
 
 impl Species {
@@ -72,6 +77,7 @@ impl Species {
             colour,
             inertia: None,
             water: None,
+            molecule: None,
         }
     }
 
@@ -283,6 +289,7 @@ static BUILTIN_TABLE: LazyLock<Arc<SpeciesTable>> = LazyLock::new(|| {
             .chain(size_classes)
             .chain(library)
             .chain(std::iter::once(mb_water()))
+            .chain(std::iter::once(n2_dumbbell()))
             .collect(),
     ))
 });
@@ -309,6 +316,42 @@ fn mb_water() -> Species {
     ));
     water
 }
+
+/// N₂ as a rigid dumbbell (#406), `N2_2S`: two TraPPE nitrogen sites
+/// (Potoff & Siepmann, *AIChE J.* 47, 1676 (2001): `σ` = 3.31 Å, `ε/k_B` =
+/// 36.0 K, bond 1.10 Å), without TraPPE's centre charges (no electrostatics).
+/// Mass 2 × 14.007 u; moment of inertia from the sites. The single-site
+/// `N2` stays the default species (owner decision).
+fn n2_dumbbell() -> Species {
+    let molecule = LinearMolecule::diatomic(
+        (N2_BOND_ANGSTROM / AR_SIGMA_ANGSTROM) as f32,
+        (TRAPPE_N_SIGMA_ANGSTROM / AR_SIGMA_ANGSTROM) as f32,
+        (TRAPPE_N_EPSILON_KELVIN / AR_EPSILON_KELVIN) as f32,
+        (14.007 / AR_MASS_U) as f32,
+    );
+    molecule_species("N2_2S", molecule, [0.2, 0.75, 0.95, 1.0])
+}
+
+/// A species whose balls are the rigid molecule `molecule` (#406).
+pub(crate) fn molecule_species(name: &str, molecule: LinearMolecule, colour: [f32; 4]) -> Species {
+    let mut species = Species::new(
+        name,
+        molecule.mass(),
+        molecule.envelope_sigma(),
+        0.0,
+        colour,
+    );
+    species.inertia = Some(molecule.inertia());
+    species.display_radius = 0.5 * molecule.max_site_sigma();
+    species.molecule = Some(molecule);
+    species
+}
+
+/// TraPPE N₂ site (#406).
+const TRAPPE_N_SIGMA_ANGSTROM: f64 = 3.31;
+const TRAPPE_N_EPSILON_KELVIN: f64 = 36.0;
+/// N≡N bond length in Å.
+const N2_BOND_ANGSTROM: f64 = 1.10;
 
 /// `r_HB` of MB water in Å.
 pub const MB_R_HB_ANGSTROM: f64 = 2.8;
@@ -504,21 +547,29 @@ mod tests {
     #[test]
     fn next_wraps_around() {
         let table = SpeciesTable::builtin();
-        assert_eq!(table.next(SpeciesId::new(5)), SpeciesId::new(6));
-        assert_eq!(table.next(SpeciesId::new(12)), SpeciesId::new(0));
-        assert_eq!(table.previous(SpeciesId::new(0)), SpeciesId::new(12));
-        assert_eq!(table.previous(SpeciesId::new(6)), SpeciesId::new(5));
+        let last = (table.len() - 1) as u16;
+        let id = SpeciesId::new;
+        assert_eq!(table.next(id(5)), id(6));
+        assert_eq!(table.next(id(last)), id(0));
+        assert_eq!(table.previous(id(0)), id(last));
+        assert_eq!(table.previous(id(6)), id(5));
         // An id outside the table wraps into it in both directions.
-        assert_eq!(table.next(SpeciesId::new(14)), SpeciesId::new(2));
-        assert_eq!(table.previous(SpeciesId::new(14)), SpeciesId::new(0));
+        let outside = last + 2;
+        let wrapped = outside as usize % table.len();
+        assert_eq!(table.next(id(outside)).index(), (wrapped + 1) % table.len());
+        assert_eq!(
+            table.previous(id(outside)).index(),
+            (wrapped + table.len() - 1) % table.len()
+        );
     }
 
     #[test]
     fn id_rejects_indices_outside_the_table() {
         let table = SpeciesTable::builtin();
-        assert_eq!(table.id(12), Some(SpeciesId::new(12)));
-        assert_eq!(table.id(13), None);
-        assert!(table.get(SpeciesId::new(13)).is_none());
+        let n = table.len();
+        assert_eq!(table.id(n - 1), Some(SpeciesId::new((n - 1) as u16)));
+        assert_eq!(table.id(n), None);
+        assert!(table.get(SpeciesId::new(n as u16)).is_none());
         assert_eq!(table.by_name("M"), Some(SpeciesId::new(3)));
         assert_eq!(table.by_name("M"), Some(SPECIES_M));
         assert_eq!(table.by_name("Ar"), Some(SpeciesId::new(6)));
@@ -589,8 +640,8 @@ mod tests {
     fn builtin_table_is_pinned() {
         // (name, f32 bits of mass, sigma, epsilon, display_radius), in table
         // order, in Ar units (#405, format v6; #409, v7: TraPPE CH4, NH3,
-        // the former CH4 as CH4_HCB; #349: MB water H2O).
-        const PINNED: [(&str, u32, u32, u32, u32); 13] = [
+        // the former CH4 as CH4_HCB; #349: MB water H2O; #406: N2_2S).
+        const PINNED: [(&str, u32, u32, u32, u32); 14] = [
             ("N2", 0x3f3384e6, 0x3f8b03af, 0x3f4b1ca2, 0x3f0b03af), // 0.7012466, 1.08605, 0.7934057
             ("XS", 0x3f3384e6, 0x3fb02b31, 0x3f4b1ca2, 0x3f302b31), // 0.7012466, 1.376318, 0.7934057
             ("S", 0x3f576c48, 0x3fd552b2, 0x3f4b1ca2, 0x3f5552b2),  // 0.841496, 1.666586, 0.7934057
@@ -604,6 +655,7 @@ mod tests {
             ("NH3", 0x3eda47d3, 0x3f5a0845, 0x409520e8, 0x3eda0845), // 0.4263292, 0.8516887, 4.660267
             ("CH4_HCB", 0x3ecd9e22, 0x3f8f7ce1, 0x3f9e580a, 0x3f0f7ce1), // 0.4015971, 1.120999, 1.237062
             ("H2O", 0x3ee6e465, 0x3f135c1a, 0x3f93fadf, 0x3ed28392), // 0.4509613, 0.5756241, 1.156093
+            ("N2_2S", 0x3f3385e2, 0x3fa5c79d, 0x00000000, 0x3ef8db89), // 0.7012616, 1.295154, 0
         ];
         let actual: Vec<_> = SpeciesTable::builtin()
             .iter()

@@ -17,6 +17,8 @@
 //! contact sweep, so the potential is evaluated only for nearby balls.
 
 use super::line_segments::Obstacle;
+use crate::objects2d::ball_impl::molecule::{axis, cross};
+use crate::objects2d::ball_impl::pair_potential::PairPotential;
 use crate::objects2d::ball_impl::wall_law::SoftWalls;
 use crate::objects2d::ball_impl::{Ball2D, ForceResult};
 use crate::objects2d::{Rect, Vec2D};
@@ -29,16 +31,20 @@ pub(crate) struct WallForce {
     /// The part of `force` that books wall momentum (all but the ghost wall).
     pub counted: Vec2D,
     pub potential: f32,
+    /// Torque of the wall forces on the sites of a molecule (#406).
+    pub torque: f32,
 }
 
 impl WallForce {
-    fn add(&mut self, normal: Vec2D, (force, potential): (f32, f32), counts: bool) {
+    /// A force `normal · force` at `lever` from the ball's centre.
+    fn add(&mut self, normal: Vec2D, (force, potential): (f32, f32), counts: bool, lever: Vec2D) {
         let f = normal.scaled(force);
         self.force += f;
         if counts {
             self.counted += f;
         }
         self.potential += potential;
+        self.torque += cross(lever, f);
     }
 
     /// Add this to the ball's force result.
@@ -46,10 +52,12 @@ impl WallForce {
         result.force += self.force;
         result.wall_force = self.counted;
         result.wall_potential = self.potential;
+        result.torque += self.torque;
     }
 }
 
-/// The soft wall force on `ball` from the box `bound` and `obstacles`.
+/// The soft wall force on `ball` from the box `bound` and `obstacles`. A
+/// molecule (#406) feels it at each of its sites, which adds a torque.
 pub(crate) fn soft_wall_force(
     walls: &SoftWalls,
     ball: &Ball2D,
@@ -57,14 +65,54 @@ pub(crate) fn soft_wall_force(
     obstacles: &[Obstacle],
 ) -> WallForce {
     let species = ball.species();
-    let cutoff = walls.cutoff(species);
-    let pos = *ball.get_position();
+    let centre = *ball.get_position();
     let mut out = WallForce {
         force: Vec2D::zero(),
         counted: Vec2D::zero(),
         potential: 0.0,
+        torque: 0.0,
     };
+    match walls.sites(species) {
+        None => point_force(
+            centre,
+            Vec2D::zero(),
+            walls.cutoff(species),
+            &|z| walls.force_and_potential(species, z),
+            bound,
+            obstacles,
+            &mut out,
+        ),
+        Some(sites) => {
+            let axis = axis(ball.theta);
+            for (offset, potential) in sites {
+                let lever = axis.scaled(*offset);
+                point_force(
+                    centre + lever,
+                    lever,
+                    potential.cutoff(),
+                    &|z| (potential.force(z), potential.potential(z)),
+                    bound,
+                    obstacles,
+                    &mut out,
+                );
+            }
+        }
+    }
+    out
+}
 
+/// The wall force on a point at `pos` (`lever` from the ball's centre) with
+/// the wall law `law` (force, potential at wall distance `z`), cut off at
+/// `cutoff`, added to `out`.
+fn point_force(
+    pos: Vec2D,
+    lever: Vec2D,
+    cutoff: f32,
+    law: &impl Fn(f32) -> (f32, f32),
+    bound: &Rect,
+    obstacles: &[Obstacle],
+    out: &mut WallForce,
+) {
     let (left, top) = bound.get_tl();
     let (right, bottom) = bound.get_br();
     let sides = [
@@ -75,7 +123,7 @@ pub(crate) fn soft_wall_force(
     ];
     for (z, normal) in sides {
         if z < cutoff {
-            out.add(normal, walls.force_and_potential(species, z), true);
+            out.add(normal, law(z), true, lever);
         }
     }
 
@@ -89,7 +137,6 @@ pub(crate) fn soft_wall_force(
         }
     }
     if let Some((z, normal, counts)) = nearest {
-        out.add(normal, walls.force_and_potential(species, z), counts);
+        out.add(normal, law(z), counts, lever);
     }
-    out
 }

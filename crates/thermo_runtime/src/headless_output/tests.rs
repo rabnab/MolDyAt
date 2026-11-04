@@ -177,6 +177,7 @@ fn test_detail_balls_includes_ball_fields() {
             display_radius: 0.7,
             equilibrium_radius: 0.8,
             cutoff_radius: 2.8,
+            theta: 0.0,
         });
     snapshot
         .balls
@@ -192,6 +193,7 @@ fn test_detail_balls_includes_ball_fields() {
             display_radius: 0.5,
             equilibrium_radius: 0.6,
             cutoff_radius: 2.0,
+            theta: 0.0,
         });
 
     let config = HeadlessConfig {

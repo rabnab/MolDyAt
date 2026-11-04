@@ -99,6 +99,11 @@ pub(crate) trait PairLaw: Copy {
     fn length_scale(&self) -> f32;
     /// Distance of the potential minimum, where the force is zero.
     fn equilibrium_distance(&self) -> f32;
+    /// Whether the law is zero everywhere (a pair with a molecule, whose
+    /// centre has `ε = 0`, #406): it gets no cap.
+    fn is_null(&self) -> bool {
+        false
+    }
     /// Interval that contains the cap distance for any positive cap: the force
     /// falls monotonically across it and is below every cap at its upper end.
     fn cap_search_range(&self) -> (f32, f32) {
@@ -234,6 +239,10 @@ impl PairLaw for LennardJones {
     fn equilibrium_distance(&self) -> f32 {
         SQRT6_OF_TWO * self.sigma
     }
+
+    fn is_null(&self) -> bool {
+        self.epsilon == 0.0
+    }
 }
 
 impl LawLanes for LennardJonesLanes {
@@ -277,8 +286,19 @@ pub(crate) struct CappedPotential<L> {
 
 impl<L: PairLaw> CappedPotential<L> {
     pub(crate) fn new(law: L, settings: CapSettings) -> Self {
-        let r_cap = force_cap_distance(&law, settings.max_force);
         let cutoff = settings.cutoff_factor * law.length_scale();
+        if law.is_null() {
+            // Zero force and potential at every distance (r_cap = 0: no core).
+            return CappedPotential {
+                settings,
+                cutoff,
+                r_cap: 0.0,
+                pot_at_cap: 0.0,
+                pot_at_cutoff: 0.0,
+                law,
+            };
+        }
+        let r_cap = force_cap_distance(&law, settings.max_force);
         CappedPotential {
             settings,
             cutoff,

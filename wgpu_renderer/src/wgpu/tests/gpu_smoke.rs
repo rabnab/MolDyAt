@@ -55,6 +55,7 @@ fn ball(id: usize, x: f32, y: f32) -> BallRenderData {
         display_radius: 0.5,
         equilibrium_radius: 0.56,
         cutoff_radius: 2.0,
+        theta: 0.0,
     }
 }
 

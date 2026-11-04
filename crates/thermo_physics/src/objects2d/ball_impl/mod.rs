@@ -20,6 +20,7 @@ pub(crate) mod ball_core;
 mod ball_factory;
 pub(crate) mod ball_physics;
 pub(crate) mod external_field;
+pub(crate) mod molecule;
 pub(crate) mod pair_potential;
 pub(crate) mod simd_forces;
 pub(crate) mod species;
