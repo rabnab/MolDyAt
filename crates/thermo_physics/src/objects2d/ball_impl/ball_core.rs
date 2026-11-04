@@ -40,6 +40,9 @@ pub(crate) struct BounceInfo {
     /// Momentum the box walls took from a molecule's site impulses this step
     /// (#408, [`Ball2D::execute_update_pos_molecule`]); zero for atoms.
     pub wall_momentum: Vec2D,
+    /// Whether a molecule's site got a box-wall impulse this step (#408):
+    /// counts as a box contact, so the line walls are not swept.
+    pub box_impulse: bool,
 }
 
 impl Default for BounceInfo {
@@ -49,6 +52,7 @@ impl Default for BounceInfo {
             box_y: None,
             line_wall: None,
             wall_momentum: Vec2D::zero(),
+            box_impulse: false,
         }
     }
 }
@@ -56,7 +60,7 @@ impl Default for BounceInfo {
 impl BounceInfo {
     /// Whether the ball touched a box wall this step.
     pub(crate) fn touched_box(&self) -> bool {
-        self.box_x.is_some() || self.box_y.is_some()
+        self.box_x.is_some() || self.box_y.is_some() || self.box_impulse
     }
 
     pub(crate) fn iter(&self) -> impl Iterator<Item = &WallContact> {
@@ -428,6 +432,7 @@ impl Ball2D {
             box_y: y_contact.map(|c| contact(Vec2D::new(0.0, 1.0), c)),
             line_wall: None,
             wall_momentum: Vec2D::zero(),
+            box_impulse: false,
         }
     }
 
@@ -472,6 +477,7 @@ impl Ball2D {
         let (sin, cos) = self.theta.sin_cos();
         let axis = Vec2D::new(cos, sin);
         let mut wall_momentum = Vec2D::zero();
+        let mut box_impulse = false;
         // (inward normal, coordinate index, wall coordinate): the centre's
         // distance from the wall is `normal · (centre − wall)` along the index.
         let sides = [
@@ -501,6 +507,7 @@ impl Ball2D {
                 self.v = self.v.add_scaled(&normal, impulse / self.mass);
                 self.omega += arm * impulse / self.inertia;
                 wall_momentum = wall_momentum.add_scaled(&normal, -impulse);
+                box_impulse = true;
                 // Mirror the overshoot, as a free bounce would have: the site
                 // ends `e·overlap` outside the contact distance.
                 let push = (1.0 + restitution) * overlap;
@@ -513,6 +520,7 @@ impl Ball2D {
         self.set_exact_position(centre);
         BounceInfo {
             wall_momentum,
+            box_impulse,
             ..BounceInfo::default()
         }
     }

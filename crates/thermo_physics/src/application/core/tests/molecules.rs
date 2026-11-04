@@ -442,13 +442,19 @@ fn spinning_molecule_bounces_off_a_hard_wall() {
     mc.simulation_step().unwrap();
     let e0 = reported_energy(&mc);
     let mut lowest = f32::INFINITY;
+    let mut hit_steps = 0;
     for _ in 0..4_000 {
+        let before = mc.wall_momentum().1;
         mc.simulation_step().unwrap();
+        if mc.wall_momentum().1 != before {
+            hit_steps += 1;
+        }
         let [a, b] = end_site_heights(&mc.world().balls[0], floor);
         lowest = lowest.min(a).min(b);
         let e = reported_energy(&mc);
         assert!((e - e0).abs() <= 1e-4 * e0, "energy {e} vs {e0}");
     }
+    assert!(hit_steps > 0, "no step reported a box contact");
     let (_, py) = mc.wall_momentum();
     assert!(py.abs() > 0.0, "the wall took no momentum: no contact");
     assert!(
@@ -488,4 +494,44 @@ fn co2_gas_keeps_its_energy_between_hard_walls() {
         fine < 0.6 * coarse,
         "no convergence: {coarse:e} -> {fine:e}"
     );
+}
+
+/// A site impulse on a box wall counts as a box contact (#408), so the
+/// line-wall sweep skips that step as for atoms: contacts in one step must
+/// have orthogonal normals.
+#[test]
+fn site_impulse_counts_as_a_box_contact() {
+    let mut mc = world(7, 10.0);
+    mc.use_hard_walls();
+    let co2 = species("CO2_3S");
+    let floor = mc
+        .world()
+        .world_region()
+        .get_br()
+        .1
+        .min(mc.world().world_region().get_tl().1);
+    add(
+        &mut mc,
+        Vec2D::new(0.0, floor + 0.7),
+        Vec2D::new(0.0, -2.0),
+        0.0,
+        0.0,
+        co2,
+    );
+    let bound = mc.world().world_region();
+    let physics = mc.world().physics.clone();
+    let ball = &mut mc.world_mut().balls[0];
+    let mut touched = false;
+    for _ in 0..200 {
+        let bounce = physics.update_positions(ball, CO2_MAX_TIME_STEP, &bound, 1.0);
+        if bounce.wall_momentum != Vec2D::zero() {
+            assert!(
+                bounce.touched_box(),
+                "a site impulse must count as a box contact"
+            );
+            touched = true;
+            break;
+        }
+    }
+    assert!(touched, "the molecule never reached the wall");
 }
