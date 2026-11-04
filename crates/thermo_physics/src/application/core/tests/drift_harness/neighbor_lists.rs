@@ -155,8 +155,14 @@ fn cell_border_world(cells_x: f32, cells_y: f32) -> MainContent {
 }
 
 /// The species with the largest `σ` (`XL`), whose pair sets the cell size.
+/// (It used to be the last entry of the table, which stopped being `XL`
+/// once the library gases were appended; #349 found it.)
 fn largest_species() -> SpeciesId {
-    SpeciesId::new((SpeciesTable::builtin().len() - 1) as u16)
+    let table = SpeciesTable::builtin();
+    table
+        .ids()
+        .max_by(|a, b| table.species(*a).sigma.total_cmp(&table.species(*b).sigma))
+        .expect("the table is not empty")
 }
 
 /// Pairs of the largest balls just inside the LJ cutoff of each other, the

@@ -13,13 +13,16 @@ use crate::application::thermo_field::{
 use crate::application::{AppResult, log_util};
 use crate::logging::log_update_hood_start;
 use crate::objects2d::ball_impl::ForceResult;
+use crate::objects2d::ball_impl::SpeciesTable;
 use crate::objects2d::ball_impl::ball_core::{Ball2D, BounceInfo};
 use crate::objects2d::ball_impl::external_field::{
     ExternalField, Field, UniformField, fields_acceleration,
 };
 use crate::objects2d::ball_impl::simd_forces::{KernelPoint, force_simd};
+use crate::objects2d::ball_impl::species::WATER_MAX_TIME_STEP;
 use crate::objects2d::ball_impl::verlet::Verlet;
 use crate::objects2d::ball_impl::wall_contact::normal_velocity_after_contact;
+use crate::objects2d::ball_impl::water::MbWater;
 use crate::objects2d::{Rect, Vec2D};
 use rayon::prelude::*;
 
@@ -77,6 +80,7 @@ impl SimulationEngine {
         }
 
         let bound_rect = world.world_rect;
+        Self::warn_if_too_coarse_for_water(world, dt);
 
         Self::collect_neighbours_by_cell(world, step_config, dt, log_timings);
         Self::update_sim_and_move_balls(world, step_config, dt, &bound_rect, log_timings);
@@ -233,6 +237,27 @@ impl SimulationEngine {
             world.reorder_balls_by_cell();
         }
         clock.lap(&mut world.phase_timings, Phase::Cells);
+    }
+
+    /// Log once if MB water is present and `dt` is above
+    /// [`WATER_MAX_TIME_STEP`]: its librations and hydrogen bonds would not
+    /// conserve energy (#349).
+    fn warn_if_too_coarse_for_water(world: &mut SimulationWorld, dt: f32) {
+        if world.water_dt_warned || dt <= WATER_MAX_TIME_STEP {
+            return;
+        }
+        let species = world.physics.species();
+        if world
+            .species_present
+            .iter()
+            .any(|id| species.species(id).water.is_some())
+        {
+            log::warn!(
+                "time step {dt} is too large for MB water; use at most {WATER_MAX_TIME_STEP} \
+                 (see docs/units.md)"
+            );
+            world.water_dt_warned = true;
+        }
     }
 
     /// Rebuild the neighbour lists of the balls that moved far enough.
@@ -453,6 +478,7 @@ impl SimulationEngine {
         let balls = &world.balls;
         let points = &world.kernel_points;
         let soft_walls = physics.soft_walls();
+        let species = physics.species();
         (0..balls.len())
             .into_par_iter()
             .map(|i| {
@@ -460,9 +486,42 @@ impl SimulationEngine {
                 if let Some(walls) = soft_walls {
                     soft_wall_force(walls, &balls[i], bound, obstacles).add_to(&mut result);
                 }
+                if let Some(water) = &species.species(balls[i].species()).water {
+                    Self::add_hydrogen_bonds(water, i, balls, species, &mut result);
+                }
                 result
             })
             .collect_into_vec(results);
+    }
+
+    /// The Mercedes-Benz hydrogen bonds of water ball `i` with its water
+    /// neighbours (#349): energy (counted by both balls, like the pair
+    /// energy), force, torque and virial, added to `result`, in list order.
+    fn add_hydrogen_bonds(
+        water: &MbWater,
+        i: usize,
+        balls: &[Ball2D],
+        species: &SpeciesTable,
+        result: &mut ForceResult,
+    ) {
+        let ball = &balls[i];
+        let pos = ball.exact_position();
+        for &j in ball.cold.hood.get_neighbour_indices() {
+            let other = &balls[j];
+            if species.species(other.species()).water.is_none() {
+                continue;
+            }
+            let pos_j = other.exact_position();
+            let r = Vec2D::new((pos_j[0] - pos[0]) as f32, (pos_j[1] - pos[1]) as f32);
+            let bond = water.pair(r, ball.theta, other.theta);
+            if bond.energy == 0.0 {
+                continue;
+            }
+            result.potential_energy += bond.energy;
+            result.force += bond.force;
+            result.torque += bond.torque;
+            result.virial -= r.dot(&bond.force);
+        }
     }
 
     /// Velocity-Verlet kick of one ball, with its wall contacts, added to
