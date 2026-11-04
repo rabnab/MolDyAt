@@ -587,6 +587,9 @@ impl SimulationEngine {
             }
         }
         ball.v = v_new;
+        // Site impulses of a molecule on the box walls (#408).
+        wall_px += bounce_info.wall_momentum.x;
+        wall_py += bounce_info.wall_momentum.y;
 
         // Soft walls: the impulse their force gives the ball over the step
         // is taken from the walls (zero with hard walls).
