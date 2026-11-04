@@ -88,6 +88,9 @@ pub struct BallPhysics {
     /// Wall contact distance of each species, from `wall_law`: the hard
     /// contact, or the backstop behind a soft wall.
     wall_contact: Vec<f32>,
+    /// Per molecule species (#406, #408): half its length and a site's
+    /// contact, for the orientation-dependent box-wall contact.
+    molecule_contact: Vec<Option<(f32, f32)>>,
     /// Contact distance (`σ_ij`) of each species pair, row-major.
     contact: Vec<f32>,
     species_count: usize,
@@ -157,6 +160,7 @@ impl BallPhysics {
             fields: Vec::new(),
             sites: SiteTable::new(species, cap),
             wall_contact: Vec::new(),
+            molecule_contact: Vec::new(),
             contact,
             species_count: species.len(),
         }
@@ -197,10 +201,26 @@ impl BallPhysics {
                 })
                 .collect()
         };
+        let molecule_contact_of = |law: &dyn WallLaw| -> Vec<Option<(f32, f32)>> {
+            species
+                .iter()
+                .map(|s| {
+                    s.molecule.as_ref().map(|m| {
+                        let site = law.contact_distance(&Species {
+                            sigma: m.max_site_sigma(),
+                            ..s.clone()
+                        });
+                        (m.half_length(), site)
+                    })
+                })
+                .collect()
+        };
         if walls.soft {
-            self.wall_contact = contact_of(&Backstop {
+            let backstop = Backstop {
                 factor: walls.backstop,
-            });
+            };
+            self.molecule_contact = molecule_contact_of(&backstop);
+            self.wall_contact = contact_of(&backstop);
             self.soft_walls = Some(SoftWalls::new(
                 species,
                 sigma_of,
@@ -208,6 +228,7 @@ impl BallPhysics {
                 *self.cap_settings(),
             ));
         } else {
+            self.molecule_contact = molecule_contact_of(&HardContact);
             self.wall_contact = contact_of(&HardContact);
             self.soft_walls = None;
         }
@@ -345,6 +366,29 @@ impl BallPhysics {
         self.wall_contact[species.index()]
     }
 
+    /// Centre distance from the left/right and the bottom/top box walls at
+    /// which `ball` is reflected. A molecule (#408) reaches as far as its
+    /// sites do along the wall normal, `half length · |cos θ|` or `|sin θ|`,
+    /// plus a site's contact, so a molecule lying along a wall is not
+    /// stopped before its sites feel the soft wall. Line walls use the
+    /// full half length ([`Self::wall_contact_distance`]).
+    #[inline]
+    pub(crate) fn box_wall_contact(&self, ball: &Ball2D) -> [f32; 2] {
+        match self.molecule_contact[ball.species().index()] {
+            None => {
+                let contact = self.wall_contact_distance(ball.species());
+                [contact, contact]
+            }
+            Some((half_length, site)) => {
+                let (sin, cos) = ball.theta.sin_cos();
+                [
+                    half_length * cos.abs() + site,
+                    half_length * sin.abs() + site,
+                ]
+            }
+        }
+    }
+
     /// Centre distance at which the potential of species `a` and `b`
     /// crosses zero (`σ_ij`, also for an overridden pair): where placement
     /// and the overlap checks put contact.
@@ -390,7 +434,7 @@ impl BallPhysics {
         bound: &Rect,
         restitution: f32,
     ) -> BounceInfo {
-        let contact = self.wall_contact_distance(ball.species());
+        let contact = self.box_wall_contact(ball);
         let bounce_info = ball.execute_update_pos(dt, bound, contact, restitution);
         if ball.inertia > 0.0 {
             ball.advance_orientation(dt);

@@ -22,7 +22,7 @@
 //! A config file can replace the whole table with its own `[[species]]` list
 //! (`SimConfig::species_table`); a world keeps the table it was built with.
 
-use crate::objects2d::ball_impl::molecule::LinearMolecule;
+use crate::objects2d::ball_impl::molecule::{LinearMolecule, MoleculeSite};
 use crate::objects2d::ball_impl::water::MbWater;
 use std::sync::{Arc, LazyLock};
 
@@ -295,6 +295,7 @@ static BUILTIN_TABLE: LazyLock<Arc<SpeciesTable>> = LazyLock::new(|| {
             .chain(std::iter::once(mb_water()))
             .chain(std::iter::once(n2_dumbbell()))
             .chain(std::iter::once(h2_dumbbell()))
+            .chain(std::iter::once(co2_chain()))
             .collect(),
     ))
 });
@@ -356,6 +357,39 @@ fn h2_dumbbell() -> Species {
     species.max_time_step = Some(H2_MAX_TIME_STEP);
     species
 }
+
+/// CO₂ as a rigid linear O–C–O chain (#408), `CO2_3S`: TraPPE sites
+/// (Potoff & Siepmann, *AIChE J.* 47, 1676 (2001): O σ = 3.05 Å, ε/k_B =
+/// 79.0 K; C σ = 2.80 Å, ε/k_B = 27.0 K; C–O 1.16 Å), without the partial
+/// charges: its quadrupole needs long-range electrostatics (out of scope).
+fn co2_chain() -> Species {
+    let ar = |angstrom: f64| (angstrom / AR_SIGMA_ANGSTROM) as f32;
+    let kelvin = |k: f64| (k / AR_EPSILON_KELVIN) as f32;
+    let mass = |u: f64| (u / AR_MASS_U) as f32;
+    let oxygen = |offset| MoleculeSite {
+        offset,
+        sigma: ar(3.05),
+        epsilon: kelvin(79.0),
+        mass: mass(15.999),
+    };
+    let carbon = MoleculeSite {
+        offset: 0.0,
+        sigma: ar(2.80),
+        epsilon: kelvin(27.0),
+        mass: mass(12.011),
+    };
+    let molecule = LinearMolecule {
+        sites: vec![oxygen(-ar(1.16)), carbon, oxygen(ar(1.16))],
+    };
+    let mut species = molecule_species("CO2_3S", molecule, [0.6, 0.6, 0.6, 1.0]);
+    species.max_time_step = Some(CO2_MAX_TIME_STEP);
+    species
+}
+
+/// Largest time step for runs with CO₂ (#408): its strongly bound,
+/// heavier sites librate fast in a condensed phase (energy error 9.6e-3 of
+/// the kinetic energy at 0.005, 1.5e-3 at 0.0025).
+pub const CO2_MAX_TIME_STEP: f32 = 0.0025;
 
 /// Largest time step for runs with H₂ (#407): its rotation is ~20 times
 /// faster than N₂'s.
@@ -669,8 +703,8 @@ mod tests {
     fn builtin_table_is_pinned() {
         // (name, f32 bits of mass, sigma, epsilon, display_radius), in table
         // order, in Ar units (#405, format v6; #409, v7: TraPPE CH4, NH3,
-        // the former CH4 as CH4_HCB; #349: MB water H2O; #406: N2_2S; #407: H2_2S).
-        const PINNED: [(&str, u32, u32, u32, u32); 15] = [
+        // the former CH4 as CH4_HCB; #349: MB water H2O; #406: N2_2S; #407: H2_2S; #408: CO2_3S).
+        const PINNED: [(&str, u32, u32, u32, u32); 16] = [
             ("N2", 0x3f3384e6, 0x3f8b03af, 0x3f4b1ca2, 0x3f0b03af), // 0.7012466, 1.08605, 0.7934057
             ("XS", 0x3f3384e6, 0x3fb02b31, 0x3f4b1ca2, 0x3f302b31), // 0.7012466, 1.376318, 0.7934057
             ("S", 0x3f576c48, 0x3fd552b2, 0x3f4b1ca2, 0x3f5552b2),  // 0.841496, 1.666586, 0.7934057
@@ -686,6 +720,7 @@ mod tests {
             ("H2O", 0x3ee6e465, 0x3f135c1a, 0x3f93fadf, 0x3ed28392), // 0.4509613, 0.5756241, 1.156093
             ("N2_2S", 0x3f3385e2, 0x3fa5c79d, 0x00000000, 0x3ef8db89), // 0.7012616, 1.295154, 0
             ("H2_2S", 0x3d4eb506, 0x3f82114b, 0x00000000, 0x3ecc7fd0), // 0.05046561, 1.016153, 0
+            ("CO2_3S", 0x3f8d031a, 0x3fc9de2b, 0x00000000, 0x3ee54f52), // 1.101657, 1.577093, 0
         ];
         let actual: Vec<_> = SpeciesTable::builtin()
             .iter()

@@ -365,21 +365,23 @@ impl Ball2D {
     /// # Arguments
     /// * `dt` - Time step
     /// * `bound` - Boundary rectangle (reflective walls)
-    /// * `contact` - Centre distance from a wall at which the ball is
-    ///   reflected (`BallPhysics::wall_contact_distance`)
+    /// * `contact` - Centre distance from the left/right and the
+    ///   bottom/top walls at which the ball is reflected
+    ///   (`BallPhysics::box_wall_contact`)
     /// * `restitution` - Normal restitution of the walls (1.0 = elastic)
     pub(crate) fn execute_update_pos(
         &mut self,
         dt: f32,
         bound: &Rect,
-        contact: f32,
+        contact: [f32; 2],
         restitution: f32,
     ) -> BounceInfo {
         let old_pos = self.pos;
         let (x0, y0) = bound.get_tl();
         let (x1, y1) = bound.get_br();
-        let x_range = (f32::min(x0, x1) + contact, f32::max(x0, x1) - contact);
-        let y_range = (f32::min(y0, y1) + contact, f32::max(y0, y1) - contact);
+        let [contact_x, contact_y] = contact;
+        let x_range = (f32::min(x0, x1) + contact_x, f32::max(x0, x1) - contact_x);
+        let y_range = (f32::min(y0, y1) + contact_y, f32::max(y0, y1) - contact_y);
 
         let [x, y] = self.exact;
         let (x, x_contact) =
@@ -527,7 +529,7 @@ mod tests {
         b.set_accel(Vec2D::zero());
         let bound = Rect::new(-2.0, -2.0, 4.0, 4.0); // square from -2..2
         // Move with dt so that we cross right boundary (max x = 2 - contact = 1)
-        let bounce_info = b.execute_update_pos(0.2, &bound, 1.0, 1.0); // dx = 2.0
+        let bounce_info = b.execute_update_pos(0.2, &bound, [1.0, 1.0], 1.0); // dx = 2.0
         // Expect bounce: position reflected inside, velocity unchanged (bounce handled later)
         assert!(b.pos.x <= 1.0 + 1e-6, "Position should be reflected");
         assert!(bounce_info.box_x.is_some(), "Should detect x bounce");
@@ -539,7 +541,7 @@ mod tests {
         // Now move towards bottom boundary in y
         b.v = Vec2D::new(0.0, -10.0);
         b.set_position_and_update_tail(Vec2D::new(0.0, 0.0));
-        let bounce_info = b.execute_update_pos(0.2, &bound, 1.0, 1.0); // dy = -2.0 -> bounce at y = -1
+        let bounce_info = b.execute_update_pos(0.2, &bound, [1.0, 1.0], 1.0); // dy = -2.0 -> bounce at y = -1
         assert!(b.pos.y >= -1.0 - 1e-6, "Position should be reflected");
         assert!(bounce_info.box_y.is_some(), "Should detect y bounce");
         assert_eq!(
@@ -598,7 +600,7 @@ mod tests {
         b.set_accel(Vec2D::zero());
         let bound = Rect::new(-4000.0, 4000.0, 8000.0, -8000.0);
         for _ in 0..1000 {
-            b.execute_update_pos(0.01, &bound, 1.0, 1.0);
+            b.execute_update_pos(0.01, &bound, [1.0, 1.0], 1.0);
         }
         let moved = b.exact_position()[0] - 2000.0;
         assert!((moved - 1e-2).abs() < 1e-9, "moved {moved}");
