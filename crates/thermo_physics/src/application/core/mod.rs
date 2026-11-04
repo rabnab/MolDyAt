@@ -301,6 +301,10 @@ pub(crate) struct StatsAccumulator {
     sum_mass: f64,
     pub(crate) max_v: f32,
     pub(crate) max_id: usize,
+    /// Balls slowed by the speed limit this step (#422).
+    pub(crate) braked: u64,
+    /// Capped pair evaluations this step, each pair counted by both balls.
+    pub(crate) capped_pairs: u64,
 }
 
 #[cfg(test)]

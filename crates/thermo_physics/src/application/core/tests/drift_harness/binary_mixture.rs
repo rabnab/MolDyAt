@@ -190,8 +190,16 @@ fn test_binary_mixture_uses_the_overridden_pairs() {
 #[ignore = "suite:drift"]
 fn test_binary_mixture_drift() {
     let run = run_mixture();
-    let violations = mixture_violations(&run);
+    let mut violations = mixture_violations(&run);
     let name = "binary_mixture";
+    // 27 capped pairs (1.1e-4 per ball and step), no backstop hit (#422).
+    violations.extend(run.metrics.safety_net_violations(
+        name,
+        SafetyNetLimits {
+            capped_rate: 2.5e-4,
+            backstop_hits: 0,
+        },
+    ));
     run.metrics.report(name, violations.is_empty());
     let m = &run.metrics;
     warn_near_threshold(

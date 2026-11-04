@@ -121,6 +121,8 @@ pub(crate) struct SitePair {
     pub force: Vec2D,
     pub torque: f32,
     pub virial: f32,
+    /// Site pairs inside the force cap's core (#422).
+    pub capped: u32,
 }
 
 impl SiteTable {
@@ -193,6 +195,7 @@ impl SiteTable {
             force: Vec2D::zero(),
             torque: 0.0,
             virial: 0.0,
+            capped: 0,
         };
         for &(ta, oa) in &self.species_sites[si.index()] {
             let pa = axis_i.scaled(oa);
@@ -206,6 +209,7 @@ impl SiteTable {
                 }
                 // Repulsive force pushes a away from b.
                 let f = d.scaled(-pot.force(dist) / dist);
+                out.capped += u32::from(pot.is_capped(dist));
                 out.energy += pot.potential(dist);
                 out.force += f;
                 out.torque += cross(pa, f);

@@ -73,6 +73,7 @@ impl CreateSnapshot for MainContent {
             layers,
             time: world.sim().get_time(),
             dt: self.active_time_step(),
+            safety_nets: world.sim().safety_nets_total,
             kinetic_energy: world.sim().get_kinetic_energy(),
             potential_energy: world.sim().get_potential_energy(),
             wall_momentum: wall_px.hypot(wall_py) as f32,

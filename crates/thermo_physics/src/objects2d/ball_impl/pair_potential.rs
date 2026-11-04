@@ -366,6 +366,15 @@ impl<L: PairLaw> PairPotential for CappedPotential<L> {
     }
 }
 
+impl<L: PairLaw> CappedPotential<L> {
+    /// Whether `r` is inside the sloped core below `r_cap`, where the force
+    /// cap replaces the law (a safety net, counted per step, #422).
+    #[inline]
+    pub(crate) fn is_capped(&self, r: f32) -> bool {
+        r < self.r_cap
+    }
+}
+
 /// Four [`CappedPotential`]s, one per lane, for the SIMD force kernel.
 #[derive(Clone, Copy)]
 pub(crate) struct CappedLanes<LL> {
@@ -391,6 +400,12 @@ impl<LL: LawLanes> CappedLanes<LL> {
             max_force: f32x4::from_array(pairs.map(|p| p.settings.max_force)),
             core_stiffness: f32x4::from_array(pairs.map(|p| p.settings.core_stiffness)),
         }
+    }
+
+    /// How many of the four lanes are inside the capped core (#422).
+    #[inline]
+    pub(crate) fn capped_count(&self, r: f32x4) -> u32 {
+        r.simd_lt(self.r_cap).to_bitmask().count_ones()
     }
 
     #[inline]

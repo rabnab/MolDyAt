@@ -105,8 +105,17 @@ fn run_hot_gas(faults: TestFaults) -> DriftRunMetrics {
 #[ignore = "suite:drift"]
 fn test_hot_sparse_gas_neighbor_lists() {
     let metrics = run_hot_gas(TestFaults::default());
-    let violations = hot_gas_violations(&metrics);
+    let mut violations = hot_gas_violations(&metrics);
     let name = "hot_sparse_gas";
+    // A hot gas leans on the cap: 13 920 capped pairs (3.5e-2 per ball and
+    // step) and 43 backstop hits in 1000 steps (#422).
+    violations.extend(metrics.safety_net_violations(
+        name,
+        SafetyNetLimits {
+            capped_rate: 7.0e-2,
+            backstop_hits: 100,
+        },
+    ));
     metrics.report(name, violations.is_empty());
     warn_near_threshold(
         name,
@@ -241,6 +250,14 @@ fn test_mixed_sizes_at_cell_borders_keep_every_pair_listed() {
             metrics.final_sample.ball_count
         ));
     }
+    // 554 capped pairs (3.1e-2 per ball and step), 7 backstop hits (#422).
+    violations.extend(metrics.safety_net_violations(
+        "mixed_sizes_cell_borders",
+        SafetyNetLimits {
+            capped_rate: 7.0e-2,
+            backstop_hits: 20,
+        },
+    ));
     metrics.report("mixed_sizes_cell_borders", violations.is_empty());
     assert!(
         violations.is_empty(),
@@ -359,6 +376,14 @@ fn test_neighbor_lists_survive_balls_removed_and_added() {
             third.final_sample.ball_count
         ));
     }
+    // 4 812 capped pairs (3.9e-2 per ball and step), 16 backstop hits (#422).
+    violations.extend(third.safety_net_violations(
+        "balls_removed_and_added",
+        SafetyNetLimits {
+            capped_rate: 8.0e-2,
+            backstop_hits: 40,
+        },
+    ));
     third.report("balls_removed_and_added", violations.is_empty());
     println!(
         "balls_removed_and_added diagnostics: removed={removed} added={added} rebuild_rates={:.3e}/{:.3e}/{:.3e}",

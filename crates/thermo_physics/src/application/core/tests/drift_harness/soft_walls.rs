@@ -50,6 +50,14 @@ fn test_soft_walled_gas_drift() {
     if run.line_pieces != 4 {
         violations.push("the line box is missing".into());
     }
+    // 85 capped pairs (3.3e-4 per ball and step), no backstop hit (#422).
+    violations.extend(m.safety_net_violations(
+        name,
+        SafetyNetLimits {
+            capped_rate: 7.0e-4,
+            backstop_hits: 0,
+        },
+    ));
     m.report(name, violations.is_empty());
     println!(
         "DRIFT_SOFT_WALLS name={name} backstop_hits={}",

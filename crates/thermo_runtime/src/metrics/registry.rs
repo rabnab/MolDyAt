@@ -39,6 +39,14 @@ pub fn write_metrics(metrics: &SharedMetricsRegistry) -> RwLockWriteGuard<'_, Me
 /// with `steps()`. The export relies on this; `record` outside `sample` is
 /// for tests and for series a caller feeds in lockstep with `sample`.
 ///
+/// The safety-net series (#422): name and description.
+const SAFETY_NET_SERIES: [(&str, &str); 4] = [
+    ("net_braked", "Balls Braked (total)"),
+    ("net_capped_pairs", "Capped Pairs (total)"),
+    ("net_backstop_hits", "Backstop Hits (total)"),
+    ("net_overlap_corrections", "Overlap Corrections (total)"),
+];
+
 /// Stores named series (E_kin, E_pot, E_tot, wall momentum, per-species
 /// counts) in ring buffers, sampled at snapshot cadence. Both UI plots and
 /// headless output read from this registry. Series live in sorted maps so
@@ -128,6 +136,17 @@ impl MetricsRegistry {
                 is_per_species: false,
             },
         );
+        // Safety-net interventions since the start (#422): counts, no unit.
+        for (name, description) in SAFETY_NET_SERIES {
+            self.register_series(
+                name.to_string(),
+                SeriesMetadata {
+                    unit: None,
+                    description,
+                    is_per_species: false,
+                },
+            );
+        }
     }
 
     /// Register a new series.
@@ -213,6 +232,15 @@ impl MetricsRegistry {
         self.record("E_pot", e_pot);
         self.record("E_tot", e_kin + e_pot);
         self.record("wall_momentum", snapshot.frame.wall_momentum);
+        let nets = &snapshot.frame.safety_nets;
+        for ((name, _), count) in SAFETY_NET_SERIES.iter().zip([
+            nets.braked,
+            nets.capped_pairs,
+            nets.backstop_hits,
+            nets.overlap_corrections,
+        ]) {
+            self.record(name, count as f32);
+        }
 
         self.sample_species_counts(snapshot);
     }

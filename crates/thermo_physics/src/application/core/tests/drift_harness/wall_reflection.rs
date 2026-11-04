@@ -398,6 +398,10 @@ impl ReflectionRun {
 }
 
 fn check_scenario(scenario: &str, run: &ReflectionRun, mut violations: Vec<String>) {
+    violations.extend(
+        run.metrics
+            .safety_net_violations(scenario, SafetyNetLimits::NONE),
+    );
     run.metrics.report(scenario, violations.is_empty());
     let max_speed_change = run
         .events

@@ -5,6 +5,7 @@
 use super::{DT_GOAL, create_main_content_for_region, test_config};
 use crate::application::MainContent;
 use crate::application::core::wall_forces::soft_wall_force;
+use crate::application::sim_stats::SafetyNets;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::{BallFactory, BallId, SPECIES_M, SpeciesId};
 use std::collections::hash_map::DefaultHasher;
@@ -73,6 +74,8 @@ pub struct DriftRunMetrics {
     /// Hash of every sample, every step's pair stats and the final positions
     /// and velocities (bit-exact).
     pub trajectory_hash: u64,
+    /// Safety-net interventions during the run (#422); not hashed.
+    pub safety_nets: SafetyNets,
 }
 
 impl DriftRunMetrics {
@@ -196,10 +199,63 @@ impl DriftRunMetrics {
         longest
     }
 
+    /// Safety nets above `limits` (#422): braking and the overlap fallback
+    /// never belong in a scenario; capped pairs (per ball and step) and
+    /// backstop hits only up to a bound per scenario, so a regression that
+    /// leans on them fails instead of passing on the drift alone. Values
+    /// above [`DRIFT_WARNING_FRACTION`] of a bound print a `DRIFT_WARNING`.
+    pub fn safety_net_violations(&self, scenario: &str, limits: SafetyNetLimits) -> Vec<String> {
+        let nets = &self.safety_nets;
+        let slots = (self.initial.ball_count * self.steps).max(1) as f32;
+        let capped_rate = nets.capped_pairs as f32 / slots;
+        warn_near_threshold(
+            scenario,
+            "capped_pair_rate",
+            capped_rate,
+            limits.capped_rate,
+        );
+        warn_near_threshold(
+            scenario,
+            "backstop_hits",
+            nets.backstop_hits as f32,
+            limits.backstop_hits as f32,
+        );
+        let mut violations = Vec::new();
+        if nets.braked > 0 {
+            violations.push(format!("{} balls braked by the speed limit", nets.braked));
+        }
+        if nets.overlap_corrections > 0 {
+            violations.push(format!("{} overlap corrections", nets.overlap_corrections));
+        }
+        if capped_rate > limits.capped_rate {
+            violations.push(format!(
+                "capped pairs per ball and step {capped_rate:.3e} > {:.3e}",
+                limits.capped_rate
+            ));
+        }
+        if nets.backstop_hits > limits.backstop_hits {
+            violations.push(format!(
+                "{} backstop hits > {}",
+                nets.backstop_hits, limits.backstop_hits
+            ));
+        }
+        violations
+    }
+
+    /// Panic with the [`Self::safety_net_violations`], if any.
+    pub fn assert_safety_nets(&self, scenario: &str, limits: SafetyNetLimits) {
+        let violations = self.safety_net_violations(scenario, limits);
+        assert!(
+            violations.is_empty(),
+            "{scenario}: {}",
+            violations.join("; ")
+        );
+    }
+
     /// One machine-readable summary line per scenario (see `docs/drift-test.md`).
     pub fn report(&self, scenario: &str, passed: bool) {
         println!(
-            "DRIFT_SCENARIO name={} steps={} dt={} balls={} final_balls={} max_rel_energy_drift={:.3e} final_rel_energy_drift={:.3e} rel_momentum_drift={:.3e} max_cap_hit_ratio={:.3e} cap_hits={} min_edge_distance={:.3} max_overlap_depth={:.3e} rebuild_steps={} ball_rebuild_rate={:.3e} max_missed_neighbor_pairs={} max_asymmetric_neighbor_pairs={} trajectory_hash={:016x} result={}",
+            "DRIFT_SCENARIO name={} steps={} dt={} balls={} final_balls={} max_rel_energy_drift={:.3e} final_rel_energy_drift={:.3e} rel_momentum_drift={:.3e} max_cap_hit_ratio={:.3e} cap_hits={} min_edge_distance={:.3} max_overlap_depth={:.3e} rebuild_steps={} ball_rebuild_rate={:.3e} max_missed_neighbor_pairs={} max_asymmetric_neighbor_pairs={} braked={} capped_pairs={} backstop_hits={} overlap_corrections={} trajectory_hash={:016x} result={}",
             scenario,
             self.steps,
             self.dt,
@@ -216,10 +272,32 @@ impl DriftRunMetrics {
             self.ball_rebuild_rate(),
             self.max_missed_neighbor_pairs(),
             self.max_asymmetric_neighbor_pairs(),
+            self.safety_nets.braked,
+            self.safety_nets.capped_pairs,
+            self.safety_nets.backstop_hits,
+            self.safety_nets.overlap_corrections,
             self.trajectory_hash,
             if passed { "pass" } else { "fail" }
         );
     }
+}
+
+/// How much a scenario may lean on the bounded safety nets (#422); braking
+/// and the overlap fallback must stay at zero in every scenario.
+#[derive(Debug, Clone, Copy)]
+pub struct SafetyNetLimits {
+    /// Capped pairs per ball and step.
+    pub capped_rate: f32,
+    /// Backstop hits behind soft walls over the run.
+    pub backstop_hits: u64,
+}
+
+impl SafetyNetLimits {
+    /// No safety net at all.
+    pub const NONE: Self = Self {
+        capped_rate: 0.0,
+        backstop_hits: 0,
+    };
 }
 
 /// Fraction of a threshold above which a passing metric is flagged, so shrinking
@@ -334,6 +412,7 @@ pub fn run_drift_harness_with_observer(
     let mut neighbor_rebuild_count = 0usize;
     let mut ball_rebuild_events = 0usize;
     let initial = sample_step(main_content, 0);
+    let nets_before = main_content.world().sim.safety_nets_total;
     samples.push(initial);
     pair_history.push(pair_step_stats(main_content, 0));
 
@@ -391,6 +470,13 @@ pub fn run_drift_harness_with_observer(
 
     let final_sample = *samples.last().expect("at least one sample");
     let trajectory_hash = trajectory_hash(main_content, &samples, &pair_history);
+    let nets_after = main_content.world().sim.safety_nets_total;
+    let safety_nets = SafetyNets {
+        braked: nets_after.braked - nets_before.braked,
+        capped_pairs: nets_after.capped_pairs - nets_before.capped_pairs,
+        backstop_hits: nets_after.backstop_hits - nets_before.backstop_hits,
+        overlap_corrections: nets_after.overlap_corrections - nets_before.overlap_corrections,
+    };
     DriftRunMetrics {
         initial,
         final_sample,
@@ -401,6 +487,7 @@ pub fn run_drift_harness_with_observer(
         neighbor_rebuild_count,
         ball_rebuild_events,
         trajectory_hash,
+        safety_nets,
     }
 }
 

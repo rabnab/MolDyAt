@@ -50,6 +50,42 @@ pub struct StatusNumbers {
     pub max_v: f32,
     /// Centre-of-mass velocity.
     pub v_com: Vec2D,
+    /// Safety-net interventions since the start (#422).
+    pub safety_nets: SafetyNets,
+}
+
+/// How often the safety nets that do not conserve energy stepped in (#422).
+/// They hide instabilities (a time step too coarse for a species, balls
+/// pushed into each other), so they are counted and shown instead of left
+/// silent: in a healthy run they stay at or near zero.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct SafetyNets {
+    /// Balls slowed by the speed limit (`accel_with_speed_limit`).
+    pub braked: u64,
+    /// Pairs (and molecule site pairs) inside the force cap's sloped core
+    /// (`CappedPotential`), each pair once.
+    pub capped_pairs: u64,
+    /// Hard contacts behind soft walls (the backstop); zero with hard walls,
+    /// where the contact is the wall itself.
+    pub backstop_hits: u64,
+    /// Balls the overlap fallback pushed out of a line wall.
+    pub overlap_corrections: u64,
+}
+
+impl std::ops::AddAssign for SafetyNets {
+    fn add_assign(&mut self, other: Self) {
+        self.braked += other.braked;
+        self.capped_pairs += other.capped_pairs;
+        self.backstop_hits += other.backstop_hits;
+        self.overlap_corrections += other.overlap_corrections;
+    }
+}
+
+impl SafetyNets {
+    /// Whether no safety net stepped in.
+    pub fn is_zero(&self) -> bool {
+        *self == Self::default()
+    }
 }
 
 /// Simulation statistics updated once per physics step.
@@ -95,6 +131,10 @@ pub struct SimStats {
     /// deterministic measure of wall-collision work (no timing), guarded by
     /// `test_wall_distance_checks_stay_local`.
     pub wall_distance_checks: u64,
+    /// Safety-net interventions of the last step (#422).
+    pub safety_nets_step: SafetyNets,
+    /// Safety-net interventions since the start (#422).
+    pub safety_nets_total: SafetyNets,
 }
 
 impl SimStats {
@@ -140,6 +180,7 @@ impl SimStats {
             temperature: self.temperature,
             max_v: self.max_v,
             v_com: self.v_com,
+            safety_nets: self.safety_nets_total,
         }
     }
 
@@ -234,6 +275,8 @@ impl Default for SimStats {
             wall_momentum_y: 0.,
             wall_contacts: 0,
             wall_overlap_corrections: 0,
+            safety_nets_step: SafetyNets::default(),
+            safety_nets_total: SafetyNets::default(),
             wall_distance_checks: 0,
         }
     }

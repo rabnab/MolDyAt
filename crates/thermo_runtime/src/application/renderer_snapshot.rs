@@ -18,7 +18,7 @@
 //! refills the vector without allocating.
 
 use crate::application::log_util::SpeciesCounts;
-use crate::application::sim_stats::StatusNumbers;
+use crate::application::sim_stats::{SafetyNets, StatusNumbers};
 use crate::objects2d::ball_impl::{DEFAULT_SPECIES, SpeciesId, SpeciesSet, SpeciesTable};
 use crate::objects2d::line_segment::valve_half_width;
 use crate::objects2d::{Rect, SimLineSegment, SimSourceSphere, SimThermostat, Vec2D};
@@ -276,6 +276,10 @@ pub struct FrameInfo {
     /// Simulation time
     pub time: f32,
 
+    /// Safety-net interventions since the start (#422), for headless output
+    /// and the metrics.
+    pub safety_nets: SafetyNets,
+
     /// Time step the steps run with: the set one, limited while a species
     /// with a `max_time_step` is present (`MainContent::active_time_step`).
     pub dt: f32,
@@ -319,6 +323,7 @@ impl Default for FrameInfo {
             layers: SceneLayers::ALL,
             time: 0.0,
             dt: 0.0,
+            safety_nets: SafetyNets::default(),
             kinetic_energy: 0.0,
             potential_energy: 0.0,
             wall_momentum: 0.0,

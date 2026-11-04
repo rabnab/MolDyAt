@@ -78,7 +78,8 @@ Each scenario prints exactly one line, also when it fails:
   max_rel_energy_drift=… final_rel_energy_drift=… rel_momentum_drift=…
   max_cap_hit_ratio=… cap_hits=… min_edge_distance=… max_overlap_depth=…
   rebuild_steps=… ball_rebuild_rate=… max_missed_neighbor_pairs=…
-  max_asymmetric_neighbor_pairs=… trajectory_hash=… result=…`
+  max_asymmetric_neighbor_pairs=… braked=… capped_pairs=… backstop_hits=…
+  overlap_corrections=… trajectory_hash=… result=…`
 - `DRIFT_CONVERGENCE name=…` for the timestep convergence tests, with the
   coarse and fine drift and their ratio.
 - `DRIFT_PRECISION name=… center=…` for the precision measurement
@@ -86,6 +87,16 @@ Each scenario prints exactly one line, also when it fails:
   one line per gas and world centre, with the drift at dt, dt/2 and dt/4.
 
 `relative energy drift` is `|E_t - E_0| / max(|E_0|, eps)`.
+
+`braked`, `capped_pairs`, `backstop_hits` and `overlap_corrections` count
+the safety nets that do not conserve energy (`SafetyNets`, #422) over the
+run; they are not part of the `trajectory_hash`. Every scenario checks them
+(`DriftRunMetrics::safety_net_violations` with its `SafetyNetLimits`):
+braking and the overlap fallback must stay at zero, capped pairs (per ball
+and step) and backstop hits below a bound of about twice the measured value,
+so a change that starts leaning on a safety net fails even if the energy
+still holds. `test_safety_net_checks_catch_braking` shows that the check
+catches braking.
 
 `warn_near_threshold` prints a `DRIFT_WARNING name=… metric=… value=…
 threshold=… ratio=…` line when a passing metric exceeds
@@ -328,4 +339,6 @@ stated.
 **Water time step (#349 follow-up).** Steps run with at most the smallest `max_time_step` of the species present; the water limit is relaxed from 0.0005 to 0.001. No scenario uses a species with a limit: every `trajectory_hash` is unchanged. Water energy test bound 2e-3 → 5e-3: at 0.001 the total energy of 64 molecules fluctuates by up to 4.0e-3 (8.3e-4 at 0.0005, the dt² ratio) and does not drift (within that over 16 000 steps).
 
 **f64 accumulators (#421).** The simulation time, the step's energy, momentum and mass sums, the wall momentum, the thermostat chains and the temperature sums are kept in f64. They do not feed back into the motion except through thermostats, which no scenario uses: every `trajectory_hash` and every drift value is unchanged. The free-gas headless fixture changes only in the reported energies and time (≤ 7e-8 relative); the operators fixture, which has a thermostat, also in positions and velocities (≤ 1.3e-5 relative). `serde_json` parses floats exactly (`float_roundtrip`), so the f64 chains survive a save and load bit for bit.
+
+**Safety-net counters (#422).** The step counts its safety-net interventions; they do not change any trajectory (every `trajectory_hash` and drift value is unchanged). Measured per scenario, with the bound now checked: binary_mixture 27 capped pairs (1.1e-4 per ball and step; bound 2.5e-4), dense_gas_many_body and soft_walled_gas 85 (3.3e-4; 7e-4), hot_sparse_gas 13 920 (3.5e-2; 7e-2) and 43 backstop hits (100), mixed_sizes_cell_borders 554 (3.1e-2; 7e-2) and 7 (20), balls_removed_and_added 4 812 (3.9e-2; 8e-2) and 16 (40), force_cap_transition 12 (2.0e-2; 5e-2); two_body_lj_baseline and the reflection scenarios none. No scenario brakes or corrects an overlap. The engine's capped-pair count agrees with the harness's own `cap_hits` (which also counts step 0). Both headless fixtures gain only the `safety_nets` object and the `net_*` metrics; the operators run brakes 38 balls (its default speed limit).
 

@@ -304,8 +304,16 @@ pub(super) fn run_dense_gas_at(
 #[ignore = "suite:drift"]
 fn test_dense_gas_many_body_drift() {
     let run = run_dense_gas(TestFaults::default());
-    let violations = run.violations();
+    let mut violations = run.violations();
     let name = "dense_gas_many_body";
+    // 85 capped pairs (3.3e-4 per ball and step), no backstop hit (#422).
+    violations.extend(run.metrics.safety_net_violations(
+        name,
+        SafetyNetLimits {
+            capped_rate: 7.0e-4,
+            backstop_hits: 0,
+        },
+    ));
     run.metrics.report(name, violations.is_empty());
     let m = &run.metrics;
     warn_near_threshold(
@@ -471,6 +479,7 @@ fn test_dense_gas_checks_catch_injected_regressions() {
         neighbor_rebuild_count: 0,
         ball_rebuild_events: 0,
         trajectory_hash: 0,
+        safety_nets: Default::default(),
     };
 
     let violations = dense_gas_violations(&broken, f32::INFINITY, 0.6);
