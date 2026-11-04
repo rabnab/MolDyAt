@@ -59,7 +59,8 @@ impl WallLaw for Backstop {
 /// Default `σ_w`: no size of its own, so `σ_iw = σ_i / 2`, the hard contact
 /// distance; the soft wall then has the hard wall's contact distance.
 pub(crate) const DEFAULT_WALL_SIGMA: f32 = 0.0;
-/// Default `ε_w`, the well depth of the reference species.
+/// Default `ε_w`: the well depth of the unit species, Ar (#405). Saves from
+/// before format v6 ran with `1 ε_N2` and are migrated to keep it.
 pub(crate) const DEFAULT_WALL_EPSILON: f32 = 1.0;
 /// Default backstop distance as a share of `σ_i`: with the default wall and
 /// cap the wall energy there is ≈ 24 ε for `N2`, so thermal balls reach it
@@ -125,11 +126,11 @@ pub(crate) struct SoftWalls {
 }
 
 impl SoftWalls {
-    /// `sigma_of(id)` is the species' effective `σ_i` (a `σ_ii` pair
-    /// override replaces the table's).
+    /// `like_pair(id)` is the species' effective `(σ_i, ε_i)`: a `σ_ii` or
+    /// `ε_ii` pair override replaces the table's value.
     pub(crate) fn new(
         species: &SpeciesTable,
-        sigma_of: impl Fn(SpeciesId) -> f32,
+        like_pair: impl Fn(SpeciesId) -> (f32, f32),
         settings: &WallSettings,
         cap: CapSettings,
     ) -> Self {
@@ -144,10 +145,10 @@ impl SoftWalls {
         let laws: Vec<LennardJones> = species
             .ids()
             .map(|id| {
-                let s = species.species(id);
+                let (sigma, epsilon) = like_pair(id);
                 let mixed = LennardJones {
-                    sigma: 0.5 * (sigma_of(id) + settings.sigma),
-                    epsilon: (s.epsilon * settings.epsilon).sqrt(),
+                    sigma: 0.5 * (sigma + settings.sigma),
+                    epsilon: (epsilon * settings.epsilon).sqrt(),
                 };
                 match settings.overrides.iter().find(|o| o.species == id) {
                     Some(o) => LennardJones {
