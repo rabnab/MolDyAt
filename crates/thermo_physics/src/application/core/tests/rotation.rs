@@ -263,3 +263,27 @@ fn saves_keep_the_orientation() {
     assert!(a.theta != 0.0);
     assert_eq!(loaded.world().balls[1].theta, 0.0);
 }
+
+/// Balls seeded with random speeds spin too: the mean rotational energy per
+/// rotating ball matches half the mean translational energy (one degree of
+/// freedom against two), so a fresh gas reports its temperature right away
+/// instead of starting with cold rotation; non-rotating balls stay at rest.
+#[test]
+fn seeded_balls_start_with_a_thermal_spin() {
+    let mut mc = world(11);
+    mc.seed_random_mixture(400, 2.0, &[("Rot".into(), 1), ("Ball".into(), 1)])
+        .unwrap();
+    let (mut e_rot, mut e_trans, mut n_rot) = (0.0f64, 0.0f64, 0);
+    for ball in &mc.world().balls {
+        if ball.inertia > 0.0 {
+            e_rot += f64::from(0.5 * ball.inertia * ball.omega * ball.omega);
+            e_trans += f64::from(0.5 * ball.mass * ball.v.norm_sq());
+            n_rot += 1;
+        } else {
+            assert_eq!(ball.omega, 0.0);
+        }
+    }
+    assert!(n_rot > 100, "{n_rot} rotating balls seeded");
+    let ratio = e_rot / (0.5 * e_trans);
+    assert!((ratio - 1.0).abs() < 0.2, "E_rot / (E_trans / 2) = {ratio}");
+}

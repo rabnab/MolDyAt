@@ -9,7 +9,7 @@ use crate::application::{AppError, AppResult};
 use crate::objects2d::ball_impl::ball_core::gravity_acceleration;
 use crate::objects2d::ball_impl::external_field::fields_acceleration;
 use rand::rng;
-use rand_distr::{Distribution, Normal};
+use rand_distr::{Distribution, Normal, StandardNormal};
 use rayon::prelude::*;
 
 /// How `place_candidate` checks a candidate against the balls.
@@ -252,9 +252,17 @@ impl MainContent {
         let normal = self.calculate_normal_distribution_of_speed();
         let mut r = rng();
 
+        // A component `σ` means the temperature `m σ²`: rotating balls get
+        // `ω ~ N(0, σ √(m / I))` for the same temperature (#348).
+        let sigma = normal.std_dev();
         for ball in &mut self.world.balls {
             ball.v.x = normal.sample(&mut r);
             ball.v.y = normal.sample(&mut r);
+            if ball.inertia > 0.0 {
+                ball.omega = sigma
+                    * (ball.mass / ball.inertia).sqrt()
+                    * Distribution::<f32>::sample(&StandardNormal, &mut r);
+            }
         }
     }
     pub(crate) fn calculate_normal_distribution_of_speed(&mut self) -> Normal<f32> {
