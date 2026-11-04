@@ -756,3 +756,28 @@ fn load_reads_json_by_extension_and_toml_otherwise() {
     assert!(SimConfig::load(&json).is_err());
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// A pair override that names a molecule species would add a law between
+/// the centres on top of the site–site forces (#406): rejected.
+#[test]
+fn pair_override_of_a_molecule_species_is_rejected() {
+    let message = error_message(
+        "[[potential.pair_override]]\n\
+         a = \"N2_2S\"\n\
+         b = \"Ar\"\n\
+         epsilon = 1.0\n",
+    );
+    assert!(message.contains("molecule species N2_2S"), "{message}");
+}
+
+/// A wall override of a molecule species would not reach its sites (#406):
+/// rejected.
+#[test]
+fn wall_override_of_a_molecule_species_is_rejected() {
+    let message = error_message(
+        "[[walls.override]]\n\
+         species = \"N2_2S\"\n\
+         epsilon = 2.0\n",
+    );
+    assert!(message.contains("N2_2S is a molecule species"), "{message}");
+}

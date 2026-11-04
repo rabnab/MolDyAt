@@ -453,6 +453,7 @@ core_stiffness = 134.53204    # 0..10000, force slope inside the core (0: flat; 
 cutoff_factor = 4.0           # 1.2..10, pair cutoff in units of sigma_ij
 ## Optional, one block per species pair: replaces the mixed sigma_ij and/or
 ## epsilon_ij of that pair (both orders); a missing value keeps the mixed one.
+## Molecule species (e.g. N2_2S) cannot be named: their sites mix.
 # [[potential.pair_override]]
 # a = "N2"                    # species names of the run's table (see [[species]])
 # b = "Ar"
@@ -466,6 +467,7 @@ epsilon = 1.0                 # 0.1..10, wall epsilon_w: epsilon_iw = sqrt(epsil
 attractive = false            # false: cut at the minimum (WCA, repulsive); true: LJ well up to the cutoff
 backstop = 0.3                # 0.05..0.5, hard contact behind a soft wall at backstop * sigma_i
 ## Optional, one block per species: replaces its mixed sigma_iw and/or epsilon_iw.
+## Not for molecule species, whose sites meet the walls with the mixed laws.
 # [[walls.override]]
 # species = "Ar"
 # sigma = 0.6                 # 0.1..8
