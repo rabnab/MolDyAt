@@ -116,8 +116,9 @@ headless runs; both step with the configured time step.
    energy, force, torque and virial),
    plus, with soft walls (#280, the default), the wall forces
    (`core::wall_forces`): each box side through the signed distance from
-   it, and the nearest line wall only (nearest-feature rule, so a chain has
-   no energy step at its joints). Line walls are found by bounding-box
+   it, and of each wall chain the nearest line wall only (nearest-feature
+   rule, so a chain has no energy step at its joints; separate chains add
+   up). Line walls are found by bounding-box
    rejection against the step's obstacle list, as in the contact sweep.
 4. **apply**: velocity update (and `ω += ½ (α_old + α_new) dt`, `α = torque / I`
    for balls with an orientation), kinetic (with `½ I ω²`), pair and wall

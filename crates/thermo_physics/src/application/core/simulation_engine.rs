@@ -196,6 +196,12 @@ impl SimulationEngine {
         // the positions at the end of the step, after the wall-overlap
         // fallback moved balls (#334, #347). Skipped without fields, so
         // those runs stay bit-identical.
+        //
+        // Gravity is a `UniformField` too, but stays out of `fields()` on
+        // purpose: it is a runtime setting (`G` cycles it, it is not part of
+        // the config's `[[fields]]`), its floor follows the box on a resize,
+        // and its kick sits inside `accel_with_speed_limit`, where moving it
+        // would change the f32 rounding of every gravity run.
         let gravity = world.physics.constants.gravity;
         if gravity != 0.0 {
             stats_accumulator.pot += Self::field_potential_energy(

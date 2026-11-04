@@ -92,7 +92,8 @@ impl SimulationWorld {
             .par_iter_mut()
             .map(|ball| {
                 let contact = physics.wall_contact_distance(ball.species());
-                Self::resolve_ball_overlaps(obstacles, ball, contact)
+                let release = physics.wall_release_distance(ball.species());
+                Self::resolve_ball_overlaps(obstacles, ball, contact, release)
             })
             .collect_into_vec(passes);
         let pass = passes
@@ -105,11 +106,13 @@ impl SimulationWorld {
     }
 
     /// Overlap pass for one ball against every obstacle, in list order.
-    /// `contact` is the ball's wall contact distance.
+    /// `contact` is the ball's wall contact distance, `release` the distance
+    /// at which a `leaving_wall` ball is out of every wall's reach.
     fn resolve_ball_overlaps(
         obstacles: &[Obstacle],
         ball: &mut Ball2D,
         contact: f32,
+        release: f32,
     ) -> OverlapPass {
         let mut total_px = 0.0_f32;
         let mut total_py = 0.0_f32;
@@ -119,7 +122,7 @@ impl SimulationWorld {
         if ball.leaving_wall
             && !obstacles
                 .iter()
-                .any(|o| o.within_counted(ball.get_position(), o.reach(contact), &mut checks))
+                .any(|o| o.within_counted(ball.get_position(), o.reach(release), &mut checks))
         {
             ball.leaving_wall = false;
         }
