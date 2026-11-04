@@ -45,9 +45,11 @@ plain capsules; an open valve produces no obstacle.
 
 With soft walls (#280, the default), every capsule acts on nearby balls
 through the wall potential of their species in the distance `z` from its
-surface (negative inside it); only the nearest capsule acts, so the pieces
-and closed valves of a chain, which overlap at their joints, add no bump or
-well there (`core::wall_forces`). The wall force books wall momentum
+surface (negative inside it); of each chain only the nearest capsule acts, so
+the pieces and closed valves of a chain, which overlap at their joints, add no
+bump or well there, while separate chains add up (`core::wall_forces`). A ball
+a wall was drawn or closed on (`leaving_wall`) feels no line wall until it is
+past the wall cutoff. The wall force books wall momentum
 (`-F·dt`), except the ghost wall's. Thin walls and valves still need a hard
 contact: once a centre crosses the centre line the soft force flips. That
 backstop sits at `0.3 σ_i`, far up the wall potential; thermal balls never

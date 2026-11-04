@@ -33,7 +33,7 @@ pub(super) fn is_normal_gravity(gravity: f32) -> bool {
 /// them, with the time, energies and ball counts, into text (#341).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct StatusNumbers {
-    /// Show physical units of N₂ instead of reduced units.
+    /// Show physical units (Ar reference, #405) instead of reduced units.
     pub real_units: bool,
     /// Time step the steps run with.
     pub dt: f32,
@@ -117,7 +117,7 @@ impl SimStats {
 
     /// The numbers of the status lines besides the time and the energies
     /// (which every snapshot carries): the UI formats them (#341).
-    /// `real_units` asks for physical units of N₂ (key `D`); `dt` is the
+    /// `real_units` asks for physical units, Ar reference (key `D`); `dt` is the
     /// time step and `hood_updates` the neighbour-list rebuilds so far.
     pub(crate) fn status_numbers(
         &self,

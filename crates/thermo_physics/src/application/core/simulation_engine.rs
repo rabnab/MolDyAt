@@ -22,7 +22,7 @@ use crate::objects2d::ball_impl::molecule::SiteTable;
 use crate::objects2d::ball_impl::simd_forces::{KernelPoint, force_simd};
 use crate::objects2d::ball_impl::verlet::Verlet;
 use crate::objects2d::ball_impl::wall_contact::normal_velocity_after_contact;
-use crate::objects2d::ball_impl::water::MbWater;
+use crate::objects2d::ball_impl::water::{MbWater, arms};
 use crate::objects2d::{Rect, Vec2D};
 use rayon::prelude::*;
 
@@ -195,6 +195,12 @@ impl SimulationEngine {
         // the positions at the end of the step, after the wall-overlap
         // fallback moved balls (#334, #347). Skipped without fields, so
         // those runs stay bit-identical.
+        //
+        // Gravity is a `UniformField` too, but stays out of `fields()` on
+        // purpose: it is a runtime setting (`G` cycles it, it is not part of
+        // the config's `[[fields]]`), its floor follows the box on a resize,
+        // and its kick sits inside `accel_with_speed_limit`, where moving it
+        // would change the f32 rounding of every gravity run.
         let gravity = world.physics.constants.gravity;
         if gravity != 0.0 {
             stats_accumulator.pot += Self::field_potential_energy(
@@ -514,6 +520,7 @@ impl SimulationEngine {
     ) {
         let ball = &balls[i];
         let pos = ball.exact_position();
+        let arms_i = arms(ball.theta);
         for &j in ball.cold.hood.get_neighbour_indices() {
             let other = &balls[j];
             if species.species(other.species()).water.is_none() {
@@ -521,7 +528,10 @@ impl SimulationEngine {
             }
             let pos_j = other.exact_position();
             let r = Vec2D::new((pos_j[0] - pos[0]) as f32, (pos_j[1] - pos[1]) as f32);
-            let bond = water.pair(r, ball.theta, other.theta);
+            if r.norm_sq() >= water.cutoff() * water.cutoff() {
+                continue;
+            }
+            let bond = water.pair_with_arms(r, &arms_i, &arms(other.theta));
             if bond.energy == 0.0 {
                 continue;
             }
