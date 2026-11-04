@@ -323,5 +323,5 @@ stated.
 
 **H₂ dumbbell (#407).** A new built-in species `H2_2S`; no scenario uses it, every `trajectory_hash` is unchanged and both headless fixtures only gain the `H2_2S:count` metric.
 
-**CO₂ chain (#408).** A new built-in species `CO2_3S`, and an orientation-dependent box-wall contact for molecules (`BallPhysics::box_wall_contact`; atomic species keep their contact bit for bit). No scenario uses molecules: every `trajectory_hash` is unchanged and both headless fixtures only gain the `CO2_3S:count` metric.
+**CO₂ chain (#408).** A new built-in species `CO2_3S`, and a per-site box-wall contact for molecules: a rigid-body impulse at the end site that hits the wall (`Ball2D::execute_update_pos_molecule`; atomic species keep their contact bit for bit, and molecules away from the walls drift bit for bit as before). A hot CO₂ gas between hard walls keeps its energy to 6.9e-3 of the kinetic energy at dt 0.0025 and 3.6e-3 at half of it (first order: the impulse acts at the end of the drift); the earlier centre-based contact gave 1.2e-1 and 3.9e-2. No scenario uses molecules: every `trajectory_hash` is unchanged and both headless fixtures only gain the `CO2_3S:count` metric.
 

@@ -370,29 +370,6 @@ impl BallPhysics {
         self.wall_contact[species.index()]
     }
 
-    /// Centre distance from the left/right and the bottom/top box walls at
-    /// which `ball` is reflected. A molecule (#408) reaches as far as its
-    /// sites do along the wall normal, `half length · |cos θ|` or `|sin θ|`,
-    /// plus a site's contact, so a molecule lying along a wall is not
-    /// stopped before its sites feel the soft wall. Line walls use the
-    /// full half length ([`Self::wall_contact_distance`]).
-    #[inline]
-    pub(crate) fn box_wall_contact(&self, ball: &Ball2D) -> [f32; 2] {
-        match self.molecule_contact[ball.species().index()] {
-            None => {
-                let contact = self.wall_contact_distance(ball.species());
-                [contact, contact]
-            }
-            Some((half_length, site)) => {
-                let (sin, cos) = ball.theta.sin_cos();
-                [
-                    half_length * cos.abs() + site,
-                    half_length * sin.abs() + site,
-                ]
-            }
-        }
-    }
-
     /// Wall distance beyond which a ball of `species` feels no wall: the
     /// soft wall cutoff, or the contact distance with hard walls. A ball
     /// leaving a wall (`Ball2D::leaving_wall`) keeps its flag until it is
@@ -457,11 +434,20 @@ impl BallPhysics {
         bound: &Rect,
         restitution: f32,
     ) -> BounceInfo {
-        let contact = self.box_wall_contact(ball);
-        let bounce_info = ball.execute_update_pos(dt, bound, contact, restitution);
-        if ball.inertia > 0.0 {
-            ball.advance_orientation(dt);
-        }
+        // A molecule (#408) meets the box walls with its end sites, with a
+        // rigid-body impulse; line walls still use its full half length.
+        let bounce_info = match self.molecule_contact[ball.species().index()] {
+            Some(contact) => ball.execute_update_pos_molecule(dt, bound, contact, restitution),
+            None => {
+                let contact = self.wall_contact_distance(ball.species());
+                let bounce_info =
+                    ball.execute_update_pos(dt, bound, [contact, contact], restitution);
+                if ball.inertia > 0.0 {
+                    ball.advance_orientation(dt);
+                }
+                bounce_info
+            }
+        };
 
         if ball.verbose.console {
             log::debug!(
