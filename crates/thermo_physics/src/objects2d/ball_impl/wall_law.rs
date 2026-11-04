@@ -125,11 +125,11 @@ pub(crate) struct SoftWalls {
 }
 
 impl SoftWalls {
-    /// `sigma_of(id)` is the species' effective `σ_i` (a `σ_ii` pair
-    /// override replaces the table's).
+    /// `like_pair(id)` is the species' effective `(σ_i, ε_i)`: a `σ_ii` or
+    /// `ε_ii` pair override replaces the table's value.
     pub(crate) fn new(
         species: &SpeciesTable,
-        sigma_of: impl Fn(SpeciesId) -> f32,
+        like_pair: impl Fn(SpeciesId) -> (f32, f32),
         settings: &WallSettings,
         cap: CapSettings,
     ) -> Self {
@@ -144,10 +144,10 @@ impl SoftWalls {
         let laws: Vec<LennardJones> = species
             .ids()
             .map(|id| {
-                let s = species.species(id);
+                let (sigma, epsilon) = like_pair(id);
                 let mixed = LennardJones {
-                    sigma: 0.5 * (sigma_of(id) + settings.sigma),
-                    epsilon: (s.epsilon * settings.epsilon).sqrt(),
+                    sigma: 0.5 * (sigma + settings.sigma),
+                    epsilon: (epsilon * settings.epsilon).sqrt(),
                 };
                 match settings.overrides.iter().find(|o| o.species == id) {
                     Some(o) => LennardJones {
