@@ -41,7 +41,9 @@ impl LocalKineticStats {
 
     /// Thermal degrees of freedom: `2·(N − 1)` of the translation in the
     /// centre-of-mass frame, plus one per ball with an orientation (#348).
-    /// `None` below two balls.
+    /// `None` below two balls, also for one rotating ball: its spin alone
+    /// is not a temperature a thermostat should act on (a single ball has
+    /// none in translation either).
     pub(crate) fn thermal_dof(&self) -> Option<f32> {
         if self.count < 2 {
             return None;
