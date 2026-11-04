@@ -295,7 +295,7 @@ Keyboard (press `H` for the same list in the log):
 | `SPACE` | Pause or resume the simulation. |
 | `S` | Toggle step-by-step mode. |
 | `G` | Cycle gravity: off -> 9.81 m/s^2 -> 49.05 m/s^2. |
-| `+` | Double the simulation time step (at most to the limit of the species present, e.g. 0.001 with water; see docs/units.md). |
+| `+` | Double the simulation time step (at most to the limit of the species present, e.g. 0.001 with water). |
 | `-` | Halve the simulation time step. |
 | `Alt + +` | Decrease the wait time between steps. |
 | `Alt + -` | Increase the wait time between steps. |
