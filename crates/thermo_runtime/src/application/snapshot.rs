@@ -81,7 +81,7 @@ impl CreateSnapshot for MainContent {
             ),
             physics_fps: self.runtime().physics_fps(),
             world_rect: world.cell_grid().world_rect(),
-            status: self.status_numbers(step_config.get_time_step()),
+            status: self.status_numbers(),
             created_at: std::time::Instant::now(),
         };
 

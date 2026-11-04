@@ -24,6 +24,14 @@ pub fn status_text(snapshot: &RendererSnapshot, metrics_line: &str) -> Option<St
         reduced_units_lines(snapshot, status, metrics_line)
     };
     text.push('\n');
+    if let Some(id) = status.dt_limited_by {
+        let name = snapshot
+            .balls
+            .species
+            .get(id)
+            .map_or("?", |species| species.name.as_str());
+        let _ = writeln!(text, "dt limited by {name}");
+    }
     write_species_lines(&mut text, snapshot);
     Some(text)
 }

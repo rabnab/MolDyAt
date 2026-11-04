@@ -266,9 +266,12 @@ impl MainContent {
         Normal::new(0., f32::max(0.3, sig)).expect("Invalid distribution parameters")
     }
 
+    /// Stop every ball: no velocity and, for rotating species, no angular
+    /// velocity (else the rotation feeds its energy back).
     pub fn stop_all_balls(&mut self) {
         for ball in &mut self.world.balls {
             ball.v = Vec2D::new(0., 0.);
+            ball.omega = 0.0;
         }
     }
 

@@ -259,6 +259,7 @@ mod tests {
         snapshot.frame.status = Some(StatusNumbers {
             real_units: false,
             dt: 0.01,
+            dt_limited_by: None,
             hood_updates: 0,
             max_neighbours: 0,
             temperature: 0.0,

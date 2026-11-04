@@ -5,7 +5,7 @@
 use crate::application::core::StatsAccumulator;
 use crate::application::thermo_field::LocalKineticStats;
 use crate::objects2d::Vec2D;
-use crate::objects2d::ball_impl::Ball2D;
+use crate::objects2d::ball_impl::{Ball2D, SpeciesId};
 use std::collections::VecDeque;
 
 const PLT_SIZE: usize = 1000;
@@ -35,8 +35,11 @@ pub(super) fn is_normal_gravity(gravity: f32) -> bool {
 pub struct StatusNumbers {
     /// Show physical units of N₂ instead of reduced units.
     pub real_units: bool,
-    /// Time step.
+    /// Time step the steps run with.
     pub dt: f32,
+    /// The species whose `max_time_step` limits `dt` below the set time
+    /// step, if any (`MainContent::active_time_step`).
+    pub dt_limited_by: Option<SpeciesId>,
     /// Neighbour-list rebuilds since the start.
     pub hood_updates: usize,
     /// Most neighbours of any ball.
@@ -120,11 +123,13 @@ impl SimStats {
         &self,
         real_units: bool,
         dt: f32,
+        dt_limited_by: Option<SpeciesId>,
         hood_updates: usize,
     ) -> StatusNumbers {
         StatusNumbers {
             real_units,
             dt,
+            dt_limited_by,
             hood_updates,
             max_neighbours: self.max_neighbours,
             temperature: self.temperature,
