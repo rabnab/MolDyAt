@@ -384,8 +384,8 @@ fn many_chunk_run_bits(threads: usize) -> (usize, Vec<u32>) {
         let mut bits = vec![
             world.sim.get_kinetic_energy().to_bits(),
             world.sim.get_potential_energy().to_bits(),
-            world.sim.wall_momentum_x.to_bits(),
-            world.sim.wall_momentum_y.to_bits(),
+            (world.sim.wall_momentum_x as f32).to_bits(),
+            (world.sim.wall_momentum_y as f32).to_bits(),
         ];
         for ball in &world.balls {
             bits.push(ball.get_position().x.to_bits());

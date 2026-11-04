@@ -568,7 +568,7 @@ fn check_world(
         .iter()
         .zip([0.0, 0.25, -0.5, 0.0, 0.125])
     {
-        close(*xi, n2, 1.0 / s.time, "chain");
+        close(*xi as f32, n2, 1.0 / s.time, "chain");
     }
     close_vec(
         thermostats[1].position,

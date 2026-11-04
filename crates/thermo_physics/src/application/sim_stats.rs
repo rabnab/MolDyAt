@@ -60,8 +60,9 @@ pub struct StatusNumbers {
 /// scheduling — those responsibilities belong to their respective
 /// orchestrators.
 pub struct SimStats {
-    energy_pot: f32,
-    energy_kin: f32,
+    /// The last step's energies, summed in f64 over the balls (#421).
+    energy_pot: f64,
+    energy_kin: f64,
     temperature: f32,
     max_v: f32,
     max_id: usize,
@@ -77,9 +78,10 @@ pub struct SimStats {
     v_kin: VecDeque<f32>,
     max_neighbours: usize,
 
-    // Wall momentum tracking
-    pub wall_momentum_x: f32,
-    pub wall_momentum_y: f32,
+    /// Momentum the walls took since the start, summed in f64 (#421): in
+    /// f32 a long run's total stops taking the small per-step amounts.
+    pub wall_momentum_x: f64,
+    pub wall_momentum_y: f64,
 
     /// Wall contacts resolved exactly during the position update (box walls
     /// and line segments, see `wall_contact`), cumulative.
@@ -155,11 +157,11 @@ impl SimStats {
             if self.v_pot.len() >= PLT_SIZE {
                 self.v_pot.pop_front();
             }
-            self.v_pot.push_back(stats_acumulator.pot);
+            self.v_pot.push_back(stats_acumulator.pot as f32);
             if self.v_kin.len() >= PLT_SIZE {
                 self.v_kin.pop_front();
             }
-            self.v_kin.push_back(stats_acumulator.kin);
+            self.v_kin.push_back(stats_acumulator.kin as f32);
         }
 
         self.max_v = stats_acumulator.max_v;
@@ -192,11 +194,11 @@ impl SimStats {
     }
 
     pub fn get_kinetic_energy(&self) -> f32 {
-        self.energy_kin
+        self.energy_kin as f32
     }
 
     pub fn get_potential_energy(&self) -> f32 {
-        self.energy_pot
+        self.energy_pot as f32
     }
 
     pub fn get_time(&self) -> f32 {
@@ -389,7 +391,7 @@ mod tests {
         // while wall_momentum_x > 0 (wall absorbed rightward momentum).
         // Together they should approximately conserve the initial momentum.
         let p_ball = ball_mass * mc.world().balls[0].v.x;
-        let p_wall = mc.world().sim.wall_momentum_x;
+        let p_wall = mc.world().sim.wall_momentum_x as f32;
 
         assert!(
             p_wall > 0.0,
@@ -401,6 +403,42 @@ mod tests {
         assert!(
             error < 1e-3,
             "momentum not conserved: p_ball={p_ball:.6}, p_wall={p_wall:.6}, initial={initial:.6}, error={error:.2e}"
+        );
+    }
+
+    /// A long run's wall momentum still takes a single bounce (#421): with
+    /// 2e7 already booked, f32 (spacing 2 there) would drop it.
+    #[test]
+    fn test_wall_momentum_keeps_adding_in_long_runs() {
+        use crate::application::MainContent;
+        use crate::objects2d::ball_impl::BallFactory;
+        use crate::objects2d::{Rect, Vec2D};
+
+        let world_rect = Rect::new(0.0, 0.0, 10.0, -10.0);
+        let mut mc = MainContent::new(world_rect).expect("failed to create simulation");
+        mc.world_mut().speed_limit_override = Some(f32::INFINITY);
+        let factory = BallFactory::new();
+        let ball = factory.create_massive_with_velocity(
+            Vec2D::new(10.0 - factory.get_new_ball_radius() - 0.05, -5.0),
+            Vec2D::new(10.0, 0.0),
+        );
+        let mass = f64::from(ball.mass);
+        mc.world_mut().balls.push(ball);
+        mc.world_mut().rebuild_cell_grid();
+        const BOOKED: f64 = 2.0e7;
+        mc.world_mut().sim.wall_momentum_x = BOOKED;
+
+        let bound = mc.world().world_region();
+        for _ in 0..10 {
+            mc.update_sim(0.01, &bound);
+        }
+        // The wall took what the ball lost (it bounced: about 2 m v).
+        let bounce = mass * (10.0 - f64::from(mc.world().balls[0].v.x));
+        assert!(bounce > 10.0, "no bounce: {bounce}");
+        let added = mc.world().sim.wall_momentum_x - BOOKED;
+        assert!(
+            (added - bounce).abs() < 1e-5 * bounce,
+            "the wall took {added} of a {bounce} bounce"
         );
     }
 

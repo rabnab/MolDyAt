@@ -16,19 +16,12 @@ fn make_content() -> MainContent {
 }
 
 /// Threshold below which trailing chain values are treated as effectively zero.
-const MIN_SIGNIFICANT_CHAIN_VALUE: f32 = 1.0e-6;
+const MIN_SIGNIFICANT_CHAIN_VALUE: f64 = 1.0e-6;
 /// Coarse upper bound used to detect runaway heating in long-run stability checks.
 const MAX_STABLE_BUCKET_TEMP: f32 = 10.0;
 
 fn zeroed_stats() -> StatsAccumulator {
-    StatsAccumulator {
-        pot: 0.0,
-        kin: 0.0,
-        v_com: Vec2D::zero(),
-        sum_mass: 0.0,
-        max_v: 0.0,
-        max_id: 0,
-    }
+    StatsAccumulator::default()
 }
 
 fn add_ball(mc: &mut MainContent, pos: Vec2D, velocity: Vec2D) {

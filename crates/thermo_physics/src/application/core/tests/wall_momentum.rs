@@ -114,15 +114,15 @@ fn test_single_ball_wall_bounce_momentum() {
             println!("  Ball momentum change:  {:.6}", ball_momentum_change);
             println!(
                 "  Wall momentum:         {:.6}",
-                main_content.world().sim.wall_momentum_x
+                (main_content.world().sim.wall_momentum_x as f32)
             );
             println!(
                 "  System momentum:       {:.6}",
-                final_ball_momentum + main_content.world().sim.wall_momentum_x
+                final_ball_momentum + (main_content.world().sim.wall_momentum_x as f32)
             );
 
             let momentum_conservation_error = (final_ball_momentum
-                + main_content.world().sim.wall_momentum_x)
+                + (main_content.world().sim.wall_momentum_x as f32))
                 - initial_ball_momentum;
             println!(
                 "  Conservation error:    {:.10}",
@@ -136,13 +136,13 @@ fn test_single_ball_wall_bounce_momentum() {
 
             let expected_wall_momentum = -ball_momentum_change;
             let wall_momentum_error =
-                main_content.world().sim.wall_momentum_x - expected_wall_momentum;
+                (main_content.world().sim.wall_momentum_x as f32) - expected_wall_momentum;
 
             println!("\nExpected vs Actual:");
             println!("  Expected wall momentum: {:.6}", expected_wall_momentum);
             println!(
                 "  Actual wall momentum:   {:.6}",
-                main_content.world().sim.wall_momentum_x
+                (main_content.world().sim.wall_momentum_x as f32)
             );
             println!("  Wall momentum error:    {:.10}", wall_momentum_error);
 

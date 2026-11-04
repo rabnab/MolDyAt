@@ -18,9 +18,9 @@ const DEFAULT_TAU: f32 = 0.5;
 /// Active Nosé-Hoover chain length per thermostat.
 pub const DEFAULT_THERMOSTAT_CHAIN_LENGTH: usize = 5;
 /// Lower bound for chain variables to avoid runaway values.
-pub const THERMOSTAT_CHAIN_MIN: f32 = -10.0;
+pub const THERMOSTAT_CHAIN_MIN: f64 = -10.0;
 /// Upper bound for chain variables to avoid runaway values.
-pub const THERMOSTAT_CHAIN_MAX: f32 = 10.0;
+pub const THERMOSTAT_CHAIN_MAX: f64 = 10.0;
 /// Scroll-wheel increment for target temperature changes.
 pub const THERMOSTAT_TARGET_TEMP_STEP: f32 = 5.0 / 122.0;
 /// Scroll-wheel increment for radius changes.
@@ -47,8 +47,9 @@ pub struct SimThermostat {
     pub target_temperature: f32,
     /// Radius of the thermostat region in world units.
     pub radius: f32,
-    /// Nosé-Hoover chain variables (5-chain Nosé-Hoover by default).
-    pub chain: Vec<f32>,
+    /// Nosé-Hoover chain variables (5-chain Nosé-Hoover by default),
+    /// integrated in f64 (#421).
+    pub chain: Vec<f64>,
     /// Coupling time constant.
     pub tau: f32,
     /// Current measured local temperature in LJ reduced units.

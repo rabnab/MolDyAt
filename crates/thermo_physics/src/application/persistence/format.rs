@@ -289,7 +289,7 @@ pub(crate) struct ThermostatData {
     pub target_temperature: f32,
     pub radius: f32,
     pub tau: f32,
-    pub chain: Vec<f32>,
+    pub chain: Vec<f64>,
 }
 
 pub(super) fn invalid(message: impl Into<String>) -> AppError {
@@ -465,7 +465,9 @@ impl WorldFile {
                 ],
                 &what,
             )?;
-            check_finite(&thermostat.chain, &what)?;
+            if !thermostat.chain.iter().all(|v| v.is_finite()) {
+                return Err(invalid(format!("{what} contains a non-finite number")));
+            }
             let radius_ok =
                 (MIN_THERMOSTAT_RADIUS..=MAX_THERMOSTAT_RADIUS).contains(&thermostat.radius);
             let target_ok = (MIN_TARGET_TEMPERATURE..=MAX_TARGET_TEMPERATURE)

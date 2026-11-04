@@ -37,8 +37,9 @@ impl MainContent {
     }
 
     /// Momentum `(px, py)` given to walls (box and non-ghost line walls)
-    /// since the start of the run; the pressure readings derive from it.
-    pub fn wall_momentum(&self) -> (f32, f32) {
+    /// since the start of the run, summed in f64 (#421); the pressure
+    /// readings derive from it.
+    pub fn wall_momentum(&self) -> (f64, f64) {
         (
             self.world.sim.wall_momentum_x,
             self.world.sim.wall_momentum_y,
