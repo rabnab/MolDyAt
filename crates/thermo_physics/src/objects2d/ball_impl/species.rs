@@ -279,14 +279,18 @@ static BUILTIN_TABLE: LazyLock<Arc<SpeciesTable>> = LazyLock::new(|| {
         )
     });
     let library = LIBRARY.iter().map(|s| {
-        Species::from_literature(
+        let mut species = Species::from_literature(
             s.name,
             s.sigma_angstrom,
             s.epsilon_kelvin,
             s.mass_u,
             None,
             s.colour,
-        )
+        );
+        if s.name == "NH3" {
+            species.max_time_step = Some(NH3_MAX_TIME_STEP);
+        }
+        species
     });
     Arc::new(SpeciesTable::new(
         std::iter::once(n2)
@@ -390,6 +394,10 @@ fn co2_chain() -> Species {
 /// heavier sites librate fast in a condensed phase (energy error 9.6e-3 of
 /// the kinetic energy at 0.005, 1.5e-3 at 0.0025).
 pub const CO2_MAX_TIME_STEP: f32 = 0.0025;
+/// Largest time step while `NH3` is present (#409): its deep, narrow
+/// Lennard-Jones well (ω ≈ 41.5 for a bound pair) makes Verlet unstable
+/// above dt ≈ 0.048; at 0.01, ω·dt ≈ 0.4.
+pub const NH3_MAX_TIME_STEP: f32 = 0.01;
 
 /// Largest time step for runs with H₂ (#407): its rotation is ~20 times
 /// faster than N₂'s.
