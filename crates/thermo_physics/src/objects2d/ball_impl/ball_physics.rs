@@ -7,7 +7,9 @@ use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::ball_core::BounceInfo;
 use crate::objects2d::ball_impl::external_field::Field;
 use crate::objects2d::ball_impl::molecule::SiteTable;
-use crate::objects2d::ball_impl::pair_potential::{CapSettings, LJ_SIG, PairOverride, Potential};
+use crate::objects2d::ball_impl::pair_potential::{
+    CapSettings, LJ_SIG, PairOverride, PairPotential, Potential,
+};
 use crate::objects2d::ball_impl::species::{
     DEFAULT_SPECIES, Species, SpeciesId, SpeciesSet, SpeciesTable,
 };
@@ -163,17 +165,19 @@ impl BallPhysics {
         .with_walls(WallSettings::hard())
     }
 
-    /// The same physics with the wall model `walls`. A `σ_ii` pair override
-    /// also sets the species' `σ_i` for the walls.
+    /// The same physics with the wall model `walls`. A `σ_ii` or `ε_ii`
+    /// pair override also sets the species' `σ_i` or `ε_i` for the walls.
     pub(crate) fn with_walls(mut self, walls: WallSettings) -> Self {
         let species = &*self.species;
-        let sigma_of = |id: SpeciesId| {
-            self.pair_overrides
-                .iter()
-                .find(|o| o.is_for(id, id))
-                .and_then(|o| o.sigma)
-                .unwrap_or(species.species(id).sigma)
+        let like_pair = |id: SpeciesId| {
+            let s = species.species(id);
+            let o = self.pair_overrides.iter().find(|o| o.is_for(id, id));
+            (
+                o.and_then(|o| o.sigma).unwrap_or(s.sigma),
+                o.and_then(|o| o.epsilon).unwrap_or(s.epsilon),
+            )
         };
+        let sigma_of = |id: SpeciesId| like_pair(id).0;
         // A molecule (#406) touches the wall with its outermost site: its
         // centre stays half its length plus a site's contact away.
         let contact_of = |law: &dyn WallLaw| -> Vec<f32> {
@@ -203,7 +207,7 @@ impl BallPhysics {
             });
             self.soft_walls = Some(SoftWalls::new(
                 species,
-                sigma_of,
+                like_pair,
                 &walls,
                 *self.cap_settings(),
             ));
@@ -343,6 +347,25 @@ impl BallPhysics {
     #[inline]
     pub(crate) fn wall_contact_distance(&self, species: SpeciesId) -> f32 {
         self.wall_contact[species.index()]
+    }
+
+    /// Wall distance beyond which a ball of `species` feels no wall: the
+    /// soft wall cutoff, or the contact distance with hard walls. A ball
+    /// leaving a wall (`Ball2D::leaving_wall`) keeps its flag until it is
+    /// this far out, so the soft force does not switch on inside its core.
+    pub(crate) fn wall_release_distance(&self, species: SpeciesId) -> f32 {
+        let contact = self.wall_contact_distance(species);
+        self.soft_walls.as_ref().map_or(contact, |w| {
+            // A molecule (#406) reaches as far as its outermost site's cutoff.
+            let reach = match w.sites(species) {
+                Some(sites) => sites
+                    .iter()
+                    .map(|(offset, potential)| offset.abs() + PairPotential::cutoff(potential))
+                    .fold(0.0, f32::max),
+                None => w.cutoff(species),
+            };
+            reach.max(contact)
+        })
     }
 
     /// Centre distance at which the potential of species `a` and `b`

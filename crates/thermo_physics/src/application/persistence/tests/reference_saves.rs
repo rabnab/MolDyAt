@@ -206,6 +206,29 @@ fn config_less_save_keeps_its_time_step() {
     assert_eq!(mc.config(), config);
 }
 
+/// A v5 save whose soft walls were at their default (no `walls` in its
+/// config) keeps the physical `ε_w = 1 ε_N2` it ran with when converted to
+/// Ar units (#405), like a save that wrote its `walls`.
+#[test]
+fn default_soft_walls_keep_their_epsilon_in_ar_units() {
+    let mut file: serde_json::Value = serde_json::from_str(&read_fixture("v5.json")).unwrap();
+    let config = file["config"].as_object_mut().expect("v5 has a config");
+    assert!(config.remove("walls").is_some());
+    let dir = scratch_dir("reference_default_walls");
+    fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("v5_default_walls.json");
+    fs::write(&path, serde_json::to_string(&file).unwrap()).unwrap();
+
+    let store = SaveStore::new(dir);
+    let mut mc = MainContent::new(Rect::new(-10.0, 10.0, 100.0, -100.0)).unwrap();
+    mc.load_world(&store, &LoadSource::Path(path), true)
+        .unwrap();
+    let s = UnitSystem::N2.scale_to(&UnitSystem::AR);
+    let walls = mc.config().walls;
+    assert_eq!(walls.model, WallModel::Soft);
+    close(walls.epsilon, 1.0, s.energy, "default ε_w");
+}
+
 #[test]
 fn old_saves_load_into_a_file_type_with_new_fields() {
     for fixture in FIXTURES {

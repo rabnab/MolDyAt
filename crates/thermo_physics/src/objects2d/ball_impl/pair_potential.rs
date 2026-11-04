@@ -38,9 +38,12 @@ const N2_ENERGY_IN_AR: f64 = N2_EPSILON_KELVIN / AR_EPSILON_KELVIN;
 const MAX_FORCE: f32 = (100.0 * (N2_ENERGY_IN_AR / N2_LENGTH_IN_AR)) as f32;
 /// Slope of the repulsion below `r_cap`: the force grows by this much per unit
 /// of extra compression, so deeper overlaps push harder than shallow ones.
-/// 200 ε_N2/σ_N2² ≈ 134.5 in Ar units. Stability: the smallest reduced mass
-/// (two `N2`, 0.35) gives ω ≈ 19.6, so ω·dt ≈ 0.1 at the default dt = 0.005
-/// and ≈ 1.6 at `MAX_TIME_STEP` (0.08), below the Verlet limit of 2.
+/// 200 ε_N2/σ_N2² ≈ 134.5 in Ar units. Stability of the capped core alone:
+/// the smallest reduced mass (two `N2`, 0.35) gives ω ≈ 19.6, so ω·dt ≈ 0.1
+/// at the default dt = 0.005 and ≈ 1.6 at `MAX_TIME_STEP` (0.08), below the
+/// Verlet limit of 2. A deep, narrow well can be stiffer than the core:
+/// `NH3` (`72·2^(-1/3)·ε/σ²` ≈ 367, reduced mass 0.21) has ω ≈ 41.5, so
+/// ω·dt ≈ 0.2 at the default dt but ≈ 3.3 at `MAX_TIME_STEP` (unstable).
 const CORE_STIFFNESS: f32 =
     (200.0 * (N2_ENERGY_IN_AR / (N2_LENGTH_IN_AR * N2_LENGTH_IN_AR))) as f32;
 const CUTOFF_FACTOR: f32 = 4.0;

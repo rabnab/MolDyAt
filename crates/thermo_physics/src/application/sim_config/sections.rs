@@ -118,6 +118,19 @@ impl PotentialConfig {
         for (i, entry) in self.pair_overrides.iter().enumerate() {
             let key = format!("potential.pair_override[{i}]");
             let o = entry.resolve(species, &key)?;
+            // A molecule (#406) interacts through its sites only: an override
+            // would add a second law between the centres (sites mix by
+            // Lorentz–Berthelot; there are no site overrides yet).
+            if let Some(name) = [o.a, o.b]
+                .into_iter()
+                .find(|&id| species.species(id).molecule.is_some())
+                .map(|id| &species.species(id).name)
+            {
+                return Err(invalid(format!(
+                    "{key} names the molecule species {name}: molecules interact through \
+                     their sites, which mix by Lorentz–Berthelot and cannot be overridden"
+                )));
+            }
             if let Some(j) = resolved.iter().position(|r| r.is_for(o.a, o.b)) {
                 return Err(invalid(format!(
                     "{key} overrides the pair {} – {} again (first in potential.pair_override[{j}])",
@@ -304,6 +317,13 @@ impl WallsConfig {
                     known.join(", ")
                 ))
             })?;
+            if species.species(id).molecule.is_some() {
+                return Err(invalid(format!(
+                    "{key}: {} is a molecule species; its sites meet the walls with the \
+                     mixed site laws, which cannot be overridden",
+                    entry.species
+                )));
+            }
             if overrides.iter().any(|o| o.species == id) {
                 return Err(invalid(format!(
                     "{key} overrides species {} again",
