@@ -112,8 +112,9 @@ headless runs; both step with the configured time step.
 3. **forces**: pair forces from the SIMD kernel (`simd_forces`, `f32x4`),
    plus, with soft walls (#280, the default), the wall forces
    (`core::wall_forces`): each box side through the signed distance from
-   it, and the nearest line wall only (nearest-feature rule, so a chain has
-   no energy step at its joints). Line walls are found by bounding-box
+   it, and of each wall chain the nearest line wall only (nearest-feature
+   rule, so a chain has no energy step at its joints; separate chains add
+   up). Line walls are found by bounding-box
    rejection against the step's obstacle list, as in the contact sweep.
 4. **apply**: velocity update, kinetic, pair and wall potential energy, wall
    momentum bookkeeping (contacts, and the soft wall forces times `dt`), the
