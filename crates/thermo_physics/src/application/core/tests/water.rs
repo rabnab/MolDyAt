@@ -166,7 +166,7 @@ fn a_coarse_time_step_with_water_is_flagged() {
         MainContent::with_config(Rect::new(-20.0, 20.0, 40.0, -40.0), &test_config(), None)
             .unwrap();
     mc.simulation_step().unwrap();
-    assert!(!mc.world().water_dt_warned, "no water yet");
+    assert!(!mc.world().dt_warned, "no water yet");
     add(
         &mut mc,
         Vec2D::zero(),
@@ -176,7 +176,7 @@ fn a_coarse_time_step_with_water_is_flagged() {
         species("H2O"),
     );
     mc.simulation_step().unwrap();
-    assert!(mc.world().water_dt_warned);
+    assert!(mc.world().dt_warned);
 }
 
 /// Mean pressure on the box walls over `steps` steps: the soft wall forces

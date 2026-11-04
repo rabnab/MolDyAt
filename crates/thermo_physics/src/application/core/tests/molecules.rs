@@ -9,6 +9,7 @@
 use crate::application::persistence::{LoadSource, SaveStore};
 use crate::application::thermo_field::LocalKineticStats;
 use crate::application::{MainContent, SimConfig};
+use crate::objects2d::ball_impl::species::H2_MAX_TIME_STEP;
 use crate::objects2d::ball_impl::{Ball2D, SpeciesId, SpeciesTable};
 use crate::objects2d::{Rect, Vec2D};
 
@@ -184,4 +185,137 @@ fn saves_keep_a_dumbbell() {
     let (a, b) = (&mc.world().balls[0], &loaded.world().balls[0]);
     assert_eq!(a.species(), b.species());
     assert_eq!((a.theta, a.omega, a.alpha), (b.theta, b.omega, b.alpha));
+}
+
+// ── H₂ (#407) ───────────────────────────────────────────────────────────
+
+/// `world` at the H₂ time step.
+fn h2_world(seed: u64, half: f32, dt: f32) -> MainContent {
+    let mut config = SimConfig::default();
+    config.integration.time_step = dt;
+    let mut mc = MainContent::with_config(
+        Rect::new(-half, half, 2.0 * half, -2.0 * half),
+        &config,
+        Some(seed),
+    )
+    .unwrap();
+    mc.world_mut().speed_limit_override = Some(f32::INFINITY);
+    mc
+}
+
+/// Max energy error, as a share of the kinetic energy, of an H₂ gas at
+/// about 100 K over 20 time units at `dt`.
+fn h2_energy_error(dt: f32) -> f32 {
+    let mut mc = h2_world(6, 9.0, dt);
+    let h2 = species("H2_2S");
+    // ½ m v² ≈ k_B T: v ≈ 0.96 at T ≈ 0.83 (100 K) for m = 0.0505.
+    let side = 9;
+    for i in 0..side {
+        for j in 0..side {
+            let pos = Vec2D::new(-7.2 + 1.8 * i as f32, -7.2 + 1.8 * j as f32);
+            let phase = (i * 7 + j * 13) as f32;
+            let v = Vec2D::new(phase.sin(), (1.3 * phase).cos()).scaled(4.0);
+            add(
+                &mut mc,
+                pos,
+                v,
+                0.37 * phase,
+                15.0 * (0.9 * phase).sin(),
+                h2,
+            );
+        }
+    }
+    mc.collect_neighbours_by_cell(dt);
+    mc.simulation_step().unwrap();
+    let (e0, kin0) = (reported_energy(&mc), mc.world().sim.get_kinetic_energy());
+    let mut max = 0.0f32;
+    for _ in 0..(20.0 / dt) as usize {
+        mc.simulation_step().unwrap();
+        max = max.max((reported_energy(&mc) - e0).abs() / kin0);
+    }
+    max
+}
+
+/// At the H₂ time step the energy holds (1e-3 of the kinetic energy) and
+/// the error shrinks with dt, so it is the step, not the model.
+#[test]
+fn h2_gas_conserves_its_energy_at_its_time_step() {
+    let coarse = h2_energy_error(H2_MAX_TIME_STEP);
+    let fine = h2_energy_error(0.5 * H2_MAX_TIME_STEP);
+    println!("H2: energy error {coarse:e} at dt, {fine:e} at dt/2");
+    assert!(coarse < 1e-3, "energy error {coarse:e}");
+    assert!(
+        fine < 0.5 * coarse,
+        "no convergence: {coarse:e} -> {fine:e}"
+    );
+}
+
+/// Wall pressure (soft wall forces per wall length) of a dilute gas of
+/// `h2` H₂ and `ar` Ar molecules held at `T = 1` by a thermostat.
+fn dilute_pressure(h2: usize, ar: usize) -> f64 {
+    let half = 20.0;
+    let mut mc = h2_world(8, half, H2_MAX_TIME_STEP);
+    let (h2_id, ar_id) = (species("H2_2S"), species("Ar"));
+    let kinds: Vec<SpeciesId> = std::iter::repeat_n(h2_id, h2)
+        .chain(std::iter::repeat_n(ar_id, ar))
+        .collect();
+    let side = (kinds.len() as f32).sqrt().ceil() as usize;
+    let spacing = 2.0 * half / side as f32;
+    for (k, &kind) in kinds.iter().enumerate() {
+        let (i, j) = (k % side, k / side);
+        let pos = Vec2D::new(
+            -half + spacing * (i as f32 + 0.5),
+            -half + spacing * (j as f32 + 0.5),
+        );
+        // Speeds of about T = 1 for each species (the thermostat only
+        // scales velocities, it cannot start a gas at rest).
+        let mass = mc.world().species().species(kind).mass;
+        let phase = k as f32 * 2.399;
+        let v = Vec2D::new(phase.cos(), phase.sin()).scaled((2.0 / mass).sqrt());
+        add(&mut mc, pos, v, 0.0, 0.0, kind);
+    }
+    mc.collect_neighbours_by_cell(H2_MAX_TIME_STEP);
+    mc.add_thermostat(Vec2D::zero());
+    let id = mc.world().thermostats.thermostats()[0].id;
+    mc.toggle_thermostat(id);
+    {
+        let thermostat = mc.world_mut().thermostats.find_mut(id).unwrap();
+        thermostat.target_temperature = 1.0;
+        thermostat.radius = 2.0 * half;
+    }
+    // Shorter runs (5k + 25k steps) scatter by up to 20 %.
+    for _ in 0..10_000 {
+        mc.simulation_step().unwrap();
+    }
+    let perimeter = 8.0 * f64::from(half);
+    let steps = 40_000;
+    let mut sum = 0.0f64;
+    for _ in 0..steps {
+        mc.simulation_step().unwrap();
+        sum += mc
+            .world()
+            .cached_force_results
+            .iter()
+            .map(|r| f64::from(r.wall_force.x.abs() + r.wall_force.y.abs()))
+            .sum::<f64>();
+    }
+    sum / (steps as f64 * perimeter)
+}
+
+/// Dalton's law in a dilute H₂/Ar gas: the pressure of the mixture is the
+/// sum of the partial pressures (ideal-gas smoke test, #407).
+#[test]
+#[ignore = "suite:physics (slow)"]
+fn h2_and_argon_partial_pressures_add_up() {
+    let (p_h2, p_ar, p_mix) = (
+        dilute_pressure(40, 0),
+        dilute_pressure(0, 40),
+        dilute_pressure(40, 40),
+    );
+    println!(
+        "H2/Ar: P_H2 {p_h2:.5}, P_Ar {p_ar:.5}, P_mix {p_mix:.5}, sum {:.5}",
+        p_h2 + p_ar
+    );
+    let ratio = p_mix / (p_h2 + p_ar);
+    assert!((ratio - 1.0).abs() < 0.1, "P_mix / (P_H2 + P_Ar) = {ratio}");
 }
