@@ -104,3 +104,27 @@ fn test_species_series_are_registered_once_per_table() {
             .is_some_and(|m| m.is_per_species)
     );
 }
+
+/// The `net_*` series hold the safety-net interventions since the previous
+/// sample (#422): exact in f32 even when the totals are far past 2^24.
+#[test]
+fn test_safety_net_series_record_the_increase_since_the_last_sample() {
+    use thermo_physics::application::sim_stats::SafetyNets;
+    let mut registry = MetricsRegistry::default();
+    let mut snapshot = stepped_snapshot(1);
+    let base = 50_000_000u64;
+    snapshot.frame.safety_nets = SafetyNets {
+        capped_pairs: base,
+        ..SafetyNets::default()
+    };
+    registry.sample(&snapshot);
+    snapshot.frame.simulation_step += 1;
+    snapshot.frame.safety_nets.capped_pairs = base + 3;
+    snapshot.frame.safety_nets.braked = 1;
+    registry.sample(&snapshot);
+
+    let last = |name: &str| registry.get_series(name).unwrap().latest().copied();
+    assert_eq!(last("net_capped_pairs"), Some(3.0));
+    assert_eq!(last("net_braked"), Some(1.0));
+    assert_eq!(last("net_backstop_hits"), Some(0.0));
+}

@@ -8,6 +8,7 @@ use crate::application::renderer_snapshot::RendererSnapshot;
 use crate::objects2d::ball_impl::SpeciesTable;
 use std::collections::BTreeMap;
 use std::sync::{Arc, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use thermo_physics::application::sim_stats::SafetyNets;
 
 use super::series::{RingBuffer, SeriesMetadata, SeriesName};
 
@@ -39,12 +40,16 @@ pub fn write_metrics(metrics: &SharedMetricsRegistry) -> RwLockWriteGuard<'_, Me
 /// with `steps()`. The export relies on this; `record` outside `sample` is
 /// for tests and for series a caller feeds in lockstep with `sample`.
 ///
-/// The safety-net series (#422): name and description.
+/// The safety-net series (#422): name and description. Each sample holds
+/// the interventions since the previous sample.
 const SAFETY_NET_SERIES: [(&str, &str); 4] = [
-    ("net_braked", "Balls Braked (total)"),
-    ("net_capped_pairs", "Capped Pairs (total)"),
-    ("net_backstop_hits", "Backstop Hits (total)"),
-    ("net_overlap_corrections", "Overlap Corrections (total)"),
+    ("net_braked", "Balls Braked (per sample)"),
+    ("net_capped_pairs", "Capped Pairs (per sample)"),
+    ("net_backstop_hits", "Backstop Hits (per sample)"),
+    (
+        "net_overlap_corrections",
+        "Overlap Corrections (per sample)",
+    ),
 ];
 
 /// Stores named series (E_kin, E_pot, E_tot, wall momentum, per-species
@@ -65,6 +70,9 @@ pub struct MetricsRegistry {
     last_sampled: Option<(u64, u64)>,
     /// World generation the stored history belongs to.
     generation: u64,
+    /// Safety-net totals at the last sample: the `net_*` series record the
+    /// increase since then (#422), which stays small and exact in f32.
+    last_safety_nets: SafetyNets,
     /// Counts every change of the stored series, so a consumer can tell
     /// whether it has to copy them again.
     version: u64,
@@ -89,6 +97,7 @@ impl MetricsRegistry {
             times: RingBuffer::new(capacity),
             last_sampled: None,
             generation: 0,
+            last_safety_nets: SafetyNets::default(),
             version: 0,
             capacity,
             species_table: None,
@@ -136,7 +145,7 @@ impl MetricsRegistry {
                 is_per_species: false,
             },
         );
-        // Safety-net interventions since the start (#422): counts, no unit.
+        // Safety-net interventions per sample (#422): counts, no unit.
         for (name, description) in SAFETY_NET_SERIES {
             self.register_series(
                 name.to_string(),
@@ -200,6 +209,7 @@ impl MetricsRegistry {
         self.species_table = None;
         self.count_series.clear();
         self.last_sampled = None;
+        self.last_safety_nets = SafetyNets::default();
         self.version = self.version.wrapping_add(1);
     }
 
@@ -232,15 +242,19 @@ impl MetricsRegistry {
         self.record("E_pot", e_pot);
         self.record("E_tot", snapshot.frame.total_energy());
         self.record("wall_momentum", snapshot.frame.wall_momentum);
-        let nets = &snapshot.frame.safety_nets;
+        // The increase since the last sample, not the total: a total past
+        // 2^24 would stop growing in f32.
+        let (nets, last) = (snapshot.frame.safety_nets, self.last_safety_nets);
         for ((name, _), count) in SAFETY_NET_SERIES.iter().zip([
-            nets.braked,
-            nets.capped_pairs,
-            nets.backstop_hits,
-            nets.overlap_corrections,
+            nets.braked.saturating_sub(last.braked),
+            nets.capped_pairs.saturating_sub(last.capped_pairs),
+            nets.backstop_hits.saturating_sub(last.backstop_hits),
+            nets.overlap_corrections
+                .saturating_sub(last.overlap_corrections),
         ]) {
             self.record(name, count as f32);
         }
+        self.last_safety_nets = nets;
 
         self.sample_species_counts(snapshot);
     }
