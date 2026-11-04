@@ -20,7 +20,6 @@
 //! Water meets other species through its Lennard-Jones part only.
 
 use crate::objects2d::Vec2D;
-use std::f32::consts::TAU;
 
 /// Hydrogen-bond parameters of a water species, in reduced (Ar) units.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -67,7 +66,14 @@ impl MbWater {
     /// Bond of ball `i` (orientation `theta_i`) with `j` (`theta_j`) at
     /// `r = r_j − r_i`: energy, force and torque on `i`. Zero beyond
     /// [`Self::cutoff`].
+    #[cfg(test)]
     pub(crate) fn pair(&self, r: Vec2D, theta_i: f32, theta_j: f32) -> HbPair {
+        self.pair_with_arms(r, &arms(theta_i), &arms(theta_j))
+    }
+
+    /// [`Self::pair`] with the arm directions of both balls ([`arms`]), so
+    /// the force pass computes each ball's arms once, not once per pair.
+    pub(crate) fn pair_with_arms(&self, r: Vec2D, arms_i: &Arms, arms_j: &Arms) -> HbPair {
         let zero = HbPair {
             energy: 0.0,
             force: Vec2D::zero(),
@@ -92,9 +98,7 @@ impl MbWater {
         // Arms of j: B = Σ G(y_l + 1); dB/dr.
         let (mut b_sum, mut db_dr) = (0.0f32, Vec2D::zero());
         for k in 0..3 {
-            let phase = TAU * k as f32 / 3.0;
-            let (sin_i, cos_i) = (theta_i + phase).sin_cos();
-            let arm_i = Vec2D::new(cos_i, sin_i);
+            let arm_i = arms_i[k];
             let x = arm_i.dot(&u);
             let g = gauss(x - 1.0, w);
             let dg = -(x - 1.0) / w2 * g;
@@ -102,10 +106,9 @@ impl MbWater {
             // ∂x/∂r = (a − x u) / d
             da_dr = da_dr.add_scaled(&arm_i.add_scaled(&u, -x), dg / d);
             // ∂x/∂θ_i = perp(a)·u
-            da_dtheta += dg * Vec2D::new(-sin_i, cos_i).dot(&u);
+            da_dtheta += dg * Vec2D::new(-arm_i.y, arm_i.x).dot(&u);
 
-            let (sin_j, cos_j) = (theta_j + phase).sin_cos();
-            let arm_j = Vec2D::new(cos_j, sin_j);
+            let arm_j = arms_j[k];
             let y = arm_j.dot(&u);
             let g = gauss(y + 1.0, w);
             let dg = -(y + 1.0) / w2 * g;
@@ -127,6 +130,21 @@ impl MbWater {
             torque: eps * radial * b_sum * da_dtheta,
         }
     }
+}
+
+/// The three hydrogen-bond arm directions of a molecule.
+pub(crate) type Arms = [Vec2D; 3];
+
+/// The arms of a molecule at orientation `theta`: the first along `theta`,
+/// the others turned by 120° and 240° (one `sin_cos`, then fixed rotations).
+pub(crate) fn arms(theta: f32) -> Arms {
+    let (sin, cos) = theta.sin_cos();
+    let first = Vec2D::new(cos, sin);
+    // cos and sin of ±120°.
+    const C: f32 = -0.5;
+    const S: f32 = 0.866_025_4;
+    let turn = |s: f32| Vec2D::new(C * first.x - s * first.y, s * first.x + C * first.y);
+    [first, turn(S), turn(-S)]
 }
 
 #[cfg(test)]

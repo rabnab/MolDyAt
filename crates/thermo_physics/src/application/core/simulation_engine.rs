@@ -22,7 +22,7 @@ use crate::objects2d::ball_impl::simd_forces::{KernelPoint, force_simd};
 use crate::objects2d::ball_impl::species::WATER_MAX_TIME_STEP;
 use crate::objects2d::ball_impl::verlet::Verlet;
 use crate::objects2d::ball_impl::wall_contact::normal_velocity_after_contact;
-use crate::objects2d::ball_impl::water::MbWater;
+use crate::objects2d::ball_impl::water::{MbWater, arms};
 use crate::objects2d::{Rect, Vec2D};
 use rayon::prelude::*;
 
@@ -512,6 +512,7 @@ impl SimulationEngine {
     ) {
         let ball = &balls[i];
         let pos = ball.exact_position();
+        let arms_i = arms(ball.theta);
         for &j in ball.cold.hood.get_neighbour_indices() {
             let other = &balls[j];
             if species.species(other.species()).water.is_none() {
@@ -519,7 +520,10 @@ impl SimulationEngine {
             }
             let pos_j = other.exact_position();
             let r = Vec2D::new((pos_j[0] - pos[0]) as f32, (pos_j[1] - pos[1]) as f32);
-            let bond = water.pair(r, ball.theta, other.theta);
+            if r.norm_sq() >= water.cutoff() * water.cutoff() {
+                continue;
+            }
+            let bond = water.pair_with_arms(r, &arms_i, &arms(other.theta));
             if bond.energy == 0.0 {
                 continue;
             }
