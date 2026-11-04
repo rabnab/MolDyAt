@@ -87,6 +87,13 @@ pub(crate) const MIGRATIONS: &[Migration] = &[
 /// numbers: the time step (and so emission periods in steps) and the cutoff
 /// and skin factors. A config's `[[species]]` list is in Å, K and u already.
 /// Wall thicknesses and emission speeds are clamped to their ranges.
+///
+/// Soft walls left at their default `ε_w` (a config without `walls`, or
+/// without its `epsilon`) ran with `ε_w = 1 ε_N2`: the migrated config states
+/// that value in Ar units, since the default is now `1 ε_Ar`. The config's
+/// `world.scale` keeps its number: it only records how the world was created
+/// (the save keeps its own `world_rect`), so a new world made from a
+/// migrated config is `1 / 1.0861` of the old size in physical units.
 fn migrate_v5_to_v6(file: &mut Value) -> AppResult {
     let s = UnitSystem::N2.scale_to(&UnitSystem::AR);
     scale_rect(file, "world_rect", s.length)?;
@@ -148,6 +155,14 @@ fn migrate_v5_to_v6(file: &mut Value) -> AppResult {
 /// The physical keys of a saved config (see [`migrate_v5_to_v6`]).
 fn scale_config(config: &mut Value, s: &UnitScale) -> AppResult {
     let config = object_mut(config, "`config`")?;
+    let walls = config
+        .entry("walls")
+        .or_insert_with(|| Value::Object(serde_json::Map::new()));
+    let hard = walls.get("model").and_then(Value::as_str) == Some("hard");
+    if !hard && walls.get("epsilon").is_none() {
+        // The v5 default ε_w, in N₂ units; scaled below.
+        object_mut(walls, "`config.walls`")?.insert("epsilon".into(), Value::from(1.0));
+    }
     if let Some(potential) = config.get_mut("potential") {
         scale_optional(potential, "max_force", s.energy / s.length)?;
         scale_optional(potential, "core_stiffness", s.stiffness())?;
