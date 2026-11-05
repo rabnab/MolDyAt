@@ -5,6 +5,8 @@ User-visible changes to MolDyAt, newest first. Binaries and full release notes a
 
 ## Unreleased
 
+- Keep the simulation time, energy totals, wall momentum and thermostats in f64, so long runs keep
+  their time axis and an accurate energy drift. (#421)
 - Add CO₂ as a rigid three-site molecule (`CO2_3S`); molecules bounce off the box walls with a
   spin. (#408)
 - Add H₂ as a rigid two-site molecule (`H2_2S`). (#407)
