@@ -5,6 +5,8 @@ User-visible changes to MolDyAt, newest first. Binaries and full release notes a
 
 ## Unreleased
 
+- Walls are a soft repulsive potential with a hard backstop by default (`[walls]` in the config);
+  saves from before keep hard walls. A wall drawn over balls lets them leave without a kick. (#280)
 ## v0.3.0 - 2026-11-02
 
 - **Breaking:** balls interact by Lennard-Jones on the centre distance with parameters per species
