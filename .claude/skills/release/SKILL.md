@@ -26,6 +26,7 @@ git switch -c feature/master/release-vX.Y.Z
 - Set `version` in the root `Cargo.toml`.
 - Set `version` and `date-released` (the planned tag date, `YYYY-MM-DD`; correct it if the tag lands on another day) in `CITATION.cff`.
 - Set the tag in the README's download examples (Getting Started: `$tag = "vX.Y.Z"` and `tag=vX.Y.Z`).
+- In `CHANGELOG.md`, turn `## Unreleased` into `## vX.Y.Z - YYYY-MM-DD` and start a new empty `## Unreleased` (the `changelog` skill, "At release").
 - `cargo update -w` so `Cargo.lock` records the new version (release builds use `--locked`).
 - Check that README and docs mention no unreleased flags as missing, and no removed ones as present.
 
@@ -56,7 +57,7 @@ The workflow's first job reruns `check_release_files.sh` with the tag and fails 
 ## 5. Verify
 - `gh release view vX.Y.Z`: two archives (`.tar.gz` for Linux, `.zip` for Windows) and their `.sha256` files.
 - Download one, check the checksum, run `moldyat --version` and a short headless run (`--headless --steps 100 --rng-seed 1`).
-- Edit the generated notes if needed: highlights, save-format or headless schema changes, known issues.
+- Edit the generated notes: put the release's `CHANGELOG.md` section on top, then known issues.
 
 ## Fixing a release
 - A broken build for an existing tag: fix on `master`, then rebuild with `gh workflow run release.yml -f tag=vX.Y.Z` only if the tag's commit is still right; the workflow re-uploads the assets with `--clobber`.

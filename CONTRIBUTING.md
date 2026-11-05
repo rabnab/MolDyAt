@@ -145,6 +145,8 @@ every one of them through the real load path and checks its contents.
 2. **Create a Pull Request** on GitHub:
    - Write a clear title and description
    - Link related issues (e.g., "Closes #23")
+   - For a user-visible change, add an entry at the top of `## Unreleased` in
+     [CHANGELOG.md](CHANGELOG.md): at most three lines, what users see, ending with the issue number
    - Wait for CI checks to pass
    - Address review comments
 
