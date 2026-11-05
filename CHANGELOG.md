@@ -5,6 +5,8 @@ User-visible changes to MolDyAt, newest first. Binaries and full release notes a
 
 ## Unreleased
 
+- Count the safety nets that bend the physics (speed-limit braking, force cap, wall backstop,
+  overlap fix) in the status lines (`B`), headless frames and metrics. (#422)
 - Keep the simulation time, energy totals, wall momentum and thermostats in f64, so long runs keep
   their time axis and an accurate energy drift. (#421)
 - Add CO₂ as a rigid three-site molecule (`CO2_3S`); molecules bounce off the box walls with a
