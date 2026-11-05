@@ -46,6 +46,7 @@
 - [ ] `cargo fmt` applied
 - [ ] `cargo clippy --workspace -- -D warnings` passes
 - [ ] Tests pass (scope documented below)
+- [ ] `CHANGELOG.md` entry added under `Unreleased` (user-visible changes only)
 
 ## Testing Commands
 ```bash
