@@ -5,6 +5,8 @@ User-visible changes to MolDyAt, newest first. Binaries and full release notes a
 
 ## Unreleased
 
+- **Breaking:** reduced units are based on argon instead of N₂ (save format 6); older saves and
+  configs are converted on load, and a new world is about 8 % smaller physically. (#405)
 - Add external fields to the config (`[[fields]]`, e.g. a harmonic trap); gravity is one of them. (#347)
 - Walls are a soft repulsive potential with a hard backstop by default (`[walls]` in the config);
   saves from before keep hard walls. A wall drawn over balls lets them leave without a kick. (#280)
