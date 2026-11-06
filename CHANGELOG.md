@@ -5,6 +5,11 @@ User-visible changes to MolDyAt, newest first. Binaries and full release notes a
 
 ## Unreleased
 
+- Every species, also from a config, gets a time step limit derived from its potential (`dt limited
+  by …`): water about 0.0007, H₂ 0.0016, NH₃ 0.0034; CO₂ is no longer capped at 0.0025, and a set
+  step above about 0.008 is capped for every species. (#427)
+- Fast balls no longer pass through a thin wall in a single step, and molecules meet every wall
+  with each site at its own size, also with hard walls (before: line walls as a disk). (#424)
 - Count the safety nets that bend the physics (speed-limit braking, force cap, wall backstop,
   overlap fix) in the status lines (`B`), headless frames and metrics. (#422)
 - Keep the simulation time, energy totals, wall momentum and thermostats in f64, so long runs keep
@@ -13,8 +18,8 @@ User-visible changes to MolDyAt, newest first. Binaries and full release notes a
   spin. (#408)
 - Add H₂ as a rigid two-site molecule (`H2_2S`). (#407)
 - Add N₂ as a rigid two-site molecule (`N2_2S`). (#406)
-- Add 2D water (`H2O`, Mercedes-Benz model) with hydrogen bonds. While water, H₂, CO₂ or NH₃ is
-  present the time step is capped (`dt limited by …`), and `F1` also stops rotation. (#349)
+- Add 2D water (`H2O`, Mercedes-Benz model) with hydrogen bonds. While water is present the time
+  step is capped (`dt limited by …`), and `F1` also stops rotation. (#349)
 - Species can rotate (`moment_of_inertia_u_angstrom2`): temperature, thermostats, new balls and saves
   include the rotation. (#348)
 - `CH4` uses the TraPPE-UA parameters (the old one stays as `CH4_HCB`), and ammonia (`NH3`) is a new
@@ -23,7 +28,7 @@ User-visible changes to MolDyAt, newest first. Binaries and full release notes a
   configs are converted on load, and a new world is about 8 % smaller physically. (#405)
 - Add external fields to the config (`[[fields]]`, e.g. a harmonic trap); gravity is one of them. (#347)
 - Walls are a soft repulsive potential with a hard backstop by default (`[walls]` in the config);
-  saves from before keep hard walls. A wall drawn over balls lets them leave without a kick. (#280)
+  saves from before keep hard walls. A wall drawn over balls pushes them out gently. (#280, #424)
 
 ## v0.3.0 - 2026-11-02
 

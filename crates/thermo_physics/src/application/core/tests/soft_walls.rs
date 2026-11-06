@@ -9,7 +9,7 @@ use super::{create_main_content_for_region, new_main_content_seeded};
 use crate::application::MainContent;
 use crate::application::core::wall_forces::soft_wall_force;
 use crate::objects2d::ball_impl::pair_potential::CapSettings;
-use crate::objects2d::ball_impl::wall_law::{SoftWalls, WallSettings};
+use crate::objects2d::ball_impl::wall_law::{SoftWalls, WALL_RAMP_TIME, WallSettings};
 use crate::objects2d::ball_impl::{BallFactory, DEFAULT_SPECIES, SPECIES_AR, SpeciesTable};
 use crate::objects2d::line_segment::GhostWall;
 use crate::objects2d::{Rect, Vec2D};
@@ -247,7 +247,7 @@ fn thermal_gas_never_reaches_the_backstop() {
 fn left_wall_impulse(mc: &MainContent, v_before: &[f32]) -> f64 {
     let world = mc.world();
     if world.physics.soft_walls().is_some() {
-        let dt = f64::from(mc.time_step());
+        let dt = f64::from(mc.active_time_step());
         return world
             .cached_force_results
             .iter()
@@ -331,17 +331,17 @@ fn soft_walls_book_the_momentum_they_give() {
     assert_eq!(mc.world().sim.wall_contacts, 0, "backstop reached");
     let wall = mc.world().sim.wall_momentum_y - wall0;
     let gas = gas_momentum(&mc) - gas0;
-    let gravity = -mass * f64::from(GRAVITY) * f64::from(mc.time_step()) * steps as f64;
+    let gravity = -mass * f64::from(GRAVITY) * f64::from(mc.active_time_step()) * steps as f64;
     assert!(
         ((wall + gas - gravity) / gravity).abs() < 0.01,
         "wall {wall} + gas {gas} vs gravity impulse {gravity}"
     );
 }
 
-/// A wall drawn on top of a ball at rest does not kick it out: a ball
-/// flagged `leaving_wall` feels no line wall until it is out of reach.
-#[test]
-fn ghost_wall_over_a_resting_ball_adds_no_energy() {
+/// Kinetic energy of a ball at rest that a ghost wall lands on, after the
+/// ramp, and its distance from the wall's centre line. `ramp`: whether the
+/// wall ramps in (as it does); `false` switches it on at full strength.
+fn ghost_wall_kick(ramp: bool) -> (f32, f32) {
     let (mut mc, _) = create_main_content_for_region(-10.0, 10.0);
     mc.add_candidate_to_vec(
         BallFactory::new().create_massive_with_velocity(Vec2D::new(40.0, -50.0), Vec2D::zero()),
@@ -351,12 +351,33 @@ fn ghost_wall_over_a_resting_ball_adds_no_energy() {
         end: Vec2D::new(60.0, -50.2),
         thickness: 1.0,
     }));
-    assert!(mc.world().balls[0].leaving_wall);
-    for _ in 0..50 {
+    assert!(mc.world().balls[0].leaving_wall, "the wall landed on it");
+    assert_eq!(mc.world().balls[0].cold.wall_ramp, 0.0);
+    if !ramp {
+        mc.world_mut().balls[0].leaving_wall = false;
+    }
+    let steps = (2.0 * WALL_RAMP_TIME / mc.active_time_step()).ceil() as usize;
+    for _ in 0..steps {
         mc.simulation_step().unwrap();
     }
-    let v = mc.world().balls[0].v.norm();
-    assert!(v < 1e-6, "the ghost wall kicked the ball: |v| = {v}");
+    let ball = &mc.world().balls[0];
+    assert!(!ball.leaving_wall, "ramped in");
+    let kinetic = 0.5 * ball.mass * ball.v.norm_sq();
+    (kinetic, (ball.get_position().y + 50.2).abs())
+}
+
+/// A wall drawn on top of a ball at rest pushes it out gently (#424): the
+/// line walls ramp in for that ball, so it leaves with a fraction of the
+/// kick a wall switched on at full strength gives it.
+#[test]
+fn ghost_wall_over_a_resting_ball_ramps_in() {
+    let (ramped, distance) = ghost_wall_kick(true);
+    let (kicked, _) = ghost_wall_kick(false);
+    assert!(distance > 0.5, "still inside the wall: {distance}");
+    assert!(
+        ramped < 0.25 * kicked,
+        "ramped kick {ramped} vs full-strength kick {kicked}"
+    );
 }
 
 /// Two separate walls closer than two wall cutoffs both push on a ball

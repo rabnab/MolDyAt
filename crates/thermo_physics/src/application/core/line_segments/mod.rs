@@ -118,14 +118,15 @@ impl SimulationWorld {
         }
     }
 
-    /// Mark every ball overlapping `obstacle` as `leaving_wall`: it was
-    /// there before the wall was, so it gets out on its own path instead of
-    /// being moved (which would add energy or land it on another ball).
+    /// Mark every ball within reach of `obstacle` as `leaving_wall`, with its
+    /// wall ramp restarted: it was there before the wall was, and a kick out
+    /// of the wall would add energy or land it on another ball.
     fn flag_balls_overlapping(&mut self, obstacle: &Obstacle) {
         for ball in &mut self.balls {
-            let contact = self.physics.wall_contact_distance(ball.species());
-            if obstacle.overlaps(ball.get_position(), contact) {
+            let reach = self.physics.wall_release_distance(ball.species());
+            if obstacle.overlaps(ball.get_position(), reach) {
                 ball.leaving_wall = true;
+                ball.cold.wall_ramp = 0.0;
             }
         }
     }

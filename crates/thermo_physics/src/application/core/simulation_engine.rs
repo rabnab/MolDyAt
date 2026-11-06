@@ -4,7 +4,7 @@
 
 use super::line_segments::Obstacle;
 use super::step_scratch::{NeighbourStats, RebuildScratch, UpdateScratch};
-use super::wall_forces::soft_wall_force;
+use super::wall_forces::{molecule_backstop, soft_wall_force};
 use super::{RuntimeOptions, SimulationWorld, StatsAccumulator, StepConfig};
 use crate::application::phase_timings::{Phase, PhaseClock};
 use crate::application::sim_stats::SafetyNets;
@@ -23,6 +23,7 @@ use crate::objects2d::ball_impl::molecule::SiteTable;
 use crate::objects2d::ball_impl::simd_forces::{KernelPoint, force_simd};
 use crate::objects2d::ball_impl::verlet::Verlet;
 use crate::objects2d::ball_impl::wall_contact::normal_velocity_after_contact;
+use crate::objects2d::ball_impl::wall_law::WALL_RAMP_TIME;
 use crate::objects2d::ball_impl::water::{MbWater, arms};
 use crate::objects2d::{Rect, Vec2D};
 use rayon::prelude::*;
@@ -161,7 +162,7 @@ impl SimulationEngine {
                 let contacts = scratch
                     .bounce_infos
                     .iter()
-                    .map(|b| b.iter().count() as u64 + u64::from(b.box_impulse))
+                    .map(|b| b.iter().count() as u64 + u64::from(b.impulses))
                     .sum::<u64>();
                 world.sim.wall_contacts += contacts;
                 // Safety nets of this step (#422); braking and capped pairs
@@ -413,12 +414,20 @@ impl SimulationEngine {
             .balls
             .par_iter_mut()
             .map(|ball| {
+                if let Some(molecule) = &physics.species().species(ball.species()).molecule {
+                    let walls = (bound_rect, obstacles.as_slice());
+                    return (
+                        molecule_backstop(physics, ball, molecule, walls, dt, restitution),
+                        0,
+                    );
+                }
+                // Atoms meet the walls (behind soft walls: the backstop) at the
+                // exact contact time.
                 let start = *ball.get_position();
                 let mut bounce_info = physics.update_positions(ball, dt, bound_rect, restitution);
                 let mut checks = 0;
                 // A ball that reached a box wall is not swept against line
-                // walls this step (the contact normals must stay orthogonal);
-                // if it ends inside one, the overlap pass handles it.
+                // walls this step: the contact normals must stay orthogonal.
                 if !bounce_info.touched_box() {
                     let contact = physics.wall_contact_distance(ball.species());
                     bounce_info.line_wall = SimulationWorld::sweep_wall_contact(
@@ -571,6 +580,7 @@ impl SimulationEngine {
             restitution,
             dt,
             speed_limit,
+            wall_ramp_step,
         } = *params;
 
         let mut wall_px = 0.0;
@@ -600,7 +610,7 @@ impl SimulationEngine {
             }
         }
         ball.v = v_new;
-        // Site impulses of a molecule on the box walls (#408).
+        // Site impulses of a molecule on the walls.
         wall_px += bounce_info.wall_momentum.x;
         wall_py += bounce_info.wall_momentum.y;
 
@@ -612,6 +622,10 @@ impl SimulationEngine {
         ball.accel = accel;
         if ball.inertia > 0.0 {
             ball.kick_rotation(result.torque, dt);
+        }
+        if ball.leaving_wall && wall_ramp_step > 0.0 {
+            ball.cold.wall_ramp += wall_ramp_step;
+            ball.leaving_wall = ball.cold.wall_ramp < 1.0;
         }
 
         if ball.verbose.console {
@@ -702,6 +716,11 @@ impl SimulationEngine {
             speed_limit: world
                 .speed_limit_override
                 .unwrap_or_else(|| Self::default_speed_limit(bound_rect, world.speed_limit_factor)),
+            wall_ramp_step: if world.physics.walls().soft {
+                dt / WALL_RAMP_TIME
+            } else {
+                0.0
+            },
         };
 
         world
@@ -758,6 +777,9 @@ struct ApplyParams<'a> {
     restitution: f32,
     dt: f32,
     speed_limit: f32,
+    /// How much `BallCold::wall_ramp` grows per step: `dt / WALL_RAMP_TIME`
+    /// with soft walls, 0 with hard walls (the overlap pass ends it).
+    wall_ramp_step: f32,
 }
 
 /// Stats of one chunk of the apply pass, summed in ball order, in f64

@@ -112,8 +112,9 @@ impl Obstacle {
 
     /// Where along the straight path `start -> end` (as a fraction) a ball of
     /// `radius` first touches the obstacle, if it starts clear of it and ends
-    /// overlapping it. Almost every ball ends the step clear of almost every
-    /// obstacle, so that is tested first, and without a square root.
+    /// overlapping it or went through it (crossed its centre line).
+    /// Almost every ball ends the step clear of almost every obstacle, so
+    /// that is tested first, and without a square root.
     #[inline]
     pub(super) fn first_touch(
         &self,
@@ -123,15 +124,22 @@ impl Obstacle {
         checks: &mut u64,
     ) -> Option<f32> {
         let reach = self.reach(radius);
-        if self.is_degenerate()
-            || !self.within_counted(end, reach, checks)
-            || self.within_counted(start, reach, checks)
-        {
+        if self.is_degenerate() {
+            return None;
+        }
+        // A point on the path inside the obstacle: its end, or where it
+        // crossed the centre line.
+        let inside = if self.within_counted(end, reach, checks) {
+            1.0
+        } else {
+            self.crossing(start, end)?.0
+        };
+        if self.within_counted(start, reach, checks) {
             return None;
         }
         let reach_sq = reach * reach;
         let path = start.dist(end);
-        let (mut clear, mut inside) = (0.0f32, 1.0f32);
+        let (mut clear, mut inside) = (0.0f32, inside);
         for _ in 0..TOUCH_BISECTION_STEPS {
             let mid = 0.5 * (clear + inside);
             if self.distance_sq(&start.add_scaled(&path, mid)) >= reach_sq {
@@ -188,6 +196,51 @@ impl Obstacle {
             self.outward_normal(pos, pos)
         };
         Some((dist - self.half_thickness, normal))
+    }
+
+    /// [`Self::surface_distance`], plus the shift that puts the point back
+    /// on its side. If its move `from → pos` crossed the centre line (a thin
+    /// wall, a fast site), the force would push it on through: the shift
+    /// mirrors it back across the centre line, where the wall's potential is
+    /// the same, and distance and normal are those of the mirrored point.
+    pub(crate) fn backstop_distance(
+        &self,
+        pos: &Vec2D,
+        from: &Vec2D,
+        range: f32,
+    ) -> Option<(f32, Vec2D, Vec2D)> {
+        if let Some((_, normal)) = self.crossing(from, pos) {
+            // Negative: how far past the centre line the point got.
+            let depth = normal.dot(&self.start.dist(pos));
+            return Some((
+                -depth - self.half_thickness,
+                normal,
+                normal.scaled(-2.0 * depth),
+            ));
+        }
+        let (z, normal) = self.surface_distance(pos, range)?;
+        Some((z, normal, Vec2D::zero()))
+    }
+
+    /// Where the straight path `from → to` crosses the centre line (the
+    /// segment itself, not its extension) from one side strictly to the
+    /// other, as a fraction of the path, and the unit normal of the centre
+    /// line on `from`'s side.
+    fn crossing(&self, from: &Vec2D, to: &Vec2D) -> Option<(f32, Vec2D)> {
+        let perpendicular = Vec2D::new(-self.direction.y, self.direction.x);
+        let a = perpendicular.dot(&self.start.dist(from));
+        let b = perpendicular.dot(&self.start.dist(to));
+        if a * b >= 0.0 {
+            return None;
+        }
+        let fraction = a / (a - b);
+        let hit = from.add_scaled(&from.dist(to), fraction);
+        let along = self.start.dist(&hit).dot(&self.direction) * self.inv_length_sq;
+        if !(0.0..=1.0).contains(&along) {
+            return None;
+        }
+        let unit = perpendicular.scaled(self.inv_length_sq.sqrt());
+        Some((fraction, if a > 0.0 { unit } else { unit.scaled(-1.0) }))
     }
 
     /// Squared distance from `pos` to the centre line.

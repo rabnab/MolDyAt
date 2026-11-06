@@ -321,6 +321,31 @@ impl<L: PairLaw> CappedPotential<L> {
     pub(crate) fn r_cap(&self) -> f32 {
         self.r_cap
     }
+
+    /// `U''(r)`: the law's `-dF/dr`, or the core's slope below `r_cap`.
+    pub(crate) fn curvature(&self, r: f32) -> f32 {
+        if r < self.r_cap {
+            self.settings.core_stiffness
+        } else {
+            -self.law.force_derivative(r)
+        }
+    }
+
+    /// The largest `U''` a pair meets: at its well minimum, or along a
+    /// head-on collision with `energy`. The law's `U''` falls outward, so a
+    /// collision is stiffest where it turns or, turning inside the core, at
+    /// the core's edge.
+    pub(crate) fn stiffness(&self, energy: f32) -> f32 {
+        if self.law.is_null() {
+            return 0.0;
+        }
+        let minimum = self.law.equilibrium_distance();
+        let (_, turn) = bisect(0.0, minimum, |r| self.potential(r) > energy);
+        let collision = self
+            .curvature(turn)
+            .max(self.curvature(turn.max(self.r_cap)));
+        self.curvature(minimum).max(collision)
+    }
 }
 
 impl<L: PairLaw> PairPotential for CappedPotential<L> {
@@ -475,18 +500,23 @@ pub(crate) fn newton_cap_distance<L: PairLaw>(law: &L, max_force: f32) -> Option
 /// Bisection over [`PairLaw::cap_search_range`], which contains the root for
 /// any positive `max_force`.
 pub(crate) fn bisect_cap_distance<L: PairLaw>(law: &L, max_force: f32) -> f32 {
-    const ITERATIONS: usize = 50;
+    let (low, high) = law.cap_search_range();
+    let (r_low, r_high) = bisect(low, high, |r| law.force(r) > max_force);
+    (r_low + r_high) / 2.0
+}
 
-    let (mut r_low, mut r_high) = law.cap_search_range();
-    for _ in 0..ITERATIONS {
-        let r_mid = (r_low + r_high) / 2.0;
-        if law.force(r_mid) > max_force {
-            r_low = r_mid;
+/// The bracket `[low, high]` after bisecting for the distance where
+/// `inside(r)` (true below it) stops holding.
+fn bisect(mut low: f32, mut high: f32, inside: impl Fn(f32) -> bool) -> (f32, f32) {
+    for _ in 0..50 {
+        let mid = (low + high) / 2.0;
+        if inside(mid) {
+            low = mid;
         } else {
-            r_high = r_mid;
+            high = mid;
         }
     }
-    (r_low + r_high) / 2.0
+    (low, high)
 }
 
 /// One [`CappedPotential`] per ordered pair of species, built once from the
@@ -577,6 +607,12 @@ impl Potential {
     pub(crate) fn cutoff(&self, a: SpeciesId, b: SpeciesId) -> f32 {
         match self {
             Potential::LennardJones(t) => t.pair(a, b).cutoff(),
+        }
+    }
+
+    pub(crate) fn stiffness(&self, a: SpeciesId, b: SpeciesId, energy: f32) -> f32 {
+        match self {
+            Potential::LennardJones(t) => t.pair(a, b).stiffness(energy),
         }
     }
 

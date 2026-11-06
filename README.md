@@ -295,7 +295,7 @@ Keyboard (press `H` for the same list in the log):
 | `SPACE` | Pause or resume the simulation. |
 | `S` | Toggle step-by-step mode. |
 | `G` | Cycle gravity: off -> 9.81 m/s^2 -> 49.05 m/s^2. |
-| `+` | Double the simulation time step (at most to the limit of the species present, e.g. 0.001 with water). |
+| `+` | Double the simulation time step (at most to the limit of the species present, e.g. about 0.0007 with water). |
 | `-` | Halve the simulation time step. |
 | `Alt + +` | Decrease the wait time between steps. |
 | `Alt + -` | Increase the wait time between steps. |
@@ -465,7 +465,7 @@ model = "soft"                # "soft" (default) or "hard"; saves from before v4
 sigma = 0.0                   # 0..8, wall sigma_w: sigma_iw = (sigma_i + sigma_w) / 2
 epsilon = 1.0                 # 0.1..10, wall epsilon_w: epsilon_iw = sqrt(epsilon_i * epsilon_w)
 attractive = false            # false: cut at the minimum (WCA, repulsive); true: LJ well up to the cutoff
-backstop = 0.3                # 0.05..0.5, hard contact behind a soft wall at backstop * sigma_i
+backstop = 0.3                # 0.05..0.5, safety net behind a soft wall at backstop * sigma_i
 ## Optional, one block per species: replaces its mixed sigma_iw and/or epsilon_iw.
 ## Not for molecule species, whose sites meet the walls with the mixed laws.
 # [[walls.override]]
@@ -489,9 +489,10 @@ snapshot_interval_us = 16667  # 1000..1000000, least time between two frames sen
 ## Optional: the species of the run. Without [[species]] the built-in library
 ## applies: N2, the former size classes XS, S, M, L, XL, and Ar, Ne, CH4, O2,
 ## NH3, CH4_HCB (the CH4 of saves before format v7), H2O (MB water, #349:
-## steps run with at most 0.001 while present, see docs/units.md), N2_2S (N2 as a rigid dumbbell, #406),
-## H2_2S (H2 as a rigid dumbbell, #407: at most 0.001),
-## CO2_3S (CO2 as a rigid O-C-O chain, #408: at most 0.0025).
+## steps run with at most about 0.0007 while present), N2_2S (N2 as a rigid dumbbell, #406),
+## H2_2S (H2 as a rigid dumbbell, #407: about 0.0016),
+## CO2_3S (CO2 as a rigid O-C-O chain, #408). Every species has a time step
+## limit derived from its potential (docs/units.md, Time step limits).
 ## With it, exactly the listed species, in this order; the first is the
 ## default for new balls. Literature single-site Lennard-Jones values;
 ## Ar (3.405 A, 119.8 K, 39.948 u) is the unit (#405).

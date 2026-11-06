@@ -85,7 +85,7 @@ fn free_rotor_turns_at_constant_speed() {
     let mut mc = world(2);
     let omega = 3.0;
     add(&mut mc, Vec2D::zero(), Vec2D::zero(), omega, ROT);
-    let dt = mc.time_step();
+    let dt = mc.active_time_step();
     let steps = 1_000;
     for _ in 0..steps {
         mc.simulation_step().unwrap();

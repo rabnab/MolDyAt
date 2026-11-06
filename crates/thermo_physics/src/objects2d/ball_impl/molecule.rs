@@ -179,6 +179,21 @@ impl SiteTable {
         self.is_molecule[species.index()]
     }
 
+    /// (offset in `a`, offset in `b`, potential) of every site pair.
+    pub(crate) fn site_pairs(
+        &self,
+        a: SpeciesId,
+        b: SpeciesId,
+    ) -> impl Iterator<Item = (f32, f32, &CappedPotential<LennardJones>)> {
+        self.species_sites[a.index()]
+            .iter()
+            .flat_map(move |&(ta, oa)| {
+                self.species_sites[b.index()]
+                    .iter()
+                    .map(move |&(tb, ob)| (oa, ob, &self.potentials[ta * self.type_count + tb]))
+            })
+    }
+
     /// Site–site interaction of ball `i` (species `si`, angle `theta_i`)
     /// with ball `j` at `r = r_j − r_i`.
     pub(crate) fn pair(

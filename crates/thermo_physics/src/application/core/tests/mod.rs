@@ -18,6 +18,7 @@ mod rotation;
 mod simulation;
 mod simulation_engine;
 mod soft_walls;
+mod wall_backstop;
 mod wall_handover;
 mod wall_momentum;
 
@@ -39,3 +40,14 @@ pub(crate) use crate::test_support::{
     DT_GOAL, create_main_content, create_main_content_for_region, new_main_content,
     new_main_content_seeded, test_config,
 };
+
+/// The derived time step limit (#427) of the built-in species `name` on its
+/// own, with the default caps.
+pub(crate) fn time_step_limit_of(name: &str) -> f32 {
+    use crate::objects2d::ball_impl::{BallPhysics, SpeciesTable};
+    let id = SpeciesTable::builtin().by_name(name).unwrap();
+    BallPhysics::default()
+        .time_step_limit([id].into_iter().collect())
+        .unwrap()
+        .0
+}

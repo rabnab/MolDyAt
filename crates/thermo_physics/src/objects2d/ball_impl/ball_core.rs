@@ -37,12 +37,11 @@ pub(crate) struct BounceInfo {
     pub box_y: Option<WallContact>,
     /// Contact with a line-segment wall (see `SimulationWorld::sweep_wall_contact`).
     pub line_wall: Option<WallContact>,
-    /// Momentum the box walls took from a molecule's site impulses this step
-    /// (#408, [`Ball2D::execute_update_pos_molecule`]); zero for atoms.
+    /// Momentum the walls took from a molecule's site impulses
+    /// ([`Ball2D::wall_hit`]) in the position update.
     pub wall_momentum: Vec2D,
-    /// Whether a molecule's site got a box-wall impulse this step (#408):
-    /// counts as a box contact, so the line walls are not swept.
-    pub box_impulse: bool,
+    /// Site impulses applied.
+    pub impulses: u32,
 }
 
 impl Default for BounceInfo {
@@ -52,7 +51,7 @@ impl Default for BounceInfo {
             box_y: None,
             line_wall: None,
             wall_momentum: Vec2D::zero(),
-            box_impulse: false,
+            impulses: 0,
         }
     }
 }
@@ -60,7 +59,7 @@ impl Default for BounceInfo {
 impl BounceInfo {
     /// Whether the ball touched a box wall this step.
     pub(crate) fn touched_box(&self) -> bool {
-        self.box_x.is_some() || self.box_y.is_some() || self.box_impulse
+        self.box_x.is_some() || self.box_y.is_some()
     }
 
     pub(crate) fn iter(&self) -> impl Iterator<Item = &WallContact> {
@@ -95,7 +94,7 @@ pub struct Ball2D {
     pub alpha: f32,
     pub species: SpeciesId,
     /// `σ / 2` of the species: the ball's size for overlap and placement
-    /// checks. Wall contacts take their distance from the `WallLaw`.
+    /// checks. Wall contacts take their distance from the `WallSettings`.
     pub contact_radius: f32,
     pub pre_update_pos: Vec2D,
     pub last_update_hood_pos: Vec2D,
@@ -104,8 +103,9 @@ pub struct Ball2D {
     pub verbose: VerboseInfo,
     pub braking: bool,
     /// A wall appeared or changed on top of this ball (a valve closed, a wall
-    /// was drawn, moved or thickened over it). Until it no longer touches any
-    /// wall, it passes through the walls it overlaps instead of being pushed.
+    /// was drawn, moved or thickened over it). With soft walls the line walls
+    /// ramp in for it (`BallCold::wall_ramp`); with hard walls it passes
+    /// through the walls it overlaps until it touches none.
     pub leaving_wall: bool,
     pub(crate) cold: Box<BallCold>,
 }
@@ -120,6 +120,9 @@ pub(crate) struct BallCold {
     /// lazily; `None` otherwise).
     tail: Option<VecDeque<Vec2D>>,
     show_update_count: usize,
+    /// While `Ball2D::leaving_wall` with soft walls: how strongly the line
+    /// walls act on the ball, growing from 0 to 1 over `WALL_RAMP_TIME`.
+    pub(crate) wall_ramp: f32,
 }
 
 /// A ball of the built-in default species (`N2`) at the origin. Test builds
@@ -345,6 +348,24 @@ impl Ball2D {
         self.pre_update_pos = self.pos;
     }
 
+    /// Free velocity-Verlet drift of a molecule's position and angle, with
+    /// the arithmetic of the free path of [`Self::resolve_box_axis`].
+    pub(crate) fn drift(&mut self, dt: f32) {
+        let displacement = |v: f32, a: f32| f64::from(v * dt + 0.5 * a * dt * dt);
+        let [x, y] = self.exact;
+        self.set_exact_position([
+            x + displacement(self.v.x, self.accel.x),
+            y + displacement(self.v.y, self.accel.y),
+        ]);
+        self.advance_orientation(dt);
+    }
+
+    /// Move the ball by `delta`, added to its f64 position.
+    pub(crate) fn shift(&mut self, delta: Vec2D) {
+        let [x, y] = self.exact;
+        self.set_exact_position([x + f64::from(delta.x), y + f64::from(delta.y)]);
+    }
+
     /// Resolve one box axis: the ball's centre must stay in `[min, max]`.
     /// Returns the new coordinate and the contact, if the ball reached a wall.
     fn resolve_box_axis(
@@ -432,97 +453,36 @@ impl Ball2D {
             box_y: y_contact.map(|c| contact(Vec2D::new(0.0, 1.0), c)),
             line_wall: None,
             wall_momentum: Vec2D::zero(),
-            box_impulse: false,
+            impulses: 0,
         }
     }
 
-    /// Position update of a rigid linear molecule (#408): the centre and the
-    /// orientation drift freely, then each box wall is checked against the
-    /// end site nearest to it. An end site closer to a wall than `site` (its
-    /// contact distance) that moves into it gets the rigid-body impulse at
-    /// that site, `J = -(1 + e)·u / (1/m + (r×n)²/I)` with `u` the site's
-    /// normal velocity and `r` its lever: it reflects the site and turns the
-    /// molecule, and with `e = 1` keeps the kinetic energy (translation plus
-    /// rotation). The centre is then moved out along the normal by `(1 + e)`
-    /// times the overlap, mirroring the overshoot of a free bounce. A site
-    /// that rotated into a wall is stopped the same way, so
-    /// hard walls hold molecules lying along them as well as end-on ones.
-    /// The impulse acts at the end of the drift, not at the contact time, so
-    /// its energy error is first order in dt (unlike the exact parabola of
-    /// the atoms' contact); soft walls keep molecules off it.
-    /// The velocity update adds its kick on top; the walls' share of the
-    /// momentum is returned in [`BounceInfo::wall_momentum`].
-    pub(crate) fn execute_update_pos_molecule(
+    /// The rigid-body impulse `J = -(1 + e)·u / (1/m + (r×n)²/I)` of a wall
+    /// with normal `normal` on the site at `lever` from the centre, `u` its
+    /// normal velocity, if the site moves into the wall: it reflects the
+    /// site, turns the molecule and with `e = 1` keeps the kinetic energy.
+    /// The site, `overlap` inside its contact distance, is moved out by
+    /// `(1 + e)·overlap`, mirroring the overshoot. A site moving out is left
+    /// alone: moving it would change the energy with no force paying for it.
+    pub(crate) fn wall_hit(
         &mut self,
-        dt: f32,
-        bound: &Rect,
-        (half_length, site): (f32, f32),
+        normal: Vec2D,
+        overlap: f32,
+        lever: Vec2D,
         restitution: f32,
-    ) -> BounceInfo {
-        // The free drift of `resolve_box_axis`, term for term, so a molecule
-        // away from the walls moves exactly as before (#213: f32 displacement
-        // added to the f64 position).
-        let drift = |v: f32, a: f32| f64::from(v * dt + 0.5 * a * dt * dt);
-        let [x, y] = self.exact;
-        let mut centre = [
-            x + drift(self.v.x, self.accel.x),
-            y + drift(self.v.y, self.accel.y),
-        ];
-        self.advance_orientation(dt);
-
-        let (x0, y0) = bound.get_tl();
-        let (x1, y1) = bound.get_br();
-        let (left, right) = (f64::from(x0.min(x1)), f64::from(x0.max(x1)));
-        let (bottom, top) = (f64::from(y0.min(y1)), f64::from(y0.max(y1)));
-        let (sin, cos) = self.theta.sin_cos();
-        let axis = Vec2D::new(cos, sin);
-        let mut wall_momentum = Vec2D::zero();
-        let mut box_impulse = false;
-        // (inward normal, coordinate index, wall coordinate): the centre's
-        // distance from the wall is `normal · (centre − wall)` along the index.
-        let sides = [
-            (Vec2D::new(1.0, 0.0), 0, left),
-            (Vec2D::new(-1.0, 0.0), 0, right),
-            (Vec2D::new(0.0, 1.0), 1, bottom),
-            (Vec2D::new(0.0, -1.0), 1, top),
-        ];
-        for (normal, index, wall) in sides {
-            let along = if index == 0 { normal.x } else { normal.y };
-            let distance = f64::from(along) * (centre[index] - wall);
-            // The end site on the wall's side: its lever points away from n.
-            let projection = axis.dot(&normal);
-            let sign = if projection > 0.0 { -1.0 } else { 1.0 };
-            let lever = axis.scaled(sign * half_length);
-            let site_distance = distance as f32 + lever.dot(&normal);
-            let overlap = site - site_distance;
-            if overlap <= 0.0 {
-                continue;
-            }
-            let site_velocity = self.v + Vec2D::new(-self.omega * lever.y, self.omega * lever.x);
-            let approach = site_velocity.dot(&normal);
-            if approach < 0.0 {
-                let arm = lever.x * normal.y - lever.y * normal.x;
-                let inverse_mass = 1.0 / self.mass + arm * arm / self.inertia;
-                let impulse = -(1.0 + restitution) * approach / inverse_mass;
-                self.v = self.v.add_scaled(&normal, impulse / self.mass);
-                self.omega += arm * impulse / self.inertia;
-                wall_momentum = wall_momentum.add_scaled(&normal, -impulse);
-                box_impulse = true;
-                // Mirror the overshoot, as a free bounce would have: the site
-                // ends `e·overlap` outside the contact distance.
-                let push = (1.0 + restitution) * overlap;
-                centre[0] += f64::from(normal.x * push);
-                centre[1] += f64::from(normal.y * push);
-            }
-            // A site already moving out is left to leave on its own: moving
-            // the centre would change the energy with no force paying for it.
+    ) -> Option<f32> {
+        let point_velocity = self.v + Vec2D::new(-self.omega * lever.y, self.omega * lever.x);
+        let approach = point_velocity.dot(&normal);
+        if approach >= 0.0 {
+            return None;
         }
-        self.set_exact_position(centre);
-        BounceInfo {
-            wall_momentum,
-            box_impulse,
-            ..BounceInfo::default()
-        }
+        let arm = lever.x * normal.y - lever.y * normal.x;
+        let inverse_mass = 1.0 / self.mass + arm * arm / self.inertia;
+        let impulse = -(1.0 + restitution) * approach / inverse_mass;
+        self.v = self.v.add_scaled(&normal, impulse / self.mass);
+        self.omega += arm * impulse / self.inertia;
+        self.shift(normal.scaled((1.0 + restitution) * overlap));
+        Some(impulse)
     }
 
     /// Set ball position and, for verbose balls only, add to the tail trail
