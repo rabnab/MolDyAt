@@ -276,6 +276,10 @@ pub struct FrameInfo {
     /// Simulation time
     pub time: f32,
 
+    /// Time step the steps run with: the set one, limited while a species
+    /// with a `max_time_step` is present (`MainContent::active_time_step`).
+    pub dt: f32,
+
     /// Kinetic energy of the system
     pub kinetic_energy: f32,
 
@@ -314,6 +318,7 @@ impl Default for FrameInfo {
             world_generation: 0,
             layers: SceneLayers::ALL,
             time: 0.0,
+            dt: 0.0,
             kinetic_energy: 0.0,
             potential_energy: 0.0,
             wall_momentum: 0.0,

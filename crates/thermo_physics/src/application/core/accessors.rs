@@ -183,17 +183,52 @@ impl MainContent {
         world.thermo_history.clear();
     }
 
+    /// Double the set time step (key `+`), at most to the limit of the
+    /// species present ([`Self::time_step_limit`]); no change while the set
+    /// time step is already at or above it.
     pub fn double_time_step(&mut self) {
-        self.step_config.double_time_step();
+        match self.time_step_limit() {
+            Some((limit, _)) if self.time_step() >= limit => {}
+            Some((limit, _)) => {
+                self.step_config.double_time_step();
+                if self.time_step() > limit {
+                    let _ = self.step_config.set_time_step(limit);
+                }
+            }
+            None => self.step_config.double_time_step(),
+        }
     }
 
+    /// Halve the time step the simulation runs with (key `-`): the set
+    /// time step, or the limit of the species present when that is smaller.
     pub fn halve_time_step(&mut self) {
+        let active = self.active_time_step();
+        if active < self.time_step() {
+            let _ = self.step_config.set_time_step(active);
+        }
         self.step_config.halve_time_step();
     }
 
-    /// Time step used by every following simulation step.
+    /// The set time step (config, `--dt`, the `+`/`-` keys). The steps run
+    /// with [`Self::active_time_step`].
     pub fn time_step(&self) -> f32 {
         self.step_config.get_time_step()
+    }
+
+    /// The time step every following simulation step uses: the set time
+    /// step, limited to the smallest `max_time_step` of the species present
+    /// (water, H₂). Back to the set time step once those species are gone.
+    pub fn active_time_step(&self) -> f32 {
+        match self.time_step_limit() {
+            Some((limit, _)) => self.time_step().min(limit),
+            None => self.time_step(),
+        }
+    }
+
+    /// The smallest `max_time_step` of the species present and its
+    /// species, or `None` when no species present has one.
+    pub fn time_step_limit(&self) -> Option<(f32, SpeciesId)> {
+        self.world.time_step_limit()
     }
 
     /// Set the time step exactly (no clamping, unlike the double/halve
@@ -205,6 +240,16 @@ impl MainContent {
 }
 
 impl SimulationWorld {
+    /// The smallest `max_time_step` of the species present and its species
+    /// (the first in table order on a tie), or `None` when none has one.
+    pub(crate) fn time_step_limit(&self) -> Option<(f32, SpeciesId)> {
+        let species = self.physics.species();
+        self.species_present
+            .iter()
+            .filter_map(|id| species.species(id).max_time_step.map(|max| (max, id)))
+            .reduce(|best, next| if next.0 < best.0 { next } else { best })
+    }
+
     /// Rebuild the physics with the wall model `walls`.
     #[cfg(any(test, feature = "test-support"))]
     pub(crate) fn set_walls(&mut self, walls: WallSettings) {

@@ -13,6 +13,7 @@ fn numbers(real_units: bool) -> StatusNumbers {
     StatusNumbers {
         real_units,
         dt: 0.01,
+        dt_limited_by: None,
         hood_updates: 42,
         max_neighbours: 6,
         temperature: 1.0,
@@ -67,4 +68,19 @@ fn species_lines_name_the_new_ball_species_and_count_per_species() {
     let status = status_text(&snapshot, "fps 0").unwrap();
     assert!(status.contains("#Balls: 5 "), "{status}");
     assert!(status.ends_with("\nNew: Ar\nN2: 3\nAr: 2"), "{status}");
+}
+
+#[test]
+fn status_names_the_species_that_limits_the_time_step() {
+    let mut snapshot = snapshot(Some(numbers(false)));
+    let text = status_text(&snapshot, "fps 60").unwrap();
+    assert!(!text.contains("dt limited"), "{text}");
+
+    let water = snapshot.balls.species.by_name("H2O").expect("built-in H2O");
+    snapshot.frame.status = Some(StatusNumbers {
+        dt_limited_by: Some(water),
+        ..numbers(false)
+    });
+    let text = status_text(&snapshot, "fps 60").unwrap();
+    assert!(text.contains("\ndt limited by H2O\n"), "{text}");
 }

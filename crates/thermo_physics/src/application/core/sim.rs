@@ -61,7 +61,7 @@ impl MainContent {
     /// `record_thermo_fields` (the physics thread does so only while the
     /// heatmap is shown) and the world is not paused.
     pub fn step_recording_thermo_fields(&mut self, record_thermo_fields: bool) -> AppResult<()> {
-        let dt = self.time_step();
+        let dt = self.active_time_step();
         self.step_with_dt(dt, record_thermo_fields)
     }
 

@@ -347,7 +347,7 @@ pub static COMMANDS: &[CommandDescriptor] = &[
     },
     CommandDescriptor {
         id: "sim.double_time_step",
-        label: "Double the simulation time step.",
+        label: "Double the simulation time step (at most to the limit of the species present, e.g. 0.001 with water).",
         category: CommandCategory::Simulation,
         default_binding: &[symbol('+', Release), symbol('=', Release).hidden()],
         kind: CommandKind::Domain("sim.double_time_step"),

@@ -80,7 +80,6 @@ impl SimulationEngine {
         }
 
         let bound_rect = world.world_rect;
-        Self::warn_if_too_coarse(world, dt);
 
         Self::collect_neighbours_by_cell(world, step_config, dt, log_timings);
         Self::update_sim_and_move_balls(world, step_config, dt, &bound_rect, log_timings);
@@ -243,27 +242,6 @@ impl SimulationEngine {
             world.reorder_balls_by_cell();
         }
         clock.lap(&mut world.phase_timings, Phase::Cells);
-    }
-
-    /// Log once if a species present has a `max_time_step` below `dt`
-    /// (MB water #349, H₂ #407): its fast motion would not conserve energy.
-    fn warn_if_too_coarse(world: &mut SimulationWorld, dt: f32) {
-        if world.dt_warned {
-            return;
-        }
-        let species = world.physics.species();
-        let too_coarse = world.species_present.iter().find_map(|id| {
-            let s = species.species(id);
-            s.max_time_step
-                .filter(|&max| dt > max)
-                .map(|max| (s.name.clone(), max))
-        });
-        if let Some((name, max)) = too_coarse {
-            log::warn!(
-                "time step {dt} is too large for {name}; use at most {max} (see docs/units.md)"
-            );
-            world.dt_warned = true;
-        }
     }
 
     /// Rebuild the neighbour lists of the balls that moved far enough.

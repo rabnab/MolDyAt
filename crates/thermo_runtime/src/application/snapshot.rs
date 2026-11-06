@@ -72,6 +72,7 @@ impl CreateSnapshot for MainContent {
             world_generation: self.runtime().world_generation(),
             layers,
             time: world.sim().get_time(),
+            dt: self.active_time_step(),
             kinetic_energy: world.sim().get_kinetic_energy(),
             potential_energy: world.sim().get_potential_energy(),
             wall_momentum: wall_px.hypot(wall_py),
@@ -81,7 +82,7 @@ impl CreateSnapshot for MainContent {
             ),
             physics_fps: self.runtime().physics_fps(),
             world_rect: world.cell_grid().world_rect(),
-            status: self.status_numbers(step_config.get_time_step()),
+            status: self.status_numbers(),
             created_at: std::time::Instant::now(),
         };
 

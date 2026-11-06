@@ -306,6 +306,7 @@ fn frame_to_jsonl_with_metrics(
         "record_kind": "frame",
         "step": snapshot.frame.simulation_step,
         "time": f32_value(snapshot.frame.time),
+        "dt": f32_value(snapshot.frame.dt),
         "kinetic_energy": f32_value(snapshot.frame.kinetic_energy),
         "potential_energy": f32_value(snapshot.frame.potential_energy),
         "delta_energy": delta_energy.map_or(serde_json::Value::Null, f32_value),

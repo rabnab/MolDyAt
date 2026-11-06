@@ -454,3 +454,17 @@ fn methane_argon_mixture_conserves_energy() {
 fn approx_eq(a: f32, b: f32) {
     assert!((a - b).abs() < 1e-5, "{a} vs {b}");
 }
+
+/// `NH3`'s stiff well caps the time step at `NH3_MAX_TIME_STEP` while it is
+/// present (#409); the default step is below the cap.
+#[test]
+fn ammonia_caps_a_coarse_time_step() {
+    use crate::objects2d::ball_impl::species::NH3_MAX_TIME_STEP;
+    let config = crate::application::core::tests::test_config();
+    let rect = Rect::new(-50.0, 50.0, 100.0, -100.0);
+    let mut mc = MainContent::with_config(rect, &config, Some(3)).unwrap();
+    mc.add_candidate_to_vec(Ball2D::new(1, Vec2D::zero(), species("NH3")));
+    assert_eq!(mc.active_time_step(), mc.time_step(), "default dt is fine");
+    mc.set_time_step(0.02).unwrap();
+    assert_eq!(mc.active_time_step(), NH3_MAX_TIME_STEP);
+}

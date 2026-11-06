@@ -279,14 +279,18 @@ static BUILTIN_TABLE: LazyLock<Arc<SpeciesTable>> = LazyLock::new(|| {
         )
     });
     let library = LIBRARY.iter().map(|s| {
-        Species::from_literature(
+        let mut species = Species::from_literature(
             s.name,
             s.sigma_angstrom,
             s.epsilon_kelvin,
             s.mass_u,
             None,
             s.colour,
-        )
+        );
+        if s.name == "NH3" {
+            species.max_time_step = Some(NH3_MAX_TIME_STEP);
+        }
+        species
     });
     Arc::new(SpeciesTable::new(
         std::iter::once(n2)
@@ -305,7 +309,7 @@ static BUILTIN_TABLE: LazyLock<Arc<SpeciesTable>> = LazyLock::new(|| {
 /// model's density maximum (`T ≈ 0.2 ε_HB / k_B`) lies near 277 K (owner
 /// decision). Its Lennard-Jones disk has `σ = 0.7 r_HB`, `ε = 0.1 ε_HB`; mass
 /// and moment of inertia are those of H₂O (1.15 u·Å², the in-plane axis).
-/// Rotations are fast: water runs need `dt ≈ 0.0005` ([`WATER_MAX_TIME_STEP`]).
+/// Rotations are fast: water runs need `dt ≤ 0.001` ([`WATER_MAX_TIME_STEP`]).
 fn mb_water() -> Species {
     let mut water = Species::from_literature(
         "H2O",
@@ -390,6 +394,10 @@ fn co2_chain() -> Species {
 /// heavier sites librate fast in a condensed phase (energy error 9.6e-3 of
 /// the kinetic energy at 0.005, 1.5e-3 at 0.0025).
 pub const CO2_MAX_TIME_STEP: f32 = 0.0025;
+/// Largest time step while `NH3` is present (#409): its deep, narrow
+/// Lennard-Jones well (ω ≈ 41.5 for a bound pair) makes Verlet unstable
+/// above dt ≈ 0.048; at 0.01, ω·dt ≈ 0.4.
+pub const NH3_MAX_TIME_STEP: f32 = 0.01;
 
 /// Largest time step for runs with H₂ (#407): its rotation is ~20 times
 /// faster than N₂'s.
@@ -420,10 +428,13 @@ const N2_BOND_ANGSTROM: f64 = 1.10;
 pub const MB_R_HB_ANGSTROM: f64 = 2.8;
 /// `ε_HB / k_B` of MB water in K.
 pub const MB_EPSILON_HB_KELVIN: f64 = 1385.0;
-/// Largest time step for runs with MB water (reduced units, about 1 fs):
+/// Largest time step for runs with MB water (reduced units, about 2 fs):
 /// the librations of real-inertia water and the narrow hydrogen-bond
-/// Gaussians need it (#349).
-pub const WATER_MAX_TIME_STEP: f32 = 0.0005;
+/// Gaussians need it (#349). Steps run with at most this while water is
+/// present (`MainContent::active_time_step`); 3400 H₂O in a world of scale
+/// 3 keep their total energy within 0.5 % over 2000 steps at this step,
+/// and heat up without bound at 0.005.
+pub const WATER_MAX_TIME_STEP: f32 = 0.001;
 
 /// Mass of the former size classes: grows slowly with the radius.
 fn size_class_mass(radius: f32) -> f32 {

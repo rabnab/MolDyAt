@@ -325,3 +325,5 @@ stated.
 
 **CO₂ chain (#408).** A new built-in species `CO2_3S`, and a per-site box-wall contact for molecules: a rigid-body impulse at the end site that hits the wall (`Ball2D::execute_update_pos_molecule`; atomic species keep their contact bit for bit, and molecules away from the walls drift bit for bit as before). A hot CO₂ gas between hard walls keeps its energy to 6.9e-3 of the kinetic energy at dt 0.0025 and 3.6e-3 at half of it (first order: the impulse acts at the end of the drift); the earlier centre-based contact gave 1.2e-1 and 3.9e-2. No scenario uses molecules: every `trajectory_hash` is unchanged and both headless fixtures only gain the `CO2_3S:count` metric.
 
+**Water time step (#349 follow-up).** Steps run with at most the smallest `max_time_step` of the species present; the water limit is relaxed from 0.0005 to 0.001. No scenario uses a species with a limit: every `trajectory_hash` is unchanged. Water energy test bound 2e-3 → 5e-3: at 0.001 the total energy of 64 molecules fluctuates by up to 4.0e-3 (8.3e-4 at 0.0005, the dt² ratio) and does not drift (within that over 16 000 steps).
+

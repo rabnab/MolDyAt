@@ -77,9 +77,6 @@ pub struct SimulationWorld {
     /// last ball is gone, until the next `rebuild_cell_grid`). The cell size
     /// follows the largest pair list radius among them.
     pub(crate) species_present: SpeciesSet,
-    /// Whether the run already warned that its time step is too large for
-    /// a species in it (`Species::max_time_step`); once per world.
-    pub(crate) dt_warned: bool,
     pub(crate) step_count: usize,
 
     /// Speed limit as a share of the shorter world side (`SimConfig`).
