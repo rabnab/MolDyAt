@@ -13,6 +13,7 @@ use crate::objects2d::ball_impl::pair_potential::{
 use crate::objects2d::ball_impl::species::{
     DEFAULT_SPECIES, Species, SpeciesId, SpeciesSet, SpeciesTable,
 };
+use crate::objects2d::ball_impl::time_step_limit::TimeStepLimits;
 use crate::objects2d::ball_impl::wall_law::{
     Backstop, HardContact, SoftWalls, WallLaw, WallSettings,
 };
@@ -77,6 +78,8 @@ pub struct BallPhysics {
     /// snapshots read it from here, so physics and table cannot diverge.
     species: Arc<SpeciesTable>,
     pair_potential: Potential,
+    /// The largest stable time step of each species pair (#427).
+    time_step_limits: TimeStepLimits,
     /// The pairs of `pair_potential` that do not follow the mixing rule.
     pair_overrides: Vec<PairOverride>,
     /// Skin as a share of the reference cutoff.
@@ -154,10 +157,12 @@ impl BallPhysics {
                 })
             })
             .collect();
+        let pair_potential = Potential::lennard_jones(species, cap, &overrides);
         BallPhysics {
             constants,
             species: Arc::clone(&species_table),
-            pair_potential: Potential::lennard_jones(species, cap, &overrides),
+            time_step_limits: TimeStepLimits::new(species, &pair_potential, cap),
+            pair_potential,
             pair_overrides: overrides,
             skin_factor: DEFAULT_SKIN_FACTOR,
             walls: WallSettings::hard(),
@@ -362,6 +367,11 @@ impl BallPhysics {
     }
 
     /// The pair potentials; the force kernel matches on them once per ball.
+    /// The largest stable time step of each species pair (#427).
+    pub(crate) fn time_step_limits(&self) -> &TimeStepLimits {
+        &self.time_step_limits
+    }
+
     pub(crate) fn pair_potential(&self) -> &Potential {
         &self.pair_potential
     }

@@ -317,7 +317,9 @@ fn test_ball_sliding_across_wall_joints_is_not_deflected() {
     let surface_y = WALL_Y + half_thickness + radius + WALL_CONTACT_MARGIN;
     const START_X: f32 = -20.0;
     const SPEED: f32 = 3.0;
-    const STEPS: usize = 1_000; // ends at x = 10, past both joints
+    // Ends at x = 10, past both joints, at the step that runs (#427).
+    let dt = main_content.active_time_step();
+    let steps = (30.0 / (SPEED * dt)).round() as usize;
     {
         let ball = &mut main_content.world_mut().balls[0];
         ball.set_position_and_update_tail(Vec2D::new(START_X, surface_y));
@@ -328,13 +330,13 @@ fn test_ball_sliding_across_wall_joints_is_not_deflected() {
     let e0 = mechanical_energy(&main_content);
     let kinetic = 0.5 * main_content.world().balls[0].mass * SPEED * SPEED;
     let mut max_vertical_speed = 0.0f32;
-    for _ in 0..STEPS {
+    for _ in 0..steps {
         main_content.simulation_step().unwrap();
         max_vertical_speed = max_vertical_speed.max(main_content.world().balls[0].v.y.abs());
     }
 
     let ball = &main_content.world().balls[0];
-    let end_x = START_X + SPEED * STEPS as f32 * super::DT_GOAL;
+    let end_x = START_X + SPEED * steps as f32 * dt;
     assert!(
         (ball.get_position().x - end_x).abs() < 1e-3,
         "slowed down or stopped at a joint: x={} expected {end_x}",

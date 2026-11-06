@@ -23,7 +23,7 @@ fn add(mc: &mut MainContent, pos: Vec2D, v: Vec2D, theta: f32, species: SpeciesI
     ball.v = v;
     ball.theta = theta;
     mc.world_mut().add_ball_and_register(ball);
-    mc.collect_neighbours_by_cell(mc.time_step());
+    mc.collect_neighbours_by_cell(mc.active_time_step());
 }
 
 fn backstop_hits(mc: &MainContent) -> u64 {
@@ -39,7 +39,7 @@ fn a_ball_crossing_a_thin_wall_in_one_step_is_sent_back() {
     mc.add_line_segment(Vec2D::new(-20.0, 0.0), Vec2D::new(20.0, 0.0));
     // 2.5 per step: from 1.0 above the centre line to 1.5 below it, out of
     // the backstop's reach on the far side.
-    let speed = 2.5 / mc.time_step();
+    let speed = 2.5 / mc.active_time_step();
     add(
         &mut mc,
         Vec2D::new(0.0, 1.0),
@@ -77,7 +77,7 @@ fn the_box_backstop_holds_a_ball_fired_at_each_side() {
         Vec2D::new(0.0, -1.0),
     ] {
         let mut mc = world();
-        let speed = 1.5 / mc.time_step();
+        let speed = 1.5 / mc.active_time_step();
         add(
             &mut mc,
             Vec2D::zero(),
@@ -106,7 +106,7 @@ fn the_box_backstop_holds_a_ball_fired_at_each_side() {
 fn the_backstop_acts_on_the_sites_of_a_molecule() {
     let mut mc = world();
     let co2 = SpeciesTable::builtin().by_name("CO2_3S").unwrap();
-    let speed = 1.0 / mc.time_step();
+    let speed = 1.0 / mc.active_time_step();
     let theta = -1.0; // tilted, so the end site's impulse has a lever
     add(
         &mut mc,

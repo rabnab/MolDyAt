@@ -20,6 +20,7 @@ use crate::objects2d::ball_impl::species::{
     AR_EPSILON_KELVIN, AR_SIGMA_ANGSTROM, N2_EPSILON_KELVIN, N2_SIGMA_ANGSTROM, Species, SpeciesId,
     SpeciesTable,
 };
+use crate::objects2d::ball_impl::time_step_limit::stiffness;
 use std::simd::Select;
 use std::simd::f32x4;
 use std::simd::prelude::{SimdFloat, SimdPartialOrd};
@@ -317,9 +318,18 @@ impl<L: PairLaw> CappedPotential<L> {
     }
 
     /// Distance below which the force follows the sloped core.
-    #[cfg(test)]
     pub(crate) fn r_cap(&self) -> f32 {
         self.r_cap
+    }
+
+    /// Curvature `U''(r)` (stiffness) of the capped potential: the law's
+    /// `-dF/dr`, or the core's slope below `r_cap` (#427).
+    pub(crate) fn curvature(&self, r: f32) -> f32 {
+        if r < self.r_cap {
+            self.settings.core_stiffness
+        } else {
+            -self.law.force_derivative(r)
+        }
     }
 }
 
@@ -577,6 +587,14 @@ impl Potential {
     pub(crate) fn cutoff(&self, a: SpeciesId, b: SpeciesId) -> f32 {
         match self {
             Potential::LennardJones(t) => t.pair(a, b).cutoff(),
+        }
+    }
+
+    /// The pair's largest curvature that limits the time step (#427, see
+    /// `time_step_limit::stiffness`).
+    pub(crate) fn stiffness(&self, a: SpeciesId, b: SpeciesId, energy: f32) -> f32 {
+        match self {
+            Potential::LennardJones(t) => stiffness(t.pair(a, b), energy),
         }
     }
 

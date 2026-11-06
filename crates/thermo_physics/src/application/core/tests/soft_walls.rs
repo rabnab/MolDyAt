@@ -247,7 +247,7 @@ fn thermal_gas_never_reaches_the_backstop() {
 fn left_wall_impulse(mc: &MainContent, v_before: &[f32]) -> f64 {
     let world = mc.world();
     if world.physics.soft_walls().is_some() {
-        let dt = f64::from(mc.time_step());
+        let dt = f64::from(mc.active_time_step());
         return world
             .cached_force_results
             .iter()
@@ -331,7 +331,7 @@ fn soft_walls_book_the_momentum_they_give() {
     assert_eq!(mc.world().sim.wall_contacts, 0, "backstop reached");
     let wall = mc.world().sim.wall_momentum_y - wall0;
     let gas = gas_momentum(&mc) - gas0;
-    let gravity = -mass * f64::from(GRAVITY) * f64::from(mc.time_step()) * steps as f64;
+    let gravity = -mass * f64::from(GRAVITY) * f64::from(mc.active_time_step()) * steps as f64;
     assert!(
         ((wall + gas - gravity) / gravity).abs() < 0.01,
         "wall {wall} + gas {gas} vs gravity impulse {gravity}"
@@ -355,7 +355,7 @@ fn ghost_wall_kick(ramp: bool) -> (f32, f32) {
     if !ramp {
         mc.world_mut().balls[0].wall_ramp = 1.0;
     }
-    let steps = (2.0 * WALL_RAMP_TIME / mc.time_step()).ceil() as usize;
+    let steps = (2.0 * WALL_RAMP_TIME / mc.active_time_step()).ceil() as usize;
     for _ in 0..steps {
         mc.simulation_step().unwrap();
     }

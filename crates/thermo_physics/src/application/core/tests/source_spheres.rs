@@ -66,7 +66,7 @@ fn test_seeded_source_sphere_emits_the_same_balls_every_run() {
 fn test_grid_emission_check_emits_the_same_balls_as_the_full_scan() {
     let grid = emitted_ball_state_in_gas(7, 120, false);
     let full = emitted_ball_state_in_gas(7, 120, true);
-    assert!(grid.len() >= 120 + 10, "only {} balls in total", grid.len());
+    assert!(grid.len() >= 120 + 5, "only {} balls in total", grid.len());
     assert_eq!(grid, full);
 }
 

@@ -9,9 +9,22 @@
 use crate::application::persistence::{LoadSource, SaveStore};
 use crate::application::thermo_field::LocalKineticStats;
 use crate::application::{MainContent, SimConfig};
-use crate::objects2d::ball_impl::species::{CO2_MAX_TIME_STEP, H2_MAX_TIME_STEP};
 use crate::objects2d::ball_impl::{Ball2D, SpeciesId, SpeciesTable};
 use crate::objects2d::{Rect, Vec2D};
+
+/// The derived time step limits of H₂ and CO₂ (#427).
+fn h2_dt() -> f32 {
+    super::time_step_limit_of("H2_2S")
+}
+fn co2_dt() -> f32 {
+    super::time_step_limit_of("CO2_3S")
+}
+
+/// The step CO₂'s energy errors are measured at (#408). Its derived limit
+/// (#427) is looser: the librations of bound CO₂ are a collective motion
+/// no pair frequency covers (see `time_step_limit`), so these tests pin
+/// the accuracy at this step instead.
+const CO2_ACCURATE_DT: f32 = 0.0025;
 
 fn species(name: &str) -> SpeciesId {
     SpeciesTable::builtin().by_name(name).unwrap()
@@ -252,8 +265,8 @@ fn h2_energy_error(dt: f32) -> f32 {
 /// the error shrinks with dt, so it is the step, not the model.
 #[test]
 fn h2_gas_conserves_its_energy_at_its_time_step() {
-    let coarse = h2_energy_error(H2_MAX_TIME_STEP);
-    let fine = h2_energy_error(0.5 * H2_MAX_TIME_STEP);
+    let coarse = h2_energy_error(h2_dt());
+    let fine = h2_energy_error(0.5 * h2_dt());
     println!("H2: energy error {coarse:e} at dt, {fine:e} at dt/2");
     assert!(coarse < 1e-3, "energy error {coarse:e}");
     assert!(
@@ -266,7 +279,7 @@ fn h2_gas_conserves_its_energy_at_its_time_step() {
 /// `h2` H₂ and `ar` Ar molecules held at `T = 1` by a thermostat.
 fn dilute_pressure(h2: usize, ar: usize) -> f64 {
     let half = 20.0;
-    let mut mc = h2_world(8, half, H2_MAX_TIME_STEP);
+    let mut mc = h2_world(8, half, h2_dt());
     let (h2_id, ar_id) = (species("H2_2S"), species("Ar"));
     let kinds: Vec<SpeciesId> = std::iter::repeat_n(h2_id, h2)
         .chain(std::iter::repeat_n(ar_id, ar))
@@ -286,7 +299,7 @@ fn dilute_pressure(h2: usize, ar: usize) -> f64 {
         let v = Vec2D::new(phase.cos(), phase.sin()).scaled((2.0 / mass).sqrt());
         add(&mut mc, pos, v, 0.0, 0.0, kind);
     }
-    mc.collect_neighbours_by_cell(H2_MAX_TIME_STEP);
+    mc.collect_neighbours_by_cell(h2_dt());
     mc.add_thermostat(Vec2D::zero());
     let id = mc.world().thermostats.thermostats()[0].id;
     mc.toggle_thermostat(id);
@@ -360,8 +373,8 @@ fn co2_gas_conserves_its_energy() {
         assert_eq!(mc.world().sim.wall_contacts, 0, "backstop reached");
         max
     };
-    let (coarse, fine) = (error(CO2_MAX_TIME_STEP), error(0.5 * CO2_MAX_TIME_STEP));
-    println!("CO2: energy error {coarse:e} at its dt, {fine:e} at dt/2");
+    let (coarse, fine) = (error(CO2_ACCURATE_DT), error(0.5 * CO2_ACCURATE_DT));
+    println!("CO2: energy error {coarse:e} at dt, {fine:e} at dt/2");
     assert!(coarse < 3e-3, "energy error {coarse:e}");
     assert!(
         fine < 0.5 * coarse,
@@ -437,8 +450,8 @@ fn spinning_molecule_bounces_off_a_hard_wall() {
         3.0,
         co2,
     );
-    mc.collect_neighbours_by_cell(CO2_MAX_TIME_STEP);
-    mc.set_time_step(CO2_MAX_TIME_STEP).unwrap();
+    mc.collect_neighbours_by_cell(co2_dt());
+    mc.set_time_step(co2_dt()).unwrap();
     mc.simulation_step().unwrap();
     let e0 = reported_energy(&mc);
     let mut lowest = f32::INFINITY;
@@ -485,8 +498,8 @@ fn co2_gas_keeps_its_energy_between_hard_walls() {
         }
         (max, mc.wall_momentum())
     };
-    let (coarse, (px, py)) = run(CO2_MAX_TIME_STEP);
-    let (fine, _) = run(0.5 * CO2_MAX_TIME_STEP);
+    let (coarse, (px, py)) = run(CO2_ACCURATE_DT);
+    let (fine, _) = run(0.5 * CO2_ACCURATE_DT);
     println!("CO2 hard walls: energy error {coarse:e} at dt, {fine:e} at dt/2");
     assert!(px.abs() + py.abs() > 0.0, "no wall contact");
     assert!(coarse < 1e-2, "energy error {coarse:e}");
@@ -523,7 +536,7 @@ fn site_impulse_counts_as_a_box_contact() {
     let ball = &mut mc.world_mut().balls[0];
     let mut touched = false;
     for _ in 0..200 {
-        let bounce = physics.update_positions(ball, CO2_MAX_TIME_STEP, &bound, 1.0);
+        let bounce = physics.update_positions(ball, co2_dt(), &bound, 1.0);
         if bounce.wall_momentum != Vec2D::zero() {
             assert!(
                 bounce.touched_box(),

@@ -63,9 +63,6 @@ pub struct Species {
     /// is then the envelope of the sites (placement, the cell grid) and its
     /// `ε` is 0: it interacts only through its sites.
     pub molecule: Option<LinearMolecule>,
-    /// Largest time step its motion allows (MB water, H₂); a run above it
-    /// logs a warning.
-    pub max_time_step: Option<f32>,
 }
 
 impl Species {
@@ -81,7 +78,6 @@ impl Species {
             inertia: None,
             water: None,
             molecule: None,
-            max_time_step: None,
         }
     }
 
@@ -279,18 +275,14 @@ static BUILTIN_TABLE: LazyLock<Arc<SpeciesTable>> = LazyLock::new(|| {
         )
     });
     let library = LIBRARY.iter().map(|s| {
-        let mut species = Species::from_literature(
+        Species::from_literature(
             s.name,
             s.sigma_angstrom,
             s.epsilon_kelvin,
             s.mass_u,
             None,
             s.colour,
-        );
-        if s.name == "NH3" {
-            species.max_time_step = Some(NH3_MAX_TIME_STEP);
-        }
-        species
+        )
     });
     Arc::new(SpeciesTable::new(
         std::iter::once(n2)
@@ -309,7 +301,8 @@ static BUILTIN_TABLE: LazyLock<Arc<SpeciesTable>> = LazyLock::new(|| {
 /// model's density maximum (`T ≈ 0.2 ε_HB / k_B`) lies near 277 K (owner
 /// decision). Its Lennard-Jones disk has `σ = 0.7 r_HB`, `ε = 0.1 ε_HB`; mass
 /// and moment of inertia are those of H₂O (1.15 u·Å², the in-plane axis).
-/// Rotations are fast: water runs need `dt ≤ 0.001` ([`WATER_MAX_TIME_STEP`]).
+/// Rotations are fast: the alignment of its hydrogen bonds limits water
+/// runs to `dt ≈ 0.0007` (`time_step_limit`, #427).
 fn mb_water() -> Species {
     let mut water = Species::from_literature(
         "H2O",
@@ -320,7 +313,6 @@ fn mb_water() -> Species {
         [0.95, 0.95, 1.0, 1.0], // white
     );
     water.inertia = Some((1.15 / (AR_MASS_U * AR_SIGMA_ANGSTROM * AR_SIGMA_ANGSTROM)) as f32);
-    water.max_time_step = Some(WATER_MAX_TIME_STEP);
     water.water = Some(MbWater::new(
         (MB_EPSILON_HB_KELVIN / AR_EPSILON_KELVIN) as f32,
         (MB_R_HB_ANGSTROM / AR_SIGMA_ANGSTROM) as f32,
@@ -348,8 +340,8 @@ fn n2_dumbbell() -> Species {
 /// `ε/k_B` = 10.0 K, bond 0.74 Å), fitted to PVT data and self-diffusion of
 /// H₂ at 80–300 K; one of the two best of eight LJ models in Barraco et al.,
 /// *J. Phys. Chem. A* 127 (2023). Classical: zero-point motion and frozen
-/// rotations at low temperature are not modelled. Light and fast: runs need
-/// `dt ≤` [`H2_MAX_TIME_STEP`].
+/// rotations at low temperature are not modelled. Light and fast: its
+/// collisions limit runs to `dt ≈ 0.0016` (`time_step_limit`, #427).
 fn h2_dumbbell() -> Species {
     let molecule = LinearMolecule::diatomic(
         (0.74 / AR_SIGMA_ANGSTROM) as f32,
@@ -357,9 +349,7 @@ fn h2_dumbbell() -> Species {
         (10.0 / AR_EPSILON_KELVIN) as f32,
         (1.008 / AR_MASS_U) as f32,
     );
-    let mut species = molecule_species("H2_2S", molecule, [1.0, 0.85, 0.85, 1.0]);
-    species.max_time_step = Some(H2_MAX_TIME_STEP);
-    species
+    molecule_species("H2_2S", molecule, [1.0, 0.85, 0.85, 1.0])
 }
 
 /// CO₂ as a rigid linear O–C–O chain (#408), `CO2_3S`: TraPPE sites
@@ -385,23 +375,8 @@ fn co2_chain() -> Species {
     let molecule = LinearMolecule {
         sites: vec![oxygen(-ar(1.16)), carbon, oxygen(ar(1.16))],
     };
-    let mut species = molecule_species("CO2_3S", molecule, [0.6, 0.6, 0.6, 1.0]);
-    species.max_time_step = Some(CO2_MAX_TIME_STEP);
-    species
+    molecule_species("CO2_3S", molecule, [0.6, 0.6, 0.6, 1.0])
 }
-
-/// Largest time step for runs with CO₂ (#408): its strongly bound,
-/// heavier sites librate fast in a condensed phase (energy error 9.6e-3 of
-/// the kinetic energy at 0.005, 1.5e-3 at 0.0025).
-pub const CO2_MAX_TIME_STEP: f32 = 0.0025;
-/// Largest time step while `NH3` is present (#409): its deep, narrow
-/// Lennard-Jones well (ω ≈ 41.5 for a bound pair) makes Verlet unstable
-/// above dt ≈ 0.048; at 0.01, ω·dt ≈ 0.4.
-pub const NH3_MAX_TIME_STEP: f32 = 0.01;
-
-/// Largest time step for runs with H₂ (#407): its rotation is ~20 times
-/// faster than N₂'s.
-pub const H2_MAX_TIME_STEP: f32 = 0.001;
 
 /// A species whose balls are the rigid molecule `molecule` (#406).
 pub(crate) fn molecule_species(name: &str, molecule: LinearMolecule, colour: [f32; 4]) -> Species {
@@ -428,13 +403,6 @@ const N2_BOND_ANGSTROM: f64 = 1.10;
 pub const MB_R_HB_ANGSTROM: f64 = 2.8;
 /// `ε_HB / k_B` of MB water in K.
 pub const MB_EPSILON_HB_KELVIN: f64 = 1385.0;
-/// Largest time step for runs with MB water (reduced units, about 2 fs):
-/// the librations of real-inertia water and the narrow hydrogen-bond
-/// Gaussians need it (#349). Steps run with at most this while water is
-/// present (`MainContent::active_time_step`); 3400 H₂O in a world of scale
-/// 3 keep their total energy within 0.5 % over 2000 steps at this step,
-/// and heat up without bound at 0.005.
-pub const WATER_MAX_TIME_STEP: f32 = 0.001;
 
 /// Mass of the former size classes: grows slowly with the radius.
 fn size_class_mass(radius: f32) -> f32 {

@@ -455,16 +455,19 @@ fn approx_eq(a: f32, b: f32) {
     assert!((a - b).abs() < 1e-5, "{a} vs {b}");
 }
 
-/// `NH3`'s stiff well caps the time step at `NH3_MAX_TIME_STEP` while it is
-/// present (#409); the default step is below the cap.
+/// `NH3`'s stiff collisions cap the time step at its derived limit while it
+/// is present (#409, #427), below the default step; a finer set step runs
+/// as set.
 #[test]
-fn ammonia_caps_a_coarse_time_step() {
-    use crate::objects2d::ball_impl::species::NH3_MAX_TIME_STEP;
-    let config = crate::application::core::tests::test_config();
+fn ammonia_caps_the_time_step() {
+    let nh3_limit = super::time_step_limit_of("NH3");
+    let config = crate::application::SimConfig::default();
     let rect = Rect::new(-50.0, 50.0, 100.0, -100.0);
     let mut mc = MainContent::with_config(rect, &config, Some(3)).unwrap();
+    assert_eq!(mc.active_time_step(), mc.time_step(), "empty world");
     mc.add_candidate_to_vec(Ball2D::new(1, Vec2D::zero(), species("NH3")));
-    assert_eq!(mc.active_time_step(), mc.time_step(), "default dt is fine");
-    mc.set_time_step(0.02).unwrap();
-    assert_eq!(mc.active_time_step(), NH3_MAX_TIME_STEP);
+    assert!(nh3_limit < mc.time_step(), "the default step is capped");
+    assert_eq!(mc.active_time_step(), nh3_limit);
+    mc.set_time_step(0.5 * nh3_limit).unwrap();
+    assert_eq!(mc.active_time_step(), 0.5 * nh3_limit);
 }

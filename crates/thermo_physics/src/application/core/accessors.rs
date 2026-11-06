@@ -217,8 +217,9 @@ impl MainContent {
     }
 
     /// The time step every following simulation step uses: the set time
-    /// step, limited to the smallest `max_time_step` of the species present
-    /// (water, H₂). Back to the set time step once those species are gone.
+    /// step, limited to the largest stable step of the species present
+    /// (#427, derived from their potentials). Back to the set time step once
+    /// the limiting species are gone.
     pub fn active_time_step(&self) -> f32 {
         match self.time_step_limit() {
             Some((limit, _)) => self.time_step().min(limit),
@@ -226,8 +227,8 @@ impl MainContent {
         }
     }
 
-    /// The smallest `max_time_step` of the species present and its
-    /// species, or `None` when no species present has one.
+    /// The largest stable time step of the species present and the species
+    /// it is reported for, or `None` when the world is empty.
     pub fn time_step_limit(&self) -> Option<(f32, SpeciesId)> {
         self.world.time_step_limit()
     }
@@ -241,14 +242,11 @@ impl MainContent {
 }
 
 impl SimulationWorld {
-    /// The smallest `max_time_step` of the species present and its species
-    /// (the first in table order on a tie), or `None` when none has one.
+    /// The largest stable time step of the species present (#427, see
+    /// `TimeStepLimits::limit`) and the species it is reported for, or
+    /// `None` when the world is empty.
     pub(crate) fn time_step_limit(&self) -> Option<(f32, SpeciesId)> {
-        let species = self.physics.species();
-        self.species_present
-            .iter()
-            .filter_map(|id| species.species(id).max_time_step.map(|max| (max, id)))
-            .reduce(|best, next| if next.0 < best.0 { next } else { best })
+        self.physics.time_step_limits().limit(self.species_present)
     }
 
     /// Rebuild the physics with the wall model `walls`.

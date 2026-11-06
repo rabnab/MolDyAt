@@ -280,8 +280,8 @@ pub struct FrameInfo {
     /// and the metrics.
     pub safety_nets: SafetyNets,
 
-    /// Time step the steps run with: the set one, limited while a species
-    /// with a `max_time_step` is present (`MainContent::active_time_step`).
+    /// Time step the steps run with: the set one, limited to the largest
+    /// stable step of the species present (`MainContent::active_time_step`).
     pub dt: f32,
 
     /// Kinetic energy of the system
