@@ -623,8 +623,9 @@ impl SimulationEngine {
         if ball.inertia > 0.0 {
             ball.kick_rotation(result.torque, dt);
         }
-        if ball.wall_ramp < 1.0 && wall_ramp_step > 0.0 {
-            ball.wall_ramp = (ball.wall_ramp + wall_ramp_step).min(1.0);
+        if ball.leaving_wall && wall_ramp_step > 0.0 {
+            ball.cold.wall_ramp += wall_ramp_step;
+            ball.leaving_wall = ball.cold.wall_ramp < 1.0;
         }
 
         if ball.verbose.console {
@@ -776,8 +777,8 @@ struct ApplyParams<'a> {
     restitution: f32,
     dt: f32,
     speed_limit: f32,
-    /// How much `Ball2D::wall_ramp` grows per step: `dt / WALL_RAMP_TIME`
-    /// with soft walls, 0 with hard walls (the overlap pass resets it).
+    /// How much `BallCold::wall_ramp` grows per step: `dt / WALL_RAMP_TIME`
+    /// with soft walls, 0 with hard walls (the overlap pass ends it).
     wall_ramp_step: f32,
 }
 

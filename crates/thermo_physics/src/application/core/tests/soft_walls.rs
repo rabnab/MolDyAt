@@ -351,16 +351,17 @@ fn ghost_wall_kick(ramp: bool) -> (f32, f32) {
         end: Vec2D::new(60.0, -50.2),
         thickness: 1.0,
     }));
-    assert_eq!(mc.world().balls[0].wall_ramp, 0.0, "the wall landed on it");
+    assert!(mc.world().balls[0].leaving_wall, "the wall landed on it");
+    assert_eq!(mc.world().balls[0].cold.wall_ramp, 0.0);
     if !ramp {
-        mc.world_mut().balls[0].wall_ramp = 1.0;
+        mc.world_mut().balls[0].leaving_wall = false;
     }
     let steps = (2.0 * WALL_RAMP_TIME / mc.active_time_step()).ceil() as usize;
     for _ in 0..steps {
         mc.simulation_step().unwrap();
     }
     let ball = &mc.world().balls[0];
-    assert_eq!(ball.wall_ramp, 1.0, "ramped in");
+    assert!(!ball.leaving_wall, "ramped in");
     let kinetic = 0.5 * ball.mass * ball.v.norm_sq();
     (kinetic, (ball.get_position().y + 50.2).abs())
 }

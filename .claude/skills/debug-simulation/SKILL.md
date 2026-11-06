@@ -35,7 +35,7 @@ Map the symptom to the step phase (`docs/architecture.md`, Simulation step) and 
 |---|---|
 | Energy jumps when pairs approach or separate | force/potential mismatch, cutoff shift, force cap (`pair_potential.rs`), scalar vs SIMD path (`simd_forces.rs`) |
 | Energy jumps at neighbour-list changes | pairs beyond the cutoff contributing, stale lists (skin/3 threshold, `verlet.rs`), cell size (`cell_grid.rs`) |
-| Energy gain at walls, balls resting on walls drift | soft walls: wall force and molecule backstop (`core/wall_forces.rs`), backstop hits, a wall ramping in (`Ball2D::wall_ramp`); hard walls: wall contact (`wall_contact.rs`), contact sweep and overlap fallback (`application/core/line_segments/sweep.rs`, `overlap.rs`) |
+| Energy gain at walls, balls resting on walls drift | soft walls: wall force and molecule backstop (`core/wall_forces.rs`), backstop hits, a wall ramping in (`Ball2D::leaving_wall`); hard walls: wall contact (`wall_contact.rs`), contact sweep and overlap fallback (`application/core/line_segments/sweep.rs`, `overlap.rs`) |
 | Balls escape through walls or valves | `collect_solid_obstacles`, valve state, ghost wall, thickness |
 | Wrong ball touched after removal, panics on index | index contract after `remove_invalid_balls` |
 | Drift grows in large worlds | f32 precision far from the origin (#213) |

@@ -55,9 +55,9 @@ impl SimulationWorld {
     /// 1. Position-corrected so it no longer overlaps.
     /// 2. Velocity-reflected: `v' = v − 2(v · n̂) n̂` (elastic, |v| preserved).
     ///
-    /// A ball leaving a wall (`Ball2D::is_leaving_wall`) passes through the
-    /// walls it overlaps, keeping its path and speed, and the flag is
-    /// cleared once it touches no wall at all. With gravity,
+    /// A ball flagged `leaving_wall` (a wall appeared or changed on top of
+    /// it) passes through the walls it overlaps, keeping its path and speed,
+    /// and the flag is cleared once it touches no wall at all. With gravity,
     /// a ball caught in a horizontal valve as it closes therefore falls
     /// through it. Every other ball collides as usual, including one whose
     /// centre got inside a wall in a single step: it is pushed back out.
@@ -89,7 +89,7 @@ impl SimulationWorld {
         }
         if obstacles.is_empty() {
             for ball in &mut self.balls {
-                ball.wall_ramp = 1.0;
+                ball.leaving_wall = false;
             }
             return (0.0, 0.0);
         }
@@ -115,7 +115,7 @@ impl SimulationWorld {
 
     /// Overlap pass for one ball against every obstacle, in list order.
     /// `contact` is the ball's wall contact distance (`None`: only release
-    /// it), `release` the distance at which a ball leaving a wall is out of
+    /// it), `release` the distance at which a `leaving_wall` ball is out of
     /// every wall's reach.
     fn resolve_ball_overlaps(
         obstacles: &[Obstacle],
@@ -128,12 +128,12 @@ impl SimulationWorld {
         let mut corrections = 0;
         let mut checks = 0;
 
-        if ball.is_leaving_wall()
+        if ball.leaving_wall
             && !obstacles
                 .iter()
                 .any(|o| o.within_counted(ball.get_position(), o.reach(release), &mut checks))
         {
-            ball.wall_ramp = 1.0;
+            ball.leaving_wall = false;
         }
         let Some(contact) = contact else {
             return OverlapPass {
@@ -156,7 +156,7 @@ impl SimulationWorld {
             if !obstacle.within_counted(ball.get_position(), reach, &mut checks) {
                 continue; // no collision (cheap reject, no square root)
             }
-            if ball.is_leaving_wall() {
+            if ball.leaving_wall {
                 continue; // was here before this wall: let it leave
             }
             let closest = obstacle.closest_point(ball.get_position());

@@ -53,8 +53,9 @@ momentum (`-F·dt`), except the ghost wall's.
 
 A wall drawn, dragged, thickened or closed on top of a ball (within reach of
 its force, `BallPhysics::wall_release_distance`) is ramped in for that ball:
-its `wall_ramp` is set to 0 and grows to 1 over `WALL_RAMP_TIME` (1 time
-unit), and the ball feels the line walls scaled by it. The growing force
+it is flagged `leaving_wall`, its ramp (`BallCold::wall_ramp`) is set to 0
+and grows to 1 over `WALL_RAMP_TIME` (1 time unit), and the ball feels the
+line walls scaled by it. The growing force
 pushes it out gently instead of kicking it out of the wall's core. This is
 work done on the ball (the wall moved onto it), so the total energy rises a
 little; other balls feel the new wall at full strength at once, so it does

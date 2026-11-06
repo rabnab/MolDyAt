@@ -16,7 +16,7 @@
 //!   distance from the union, so the energy has no bump or well at a joint.
 //!   (The two ends of a gap in one chain count as one wall too.)
 //! - A ball a wall was drawn or closed on top of feels the line walls
-//!   scaled by its `wall_ramp`: the force pushes it out gently instead of
+//!   scaled by its ramp (`BallCold::wall_ramp`): the force pushes it out gently instead of
 //!   kicking it out of the wall's core. The ramp does work on the ball, as
 //!   any wall moved onto a ball must.
 //!
@@ -74,7 +74,11 @@ pub(crate) fn soft_wall_force(
 ) -> WallForce {
     let species = ball.species();
     let centre = *ball.get_position();
-    let ramp = ball.wall_ramp;
+    let ramp = if ball.leaving_wall {
+        ball.cold.wall_ramp
+    } else {
+        1.0
+    };
     let obstacles = if ramp > 0.0 { obstacles } else { &[] };
     let mut out = WallForce {
         force: Vec2D::zero(),
@@ -128,8 +132,7 @@ fn point_force(
         let (force, potential) = law(z);
         (ramp * force, ramp * potential)
     };
-    for side in 0..4 {
-        let (z, normal) = box_side(pos, bound, side);
+    for (z, normal) in box_sides(pos, bound) {
         if z < cutoff {
             out.add(normal, law(z), true, lever);
         }
@@ -161,17 +164,17 @@ fn point_force(
     }
 }
 
-/// Signed distance of `pos` from box side `side` (left, right, bottom, top)
-/// and its inward normal.
-fn box_side(pos: Vec2D, bound: &Rect, side: usize) -> (f32, Vec2D) {
+/// Signed distances of `pos` from the four box sides, with their inward
+/// normals.
+fn box_sides(pos: Vec2D, bound: &Rect) -> [(f32, Vec2D); 4] {
     let (x0, y0) = bound.get_tl();
     let (x1, y1) = bound.get_br();
-    match side {
-        0 => (pos.x - x0.min(x1), Vec2D::new(1.0, 0.0)),
-        1 => (x0.max(x1) - pos.x, Vec2D::new(-1.0, 0.0)),
-        2 => (pos.y - y0.min(y1), Vec2D::new(0.0, 1.0)),
-        _ => (y0.max(y1) - pos.y, Vec2D::new(0.0, -1.0)),
-    }
+    [
+        (pos.x - x0.min(x1), Vec2D::new(1.0, 0.0)),
+        (x0.max(x1) - pos.x, Vec2D::new(-1.0, 0.0)),
+        (pos.y - y0.min(y1), Vec2D::new(0.0, 1.0)),
+        (y0.max(y1) - pos.y, Vec2D::new(0.0, -1.0)),
+    ]
 }
 
 /// The position update of a molecule: the drift, then each site against
@@ -190,11 +193,7 @@ pub(crate) fn molecule_backstop(
     restitution: f32,
 ) -> BounceInfo {
     let start = *ball.get_position();
-    let obstacles = if ball.is_leaving_wall() {
-        &[]
-    } else {
-        obstacles
-    };
+    let obstacles = if ball.leaving_wall { &[] } else { obstacles };
     let start_axis = axis(ball.theta);
     ball.drift(dt);
     let axis = axis(ball.theta);
@@ -211,7 +210,7 @@ pub(crate) fn molecule_backstop(
         let lever = axis.scaled(site.offset);
         let distance = physics.walls().contact_factor() * site.sigma;
         for side in 0..4 {
-            let (z, normal) = box_side(*ball.get_position() + lever, bound, side);
+            let (z, normal) = box_sides(*ball.get_position() + lever, bound)[side];
             if z < distance {
                 hit(ball, normal, distance - z, lever, true);
             }

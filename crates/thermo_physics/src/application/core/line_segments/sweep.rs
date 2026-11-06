@@ -18,9 +18,8 @@ impl SimulationWorld {
     /// `start` is the ball's position before this step's drift; the ball's
     /// current position is the free (unreflected) end of the drift. `contact`
     /// is the ball's wall contact distance (`BallPhysics::wall_contact_distance`). A ball
-    /// leaving a wall (`Ball2D::is_leaving_wall`), or one that starts the
-    /// step inside a wall, is left to the overlap pass
-    /// (`resolve_wall_overlaps_with`) or the soft walls' force. Distance checks are added to
+    /// flagged `leaving_wall`, or one that starts the step inside a wall, is
+    /// left to the overlap pass (`resolve_wall_overlaps_with`). Distance checks are added to
     /// `checks` (see `SimStats::wall_distance_checks`).
     pub(crate) fn sweep_wall_contact(
         obstacles: &[Obstacle],
@@ -31,7 +30,7 @@ impl SimulationWorld {
         restitution: f32,
         checks: &mut u64,
     ) -> Option<WallContact> {
-        if ball.is_leaving_wall() {
+        if ball.leaving_wall {
             return None;
         }
         let end = *ball.get_position();

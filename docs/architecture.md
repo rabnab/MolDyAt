@@ -129,13 +129,13 @@ headless runs; both step with the configured time step.
    rule, so a chain has no energy step at its joints; separate chains add
    up). Line walls are found by bounding-box
    rejection against the step's obstacle list. A ball a wall appeared on
-   feels the line walls scaled by its `wall_ramp`, which grows from 0 to 1
-   over `WALL_RAMP_TIME` (#424).
+   (`leaving_wall`) feels the line walls scaled by its ramp, which grows
+   from 0 to 1 over `WALL_RAMP_TIME` (#424).
 4. **apply**: velocity update (and `ω += ½ (α_old + α_new) dt`, `α = torque / I`
    for balls with an orientation), kinetic (with `½ I ω²`), pair and wall
    potential energy, wall
    momentum bookkeeping (the soft wall forces times `dt`, backstop
-   impulses, hard contacts), the growth of `wall_ramp`, with hard walls the
+   impulses, hard contacts), the growth of the wall ramp, with hard walls the
    overlap fallback for balls still inside a
    wall, and the Nosé–Hoover thermostats. The velocity update runs in
    parallel over fixed chunks of 1024 balls; each chunk sums its energies

@@ -480,7 +480,8 @@ fn spinning_molecule_bounces_off_a_hard_wall() {
 /// keep the total energy, and the error shrinks with dt. The impulse acts at
 /// the end of the drift, not at the exact contact time, so the error is first
 /// order in dt. The largest error of one run depends on which single bad
-/// contact happens: steps 1 % apart give 3e-3 to 2e-2. So the test takes the
+/// contact happens: steps 1 % apart give 3e-3 to 2e-2, with the end-site
+/// contact before #424 as with the per-site one. So the test takes the
 /// median over five steps near dt (about 7e-3 at dt, 3.6e-3 at dt/2; the
 /// centre-based contact before #408 gave 1.2e-1 and 3.9e-2). Soft walls, the
 /// default, keep molecules off this contact.
@@ -501,15 +502,14 @@ fn co2_gas_keeps_its_energy_between_hard_walls() {
         (max, mc.wall_momentum())
     };
     let median = |scale: f32| {
-        let mut errors: Vec<f32> = [0.96, 0.98, 1.0, 1.02, 1.04]
+        let mut runs: Vec<_> = [0.96, 0.98, 1.0, 1.02, 1.04]
             .iter()
-            .map(|f| run(f * scale * CO2_ACCURATE_DT).0)
+            .map(|f| run(f * scale * CO2_ACCURATE_DT))
             .collect();
-        errors.sort_by(f32::total_cmp);
-        errors[2]
+        runs.sort_by(|a, b| a.0.total_cmp(&b.0));
+        runs[2]
     };
-    let (_, (px, py)) = run(CO2_ACCURATE_DT);
-    let (coarse, fine) = (median(1.0), median(0.5));
+    let ((coarse, (px, py)), (fine, _)) = (median(1.0), median(0.5));
     println!("CO2 hard walls: median energy error {coarse:e} at dt, {fine:e} at dt/2");
     assert!(px.abs() + py.abs() > 0.0, "no wall contact");
     assert!(coarse < 1e-2, "energy error {coarse:e}");

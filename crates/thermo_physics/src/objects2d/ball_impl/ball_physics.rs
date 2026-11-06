@@ -395,7 +395,7 @@ impl BallPhysics {
     /// Wall distance beyond which a ball of `species` feels no wall: the
     /// soft wall cutoff, or the contact distance with hard walls. A wall
     /// that appears within this distance of a ball ramps in for it
-    /// (`Ball2D::wall_ramp`).
+    /// (`Ball2D::leaving_wall`).
     pub(crate) fn wall_release_distance(&self, species: SpeciesId) -> f32 {
         let contact = self.wall_contact_distance(species);
         self.soft_walls.as_ref().map_or(contact, |w| {

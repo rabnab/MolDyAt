@@ -102,11 +102,11 @@ pub struct Ball2D {
     /// Four flags, checked in every pass, so they stay hot.
     pub verbose: VerboseInfo,
     pub braking: bool,
-    /// How strongly the line walls act on this ball, in `[0, 1]`. A wall
-    /// that appears on top of it sets it to 0. With soft walls it ramps back
-    /// to 1 over `WALL_RAMP_TIME`, so the force pushes the ball out gently;
-    /// with hard walls the ball passes through walls until it touches none.
-    pub wall_ramp: f32,
+    /// A wall appeared or changed on top of this ball (a valve closed, a wall
+    /// was drawn, moved or thickened over it). With soft walls the line walls
+    /// ramp in for it (`BallCold::wall_ramp`); with hard walls it passes
+    /// through the walls it overlaps until it touches none.
+    pub leaving_wall: bool,
     pub(crate) cold: Box<BallCold>,
 }
 
@@ -120,6 +120,9 @@ pub(crate) struct BallCold {
     /// lazily; `None` otherwise).
     tail: Option<VecDeque<Vec2D>>,
     show_update_count: usize,
+    /// While `Ball2D::leaving_wall` with soft walls: how strongly the line
+    /// walls act on the ball, growing from 0 to 1 over `WALL_RAMP_TIME`.
+    pub(crate) wall_ramp: f32,
 }
 
 /// A ball of the built-in default species (`N2`) at the origin. Test builds
@@ -189,7 +192,7 @@ impl Ball2D {
             pre_update_pos: pos,
             accel: Vec2D::zero(),
             last_update_hood_pos: pos,
-            wall_ramp: 1.0,
+            leaving_wall: false,
             cold: Box::default(),
         }
     }
@@ -343,11 +346,6 @@ impl Ball2D {
     /// Note: Despite the name, this stores the "current" position, not the "old" one.
     pub(crate) fn update_old_pos(&mut self) {
         self.pre_update_pos = self.pos;
-    }
-
-    /// See [`Self::wall_ramp`].
-    pub(crate) fn is_leaving_wall(&self) -> bool {
-        self.wall_ramp < 1.0
     }
 
     /// Free velocity-Verlet drift of a molecule's position and angle, with

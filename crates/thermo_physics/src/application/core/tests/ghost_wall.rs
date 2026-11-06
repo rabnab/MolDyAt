@@ -56,8 +56,8 @@ fn a_ghost_landing_on_a_ball_flags_it_without_moving_it() {
 
     let balls = &mc.world().balls;
     assert_eq!(*balls[0].get_position(), Vec2D::new(0.0, 0.2));
-    assert!(balls[0].is_leaving_wall());
-    assert!(!balls[1].is_leaving_wall());
+    assert!(balls[0].leaving_wall);
+    assert!(!balls[1].leaving_wall);
 }
 
 #[test]
@@ -89,7 +89,7 @@ fn a_ball_under_a_new_wall_leaves_with_unchanged_velocity() {
 
     mc.add_line_segment(Vec2D::new(-10.0, 0.0), Vec2D::new(10.0, 0.0));
     assert!(mc.world().ghost_wall.is_none());
-    assert!(mc.world().balls[0].is_leaving_wall());
+    assert!(mc.world().balls[0].leaving_wall);
 
     move_and_collide(&mut mc, 30, 0.02);
 
@@ -99,7 +99,7 @@ fn a_ball_under_a_new_wall_leaves_with_unchanged_velocity() {
         "{ball:?}"
     );
     assert_eq!(ball.v, Vec2D::new(0.5, -4.0));
-    assert!(!ball.is_leaving_wall(), "flag clears once the ball is free");
+    assert!(!ball.leaving_wall, "flag clears once the ball is free");
 }
 
 #[test]
@@ -112,7 +112,7 @@ fn moving_a_wall_endpoint_onto_a_ball_flags_it() {
     mc.move_line_segment_endpoint(0, Vec2D::new(10.0, -5.0), false);
 
     assert!(mc.world().ghost_wall.is_none());
-    assert!(mc.world().balls[0].is_leaving_wall());
+    assert!(mc.world().balls[0].leaving_wall);
     assert_eq!(*mc.world().balls[0].get_position(), Vec2D::zero());
 }
 
@@ -121,11 +121,11 @@ fn thickening_a_wall_onto_a_ball_flags_it() {
     let mut mc = make_content();
     mc.add_line_segment(Vec2D::new(-10.0, 0.0), Vec2D::new(10.0, 0.0));
     push_ball(&mut mc, Vec2D::new(0.0, 2.5), Vec2D::zero());
-    assert!(!mc.world().balls[0].is_leaving_wall());
+    assert!(!mc.world().balls[0].leaving_wall);
 
     mc.change_thickness(0, 3); // half-thickness 0.5 -> 2.0
 
-    assert!(mc.world().balls[0].is_leaving_wall());
+    assert!(mc.world().balls[0].leaving_wall);
 }
 
 #[test]

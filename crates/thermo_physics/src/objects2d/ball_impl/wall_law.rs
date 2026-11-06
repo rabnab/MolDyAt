@@ -5,17 +5,17 @@
 //! How balls meet walls (box walls, wall pieces, closed valves).
 //!
 //! Two models ([`WallSettings::soft`]):
-//! - **Soft** ([`SoftWalls`], the default for new worlds): the wall is a pseudo-species with
-//!   `σ_w`, `ε_w`, and a ball feels the Lennard-Jones law of the mixed
-//!   `σ_iw = (σ_i + σ_w)/2`, `ε_iw = √(ε_i·ε_w)` in its distance `z` from
-//!   the wall surface, capped like a pair (`CappedPotential`). By default
-//!   it is cut and shifted at its minimum (WCA, purely repulsive);
-//!   `attractive` keeps the well up to the pair cutoff. Walls act only
-//!   through this force (`wall_forces`). Behind it sits a hard backstop at
-//!   `backstop · σ_i`, where the wall energy is far above `k_B·T`: a
-//!   counted safety net, since a soft wall alone has a finite barrier (the
-//!   force cap), is sampled once per step, and flips its force once a
-//!   centre crosses a thin segment.
+//! - **Soft** ([`SoftWalls`], the default for new worlds): the wall is a
+//!   pseudo-species with `σ_w`, `ε_w`, and a ball feels the Lennard-Jones
+//!   law of the mixed `σ_iw = (σ_i + σ_w)/2`, `ε_iw = √(ε_i·ε_w)` in its
+//!   distance `z` from the wall surface, capped like a pair
+//!   (`CappedPotential`). By default it is cut and shifted at its minimum
+//!   (WCA, purely repulsive); `attractive` keeps the well up to the pair
+//!   cutoff. Walls act only through this force (`wall_forces`). Behind it
+//!   sits a hard backstop at `backstop · σ_i`, where the wall energy is far
+//!   above `k_B·T`: a counted safety net, since a soft wall alone has a
+//!   finite barrier (the force cap), is sampled once per step, and flips its
+//!   force once a centre crosses a thin segment.
 //! - **Hard** (saves from before soft walls): a ball is reflected at centre
 //!   distance `σ_i / 2` from the wall surface, the closest approach of two
 //!   like balls at about T* = 1 (≈ 0.97·σ), in the position update. No
