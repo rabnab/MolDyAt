@@ -28,6 +28,36 @@ fn test_drift_harness_collects_metrics() {
     assert!(metrics.relative_momentum_drift().is_finite());
 }
 
+/// A gas whose speed limit is far below its thermal speed leans on the
+/// braking safety net: the counter sees it and the drift checks fail on it
+/// (#422), while an unlimited run of the same gas reports none.
+#[test]
+#[ignore = "suite:drift"]
+fn test_safety_net_checks_catch_braking() {
+    let run = |limit: f32| {
+        let mut main_content = create_dense_harness_with_seed(12345);
+        main_content.world_mut().speed_limit_override = Some(limit);
+        populate_grid_balls(&mut main_content, 100, 1.2);
+        let cfg = DriftHarnessConfig {
+            steps: 20,
+            sample_every: 5,
+            dt: DT_GOAL,
+        };
+        run_drift_harness(&mut main_content, cfg)
+    };
+    let free = run(f32::INFINITY);
+    assert_eq!(free.safety_nets.braked, 0);
+    let braked = run(0.01);
+    assert!(braked.safety_nets.braked > 0, "no ball was braked");
+    let violations = braked.safety_net_violations("braked", SafetyNetLimits::NONE);
+    assert!(
+        violations
+            .iter()
+            .any(|v| v.contains("braked by the speed limit")),
+        "{violations:?}"
+    );
+}
+
 #[test]
 #[ignore = "suite:drift"]
 fn test_two_body_lj_baseline_drift() {
@@ -76,6 +106,7 @@ fn test_two_body_lj_baseline_drift() {
         metrics.relative_energy_drift() <= MAX_REL_ENERGY_DRIFT
             && metrics.relative_momentum_drift() <= MAX_REL_MOMENTUM_DRIFT,
     );
+    metrics.assert_safety_nets("two_body_lj_baseline", SafetyNetLimits::NONE);
     assert!(
         metrics.relative_energy_drift() <= MAX_REL_ENERGY_DRIFT,
         "two-body LJ energy drift too high: drift={}, threshold={}, initial_total={}, final_total={}",
@@ -151,6 +182,15 @@ fn test_force_cap_transition_drift() {
         metrics.relative_energy_drift() <= MAX_REL_ENERGY_DRIFT
             && metrics.relative_momentum_drift() <= MAX_REL_MOMENTUM_DRIFT
             && max_cap_hit_ratio >= MIN_CAP_HIT_RATIO,
+    );
+    // This scenario exists to drive a pair into the cap (12 capped pair
+    // evaluations in 300 steps of 2 balls); no other safety net.
+    metrics.assert_safety_nets(
+        "force_cap_transition",
+        SafetyNetLimits {
+            capped_rate: 5.0e-2,
+            backstop_hits: 0,
+        },
     );
 
     assert!(

@@ -24,6 +24,13 @@ pub fn status_text(snapshot: &RendererSnapshot, metrics_line: &str) -> Option<St
         reduced_units_lines(snapshot, status, metrics_line)
     };
     text.push('\n');
+    // Safety nets that do not conserve energy, since the start (#422).
+    let nets = &status.safety_nets;
+    let _ = writeln!(
+        text,
+        "Nets: brake {} cap {} backstop {} overlap {}",
+        nets.braked, nets.capped_pairs, nets.backstop_hits, nets.overlap_corrections
+    );
     if let Some(id) = status.dt_limited_by {
         let name = snapshot
             .balls

@@ -12,6 +12,7 @@ use serde_json::json;
 use std::fs::File;
 use std::io::{self, BufWriter, Write};
 use thermo_physics::application::sim_config::{SimConfig, WorldConfig};
+use thermo_physics::application::sim_stats::SafetyNets;
 use thermo_physics::application::thermo_field::ThermoGrid;
 
 pub trait HeadlessSnapshotSink {
@@ -307,6 +308,7 @@ fn frame_to_jsonl_with_metrics(
         "step": snapshot.frame.simulation_step,
         "time": f32_value(snapshot.frame.time),
         "dt": f32_value(snapshot.frame.dt),
+        "safety_nets": safety_nets_to_json(&snapshot.frame.safety_nets),
         "kinetic_energy": f32_value(snapshot.frame.kinetic_energy),
         "potential_energy": f32_value(snapshot.frame.potential_energy),
         "delta_energy": delta_energy.map_or(serde_json::Value::Null, f32_value),
@@ -478,3 +480,13 @@ fn f32_value(value: f32) -> serde_json::Value {
 
 #[cfg(test)]
 mod tests;
+
+/// The safety-net counts since the start (#422).
+fn safety_nets_to_json(nets: &SafetyNets) -> serde_json::Value {
+    json!({
+        "braked": nets.braked,
+        "capped_pairs": nets.capped_pairs,
+        "backstop_hits": nets.backstop_hits,
+        "overlap_corrections": nets.overlap_corrections,
+    })
+}

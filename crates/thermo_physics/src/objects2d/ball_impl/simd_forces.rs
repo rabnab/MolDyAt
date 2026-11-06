@@ -208,6 +208,7 @@ fn force_kernel<L: PairLaw>(
     let mut min_dist = f32::NAN;
     let mut total_pot = 0.;
     let mut virial = 0.0f32;
+    let mut capped_pairs = 0u32;
 
     // Optimization: Only collect neighbor forces if visualization is enabled for this ball
     // This avoids expensive allocations and vector pushes in the hot path
@@ -261,6 +262,7 @@ fn force_kernel<L: PairLaw>(
         // Pair force, sloped from max_force below r_cap and zero beyond the
         // cutoff (see CappedPotential).
         let lj_force = potential.force(center_dist);
+        capped_pairs += potential.capped_count(center_dist);
 
         // Force direction: force / center_dist
         // Avoid division by zero: if center_dist is 0, use a small epsilon to prevent Inf/NaN
@@ -310,6 +312,7 @@ fn force_kernel<L: PairLaw>(
             let potential = &pairs[species];
 
             let lj_force = potential.force(center_dist);
+            capped_pairs += u32::from(potential.is_capped(center_dist));
 
             // Force direction: force / center_dist
             // Avoid division by zero: if center_dist is 0, use a small epsilon to prevent Inf/NaN
@@ -349,5 +352,6 @@ fn force_kernel<L: PairLaw>(
         wall_force: Vec2D::zero(),
         wall_potential: 0.0,
         torque: 0.0,
+        capped_pairs,
     }
 }

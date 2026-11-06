@@ -21,6 +21,7 @@ fn make_force_result(virial: f32) -> ForceResult {
         wall_force: Vec2D::zero(),
         wall_potential: 0.0,
         torque: 0.0,
+        capped_pairs: 0,
     }
 }
 

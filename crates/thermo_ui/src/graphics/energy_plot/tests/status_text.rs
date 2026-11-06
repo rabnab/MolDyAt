@@ -5,7 +5,7 @@
 //! The status lines formatted from a snapshot's numbers (#341).
 
 use crate::graphics::energy_plot::status_text::{status_text, write_species_lines};
-use thermo_physics::application::sim_stats::StatusNumbers;
+use thermo_physics::application::sim_stats::{SafetyNets, StatusNumbers};
 use thermo_physics::objects2d::Vec2D;
 use thermo_runtime::application::renderer_snapshot::RendererSnapshot;
 
@@ -19,6 +19,7 @@ fn numbers(real_units: bool) -> StatusNumbers {
         temperature: 1.0,
         max_v: 2.0,
         v_com: Vec2D::new(0.0, 0.0),
+        safety_nets: SafetyNets::default(),
     }
 }
 
@@ -83,4 +84,23 @@ fn status_names_the_species_that_limits_the_time_step() {
     });
     let text = status_text(&snapshot, "fps 60").unwrap();
     assert!(text.contains("\ndt limited by H2O\n"), "{text}");
+}
+
+/// The safety-net counts since the start are one status line (#422).
+#[test]
+fn status_counts_the_safety_nets() {
+    let numbers = StatusNumbers {
+        safety_nets: SafetyNets {
+            braked: 1,
+            capped_pairs: 22,
+            backstop_hits: 3,
+            overlap_corrections: 4,
+        },
+        ..numbers(false)
+    };
+    let text = status_text(&snapshot(Some(numbers)), "fps 60").unwrap();
+    assert!(
+        text.contains("\nNets: brake 1 cap 22 backstop 3 overlap 4\n"),
+        "{text}"
+    );
 }

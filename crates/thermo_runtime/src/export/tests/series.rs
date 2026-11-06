@@ -17,6 +17,10 @@ fn test_series_csv_round_trips_columns_units_and_gaps() {
             "E_pot [eps*]",
             "E_tot [eps*]",
             "late",
+            "net_backstop_hits",
+            "net_braked",
+            "net_capped_pairs",
+            "net_overlap_corrections",
             "wall_momentum [m*sigma*/tau*]"
         ]
     );

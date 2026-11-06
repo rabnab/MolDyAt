@@ -7,6 +7,7 @@ use super::step_scratch::{NeighbourStats, RebuildScratch, UpdateScratch};
 use super::wall_forces::soft_wall_force;
 use super::{RuntimeOptions, SimulationWorld, StatsAccumulator, StepConfig};
 use crate::application::phase_timings::{Phase, PhaseClock};
+use crate::application::sim_stats::SafetyNets;
 use crate::application::thermo_field::{
     THERMO_SAMPLE_STRIDE, compute_cell_fields, thermo_grid_dims,
 };
@@ -157,11 +158,22 @@ impl SimulationEngine {
                 clock.lap(&mut world.phase_timings, Phase::Forces);
 
                 world.sim.wall_distance_checks += sweep_checks;
-                world.sim.wall_contacts += scratch
+                let contacts = scratch
                     .bounce_infos
                     .iter()
-                    .map(|b| b.iter().count() as u64)
+                    .map(|b| b.iter().count() as u64 + u64::from(b.box_impulse))
                     .sum::<u64>();
+                world.sim.wall_contacts += contacts;
+                // Safety nets of this step (#422); braking and capped pairs
+                // are summed in the apply pass.
+                let mut nets = SafetyNets {
+                    backstop_hits: if world.physics.walls().soft {
+                        contacts
+                    } else {
+                        0
+                    },
+                    ..SafetyNets::default()
+                };
                 let (wall_px, wall_py) = Self::apply_forces_and_collect_stats(
                     world,
                     &scratch.force_results,
@@ -175,8 +187,14 @@ impl SimulationEngine {
                 // The previous step's results become the next step's buffer.
                 std::mem::swap(&mut world.cached_force_results, &mut scratch.force_results);
 
+                let corrections_before = world.sim.wall_overlap_corrections;
                 let (seg_px, seg_py) = world
                     .resolve_wall_overlaps_with(&scratch.obstacles, &mut scratch.overlap_passes);
+                nets.overlap_corrections = world.sim.wall_overlap_corrections - corrections_before;
+                nets.braked = stats_accumulator.braked;
+                nets.capped_pairs = stats_accumulator.capped_pairs / 2;
+                world.sim.safety_nets_step = nets;
+                world.sim.safety_nets_total += nets;
                 world.apply_thermostats(dt, &mut stats_accumulator);
 
                 world.sim.wall_momentum_x += wall_px + f64::from(seg_px);
@@ -499,6 +517,7 @@ impl SimulationEngine {
             result.force += pair.force;
             result.torque += pair.torque;
             result.virial += pair.virial;
+            result.capped_pairs += pair.capped;
         }
     }
 
@@ -616,6 +635,8 @@ impl SimulationEngine {
             stats.kin += f64::from(ball.rotational_energy());
         }
         stats.mass += f64::from(ball.mass);
+        stats.braked += u64::from(ball.braking);
+        stats.capped_pairs += u64::from(result.capped_pairs);
         stats.wall_px += f64::from(wall_px);
         stats.wall_py += f64::from(wall_py);
         (speed_sq, ball.get_id())
@@ -710,6 +731,8 @@ impl SimulationEngine {
             stats_accumulator.momentum[1] += chunk.py;
             stats_accumulator.kin += chunk.kin;
             stats_accumulator.sum_mass += chunk.mass;
+            stats_accumulator.braked += chunk.braked;
+            stats_accumulator.capped_pairs += chunk.capped_pairs;
             if stats_accumulator.max_v < chunk.max_v {
                 stats_accumulator.max_v = chunk.max_v;
                 stats_accumulator.max_id = chunk.max_id;
@@ -753,4 +776,8 @@ pub(crate) struct ApplyStats {
     /// Momentum given to the walls the balls touched.
     wall_px: f64,
     wall_py: f64,
+    /// Balls slowed by the speed limit (#422).
+    braked: u64,
+    /// Capped pair evaluations, each pair counted by both balls (#422).
+    capped_pairs: u64,
 }

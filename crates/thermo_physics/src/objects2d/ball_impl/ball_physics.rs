@@ -60,6 +60,9 @@ pub struct ForceResult {
     /// Torque on the ball about its centre (#348); zero for the isotropic
     /// pair laws and for species without orientation.
     pub torque: f32,
+    /// Pair and site-pair evaluations of this ball inside the force cap's
+    /// core (#422); each pair is counted by both of its balls.
+    pub capped_pairs: u32,
 }
 
 /// Default Verlet skin as a share of the reference cutoff (see

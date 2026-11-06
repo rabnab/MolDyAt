@@ -267,6 +267,7 @@ mod tests {
             temperature: 0.0,
             max_v: 0.0,
             v_com: Vec2D::zero(),
+            safety_nets: Default::default(),
         });
 
         let physics = PhysicsCoordinator::with_snapshot(snapshot);
