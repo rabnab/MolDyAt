@@ -72,18 +72,18 @@ It is a safety net, not physics: thermal balls never reach it, and every
 hit is counted (`SafetyNets::backstop_hits`, `SimStats::wall_contacts`). A
 ball whose line walls are still ramping in meets only the box.
 
-With hard walls (legacy, saves from before #280), a ball touches a wall when
-its centre is `σ_i / 2` from the surface (`BallPhysics::wall_contact_distance`,
-from the `WallLaw`). Contacts are then resolved in two places:
+With hard walls (legacy, saves from before #280), the same contacts are the
+walls themselves, at `σ / 2` instead of `0.3 σ` (`WallSettings::contact_factor`,
+per site for molecules). Contacts are resolved in two places:
 
 - **Position update.** `SimulationWorld::sweep_wall_contact` finds the
   contact time on the ball's path and reflects it along the surface normal
   (`ball_impl::wall_contact`), exactly for constant acceleration, including
   several bounces or resting within one step. The box walls use the same
-  routine; molecules get a rigid-body impulse at the end site. The velocity
-  update applies the returned contacts and books the momentum change as wall
-  momentum, which feeds the pressure readout.
-- **Overlap fallback.** A ball that starts a step inside a wall is pushed out
+  routine; molecule sites get the rigid-body impulse described above. The
+  velocity update applies the returned contacts and books the momentum change
+  as wall momentum, which feeds the pressure readout.
+- **Overlap fallback.** An atom that starts a step inside a wall is pushed out
   and reflected if it moves toward the wall.
   `SimStats::wall_overlap_corrections` counts these cases. A ball a wall was
   drawn on passes through it instead, until it touches no wall.

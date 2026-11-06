@@ -40,8 +40,7 @@ pub(crate) struct BounceInfo {
     /// Momentum the walls took from a molecule's site impulses
     /// ([`Ball2D::wall_hit`]) in the position update.
     pub wall_momentum: Vec2D,
-    /// Site impulses applied. With hard walls they are box contacts, so the
-    /// line walls are not swept.
+    /// Site impulses applied.
     pub impulses: u32,
 }
 
@@ -60,7 +59,7 @@ impl Default for BounceInfo {
 impl BounceInfo {
     /// Whether the ball touched a box wall this step.
     pub(crate) fn touched_box(&self) -> bool {
-        self.box_x.is_some() || self.box_y.is_some() || self.impulses > 0
+        self.box_x.is_some() || self.box_y.is_some()
     }
 
     pub(crate) fn iter(&self) -> impl Iterator<Item = &WallContact> {
@@ -95,7 +94,7 @@ pub struct Ball2D {
     pub alpha: f32,
     pub species: SpeciesId,
     /// `σ / 2` of the species: the ball's size for overlap and placement
-    /// checks. Wall contacts take their distance from the `WallLaw`.
+    /// checks. Wall contacts take their distance from the `WallSettings`.
     pub contact_radius: f32,
     pub pre_update_pos: Vec2D,
     pub last_update_hood_pos: Vec2D,
@@ -458,53 +457,6 @@ impl Ball2D {
             wall_momentum: Vec2D::zero(),
             impulses: 0,
         }
-    }
-
-    /// Position update of a rigid linear molecule with hard walls (#408): a
-    /// free drift, then each box wall against the end site nearest to it,
-    /// with contact distance `site` ([`Self::wall_hit`]). A site that
-    /// rotated into a wall is stopped the same way, so hard walls hold
-    /// molecules lying along them as well as end-on ones. The impulse acts
-    /// at the end of the drift, not at the contact time, so its energy error
-    /// is first order in dt.
-    pub(crate) fn execute_update_pos_molecule(
-        &mut self,
-        dt: f32,
-        bound: &Rect,
-        (half_length, site): (f32, f32),
-        restitution: f32,
-    ) -> BounceInfo {
-        self.drift(dt);
-        let (x0, y0) = bound.get_tl();
-        let (x1, y1) = bound.get_br();
-        let (left, right) = (f64::from(x0.min(x1)), f64::from(x0.max(x1)));
-        let (bottom, top) = (f64::from(y0.min(y1)), f64::from(y0.max(y1)));
-        let (sin, cos) = self.theta.sin_cos();
-        let axis = Vec2D::new(cos, sin);
-        let mut info = BounceInfo::default();
-        // (inward normal, coordinate index, wall coordinate): the centre's
-        // distance from the wall is `normal · (centre − wall)` along the index.
-        let sides = [
-            (Vec2D::new(1.0, 0.0), 0, left),
-            (Vec2D::new(-1.0, 0.0), 0, right),
-            (Vec2D::new(0.0, 1.0), 1, bottom),
-            (Vec2D::new(0.0, -1.0), 1, top),
-        ];
-        for (normal, index, wall) in sides {
-            let along = if index == 0 { normal.x } else { normal.y };
-            let distance = f64::from(along) * (self.exact[index] - wall);
-            // The end site on the wall's side: its lever points away from n.
-            let sign = if axis.dot(&normal) > 0.0 { -1.0 } else { 1.0 };
-            let lever = axis.scaled(sign * half_length);
-            let overlap = site - (distance as f32 + lever.dot(&normal));
-            if overlap > 0.0
-                && let Some(impulse) = self.wall_hit(normal, overlap, lever, restitution)
-            {
-                info.wall_momentum = info.wall_momentum.add_scaled(&normal, -impulse);
-                info.impulses += 1;
-            }
-        }
-        info
     }
 
     /// The rigid-body impulse `J = -(1 + e)·u / (1/m + (r×n)²/I)` of a wall

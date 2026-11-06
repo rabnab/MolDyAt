@@ -188,14 +188,9 @@ impl SimulationEngine {
                 // The previous step's results become the next step's buffer.
                 std::mem::swap(&mut world.cached_force_results, &mut scratch.force_results);
 
-                // The overlap fallback is for hard walls only.
                 let corrections_before = world.sim.wall_overlap_corrections;
-                let (seg_px, seg_py) = if world.physics.walls().soft {
-                    (0.0, 0.0)
-                } else {
-                    world
-                        .resolve_wall_overlaps_with(&scratch.obstacles, &mut scratch.overlap_passes)
-                };
+                let (seg_px, seg_py) = world
+                    .resolve_wall_overlaps_with(&scratch.obstacles, &mut scratch.overlap_passes);
                 nets.overlap_corrections = world.sim.wall_overlap_corrections - corrections_before;
                 nets.braked = stats_accumulator.braked;
                 nets.capped_pairs = stats_accumulator.capped_pairs / 2;
@@ -415,13 +410,11 @@ impl SimulationEngine {
         let restitution = world.wall_restitution_fault();
         let physics = &world.physics;
         let obstacles = &scratch.obstacles;
-        let soft = physics.walls().soft;
         world
             .balls
             .par_iter_mut()
             .map(|ball| {
-                if soft && let Some(molecule) = &physics.species().species(ball.species()).molecule
-                {
+                if let Some(molecule) = &physics.species().species(ball.species()).molecule {
                     let walls = (bound_rect, obstacles.as_slice());
                     return (
                         molecule_backstop(physics, ball, molecule, walls, dt, restitution),
@@ -617,7 +610,7 @@ impl SimulationEngine {
             }
         }
         ball.v = v_new;
-        // Site impulses of a molecule on the walls (#408).
+        // Site impulses of a molecule on the walls.
         wall_px += bounce_info.wall_momentum.x;
         wall_py += bounce_info.wall_momentum.y;
 

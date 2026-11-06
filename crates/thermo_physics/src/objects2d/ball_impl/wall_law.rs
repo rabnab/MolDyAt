@@ -5,8 +5,7 @@
 //! How balls meet walls (box walls, wall pieces, closed valves).
 //!
 //! Two models ([`WallSettings::soft`]):
-//! - **Soft** ([`SoftWalls`], the default for new worlds, #280, and the only
-//!   physical wall model): the wall is a pseudo-species with
+//! - **Soft** ([`SoftWalls`], the default for new worlds): the wall is a pseudo-species with
 //!   `σ_w`, `ε_w`, and a ball feels the Lennard-Jones law of the mixed
 //!   `σ_iw = (σ_i + σ_w)/2`, `ε_iw = √(ε_i·ε_w)` in its distance `z` from
 //!   the wall surface, capped like a pair (`CappedPotential`). By default
@@ -17,47 +16,18 @@
 //!   counted safety net, since a soft wall alone has a finite barrier (the
 //!   force cap), is sampled once per step, and flips its force once a
 //!   centre crosses a thin segment.
-//! - **Hard** ([`HardContact`], saves from before #280): a ball is
-//!   reflected at centre distance `σ_i / 2` from the wall surface, the
-//!   closest approach of two like balls at about T* = 1 (≈ 0.97·σ), in the
-//!   position update. No force, no energy.
+//! - **Hard** (saves from before soft walls): a ball is reflected at centre
+//!   distance `σ_i / 2` from the wall surface, the closest approach of two
+//!   like balls at about T* = 1 (≈ 0.97·σ), in the position update. No
+//!   force, no energy.
 //!
-//! The wall code asks [`WallLaw::contact_distance`] where the hard contact
-//! (or the backstop) is.
+//! The wall code asks [`WallSettings::contact_factor`] where the hard
+//! contact (or the backstop) is.
 
 use crate::objects2d::ball_impl::pair_potential::{
     CapSettings, CappedPotential, LennardJones, PairPotential, SQRT6_OF_TWO,
 };
-use crate::objects2d::ball_impl::species::{Species, SpeciesId, SpeciesTable};
-
-/// The interaction of balls with walls.
-pub(crate) trait WallLaw {
-    /// Centre distance from a wall surface at which a ball of `species`
-    /// touches the wall and is reflected.
-    fn contact_distance(&self, species: &Species) -> f32;
-}
-
-/// Elastic (or damped, by the restitution) reflection at `σ_i / 2`.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub(crate) struct HardContact;
-
-impl WallLaw for HardContact {
-    fn contact_distance(&self, species: &Species) -> f32 {
-        species.contact_radius()
-    }
-}
-
-/// The hard backstop behind a soft wall: reflection at `factor · σ_i`.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct Backstop {
-    pub factor: f32,
-}
-
-impl WallLaw for Backstop {
-    fn contact_distance(&self, species: &Species) -> f32 {
-        self.factor * species.sigma
-    }
-}
+use crate::objects2d::ball_impl::species::{SpeciesId, SpeciesTable};
 
 /// Default `σ_w`: no size of its own, so `σ_iw = σ_i / 2`, the hard contact
 /// distance; the soft wall then has the hard wall's contact distance.
@@ -99,6 +69,12 @@ impl WallSettings {
             soft: false,
             ..Self::default()
         }
+    }
+
+    /// Wall contact distance as a share of `σ` (of a ball or a site):
+    /// `σ / 2` with hard walls, the backstop behind soft walls.
+    pub(crate) fn contact_factor(&self) -> f32 {
+        if self.soft { self.backstop } else { 0.5 }
     }
 }
 

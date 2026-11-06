@@ -340,15 +340,7 @@ impl<L: PairLaw> CappedPotential<L> {
             return 0.0;
         }
         let minimum = self.law.equilibrium_distance();
-        let (mut inside, mut turn) = (0.0_f32, minimum);
-        for _ in 0..60 {
-            let mid = 0.5 * (inside + turn);
-            if self.potential(mid) > energy {
-                inside = mid;
-            } else {
-                turn = mid;
-            }
-        }
+        let (_, turn) = bisect(0.0, minimum, |r| self.potential(r) > energy);
         let collision = self
             .curvature(turn)
             .max(self.curvature(turn.max(self.r_cap)));
@@ -508,18 +500,23 @@ pub(crate) fn newton_cap_distance<L: PairLaw>(law: &L, max_force: f32) -> Option
 /// Bisection over [`PairLaw::cap_search_range`], which contains the root for
 /// any positive `max_force`.
 pub(crate) fn bisect_cap_distance<L: PairLaw>(law: &L, max_force: f32) -> f32 {
-    const ITERATIONS: usize = 50;
+    let (low, high) = law.cap_search_range();
+    let (r_low, r_high) = bisect(low, high, |r| law.force(r) > max_force);
+    (r_low + r_high) / 2.0
+}
 
-    let (mut r_low, mut r_high) = law.cap_search_range();
-    for _ in 0..ITERATIONS {
-        let r_mid = (r_low + r_high) / 2.0;
-        if law.force(r_mid) > max_force {
-            r_low = r_mid;
+/// The bracket `[low, high]` after bisecting for the distance where
+/// `inside(r)` (true below it) stops holding.
+fn bisect(mut low: f32, mut high: f32, inside: impl Fn(f32) -> bool) -> (f32, f32) {
+    for _ in 0..50 {
+        let mid = (low + high) / 2.0;
+        if inside(mid) {
+            low = mid;
         } else {
-            r_high = r_mid;
+            high = mid;
         }
     }
-    (r_low + r_high) / 2.0
+    (low, high)
 }
 
 /// One [`CappedPotential`] per ordered pair of species, built once from the

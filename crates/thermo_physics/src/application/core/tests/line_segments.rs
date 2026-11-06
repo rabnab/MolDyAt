@@ -52,6 +52,7 @@ fn move_endpoint_end() {
 #[test]
 fn collision_reflects_ball() {
     let mut mc = make_content();
+    mc.use_hard_walls(); // the overlap pass is the hard walls' fallback
     // Horizontal segment at y=0 from x=-10 to x=10
     mc.add_line_segment(Vec2D::new(-10.0, 0.0), Vec2D::new(10.0, 0.0));
 
@@ -75,6 +76,7 @@ fn collision_reflects_ball() {
 fn overlap_pass_momentum_bits(threads: usize) -> [u32; 2] {
     let run = || {
         let mut mc = make_content();
+        mc.use_hard_walls();
         mc.add_line_segment(Vec2D::new(-10.0, 0.0), Vec2D::new(10.0, 0.0));
         for k in 0..400 {
             let x = -9.0 + 18.0 * (k as f32 / 399.0);

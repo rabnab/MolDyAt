@@ -40,7 +40,8 @@ impl SimulationWorld {
     /// `collect_solid_obstacles`; the simulation step shares one list with
     /// `sweep_wall_contact`).
     ///
-    /// Hard walls only.
+    /// Hard walls only. Molecules meet the walls per site in the position
+    /// update (`molecule_backstop`); here they only leave walls.
     ///
     /// Contacts during a step are resolved by `sweep_wall_contact`; this pass
     /// only catches what that cannot: balls that started a step inside a wall
@@ -83,6 +84,9 @@ impl SimulationWorld {
         obstacles: &[Obstacle],
         passes: &mut Vec<OverlapPass>,
     ) -> (f32, f32) {
+        if self.physics.walls().soft {
+            return (0.0, 0.0);
+        }
         if obstacles.is_empty() {
             for ball in &mut self.balls {
                 ball.wall_ramp = 1.0;
@@ -93,8 +97,10 @@ impl SimulationWorld {
         self.balls
             .par_iter_mut()
             .map(|ball| {
-                let contact = physics.wall_contact_distance(ball.species());
-                let release = physics.wall_release_distance(ball.species());
+                let species = ball.species();
+                let contact = (physics.species().species(species).molecule.is_none())
+                    .then(|| physics.wall_contact_distance(species));
+                let release = physics.wall_release_distance(species);
                 Self::resolve_ball_overlaps(obstacles, ball, contact, release)
             })
             .collect_into_vec(passes);
@@ -108,12 +114,13 @@ impl SimulationWorld {
     }
 
     /// Overlap pass for one ball against every obstacle, in list order.
-    /// `contact` is the ball's wall contact distance, `release` the distance
-    /// at which a `leaving_wall` ball is out of every wall's reach.
+    /// `contact` is the ball's wall contact distance (`None`: only release
+    /// it), `release` the distance at which a ball leaving a wall is out of
+    /// every wall's reach.
     fn resolve_ball_overlaps(
         obstacles: &[Obstacle],
         ball: &mut Ball2D,
-        contact: f32,
+        contact: Option<f32>,
         release: f32,
     ) -> OverlapPass {
         let mut total_px = 0.0_f32;
@@ -128,6 +135,12 @@ impl SimulationWorld {
         {
             ball.wall_ramp = 1.0;
         }
+        let Some(contact) = contact else {
+            return OverlapPass {
+                checks,
+                ..OverlapPass::default()
+            };
+        };
 
         for obstacle in obstacles {
             if obstacle.is_degenerate() {

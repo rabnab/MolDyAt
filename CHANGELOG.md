@@ -8,8 +8,8 @@ User-visible changes to MolDyAt, newest first. Binaries and full release notes a
 - Every species, also from a config, gets a time step limit derived from its potential (`dt limited
   by …`): water about 0.0007, H₂ 0.0016, NH₃ 0.0034; CO₂ is no longer capped at 0.0025, and a set
   step above about 0.008 is capped for every species. (#427)
-- Fast balls no longer pass through a thin wall in a single step, and molecules meet line walls
-  with their sites instead of as a disk. (#424)
+- Fast balls no longer pass through a thin wall in a single step, and molecules meet every wall
+  with each site at its own size, also with hard walls (before: line walls as a disk). (#424)
 - Count the safety nets that bend the physics (speed-limit braking, force cap, wall backstop,
   overlap fix) in the status lines (`B`), headless frames and metrics. (#422)
 - Keep the simulation time, energy totals, wall momentum and thermostats in f64, so long runs keep

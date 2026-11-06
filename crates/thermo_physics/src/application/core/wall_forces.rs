@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Soft walls (#280): the force and energy of every ball in the box walls
+//! Soft walls: the force and energy of every ball in the box walls
 //! and the line walls, added to its pair forces in the force pass, and the
 //! backstop behind them in the position update.
 //!
@@ -128,7 +128,8 @@ fn point_force(
         let (force, potential) = law(z);
         (ramp * force, ramp * potential)
     };
-    for (z, normal) in box_sides(pos, bound) {
+    for side in 0..4 {
+        let (z, normal) = box_side(pos, bound, side);
         if z < cutoff {
             out.add(normal, law(z), true, lever);
         }
@@ -160,24 +161,26 @@ fn point_force(
     }
 }
 
-/// Signed distances of `pos` from the four box sides, with their inward
-/// normals.
-fn box_sides(pos: Vec2D, bound: &Rect) -> [(f32, Vec2D); 4] {
+/// Signed distance of `pos` from box side `side` (left, right, bottom, top)
+/// and its inward normal.
+fn box_side(pos: Vec2D, bound: &Rect, side: usize) -> (f32, Vec2D) {
     let (x0, y0) = bound.get_tl();
     let (x1, y1) = bound.get_br();
-    [
-        (pos.x - x0.min(x1), Vec2D::new(1.0, 0.0)),
-        (x0.max(x1) - pos.x, Vec2D::new(-1.0, 0.0)),
-        (pos.y - y0.min(y1), Vec2D::new(0.0, 1.0)),
-        (y0.max(y1) - pos.y, Vec2D::new(0.0, -1.0)),
-    ]
+    match side {
+        0 => (pos.x - x0.min(x1), Vec2D::new(1.0, 0.0)),
+        1 => (x0.max(x1) - pos.x, Vec2D::new(-1.0, 0.0)),
+        2 => (pos.y - y0.min(y1), Vec2D::new(0.0, 1.0)),
+        _ => (y0.max(y1) - pos.y, Vec2D::new(0.0, -1.0)),
+    }
 }
 
-/// The position update of a molecule behind soft walls: the drift plus the
-/// backstop at `backstop · σ` of each site, a counted safety net. Its sites
-/// turn with it, so after the drift each gets [`Ball2D::wall_hit`], first
-/// mirrored back across a line wall whose centre line it crossed. A ball
-/// whose line walls are ramping in meets only the box.
+/// The position update of a molecule: the drift, then each site against
+/// the walls at its contact distance (`WallSettings::contact_factor`; behind
+/// soft walls the backstop, a counted safety net). Its sites turn with it,
+/// so after the drift each gets [`Ball2D::wall_hit`], first mirrored back
+/// across a line wall whose centre line it crossed. The impulse acts at the
+/// end of the drift, so its energy error is first order in dt. A ball whose
+/// line walls are ramping in meets only the box.
 pub(crate) fn molecule_backstop(
     physics: &BallPhysics,
     ball: &mut Ball2D,
@@ -206,9 +209,9 @@ pub(crate) fn molecule_backstop(
     };
     for site in &molecule.sites {
         let lever = axis.scaled(site.offset);
-        let distance = physics.walls().backstop * site.sigma;
+        let distance = physics.walls().contact_factor() * site.sigma;
         for side in 0..4 {
-            let (z, normal) = box_sides(*ball.get_position() + lever, bound)[side];
+            let (z, normal) = box_side(*ball.get_position() + lever, bound, side);
             if z < distance {
                 hit(ball, normal, distance - z, lever, true);
             }
