@@ -27,6 +27,14 @@ Commands and process rules for AI assistants; other docs link here instead of co
 
 - Drift thresholds may change only with intentional behavior changes and baseline evidence; follow `docs/drift-test.md`.
 
+### Minimal code policy (source of truth)
+
+- Production code must be minimal: the fewest lines that solve the issue, nothing it did not ask for. Padding gets rejected. Tests are exempt.
+- Expose a new value only in the outputs the issue names (status text, metrics, headless, UI).
+- Reuse existing types, fields and functions; no type, trait or module for a single use.
+- Comment only what code cannot say: no doc comments repeating the name, no issue numbers.
+- Delete what the change makes redundant.
+
 ---
 
 ## Quick build, test and lint commands (explicit)
