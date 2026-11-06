@@ -116,13 +116,13 @@ headless runs; both step with the configured time step.
    line-segment walls are resolved along the wall normal at `σ_i / 2`
    (`ball_impl::wall_contact`, the line-wall sweep, a molecule's site
    impulses).
-3. **forces**: pair forces from the SIMD kernel (`simd_forces`, `f32x4`),
-   the site–site Lennard-Jones of pairs with a rigid molecule (#406,
-   `ball_impl::molecule`, scalar, only while a molecule species is
-   present: energy, force, torque, virial), the Mercedes-Benz hydrogen
-   bonds of water balls with their water
-   neighbours (#349, `ball_impl::water`, scalar, in neighbour-list order:
-   energy, force, torque and virial),
+3. **forces**: one walk over each neighbour list (#425): the pair forces
+   from the SIMD kernel (`simd_forces`, `f32x4`), which hands every pair
+   to the interactions its species pair adds (`ball_impl::interaction`,
+   scalar: the site–site Lennard-Jones of pairs with a rigid molecule,
+   #406, and the Mercedes-Benz hydrogen bonds of water, #349; energy,
+   force, torque and virial), only for species with interactions among
+   those present,
    plus, with soft walls (#280, the default), the wall forces
    (`core::wall_forces`): each box side through the signed distance from
    it, and of each wall chain the nearest line wall only (nearest-feature

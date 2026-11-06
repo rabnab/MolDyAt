@@ -56,7 +56,7 @@ fn omega_times_the_limit_stays_within_the_margin() {
     let physics = BallPhysics::default();
     for id in table.ids() {
         let s = table.species(id);
-        if s.molecule.is_some() {
+        if s.model.molecule().is_some() {
             continue;
         }
         let p = CappedPotential::new(

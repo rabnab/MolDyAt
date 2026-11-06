@@ -6,13 +6,11 @@ use crate::objects2d::Rect;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::ball_core::BounceInfo;
 use crate::objects2d::ball_impl::external_field::Field;
-use crate::objects2d::ball_impl::molecule::SiteTable;
+use crate::objects2d::ball_impl::interaction::{Interaction, pair_interactions};
 use crate::objects2d::ball_impl::pair_potential::{
     CapSettings, LJ_SIG, PairOverride, PairPotential, Potential,
 };
-use crate::objects2d::ball_impl::species::{
-    DEFAULT_SPECIES, Species, SpeciesId, SpeciesSet, SpeciesTable,
-};
+use crate::objects2d::ball_impl::species::{DEFAULT_SPECIES, SpeciesId, SpeciesSet, SpeciesTable};
 use crate::objects2d::ball_impl::wall_law::{SoftWalls, WallSettings};
 use crate::objects2d::ball_impl::{Ball2D, Named};
 use std::sync::Arc;
@@ -27,7 +25,7 @@ pub struct PhysicsConstants {
 
 /// Result of force calculation for a ball, including minimum distance to neighbors,
 /// total force vector, and total potential energy from interactions.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct ForceResult {
     /// Smallest centre distance to a neighbour, minus the two contact radii
     /// `σ_i/2 + σ_j/2` (negative inside the repulsive core). For a pair with
@@ -71,43 +69,26 @@ pub(crate) const DEFAULT_SKIN_FACTOR: f32 = 0.2;
 pub(crate) const STEP_MARGIN: f32 = std::f32::consts::TAU / 20.0;
 /// Collision energy for the stiffness of the repulsive core: `k_B·T` at
 /// `T* = 1`. Much hotter runs need a smaller step than the limits.
-const REFERENCE_ENERGY: f32 = 1.0;
+pub(crate) const REFERENCE_ENERGY: f32 = 1.0;
 
-/// `STEP_MARGIN / ω` per species pair, row-major, with `ω² = k/μ`: `k` the
-/// pair's stiffness, `μ` the reduced mass of the two interacting points (a
-/// molecule's site at lever `L` moves across the axis as `1/(1/M + L²/I)`),
-/// and water's hydrogen bonds. Collective modes (librations in a dense
+/// `STEP_MARGIN / ω` per species pair, row-major, with `ω² = k/μ` of the
+/// pair potential (`k` its stiffness, `μ` the reduced mass) or the largest
+/// `ω²` of the pair's interactions. Collective modes (librations in a dense
 /// phase) are not covered.
 fn time_step_limits(
     table: &SpeciesTable,
     pairs: &Potential,
-    sites: Option<&SiteTable>,
+    interactions: &[Vec<Arc<dyn Interaction>>],
 ) -> Vec<f32> {
-    let site_mass = |s: &Species, offset: f32| match &s.molecule {
-        Some(m) => 1.0 / (1.0 / m.mass() + offset * offset / m.inertia()),
-        None => s.mass,
-    };
-    let reduced = |a: f32, b: f32| a * b / (a + b);
     table
         .ids()
         .flat_map(|a| table.ids().map(move |b| (a, b)))
-        .map(|(a, b)| {
+        .zip(interactions)
+        .map(|((a, b), pair)| {
             let (sa, sb) = (table.species(a), table.species(b));
-            let mut omega_sq = match sites.filter(|s| s.is_molecule(a) || s.is_molecule(b)) {
-                Some(sites) => sites
-                    .site_pairs(a, b)
-                    .map(|(oa, ob, p)| {
-                        p.stiffness(REFERENCE_ENERGY)
-                            / reduced(site_mass(sa, oa), site_mass(sb, ob))
-                    })
-                    .fold(0.0, f32::max),
-                None => pairs.stiffness(a, b, REFERENCE_ENERGY) / reduced(sa.mass, sb.mass),
-            };
-            if a == b
-                && let (Some(water), Some(inertia)) = (&sa.water, sa.inertia)
-            {
-                omega_sq = omega_sq.max(water.omega_sq(sa.mass, inertia));
-            }
+            let lj =
+                pairs.stiffness(a, b, REFERENCE_ENERGY) / (sa.mass * sb.mass / (sa.mass + sb.mass));
+            let omega_sq = pair.iter().map(|x| x.omega_sq(sa, sb)).fold(lj, f32::max);
             STEP_MARGIN / omega_sq.sqrt()
         })
         .collect()
@@ -134,13 +115,17 @@ pub struct BallPhysics {
     /// External fields from the config (`[[fields]]`, #347); gravity is in
     /// `constants`.
     fields: Vec<Field>,
-    /// Site–site interactions, if the table has molecules (#406).
-    sites: Option<SiteTable>,
+    /// The interactions of each species pair besides `pair_potential`,
+    /// row-major.
+    interactions: Vec<Vec<Arc<dyn Interaction>>>,
     /// Wall contact distance of each species, from `wall_law`: the hard
     /// contact, or the backstop behind a soft wall.
     wall_contact: Vec<f32>,
     /// Contact distance (`σ_ij`) of each species pair, row-major.
     contact: Vec<f32>,
+    /// Cutoff of each species pair, row-major: the largest of its pair
+    /// potential and interactions.
+    cutoff: Vec<f32>,
     species_count: usize,
 }
 
@@ -198,20 +183,30 @@ impl BallPhysics {
             })
             .collect();
         let pair_potential = Potential::lennard_jones(species, cap, &overrides);
-        let sites = SiteTable::new(species, cap);
+        let interactions = pair_interactions(species, cap);
+        let cutoff = species
+            .ids()
+            .flat_map(|a| species.ids().map(move |b| (a, b)))
+            .zip(&interactions)
+            .map(|((a, b), pair)| {
+                let lj = pair_potential.cutoff(a, b);
+                pair.iter().map(|x| x.cutoff()).fold(lj, f32::max)
+            })
+            .collect();
         BallPhysics {
             constants,
             species: Arc::clone(&species_table),
-            time_step_limits: time_step_limits(species, &pair_potential, sites.as_ref()),
+            time_step_limits: time_step_limits(species, &pair_potential, &interactions),
             pair_potential,
             pair_overrides: overrides,
             skin_factor: DEFAULT_SKIN_FACTOR,
             walls: WallSettings::hard(),
             soft_walls: None,
             fields: Vec::new(),
-            sites,
+            interactions,
             wall_contact: Vec::new(),
             contact,
+            cutoff,
             species_count: species.len(),
         }
         .with_walls(WallSettings::hard())
@@ -234,7 +229,7 @@ impl BallPhysics {
         // centre stays half its length plus a site's contact away.
         self.wall_contact = species
             .ids()
-            .map(|id| match &species.species(id).molecule {
+            .map(|id| match species.species(id).model.molecule() {
                 Some(m) => m.half_length() + factor * m.max_site_sigma(),
                 None => factor * like_pair(id).0,
             })
@@ -252,10 +247,12 @@ impl BallPhysics {
         self
     }
 
-    /// The site–site interactions of molecules (#406), if the table has any.
+    /// The interactions of species `a` with each species besides the pair
+    /// potential, indexed by the other species.
     #[inline]
-    pub(crate) fn sites(&self) -> Option<&SiteTable> {
-        self.sites.as_ref()
+    pub(crate) fn interactions(&self, a: SpeciesId) -> &[Vec<Arc<dyn Interaction>>] {
+        let start = a.index() * self.species_count;
+        &self.interactions[start..start + self.species_count]
     }
 
     /// The external fields besides gravity, in config order.
@@ -314,7 +311,7 @@ impl BallPhysics {
 
     /// Species `a` and `b` interact only below this centre distance.
     pub fn cutoff(&self, a: SpeciesId, b: SpeciesId) -> f32 {
-        self.pair_potential.cutoff(a, b)
+        self.cutoff[a.index() * self.species_count + b.index()]
     }
 
     /// Verlet skin: a fixed share (`skin_factor`) of the reference cutoff

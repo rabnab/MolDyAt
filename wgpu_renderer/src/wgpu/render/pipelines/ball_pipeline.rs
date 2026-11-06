@@ -106,7 +106,7 @@ impl RenderPipeline for BallPipeline {
         self.instances.clear();
         let species = &ctx.balls.species;
         for data in ctx.balls.iter() {
-            match species.get(data.species).and_then(|s| s.molecule.as_ref()) {
+            match species.get(data.species).and_then(|s| s.model.molecule()) {
                 // A rigid molecule (#406): one disk per site along its axis.
                 Some(molecule) => {
                     let (sin, cos) = data.theta.sin_cos();

@@ -74,8 +74,8 @@ fn species_inertia_is_converted_to_argon_units() {
     let mc = world(1);
     let table = mc.world().species();
     let expected = (INERTIA_U_A2 / (39.948 * 3.405 * 3.405)) as f32;
-    assert_eq!(table.species(ROT).inertia, Some(expected));
-    assert_eq!(table.species(BALL).inertia, None);
+    assert_eq!(table.species(ROT).model.inertia(), Some(expected));
+    assert_eq!(table.species(BALL).model.inertia(), None);
 }
 
 /// A free rotor turns at constant ω, its angle stays wrapped, and its
@@ -150,7 +150,7 @@ fn temperature_counts_rotation() {
         ball.omega = omega;
         stats.add_ball(&ball);
     }
-    let inertia = table.species(ROT).inertia.unwrap();
+    let inertia = table.species(ROT).model.inertia().unwrap();
     // Σ m |v - v_com|² = 2, Σ I ω² = 4 I; dof = 2·(2 − 1) + 1.
     let expected = (2.0 + 4.0 * inertia) / 3.0;
     assert_eq!(stats.thermal_dof(), Some(3.0));
@@ -167,7 +167,7 @@ fn temperature_counts_rotation() {
 fn thermostat_brings_rotation_to_the_target() {
     const TARGET: f32 = 0.8;
     let mut mc = world(4);
-    let inertia = mc.world().species().species(ROT).inertia.unwrap();
+    let inertia = mc.world().species().species(ROT).model.inertia().unwrap();
     for i in 0..12 {
         for j in 0..12 {
             let pos = Vec2D::new(-16.5 + 3.0 * i as f32, -16.5 + 3.0 * j as f32);

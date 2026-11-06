@@ -22,6 +22,7 @@
 //! A config file can replace the whole table with its own `[[species]]` list
 //! (`SimConfig::species_table`); a world keeps the table it was built with.
 
+use crate::objects2d::ball_impl::interaction::Model;
 use crate::objects2d::ball_impl::molecule::{LinearMolecule, MoleculeSite};
 use crate::objects2d::ball_impl::water::MbWater;
 use std::sync::{Arc, LazyLock};
@@ -54,15 +55,9 @@ pub struct Species {
     pub display_radius: f32,
     /// RGBA in `[0, 1]`.
     pub colour: [f32; 4],
-    /// Moment of inertia about the centre (#348), `None` for a species
-    /// without orientation (every single-site Lennard-Jones species).
-    pub inertia: Option<f32>,
-    /// Mercedes-Benz hydrogen-bond arms (#349), for water.
-    pub water: Option<MbWater>,
-    /// Lennard-Jones sites of a rigid linear molecule (#406). Its own `σ`
-    /// is then the envelope of the sites (placement, the cell grid) and its
-    /// `ε` is 0: it interacts only through its sites.
-    pub molecule: Option<LinearMolecule>,
+    /// For a molecule (#406) `σ` is the envelope of its sites (placement,
+    /// the cell grid) and `ε` is 0: it interacts only through its sites.
+    pub model: Model,
 }
 
 impl Species {
@@ -75,9 +70,7 @@ impl Species {
             epsilon,
             display_radius: 0.5 * sigma,
             colour,
-            inertia: None,
-            water: None,
-            molecule: None,
+            model: Model::Atom { inertia: None },
         }
     }
 
@@ -312,10 +305,10 @@ fn mb_water() -> Species {
         Some(0.5 * MB_R_HB_ANGSTROM),
         [0.95, 0.95, 1.0, 1.0], // white
     );
-    water.inertia = Some((1.15 / (AR_MASS_U * AR_SIGMA_ANGSTROM * AR_SIGMA_ANGSTROM)) as f32);
-    water.water = Some(MbWater::new(
+    water.model = Model::MbWater(MbWater::new(
         (MB_EPSILON_HB_KELVIN / AR_EPSILON_KELVIN) as f32,
         (MB_R_HB_ANGSTROM / AR_SIGMA_ANGSTROM) as f32,
+        (1.15 / (AR_MASS_U * AR_SIGMA_ANGSTROM * AR_SIGMA_ANGSTROM)) as f32,
     ));
     water
 }
@@ -387,9 +380,8 @@ pub(crate) fn molecule_species(name: &str, molecule: LinearMolecule, colour: [f3
         0.0,
         colour,
     );
-    species.inertia = Some(molecule.inertia());
     species.display_radius = 0.5 * molecule.max_site_sigma();
-    species.molecule = Some(molecule);
+    species.model = Model::RigidLinear(molecule);
     species
 }
 
@@ -500,7 +492,6 @@ impl SpeciesSet {
         self.0 |= 1 << id.index();
     }
 
-    #[cfg(test)]
     pub(crate) fn contains(&self, id: SpeciesId) -> bool {
         self.0 & (1 << id.index()) != 0
     }

@@ -179,6 +179,9 @@ pub(crate) fn kernel_points(balls: &[Ball2D]) -> KernelPoints {
 /// * `ball_idx` - Index of ball to calculate forces for
 /// * `balls` - Slice of all balls (read-only access)
 /// * `points` - `KernelPoint` of every ball (same indices as `balls`), taken after `update_old_pos`
+/// * `each_pair` - called in the same walk with the result so far, every neighbour's
+///   index, species index and `r_i − r_j` (the pair's other interactions); a no-op
+///   compiles away
 ///
 /// # Returns
 /// ForceResult containing total force vector, potential energy, minimum distance, and optional neighbor forces
@@ -187,11 +190,12 @@ pub(crate) fn force_simd(
     ball_idx: usize,
     balls: &[Ball2D],
     points: &KernelPoints,
+    each_pair: impl FnMut(&mut ForceResult, usize, usize, Vec2D),
 ) -> ForceResult {
     // Static dispatch: one match per ball, outside the neighbour loop; the
     // kernel below is monomorphised for each law, with no branch per neighbour.
     match physics.pair_potential() {
-        Potential::LennardJones(table) => force_kernel(table, ball_idx, balls, points),
+        Potential::LennardJones(table) => force_kernel(table, ball_idx, balls, points, each_pair),
     }
 }
 
@@ -202,21 +206,20 @@ fn force_kernel<L: PairLaw>(
     ball_idx: usize,
     balls: &[Ball2D],
     kernel: &KernelPoints,
+    mut each_pair: impl FnMut(&mut ForceResult, usize, usize, Vec2D),
 ) -> ForceResult {
     let (points, cell, contacts_of) = (&kernel.points, kernel.cell, &kernel.contacts);
-    let mut force = Vec2D::new(0., 0.);
-    let mut min_dist = f32::NAN;
-    let mut total_pot = 0.;
-    let mut virial = 0.0f32;
-    let mut capped_pairs = 0u32;
-
     // Optimization: Only collect neighbor forces if visualization is enabled for this ball
     // This avoids expensive allocations and vector pushes in the hot path
     let collect_neighbor_forces = balls[ball_idx].verbose.lines();
-    let mut neighbor_forces = if collect_neighbor_forces {
-        Vec::with_capacity(balls[ball_idx].cold.hood.get_number_of_neighbors())
-    } else {
-        Vec::new()
+    let mut out = ForceResult {
+        min_dist: f32::NAN,
+        neighbor_forces: if collect_neighbor_forces {
+            Vec::with_capacity(balls[ball_idx].cold.hood.get_number_of_neighbors())
+        } else {
+            Vec::new()
+        },
+        ..ForceResult::default()
     };
 
     let ball = &balls[ball_idx];
@@ -245,6 +248,7 @@ fn force_kernel<L: PairLaw>(
                 let species = neighbour.species();
                 contacts[i] = contacts_of[species];
                 chunk_pairs[i] = &pairs[species];
+                each_pair(&mut out, neighbour_idx, species, dist_vec);
             } else {
                 panic!("Invalid neighbor index in SIMD force calculation");
             }
@@ -262,7 +266,7 @@ fn force_kernel<L: PairLaw>(
         // Pair force, sloped from max_force below r_cap and zero beyond the
         // cutoff (see CappedPotential).
         let lj_force = potential.force(center_dist);
-        capped_pairs += potential.capped_count(center_dist);
+        out.capped_pairs += potential.capped_count(center_dist);
 
         // Force direction: force / center_dist
         // Avoid division by zero: if center_dist is 0, use a small epsilon to prevent Inf/NaN
@@ -280,24 +284,20 @@ fn force_kernel<L: PairLaw>(
         // Virial: Σ (r_ij · F_ij).
         // Since fx = dx_vec * force_to_dist and fy = dy_vec * force_to_dist,
         // we have r · F = (dx^2 + dy^2) * force_to_dist = center_dist_sq * force_to_dist.
-        virial += (center_dist_sq * force_to_dist).reduce_sum();
+        out.virial += (center_dist_sq * force_to_dist).reduce_sum();
 
-        force.x += fx.reduce_sum();
-        force.y += fy.reduce_sum();
-        total_pot += potential_used.reduce_sum();
+        out.force.x += fx.reduce_sum();
+        out.force.y += fy.reduce_sum();
+        out.potential_energy += potential_used.reduce_sum();
         let gap = center_dist - (f32x4::from(contacts) + f32x4::splat(ball_contact));
-        let min_dist_of_chunk = gap.reduce_min();
-        min_dist = if f32::is_nan(min_dist) {
-            min_dist_of_chunk
-        } else {
-            f32::min(min_dist, min_dist_of_chunk)
-        };
+        // `f32::min` ignores NaN: the first chunk replaces the initial NaN.
+        out.min_dist = out.min_dist.min(gap.reduce_min());
 
         // Store per-neighbor force magnitudes for visualization
         if collect_neighbor_forces {
             let lj_force_array: [f32; 4] = lj_force.abs().to_array();
             for (i, &neighbour_idx) in chunk.iter().enumerate() {
-                neighbor_forces.push((neighbour_idx, lj_force_array[i]));
+                out.neighbor_forces.push((neighbour_idx, lj_force_array[i]));
             }
         }
     }
@@ -308,11 +308,12 @@ fn force_kernel<L: PairLaw>(
             let dist_vec = b.dist(ball_pos, cell);
             let center_dist = dist_vec.norm();
             let species = b.species();
+            each_pair(&mut out, neighbour_idx, species, dist_vec);
             let gap = center_dist - (contacts_of[species] + ball_contact);
             let potential = &pairs[species];
 
             let lj_force = potential.force(center_dist);
-            capped_pairs += u32::from(potential.is_capped(center_dist));
+            out.capped_pairs += u32::from(potential.is_capped(center_dist));
 
             // Force direction: force / center_dist
             // Avoid division by zero: if center_dist is 0, use a small epsilon to prevent Inf/NaN
@@ -324,34 +325,19 @@ fn force_kernel<L: PairLaw>(
             let fy = dist_vec.y * force_to_dist;
 
             // Virial: r_ij · F_ij = dx * fx + dy * fy
-            virial += dist_vec.x * fx + dist_vec.y * fy;
+            out.virial += dist_vec.x * fx + dist_vec.y * fy;
 
-            force.x += fx;
-            force.y += fy;
+            out.force.x += fx;
+            out.force.y += fy;
 
-            total_pot += potential.potential(center_dist);
+            out.potential_energy += potential.potential(center_dist);
 
             // Store per-neighbor force magnitude for visualization
             if collect_neighbor_forces {
-                neighbor_forces.push((neighbour_idx, lj_force.abs()));
+                out.neighbor_forces.push((neighbour_idx, lj_force.abs()));
             }
-            min_dist = if f32::is_nan(min_dist) {
-                gap
-            } else {
-                f32::min(min_dist, gap)
-            };
+            out.min_dist = out.min_dist.min(gap);
         }
     }
-
-    ForceResult {
-        min_dist,
-        force,
-        potential_energy: total_pot,
-        neighbor_forces,
-        virial,
-        wall_force: Vec2D::zero(),
-        wall_potential: 0.0,
-        torque: 0.0,
-        capped_pairs,
-    }
+    out
 }

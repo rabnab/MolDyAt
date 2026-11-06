@@ -182,7 +182,7 @@ impl Ball2D {
             pos,
             id,
             mass: data.mass,
-            inertia: data.inertia.unwrap_or(0.0),
+            inertia: data.model.inertia().unwrap_or(0.0),
             theta: 0.0,
             omega: 0.0,
             alpha: 0.0,

@@ -13,18 +13,16 @@ use crate::application::thermo_field::{
 };
 use crate::application::{AppResult, log_util};
 use crate::logging::log_update_hood_start;
-use crate::objects2d::ball_impl::ForceResult;
-use crate::objects2d::ball_impl::SpeciesTable;
 use crate::objects2d::ball_impl::ball_core::{Ball2D, BounceInfo};
 use crate::objects2d::ball_impl::external_field::{
     ExternalField, Field, UniformField, fields_acceleration,
 };
-use crate::objects2d::ball_impl::molecule::SiteTable;
+use crate::objects2d::ball_impl::molecule::axis;
 use crate::objects2d::ball_impl::simd_forces::{KernelPoint, force_simd};
 use crate::objects2d::ball_impl::verlet::Verlet;
 use crate::objects2d::ball_impl::wall_contact::normal_velocity_after_contact;
 use crate::objects2d::ball_impl::wall_law::WALL_RAMP_TIME;
-use crate::objects2d::ball_impl::water::{MbWater, arms};
+use crate::objects2d::ball_impl::{ForceResult, SpeciesSet};
 use crate::objects2d::{Rect, Vec2D};
 use rayon::prelude::*;
 
@@ -414,7 +412,7 @@ impl SimulationEngine {
             .balls
             .par_iter_mut()
             .map(|ball| {
-                if let Some(molecule) = &physics.species().species(ball.species()).molecule {
+                if let Some(molecule) = physics.species().species(ball.species()).model.molecule() {
                     let walls = (bound_rect, obstacles.as_slice());
                     return (
                         molecule_backstop(physics, ball, molecule, walls, dt, restitution),
@@ -472,7 +470,10 @@ impl SimulationEngine {
 
     /// Pair forces of every ball, plus the soft wall forces of the box
     /// `bound` and `obstacles` (see `wall_forces`), into `results`
-    /// (replaced, in ball order).
+    /// (replaced, in ball order). One walk over each neighbour list: the
+    /// SIMD kernel evaluates the pair potential and hands every pair to its
+    /// interactions (`BallPhysics::interactions`), for the species that have
+    /// any with a species present; the others take the kernel alone.
     fn compute_forces(
         world: &SimulationWorld,
         obstacles: &[Obstacle],
@@ -483,85 +484,38 @@ impl SimulationEngine {
         let balls = &world.balls;
         let points = &world.kernel_points;
         let soft_walls = physics.soft_walls();
-        let species = physics.species();
-        // Molecule pairs (#406), only while a molecule species is present.
-        let sites = physics
-            .sites()
-            .filter(|sites| world.species_present.iter().any(|id| sites.is_molecule(id)));
+        let present = world.species_present;
+        let interacting: SpeciesSet = present
+            .iter()
+            .filter(|&a| {
+                present
+                    .iter()
+                    .any(|b| !physics.interactions(a)[b.index()].is_empty())
+            })
+            .collect();
         (0..balls.len())
             .into_par_iter()
             .map(|i| {
-                let mut result = force_simd(physics, i, balls, points);
-                if let Some(sites) = sites {
-                    Self::add_molecule_pairs(sites, i, balls, &mut result);
-                }
+                let ball = &balls[i];
+                let mut result = if interacting.contains(ball.species()) {
+                    let row = physics.interactions(ball.species());
+                    let axis_i = axis(ball.theta);
+                    force_simd(physics, i, balls, points, |out, j, species, d| {
+                        for x in &row[species] {
+                            if d.norm_sq() < x.cutoff() * x.cutoff() {
+                                x.eval(-d, axis_i, axis(balls[j].theta), out);
+                            }
+                        }
+                    })
+                } else {
+                    force_simd(physics, i, balls, points, |_, _, _, _| {})
+                };
                 if let Some(walls) = soft_walls {
-                    soft_wall_force(walls, &balls[i], bound, obstacles).add_to(&mut result);
-                }
-                if let Some(water) = &species.species(balls[i].species()).water {
-                    Self::add_hydrogen_bonds(water, i, balls, species, &mut result);
+                    soft_wall_force(walls, ball, bound, obstacles).add_to(&mut result);
                 }
                 result
             })
             .collect_into_vec(results);
-    }
-
-    /// The site–site interactions of ball `i` with every neighbour where
-    /// one of the two is a molecule (#406): energy (counted by both balls),
-    /// force, torque and virial, in list order. Pairs of two atomic species
-    /// are the pair kernel's.
-    fn add_molecule_pairs(sites: &SiteTable, i: usize, balls: &[Ball2D], result: &mut ForceResult) {
-        let ball = &balls[i];
-        let molecule = sites.is_molecule(ball.species());
-        let pos = ball.exact_position();
-        for &j in ball.cold.hood.get_neighbour_indices() {
-            let other = &balls[j];
-            if !molecule && !sites.is_molecule(other.species()) {
-                continue;
-            }
-            let pos_j = other.exact_position();
-            let r = Vec2D::new((pos_j[0] - pos[0]) as f32, (pos_j[1] - pos[1]) as f32);
-            let pair = sites.pair(ball.species(), ball.theta, other.species(), other.theta, r);
-            result.potential_energy += pair.energy;
-            result.force += pair.force;
-            result.torque += pair.torque;
-            result.virial += pair.virial;
-            result.capped_pairs += pair.capped;
-        }
-    }
-
-    /// The Mercedes-Benz hydrogen bonds of water ball `i` with its water
-    /// neighbours (#349): energy (counted by both balls, like the pair
-    /// energy), force, torque and virial, added to `result`, in list order.
-    fn add_hydrogen_bonds(
-        water: &MbWater,
-        i: usize,
-        balls: &[Ball2D],
-        species: &SpeciesTable,
-        result: &mut ForceResult,
-    ) {
-        let ball = &balls[i];
-        let pos = ball.exact_position();
-        let arms_i = arms(ball.theta);
-        for &j in ball.cold.hood.get_neighbour_indices() {
-            let other = &balls[j];
-            if species.species(other.species()).water.is_none() {
-                continue;
-            }
-            let pos_j = other.exact_position();
-            let r = Vec2D::new((pos_j[0] - pos[0]) as f32, (pos_j[1] - pos[1]) as f32);
-            if r.norm_sq() >= water.cutoff() * water.cutoff() {
-                continue;
-            }
-            let bond = water.pair_with_arms(r, &arms_i, &arms(other.theta));
-            if bond.energy == 0.0 {
-                continue;
-            }
-            result.potential_energy += bond.energy;
-            result.force += bond.force;
-            result.torque += bond.torque;
-            result.virial -= r.dot(&bond.force);
-        }
     }
 
     /// Velocity-Verlet kick of one ball, with its wall contacts, added to
