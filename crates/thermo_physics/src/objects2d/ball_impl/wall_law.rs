@@ -116,6 +116,10 @@ pub(crate) struct WallOverride {
     pub epsilon: Option<f32>,
 }
 
+/// One site of a molecule as the walls see it: its offset along the axis
+/// and its wall potential (#406).
+pub(crate) type WallSite = (f32, CappedPotential<LennardJones>);
+
 /// The soft wall potential of every species of a table.
 #[derive(Clone, Debug)]
 pub(crate) struct SoftWalls {
@@ -123,6 +127,9 @@ pub(crate) struct SoftWalls {
     potentials: Vec<CappedPotential<LennardJones>>,
     /// Distance of the potential minimum (the WCA cutoff).
     equilibrium: Vec<f32>,
+    /// Per species, for a molecule (#406): (offset along the axis, wall
+    /// potential) of each site. The wall acts on the sites, not the centre.
+    sites: Vec<Option<Vec<WallSite>>>,
 }
 
 impl SoftWalls {
@@ -142,6 +149,26 @@ impl SoftWalls {
                 ..cap
             }
         };
+        let wall_law = |sigma: f32, epsilon: f32| LennardJones {
+            sigma: 0.5 * (sigma + settings.sigma),
+            epsilon: (epsilon * settings.epsilon).sqrt(),
+        };
+        let sites = species
+            .iter()
+            .map(|s| {
+                s.molecule.as_ref().map(|m| {
+                    m.sites
+                        .iter()
+                        .map(|site| {
+                            (
+                                site.offset,
+                                CappedPotential::new(wall_law(site.sigma, site.epsilon), cap),
+                            )
+                        })
+                        .collect()
+                })
+            })
+            .collect();
         let laws: Vec<LennardJones> = species
             .ids()
             .map(|id| {
@@ -160,6 +187,7 @@ impl SoftWalls {
             })
             .collect();
         Self {
+            sites,
             equilibrium: laws.iter().map(|l| SQRT6_OF_TWO * l.sigma).collect(),
             potentials: laws
                 .into_iter()
@@ -172,6 +200,12 @@ impl SoftWalls {
     #[inline]
     pub(crate) fn cutoff(&self, species: SpeciesId) -> f32 {
         self.potentials[species.index()].cutoff()
+    }
+
+    /// The sites of a molecule species (offset, wall potential), `None` for
+    /// an atomic species.
+    pub(crate) fn sites(&self, species: SpeciesId) -> Option<&[WallSite]> {
+        self.sites[species.index()].as_deref()
     }
 
     /// Wall distance of the potential minimum of `species`.

@@ -23,6 +23,7 @@ mod wall_momentum;
 
 mod ghost_wall;
 mod line_segments;
+mod molecules;
 mod object_deletion;
 mod source_spheres;
 mod species;

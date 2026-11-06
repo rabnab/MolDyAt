@@ -174,6 +174,7 @@ fn fill_ball_render_data(
             display_radius: species.map_or(ball.get_contact_radius(), |s| s.display_radius),
             equilibrium_radius,
             cutoff_radius,
+            theta: ball.theta,
         });
     }
 }

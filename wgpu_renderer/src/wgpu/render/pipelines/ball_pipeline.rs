@@ -104,8 +104,27 @@ impl RenderPipeline for BallPipeline {
             .set_uniforms(ctx.queue, SceneUniforms::new(ctx.view_proj, params));
 
         self.instances.clear();
-        self.instances
-            .extend(ctx.balls.iter().map(GpuBallData::from_render_data));
+        let species = &ctx.balls.species;
+        for data in ctx.balls.iter() {
+            match species.get(data.species).and_then(|s| s.molecule.as_ref()) {
+                // A rigid molecule (#406): one disk per site along its axis.
+                Some(molecule) => {
+                    let (sin, cos) = data.theta.sin_cos();
+                    let color = pack_color(data.color);
+                    self.instances
+                        .extend(molecule.sites.iter().map(|site| GpuBallData {
+                            position: [
+                                data.position.x + cos * site.offset,
+                                data.position.y + sin * site.offset,
+                            ],
+                            radius: 0.5 * site.sigma,
+                            color,
+                            rings: [0.0, 0.0],
+                        }));
+                }
+                None => self.instances.push(GpuBallData::from_render_data(data)),
+            }
+        }
         self.gpu.flush(ctx.device, ctx.queue, &self.instances);
         Ok(())
     }

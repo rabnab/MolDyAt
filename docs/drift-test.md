@@ -16,11 +16,12 @@ cargo ci-test-drift   # = cargo test -p thermo_physics -- --ignored --nocapture
 All scenarios are `#[ignore = "suite:drift"]`, so a plain `cargo test` skips
 them. CI runs the alias in a step of the `test` job, after the unit tests and
 reusing their build. The alias runs every ignored test of `thermo_physics`, so
-it also runs the four `#[ignore = "suite:physics (slow)"]` tests
+it also runs the five `#[ignore = "suite:physics (slow)"]` tests
 (`test_overlap_fallback_stays_rare_in_a_gas_with_walls`,
 `test_virial_pressure_2d_matches_wall_pressure`,
 `soft_wall_pressure_matches_the_hard_wall`,
-`torques_bring_rotation_to_equipartition`, about 40 s); they are not drift
+`torques_bring_rotation_to_equipartition`, about 40 s,
+`dumbbells_reach_equipartition`, about 16 s); they are not drift
 scenarios and print no summary line. The MB water anomaly test
 (`water_has_a_negative_thermal_pressure_coefficient`, about 7 min) is
 ignored as well but does nothing unless `MOLDYAT_SLOW_WATER=1` is set
@@ -315,4 +316,6 @@ stated.
 **CH₄ and NH₃ (#409), orientation (#348).** #409 added `NH3` and `CH4_HCB` to the built-in table, so mixed_sizes_cell_borders (one ball of every species, no energy threshold) has 13 balls instead of 12: max drift 2.77e-1 -> 2.86e-1. #348 added the orientation; species without a moment of inertia (all built-in ones) are bit-identical: every other scenario keeps its `trajectory_hash`, and both headless fixtures are unchanged.
 
 **MB water (#349).** A new built-in species `H2O`; no scenario uses it, so every scenario but one keeps its `trajectory_hash`. mixed_sizes_cell_borders took the last table entry as its largest species, which stopped being `XL` when the library gases were appended (#237); it now picks the species with the largest `σ` again and is back to 59 balls (all species up to `XL`) in a world sized by the `XL`–`XL` list radius: max drift 6.43e-3, final 6.17e-3, 565 cap hits (no energy threshold), no missed or asymmetric pairs. Both headless fixtures only gain the `H2O:count` metric. Water itself: energy drift 8.3e-4 over 4000 steps at dt 0.0005 (64 molecules); equipartition rotation / translation per degree of freedom 1.03 (144 molecules, 120k steps).
+
+**N₂ dumbbell (#406).** A new built-in species `N2_2S`; no scenario uses it and the molecule pass only runs while a molecule species is present, so every scenario keeps its `trajectory_hash` (mixed_sizes_cell_borders as after its #349 repair). Both headless fixtures only gain the `N2_2S:count` metric.
 

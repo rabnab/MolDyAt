@@ -5,6 +5,7 @@ User-visible changes to MolDyAt, newest first. Binaries and full release notes a
 
 ## Unreleased
 
+- Add N₂ as a rigid two-site molecule (`N2_2S`). (#406)
 - Add 2D water (`H2O`, Mercedes-Benz model) with hydrogen bonds. (#349)
 - Species can rotate (`moment_of_inertia_u_angstrom2`): temperature, thermostats, new balls and saves
   include the rotation. (#348)

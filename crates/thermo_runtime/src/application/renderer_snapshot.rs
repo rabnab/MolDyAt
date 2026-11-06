@@ -250,6 +250,10 @@ pub struct BallRenderData {
     /// Half the cutoff of a like pair: the rings of two balls touch where
     /// their pair stops interacting
     pub cutoff_radius: f32,
+
+    /// Orientation in radians (#348): the axis of a molecule (#406), whose
+    /// sites the renderer draws; 0 for balls without orientation.
+    pub theta: f32,
 }
 
 /// Step, time and the global numbers of the world: every snapshot has

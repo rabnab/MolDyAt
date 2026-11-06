@@ -18,6 +18,7 @@ use crate::objects2d::ball_impl::ball_core::{Ball2D, BounceInfo};
 use crate::objects2d::ball_impl::external_field::{
     ExternalField, Field, UniformField, fields_acceleration,
 };
+use crate::objects2d::ball_impl::molecule::SiteTable;
 use crate::objects2d::ball_impl::simd_forces::{KernelPoint, force_simd};
 use crate::objects2d::ball_impl::species::WATER_MAX_TIME_STEP;
 use crate::objects2d::ball_impl::verlet::Verlet;
@@ -485,10 +486,17 @@ impl SimulationEngine {
         let points = &world.kernel_points;
         let soft_walls = physics.soft_walls();
         let species = physics.species();
+        // Molecule pairs (#406), only while a molecule species is present.
+        let sites = physics
+            .sites()
+            .filter(|sites| world.species_present.iter().any(|id| sites.is_molecule(id)));
         (0..balls.len())
             .into_par_iter()
             .map(|i| {
                 let mut result = force_simd(physics, i, balls, points);
+                if let Some(sites) = sites {
+                    Self::add_molecule_pairs(sites, i, balls, &mut result);
+                }
                 if let Some(walls) = soft_walls {
                     soft_wall_force(walls, &balls[i], bound, obstacles).add_to(&mut result);
                 }
@@ -498,6 +506,29 @@ impl SimulationEngine {
                 result
             })
             .collect_into_vec(results);
+    }
+
+    /// The site–site interactions of ball `i` with every neighbour where
+    /// one of the two is a molecule (#406): energy (counted by both balls),
+    /// force, torque and virial, in list order. Pairs of two atomic species
+    /// are the pair kernel's.
+    fn add_molecule_pairs(sites: &SiteTable, i: usize, balls: &[Ball2D], result: &mut ForceResult) {
+        let ball = &balls[i];
+        let molecule = sites.is_molecule(ball.species());
+        let pos = ball.exact_position();
+        for &j in ball.cold.hood.get_neighbour_indices() {
+            let other = &balls[j];
+            if !molecule && !sites.is_molecule(other.species()) {
+                continue;
+            }
+            let pos_j = other.exact_position();
+            let r = Vec2D::new((pos_j[0] - pos[0]) as f32, (pos_j[1] - pos[1]) as f32);
+            let pair = sites.pair(ball.species(), ball.theta, other.species(), other.theta, r);
+            result.potential_energy += pair.energy;
+            result.force += pair.force;
+            result.torque += pair.torque;
+            result.virial += pair.virial;
+        }
     }
 
     /// The Mercedes-Benz hydrogen bonds of water ball `i` with its water

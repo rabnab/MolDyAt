@@ -925,6 +925,7 @@ mod window_requests {
                 display_radius: 0.5,
                 equilibrium_radius: 0.56,
                 cutoff_radius: 2.0,
+                theta: 0.0,
             })
             .collect();
         snapshot

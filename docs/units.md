@@ -115,3 +115,13 @@ With the real moment of inertia, water librates fast: runs with water need `dt �
 
 The 2D model reproduces water's density anomaly qualitatively: at fixed density `0.82 / r_HB²` the pressure peaks near `T_MB ≈ 0.135` and falls up to about 0.17 (`(∂P/∂T)_V < 0`, i.e. a negative expansion coefficient; wall pressure in Ar units: 0.11 → 2.08, 0.13 → 2.32, 0.14 → 2.33, 0.15 → 2.12, 0.16 → 2.22, 0.17 → 2.16, 0.19 → 2.36, single runs of 144 molecules, ±0.1). At 0.76 and 0.88 the pressure rises with temperature. The water config of `[[species]]` lists cannot define MB arms yet; only the built-in `H2O` has them.
 
+## Rigid linear molecules (#406)
+
+A species can be a rigid linear molecule (`ball_impl/molecule.rs`): Lennard-Jones sites at fixed offsets along the axis of the ball, which is the molecule's centre of mass and turns with its orientation (#348). Mass and moment of inertia are the sums over the sites. Two balls of which at least one is a molecule interact site by site, every site with every site (an atomic species counts as one site at its centre with its own `σ`, `ε`; pair overrides do not apply to such pairs), with Lorentz–Berthelot mixing per site pair, capped and cut off at `4 σ_ab` like a pair; the site forces give force and torque. The molecule's own `σ` is the envelope of its sites (placement, the cell grid) and its `ε` is 0, so the pair table gives it no centre interaction. Soft walls act on every site (force and torque); the hard backstop keeps the centre half the molecule's length plus a site's backstop from the wall, so no site crosses a wall.
+
+| Species | Sites | Bond | Mass | `I` | Source |
+|---|---|---|---|---|---|
+| N2_2S | 2 × N: σ = 3.31 Å, ε/k_B = 36.0 K | 1.10 Å | 28.014 u | 8.47 u·Å² (0.0183 in Ar units) | TraPPE, Potoff and Siepmann, *AIChE J.* 47, 1676 (2001), without the centre charges |
+
+`N2_2S` sits next to the single-site `N2`, which stays the default species (owner decision). A dumbbell has 2 translational and 1 rotational degree of freedom: in equilibrium `⟨E_rot⟩ = ⟨E_trans⟩ / 2` per molecule (measured 0.98). Its energy error at the default `dt = 0.005` is about 1.6e-3 of the kinetic energy over 20 time units (dt²: 0.4e-3 at dt/2).
+
