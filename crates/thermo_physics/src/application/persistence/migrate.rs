@@ -216,10 +216,7 @@ fn migrate_v5_to_v6(file: &mut Value) -> AppResult {
             for xi in list_mut(thermostat, "chain")? {
                 scale_value(xi, 1.0 / s.time, "thermostat chain")?;
                 let x = xi.as_f64().unwrap_or_default();
-                *xi = Value::from(x.clamp(
-                    f64::from(THERMOSTAT_CHAIN_MIN),
-                    f64::from(THERMOSTAT_CHAIN_MAX),
-                ));
+                *xi = Value::from(x.clamp(THERMOSTAT_CHAIN_MIN, THERMOSTAT_CHAIN_MAX));
             }
         }
         // Unknown kinds are skipped on load anyway.

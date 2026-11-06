@@ -175,7 +175,7 @@ struct OperatorsRunState {
     /// Kinetic and potential energy after every step.
     energies: Vec<[u32; 2]>,
     /// Momentum given to the walls (x, y) up to every step.
-    wall_momentum: Vec<[u32; 2]>,
+    wall_momentum: Vec<[u64; 2]>,
     /// Id, position and velocity of every ball after the last step, by id.
     balls: Vec<(usize, [u32; 4])>,
 }
@@ -366,7 +366,7 @@ fn test_seeded_operators_run_does_not_depend_on_thread_count() {
     }
     assert_ne!(
         one.wall_momentum.last(),
-        Some(&[0.0_f32.to_bits(); 2]),
+        Some(&[0.0_f64.to_bits(); 2]),
         "scenario invalid: no ball hit a wall"
     );
     if let Some(step) =

@@ -135,14 +135,7 @@ impl SimulationEngine {
         bound_rect: &Rect,
         log_timings: bool,
     ) {
-        let mut stats_accumulator = StatsAccumulator {
-            pot: 0.,
-            kin: 0.,
-            v_com: Vec2D::zero(),
-            sum_mass: 0.,
-            max_v: 0.,
-            max_id: 0,
-        };
+        let mut stats_accumulator = StatsAccumulator::default();
 
         let mut clock = PhaseClock::start(log_timings);
         world.with_scratch(
@@ -186,8 +179,8 @@ impl SimulationEngine {
                     .resolve_wall_overlaps_with(&scratch.obstacles, &mut scratch.overlap_passes);
                 world.apply_thermostats(dt, &mut stats_accumulator);
 
-                world.sim.wall_momentum_x += wall_px + seg_px;
-                world.sim.wall_momentum_y += wall_py + seg_py;
+                world.sim.wall_momentum_x += wall_px + f64::from(seg_px);
+                world.sim.wall_momentum_y += wall_py + f64::from(seg_py);
             },
         );
 
@@ -215,9 +208,10 @@ impl SimulationEngine {
             stats_accumulator.pot += Self::field_potential_energy(world, field);
         }
 
-        stats_accumulator.v_com = stats_accumulator
-            .v_com
-            .scaled(1. / stats_accumulator.sum_mass);
+        stats_accumulator.v_com = Vec2D::new(
+            (stats_accumulator.momentum[0] / stats_accumulator.sum_mass) as f32,
+            (stats_accumulator.momentum[1] / stats_accumulator.sum_mass) as f32,
+        );
         world.sim.update(dt, stats_accumulator);
         clock.lap(&mut world.phase_timings, Phase::Apply);
     }
@@ -612,17 +606,18 @@ impl SimulationEngine {
 
         let speed_sq = ball.v.norm_sq();
         let momentum = ball.moment();
-        stats.pot += result.potential_energy * 0.5;
-        stats.pot += result.wall_potential;
-        stats.px += momentum.x;
-        stats.py += momentum.y;
-        stats.kin += speed_sq * ball.mass * 0.5;
+        // Per-ball terms in f32, their sums in f64 (#421).
+        stats.pot += f64::from(result.potential_energy * 0.5);
+        stats.pot += f64::from(result.wall_potential);
+        stats.px += f64::from(momentum.x);
+        stats.py += f64::from(momentum.y);
+        stats.kin += f64::from(speed_sq * ball.mass * 0.5);
         if ball.inertia > 0.0 {
-            stats.kin += ball.rotational_energy();
+            stats.kin += f64::from(ball.rotational_energy());
         }
-        stats.mass += ball.mass;
-        stats.wall_px += wall_px;
-        stats.wall_py += wall_py;
+        stats.mass += f64::from(ball.mass);
+        stats.wall_px += f64::from(wall_px);
+        stats.wall_py += f64::from(wall_py);
         (speed_sq, ball.get_id())
     }
 
@@ -632,7 +627,7 @@ impl SimulationEngine {
     /// that f32 loses the kinetic and pair energy next to them. A ball with a
     /// non-finite position (NaN, removed later this step) is left out, so it
     /// cannot turn the reported energy into NaN.
-    fn field_potential_energy(world: &SimulationWorld, field: &impl ExternalField) -> f32 {
+    fn field_potential_energy(world: &SimulationWorld, field: &impl ExternalField) -> f64 {
         world
             .balls
             .iter()
@@ -641,7 +636,7 @@ impl SimulationEngine {
                 p.x.is_finite() && p.y.is_finite()
             })
             .map(|ball| f64::from(field.potential(*ball.get_position(), ball.mass)))
-            .sum::<f64>() as f32
+            .sum::<f64>()
     }
 
     /// `factor` times the shorter world side (`speed_limit_factor` of
@@ -664,7 +659,7 @@ impl SimulationEngine {
         dt: f32,
         bound_rect: &Rect,
         stats_accumulator: &mut StatsAccumulator,
-    ) -> (f32, f32) {
+    ) -> (f64, f64) {
         // The zips below stop at the shortest list, so a mismatch would
         // silently skip balls; the former indexed loop panicked instead.
         // Checked once per step, so kept in release builds too.
@@ -711,7 +706,8 @@ impl SimulationEngine {
         let mut total_wall_py = 0.0;
         for chunk in chunk_stats.iter() {
             stats_accumulator.pot += chunk.pot;
-            stats_accumulator.v_com += Vec2D::new(chunk.px, chunk.py);
+            stats_accumulator.momentum[0] += chunk.px;
+            stats_accumulator.momentum[1] += chunk.py;
             stats_accumulator.kin += chunk.kin;
             stats_accumulator.sum_mass += chunk.mass;
             if stats_accumulator.max_v < chunk.max_v {
@@ -741,19 +737,20 @@ struct ApplyParams<'a> {
     speed_limit: f32,
 }
 
-/// Stats of one chunk of the apply pass, summed in ball order.
+/// Stats of one chunk of the apply pass, summed in ball order, in f64
+/// (#421): a few thousand f32 terms lose digits in an f32 sum.
 #[derive(Debug, Default, Clone, Copy)]
 pub(crate) struct ApplyStats {
     /// Half the pair potential energy (each pair is counted by both balls).
-    pot: f32,
-    kin: f32,
+    pot: f64,
+    kin: f64,
     /// Momentum of the balls.
-    px: f32,
-    py: f32,
-    mass: f32,
+    px: f64,
+    py: f64,
+    mass: f64,
     max_v: f32,
     max_id: usize,
     /// Momentum given to the walls the balls touched.
-    wall_px: f32,
-    wall_py: f32,
+    wall_px: f64,
+    wall_py: f64,
 }

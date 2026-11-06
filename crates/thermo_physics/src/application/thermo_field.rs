@@ -10,14 +10,15 @@ use std::collections::VecDeque;
 #[derive(Clone, Debug)]
 pub(crate) struct LocalKineticStats {
     count: usize,
-    sum_m: f32,
-    sum_mv: Vec2D,
-    sum_mv2: f32,
+    // Sums over the balls in f64 (#421); the results are f32.
+    sum_m: f64,
+    sum_mv: [f64; 2],
+    sum_mv2: f64,
     /// Balls with an orientation (#348): one more thermal degree of
     /// freedom each.
     rot_count: usize,
     /// `Σ I ω²` of those balls.
-    sum_iw2: f32,
+    sum_iw2: f64,
 }
 
 impl LocalKineticStats {
@@ -29,13 +30,13 @@ impl LocalKineticStats {
     pub(crate) fn add_ball(&mut self, ball: &Ball2D) {
         let mass = ball.mass;
         self.count += 1;
-        self.sum_m += mass;
-        self.sum_mv.x += mass * ball.v.x;
-        self.sum_mv.y += mass * ball.v.y;
-        self.sum_mv2 += mass * ball.v.norm_sq();
+        self.sum_m += f64::from(mass);
+        self.sum_mv[0] += f64::from(mass * ball.v.x);
+        self.sum_mv[1] += f64::from(mass * ball.v.y);
+        self.sum_mv2 += f64::from(mass * ball.v.norm_sq());
         if ball.inertia > 0.0 {
             self.rot_count += 1;
-            self.sum_iw2 += ball.inertia * ball.omega * ball.omega;
+            self.sum_iw2 += f64::from(ball.inertia * ball.omega * ball.omega);
         }
     }
 
@@ -77,15 +78,18 @@ impl LocalKineticStats {
 
     /// `Σ m v / Σ m` of at least `min_count` balls.
     fn mean_velocity(&self, min_count: usize) -> Option<Vec2D> {
-        if self.count < min_count || self.sum_m <= f32::EPSILON {
+        if self.count < min_count || self.sum_m <= f64::from(f32::EPSILON) {
             return None;
         }
-        Some(self.sum_mv.scaled(1.0 / self.sum_m))
+        Some(Vec2D::new(
+            (self.sum_mv[0] / self.sum_m) as f32,
+            (self.sum_mv[1] / self.sum_m) as f32,
+        ))
     }
 
     /// Local temperature in the center-of-mass frame.
     pub(crate) fn temperature(&self) -> Option<f32> {
-        if self.count < 2 || self.sum_m <= f32::EPSILON {
+        if self.count < 2 || self.sum_m <= f64::from(f32::EPSILON) {
             return None;
         }
 
@@ -100,11 +104,13 @@ impl LocalKineticStats {
 
         // COM subtraction can leave a tiny negative/positive residue from
         // floating-point cancellation for rigidly drifting buckets.
-        let thermal_speed_sq = (self.sum_mv2 - self.sum_mv.norm_sq() / self.sum_m).max(0.0);
+        let momentum_sq = self.sum_mv[0] * self.sum_mv[0] + self.sum_mv[1] * self.sum_mv[1];
+        let thermal_speed_sq = (self.sum_mv2 - momentum_sq / self.sum_m).max(0.0);
+        let thermal_dof = f64::from(thermal_dof);
         if self.rot_count > 0 {
-            return Some((thermal_speed_sq + self.sum_iw2) / thermal_dof);
+            return Some(((thermal_speed_sq + self.sum_iw2) / thermal_dof) as f32);
         }
-        Some(thermal_speed_sq / thermal_dof)
+        Some((thermal_speed_sq / thermal_dof) as f32)
     }
 }
 
@@ -113,7 +119,7 @@ impl Default for LocalKineticStats {
         Self {
             count: 0,
             sum_m: 0.0,
-            sum_mv: Vec2D::zero(),
+            sum_mv: [0.0; 2],
             sum_mv2: 0.0,
             rot_count: 0,
             sum_iw2: 0.0,

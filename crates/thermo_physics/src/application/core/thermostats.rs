@@ -30,13 +30,12 @@ impl ThermostatBucket {
 
 /// Use a few smaller reversible sub-steps for better local thermostat stability.
 const NHC_SUBSTEPS: usize = 4;
-const NHC_SUBSTEPS_F32: f32 = 4.0;
 /// Lower bound for Nosé-Hoover masses to avoid division-by-zero.
-const MIN_CHAIN_MASS: f32 = 1.0e-6;
+const MIN_CHAIN_MASS: f64 = 1.0e-6;
 /// Lower bound for user-facing time constant when deriving internal masses.
-const MIN_EFFECTIVE_TAU: f32 = 1.0e-4;
+const MIN_EFFECTIVE_TAU: f64 = 1.0e-4;
 
-fn clamp_chain_variable(value: f32) -> f32 {
+fn clamp_chain_variable(value: f64) -> f64 {
     value.clamp(THERMOSTAT_CHAIN_MIN, THERMOSTAT_CHAIN_MAX)
 }
 
@@ -49,10 +48,10 @@ fn clamp_chain_variable(value: f32) -> f32 {
 /// This keeps the primary thermostat coupled to the bucket size while using
 /// uniform trailing masses for the remaining chain links.
 fn derive_nhc_masses(
-    tau: f32,
-    target_temperature: f32,
-    dof: f32,
-) -> [f32; DEFAULT_THERMOSTAT_CHAIN_LENGTH] {
+    tau: f64,
+    target_temperature: f64,
+    dof: f64,
+) -> [f64; DEFAULT_THERMOSTAT_CHAIN_LENGTH] {
     let effective_tau = tau.max(MIN_EFFECTIVE_TAU);
     let tau_sq = effective_tau * effective_tau;
     let q0 = (dof * target_temperature * tau_sq).max(MIN_CHAIN_MASS);
@@ -62,12 +61,12 @@ fn derive_nhc_masses(
 
 fn chain_drive(
     index: usize,
-    chain: &[f32],
-    masses: &[f32; DEFAULT_THERMOSTAT_CHAIN_LENGTH],
-    thermal_kinetic: f32,
-    target_temperature: f32,
-    thermal_dof: f32,
-) -> f32 {
+    chain: &[f64],
+    masses: &[f64; DEFAULT_THERMOSTAT_CHAIN_LENGTH],
+    thermal_kinetic: f64,
+    target_temperature: f64,
+    thermal_dof: f64,
+) -> f64 {
     if index == 0 {
         (2.0 * thermal_kinetic - thermal_dof * target_temperature) / masses[0]
     } else {
@@ -76,18 +75,26 @@ fn chain_drive(
     }
 }
 
+/// Integrate the chain over `dt` and return the velocity scale. The chain
+/// is state that changes by small amounts every step, so it is integrated
+/// in f64 (#421); only the returned scale is f32.
 fn integrate_nhc_chain(
-    chain: &mut [f32],
+    chain: &mut [f64],
     dt: f32,
     thermal_kinetic: f32,
     target_temperature: f32,
     thermal_dof: f32,
     tau: f32,
 ) -> f32 {
-    let mut total_scale = 1.0_f32;
-    let mut current_kinetic = thermal_kinetic.max(0.0);
-    let masses = derive_nhc_masses(tau, target_temperature, thermal_dof);
-    let sub_dt = dt / NHC_SUBSTEPS_F32;
+    let (dt, target_temperature, thermal_dof) = (
+        f64::from(dt),
+        f64::from(target_temperature),
+        f64::from(thermal_dof),
+    );
+    let mut total_scale = 1.0_f64;
+    let mut current_kinetic = f64::from(thermal_kinetic).max(0.0);
+    let masses = derive_nhc_masses(f64::from(tau), target_temperature, thermal_dof);
+    let sub_dt = dt / NHC_SUBSTEPS as f64;
     let quarter_dt = 0.25 * sub_dt;
     let eighth_dt = 0.125 * sub_dt;
 
@@ -135,7 +142,7 @@ fn integrate_nhc_chain(
         }
     }
 
-    total_scale
+    total_scale as f32
 }
 
 impl MainContent {
@@ -411,19 +418,21 @@ impl SimulationWorld {
 
     fn refresh_velocity_stats(&self, stats_accumulator: &mut StatsAccumulator) {
         stats_accumulator.kin = 0.0;
-        stats_accumulator.v_com = Vec2D::zero();
+        stats_accumulator.momentum = [0.0; 2];
         stats_accumulator.sum_mass = 0.0;
         stats_accumulator.max_v = 0.0;
         stats_accumulator.max_id = 0;
 
         for ball in &self.balls {
-            stats_accumulator.v_com += ball.moment();
-            stats_accumulator.sum_mass += ball.mass;
+            let momentum = ball.moment();
+            stats_accumulator.momentum[0] += f64::from(momentum.x);
+            stats_accumulator.momentum[1] += f64::from(momentum.y);
+            stats_accumulator.sum_mass += f64::from(ball.mass);
 
             let speed_sq = ball.v.norm_sq();
-            stats_accumulator.kin += speed_sq * ball.mass * 0.5;
+            stats_accumulator.kin += f64::from(speed_sq * ball.mass * 0.5);
             if ball.inertia > 0.0 {
-                stats_accumulator.kin += ball.rotational_energy();
+                stats_accumulator.kin += f64::from(ball.rotational_energy());
             }
 
             if stats_accumulator.max_v * stats_accumulator.max_v < speed_sq {

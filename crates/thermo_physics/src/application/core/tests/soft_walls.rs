@@ -323,13 +323,13 @@ fn soft_walls_book_the_momentum_they_give() {
         mc.simulation_step().unwrap();
     }
     let mass: f64 = mc.world().balls.iter().map(|b| f64::from(b.mass)).sum();
-    let (wall0, gas0) = (f64::from(mc.world().sim.wall_momentum_y), gas_momentum(&mc));
+    let (wall0, gas0) = (mc.world().sim.wall_momentum_y, gas_momentum(&mc));
     let steps = 2_000;
     for _ in 0..steps {
         mc.simulation_step().unwrap();
     }
     assert_eq!(mc.world().sim.wall_contacts, 0, "backstop reached");
-    let wall = f64::from(mc.world().sim.wall_momentum_y) - wall0;
+    let wall = mc.world().sim.wall_momentum_y - wall0;
     let gas = gas_momentum(&mc) - gas0;
     let gravity = -mass * f64::from(GRAVITY) * f64::from(mc.time_step()) * steps as f64;
     assert!(

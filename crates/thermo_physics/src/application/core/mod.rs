@@ -290,11 +290,15 @@ pub struct PhysicsRuntimeState {
     paused_for_resize: bool,
 }
 
+/// The step's totals over all balls, summed in f64 (#421).
+#[derive(Debug, Default)]
 pub(crate) struct StatsAccumulator {
-    pub(crate) pot: f32,
-    pub(crate) kin: f32,
+    pub(crate) pot: f64,
+    pub(crate) kin: f64,
+    /// Total momentum; divided by `sum_mass` into `v_com` at the end.
+    pub(crate) momentum: [f64; 2],
     pub(crate) v_com: Vec2D,
-    sum_mass: f32,
+    sum_mass: f64,
     pub(crate) max_v: f32,
     pub(crate) max_id: usize,
 }

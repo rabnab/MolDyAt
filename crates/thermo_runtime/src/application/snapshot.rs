@@ -75,7 +75,8 @@ impl CreateSnapshot for MainContent {
             dt: self.active_time_step(),
             kinetic_energy: world.sim().get_kinetic_energy(),
             potential_energy: world.sim().get_potential_energy(),
-            wall_momentum: wall_px.hypot(wall_py),
+            energy_total: world.sim().total_energy(),
+            wall_momentum: wall_px.hypot(wall_py) as f32,
             species_counts,
             gravity_force_multiple: current_gravity_force_multiple(
                 world.physics().constants.gravity,

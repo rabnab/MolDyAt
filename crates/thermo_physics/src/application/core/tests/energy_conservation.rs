@@ -168,8 +168,8 @@ fn test_energy_conservation_1000_balls() {
             let p_drift_mag = (p_drift_x * p_drift_x + p_drift_y * p_drift_y).sqrt();
 
             // Get wall momentum
-            let wall_px = world.sim.wall_momentum_x;
-            let wall_py = world.sim.wall_momentum_y;
+            let wall_px = world.sim.wall_momentum_x as f32;
+            let wall_py = world.sim.wall_momentum_y as f32;
             let wall_p_mag = (wall_px * wall_px + wall_py * wall_py).sqrt();
 
             // Total system momentum (balls + walls)
@@ -413,8 +413,8 @@ fn test_cutoff_energy_loss() {
             let total_p_mag = (total_px * total_px + total_py * total_py).sqrt();
 
             // Get wall momentum
-            let wall_px = main_content.world().sim.wall_momentum_x;
-            let wall_py = main_content.world().sim.wall_momentum_y;
+            let wall_px = main_content.world().sim.wall_momentum_x as f32;
+            let wall_py = main_content.world().sim.wall_momentum_y as f32;
             let wall_p_mag = (wall_px * wall_px + wall_py * wall_py).sqrt();
 
             // Total system momentum (balls + walls)
