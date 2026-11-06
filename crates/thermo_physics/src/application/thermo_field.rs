@@ -13,6 +13,11 @@ pub(crate) struct LocalKineticStats {
     sum_m: f32,
     sum_mv: Vec2D,
     sum_mv2: f32,
+    /// Balls with an orientation (#348): one more thermal degree of
+    /// freedom each.
+    rot_count: usize,
+    /// `Σ I ω²` of those balls.
+    sum_iw2: f32,
 }
 
 impl LocalKineticStats {
@@ -28,6 +33,27 @@ impl LocalKineticStats {
         self.sum_mv.x += mass * ball.v.x;
         self.sum_mv.y += mass * ball.v.y;
         self.sum_mv2 += mass * ball.v.norm_sq();
+        if ball.inertia > 0.0 {
+            self.rot_count += 1;
+            self.sum_iw2 += ball.inertia * ball.omega * ball.omega;
+        }
+    }
+
+    /// Thermal degrees of freedom: `2·(N − 1)` of the translation in the
+    /// centre-of-mass frame, plus one per ball with an orientation (#348).
+    /// `None` below two balls, also for one rotating ball: its spin alone
+    /// is not a temperature a thermostat should act on (a single ball has
+    /// none in translation either).
+    pub(crate) fn thermal_dof(&self) -> Option<f32> {
+        if self.count < 2 {
+            return None;
+        }
+        let translational = 2.0 * (self.count as f32 - 1.0);
+        Some(if self.rot_count > 0 {
+            translational + self.rot_count as f32
+        } else {
+            translational
+        })
     }
 
     pub(crate) fn count(&self) -> usize {
@@ -64,9 +90,10 @@ impl LocalKineticStats {
         }
 
         // Removing the 2D center-of-mass motion leaves 2 * (N - 1) thermal
-        // degrees of freedom. The numerator is `sum m |v - v_com|^2`, i.e.
+        // degrees of freedom, plus one per rotating ball (equipartition,
+        // #348). The numerator is `sum m |v - v_com|^2 + sum I ω²`, i.e.
         // twice the thermal kinetic energy in reduced LJ units.
-        let thermal_dof = 2.0 * (self.count as f32 - 1.0);
+        let thermal_dof = self.thermal_dof()?;
         if thermal_dof <= f32::EPSILON {
             return None;
         }
@@ -74,6 +101,9 @@ impl LocalKineticStats {
         // COM subtraction can leave a tiny negative/positive residue from
         // floating-point cancellation for rigidly drifting buckets.
         let thermal_speed_sq = (self.sum_mv2 - self.sum_mv.norm_sq() / self.sum_m).max(0.0);
+        if self.rot_count > 0 {
+            return Some((thermal_speed_sq + self.sum_iw2) / thermal_dof);
+        }
         Some(thermal_speed_sq / thermal_dof)
     }
 }
@@ -85,6 +115,8 @@ impl Default for LocalKineticStats {
             sum_m: 0.0,
             sum_mv: Vec2D::zero(),
             sum_mv2: 0.0,
+            rot_count: 0,
+            sum_iw2: 0.0,
         }
     }
 }

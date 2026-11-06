@@ -497,6 +497,7 @@ snapshot_interval_us = 16667  # 1000..1000000, least time between two frames sen
 # mass_u = 28.0134            # 1.997..3994.8
 # colour = [0.0, 1.0, 1.0]    # RGB or RGBA, each 0..1
 # source = "Hirschfelder, Curtiss & Bird (1954)"   # optional
+# moment_of_inertia_u_angstrom2 = 200.0   # optional (#348): the species rotates; 0.463..46320
 # [[species]]
 # name = "Ar"
 # sigma_angstrom = 3.405

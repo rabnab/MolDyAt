@@ -5,6 +5,8 @@ User-visible changes to MolDyAt, newest first. Binaries and full release notes a
 
 ## Unreleased
 
+- Species can rotate (`moment_of_inertia_u_angstrom2`): temperature, thermostats, new balls and saves
+  include the rotation. (#348)
 - `CH4` uses the TraPPE-UA parameters (the old one stays as `CH4_HCB`), and ammonia (`NH3`) is a new
   species. (#409)
 - **Breaking:** reduced units are based on argon instead of N₂ (save format 6); older saves and

@@ -52,6 +52,9 @@ pub struct Species {
     pub display_radius: f32,
     /// RGBA in `[0, 1]`.
     pub colour: [f32; 4],
+    /// Moment of inertia about the centre (#348), `None` for a species
+    /// without orientation (every single-site Lennard-Jones species).
+    pub inertia: Option<f32>,
 }
 
 impl Species {
@@ -64,6 +67,7 @@ impl Species {
             epsilon,
             display_radius: 0.5 * sigma,
             colour,
+            inertia: None,
         }
     }
 

@@ -14,6 +14,7 @@ mod overlap_resolution;
 mod placement;
 mod pressure;
 mod resize;
+mod rotation;
 mod simulation;
 mod simulation_engine;
 mod soft_walls;

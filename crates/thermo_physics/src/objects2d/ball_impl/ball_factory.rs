@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 use rand::rngs::{StdRng, SysRng};
 use rand::{RngExt, SeedableRng};
+use rand_distr::{Distribution, Normal};
 
 /// Factory for creating Ball2D instances with various configurations.
 ///
@@ -148,6 +149,7 @@ impl BallFactory {
         velocity_range: (f32, f32),
     ) -> Ball2D {
         let mut rng = self.rng.borrow_mut();
+        let rng = &mut *rng;
 
         let min_x = f32::min(pos_range.0.x, pos_range.1.x);
         let max_x = f32::max(pos_range.0.x, pos_range.1.x);
@@ -167,7 +169,39 @@ impl BallFactory {
             Vec2D::zero()
         };
 
-        self.create_with_species_and_velocity(pos, species, velocity)
+        let mut ball = self.create_basic(pos, species);
+        ball.v = velocity;
+        Self::thermal_spin(rng, &mut ball);
+        ball
+    }
+
+    /// Give a rotating `ball` (#348) an angular velocity that matches its
+    /// translation: `ω ~ N(0, √(T / I))` with `T = ½ m v²`, the temperature
+    /// at which that is the mean translational energy (2D, `k_B = 1`). So a
+    /// gas spawned with thermal speeds starts near equipartition instead of
+    /// with cold rotation. Balls without inertia, or at rest, draw nothing
+    /// from the RNG, so their runs stay bit-identical.
+    fn thermal_spin(rng: &mut StdRng, ball: &mut Ball2D) {
+        let temperature = 0.5 * ball.mass * ball.v.norm_sq();
+        if ball.inertia > 0.0 && temperature > 0.0 {
+            let spread = (temperature / ball.inertia).sqrt();
+            if let Ok(normal) = Normal::new(0.0, spread) {
+                ball.omega = normal.sample(rng);
+            }
+        }
+    }
+
+    /// [`Self::create_with_species_and_velocity`] with a thermal spin for a
+    /// rotating species (see [`Self::thermal_spin`]); for emitted balls.
+    pub(crate) fn create_spinning(
+        &self,
+        pos: impl Into<Vec2D>,
+        species: SpeciesId,
+        velocity: Vec2D,
+    ) -> Ball2D {
+        let mut ball = self.create_with_species_and_velocity(pos, species, velocity);
+        Self::thermal_spin(&mut self.rng.borrow_mut(), &mut ball);
+        ball
     }
 
     /// A direction angle in `0..TAU` from the factory's RNG, so a seeded

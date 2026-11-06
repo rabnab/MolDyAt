@@ -55,7 +55,9 @@ use std::collections::HashSet;
 ///   rescaled to the same physical state.
 /// - v7 (#409): `CH4` is TraPPE-UA methane; files on the built-in table
 ///   name the former `CH4` `CH4_HCB`. `NH3` is new.
-pub(crate) const WORLD_FILE_VERSION: u32 = 7;
+/// - v8 (#348): balls store `theta`, `omega` and `alpha`, and a config's
+///   `[[species]]` can give a `moment_of_inertia_u_angstrom2`.
+pub(crate) const WORLD_FILE_VERSION: u32 = 8;
 
 /// Everything needed to rebuild a world. Energy plot data and simulation
 /// statistics are deliberately not part of it.
@@ -166,6 +168,18 @@ pub(crate) struct BallData {
     pub v: Vec2D,
     pub pre_update_pos: Vec2D,
     pub accel: Vec2D,
+    /// Orientation, angular velocity and angular acceleration (#348); only
+    /// written for balls of a species with an orientation (nonzero).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub theta: f32,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub omega: f32,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub alpha: f32,
+}
+
+fn is_zero(value: &f32) -> bool {
+    *value == 0.0
 }
 
 /// A user-drawn wall (`WallChain`): its endpoints, the pieces (wall
@@ -365,9 +379,22 @@ impl WorldFile {
                     ball.pre_update_pos.y,
                     ball.accel.x,
                     ball.accel.y,
+                    ball.theta,
+                    ball.omega,
+                    ball.alpha,
                 ],
                 &format!("ball {}", ball.id),
             )?;
+            // Only a species with an orientation can rotate (#348).
+            let rotates = species
+                .by_name(&ball.species)
+                .is_some_and(|id| species.species(id).inertia.is_some());
+            if !rotates && (ball.theta != 0.0 || ball.omega != 0.0 || ball.alpha != 0.0) {
+                return Err(invalid(format!(
+                    "ball {} has an orientation, but species {:?} has no moment of inertia",
+                    ball.id, ball.species
+                )));
+            }
             // A ball outside the world gets no cell and would silently take
             // no part in the simulation, so reject it instead.
             let inside_x = ball.pos.x >= rect.x && ball.pos.x < rect.x + rect.w;

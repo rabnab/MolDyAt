@@ -40,13 +40,6 @@ fn clamp_chain_variable(value: f32) -> f32 {
     value.clamp(THERMOSTAT_CHAIN_MIN, THERMOSTAT_CHAIN_MAX)
 }
 
-fn compute_thermal_dof(count: usize) -> Option<f32> {
-    if count < 2 {
-        return None;
-    }
-    Some(2.0 * (count as f32 - 1.0))
-}
-
 /// Derive Nosé-Hoover chain masses from user-level thermostat controls.
 ///
 /// `tau` is the only exposed coupling knob, so internal masses are derived as:
@@ -358,7 +351,7 @@ impl SimulationWorld {
         let Some(v_com) = bucket.kinetic.center_of_mass_velocity() else {
             return false;
         };
-        let Some(thermal_dof) = compute_thermal_dof(bucket.kinetic.count()) else {
+        let Some(thermal_dof) = bucket.kinetic.thermal_dof() else {
             return false;
         };
 
@@ -372,6 +365,7 @@ impl SimulationWorld {
         if target_temperature <= f32::EPSILON {
             for &ball_idx in &bucket.ball_indices {
                 self.balls[ball_idx].v = Vec2D::zero();
+                self.balls[ball_idx].omega = 0.0;
             }
             thermostat.chain.fill(0.0);
             return !bucket.ball_indices.is_empty();
@@ -398,6 +392,10 @@ impl SimulationWorld {
             // Thermostat only the peculiar velocity in the local COM frame.
             let peculiar_velocity = self.balls[ball_idx].v - &v_com;
             self.balls[ball_idx].v = v_com.add_scaled(&peculiar_velocity, damping_scale);
+            // Rotation shares the chain (equipartition, #348).
+            if self.balls[ball_idx].inertia > 0.0 {
+                self.balls[ball_idx].omega *= damping_scale;
+            }
         }
 
         !bucket.ball_indices.is_empty()
@@ -424,6 +422,9 @@ impl SimulationWorld {
 
             let speed_sq = ball.v.norm_sq();
             stats_accumulator.kin += speed_sq * ball.mass * 0.5;
+            if ball.inertia > 0.0 {
+                stats_accumulator.kin += ball.rotational_energy();
+            }
 
             if stats_accumulator.max_v * stats_accumulator.max_v < speed_sq {
                 stats_accumulator.max_v = speed_sq.sqrt();

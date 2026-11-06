@@ -108,11 +108,7 @@ impl SimulationWorld {
                 params.center.y + SOURCE_SPHERE_RADIUS * angle.sin(),
             );
 
-            let candidate = ball_factory.create_with_species_and_velocity(
-                emit_pos,
-                params.ball_species,
-                velocity,
-            );
+            let candidate = ball_factory.create_spinning(emit_pos, params.ball_species, velocity);
             // Margin: the contact radius of the species emitted, not of the
             // species of new balls (the cursor's).
             let margin = self.species().species(params.ball_species).contact_radius();

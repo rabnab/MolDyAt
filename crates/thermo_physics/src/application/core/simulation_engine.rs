@@ -523,6 +523,9 @@ impl SimulationEngine {
         wall_py -= result.wall_force.y * dt;
 
         ball.accel = accel;
+        if ball.inertia > 0.0 {
+            ball.kick_rotation(result.torque, dt);
+        }
 
         if ball.verbose.console {
             log::debug!(
@@ -540,6 +543,9 @@ impl SimulationEngine {
         stats.px += momentum.x;
         stats.py += momentum.y;
         stats.kin += speed_sq * ball.mass * 0.5;
+        if ball.inertia > 0.0 {
+            stats.kin += ball.rotational_energy();
+        }
         stats.mass += ball.mass;
         stats.wall_px += wall_px;
         stats.wall_py += wall_py;

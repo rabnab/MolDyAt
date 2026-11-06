@@ -54,6 +54,9 @@ pub struct ForceResult {
     /// Potential energy of the ball in the soft walls (not double counted,
     /// unlike `potential_energy`). Zero with hard walls.
     pub wall_potential: f32,
+    /// Torque on the ball about its centre (#348); zero for the isotropic
+    /// pair laws and for species without orientation.
+    pub torque: f32,
 }
 
 /// Default Verlet skin as a share of the reference cutoff (see
@@ -380,6 +383,9 @@ impl BallPhysics {
     ) -> BounceInfo {
         let contact = self.wall_contact_distance(ball.species());
         let bounce_info = ball.execute_update_pos(dt, bound, contact, restitution);
+        if ball.inertia > 0.0 {
+            ball.advance_orientation(dt);
+        }
 
         if ball.verbose.console {
             log::debug!(
