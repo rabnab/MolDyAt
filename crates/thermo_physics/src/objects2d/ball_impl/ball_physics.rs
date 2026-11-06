@@ -374,9 +374,10 @@ impl BallPhysics {
     }
 
     /// Wall distance beyond which a ball of `species` feels no wall: the
-    /// soft wall cutoff, or the contact distance with hard walls. A ball
-    /// leaving a wall (`Ball2D::leaving_wall`) keeps its flag until it is
-    /// this far out, so the soft force does not switch on inside its core.
+    /// soft wall cutoff, or the contact distance with hard walls. A wall
+    /// that appears within this distance of a ball ramps in for it
+    /// (`Ball2D::wall_ramp`, #424); with hard walls the ball keeps passing
+    /// through until it is this far out.
     pub(crate) fn wall_release_distance(&self, species: SpeciesId) -> f32 {
         let contact = self.wall_contact_distance(species);
         self.soft_walls.as_ref().map_or(contact, |w| {
@@ -420,7 +421,10 @@ impl BallPhysics {
         self.edge_gap(this, other) < margin
     }
 
-    /// Update ball position using velocity-Verlet integration and handle wall bounces.
+    /// Update ball position using velocity-Verlet integration and handle
+    /// wall bounces: the position update with hard walls (legacy). Behind
+    /// soft walls the step drifts freely (`Ball2D::drift`) and only the
+    /// backstop runs (`wall_backstop`, #424).
     ///
     /// # Arguments
     /// * `ball` - Ball to update

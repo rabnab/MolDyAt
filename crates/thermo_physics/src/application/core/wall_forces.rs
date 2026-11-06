@@ -14,10 +14,11 @@
 //!   pieces overlap at its joints; the minimum of their distances is the
 //!   distance from the union, so the energy has no bump or well at a joint.
 //!   (The two ends of a gap in one chain count as one wall too.)
-//! - A ball flagged `leaving_wall` (a wall was drawn or closed on top of it)
-//!   feels no line wall until it is out of their reach, as it passes through
-//!   them in the contact pass: a force there would kick it out and add
-//!   energy.
+//! - A ball a wall was drawn or closed on top of feels the line walls
+//!   scaled by its `wall_ramp` (#424), which grows from 0 to 1 over
+//!   `WALL_RAMP_TIME`: the force pushes it out gently instead of kicking it
+//!   out of the wall's core. The ramp does work on the ball (the wall's
+//!   energy grows under it), as any wall moved onto a ball must.
 //!
 //! The obstacles are checked against their bounding boxes first, as in the
 //! contact sweep, so the potential is evaluated only for nearby balls.
@@ -72,8 +73,9 @@ pub(crate) fn soft_wall_force(
 ) -> WallForce {
     let species = ball.species();
     let centre = *ball.get_position();
-    // A ball leaving a wall feels no line wall (see the module doc).
-    let obstacles = if ball.leaving_wall { &[] } else { obstacles };
+    // A ball a wall appeared on feels the line walls ramped in (module doc).
+    let ramp = ball.wall_ramp;
+    let obstacles = if ramp > 0.0 { obstacles } else { &[] };
     let mut out = WallForce {
         force: Vec2D::zero(),
         counted: Vec2D::zero(),
@@ -87,7 +89,7 @@ pub(crate) fn soft_wall_force(
             walls.cutoff(species),
             &|z| walls.force_and_potential(species, z),
             bound,
-            obstacles,
+            (obstacles, ramp),
             &mut out,
         ),
         Some(sites) => {
@@ -100,7 +102,7 @@ pub(crate) fn soft_wall_force(
                     potential.cutoff(),
                     &|z| (potential.force(z), potential.potential(z)),
                     bound,
-                    obstacles,
+                    (obstacles, ramp),
                     &mut out,
                 );
             }
@@ -111,16 +113,21 @@ pub(crate) fn soft_wall_force(
 
 /// The wall force on a point at `pos` (`lever` from the ball's centre) with
 /// the wall law `law` (force, potential at wall distance `z`), cut off at
-/// `cutoff`, added to `out`.
+/// `cutoff`, added to `out`. The line walls (`obstacles`) act scaled by
+/// `ramp` (1 except while they ramp in for this ball).
 fn point_force(
     pos: Vec2D,
     lever: Vec2D,
     cutoff: f32,
     law: &impl Fn(f32) -> (f32, f32),
     bound: &Rect,
-    obstacles: &[Obstacle],
+    (obstacles, ramp): (&[Obstacle], f32),
     out: &mut WallForce,
 ) {
+    let line_law = |z: f32| {
+        let (force, potential) = law(z);
+        (ramp * force, ramp * potential)
+    };
     let (left, top) = bound.get_tl();
     let (right, bottom) = bound.get_br();
     let sides = [
@@ -150,13 +157,13 @@ fn point_force(
                 }
             }
             Some((_, z0, n0, counts)) => {
-                out.add(n0, law(z0), counts, lever);
+                out.add(n0, line_law(z0), counts, lever);
                 nearest = Some(candidate);
             }
             None => nearest = Some(candidate),
         }
     }
     if let Some((_, z, normal, counts)) = nearest {
-        out.add(normal, law(z), counts, lever);
+        out.add(normal, line_law(z), counts, lever);
     }
 }

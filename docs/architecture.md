@@ -106,10 +106,16 @@ headless runs; both step with the configured time step.
 1. **neighbours**: balls whose displacement since their last rebuild exceeds
    skin/3 rebuild their Verlet lists from the 3x3 surrounding cells.
 2. **positions**: velocity-Verlet position update (and `θ += ω dt + ½ α dt²`
-   for balls with an orientation, #348). Hard contacts with the
-   box walls and with line-segment walls are resolved along the wall normal
-   (`ball_impl::wall_contact`): at `σ_i / 2` with hard walls, at the
-   backstop (`0.3 σ_i`) behind soft walls.
+   for balls with an orientation, #348). With soft walls (the default)
+   the drift is free and the only hard mechanism is the backstop at
+   `0.3 σ` (`core::wall_backstop`, #424), a counted safety net: an atom is
+   reflected there at the exact contact time on its path (as the hard
+   contact below, also when its step went through a thin wall), a
+   molecule's site that moves into it gets a rigid-body impulse. With hard
+   walls (legacy saves), contacts with the box walls and
+   line-segment walls are resolved along the wall normal at `σ_i / 2`
+   (`ball_impl::wall_contact`, the line-wall sweep, a molecule's site
+   impulses).
 3. **forces**: pair forces from the SIMD kernel (`simd_forces`, `f32x4`),
    the site–site Lennard-Jones of pairs with a rigid molecule (#406,
    `ball_impl::molecule`, scalar, only while a molecule species is
@@ -122,11 +128,14 @@ headless runs; both step with the configured time step.
    it, and of each wall chain the nearest line wall only (nearest-feature
    rule, so a chain has no energy step at its joints; separate chains add
    up). Line walls are found by bounding-box
-   rejection against the step's obstacle list, as in the contact sweep.
+   rejection against the step's obstacle list. A ball a wall appeared on
+   feels the line walls scaled by its `wall_ramp`, which grows from 0 to 1
+   over `WALL_RAMP_TIME` (#424).
 4. **apply**: velocity update (and `ω += ½ (α_old + α_new) dt`, `α = torque / I`
    for balls with an orientation), kinetic (with `½ I ω²`), pair and wall
    potential energy, wall
-   momentum bookkeeping (contacts, and the soft wall forces times `dt`), the
+   momentum bookkeeping (the soft wall forces times `dt`, backstop
+   impulses, hard contacts), the growth of `wall_ramp`, with hard walls the
    overlap fallback for balls still inside a
    wall, and the Nosé–Hoover thermostats. The velocity update runs in
    parallel over fixed chunks of 1024 balls; each chunk sums its energies
@@ -134,7 +143,7 @@ headless runs; both step with the configured time step.
    order, so the sums are the same for every thread count. With gravity
    on, a last pass adds `m·g·h` to the potential energy (#334), and one
    pass per `[[fields]]` entry (#347) adds that field's energy, from the
-   positions after the overlap fallback, with `h` the height above the
+   final positions, with `h` the height above the
    bottom wall (so f32 keeps the other energies in worlds far from the
    origin) and balls with a NaN position left out. Gravity's acceleration
    and potential are defined once (`ball_core::gravity_acceleration` /

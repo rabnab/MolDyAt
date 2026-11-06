@@ -36,42 +36,60 @@ the two pieces on either side give up or take the length. It stays between
 those two pieces, so it never passes another valve or a gap; neither piece
 shrinks below `MIN_VALVE_PIECE_LENGTH` (1) and a resized valve keeps at least
 `MIN_VALVE_LENGTH` (1), or what they have if already shorter. Balls the moved
-pieces or closed valve now overlap are flagged for the overlap fallback, as
-after a wall drag.
+pieces or closed valve now reach get the wall ramped in, as after a wall
+drag (see below).
 
 Collision code does not know about chains or valve state. Once per step,
 `collect_solid_obstacles` flattens every piece and every closed valve into
 plain capsules; an open valve produces no obstacle.
 
-With soft walls (#280, the default), every capsule acts on nearby balls
-through the wall potential of their species in the distance `z` from its
-surface (negative inside it); of each chain only the nearest capsule acts, so
-the pieces and closed valves of a chain, which overlap at their joints, add no
-bump or well there, while separate chains add up (`core::wall_forces`). A ball
-a wall was drawn or closed on (`leaving_wall`) feels no line wall until it is
-past the wall cutoff. The wall force books wall momentum
-(`-F·dt`), except the ghost wall's. Thin walls and valves still need a hard
-contact: once a centre crosses the centre line the soft force flips. That
-backstop sits at `0.3 σ_i`, far up the wall potential; thermal balls never
-reach it (`SimStats::wall_contacts` counts its hits).
+With soft walls (#280, the default), walls act only through a force (#424):
+every capsule acts on nearby balls through the wall potential of their
+species in the distance `z` from its surface (negative inside it); of each
+chain only the nearest capsule acts, so the pieces and closed valves of a
+chain, which overlap at their joints, add no bump or well there, while
+separate chains add up (`core::wall_forces`). The wall force books wall
+momentum (`-F·dt`), except the ghost wall's.
 
-A ball touches a wall when its centre is its wall contact distance from the
-surface (`BallPhysics::wall_contact_distance`, from the `WallLaw`: the
-backstop behind soft walls, `σ_i / 2` of its species with hard walls).
-Contacts are then resolved in two places:
+A wall drawn, dragged, thickened or closed on top of a ball (within reach of
+its force, `BallPhysics::wall_release_distance`) is ramped in for that ball:
+its `wall_ramp` is set to 0 and grows to 1 over `WALL_RAMP_TIME` (1 time
+unit), and the ball feels the line walls scaled by it. The growing force
+pushes it out gently instead of kicking it out of the wall's core. This is
+work done on the ball (the wall moved onto it), so the total energy rises a
+little; other balls feel the new wall at full strength at once, so it does
+not leak.
+
+Thin walls and valves still need a hard limit: a soft wall has a finite
+barrier, and once a centre crosses a thin wall's centre line the force
+flips. The backstop (`core::wall_backstop`) sits at `0.3 σ`, far up the
+wall potential. An atom is reflected there at the exact contact time on its
+path (`ball_impl::wall_contact`, the line-wall sweep below), which also
+catches a step that went through a thin wall; a molecule's site that moves
+into it gets a rigid-body impulse at the site, and one whose step crossed a
+line wall's centre line is first mirrored back to the side it came from.
+It is a safety net, not physics: thermal balls never reach it, and every
+hit is counted (`SafetyNets::backstop_hits`, `SimStats::wall_contacts`). A
+ball whose line walls are still ramping in meets only the box.
+
+With hard walls (legacy, saves from before #280), a ball touches a wall when
+its centre is `σ_i / 2` from the surface (`BallPhysics::wall_contact_distance`,
+from the `WallLaw`). Contacts are then resolved in two places:
 
 - **Position update.** `SimulationWorld::sweep_wall_contact` finds the
   contact time on the ball's path and reflects it along the surface normal
   (`ball_impl::wall_contact`), exactly for constant acceleration, including
   several bounces or resting within one step. The box walls use the same
-  routine. The velocity update applies the returned contacts and books the
-  momentum change as wall momentum, which feeds the pressure readout.
-- **Overlap fallback.** A ball that starts a step inside a wall (for example
-  after a wall was drawn on top of it) is pushed out and reflected if it moves
-  toward the wall. `SimStats::wall_overlap_corrections` counts these cases.
+  routine; molecules get a rigid-body impulse at the end site. The velocity
+  update applies the returned contacts and books the momentum change as wall
+  momentum, which feeds the pressure readout.
+- **Overlap fallback.** A ball that starts a step inside a wall is pushed out
+  and reflected if it moves toward the wall.
+  `SimStats::wall_overlap_corrections` counts these cases. A ball a wall was
+  drawn on passes through it instead, until it touches no wall.
 
-While the user draws or drags a wall, a `GhostWall` collides like a real wall
-but its contacts do not count toward wall momentum.
+While the user draws or drags a wall, a `GhostWall` acts like a real wall
+but its force and contacts do not count toward wall momentum.
 
 ### Thermostats
 

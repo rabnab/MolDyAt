@@ -118,14 +118,18 @@ impl SimulationWorld {
         }
     }
 
-    /// Mark every ball overlapping `obstacle` as `leaving_wall`: it was
-    /// there before the wall was, so it gets out on its own path instead of
-    /// being moved (which would add energy or land it on another ball).
+    /// Restart the line walls' ramp (`Ball2D::wall_ramp`) of every ball
+    /// within reach of `obstacle` (#424): it was there before the wall was.
+    /// Behind soft walls that is every ball the wall's force reaches, which
+    /// then ramps in and pushes it out gently instead of kicking it; with
+    /// hard walls (legacy) every ball the wall overlaps, which then leaves
+    /// on its own path instead of being moved (which would add energy or
+    /// land it on another ball).
     fn flag_balls_overlapping(&mut self, obstacle: &Obstacle) {
         for ball in &mut self.balls {
-            let contact = self.physics.wall_contact_distance(ball.species());
-            if obstacle.overlaps(ball.get_position(), contact) {
-                ball.leaving_wall = true;
+            let reach = self.physics.wall_release_distance(ball.species());
+            if obstacle.overlaps(ball.get_position(), reach) {
+                ball.wall_ramp = 0.0;
             }
         }
     }

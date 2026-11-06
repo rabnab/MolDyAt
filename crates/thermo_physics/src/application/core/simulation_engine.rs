@@ -4,6 +4,7 @@
 
 use super::line_segments::Obstacle;
 use super::step_scratch::{NeighbourStats, RebuildScratch, UpdateScratch};
+use super::wall_backstop::soft_position_update;
 use super::wall_forces::soft_wall_force;
 use super::{RuntimeOptions, SimulationWorld, StatsAccumulator, StepConfig};
 use crate::application::phase_timings::{Phase, PhaseClock};
@@ -23,6 +24,7 @@ use crate::objects2d::ball_impl::molecule::SiteTable;
 use crate::objects2d::ball_impl::simd_forces::{KernelPoint, force_simd};
 use crate::objects2d::ball_impl::verlet::Verlet;
 use crate::objects2d::ball_impl::wall_contact::normal_velocity_after_contact;
+use crate::objects2d::ball_impl::wall_law::WALL_RAMP_TIME;
 use crate::objects2d::ball_impl::water::{MbWater, arms};
 use crate::objects2d::{Rect, Vec2D};
 use rayon::prelude::*;
@@ -161,7 +163,7 @@ impl SimulationEngine {
                 let contacts = scratch
                     .bounce_infos
                     .iter()
-                    .map(|b| b.iter().count() as u64 + u64::from(b.box_impulse))
+                    .map(BounceInfo::contact_count)
                     .sum::<u64>();
                 world.sim.wall_contacts += contacts;
                 // Safety nets of this step (#422); braking and capped pairs
@@ -187,9 +189,15 @@ impl SimulationEngine {
                 // The previous step's results become the next step's buffer.
                 std::mem::swap(&mut world.cached_force_results, &mut scratch.force_results);
 
+                // The overlap fallback belongs to the hard walls (legacy);
+                // behind soft walls the backstop has already run.
                 let corrections_before = world.sim.wall_overlap_corrections;
-                let (seg_px, seg_py) = world
-                    .resolve_wall_overlaps_with(&scratch.obstacles, &mut scratch.overlap_passes);
+                let (seg_px, seg_py) = if world.physics.walls().soft {
+                    (0.0, 0.0)
+                } else {
+                    world
+                        .resolve_wall_overlaps_with(&scratch.obstacles, &mut scratch.overlap_passes)
+                };
                 nets.overlap_corrections = world.sim.wall_overlap_corrections - corrections_before;
                 nets.braked = stats_accumulator.braked;
                 nets.capped_pairs = stats_accumulator.capped_pairs / 2;
@@ -409,6 +417,29 @@ impl SimulationEngine {
         let restitution = world.wall_restitution_fault();
         let physics = &world.physics;
         let obstacles = &scratch.obstacles;
+        // Soft walls (#424): the walls act through their force; the position
+        // update is the drift plus the backstop, a counted safety net.
+        if let Some(walls) = physics.soft_walls() {
+            let walls_of_step = (bound_rect, obstacles.as_slice());
+            world
+                .balls
+                .par_iter_mut()
+                .map(|ball| {
+                    let mut checks = 0;
+                    let info = soft_position_update(
+                        walls,
+                        ball,
+                        walls_of_step,
+                        dt,
+                        restitution,
+                        &mut checks,
+                    );
+                    (info, checks)
+                })
+                .unzip_into_vecs(&mut scratch.bounce_infos, &mut scratch.sweep_checks);
+            return scratch.sweep_checks.iter().sum();
+        }
+        // Hard walls (legacy): contacts resolved in the position update.
         world
             .balls
             .par_iter_mut()
@@ -571,6 +602,7 @@ impl SimulationEngine {
             restitution,
             dt,
             speed_limit,
+            wall_ramp_step,
         } = *params;
 
         let mut wall_px = 0.0;
@@ -600,7 +632,8 @@ impl SimulationEngine {
             }
         }
         ball.v = v_new;
-        // Site impulses of a molecule on the box walls (#408).
+        // Impulses of the position update: the backstop behind soft walls
+        // (#424), a molecule's site impulses on hard box walls (#408).
         wall_px += bounce_info.wall_momentum.x;
         wall_py += bounce_info.wall_momentum.y;
 
@@ -612,6 +645,10 @@ impl SimulationEngine {
         ball.accel = accel;
         if ball.inertia > 0.0 {
             ball.kick_rotation(result.torque, dt);
+        }
+        // Line walls that appeared on the ball ramp in (#424).
+        if ball.wall_ramp < 1.0 && wall_ramp_step > 0.0 {
+            ball.wall_ramp = (ball.wall_ramp + wall_ramp_step).min(1.0);
         }
 
         if ball.verbose.console {
@@ -702,6 +739,11 @@ impl SimulationEngine {
             speed_limit: world
                 .speed_limit_override
                 .unwrap_or_else(|| Self::default_speed_limit(bound_rect, world.speed_limit_factor)),
+            wall_ramp_step: if world.physics.walls().soft {
+                dt / WALL_RAMP_TIME
+            } else {
+                0.0
+            },
         };
 
         world
@@ -758,6 +800,9 @@ struct ApplyParams<'a> {
     restitution: f32,
     dt: f32,
     speed_limit: f32,
+    /// How much `Ball2D::wall_ramp` grows per step: `dt / WALL_RAMP_TIME`
+    /// with soft walls, 0 with hard walls (the overlap pass resets it).
+    wall_ramp_step: f32,
 }
 
 /// Stats of one chunk of the apply pass, summed in ball order, in f64

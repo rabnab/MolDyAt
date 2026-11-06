@@ -465,7 +465,7 @@ model = "soft"                # "soft" (default) or "hard"; saves from before v4
 sigma = 0.0                   # 0..8, wall sigma_w: sigma_iw = (sigma_i + sigma_w) / 2
 epsilon = 1.0                 # 0.1..10, wall epsilon_w: epsilon_iw = sqrt(epsilon_i * epsilon_w)
 attractive = false            # false: cut at the minimum (WCA, repulsive); true: LJ well up to the cutoff
-backstop = 0.3                # 0.05..0.5, hard contact behind a soft wall at backstop * sigma_i
+backstop = 0.3                # 0.05..0.5, safety net behind a soft wall at backstop * sigma_i
 ## Optional, one block per species: replaces its mixed sigma_iw and/or epsilon_iw.
 ## Not for molecule species, whose sites meet the walls with the mixed laws.
 # [[walls.override]]

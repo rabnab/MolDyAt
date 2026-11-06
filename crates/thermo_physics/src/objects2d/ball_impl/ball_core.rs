@@ -28,7 +28,8 @@ const TAIL_RESOLUTION_DELTA_SQ: f32 = 1. * 1.; // minimum squared distance to ad
 /// so contacts in the same step must have orthogonal normals: a box corner
 /// gives one `box_x` and one `box_y` contact, and a line wall is only swept
 /// in a step without a box contact (`line_wall` is `None` whenever a box
-/// field is set).
+/// field is set). Contacts come only from the hard walls (legacy); behind
+/// soft walls the backstop (`wall_backstop`, #424) applies impulses instead.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct BounceInfo {
     /// Contact with the left or right box wall.
@@ -37,12 +38,13 @@ pub(crate) struct BounceInfo {
     pub box_y: Option<WallContact>,
     /// Contact with a line-segment wall (see `SimulationWorld::sweep_wall_contact`).
     pub line_wall: Option<WallContact>,
-    /// Momentum the box walls took from a molecule's site impulses this step
-    /// (#408, [`Ball2D::execute_update_pos_molecule`]); zero for atoms.
+    /// Momentum the walls took from impulses applied in the position update:
+    /// a molecule's site impulses on the hard box walls (#408,
+    /// [`Ball2D::execute_update_pos_molecule`]) or the soft walls' backstop.
     pub wall_momentum: Vec2D,
-    /// Whether a molecule's site got a box-wall impulse this step (#408):
-    /// counts as a box contact, so the line walls are not swept.
-    pub box_impulse: bool,
+    /// Impulses applied in the position update (see `wall_momentum`). With
+    /// hard walls they are box contacts, so the line walls are not swept.
+    pub impulses: u32,
 }
 
 impl Default for BounceInfo {
@@ -52,15 +54,20 @@ impl Default for BounceInfo {
             box_y: None,
             line_wall: None,
             wall_momentum: Vec2D::zero(),
-            box_impulse: false,
+            impulses: 0,
         }
     }
 }
 
 impl BounceInfo {
-    /// Whether the ball touched a box wall this step.
+    /// Whether the ball touched a box wall this step (hard walls).
     pub(crate) fn touched_box(&self) -> bool {
-        self.box_x.is_some() || self.box_y.is_some() || self.box_impulse
+        self.box_x.is_some() || self.box_y.is_some() || self.impulses > 0
+    }
+
+    /// Wall contacts and impulses of this step.
+    pub(crate) fn contact_count(&self) -> u64 {
+        self.iter().count() as u64 + u64::from(self.impulses)
     }
 
     pub(crate) fn iter(&self) -> impl Iterator<Item = &WallContact> {
@@ -103,10 +110,14 @@ pub struct Ball2D {
     /// Four flags, checked in every pass, so they stay hot.
     pub verbose: VerboseInfo,
     pub braking: bool,
-    /// A wall appeared or changed on top of this ball (a valve closed, a wall
-    /// was drawn, moved or thickened over it). Until it no longer touches any
-    /// wall, it passes through the walls it overlaps instead of being pushed.
-    pub leaving_wall: bool,
+    /// How strongly the line walls act on this ball, in `[0, 1]` (#424). A
+    /// wall that appears or changes on top of it (a valve closes, a wall is
+    /// drawn, moved or thickened over it) sets it to 0. With soft walls it
+    /// then ramps back to 1 over `WALL_RAMP_TIME`, so the line walls' force
+    /// pushes the ball out gently instead of kicking it; with hard walls
+    /// (legacy) the ball passes through the walls it overlaps until it
+    /// touches none, and is then set back to 1.
+    pub wall_ramp: f32,
     pub(crate) cold: Box<BallCold>,
 }
 
@@ -189,7 +200,7 @@ impl Ball2D {
             pre_update_pos: pos,
             accel: Vec2D::zero(),
             last_update_hood_pos: pos,
-            leaving_wall: false,
+            wall_ramp: 1.0,
             cold: Box::default(),
         }
     }
@@ -345,6 +356,36 @@ impl Ball2D {
         self.pre_update_pos = self.pos;
     }
 
+    /// Whether a wall appeared on this ball and its line walls have not
+    /// fully come back (see [`Self::wall_ramp`]): with hard walls (legacy),
+    /// it passes through them.
+    pub(crate) fn is_leaving_wall(&self) -> bool {
+        self.wall_ramp < 1.0
+    }
+
+    /// Free velocity-Verlet drift of the position and, for a species with
+    /// orientation, the angle: the position update behind soft walls (#424),
+    /// which act through forces. The same arithmetic as the free path of
+    /// [`Self::resolve_box_axis`] (#213: f32 displacement added to the f64
+    /// position).
+    pub(crate) fn drift(&mut self, dt: f32) {
+        let displacement = |v: f32, a: f32| f64::from(v * dt + 0.5 * a * dt * dt);
+        let [x, y] = self.exact;
+        self.set_exact_position([
+            x + displacement(self.v.x, self.accel.x),
+            y + displacement(self.v.y, self.accel.y),
+        ]);
+        if self.inertia > 0.0 {
+            self.advance_orientation(dt);
+        }
+    }
+
+    /// Move the ball by `delta`, added to its f64 position.
+    pub(crate) fn shift(&mut self, delta: Vec2D) {
+        let [x, y] = self.exact;
+        self.set_exact_position([x + f64::from(delta.x), y + f64::from(delta.y)]);
+    }
+
     /// Resolve one box axis: the ball's centre must stay in `[min, max]`.
     /// Returns the new coordinate and the contact, if the ball reached a wall.
     fn resolve_box_axis(
@@ -432,24 +473,24 @@ impl Ball2D {
             box_y: y_contact.map(|c| contact(Vec2D::new(0.0, 1.0), c)),
             line_wall: None,
             wall_momentum: Vec2D::zero(),
-            box_impulse: false,
+            impulses: 0,
         }
     }
 
-    /// Position update of a rigid linear molecule (#408): the centre and the
+    /// Position update of a rigid linear molecule with hard walls (#408,
+    /// legacy since #424): the centre and the
     /// orientation drift freely, then each box wall is checked against the
     /// end site nearest to it. An end site closer to a wall than `site` (its
     /// contact distance) that moves into it gets the rigid-body impulse at
-    /// that site, `J = -(1 + e)·u / (1/m + (r×n)²/I)` with `u` the site's
-    /// normal velocity and `r` its lever: it reflects the site and turns the
-    /// molecule, and with `e = 1` keeps the kinetic energy (translation plus
-    /// rotation). The centre is then moved out along the normal by `(1 + e)`
+    /// that site ([`Self::wall_impulse`]): it reflects the site and turns the
+    /// molecule. The centre is then moved out along the normal by `(1 + e)`
     /// times the overlap, mirroring the overshoot of a free bounce. A site
     /// that rotated into a wall is stopped the same way, so
     /// hard walls hold molecules lying along them as well as end-on ones.
     /// The impulse acts at the end of the drift, not at the contact time, so
     /// its energy error is first order in dt (unlike the exact parabola of
-    /// the atoms' contact); soft walls keep molecules off it.
+    /// the atoms' contact). Behind soft walls the backstop uses the same
+    /// impulse, per site, as a safety net.
     /// The velocity update adds its kick on top; the walls' share of the
     /// momentum is returned in [`BounceInfo::wall_momentum`].
     pub(crate) fn execute_update_pos_molecule(
@@ -477,7 +518,7 @@ impl Ball2D {
         let (sin, cos) = self.theta.sin_cos();
         let axis = Vec2D::new(cos, sin);
         let mut wall_momentum = Vec2D::zero();
-        let mut box_impulse = false;
+        let mut impulses = 0;
         // (inward normal, coordinate index, wall coordinate): the centre's
         // distance from the wall is `normal · (centre − wall)` along the index.
         let sides = [
@@ -498,16 +539,9 @@ impl Ball2D {
             if overlap <= 0.0 {
                 continue;
             }
-            let site_velocity = self.v + Vec2D::new(-self.omega * lever.y, self.omega * lever.x);
-            let approach = site_velocity.dot(&normal);
-            if approach < 0.0 {
-                let arm = lever.x * normal.y - lever.y * normal.x;
-                let inverse_mass = 1.0 / self.mass + arm * arm / self.inertia;
-                let impulse = -(1.0 + restitution) * approach / inverse_mass;
-                self.v = self.v.add_scaled(&normal, impulse / self.mass);
-                self.omega += arm * impulse / self.inertia;
+            if let Some(impulse) = self.wall_impulse(normal, lever, restitution) {
                 wall_momentum = wall_momentum.add_scaled(&normal, -impulse);
-                box_impulse = true;
+                impulses += 1;
                 // Mirror the overshoot, as a free bounce would have: the site
                 // ends `e·overlap` outside the contact distance.
                 let push = (1.0 + restitution) * overlap;
@@ -520,9 +554,40 @@ impl Ball2D {
         self.set_exact_position(centre);
         BounceInfo {
             wall_momentum,
-            box_impulse,
+            impulses,
             ..BounceInfo::default()
         }
+    }
+
+    /// The rigid-body impulse of a wall with surface normal `normal` on the
+    /// point at `lever` from the centre (a site of a molecule, or the centre
+    /// itself), if that point moves into the wall: `J = -(1 + e)·u / (1/m +
+    /// (r×n)²/I)` with `u` its normal velocity. Applied to `v` and `ω`; with
+    /// `e = 1` it keeps the kinetic energy (translation plus rotation).
+    /// Returns `J`, or `None` for a point already moving out.
+    pub(crate) fn wall_impulse(
+        &mut self,
+        normal: Vec2D,
+        lever: Vec2D,
+        restitution: f32,
+    ) -> Option<f32> {
+        let point_velocity = self.v + Vec2D::new(-self.omega * lever.y, self.omega * lever.x);
+        let approach = point_velocity.dot(&normal);
+        if approach >= 0.0 {
+            return None;
+        }
+        let arm = lever.x * normal.y - lever.y * normal.x;
+        let inverse_mass = if self.inertia > 0.0 {
+            1.0 / self.mass + arm * arm / self.inertia
+        } else {
+            1.0 / self.mass
+        };
+        let impulse = -(1.0 + restitution) * approach / inverse_mass;
+        self.v = self.v.add_scaled(&normal, impulse / self.mass);
+        if self.inertia > 0.0 {
+            self.omega += arm * impulse / self.inertia;
+        }
+        Some(impulse)
     }
 
     /// Set ball position and, for verbose balls only, add to the tail trail

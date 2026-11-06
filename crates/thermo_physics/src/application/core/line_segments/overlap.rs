@@ -40,6 +40,9 @@ impl SimulationWorld {
     /// `collect_solid_obstacles`; the simulation step shares one list with
     /// `sweep_wall_contact`).
     ///
+    /// Hard walls (legacy) only: behind soft walls, the backstop
+    /// (`wall_backstop`, #424) is the only hard mechanism.
+    ///
     /// Contacts during a step are resolved by `sweep_wall_contact`; this pass
     /// only catches what that cannot: balls that started a step inside a wall
     /// (a wall moved onto them, or a second wall at a joint or box corner).
@@ -52,9 +55,10 @@ impl SimulationWorld {
     /// 1. Position-corrected so it no longer overlaps.
     /// 2. Velocity-reflected: `v' = v − 2(v · n̂) n̂` (elastic, |v| preserved).
     ///
-    /// A ball flagged `leaving_wall` (a wall appeared or changed on top of
-    /// it) passes through the walls it overlaps, keeping its path and speed,
-    /// and the flag is cleared once it touches no wall at all. With gravity,
+    /// A ball leaving a wall (`Ball2D::is_leaving_wall`: a wall appeared or
+    /// changed on top of it) passes through the walls it overlaps, keeping
+    /// its path and speed, and the flag is cleared once it touches no wall
+    /// at all. With gravity,
     /// a ball caught in a horizontal valve as it closes therefore falls
     /// through it. Every other ball collides as usual, including one whose
     /// centre got inside a wall in a single step: it is pushed back out.
@@ -83,7 +87,7 @@ impl SimulationWorld {
     ) -> (f32, f32) {
         if obstacles.is_empty() {
             for ball in &mut self.balls {
-                ball.leaving_wall = false;
+                ball.wall_ramp = 1.0;
             }
             return (0.0, 0.0);
         }
@@ -119,12 +123,12 @@ impl SimulationWorld {
         let mut corrections = 0;
         let mut checks = 0;
 
-        if ball.leaving_wall
+        if ball.is_leaving_wall()
             && !obstacles
                 .iter()
                 .any(|o| o.within_counted(ball.get_position(), o.reach(release), &mut checks))
         {
-            ball.leaving_wall = false;
+            ball.wall_ramp = 1.0;
         }
 
         for obstacle in obstacles {
@@ -141,7 +145,7 @@ impl SimulationWorld {
             if !obstacle.within_counted(ball.get_position(), reach, &mut checks) {
                 continue; // no collision (cheap reject, no square root)
             }
-            if ball.leaving_wall {
+            if ball.is_leaving_wall() {
                 continue; // was here before this wall: let it leave
             }
             let closest = obstacle.closest_point(ball.get_position());

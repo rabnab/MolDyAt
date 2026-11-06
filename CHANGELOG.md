@@ -5,6 +5,8 @@ User-visible changes to MolDyAt, newest first. Binaries and full release notes a
 
 ## Unreleased
 
+- Fast balls no longer pass through a thin wall in a single step, and molecules meet line walls
+  with their sites instead of as a disk. (#424)
 - Count the safety nets that bend the physics (speed-limit braking, force cap, wall backstop,
   overlap fix) in the status lines (`B`), headless frames and metrics. (#422)
 - Keep the simulation time, energy totals, wall momentum and thermostats in f64, so long runs keep
@@ -23,7 +25,7 @@ User-visible changes to MolDyAt, newest first. Binaries and full release notes a
   configs are converted on load, and a new world is about 8 % smaller physically. (#405)
 - Add external fields to the config (`[[fields]]`, e.g. a harmonic trap); gravity is one of them. (#347)
 - Walls are a soft repulsive potential with a hard backstop by default (`[walls]` in the config);
-  saves from before keep hard walls. A wall drawn over balls lets them leave without a kick. (#280)
+  saves from before keep hard walls. A wall drawn over balls pushes them out gently. (#280, #424)
 
 ## v0.3.0 - 2026-11-02
 

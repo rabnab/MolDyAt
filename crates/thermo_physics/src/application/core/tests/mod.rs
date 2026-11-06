@@ -18,6 +18,7 @@ mod rotation;
 mod simulation;
 mod simulation_engine;
 mod soft_walls;
+mod wall_backstop;
 mod wall_handover;
 mod wall_momentum;
 
