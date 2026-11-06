@@ -134,7 +134,7 @@ guardrails. Water (I9–I10) follows. See §5 for the model choice behind it.
 | I8b | `ExternalField` abstraction | Gravity becomes `UniformField`; enables traps or other fields; applied in the kick with the potential-energy accounting from I8a. Done (#347): `ExternalField` (`acceleration`, `potential`) in `ball_impl/external_field.rs`; gravity is a `UniformField` (strength still the run-time `PhysicsConstants::gravity` and the save's top-level `gravity`, bit-identical); `HarmonicTrap` from `[[fields]]` in the config (save format v5), added in the kick and to the potential energy. | M | I1, I8a |
 | I9 | Orientational degrees of freedom | Optional per-species orientation θ, angular velocity ω, moment of inertia; rotational velocity-Verlet step; rotational kinetic energy in stats, temperature and the Nosé–Hoover thermostat. Prerequisite for water. Deterministic (no new reductions). One track with I10: start only once the water model is decided (§7). Done (#348): `Species::inertia` (`[[species]] moment_of_inertia_u_angstrom2`), `Ball2D` `inertia`, `theta`, `omega`, `alpha` kept hot (owner decision; the hot ball grew to ≤ 112 bytes), `ForceResult::torque`, equipartition temperature (`LocalKineticStats::thermal_dof`), thermostats scale ω, saves store θ/ω/α (format v8). Equipartition by collisions needs torques: tested with I10 and #406. | L | I3 |
 | I10 | 2D water: Mercedes-Benz model | LJ core + three hydrogen-bond arms (Gaussian in distance and arm alignment), parameters from Silverstein, Haymet & Dill (1998). Torques from the same potential. Tests: energy conservation, force/torque vs finite differences, smoke test for the density maximum. Water–N₂ via the LJ part only (mixing rules). Done (#349): built-in `H2O` (`r_HB` 2.8 Å, `ε_HB/k_B` 1385 K so the density maximum is near 277 K, H₂O mass and inertia; owner decisions), `ball_impl::water`, hydrogen bonds in the force pass, `dt ≤ 0.001`, applied automatically while water is present (`MainContent::active_time_step`); tests: finite differences, energy, equipartition by collisions (slow), negative thermal pressure coefficient at ρ = 0.82 (opt-in, `MOLDYAT_SLOW_WATER=1`). | L | I9, I4 |
-| I11 | Multi-site molecules (only if needed later) | Rigid two-site N₂ or atomistic water (SPC/E, TIP4P) need molecules, constraints (SHAKE/RATTLE) and electrostatics (damped shifted force). Not needed for mixed species or MB water. | L | I9 |
+| I11 | Multi-site molecules (only if needed later) | Rigid two-site N₂ or atomistic water (SPC/E, TIP4P) need molecules, constraints (SHAKE/RATTLE) and electrostatics (damped shifted force). Not needed for mixed species or MB water. Not planned (#350 closed): the rigid linear molecules (#406–#408) are rigid bodies with one angle, so they need no constraints; MB water (I10) replaces atomistic water. Partial charges (the N₂/CO₂ quadrupole) would be a new issue after #425 (one interaction model). | L | I9 |
 | I12 | Soft wall potential with hard-contact backstop | `WallLaw` gets a soft variant `U_w(z)` (z = distance from the wall): WCA-type by default, optional attraction `ε_w` (adsorption, wetting). The wall is a pseudo-species in the I4 table (`σ_iw`, `ε_iw` by mixing or override). Signed distance for box walls and closed chains, so the force points inward after an overshoot. The existing hard contact (`wall_contact`) stays as a **backstop** at a deeper distance (e.g. `z ≈ 0.3·σ_i`, where `U_w ≫ k_B T`): a soft wall alone does not stop crossing (finite barrier with the force cap, discrete steps, two-sided segments flip the force), so thin segments and valves rely on it. Backstop hits are counted like cap hits; the drift suite expects none in normal scenarios. Wall pressure from the force sum; no energy bumps at chain joints; walls in the cell grid. Restitution < 1 stays hard-wall only or gets a documented damping term. Tests: energy conservation (new drift scenario), no ball behind a wall in a hot-gas scenario or with injected fast balls, continuity across joints, thread-count reproducibility. Done (#280, soft walls are the default by owner decision; saves before format v4 migrate to `[walls] model = "hard"`): `SoftWalls` in `wall_law.rs` (`σ_w = 0`, `ε_w = 1`, WCA unless `attractive`, `[[walls.override]]`), `core::wall_forces` (box sides by signed distance, nearest line wall only), backstop at `0.3 σ_i`, wall momentum from `-F·dt`, drift scenario soft_walled_gas. Walls are found by bounding-box rejection, not through the cell grid (owner decision); damping (restitution < 1) stays with the hard contact. | L | I3, I4 |
 
 ### Epic C – Input commands
@@ -190,7 +190,7 @@ Phase 4 (finish the split):         M9, I8a, #327, C3
 Phase 5 (metrics + plots):          V3, V7, V4a, V4b, C5
 Phase 6 (visuals + tools):          #363, V2, #290, V5, V6, #303, #203, #398, #400, #402, #384
 Phase 7 (performance):              P8a, #386, P4, #250, P6, P8b, #392 (16-byte kernel record only)
-Phase 8 (walls + molecules):        I12, I8b, #405, #409, I9, I10, #406, #407, #408 (I11 #350 not planned)
+Phase 8 (walls + molecules):        I12, I8b, #405, #409, I9, I10, #406, #407, #408, #421, #422
 Phase 9 (GPU compute):              #358, #359, #360, #361
 ```
 
@@ -203,6 +203,7 @@ Every ID of §3 is in this order, except these, which need no work of their own:
 | P7 | Folded into V2 (Phase 6). |
 | P9 | Dropped (reproducibility, decision 4). |
 | P10 | Done. |
+| I11 | Not planned (#350 closed, see §3). |
 | M10 | Part of every PR (see §3). |
 
 GitHub issues (every open issue is in a phase, as of 2026-11-02):
@@ -216,7 +217,7 @@ GitHub issues (every open issue is in a phase, as of 2026-11-02):
 | 5 | #330 | V3 #336, V7 #337, V4a #338, #367, #366, V4b #339, #371, #372, C5 #340                                              | M10 |
 | 6 | #331 | #363, V2 #341, #290, V5 #342, V6 #343, #303, #203, #398, #400, #402                                                | #384, M10 |
 | 7 | #332 | P8a #344, #386, P4 #345, #250, P6 #346 (hot/cold part), P8b #213, #392 (16-byte kernel record; SoA arrays dropped) | M10 |
-| 8 | #333 | I12 #280, I8b #347, #405, #409, I9 #348, I10 #349, #406, #407, #408                                                | I11 #350, M10 |
+| 8 | #333 | I12 #280, I8b #347, #405, #409, I9 #348, I10 #349, #406, #407, #408, #421, #422                                    | M10 |
 | 9 | #357 | –                                                                                                                  | #358, #359, #360, #361, M10 |
 
 "Landed" is taken from the commits on `master` (as of 2026-11-02), not from
@@ -247,8 +248,10 @@ crate work, graphs, visuals, performance and water in two long lists:
   fields first, then Ar as the unit species (#405) and the spherical
   species CH₄/NH₃ (#409), then rotation (I9) for Mercedes-Benz water (I10)
   and the rigid linear molecules N₂ (#406), H₂ (#407) and CO₂ (#408),
-  which use the same rigid-body machinery. Their rigid bodies cover what
-  I11 (#350) would have done for N₂; I11 stays open for atomistic water.
+  which use the same rigid-body machinery, then f64 accumulators (#421)
+  and counters for the non-conserving safety nets (#422). The rigid bodies
+  cover what I11 (#350) would have done for N₂ and MB water replaces
+  atomistic water, so I11 was closed as not planned.
 - **Phase 9** ports the Lennard-Jones force pass to wgpu compute shaders
   (#357): buffers and WGSL setup, the all-pairs kernel, zero-copy
   rendering, then validation of energy conservation.
@@ -270,10 +273,10 @@ give qualitatively right, not quantitatively exact, behaviour.
 | Substance | Recommended model | Why | Needs |
 |---|---|---|---|
 | N₂ | Single-site LJ, σ ≈ 3.7 Å, ε/k_B ≈ 95 K (published fits range ≈ 70–100 K depending on the fitted property) | Small, nearly spherical, weak quadrupole; single-site LJ reproduces gas behaviour well. Same machinery as the current balls. | I3–I6 |
-| N₂ (detailed) | Two-site LJ + quadrupole partial charges (e.g. TraPPE) | Only for liquid-structure or orientation effects. | I11 |
+| N₂ (detailed) | Two-site LJ + quadrupole partial charges (e.g. TraPPE) | Only for liquid-structure or orientation effects. | Two sites: #406 (`N2_2S`); the charges: a new issue after #425 |
 | Water (2D) | **Mercedes-Benz (MB) model**: LJ disk + three H-bond arms | Designed for 2D; reproduces density anomaly, H-bond network and hydrophobic effect. Single particle, short-range, no charges, cutoff-friendly → fits cell grid, Verlet lists and SIMD design. | I9, I10 |
 | Water (alternative) | mW (Stillinger–Weber three-body) | Single-site, no orientation, but its 109.47° angle term is tuned for 3D tetrahedra; would need re-tuning in 2D. | three-body kernel |
-| Water (atomistic) | SPC/E, TIP4P/2005 | Charges, rigid geometry and long-range electrostatics; expensive and mostly 3D-specific. | I11 |
+| Water (atomistic) | SPC/E, TIP4P/2005 | Charges, rigid geometry and long-range electrostatics; expensive and mostly 3D-specific. | Not planned (I11, #350 closed) |
 | Water–N₂ | LJ part via Lorentz–Berthelot; H-bond arms act only water–water | N₂ is a hydrophobic solute — the classic MB-model use case. | I4, I10 |
 
 Pure LJ for water is **not** recommended: it gives a simple liquid without
