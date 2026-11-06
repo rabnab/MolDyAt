@@ -408,3 +408,49 @@ fn box_walls_reflect_at_half_sigma() {
         );
     }
 }
+
+/// CH₄ and Ar (#409) mix by Lorentz–Berthelot and conserve energy in a
+/// gas of both.
+#[test]
+fn methane_argon_mixture_conserves_energy() {
+    let (ch4, ar) = (species("CH4"), species("Ar"));
+    let table = SpeciesTable::builtin();
+    let physics = BallPhysics::default();
+    let sigma = 0.5 * (table.species(ch4).sigma + table.species(ar).sigma);
+    approx_eq(
+        physics.equilibrium_distance(ch4, ar),
+        2f32.powf(1.0 / 6.0) * sigma,
+    );
+    // The default dt (0.005): CH₄ is light (m* = 0.40), its timescale is
+    // 0.65 of Ar's.
+    let mut mc = MainContent::with_config(
+        Rect::new(-30.0, 30.0, 60.0, -60.0),
+        &SimConfig::default(),
+        Some(11),
+    )
+    .unwrap();
+    mc.world_mut().speed_limit_override = Some(f32::INFINITY);
+    for i in 0..10 {
+        for j in 0..10 {
+            let pos = Vec2D::new(-13.5 + 3.0 * i as f32, -13.5 + 3.0 * j as f32);
+            let mut ball = Ball2D::new(i * 10 + j, pos, if (i + j) % 2 == 0 { ch4 } else { ar });
+            ball.mass = table.species(ball.species()).mass;
+            ball.v = Vec2D::new(((i * 7 + j) as f32).sin(), ((i + 3 * j) as f32).cos());
+            mc.world_mut().balls.push(ball);
+        }
+    }
+    mc.world_mut().rebuild_cell_grid();
+    mc.collect_neighbours_by_cell(DT_GOAL);
+    let start = total_energy(&mc);
+    let mut max_rel_drift = 0.0f64;
+    for _ in 0..10 {
+        run(&mut mc, 100);
+        max_rel_drift = max_rel_drift.max((total_energy(&mc) - start).abs() / start.abs());
+    }
+    println!("CH4/Ar: start energy {start}, max relative drift {max_rel_drift:.3e}");
+    assert!(max_rel_drift < 1e-3, "energy drift {max_rel_drift}");
+}
+
+fn approx_eq(a: f32, b: f32) {
+    assert!((a - b).abs() < 1e-5, "{a} vs {b}");
+}

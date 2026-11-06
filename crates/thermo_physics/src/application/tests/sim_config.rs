@@ -436,7 +436,7 @@ fn invalid_pair_overrides_are_rejected() {
     for (pairs, expected) in [
         (
             vec![pair("N2", "Kr", Some(1.1), None)],
-            "potential.pair_override[0].b: unknown species \"Kr\" (known: N2, XS, S, M, L, XL, Ar, Ne, CH4, O2)",
+            "potential.pair_override[0].b: unknown species \"Kr\" (known: N2, XS, S, M, L, XL, Ar, Ne, CH4, O2, NH3, CH4_HCB)",
         ),
         (
             vec![pair("n2", "N2", Some(1.1), None)],
@@ -570,7 +570,9 @@ fn species_list_replaces_the_table() {
 fn without_species_the_builtin_library_applies() {
     let table = SimConfig::default().species_table().unwrap();
     assert_eq!(&*table, SpeciesTable::builtin());
-    for name in ["N2", "XS", "S", "M", "L", "XL", "Ar", "Ne", "CH4", "O2"] {
+    for name in [
+        "N2", "XS", "S", "M", "L", "XL", "Ar", "Ne", "CH4", "O2", "NH3", "CH4_HCB",
+    ] {
         assert!(table.by_name(name).is_some(), "{name}");
     }
 }

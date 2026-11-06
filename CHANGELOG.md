@@ -5,6 +5,8 @@ User-visible changes to MolDyAt, newest first. Binaries and full release notes a
 
 ## Unreleased
 
+- `CH4` uses the TraPPE-UA parameters (the old one stays as `CH4_HCB`), and ammonia (`NH3`) is a new
+  species. (#409)
 - **Breaking:** reduced units are based on argon instead of N₂ (save format 6); older saves and
   configs are converted on load, and a new world is about 8 % smaller physically. (#405)
 - Add external fields to the config (`[[fields]]`, e.g. a harmonic trap); gravity is one of them. (#347)

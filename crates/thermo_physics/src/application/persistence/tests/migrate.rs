@@ -321,3 +321,63 @@ fn v2_malformed_lists_are_an_error_not_a_panic() {
     let error = error_text(upgrade_v2(&mut file));
     assert!(error.contains("missing field `valves`"), "{error}");
 }
+
+// ── v6 → v7 (#409): TraPPE `CH4`, the former one is `CH4_HCB` ──
+
+/// The v6 reference save with a `CH4` ball, a `CH4` source sphere and
+/// overrides naming `CH4`.
+fn v6_with_ch4() -> Value {
+    let mut file = fixture("v6.json");
+    file["balls"][0]["species"] = json!("CH4");
+    for entry in file["operators"].as_array_mut().unwrap() {
+        if let Some(sphere) = entry.get_mut("source_sphere") {
+            sphere["ball_species"] = json!("CH4");
+        }
+    }
+    file["config"]["potential"]["pair_override"] = json!([{"a": "CH4", "b": "N2", "sigma": 1.1}]);
+    file["config"]["walls"]["override"] = json!([{"species": "CH4", "epsilon": 0.5}]);
+    file
+}
+
+#[test]
+fn v6_ch4_becomes_the_former_ch4() {
+    let mut file = v6_with_ch4();
+    assert_eq!(upgrade_with(&mut file, MIGRATIONS, 7).unwrap(), 6);
+    assert_eq!(file["balls"][0]["species"], "CH4_HCB");
+    assert_eq!(
+        file["balls"][1]["species"], "S",
+        "other species keep their name"
+    );
+    let spheres: Vec<&Value> = file["operators"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|e| e.get("source_sphere"))
+        .collect();
+    assert!(spheres.iter().all(|s| s["ball_species"] == "CH4_HCB"));
+    assert_eq!(
+        file["config"]["potential"]["pair_override"][0]["a"],
+        "CH4_HCB"
+    );
+    assert_eq!(file["config"]["potential"]["pair_override"][0]["b"], "N2");
+    assert_eq!(file["config"]["walls"]["override"][0]["species"], "CH4_HCB");
+    let (world, _): (WorldFile, _) =
+        parse_with(&file.to_string(), MIGRATIONS, WORLD_FILE_VERSION).unwrap();
+    world.validate().unwrap();
+}
+
+/// A file with its own `[[species]]` list names species of that list.
+#[test]
+fn v6_ch4_of_an_own_species_list_keeps_its_name() {
+    let mut file = v6_with_ch4();
+    file["config"]["species"] = json!([{
+        "name": "CH4", "sigma_angstrom": 3.817, "epsilon_kelvin": 148.2,
+        "mass_u": 16.043, "colour": [0.5, 0.5, 0.5]
+    }, {
+        "name": "N2", "sigma_angstrom": 3.698, "epsilon_kelvin": 95.05,
+        "mass_u": 28.0134, "colour": [0.0, 1.0, 1.0]
+    }]);
+    upgrade_with(&mut file, MIGRATIONS, 7).unwrap();
+    assert_eq!(file["balls"][0]["species"], "CH4");
+    assert_eq!(file["config"]["walls"]["override"][0]["species"], "CH4");
+}

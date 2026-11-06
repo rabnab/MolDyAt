@@ -62,6 +62,11 @@ const FIXTURES: &[Fixture] = &[
         file: "v6.json",
         check: check_v5,
     },
+    Fixture {
+        version: 7,
+        file: "v7.json",
+        check: check_v5,
+    },
 ];
 
 fn fixtures_dir() -> PathBuf {
@@ -324,7 +329,8 @@ fn v5_fields() -> Vec<FieldConfig> {
 
 /// v5 (#347): the v4 world with a harmonic trap in `config.fields`. v6
 /// (#405) is the same world in Ar units, written by the #405 build from
-/// `v5.json` (loaded, `WorldFile::capture`d, `to_json`).
+/// `v5.json` (loaded, `WorldFile::capture`d, `to_json`), and v7 (#409,
+/// no `CH4` in it) by the #409 build from `v6.json` the same way.
 /// Written by the #347 build: `v4.json` loaded, `WorldFile::capture`d, its
 /// `sim_config()` with `fields = v5_fields()` set as `config`, `to_json`.
 fn check_v5(mc: &MainContent) {

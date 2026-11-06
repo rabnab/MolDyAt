@@ -53,7 +53,9 @@ use std::collections::HashSet;
 /// - v5 (#347): `config.fields`, external fields besides gravity.
 /// - v6 (#405): Ar instead of N₂ is the unit species; older files are
 ///   rescaled to the same physical state.
-pub(crate) const WORLD_FILE_VERSION: u32 = 6;
+/// - v7 (#409): `CH4` is TraPPE-UA methane; files on the built-in table
+///   name the former `CH4` `CH4_HCB`. `NH3` is new.
+pub(crate) const WORLD_FILE_VERSION: u32 = 7;
 
 /// Everything needed to rebuild a world. Energy plot data and simulation
 /// statistics are deliberately not part of it.

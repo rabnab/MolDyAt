@@ -485,7 +485,8 @@ reorder_interval = 0          # steps between sorts of the balls by cell (memory
 snapshot_interval_us = 16667  # 1000..1000000, least time between two frames sent to the window
 
 ## Optional: the species of the run. Without [[species]] the built-in library
-## applies: N2, the former size classes XS, S, M, L, XL, and Ar, Ne, CH4, O2.
+## applies: N2, the former size classes XS, S, M, L, XL, and Ar, Ne, CH4, O2,
+## NH3, CH4_HCB (the CH4 of saves before format v7).
 ## With it, exactly the listed species, in this order; the first is the
 ## default for new balls. Literature single-site Lennard-Jones values;
 ## Ar (3.405 A, 119.8 K, 39.948 u) is the unit (#405).
