@@ -20,7 +20,6 @@ use crate::objects2d::ball_impl::external_field::{
 };
 use crate::objects2d::ball_impl::molecule::SiteTable;
 use crate::objects2d::ball_impl::simd_forces::{KernelPoint, force_simd};
-use crate::objects2d::ball_impl::species::WATER_MAX_TIME_STEP;
 use crate::objects2d::ball_impl::verlet::Verlet;
 use crate::objects2d::ball_impl::wall_contact::normal_velocity_after_contact;
 use crate::objects2d::ball_impl::water::{MbWater, arms};
@@ -81,7 +80,7 @@ impl SimulationEngine {
         }
 
         let bound_rect = world.world_rect;
-        Self::warn_if_too_coarse_for_water(world, dt);
+        Self::warn_if_too_coarse(world, dt);
 
         Self::collect_neighbours_by_cell(world, step_config, dt, log_timings);
         Self::update_sim_and_move_balls(world, step_config, dt, &bound_rect, log_timings);
@@ -246,24 +245,24 @@ impl SimulationEngine {
         clock.lap(&mut world.phase_timings, Phase::Cells);
     }
 
-    /// Log once if MB water is present and `dt` is above
-    /// [`WATER_MAX_TIME_STEP`]: its librations and hydrogen bonds would not
-    /// conserve energy (#349).
-    fn warn_if_too_coarse_for_water(world: &mut SimulationWorld, dt: f32) {
-        if world.water_dt_warned || dt <= WATER_MAX_TIME_STEP {
+    /// Log once if a species present has a `max_time_step` below `dt`
+    /// (MB water #349, H₂ #407): its fast motion would not conserve energy.
+    fn warn_if_too_coarse(world: &mut SimulationWorld, dt: f32) {
+        if world.dt_warned {
             return;
         }
         let species = world.physics.species();
-        if world
-            .species_present
-            .iter()
-            .any(|id| species.species(id).water.is_some())
-        {
+        let too_coarse = world.species_present.iter().find_map(|id| {
+            let s = species.species(id);
+            s.max_time_step
+                .filter(|&max| dt > max)
+                .map(|max| (s.name.clone(), max))
+        });
+        if let Some((name, max)) = too_coarse {
             log::warn!(
-                "time step {dt} is too large for MB water; use at most {WATER_MAX_TIME_STEP} \
-                 (see docs/units.md)"
+                "time step {dt} is too large for {name}; use at most {max} (see docs/units.md)"
             );
-            world.water_dt_warned = true;
+            world.dt_warned = true;
         }
     }
 

@@ -83,7 +83,7 @@ impl SimulationWorld {
             world_config: config.world.clone(),
             cell_grid,
             species_present,
-            water_dt_warned: false,
+            dt_warned: false,
             world_rect,
             sim: SimStats::default(),
             step_count: 0,

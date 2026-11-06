@@ -78,8 +78,8 @@ pub struct SimulationWorld {
     /// follows the largest pair list radius among them.
     pub(crate) species_present: SpeciesSet,
     /// Whether the run already warned that its time step is too large for
-    /// the MB water in it (#349); once per world.
-    pub(crate) water_dt_warned: bool,
+    /// a species in it (`Species::max_time_step`); once per world.
+    pub(crate) dt_warned: bool,
     pub(crate) step_count: usize,
 
     /// Speed limit as a share of the shorter world side (`SimConfig`).

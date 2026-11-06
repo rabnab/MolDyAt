@@ -122,6 +122,9 @@ A species can be a rigid linear molecule (`ball_impl/molecule.rs`): Lennard-Jone
 | Species | Sites | Bond | Mass | `I` | Source |
 |---|---|---|---|---|---|
 | N2_2S | 2 × N: σ = 3.31 Å, ε/k_B = 36.0 K | 1.10 Å | 28.014 u | 8.47 u·Å² (0.0183 in Ar units) | TraPPE, Potoff and Siepmann, *AIChE J.* 47, 1676 (2001), without the centre charges |
+| H2_2S | 2 × H: σ = 2.72 Å, ε/k_B = 10.0 K | 0.74 Å | 2.016 u | 0.276 u·Å² (0.000596) | Yang and Zhong, *J. Phys. Chem. B* 109, 11862 (2005); among the two best of eight LJ models in Barraco et al., *J. Phys. Chem. A* 127 (2023) |
+
+H₂ is classical here: zero-point motion and the freezing of its rotations below about 100 K are not modelled. It is light and fast (`τ` 0.34 of Ar's, rotation ~20 times faster than N₂'s): runs with `H2_2S` need `dt ≤ 0.001` (`H2_MAX_TIME_STEP`; energy error 3.7e-4 of the kinetic energy at 0.001, 2.5e-3 at 0.0025, 3.5e-2 at the default 0.005). A species with a `max_time_step` (`H2O`, `H2_2S`) makes a run with a larger step log a warning once. In a dilute H₂/Ar gas the partial pressures add up (Dalton: `P_mix / (P_H2 + P_Ar)` = 1.06, each close to the ideal `N k_B T / A`).
 
 `N2_2S` sits next to the single-site `N2`, which stays the default species (owner decision). A dumbbell has 2 translational and 1 rotational degree of freedom: in equilibrium `⟨E_rot⟩ = ⟨E_trans⟩ / 2` per molecule (measured 0.98). Its energy error at the default `dt = 0.005` is about 1.6e-3 of the kinetic energy over 20 time units (dt²: 0.4e-3 at dt/2).
 

@@ -63,6 +63,9 @@ pub struct Species {
     /// is then the envelope of the sites (placement, the cell grid) and its
     /// `ε` is 0: it interacts only through its sites.
     pub molecule: Option<LinearMolecule>,
+    /// Largest time step its motion allows (MB water, H₂); a run above it
+    /// logs a warning.
+    pub max_time_step: Option<f32>,
 }
 
 impl Species {
@@ -78,6 +81,7 @@ impl Species {
             inertia: None,
             water: None,
             molecule: None,
+            max_time_step: None,
         }
     }
 
@@ -290,6 +294,7 @@ static BUILTIN_TABLE: LazyLock<Arc<SpeciesTable>> = LazyLock::new(|| {
             .chain(library)
             .chain(std::iter::once(mb_water()))
             .chain(std::iter::once(n2_dumbbell()))
+            .chain(std::iter::once(h2_dumbbell()))
             .collect(),
     ))
 });
@@ -310,6 +315,7 @@ fn mb_water() -> Species {
         [0.95, 0.95, 1.0, 1.0], // white
     );
     water.inertia = Some((1.15 / (AR_MASS_U * AR_SIGMA_ANGSTROM * AR_SIGMA_ANGSTROM)) as f32);
+    water.max_time_step = Some(WATER_MAX_TIME_STEP);
     water.water = Some(MbWater::new(
         (MB_EPSILON_HB_KELVIN / AR_EPSILON_KELVIN) as f32,
         (MB_R_HB_ANGSTROM / AR_SIGMA_ANGSTROM) as f32,
@@ -331,6 +337,29 @@ fn n2_dumbbell() -> Species {
     );
     molecule_species("N2_2S", molecule, [0.2, 0.75, 0.95, 1.0])
 }
+
+/// H₂ as a rigid dumbbell (#407), `H2_2S`: two Lennard-Jones sites on the
+/// atoms (Yang & Zhong, *J. Phys. Chem. B* 109, 11862 (2005): `σ` = 2.72 Å,
+/// `ε/k_B` = 10.0 K, bond 0.74 Å), fitted to PVT data and self-diffusion of
+/// H₂ at 80–300 K; one of the two best of eight LJ models in Barraco et al.,
+/// *J. Phys. Chem. A* 127 (2023). Classical: zero-point motion and frozen
+/// rotations at low temperature are not modelled. Light and fast: runs need
+/// `dt ≤` [`H2_MAX_TIME_STEP`].
+fn h2_dumbbell() -> Species {
+    let molecule = LinearMolecule::diatomic(
+        (0.74 / AR_SIGMA_ANGSTROM) as f32,
+        (2.72 / AR_SIGMA_ANGSTROM) as f32,
+        (10.0 / AR_EPSILON_KELVIN) as f32,
+        (1.008 / AR_MASS_U) as f32,
+    );
+    let mut species = molecule_species("H2_2S", molecule, [1.0, 0.85, 0.85, 1.0]);
+    species.max_time_step = Some(H2_MAX_TIME_STEP);
+    species
+}
+
+/// Largest time step for runs with H₂ (#407): its rotation is ~20 times
+/// faster than N₂'s.
+pub const H2_MAX_TIME_STEP: f32 = 0.001;
 
 /// A species whose balls are the rigid molecule `molecule` (#406).
 pub(crate) fn molecule_species(name: &str, molecule: LinearMolecule, colour: [f32; 4]) -> Species {
@@ -640,8 +669,8 @@ mod tests {
     fn builtin_table_is_pinned() {
         // (name, f32 bits of mass, sigma, epsilon, display_radius), in table
         // order, in Ar units (#405, format v6; #409, v7: TraPPE CH4, NH3,
-        // the former CH4 as CH4_HCB; #349: MB water H2O; #406: N2_2S).
-        const PINNED: [(&str, u32, u32, u32, u32); 14] = [
+        // the former CH4 as CH4_HCB; #349: MB water H2O; #406: N2_2S; #407: H2_2S).
+        const PINNED: [(&str, u32, u32, u32, u32); 15] = [
             ("N2", 0x3f3384e6, 0x3f8b03af, 0x3f4b1ca2, 0x3f0b03af), // 0.7012466, 1.08605, 0.7934057
             ("XS", 0x3f3384e6, 0x3fb02b31, 0x3f4b1ca2, 0x3f302b31), // 0.7012466, 1.376318, 0.7934057
             ("S", 0x3f576c48, 0x3fd552b2, 0x3f4b1ca2, 0x3f5552b2),  // 0.841496, 1.666586, 0.7934057
@@ -656,6 +685,7 @@ mod tests {
             ("CH4_HCB", 0x3ecd9e22, 0x3f8f7ce1, 0x3f9e580a, 0x3f0f7ce1), // 0.4015971, 1.120999, 1.237062
             ("H2O", 0x3ee6e465, 0x3f135c1a, 0x3f93fadf, 0x3ed28392), // 0.4509613, 0.5756241, 1.156093
             ("N2_2S", 0x3f3385e2, 0x3fa5c79d, 0x00000000, 0x3ef8db89), // 0.7012616, 1.295154, 0
+            ("H2_2S", 0x3d4eb506, 0x3f82114b, 0x00000000, 0x3ecc7fd0), // 0.05046561, 1.016153, 0
         ];
         let actual: Vec<_> = SpeciesTable::builtin()
             .iter()
