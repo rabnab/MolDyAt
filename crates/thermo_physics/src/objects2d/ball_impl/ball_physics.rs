@@ -13,7 +13,6 @@ use crate::objects2d::ball_impl::pair_potential::{
 use crate::objects2d::ball_impl::species::{
     DEFAULT_SPECIES, Species, SpeciesId, SpeciesSet, SpeciesTable,
 };
-use crate::objects2d::ball_impl::time_step_limit::TimeStepLimits;
 use crate::objects2d::ball_impl::wall_law::{
     Backstop, HardContact, SoftWalls, WallLaw, WallSettings,
 };
@@ -70,6 +69,52 @@ pub struct ForceResult {
 /// [`BallPhysics::get_skin_thickness`]).
 pub(crate) const DEFAULT_SKIN_FACTOR: f32 = 0.2;
 
+/// `ω·dt` at a time step limit: 20 steps per period of the fastest motion.
+pub(crate) const STEP_MARGIN: f32 = std::f32::consts::TAU / 20.0;
+/// Collision energy for the stiffness of the repulsive core: `k_B·T` at
+/// `T* = 1`. Much hotter runs need a smaller step than the limits.
+const REFERENCE_ENERGY: f32 = 1.0;
+
+/// `STEP_MARGIN / ω` per species pair, row-major, with `ω² = k/μ`: `k` the
+/// pair's stiffness, `μ` the reduced mass of the two interacting points (a
+/// molecule's site at lever `L` moves across the axis as `1/(1/M + L²/I)`),
+/// and water's hydrogen bonds. Collective modes (librations in a dense
+/// phase) are not covered.
+fn time_step_limits(
+    table: &SpeciesTable,
+    pairs: &Potential,
+    sites: Option<&SiteTable>,
+) -> Vec<f32> {
+    let site_mass = |s: &Species, offset: f32| match &s.molecule {
+        Some(m) => 1.0 / (1.0 / m.mass() + offset * offset / m.inertia()),
+        None => s.mass,
+    };
+    let reduced = |a: f32, b: f32| a * b / (a + b);
+    table
+        .ids()
+        .flat_map(|a| table.ids().map(move |b| (a, b)))
+        .map(|(a, b)| {
+            let (sa, sb) = (table.species(a), table.species(b));
+            let mut omega_sq = match sites.filter(|s| s.is_molecule(a) || s.is_molecule(b)) {
+                Some(sites) => sites
+                    .site_pairs(a, b)
+                    .map(|(oa, ob, p)| {
+                        p.stiffness(REFERENCE_ENERGY)
+                            / reduced(site_mass(sa, oa), site_mass(sb, ob))
+                    })
+                    .fold(0.0, f32::max),
+                None => pairs.stiffness(a, b, REFERENCE_ENERGY) / reduced(sa.mass, sb.mass),
+            };
+            if a == b
+                && let (Some(water), Some(inertia)) = (&sa.water, sa.inertia)
+            {
+                omega_sq = omega_sq.max(water.omega_sq(sa.mass, inertia));
+            }
+            STEP_MARGIN / omega_sq.sqrt()
+        })
+        .collect()
+}
+
 #[derive(Clone)]
 pub struct BallPhysics {
     pub constants: PhysicsConstants,
@@ -78,8 +123,8 @@ pub struct BallPhysics {
     /// snapshots read it from here, so physics and table cannot diverge.
     species: Arc<SpeciesTable>,
     pair_potential: Potential,
-    /// The largest stable time step of each species pair (#427).
-    time_step_limits: TimeStepLimits,
+    /// Largest stable time step of each species pair, row-major.
+    time_step_limits: Vec<f32>,
     /// The pairs of `pair_potential` that do not follow the mixing rule.
     pair_overrides: Vec<PairOverride>,
     /// Skin as a share of the reference cutoff.
@@ -97,7 +142,7 @@ pub struct BallPhysics {
     /// contact, or the backstop behind a soft wall.
     wall_contact: Vec<f32>,
     /// Per molecule species (#406, #408): half its length and a site's
-    /// contact, for the orientation-dependent box-wall contact.
+    /// contact, for the orientation-dependent hard box-wall contact.
     molecule_contact: Vec<Option<(f32, f32)>>,
     /// Contact distance (`σ_ij`) of each species pair, row-major.
     contact: Vec<f32>,
@@ -158,17 +203,18 @@ impl BallPhysics {
             })
             .collect();
         let pair_potential = Potential::lennard_jones(species, cap, &overrides);
+        let sites = SiteTable::new(species, cap);
         BallPhysics {
             constants,
             species: Arc::clone(&species_table),
-            time_step_limits: TimeStepLimits::new(species, &pair_potential, cap),
+            time_step_limits: time_step_limits(species, &pair_potential, sites.as_ref()),
             pair_potential,
             pair_overrides: overrides,
             skin_factor: DEFAULT_SKIN_FACTOR,
             walls: WallSettings::hard(),
             soft_walls: None,
             fields: Vec::new(),
-            sites: SiteTable::new(species, cap),
+            sites,
             wall_contact: Vec::new(),
             molecule_contact: Vec::new(),
             contact,
@@ -213,25 +259,18 @@ impl BallPhysics {
                 })
                 .collect()
         };
-        let molecule_contact_of = |law: &dyn WallLaw| -> Vec<Option<(f32, f32)>> {
-            species
-                .iter()
-                .map(|s| {
-                    s.molecule.as_ref().map(|m| {
-                        let site = law.contact_distance(&Species {
-                            sigma: m.max_site_sigma(),
-                            ..s.clone()
-                        });
-                        (m.half_length(), site)
-                    })
-                })
-                .collect()
-        };
+        self.molecule_contact = species
+            .iter()
+            .map(|s| {
+                s.molecule
+                    .as_ref()
+                    .map(|m| (m.half_length(), 0.5 * m.max_site_sigma()))
+            })
+            .collect();
         if walls.soft {
             let backstop = Backstop {
                 factor: walls.backstop,
             };
-            self.molecule_contact = molecule_contact_of(&backstop);
             self.wall_contact = contact_of(&backstop);
             self.soft_walls = Some(SoftWalls::new(
                 species,
@@ -240,7 +279,6 @@ impl BallPhysics {
                 *self.cap_settings(),
             ));
         } else {
-            self.molecule_contact = molecule_contact_of(&HardContact);
             self.wall_contact = contact_of(&HardContact);
             self.soft_walls = None;
         }
@@ -366,12 +404,23 @@ impl BallPhysics {
         self.pair_potential.equilibrium_distance(a, b)
     }
 
-    /// The pair potentials; the force kernel matches on them once per ball.
-    /// The largest stable time step of each species pair (#427).
-    pub(crate) fn time_step_limits(&self) -> &TimeStepLimits {
-        &self.time_step_limits
+    /// The largest stable time step of the species `present` (the smallest
+    /// of their pairs) and the species it is reported for: of a mixed pair
+    /// the one with the smaller limit of its own, then the first in table
+    /// order. `None` when nothing is present.
+    pub(crate) fn time_step_limit(&self, present: SpeciesSet) -> Option<(f32, SpeciesId)> {
+        let limit = |a: SpeciesId, b: SpeciesId| {
+            self.time_step_limits[a.index() * self.species_count + b.index()]
+        };
+        present
+            .iter()
+            .flat_map(|a| present.iter().map(move |b| (limit(a, b), limit(a, a), a)))
+            .filter(|(l, _, _)| l.is_finite())
+            .min_by(|x, y| (x.0, x.1).partial_cmp(&(y.0, y.1)).unwrap())
+            .map(|(l, _, a)| (l, a))
     }
 
+    /// The pair potentials; the force kernel matches on them once per ball.
     pub(crate) fn pair_potential(&self) -> &Potential {
         &self.pair_potential
     }
@@ -386,8 +435,7 @@ impl BallPhysics {
     /// Wall distance beyond which a ball of `species` feels no wall: the
     /// soft wall cutoff, or the contact distance with hard walls. A wall
     /// that appears within this distance of a ball ramps in for it
-    /// (`Ball2D::wall_ramp`, #424); with hard walls the ball keeps passing
-    /// through until it is this far out.
+    /// (`Ball2D::wall_ramp`).
     pub(crate) fn wall_release_distance(&self, species: SpeciesId) -> f32 {
         let contact = self.wall_contact_distance(species);
         self.soft_walls.as_ref().map_or(contact, |w| {
@@ -431,10 +479,7 @@ impl BallPhysics {
         self.edge_gap(this, other) < margin
     }
 
-    /// Update ball position using velocity-Verlet integration and handle
-    /// wall bounces: the position update with hard walls (legacy). Behind
-    /// soft walls the step drifts freely (`Ball2D::drift`) and only the
-    /// backstop runs (`wall_backstop`, #424).
+    /// Update ball position using velocity-Verlet integration and handle wall bounces.
     ///
     /// # Arguments
     /// * `ball` - Ball to update

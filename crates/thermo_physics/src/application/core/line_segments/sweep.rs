@@ -20,7 +20,7 @@ impl SimulationWorld {
     /// is the ball's wall contact distance (`BallPhysics::wall_contact_distance`). A ball
     /// leaving a wall (`Ball2D::is_leaving_wall`), or one that starts the
     /// step inside a wall, is left to the overlap pass
-    /// (`resolve_wall_overlaps_with`). Hard walls (legacy) only. Distance checks are added to
+    /// (`resolve_wall_overlaps_with`) or the soft walls' force. Distance checks are added to
     /// `checks` (see `SimStats::wall_distance_checks`).
     pub(crate) fn sweep_wall_contact(
         obstacles: &[Obstacle],

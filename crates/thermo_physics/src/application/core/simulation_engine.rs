@@ -4,8 +4,7 @@
 
 use super::line_segments::Obstacle;
 use super::step_scratch::{NeighbourStats, RebuildScratch, UpdateScratch};
-use super::wall_backstop::soft_position_update;
-use super::wall_forces::soft_wall_force;
+use super::wall_forces::{molecule_backstop, soft_wall_force};
 use super::{RuntimeOptions, SimulationWorld, StatsAccumulator, StepConfig};
 use crate::application::phase_timings::{Phase, PhaseClock};
 use crate::application::sim_stats::SafetyNets;
@@ -163,7 +162,7 @@ impl SimulationEngine {
                 let contacts = scratch
                     .bounce_infos
                     .iter()
-                    .map(BounceInfo::contact_count)
+                    .map(|b| b.iter().count() as u64 + u64::from(b.impulses))
                     .sum::<u64>();
                 world.sim.wall_contacts += contacts;
                 // Safety nets of this step (#422); braking and capped pairs
@@ -189,8 +188,7 @@ impl SimulationEngine {
                 // The previous step's results become the next step's buffer.
                 std::mem::swap(&mut world.cached_force_results, &mut scratch.force_results);
 
-                // The overlap fallback belongs to the hard walls (legacy);
-                // behind soft walls the backstop has already run.
+                // The overlap fallback is for hard walls only.
                 let corrections_before = world.sim.wall_overlap_corrections;
                 let (seg_px, seg_py) = if world.physics.walls().soft {
                     (0.0, 0.0)
@@ -417,39 +415,26 @@ impl SimulationEngine {
         let restitution = world.wall_restitution_fault();
         let physics = &world.physics;
         let obstacles = &scratch.obstacles;
-        // Soft walls (#424): the walls act through their force; the position
-        // update is the drift plus the backstop, a counted safety net.
-        if let Some(walls) = physics.soft_walls() {
-            let walls_of_step = (bound_rect, obstacles.as_slice());
-            world
-                .balls
-                .par_iter_mut()
-                .map(|ball| {
-                    let mut checks = 0;
-                    let info = soft_position_update(
-                        walls,
-                        ball,
-                        walls_of_step,
-                        dt,
-                        restitution,
-                        &mut checks,
-                    );
-                    (info, checks)
-                })
-                .unzip_into_vecs(&mut scratch.bounce_infos, &mut scratch.sweep_checks);
-            return scratch.sweep_checks.iter().sum();
-        }
-        // Hard walls (legacy): contacts resolved in the position update.
+        let soft = physics.walls().soft;
         world
             .balls
             .par_iter_mut()
             .map(|ball| {
+                if soft && let Some(molecule) = &physics.species().species(ball.species()).molecule
+                {
+                    let walls = (bound_rect, obstacles.as_slice());
+                    return (
+                        molecule_backstop(physics, ball, molecule, walls, dt, restitution),
+                        0,
+                    );
+                }
+                // Atoms meet the walls (behind soft walls: the backstop) at the
+                // exact contact time.
                 let start = *ball.get_position();
                 let mut bounce_info = physics.update_positions(ball, dt, bound_rect, restitution);
                 let mut checks = 0;
                 // A ball that reached a box wall is not swept against line
-                // walls this step (the contact normals must stay orthogonal);
-                // if it ends inside one, the overlap pass handles it.
+                // walls this step: the contact normals must stay orthogonal.
                 if !bounce_info.touched_box() {
                     let contact = physics.wall_contact_distance(ball.species());
                     bounce_info.line_wall = SimulationWorld::sweep_wall_contact(
@@ -632,8 +617,7 @@ impl SimulationEngine {
             }
         }
         ball.v = v_new;
-        // Impulses of the position update: the backstop behind soft walls
-        // (#424), a molecule's site impulses on hard box walls (#408).
+        // Site impulses of a molecule on the walls (#408).
         wall_px += bounce_info.wall_momentum.x;
         wall_py += bounce_info.wall_momentum.y;
 
@@ -646,7 +630,6 @@ impl SimulationEngine {
         if ball.inertia > 0.0 {
             ball.kick_rotation(result.torque, dt);
         }
-        // Line walls that appeared on the ball ramp in (#424).
         if ball.wall_ramp < 1.0 && wall_ramp_step > 0.0 {
             ball.wall_ramp = (ball.wall_ramp + wall_ramp_step).min(1.0);
         }

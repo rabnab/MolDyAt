@@ -302,7 +302,7 @@ static BUILTIN_TABLE: LazyLock<Arc<SpeciesTable>> = LazyLock::new(|| {
 /// decision). Its Lennard-Jones disk has `σ = 0.7 r_HB`, `ε = 0.1 ε_HB`; mass
 /// and moment of inertia are those of H₂O (1.15 u·Å², the in-plane axis).
 /// Rotations are fast: the alignment of its hydrogen bonds limits water
-/// runs to `dt ≈ 0.0007` (`time_step_limit`, #427).
+/// runs to `dt ≈ 0.0007` (`BallPhysics::time_step_limit`).
 fn mb_water() -> Species {
     let mut water = Species::from_literature(
         "H2O",
@@ -341,7 +341,7 @@ fn n2_dumbbell() -> Species {
 /// H₂ at 80–300 K; one of the two best of eight LJ models in Barraco et al.,
 /// *J. Phys. Chem. A* 127 (2023). Classical: zero-point motion and frozen
 /// rotations at low temperature are not modelled. Light and fast: its
-/// collisions limit runs to `dt ≈ 0.0016` (`time_step_limit`, #427).
+/// collisions limit runs to `dt ≈ 0.0016` (`BallPhysics::time_step_limit`).
 fn h2_dumbbell() -> Species {
     let molecule = LinearMolecule::diatomic(
         (0.74 / AR_SIGMA_ANGSTROM) as f32,

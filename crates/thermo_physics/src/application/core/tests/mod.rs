@@ -46,5 +46,8 @@ pub(crate) use crate::test_support::{
 pub(crate) fn time_step_limit_of(name: &str) -> f32 {
     use crate::objects2d::ball_impl::{BallPhysics, SpeciesTable};
     let id = SpeciesTable::builtin().by_name(name).unwrap();
-    BallPhysics::default().time_step_limits().pair(id, id)
+    BallPhysics::default()
+        .time_step_limit([id].into_iter().collect())
+        .unwrap()
+        .0
 }

@@ -108,7 +108,7 @@ headless runs; both step with the configured time step.
 2. **positions**: velocity-Verlet position update (and `θ += ω dt + ½ α dt²`
    for balls with an orientation, #348). With soft walls (the default)
    the drift is free and the only hard mechanism is the backstop at
-   `0.3 σ` (`core::wall_backstop`, #424), a counted safety net: an atom is
+   `0.3 σ` (#424), a counted safety net: an atom is
    reflected there at the exact contact time on its path (as the hard
    contact below, also when its step went through a thin wall), a
    molecule's site that moves into it gets a rigid-body impulse. With hard

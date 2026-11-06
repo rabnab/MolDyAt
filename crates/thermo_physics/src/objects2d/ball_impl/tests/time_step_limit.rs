@@ -6,20 +6,18 @@
 
 use crate::application::sim_config::DEFAULT_TIME_STEP;
 use crate::objects2d::ball_impl::pair_potential::{
-    CapSettings, CappedPotential, LennardJones, PairPotential, Potential,
+    CapSettings, CappedPotential, LennardJones, PairPotential,
 };
-use crate::objects2d::ball_impl::species::{Species, SpeciesSet, SpeciesTable};
-use crate::objects2d::ball_impl::time_step_limit::{STEP_MARGIN, TimeStepLimits, stiffness};
+use crate::objects2d::ball_impl::species::{Species, SpeciesId, SpeciesSet, SpeciesTable};
+use crate::objects2d::ball_impl::{BallPhysics, PhysicsConstants, STEP_MARGIN};
 
-fn builtin_limits() -> TimeStepLimits {
-    let table = SpeciesTable::builtin();
-    let cap = CapSettings::default();
-    TimeStepLimits::new(table, &Potential::lennard_jones(table, cap, &[]), cap)
+fn limit_in(physics: &BallPhysics, species: &[SpeciesId]) -> Option<(f32, SpeciesId)> {
+    physics.time_step_limit(species.iter().copied().collect())
 }
 
 fn own_limit(name: &str) -> f32 {
     let id = SpeciesTable::builtin().by_name(name).unwrap();
-    builtin_limits().pair(id, id)
+    limit_in(&BallPhysics::default(), &[id]).unwrap().0
 }
 
 /// `U''` from finite differences of the force, independent of
@@ -55,8 +53,7 @@ fn curvature_is_minus_the_derivative_of_the_force() {
 #[test]
 fn omega_times_the_limit_stays_within_the_margin() {
     let table = SpeciesTable::builtin();
-    let limits = builtin_limits();
-    let cap = CapSettings::default();
+    let physics = BallPhysics::default();
     for id in table.ids() {
         let s = table.species(id);
         if s.molecule.is_some() {
@@ -67,10 +64,10 @@ fn omega_times_the_limit_stays_within_the_margin() {
                 sigma: s.sigma,
                 epsilon: s.epsilon,
             },
-            cap,
+            CapSettings::default(),
         );
         let mu = 0.5 * s.mass;
-        let limit = limits.pair(id, id);
+        let limit = limit_in(&physics, &[id]).unwrap().0;
         let well = 2f32.powf(1.0 / 6.0) * s.sigma;
         let mut turn = well;
         while p.potential(turn) < 1.0 {
@@ -120,12 +117,12 @@ fn built_in_limits() {
 /// one (stiffer, `U'' ∝ 1/σ²`) a smaller limit, a heavier one a larger.
 #[test]
 fn config_species_get_a_limit() {
-    let cap = CapSettings::default();
     let limit_of = |mass: f32, sigma: f32| {
         let table = SpeciesTable::new(vec![Species::new("X", mass, sigma, 1.0, [1.0; 4])]);
-        let limits = TimeStepLimits::new(&table, &Potential::lennard_jones(&table, cap, &[]), cap);
-        let id = table.ids().next().unwrap();
-        limits.pair(id, id)
+        let physics = BallPhysics::new(PhysicsConstants::default(), &table, CapSettings::default());
+        limit_in(&physics, &[table.ids().next().unwrap()])
+            .unwrap()
+            .0
     };
     let unit = limit_of(1.0, 1.0);
     assert!(unit.is_finite());
@@ -134,27 +131,21 @@ fn config_species_get_a_limit() {
     assert!((heavy / unit - 2.0).abs() < 1e-3, "√m: {heavy} vs {unit}");
 }
 
-/// In a mixture the smallest pair limit applies, reported for the faster
-/// species, and the limit follows the species present.
+/// In a mixture the smallest limit applies, reported for the faster species.
 #[test]
 fn a_mixture_takes_its_fastest_pair() {
     let table = SpeciesTable::builtin();
-    let limits = builtin_limits();
+    let physics = BallPhysics::default();
     let (ar, h2) = (
         table.by_name("Ar").unwrap(),
         table.by_name("H2_2S").unwrap(),
     );
-    let only_ar: SpeciesSet = [ar].into_iter().collect();
-    let both: SpeciesSet = [ar, h2].into_iter().collect();
-    assert_eq!(limits.limit(only_ar), Some((limits.pair(ar, ar), ar)));
-    let (limit, by) = limits.limit(both).unwrap();
+    let (ar_alone, _) = limit_in(&physics, &[ar]).unwrap();
+    let (h2_alone, _) = limit_in(&physics, &[h2]).unwrap();
+    let (mixed, by) = limit_in(&physics, &[ar, h2]).unwrap();
     assert_eq!(by, h2, "reported for H2");
-    let smallest = limits
-        .pair(h2, h2)
-        .min(limits.pair(ar, h2))
-        .min(limits.pair(ar, ar));
-    assert_eq!(limit, smallest);
-    assert_eq!(limits.limit(SpeciesSet::default()), None);
+    assert!(mixed <= h2_alone.min(ar_alone));
+    assert_eq!(physics.time_step_limit(SpeciesSet::default()), None);
 }
 
 /// A null pair (a molecule's centre, `ε = 0`) has no stiffness.
@@ -167,5 +158,5 @@ fn a_null_pair_has_no_stiffness() {
         },
         CapSettings::default(),
     );
-    assert_eq!(stiffness(&p, 1.0), 0.0);
+    assert_eq!(p.stiffness(1.0), 0.0);
 }

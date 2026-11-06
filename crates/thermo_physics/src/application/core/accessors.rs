@@ -217,9 +217,8 @@ impl MainContent {
     }
 
     /// The time step every following simulation step uses: the set time
-    /// step, limited to the largest stable step of the species present
-    /// (#427, derived from their potentials). Back to the set time step once
-    /// the limiting species are gone.
+    /// step, limited to the largest stable step of the species present.
+    /// Back to the set time step once the limiting species are gone.
     pub fn active_time_step(&self) -> f32 {
         match self.time_step_limit() {
             Some((limit, _)) => self.time_step().min(limit),
@@ -242,11 +241,9 @@ impl MainContent {
 }
 
 impl SimulationWorld {
-    /// The largest stable time step of the species present (#427, see
-    /// `TimeStepLimits::limit`) and the species it is reported for, or
-    /// `None` when the world is empty.
+    /// See `BallPhysics::time_step_limit`.
     pub(crate) fn time_step_limit(&self) -> Option<(f32, SpeciesId)> {
-        self.physics.time_step_limits().limit(self.species_present)
+        self.physics.time_step_limit(self.species_present)
     }
 
     /// Rebuild the physics with the wall model `walls`.

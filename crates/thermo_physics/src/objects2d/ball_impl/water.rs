@@ -63,6 +63,24 @@ impl MbWater {
         self.r_hb + 12.0 * self.width_r
     }
 
+    /// `ω²` of the bonds of a molecule with `mass` and `inertia`: the
+    /// distance Gaussian on the reduced mass, and the largest curvature of
+    /// the arm alignment `-ε_HB·exp(-(cos φ - 1)²/(2 w²))` in `φ` (flat at
+    /// its optimum) for each of the three arms, which turn together.
+    pub(crate) fn omega_sq(&self, mass: f32, inertia: f32) -> f32 {
+        let w = f64::from(self.width_angle);
+        let alignment = |phi: f64| -(-(phi.cos() - 1.0).powi(2) / (2.0 * w * w)).exp();
+        let h = 1e-3;
+        let largest = (1..3000)
+            .map(|i| {
+                let phi = f64::from(i) * h;
+                ((alignment(phi + h) - 2.0 * alignment(phi) + alignment(phi - h)) / (h * h)).abs()
+            })
+            .fold(0.0, f64::max) as f32;
+        let radial = self.epsilon_hb / (self.width_r * self.width_r) / (0.5 * mass);
+        radial.max(3.0 * self.epsilon_hb * largest / inertia)
+    }
+
     /// Bond of ball `i` (orientation `theta_i`) with `j` (`theta_j`) at
     /// `r = r_j − r_i`: energy, force and torque on `i`. Zero beyond
     /// [`Self::cutoff`].

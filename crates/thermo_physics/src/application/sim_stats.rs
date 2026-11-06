@@ -37,8 +37,8 @@ pub struct StatusNumbers {
     pub real_units: bool,
     /// Time step the steps run with.
     pub dt: f32,
-    /// The species whose time step limit (#427) holds `dt` below the set
-    /// time step, if any (`MainContent::active_time_step`).
+    /// The species whose time step limit holds `dt` below the set time
+    /// step, if any (`MainContent::active_time_step`).
     pub dt_limited_by: Option<SpeciesId>,
     /// Neighbour-list rebuilds since the start.
     pub hood_updates: usize,

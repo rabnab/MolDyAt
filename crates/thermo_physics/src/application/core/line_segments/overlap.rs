@@ -40,8 +40,7 @@ impl SimulationWorld {
     /// `collect_solid_obstacles`; the simulation step shares one list with
     /// `sweep_wall_contact`).
     ///
-    /// Hard walls (legacy) only: behind soft walls, the backstop
-    /// (`wall_backstop`, #424) is the only hard mechanism.
+    /// Hard walls only.
     ///
     /// Contacts during a step are resolved by `sweep_wall_contact`; this pass
     /// only catches what that cannot: balls that started a step inside a wall
@@ -55,10 +54,9 @@ impl SimulationWorld {
     /// 1. Position-corrected so it no longer overlaps.
     /// 2. Velocity-reflected: `v' = v − 2(v · n̂) n̂` (elastic, |v| preserved).
     ///
-    /// A ball leaving a wall (`Ball2D::is_leaving_wall`: a wall appeared or
-    /// changed on top of it) passes through the walls it overlaps, keeping
-    /// its path and speed, and the flag is cleared once it touches no wall
-    /// at all. With gravity,
+    /// A ball leaving a wall (`Ball2D::is_leaving_wall`) passes through the
+    /// walls it overlaps, keeping its path and speed, and the flag is
+    /// cleared once it touches no wall at all. With gravity,
     /// a ball caught in a horizontal valve as it closes therefore falls
     /// through it. Every other ball collides as usual, including one whose
     /// centre got inside a wall in a single step: it is pushed back out.

@@ -2,8 +2,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Soft wall forces (#280): the force and energy of every ball in the box
-//! walls and the line walls, added to its pair forces in the force pass.
+//! Soft walls (#280): the force and energy of every ball in the box walls
+//! and the line walls, added to its pair forces in the force pass, and the
+//! backstop behind them in the position update.
 //!
 //! - Box walls: each of the four sides acts on its own, through the signed
 //!   distance of the centre from it, so the force keeps pointing inward after
@@ -15,19 +16,19 @@
 //!   distance from the union, so the energy has no bump or well at a joint.
 //!   (The two ends of a gap in one chain count as one wall too.)
 //! - A ball a wall was drawn or closed on top of feels the line walls
-//!   scaled by its `wall_ramp` (#424), which grows from 0 to 1 over
-//!   `WALL_RAMP_TIME`: the force pushes it out gently instead of kicking it
-//!   out of the wall's core. The ramp does work on the ball (the wall's
-//!   energy grows under it), as any wall moved onto a ball must.
+//!   scaled by its `wall_ramp`: the force pushes it out gently instead of
+//!   kicking it out of the wall's core. The ramp does work on the ball, as
+//!   any wall moved onto a ball must.
 //!
 //! The obstacles are checked against their bounding boxes first, as in the
 //! contact sweep, so the potential is evaluated only for nearby balls.
 
 use super::line_segments::Obstacle;
-use crate::objects2d::ball_impl::molecule::{axis, cross};
+use crate::objects2d::ball_impl::ball_core::BounceInfo;
+use crate::objects2d::ball_impl::molecule::{LinearMolecule, axis, cross};
 use crate::objects2d::ball_impl::pair_potential::PairPotential;
 use crate::objects2d::ball_impl::wall_law::SoftWalls;
-use crate::objects2d::ball_impl::{Ball2D, ForceResult};
+use crate::objects2d::ball_impl::{Ball2D, BallPhysics, ForceResult};
 use crate::objects2d::{Rect, Vec2D};
 
 /// Soft wall force and energy of one ball.
@@ -73,7 +74,6 @@ pub(crate) fn soft_wall_force(
 ) -> WallForce {
     let species = ball.species();
     let centre = *ball.get_position();
-    // A ball a wall appeared on feels the line walls ramped in (module doc).
     let ramp = ball.wall_ramp;
     let obstacles = if ramp > 0.0 { obstacles } else { &[] };
     let mut out = WallForce {
@@ -128,15 +128,7 @@ fn point_force(
         let (force, potential) = law(z);
         (ramp * force, ramp * potential)
     };
-    let (left, top) = bound.get_tl();
-    let (right, bottom) = bound.get_br();
-    let sides = [
-        (pos.x - left, Vec2D::new(1.0, 0.0)),
-        (right - pos.x, Vec2D::new(-1.0, 0.0)),
-        (pos.y - bottom.min(top), Vec2D::new(0.0, 1.0)),
-        (top.max(bottom) - pos.y, Vec2D::new(0.0, -1.0)),
-    ];
-    for (z, normal) in sides {
+    for (z, normal) in box_sides(pos, bound) {
         if z < cutoff {
             out.add(normal, law(z), true, lever);
         }
@@ -166,4 +158,71 @@ fn point_force(
     if let Some((_, z, normal, counts)) = nearest {
         out.add(normal, line_law(z), counts, lever);
     }
+}
+
+/// Signed distances of `pos` from the four box sides, with their inward
+/// normals.
+fn box_sides(pos: Vec2D, bound: &Rect) -> [(f32, Vec2D); 4] {
+    let (x0, y0) = bound.get_tl();
+    let (x1, y1) = bound.get_br();
+    [
+        (pos.x - x0.min(x1), Vec2D::new(1.0, 0.0)),
+        (x0.max(x1) - pos.x, Vec2D::new(-1.0, 0.0)),
+        (pos.y - y0.min(y1), Vec2D::new(0.0, 1.0)),
+        (y0.max(y1) - pos.y, Vec2D::new(0.0, -1.0)),
+    ]
+}
+
+/// The position update of a molecule behind soft walls: the drift plus the
+/// backstop at `backstop · σ` of each site, a counted safety net. Its sites
+/// turn with it, so after the drift each gets [`Ball2D::wall_hit`], first
+/// mirrored back across a line wall whose centre line it crossed. A ball
+/// whose line walls are ramping in meets only the box.
+pub(crate) fn molecule_backstop(
+    physics: &BallPhysics,
+    ball: &mut Ball2D,
+    molecule: &LinearMolecule,
+    (bound, obstacles): (&Rect, &[Obstacle]),
+    dt: f32,
+    restitution: f32,
+) -> BounceInfo {
+    let start = *ball.get_position();
+    let obstacles = if ball.is_leaving_wall() {
+        &[]
+    } else {
+        obstacles
+    };
+    let start_axis = axis(ball.theta);
+    ball.drift(dt);
+    let axis = axis(ball.theta);
+    let mut info = BounceInfo::default();
+    let mut hit = |ball: &mut Ball2D, normal: Vec2D, overlap, lever, counts: bool| {
+        if let Some(impulse) = ball.wall_hit(normal, overlap, lever, restitution) {
+            info.impulses += 1;
+            if counts {
+                info.wall_momentum = info.wall_momentum.add_scaled(&normal, -impulse);
+            }
+        }
+    };
+    for site in &molecule.sites {
+        let lever = axis.scaled(site.offset);
+        let distance = physics.walls().backstop * site.sigma;
+        for side in 0..4 {
+            let (z, normal) = box_sides(*ball.get_position() + lever, bound)[side];
+            if z < distance {
+                hit(ball, normal, distance - z, lever, true);
+            }
+        }
+        let from = start + start_axis.scaled(site.offset);
+        for obstacle in obstacles {
+            let point = *ball.get_position() + lever;
+            if let Some((z, normal, mirror)) = obstacle.backstop_distance(&point, &from, distance)
+                && z < distance
+            {
+                ball.shift(mirror);
+                hit(ball, normal, distance - z, lever, !obstacle.is_ghost());
+            }
+        }
+    }
+    info
 }

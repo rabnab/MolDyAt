@@ -62,7 +62,7 @@ not leak.
 
 Thin walls and valves still need a hard limit: a soft wall has a finite
 barrier, and once a centre crosses a thin wall's centre line the force
-flips. The backstop (`core::wall_backstop`) sits at `0.3 σ`, far up the
+flips. The backstop sits at `0.3 σ`, far up the
 wall potential. An atom is reflected there at the exact contact time on its
 path (`ball_impl::wall_contact`, the line-wall sweep below), which also
 catches a step that went through a thin wall; a molecule's site that moves

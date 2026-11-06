@@ -6,24 +6,21 @@
 //!
 //! Two models ([`WallSettings::soft`]):
 //! - **Soft** ([`SoftWalls`], the default for new worlds, #280, and the only
-//!   physical wall model since #424): the wall is a pseudo-species with
+//!   physical wall model): the wall is a pseudo-species with
 //!   `σ_w`, `ε_w`, and a ball feels the Lennard-Jones law of the mixed
 //!   `σ_iw = (σ_i + σ_w)/2`, `ε_iw = √(ε_i·ε_w)` in its distance `z` from
 //!   the wall surface, capped like a pair (`CappedPotential`). By default
 //!   it is cut and shifted at its minimum (WCA, purely repulsive);
 //!   `attractive` keeps the well up to the pair cutoff. Walls act only
 //!   through this force (`wall_forces`). Behind it sits a hard backstop at
-//!   `backstop · σ_i` (`wall_backstop`), where the wall energy is far above
-//!   `k_B·T`: a safety net, counted (#422), since a soft wall alone has a
-//!   finite barrier (the force cap), is sampled once per step, and flips its
-//!   force once a centre crosses a thin segment. A wall that appears on top
-//!   of a ball is ramped in for that ball (`Ball2D::wall_ramp`,
-//!   [`WALL_RAMP_TIME`]).
-//! - **Hard** ([`HardContact`], legacy: saves from before #280): a ball is
+//!   `backstop · σ_i`, where the wall energy is far above `k_B·T`: a
+//!   counted safety net, since a soft wall alone has a finite barrier (the
+//!   force cap), is sampled once per step, and flips its force once a
+//!   centre crosses a thin segment.
+//! - **Hard** ([`HardContact`], saves from before #280): a ball is
 //!   reflected at centre distance `σ_i / 2` from the wall surface, the
 //!   closest approach of two like balls at about T* = 1 (≈ 0.97·σ), in the
-//!   position update (`wall_contact`, the line-wall sweep, the overlap
-//!   pass, the molecules' site impulses). No force, no energy.
+//!   position update. No force, no energy.
 //!
 //! The wall code asks [`WallLaw::contact_distance`] where the hard contact
 //! (or the backstop) is.
@@ -73,10 +70,9 @@ pub(crate) const DEFAULT_WALL_EPSILON: f32 = 1.0;
 /// with a probability of about e⁻²⁴ per contact at T* = 1.
 pub(crate) const DEFAULT_BACKSTOP_FACTOR: f32 = 0.3;
 
-/// Time over which the line walls ramp in for a ball a wall appeared on
-/// (`Ball2D::wall_ramp`, #424). Long against a step, so the force that
-/// pushes the ball out stays small while the ball is deep inside, and short
-/// enough that a thermal ball (speed ≈ 1) is out after about one `σ`.
+/// Time over which the line walls ramp in for a ball a wall appeared on:
+/// long against a step, short enough that a thermal ball is out after
+/// about one `σ`.
 pub(crate) const WALL_RAMP_TIME: f32 = 1.0;
 
 /// The wall model of a world, fixed when its physics is built.
@@ -142,10 +138,6 @@ pub(crate) struct SoftWalls {
     /// Per species, for a molecule (#406): (offset along the axis, wall
     /// potential) of each site. The wall acts on the sites, not the centre.
     sites: Vec<Option<Vec<WallSite>>>,
-    /// Per species: (offset along the axis, backstop distance) of each
-    /// point the backstop checks (#424): the centre of an atom, every site
-    /// of a molecule.
-    backstop: Vec<Vec<(f32, f32)>>,
 }
 
 impl SoftWalls {
@@ -185,29 +177,6 @@ impl SoftWalls {
                 })
             })
             .collect();
-        let backstop = Backstop {
-            factor: settings.backstop,
-        };
-        let backstop_points = species
-            .ids()
-            .map(|id| {
-                let s = species.species(id);
-                match &s.molecule {
-                    Some(m) => m
-                        .sites
-                        .iter()
-                        .map(|site| (site.offset, backstop.factor * site.sigma))
-                        .collect(),
-                    None => vec![(
-                        0.0,
-                        backstop.contact_distance(&Species {
-                            sigma: like_pair(id).0,
-                            ..s.clone()
-                        }),
-                    )],
-                }
-            })
-            .collect();
         let laws: Vec<LennardJones> = species
             .ids()
             .map(|id| {
@@ -227,7 +196,6 @@ impl SoftWalls {
             .collect();
         Self {
             sites,
-            backstop: backstop_points,
             equilibrium: laws.iter().map(|l| SQRT6_OF_TWO * l.sigma).collect(),
             potentials: laws
                 .into_iter()
@@ -246,12 +214,6 @@ impl SoftWalls {
     /// an atomic species.
     pub(crate) fn sites(&self, species: SpeciesId) -> Option<&[WallSite]> {
         self.sites[species.index()].as_deref()
-    }
-
-    /// The points of a ball of `species` the backstop checks: (offset along
-    /// its axis, backstop distance from the wall surface).
-    pub(crate) fn backstop_points(&self, species: SpeciesId) -> &[(f32, f32)] {
-        &self.backstop[species.index()]
     }
 
     /// Wall distance of the potential minimum of `species`.
