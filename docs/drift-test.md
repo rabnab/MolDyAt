@@ -16,11 +16,15 @@ cargo ci-test-drift   # = cargo test -p thermo_physics -- --ignored --nocapture
 All scenarios are `#[ignore = "suite:drift"]`, so a plain `cargo test` skips
 them. CI runs the alias in a step of the `test` job, after the unit tests and
 reusing their build. The alias runs every ignored test of `thermo_physics`, so
-it also runs the three `#[ignore = "suite:physics (slow)"]` tests
+it also runs the four `#[ignore = "suite:physics (slow)"]` tests
 (`test_overlap_fallback_stays_rare_in_a_gas_with_walls`,
 `test_virial_pressure_2d_matches_wall_pressure`,
-`soft_wall_pressure_matches_the_hard_wall`); they are not drift
-scenarios and print no summary line.
+`soft_wall_pressure_matches_the_hard_wall`,
+`torques_bring_rotation_to_equipartition`, about 40 s); they are not drift
+scenarios and print no summary line. The MB water anomaly test
+(`water_has_a_negative_thermal_pressure_coefficient`, about 7 min) is
+ignored as well but does nothing unless `MOLDYAT_SLOW_WATER=1` is set
+(owner decision); run it by hand after changes to water.
 
 Walls: worlds have soft walls by default (#280). Scenarios that measure the
 hard contact (elastic_world_wall, elastic_line_segment, walled_gas and the
@@ -309,3 +313,6 @@ stated.
 **Ar units (#405).** Ar replaced N₂ as the unit species (`σ = ε = m = 1`); `N2` is now σ 1.086, ε 0.793, m 0.701 and the size classes keep their physical values. The force-cap defaults (`max_force` 73.05, `core_stiffness` 134.53) and the Verlet skin (a share of the `N2` cutoff) keep their physical values; the time step keeps its number (0.01 in the drift suite), about 2 % shorter physically. The dense-gas scenarios scale their spacing and speeds from N₂ units (`N2_LENGTH`, `N2_SPEED` in `drift_harness.rs`); the others keep their numbers, which are now physically a little different. binary_mixture uses `Ar` instead of `N2` as its first species (σ ratio 1 : 1.2 and ε ratio 1 : 1.5 as before; `XS` is now 0.70 times as heavy). Every trajectory changes. Re-measured against #347 (dev profile, x86_64), thresholds unchanged: dense_gas max 3.506e-3 -> 3.743e-3 (94 % of 4.0e-3, CI warns), final 2.706e-3 -> 3.101e-3, momentum 3.2e-8 -> 4.1e-8, cap hits 93 -> 85; dense_gas_dt_quartering 0.121 -> 0.071 (coarse 3.743e-3, fine 2.654e-4; the warning is gone); precision: dense gas at 2000 1.08 -> 1.49 of the origin (93 % of 1.6, CI warns; at 125 1.04, at 500 1.12), cool gas at most 0.92; walled_gas 1.09 -> 1.49 (93 %, warns), 242..277 contacts per run (120..128); soft_walled_gas 3.506e-3 -> 3.905e-3 (71 %, warns); binary_mixture 5.68e-4 -> 6.66e-4, momentum 2.3e-8, 27 cap hits; two_body_lj_baseline 2.14e-3 -> 1.99e-3; two_body_dt_halving 2.82e-3 / 1.41e-3 -> 2.59e-3 / 1.29e-3; force_cap_transition 8.31e-2 -> 7.28e-2; hot_sparse_gas 1.51e-3 -> 9.0e-4; balls_removed_and_added 6.26e-4 -> 3.35e-4; elastic_line_segment 4.2e-7 -> 1.8e-6 (threshold 1.0e-5); elastic_world_wall 0; mixed_sizes_cell_borders (no energy threshold) 2.38e-1 -> 2.77e-1. The precision ratio at 2000 rose because the origin run's dt/4 drift fell (2.65e-4 from 4.26e-4) while the far run's stayed (3.97e-4): the far runs still converge, the origin run converges faster. Both headless fixtures changed.
 
 **CH₄ and NH₃ (#409), orientation (#348).** #409 added `NH3` and `CH4_HCB` to the built-in table, so mixed_sizes_cell_borders (one ball of every species, no energy threshold) has 13 balls instead of 12: max drift 2.77e-1 -> 2.86e-1. #348 added the orientation; species without a moment of inertia (all built-in ones) are bit-identical: every other scenario keeps its `trajectory_hash`, and both headless fixtures are unchanged.
+
+**MB water (#349).** A new built-in species `H2O`; no scenario uses it, so every scenario but one keeps its `trajectory_hash`. mixed_sizes_cell_borders took the last table entry as its largest species, which stopped being `XL` when the library gases were appended (#237); it now picks the species with the largest `σ` again and is back to 59 balls (all species up to `XL`) in a world sized by the `XL`–`XL` list radius: max drift 6.43e-3, final 6.17e-3, 565 cap hits (no energy threshold), no missed or asymmetric pairs. Both headless fixtures only gain the `H2O:count` metric. Water itself: energy drift 8.3e-4 over 4000 steps at dt 0.0005 (64 molecules); equipartition rotation / translation per degree of freedom 1.03 (144 molecules, 120k steps).
+

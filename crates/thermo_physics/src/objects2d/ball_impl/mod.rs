@@ -26,6 +26,7 @@ pub(crate) mod species;
 pub(crate) mod verlet;
 pub(crate) mod wall_contact;
 pub(crate) mod wall_law;
+pub(crate) mod water;
 
 /// Neighbour-list rebuilds so far; rebuild checks run in parallel.
 static UPDATE_HOOD_CNT: AtomicUsize = AtomicUsize::new(0);

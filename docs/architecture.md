@@ -111,6 +111,9 @@ headless runs; both step with the configured time step.
    (`ball_impl::wall_contact`): at `σ_i / 2` with hard walls, at the
    backstop (`0.3 σ_i`) behind soft walls.
 3. **forces**: pair forces from the SIMD kernel (`simd_forces`, `f32x4`),
+   the Mercedes-Benz hydrogen bonds of water balls with their water
+   neighbours (#349, `ball_impl::water`, scalar, in neighbour-list order:
+   energy, force, torque and virial),
    plus, with soft walls (#280, the default), the wall forces
    (`core::wall_forces`): each box side through the signed distance from
    it, and of each wall chain the nearest line wall only (nearest-feature

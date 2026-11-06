@@ -30,6 +30,7 @@ mod species_ui;
 mod thermostats;
 mod valves;
 mod verbose;
+mod water;
 
 // The world builders are shared with the tests of `thermo_runtime` (feature
 // `test-support`).

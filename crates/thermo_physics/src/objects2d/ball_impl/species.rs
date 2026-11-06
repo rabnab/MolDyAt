@@ -22,6 +22,7 @@
 //! A config file can replace the whole table with its own `[[species]]` list
 //! (`SimConfig::species_table`); a world keeps the table it was built with.
 
+use crate::objects2d::ball_impl::water::MbWater;
 use std::sync::{Arc, LazyLock};
 
 /// Index of a species in its [`SpeciesTable`].
@@ -55,6 +56,8 @@ pub struct Species {
     /// Moment of inertia about the centre (#348), `None` for a species
     /// without orientation (every single-site Lennard-Jones species).
     pub inertia: Option<f32>,
+    /// Mercedes-Benz hydrogen-bond arms (#349), for water.
+    pub water: Option<MbWater>,
 }
 
 impl Species {
@@ -68,6 +71,7 @@ impl Species {
             display_radius: 0.5 * sigma,
             colour,
             inertia: None,
+            water: None,
         }
     }
 
@@ -278,9 +282,42 @@ static BUILTIN_TABLE: LazyLock<Arc<SpeciesTable>> = LazyLock::new(|| {
         std::iter::once(n2)
             .chain(size_classes)
             .chain(library)
+            .chain(std::iter::once(mb_water()))
             .collect(),
     ))
 });
+
+/// MB water (#349): the Mercedes-Benz model with `r_HB` = 2.8 Å (the O–O
+/// distance of a hydrogen bond) and `ε_HB / k_B` = 1385 K, chosen so that the
+/// model's density maximum (`T ≈ 0.2 ε_HB / k_B`) lies near 277 K (owner
+/// decision). Its Lennard-Jones disk has `σ = 0.7 r_HB`, `ε = 0.1 ε_HB`; mass
+/// and moment of inertia are those of H₂O (1.15 u·Å², the in-plane axis).
+/// Rotations are fast: water runs need `dt ≈ 0.0005` ([`WATER_MAX_TIME_STEP`]).
+fn mb_water() -> Species {
+    let mut water = Species::from_literature(
+        "H2O",
+        0.7 * MB_R_HB_ANGSTROM,
+        0.1 * MB_EPSILON_HB_KELVIN,
+        18.015,
+        Some(0.5 * MB_R_HB_ANGSTROM),
+        [0.95, 0.95, 1.0, 1.0], // white
+    );
+    water.inertia = Some((1.15 / (AR_MASS_U * AR_SIGMA_ANGSTROM * AR_SIGMA_ANGSTROM)) as f32);
+    water.water = Some(MbWater::new(
+        (MB_EPSILON_HB_KELVIN / AR_EPSILON_KELVIN) as f32,
+        (MB_R_HB_ANGSTROM / AR_SIGMA_ANGSTROM) as f32,
+    ));
+    water
+}
+
+/// `r_HB` of MB water in Å.
+pub const MB_R_HB_ANGSTROM: f64 = 2.8;
+/// `ε_HB / k_B` of MB water in K.
+pub const MB_EPSILON_HB_KELVIN: f64 = 1385.0;
+/// Largest time step for runs with MB water (reduced units, about 1 fs):
+/// the librations of real-inertia water and the narrow hydrogen-bond
+/// Gaussians need it (#349).
+pub const WATER_MAX_TIME_STEP: f32 = 0.0005;
 
 /// Mass of the former size classes: grows slowly with the radius.
 fn size_class_mass(radius: f32) -> f32 {
@@ -468,20 +505,20 @@ mod tests {
     fn next_wraps_around() {
         let table = SpeciesTable::builtin();
         assert_eq!(table.next(SpeciesId::new(5)), SpeciesId::new(6));
-        assert_eq!(table.next(SpeciesId::new(11)), SpeciesId::new(0));
-        assert_eq!(table.previous(SpeciesId::new(0)), SpeciesId::new(11));
+        assert_eq!(table.next(SpeciesId::new(12)), SpeciesId::new(0));
+        assert_eq!(table.previous(SpeciesId::new(0)), SpeciesId::new(12));
         assert_eq!(table.previous(SpeciesId::new(6)), SpeciesId::new(5));
         // An id outside the table wraps into it in both directions.
-        assert_eq!(table.next(SpeciesId::new(13)), SpeciesId::new(2));
-        assert_eq!(table.previous(SpeciesId::new(13)), SpeciesId::new(0));
+        assert_eq!(table.next(SpeciesId::new(14)), SpeciesId::new(2));
+        assert_eq!(table.previous(SpeciesId::new(14)), SpeciesId::new(0));
     }
 
     #[test]
     fn id_rejects_indices_outside_the_table() {
         let table = SpeciesTable::builtin();
-        assert_eq!(table.id(11), Some(SpeciesId::new(11)));
-        assert_eq!(table.id(12), None);
-        assert!(table.get(SpeciesId::new(12)).is_none());
+        assert_eq!(table.id(12), Some(SpeciesId::new(12)));
+        assert_eq!(table.id(13), None);
+        assert!(table.get(SpeciesId::new(13)).is_none());
         assert_eq!(table.by_name("M"), Some(SpeciesId::new(3)));
         assert_eq!(table.by_name("M"), Some(SPECIES_M));
         assert_eq!(table.by_name("Ar"), Some(SpeciesId::new(6)));
@@ -552,8 +589,8 @@ mod tests {
     fn builtin_table_is_pinned() {
         // (name, f32 bits of mass, sigma, epsilon, display_radius), in table
         // order, in Ar units (#405, format v6; #409, v7: TraPPE CH4, NH3,
-        // the former CH4 as CH4_HCB).
-        const PINNED: [(&str, u32, u32, u32, u32); 12] = [
+        // the former CH4 as CH4_HCB; #349: MB water H2O).
+        const PINNED: [(&str, u32, u32, u32, u32); 13] = [
             ("N2", 0x3f3384e6, 0x3f8b03af, 0x3f4b1ca2, 0x3f0b03af), // 0.7012466, 1.08605, 0.7934057
             ("XS", 0x3f3384e6, 0x3fb02b31, 0x3f4b1ca2, 0x3f302b31), // 0.7012466, 1.376318, 0.7934057
             ("S", 0x3f576c48, 0x3fd552b2, 0x3f4b1ca2, 0x3f5552b2),  // 0.841496, 1.666586, 0.7934057
@@ -566,6 +603,7 @@ mod tests {
             ("O2", 0x3f4d0f68, 0x3f86941d, 0x3f7b15cc, 0x3f06941d), // 0.8010163, 1.051395, 0.9808013
             ("NH3", 0x3eda47d3, 0x3f5a0845, 0x409520e8, 0x3eda0845), // 0.4263292, 0.8516887, 4.660267
             ("CH4_HCB", 0x3ecd9e22, 0x3f8f7ce1, 0x3f9e580a, 0x3f0f7ce1), // 0.4015971, 1.120999, 1.237062
+            ("H2O", 0x3ee6e465, 0x3f135c1a, 0x3f93fadf, 0x3ed28392), // 0.4509613, 0.5756241, 1.156093
         ];
         let actual: Vec<_> = SpeciesTable::builtin()
             .iter()

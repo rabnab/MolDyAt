@@ -97,3 +97,21 @@ The `τ` column is `σ √(m/ε)` of that species. In Ar units the same timescal
 - (a) O-site of SPC/E water with the whole-molecule mass. LJ alone is not water: it needs charges (hydrogen bonds) and a rigid-molecule geometry.
 - (b) Heinz et al. 12-6 fit (ε = 5.29 kcal/mol, `r_m` = 2.951 Å, `σ = r_m / 2^(1/6)`). Metals are many-body (EAM-like); LJ only gives a rough cohesive/lattice model.
 - H₂: quantum effects matter below about 100 K; classical LJ is approximate.
+
+## MB water (#349)
+
+The built-in species `H2O` is Mercedes-Benz water (Silverstein, Haymet and Dill, *J. Am. Chem. Soc.* 120, 3166 (1998); `ball_impl/water.rs`): a Lennard-Jones disk with three hydrogen-bond arms at 120°, turned by the ball's orientation (#348). Two water balls add `U = −ε_HB G(d − r_HB) Σ_k G(a_k·u − 1) Σ_l G(b_l·u + 1)`, `G(x) = exp(−x²/(2·0.085²))` (the distance width is `0.085 r_HB`); the force and the torque are its exact derivatives. Other species meet water through its Lennard-Jones part only (Lorentz–Berthelot), so N₂ or Ar in water are hydrophobic solutes; walls also see only that part.
+
+| Parameter | MB units | Physical (owner decision) | Ar units |
+|---|---|---|---|
+| `r_HB` | 1 | 2.8 Å (O–O distance of a hydrogen bond) | 0.8223 |
+| `ε_HB / k_B` | 1 | 1385 K, so the density maximum (`T ≈ 0.2 ε_HB/k_B`) lies near 277 K | 11.56 |
+| `σ_LJ` | 0.7 | 1.96 Å | 0.5756 |
+| `ε_LJ / k_B` | 0.1 | 138.5 K | 1.156 |
+| mass | – | 18.015 u | 0.4510 |
+| moment of inertia | – | 1.15 u·Å² (H₂O, in-plane axis) | 0.00248 |
+
+With the real moment of inertia, water librates fast: runs with water need `dt ≤ 0.0005` (`WATER_MAX_TIME_STEP`, about 1 fs, as in all-atom water MD); a run whose time step is larger logs a warning once. A temperature in MB units is `T_MB = T / 11.56` in Ar units (`T_MB = 0.2` ≈ 277 K).
+
+The 2D model reproduces water's density anomaly qualitatively: at fixed density `0.82 / r_HB²` the pressure peaks near `T_MB ≈ 0.135` and falls up to about 0.17 (`(∂P/∂T)_V < 0`, i.e. a negative expansion coefficient; wall pressure in Ar units: 0.11 → 2.08, 0.13 → 2.32, 0.14 → 2.33, 0.15 → 2.12, 0.16 → 2.22, 0.17 → 2.16, 0.19 → 2.36, single runs of 144 molecules, ±0.1). At 0.76 and 0.88 the pressure rises with temperature. The water config of `[[species]]` lists cannot define MB arms yet; only the built-in `H2O` has them.
+
