@@ -7,6 +7,7 @@ use super::placement::PlacementIndex;
 use super::*;
 use crate::application::{AppError, AppResult};
 use crate::objects2d::ball_impl::ball_core::gravity_acceleration;
+use crate::objects2d::ball_impl::external_field::fields_acceleration;
 use rand::rng;
 use rand_distr::{Distribution, Normal};
 use rayon::prelude::*;
@@ -415,6 +416,11 @@ impl SimulationWorld {
 
     pub(crate) fn add_ball_and_register(&mut self, mut candidate: Ball2D) {
         candidate.accel.y += gravity_acceleration(self.physics.constants.gravity).y;
+        let fields = self.physics.fields();
+        if !fields.is_empty() {
+            candidate.accel +=
+                fields_acceleration(fields, *candidate.get_position(), candidate.mass);
+        }
         // A new species may need wider cells; the grid is refitted before the
         // next neighbour rebuild (`fit_cell_grid`), when every ball is in its
         // cell.

@@ -8,6 +8,7 @@ mod ball_reorder;
 mod barrier_energy;
 mod drift_harness;
 mod energy_conservation;
+mod external_fields;
 mod gravity;
 mod overlap_resolution;
 mod placement;

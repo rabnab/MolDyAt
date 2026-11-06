@@ -131,7 +131,7 @@ guardrails. Water (I9–I10) follows. See §5 for the model choice behind it.
 | I6 | Species library | Species defined in the config file (M6): N₂, Ar, Ne, CH₄, O₂ (single-site LJ) plus the `legacy` preset. Done (#237): the built-in table is the library (`N2`, the size classes `XS`–`XL` as the legacy species, then `Ar`, `Ne`, `CH4`, `O2` from Hirschfelder, Curtiss & Bird 1954); a config's `[[species]]` list (Å, K, u) replaces the whole table and travels with saves; headless `--seed-species` seeds mixtures. | S | I4, I5 |
 | I7 | Mixed-species UI and metrics | Species picker (sidebar or keys via C2), colour per species, source spheres emit a chosen species, per-species count / temperature as metric series (V3). Done (#238): `N` / `Alt + N` (`balls.next_species` / `balls.previous_species`) and right click pick the species of new balls and new source spheres; it is shown on the sidebar ball icon, in the cursor readout and in the status lines with the ball count per species; each source sphere is labelled with its species. Per-species time series wait for the metrics store (V3, Phase 5). | M | I3, C2 |
 | I8a | Gravitational potential energy in the stats | The reported potential energy holds only the pair energy (`ForceResult::potential_energy`), so with gravity on the shown total energy is not conserved; only the tests in `barrier_energy.rs` add `m·g·y`. Add the gravity term to the potential energy (or as its own series for V3) and an energy-conservation test with gravity. Gravity defaults to 0, so default runs and fixtures are unchanged; outputs of runs with gravity change (document in the PR). Done (#334): with gravity on, a pass at the end of the step adds `m·g·h` (height above the bottom wall) to the potential energy. | S | – |
-| I8b | `ExternalField` abstraction | Gravity becomes `UniformField`; enables traps or other fields; applied in the kick with the potential-energy accounting from I8a. | M | I1, I8a |
+| I8b | `ExternalField` abstraction | Gravity becomes `UniformField`; enables traps or other fields; applied in the kick with the potential-energy accounting from I8a. Done (#347): `ExternalField` (`acceleration`, `potential`) in `ball_impl/external_field.rs`; gravity is a `UniformField` (strength still the run-time `PhysicsConstants::gravity` and the save's top-level `gravity`, bit-identical); `HarmonicTrap` from `[[fields]]` in the config (save format v5), added in the kick and to the potential energy. | M | I1, I8a |
 | I9 | Orientational degrees of freedom | Optional per-species orientation θ, angular velocity ω, moment of inertia; rotational velocity-Verlet step; rotational kinetic energy in stats, temperature and the Nosé–Hoover thermostat. Prerequisite for water. Deterministic (no new reductions). One track with I10: start only once the water model is decided (§7). | L | I3 |
 | I10 | 2D water: Mercedes-Benz model (pending decision) | LJ core + three hydrogen-bond arms (Gaussian in distance and arm alignment), parameters from Silverstein, Haymet & Dill (1998). Torques from the same potential. Tests: energy conservation, force/torque vs finite differences, smoke test for the density maximum. Water–N₂ via the LJ part only (mixing rules). | L | I9, I4 |
 | I11 | Multi-site molecules (only if needed later) | Rigid two-site N₂ or atomistic water (SPC/E, TIP4P) need molecules, constraints (SHAKE/RATTLE) and electrostatics (damped shifted force). Not needed for mixed species or MB water. | L | I9 |
@@ -190,7 +190,7 @@ Phase 4 (finish the split):         M9, I8a, #327, C3
 Phase 5 (metrics + plots):          V3, V7, V4a, V4b, C5
 Phase 6 (visuals + tools):          #363, V2, #290, V5, V6, #303, #203, #398, #400, #402, #384
 Phase 7 (performance):              P8a, #386, P4, #250, P6, P8b, #392 (16-byte kernel record only)
-Phase 8 (walls + water):            I12, I8b, I9 + I10 (once §7 is decided), I11 (if needed)
+Phase 8 (walls + molecules):        I12, I8b, #405, #409, I9, I10, #406, #407, #408 (I11 #350 not planned)
 Phase 9 (GPU compute):              #358, #359, #360, #361
 ```
 
@@ -216,7 +216,7 @@ GitHub issues (every open issue is in a phase, as of 2026-11-02):
 | 5 | #330 | V3 #336, V7 #337, V4a #338, #367, #366, V4b #339, #371, #372, C5 #340                                              | M10 |
 | 6 | #331 | #363, V2 #341, #290, V5 #342, V6 #343, #303, #203, #398, #400, #402                                                | #384, M10 |
 | 7 | #332 | P8a #344, #386, P4 #345, #250, P6 #346 (hot/cold part), P8b #213, #392 (16-byte kernel record; SoA arrays dropped) | M10 |
-| 8 | #333 | I12 #280                                                                                                           | I8b #347, I9 #348, I10 #349, I11 #350, M10 |
+| 8 | #333 | I12 #280, I8b #347                                                                                                 | #405, #409, I9 #348, I10 #349, #406, #407, #408, I11 #350, M10 |
 | 9 | #357 | –                                                                                                                  | #358, #359, #360, #361, M10 |
 
 "Landed" is taken from the commits on `master` (as of 2026-11-02), not from
@@ -243,9 +243,12 @@ crate work, graphs, visuals, performance and water in two long lists:
   changes; the flat cell grid (P4, with P5) comes before the hot/cold split
   (P6), and P8b only if P8a shows it is needed. #386 (the crosshair
   shrinks in large worlds) is small and independent.
-- **Phase 8** holds the physics extensions. I12 has no open prerequisites
-  and can be pulled forward; I9 and I10 wait for the water-model decision
-  (§7).
+- **Phase 8** holds the physics extensions: soft walls and external
+  fields first, then Ar as the unit species (#405) and the spherical
+  species CH₄/NH₃ (#409), then rotation (I9) for Mercedes-Benz water (I10)
+  and the rigid linear molecules N₂ (#406), H₂ (#407) and CO₂ (#408),
+  which use the same rigid-body machinery. Their rigid bodies cover what
+  I11 (#350) would have done for N₂; I11 stays open for atomistic water.
 - **Phase 9** ports the Lennard-Jones force pass to wgpu compute shaders
   (#357): buffers and WGSL setup, the all-pairs kernel, zero-copy
   rendering, then validation of energy conservation.
@@ -307,6 +310,12 @@ Decisions (2026-10-23):
 
 12. Docs refresh (M10) is part of every PR, not an item at the end of a phase: each PR updates the docs, skills, project rules and this plan its change touches.
 
+Decisions (2026-11-03):
+
+13. Water is the Mercedes-Benz model (I10); this answers §7.1.
+14. Soft walls are the default (I12); saves before format v4 run with hard walls.
+15. Ar replaces N₂ as the unit species (#405, replaces decision 6); old saves are rescaled to the same physical state.
+
 ## 7. Open questions
 
-1. Water model: Mercedes-Benz (recommended) or atomistic water (I11)? Pending: owner is reading up on the MB model.
+1. ~~Water model~~: decided, Mercedes-Benz (decision 13).

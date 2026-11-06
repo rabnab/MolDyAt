@@ -13,7 +13,10 @@ use crate::application::thermo_field::{
 use crate::application::{AppResult, log_util};
 use crate::logging::log_update_hood_start;
 use crate::objects2d::ball_impl::ForceResult;
-use crate::objects2d::ball_impl::ball_core::{Ball2D, BounceInfo, gravity_potential};
+use crate::objects2d::ball_impl::ball_core::{Ball2D, BounceInfo};
+use crate::objects2d::ball_impl::external_field::{
+    ExternalField, Field, UniformField, fields_acceleration,
+};
 use crate::objects2d::ball_impl::simd_forces::{KernelPoint, force_simd};
 use crate::objects2d::ball_impl::verlet::Verlet;
 use crate::objects2d::ball_impl::wall_contact::normal_velocity_after_contact;
@@ -185,12 +188,28 @@ impl SimulationEngine {
             },
         );
 
-        // Gravity's potential energy from the positions at the end of the
-        // step, after the wall-overlap fallback moved balls (#334). Skipped
-        // without gravity, so those runs stay bit-identical.
+        // The external fields' potential energy (gravity, `[[fields]]`) from
+        // the positions at the end of the step, after the wall-overlap
+        // fallback moved balls (#334, #347). Skipped without fields, so
+        // those runs stay bit-identical.
+        //
+        // Gravity is a `UniformField` too, but stays out of `fields()` on
+        // purpose: it is a runtime setting (`G` cycles it, it is not part of
+        // the config's `[[fields]]`), its floor follows the box on a resize,
+        // and its kick sits inside `accel_with_speed_limit`, where moving it
+        // would change the f32 rounding of every gravity run.
         let gravity = world.physics.constants.gravity;
         if gravity != 0.0 {
-            stats_accumulator.pot += Self::gravity_potential_energy(world, gravity, bound_rect);
+            stats_accumulator.pot += Self::field_potential_energy(
+                world,
+                &UniformField {
+                    g: gravity,
+                    floor: bound_rect.get_tl().1.min(bound_rect.get_br().1),
+                },
+            );
+        }
+        for field in world.physics.fields() {
+            stats_accumulator.pot += Self::field_potential_energy(world, field);
         }
 
         stats_accumulator.v_com = stats_accumulator
@@ -464,6 +483,7 @@ impl SimulationEngine {
     ) -> (f32, usize) {
         let ApplyParams {
             gravity,
+            fields,
             restitution,
             dt,
             speed_limit,
@@ -472,7 +492,10 @@ impl SimulationEngine {
         let mut wall_px = 0.0;
         let mut wall_py = 0.0;
 
-        let accel = ball.accel_with_speed_limit(&result.force, gravity, speed_limit, dt);
+        let mut accel = ball.accel_with_speed_limit(&result.force, gravity, speed_limit, dt);
+        if !fields.is_empty() {
+            accel += fields_acceleration(fields, *ball.get_position(), ball.mass);
+        }
 
         // Velocity-Verlet kick; contacts replace the normal component with
         // the reflected one (see `wall_contact`), and the walls take the
@@ -523,22 +546,21 @@ impl SimulationEngine {
         (speed_sq, ball.get_id())
     }
 
-    /// The balls' gravitational potential energy, with heights measured
-    /// from the bottom wall: a world far from the origin would otherwise add
-    /// `m·g·y` terms so large that f32 loses the kinetic and pair energy
-    /// next to them. Summed in ball order in f64. A ball with a non-finite
-    /// height (NaN, removed later this step) is left out, so it cannot turn
-    /// the reported energy into NaN.
-    fn gravity_potential_energy(world: &SimulationWorld, gravity: f32, bound_rect: &Rect) -> f32 {
-        let floor = bound_rect.get_tl().1.min(bound_rect.get_br().1);
+    /// The balls' potential energy in `field`, summed in ball order in f64.
+    /// Gravity measures heights from the bottom wall (`UniformField::floor`):
+    /// a world far from the origin would otherwise add `m·g·y` terms so large
+    /// that f32 loses the kinetic and pair energy next to them. A ball with a
+    /// non-finite position (NaN, removed later this step) is left out, so it
+    /// cannot turn the reported energy into NaN.
+    fn field_potential_energy(world: &SimulationWorld, field: &impl ExternalField) -> f32 {
         world
             .balls
             .iter()
-            .filter(|ball| ball.get_position().y.is_finite())
-            .map(|ball| {
-                let height = ball.get_position().y - floor;
-                f64::from(gravity_potential(ball.mass, gravity, height))
+            .filter(|ball| {
+                let p = ball.get_position();
+                p.x.is_finite() && p.y.is_finite()
             })
+            .map(|ball| f64::from(field.potential(*ball.get_position(), ball.mass)))
             .sum::<f64>() as f32
     }
 
@@ -578,6 +600,7 @@ impl SimulationEngine {
         );
         let params = ApplyParams {
             gravity: world.physics.constants.gravity,
+            fields: world.physics.fields(),
             restitution: world.wall_restitution_fault(),
             dt,
             speed_limit: world
@@ -629,8 +652,10 @@ impl SimulationEngine {
 const APPLY_CHUNK: usize = 1024;
 
 /// Step-wide inputs of the apply pass.
-struct ApplyParams {
+struct ApplyParams<'a> {
     gravity: f32,
+    /// The `[[fields]]` (#347); gravity is `gravity`.
+    fields: &'a [Field],
     restitution: f32,
     dt: f32,
     speed_limit: f32,

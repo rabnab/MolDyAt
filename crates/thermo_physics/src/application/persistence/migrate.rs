@@ -62,7 +62,18 @@ pub(crate) const MIGRATIONS: &[Migration] = &[
         from: 3,
         apply: migrate_v3_to_v4,
     },
+    Migration {
+        from: 4,
+        apply: migrate_v4_to_v5,
+    },
 ];
+
+/// v4 → v5 (#347): `config.fields` (external fields besides gravity).
+/// Older files have none, which the default fills in; the version only
+/// changes so that older builds refuse files with fields.
+fn migrate_v4_to_v5(_file: &mut Value) -> AppResult {
+    Ok(())
+}
 
 /// v3 → v4 (#280): soft walls became the default. A save with a `config`
 /// ran with hard walls, so it gets `config.walls.model = "hard"`; a save

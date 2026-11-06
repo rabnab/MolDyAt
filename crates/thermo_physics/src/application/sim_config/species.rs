@@ -7,6 +7,7 @@
 use super::*;
 
 use crate::error::AppResult;
+use crate::objects2d::ball_impl::external_field::Field;
 use crate::objects2d::ball_impl::pair_potential::PairOverride;
 use crate::objects2d::ball_impl::wall_law::WallSettings;
 use crate::objects2d::ball_impl::{
@@ -137,6 +138,8 @@ pub(crate) struct ResolvedSpecies {
     pub table: Arc<SpeciesTable>,
     pub pair_overrides: Vec<PairOverride>,
     pub walls: WallSettings,
+    /// The `[[fields]]` (#347).
+    pub fields: Vec<Field>,
 }
 
 impl ResolvedSpecies {
@@ -147,6 +150,7 @@ impl ResolvedSpecies {
             table: SpeciesTable::builtin_shared(),
             pair_overrides: Vec::new(),
             walls: WallSettings::hard(),
+            fields: Vec::new(),
         }
     }
 }
