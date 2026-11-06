@@ -50,6 +50,7 @@ fn seeded_gas_among_walls(balls: usize, walls: usize) -> MainContent {
 
 fn world() -> MainContent {
     let (mut main_content, _) = create_main_content_for_region(WORLD_TOP_LEFT.0, WORLD_TOP_LEFT.1);
+    main_content.use_hard_walls();
     main_content.world_mut().speed_limit_override = Some(f32::INFINITY);
     main_content
 }
@@ -116,6 +117,8 @@ fn test_overlap_fallback_stays_rare_in_a_gas_with_walls() {
     const MIN_CONTACTS: u64 = 300;
 
     let mut main_content = seeded_gas_among_walls(600, WALLS);
+    // Hard contacts: with soft walls there are none to compare against.
+    main_content.use_hard_walls();
     for _ in 0..STEPS {
         main_content.simulation_step().unwrap();
     }

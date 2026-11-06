@@ -105,12 +105,20 @@ headless runs; both step with the configured time step.
 
 1. **neighbours**: balls whose displacement since their last rebuild exceeds
    skin/3 rebuild their Verlet lists from the 3x3 surrounding cells.
-2. **positions**: velocity-Verlet position update. Contacts with the box
-   walls and with line-segment walls are resolved along the wall normal
-   (`ball_impl::wall_contact`).
-3. **forces**: pair forces from the SIMD kernel (`simd_forces`, `f32x4`).
-4. **apply**: velocity update, kinetic and pair potential energy, wall
-   momentum bookkeeping, the overlap fallback for balls still inside a
+2. **positions**: velocity-Verlet position update. Hard contacts with the
+   box walls and with line-segment walls are resolved along the wall normal
+   (`ball_impl::wall_contact`): at `σ_i / 2` with hard walls, at the
+   backstop (`0.3 σ_i`) behind soft walls.
+3. **forces**: pair forces from the SIMD kernel (`simd_forces`, `f32x4`),
+   plus, with soft walls (#280, the default), the wall forces
+   (`core::wall_forces`): each box side through the signed distance from
+   it, and of each wall chain the nearest line wall only (nearest-feature
+   rule, so a chain has no energy step at its joints; separate chains add
+   up). Line walls are found by bounding-box
+   rejection against the step's obstacle list, as in the contact sweep.
+4. **apply**: velocity update, kinetic, pair and wall potential energy, wall
+   momentum bookkeeping (contacts, and the soft wall forces times `dt`), the
+   overlap fallback for balls still inside a
    wall, and the Nosé–Hoover thermostats. The velocity update runs in
    parallel over fixed chunks of 1024 balls; each chunk sums its energies
    and momenta in ball order and the chunk sums are combined in chunk

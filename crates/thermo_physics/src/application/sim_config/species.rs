@@ -8,6 +8,7 @@ use super::*;
 
 use crate::error::AppResult;
 use crate::objects2d::ball_impl::pair_potential::PairOverride;
+use crate::objects2d::ball_impl::wall_law::WallSettings;
 use crate::objects2d::ball_impl::{
     N2_EPSILON_KELVIN, N2_MASS_U, N2_SIGMA_ANGSTROM, Species, SpeciesTable,
 };
@@ -127,23 +128,25 @@ fn check_literature(
     }
 }
 
-/// The species table of a config and its pair overrides resolved against it:
-/// what the physics of a new world is built from. Built once by
-/// [`SimConfig::validated_species`] (or `WorldFile::validate`) and handed to
-/// the world's constructor, which does not resolve them again.
+/// The species table of a config, its pair overrides and its wall model
+/// resolved against it: what the physics of a new world is built from.
+/// Built once by [`SimConfig::validated_species`] (or `WorldFile::validate`)
+/// and handed to the world's constructor, which does not resolve them again.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ResolvedSpecies {
     pub table: Arc<SpeciesTable>,
     pub pair_overrides: Vec<PairOverride>,
+    pub walls: WallSettings,
 }
 
 impl ResolvedSpecies {
-    /// The built-in library without pair overrides: a config without
-    /// `[[species]]` and `[[potential.pair_override]]`.
+    /// The built-in library without pair overrides, with hard walls: a save
+    /// written before `SimConfig` existed, which ran with hard walls.
     pub(crate) fn builtin() -> Self {
         Self {
             table: SpeciesTable::builtin_shared(),
             pair_overrides: Vec::new(),
+            walls: WallSettings::hard(),
         }
     }
 }

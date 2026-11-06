@@ -24,7 +24,7 @@ use std::simd::prelude::{SimdFloat, SimdPartialOrd};
 /// `σ` of the reference species: the skin is a fixed share of its cutoff.
 pub(crate) const LJ_SIG: f32 = crate::objects2d::ball_impl::species::N2_SIGMA;
 const LJ_EPS: f32 = 1.;
-const SQRT6_OF_TWO: f32 = 1.122_462; // == 2^(1/6)
+pub(crate) const SQRT6_OF_TWO: f32 = 1.122_462; // == 2^(1/6)
 
 const MAX_FORCE: f32 = 100.0; // max repulsive force to cap at
 /// Slope of the repulsion below `r_cap`: the force grows by this much per unit

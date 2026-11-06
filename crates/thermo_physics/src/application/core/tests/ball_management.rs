@@ -13,7 +13,7 @@ fn test_add_candidate() {
 
     let new_ball_size = BallFactory::new().get_new_ball_radius();
     // Add a valid candidate
-    let coord = main_content.world().world_region_inset(new_ball_size * 1.1);
+    let coord = main_content.world().world_region_inset(new_ball_size * 1.2);
     let (x, y) = coord.get_tl();
 
     println!(

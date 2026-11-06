@@ -21,6 +21,7 @@ fn test_single_ball_wall_bounce_momentum() {
     // conservation without artificial damping.
     // Create a small region so ball hits wall quickly
     let (mut main_content, _) = create_main_content_for_region(100.0, 100.0);
+    main_content.use_hard_walls();
 
     // Disable speed limit for momentum conservation testing
     main_content.world_mut().speed_limit_override = Some(f32::INFINITY);

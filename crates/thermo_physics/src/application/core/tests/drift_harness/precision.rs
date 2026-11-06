@@ -13,7 +13,7 @@
 //! energy drift at dt/4 far from the origin must stay close to the drift at
 //! the origin. Results in `docs/drift-test.md`.
 
-use super::dense_gas::{STEPS, run_dense_gas_at};
+use super::dense_gas::{LineBox, STEPS, run_dense_gas_at};
 use super::*;
 use crate::application::core::TestFaults;
 
@@ -45,9 +45,14 @@ fn drift_by_dt(center: f32, projectiles: bool) -> [f32; 3] {
 /// wall contacts of each run.
 fn drift_by_dt_in(center: f32, line_box: Option<f32>, projectiles: bool) -> [(f32, u64); 3] {
     DT_DIVISORS.map(|div| {
+        // Hard walls: the walled gas measures the f32 placement at a hard
+        // line-wall contact (soft walls have their own scenario).
         let run = run_dense_gas_at(
             Vec2D::new(center, center),
-            line_box,
+            line_box.map(|half_side| LineBox {
+                half_side,
+                soft: false,
+            }),
             TestFaults::default(),
             projectiles,
             DT_GOAL / div as f32,

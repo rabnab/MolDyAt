@@ -288,6 +288,9 @@ fn run_single_ball(
     velocity: Vec2D,
     faults: TestFaults,
 ) -> ReflectionRun {
+    // The elastic hard contact (the model before #280, and the backstop of
+    // soft walls).
+    main_content.use_hard_walls();
     main_content.world_mut().speed_limit_override = Some(f32::INFINITY);
     main_content.world_mut().test_faults = faults;
     let factory = scenario_factory();

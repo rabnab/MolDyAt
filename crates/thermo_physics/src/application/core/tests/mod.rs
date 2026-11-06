@@ -15,6 +15,7 @@ mod pressure;
 mod resize;
 mod simulation;
 mod simulation_engine;
+mod soft_walls;
 mod wall_handover;
 mod wall_momentum;
 

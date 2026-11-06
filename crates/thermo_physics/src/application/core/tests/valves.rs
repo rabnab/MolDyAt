@@ -7,9 +7,13 @@ use crate::application::MainContent;
 use crate::objects2d::ball_impl::{Ball2D, SPECIES_M};
 use crate::objects2d::{Rect, Vec2D};
 
+/// Hard walls: these tests check the hard contact.
 fn make_content() -> MainContent {
-    crate::application::core::tests::new_main_content(Rect::new(-20.0, 20.0, 40.0, -40.0))
-        .expect("create MainContent")
+    let mut mc =
+        crate::application::core::tests::new_main_content(Rect::new(-20.0, 20.0, 40.0, -40.0))
+            .expect("create MainContent");
+    mc.use_hard_walls();
+    mc
 }
 
 /// Wall from (-10, 0) to (10, 0): line id 0, chain id 0.

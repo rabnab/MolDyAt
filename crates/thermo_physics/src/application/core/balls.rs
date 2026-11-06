@@ -315,7 +315,7 @@ impl SimulationWorld {
     }
 
     pub(crate) fn is_ball_in_region(&self, pt: &Ball2D) -> bool {
-        let inner_margin = self.physics.wall_contact_distance(pt.species());
+        let inner_margin = self.physics.wall_placement_distance(pt.species());
         let region = self.world_rect;
         let tl = region.get_tl();
         let world = Rect::new(
@@ -400,7 +400,7 @@ impl SimulationWorld {
                 "new ball colliding with existing ball".to_string(),
             ));
         }
-        let contact = self.physics.wall_contact_distance(candidate.species());
+        let contact = self.physics.wall_placement_distance(candidate.species());
         if Self::overlaps_any_wall(obstacles, candidate.get_position(), contact) {
             return Err(AppError::CustomError("overlaps with wall".to_string()));
         }

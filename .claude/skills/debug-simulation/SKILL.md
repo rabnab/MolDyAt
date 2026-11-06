@@ -26,7 +26,7 @@ Goal: a deterministic reproduction first, then the smallest scenario that shows 
   - `moldyat::timing` (info) for step timings while F4 is on,
   - `RUST_LOG=info,moldyat::resize=debug` for resize frame timings (#217).
 - **In the window:** `V` makes a ball verbose (`c` console, `m` main neighbours, `o` other neighbours, `s` speed); `B` ball stats; `F3` cutoff rings; `T` thermo field; `F4` timings; `S` step-by-step mode; `D` real units.
-- **Counters** in `SimStats`: `wall_contacts`, `wall_overlap_corrections` (should stay near 0), `wall_distance_checks`; invalid (NaN) balls are logged with `log::warn!` when removed.
+- **Counters** in `SimStats`: `wall_contacts` (with soft walls, the default: backstop hits, should stay 0), `wall_overlap_corrections` (should stay near 0), `wall_distance_checks`; invalid (NaN) balls are logged with `log::warn!` when removed.
 
 ## 3. Narrow down
 Map the symptom to the step phase (`docs/architecture.md`, Simulation step) and the usual suspects:

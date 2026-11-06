@@ -243,11 +243,20 @@ fn run_dense_gas_timed(
     )
 }
 
+/// A square of line segments around the dense gas.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct LineBox {
+    pub(super) half_side: f32,
+    /// Soft walls (#280); hard walls otherwise.
+    pub(super) soft: bool,
+}
+
 /// [`run_dense_gas_timed`] in a drift world centred on `center`, optionally
-/// inside a square of line segments with half side `line_box` around it.
+/// inside a [`LineBox`] around it. Without one the gas never reaches the box
+/// walls, so their model does not matter.
 pub(super) fn run_dense_gas_at(
     center: Vec2D,
-    line_box: Option<f32>,
+    line_box: Option<LineBox>,
     faults: TestFaults,
     projectiles: bool,
     dt: f32,
@@ -255,9 +264,12 @@ pub(super) fn run_dense_gas_at(
     sample_every: usize,
 ) -> DenseGasRun {
     let mut main_content = create_dense_harness_at(404, center);
+    if line_box.is_some_and(|b| !b.soft) {
+        main_content.use_hard_walls();
+    }
     main_content.world_mut().speed_limit_override = Some(f32::INFINITY);
     main_content.world_mut().test_faults = faults;
-    if let Some(h) = line_box {
+    if let Some(LineBox { half_side: h, .. }) = line_box {
         let corners = [(-h, -h), (h, -h), (h, h), (-h, h), (-h, -h)];
         for pair in corners.windows(2) {
             let (a, b) = (pair[0], pair[1]);

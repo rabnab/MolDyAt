@@ -25,6 +25,9 @@ pub(crate) struct Obstacle {
     /// The wall being drawn or dragged: collides, but its hits don't count
     /// towards the wall momentum (pressure) totals.
     pub(super) ghost: bool,
+    /// The chain the obstacle belongs to (the ghost wall has its own): the
+    /// soft wall force takes the nearest obstacle of each chain.
+    pub(super) chain: u32,
     // Derived once per step, so the per-ball tests stay cheap.
     /// `end - start`
     pub(super) direction: Vec2D,
@@ -43,6 +46,7 @@ impl Obstacle {
         Self {
             start,
             ghost,
+            chain: if ghost { u32::MAX } else { 0 },
             direction,
             inv_length_sq: if length_sq > 1e-12 {
                 1.0 / length_sq
@@ -55,6 +59,11 @@ impl Obstacle {
                 Vec2D::new(start.x.max(end.x), start.y.max(end.y)),
             ),
         }
+    }
+
+    /// The chain the obstacle belongs to (`u32::MAX` for the ghost wall).
+    pub(crate) fn chain(&self) -> u32 {
+        self.chain
     }
 
     #[inline]
@@ -151,6 +160,36 @@ impl Obstacle {
         }
     }
 
+    /// The wall being drawn or dragged (its force books no wall momentum).
+    #[inline]
+    pub(crate) fn is_ghost(&self) -> bool {
+        self.ghost
+    }
+
+    /// Signed distance from `pos` to the obstacle's surface (negative
+    /// inside the capsule) and the unit outward normal there, if it is below
+    /// `range`. A degenerate obstacle has no surface, as for the contact
+    /// sweep and the overlap pass.
+    #[inline]
+    pub(crate) fn surface_distance(&self, pos: &Vec2D, range: f32) -> Option<(f32, Vec2D)> {
+        let reach = range + self.half_thickness;
+        if self.is_degenerate() || !self.near_bounds(pos, reach) {
+            return None;
+        }
+        let out = self.closest_point(pos).dist(pos);
+        let dist_sq = out.norm_sq();
+        if dist_sq >= reach * reach {
+            return None;
+        }
+        let dist = dist_sq.sqrt();
+        let normal = if dist > 1e-12 {
+            out.scaled(1.0 / dist)
+        } else {
+            self.outward_normal(pos, pos)
+        };
+        Some((dist - self.half_thickness, normal))
+    }
+
     /// Squared distance from `pos` to the centre line.
     pub(super) fn distance_sq(&self, pos: &Vec2D) -> f32 {
         self.closest_point(pos).dist(pos).norm_sq()
@@ -187,8 +226,12 @@ impl SimulationWorld {
     /// the step can reuse one buffer.
     pub(crate) fn collect_solid_obstacles_into(&self, obstacles: &mut Vec<Obstacle>) {
         obstacles.clear();
-        for chain in self.wall_chains.chains() {
+        for (index, chain) in self.wall_chains.chains().enumerate() {
+            let first = obstacles.len();
             self.chain_obstacles(chain, obstacles);
+            for obstacle in &mut obstacles[first..] {
+                obstacle.chain = index as u32;
+            }
         }
         if let Some(g) = self.ghost_wall {
             obstacles.push(Obstacle::new(g.start, g.end, g.thickness, true));
