@@ -448,8 +448,8 @@ time_step = 0.005             # 0.0003125..0.08, reduced time units; + / - chang
 speed_limit_factor = 0.2      # 0.01..10, speed limit as a share of the shorter world side
 
 [potential]
-max_force = 100.0             # 1..10000, repulsive force where the sloped core starts
-core_stiffness = 200.0        # 0..10000, force slope inside the core (0: flat)
+max_force = 73.05425          # 1..10000, repulsive force where the sloped core starts (100 in N2 units)
+core_stiffness = 134.53204    # 0..10000, force slope inside the core (0: flat; 200 in N2 units)
 cutoff_factor = 4.0           # 1.2..10, pair cutoff in units of sigma_ij
 ## Optional, one block per species pair: replaces the mixed sigma_ij and/or
 ## epsilon_ij of that pair (both orders); a missing value keeps the mixed one.
@@ -487,13 +487,13 @@ snapshot_interval_us = 16667  # 1000..1000000, least time between two frames sen
 ## Optional: the species of the run. Without [[species]] the built-in library
 ## applies: N2, the former size classes XS, S, M, L, XL, and Ar, Ne, CH4, O2.
 ## With it, exactly the listed species, in this order; the first is the
-## default for new balls. Literature single-site Lennard-Jones values; N2
-## (3.698 A, 95.05 K, 28.0134 u) is the unit.
+## default for new balls. Literature single-site Lennard-Jones values;
+## Ar (3.405 A, 119.8 K, 39.948 u) is the unit (#405).
 # [[species]]
 # name = "N2"                 # unique; saves and pair overrides use it
-# sigma_angstrom = 3.698      # 1.849..29.584
-# epsilon_kelvin = 95.05      # 9.505..950.5
-# mass_u = 28.0134            # 1.40..2801.34
+# sigma_angstrom = 3.698      # 1.7025..27.24
+# epsilon_kelvin = 95.05      # 11.98..1198
+# mass_u = 28.0134            # 1.997..3994.8
 # colour = [0.0, 1.0, 1.0]    # RGB or RGBA, each 0..1
 # source = "Hirschfelder, Curtiss & Bird (1954)"   # optional
 # [[species]]

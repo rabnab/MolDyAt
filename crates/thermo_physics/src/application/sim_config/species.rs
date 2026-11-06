@@ -11,7 +11,7 @@ use crate::objects2d::ball_impl::external_field::Field;
 use crate::objects2d::ball_impl::pair_potential::PairOverride;
 use crate::objects2d::ball_impl::wall_law::WallSettings;
 use crate::objects2d::ball_impl::{
-    N2_EPSILON_KELVIN, N2_MASS_U, N2_SIGMA_ANGSTROM, Species, SpeciesTable,
+    AR_EPSILON_KELVIN, AR_MASS_U, AR_SIGMA_ANGSTROM, Species, SpeciesTable,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -41,7 +41,7 @@ pub struct SpeciesConfig {
 }
 
 impl SpeciesConfig {
-    /// The species in N₂ units, checked against the `MIN_*` / `MAX_*` ranges;
+    /// The species in Ar units, checked against the `MIN_*` / `MAX_*` ranges;
     /// `key` names the entry in errors.
     pub(super) fn resolve(&self, key: &str) -> AppResult<Species> {
         if self.name.trim().is_empty() {
@@ -75,7 +75,7 @@ impl SpeciesConfig {
             species.sigma,
             MIN_PAIR_SIGMA,
             MAX_PAIR_SIGMA,
-            N2_SIGMA_ANGSTROM,
+            AR_SIGMA_ANGSTROM,
             self.sigma_angstrom,
             &format!("{key}.sigma_angstrom"),
         )?;
@@ -83,7 +83,7 @@ impl SpeciesConfig {
             species.epsilon,
             MIN_PAIR_EPSILON,
             MAX_PAIR_EPSILON,
-            N2_EPSILON_KELVIN,
+            AR_EPSILON_KELVIN,
             self.epsilon_kelvin,
             &format!("{key}.epsilon_kelvin"),
         )?;
@@ -91,7 +91,7 @@ impl SpeciesConfig {
             species.mass,
             MIN_SPECIES_MASS,
             MAX_SPECIES_MASS,
-            N2_MASS_U,
+            AR_MASS_U,
             self.mass_u,
             &format!("{key}.mass_u"),
         )?;
@@ -100,7 +100,7 @@ impl SpeciesConfig {
                 species.display_radius,
                 MIN_DISPLAY_RADIUS,
                 MAX_DISPLAY_RADIUS,
-                N2_SIGMA_ANGSTROM,
+                AR_SIGMA_ANGSTROM,
                 radius,
                 &format!("{key}.display_radius_angstrom"),
             )?;

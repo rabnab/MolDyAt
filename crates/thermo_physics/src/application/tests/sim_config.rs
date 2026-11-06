@@ -10,6 +10,7 @@ use crate::application::core::SimulationEngine;
 use crate::application::sim_config::*;
 use crate::error::AppError;
 use crate::objects2d::Rect;
+use crate::objects2d::ball_impl::pair_potential::LJ_SIG;
 use crate::objects2d::ball_impl::pair_potential::PairOverride;
 use crate::objects2d::ball_impl::{BallPhysics, DEFAULT_SPECIES, SpeciesTable};
 use std::time::Duration;
@@ -54,8 +55,8 @@ fn defaults_are_the_documented_values() {
     assert_eq!(config.world.rect(), Rect::new(-56.0, 31.0, 112.0, -62.0));
     assert_eq!(config.integration.time_step, 0.005);
     assert_eq!(config.integration.speed_limit_factor, 0.2);
-    assert_eq!(config.potential.max_force, 100.0);
-    assert_eq!(config.potential.core_stiffness, 200.0);
+    assert_eq!(config.potential.max_force, 73.05425);
+    assert_eq!(config.potential.core_stiffness, 134.53204);
     assert_eq!(config.potential.cutoff_factor, 4.0);
     assert_eq!(config.neighbours.skin_factor, 0.2);
     assert_eq!(config.neighbours.reorder_interval, 0);
@@ -75,7 +76,8 @@ fn default_config_builds_the_default_physics() {
         physics.get_skin_thickness().to_bits(),
         default.get_skin_thickness().to_bits()
     );
-    assert_eq!(physics.get_skin_thickness(), 0.2 * 4.0);
+    // The skin is a share of the N2 cutoff (σ_N2 in Ar units, #405).
+    assert_eq!(physics.get_skin_thickness(), 0.2 * 4.0 * LJ_SIG);
 }
 
 #[test]
@@ -86,7 +88,7 @@ fn main_content_runs_with_its_config() {
     assert_eq!(mc.time_step(), 0.0015);
     let physics = &mc.world().physics;
     assert_eq!(physics.cap_settings().max_force, 80.0);
-    assert_eq!(physics.get_skin_thickness(), 0.25 * 3.5);
+    assert_eq!(physics.get_skin_thickness(), 0.25 * 3.5 * LJ_SIG);
     assert_eq!(
         SimulationEngine::default_speed_limit(&rect(), mc.world().speed_limit_factor),
         80.0 * 0.3
@@ -541,7 +543,7 @@ const N2_AR: &str = "[[species]]\n\
      epsilon_kelvin = 119.8\n\
      mass_u = 39.948\n\
      colour = [0.6, 0.45, 1.0, 0.5]\n\
-     display_radius_angstrom = 1.849\n";
+     display_radius_angstrom = 1.7025\n";
 
 #[test]
 fn species_list_replaces_the_table() {
@@ -560,7 +562,7 @@ fn species_list_replaces_the_table() {
         "same literature values as the library"
     );
     assert_eq!(ar.colour, [0.6, 0.45, 1.0, 0.5]);
-    assert_eq!(ar.display_radius, 0.5, "1.849 Å is half the N2 sigma");
+    assert_eq!(ar.display_radius, 0.5, "1.7025 Å is half the Ar sigma");
     assert_eq!(n2.colour[3], 1.0, "RGB gets an opaque alpha");
 }
 
@@ -648,7 +650,7 @@ fn invalid_species_entries_are_rejected() {
         ),
         (
             entry("Tiny", 1.0, 95.05, 28.0134, "[0.0, 1.0, 1.0]"),
-            "species[0].sigma_angstrom must be within 1.8490..=29.5840, got 1",
+            "species[0].sigma_angstrom must be within 1.7025..=27.2400, got 1",
         ),
         (
             entry("Hot", 3.698, 5000.0, 28.0134, "[0.0, 1.0, 1.0]"),

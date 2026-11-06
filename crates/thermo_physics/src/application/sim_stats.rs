@@ -14,10 +14,10 @@ const PLT_STEP: usize = 100;
 pub const NORMAL_GRAVITY_MPS2: f32 = 9.81;
 pub const HIGH_GRAVITY_MPS2: f32 = NORMAL_GRAVITY_MPS2 * 5.0;
 
-/// 9.81 m/s² in N₂ units (`g·τ²/σ`), as
-/// `UnitSystem::N2.from_metres_per_second2` gives it; a constant because the
+/// 9.81 m/s² in Ar units (`g·τ²/σ`, #405), as
+/// `UnitSystem::AR.from_metres_per_second2` gives it; a constant because the
 /// gravity presets are compared with `==` (`test_gravity_in_reduced_units`).
-pub const NORMAL_GRAVITY: f32 = 1.285_924_5e-13;
+pub const NORMAL_GRAVITY: f32 = 1.339_646_4e-13;
 pub(crate) const HIGH_GRAVITY: f32 = NORMAL_GRAVITY * 5.0;
 
 /// Whether `gravity` is the 1 g preset: the nearest whole multiple of
@@ -33,7 +33,7 @@ pub(super) fn is_normal_gravity(gravity: f32) -> bool {
 /// them, with the time, energies and ball counts, into text (#341).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct StatusNumbers {
-    /// Show physical units of N₂ instead of reduced units.
+    /// Show physical units (Ar reference, #405) instead of reduced units.
     pub real_units: bool,
     /// Time step.
     pub dt: f32,
@@ -114,7 +114,7 @@ impl SimStats {
 
     /// The numbers of the status lines besides the time and the energies
     /// (which every snapshot carries): the UI formats them (#341).
-    /// `real_units` asks for physical units of N₂ (key `D`); `dt` is the
+    /// `real_units` asks for physical units, Ar reference (key `D`); `dt` is the
     /// time step and `hood_updates` the neighbour-list rebuilds so far.
     pub(crate) fn status_numbers(
         &self,
@@ -229,12 +229,12 @@ impl Default for SimStats {
 mod tests {
     use super::*;
     use crate::application::units::UnitSystem;
-    use crate::objects2d::ball_impl::{Ball2D, DEFAULT_SPECIES};
+    use crate::objects2d::ball_impl::{Ball2D, SPECIES_AR};
 
-    const UNITS: UnitSystem = UnitSystem::N2;
+    const UNITS: UnitSystem = UnitSystem::REDUCED;
 
     fn make_ball(id: usize, velocity: Vec2D) -> Ball2D {
-        let mut ball = Ball2D::new(id, Vec2D::zero(), DEFAULT_SPECIES);
+        let mut ball = Ball2D::new(id, Vec2D::zero(), SPECIES_AR);
         ball.v = velocity;
         ball
     }
@@ -377,7 +377,7 @@ mod tests {
 
     #[test]
     fn test_gravity_in_reduced_units() {
-        // a* = g tau^2 / sigma ~ 1.29e-13 for 9.81 m/s^2 in N2 units
+        // a* = g tau^2 / sigma ~ 1.34e-13 for 9.81 m/s^2 in Ar units
         let expected = UNITS.from_metres_per_second2(NORMAL_GRAVITY_MPS2 as f64);
         assert_eq!(NORMAL_GRAVITY, expected);
         let high = UNITS.from_metres_per_second2(HIGH_GRAVITY_MPS2 as f64);

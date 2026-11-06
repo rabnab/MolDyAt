@@ -9,14 +9,15 @@
 //! distance with the mixed `σ_ij`, `ε_ij` (see `pair_potential::PairTable`).
 //! `display_radius` is for drawing only.
 //!
-//! The built-in table (the species library, #237) holds `N2`, the default and
-//! the reference of the reduced units (`σ = ε = m = 1`), the five former size
-//! classes `XS` to `XL`, and the real gases `Ar`, `Ne`, `CH4` and `O2`
-//! (single-site Lennard-Jones from the literature, see [`LIBRARY`]). A size
-//! class of radius `R` became the species with `σ = 2·R·2^(-1/6) + σ_N2`: with
-//! arithmetic mixing every pair then keeps its old equilibrium centre distance
-//! `R_i + R_j + 2^(1/6)·σ_N2` (see `docs/simulation.md`). Old saves migrate to
-//! these size classes, so they stay in the table.
+//! The built-in table (the species library, #237) holds `N2`, the default
+//! species, the five former size classes `XS` to `XL`, and the real gases
+//! `Ar`, `Ne`, `CH4` and `O2` (single-site Lennard-Jones from the literature,
+//! see [`LIBRARY`]). `Ar` is the reference of the reduced units (`σ = ε = m =
+//! 1`, #405); every other species is converted from Å, K and u. A size class
+//! of radius `R` (in the former N₂ units) became the species with
+//! `σ = (2·R·2^(-1/6) + 1)·σ_N2`: with arithmetic mixing every pair then keeps
+//! its old equilibrium centre distance (see `docs/simulation.md`). Old saves
+//! migrate to these size classes, so they stay in the table.
 //!
 //! A config file can replace the whole table with its own `[[species]]` list
 //! (`SimConfig::species_table`); a world keeps the table it was built with.
@@ -67,7 +68,7 @@ impl Species {
     }
 
     /// A species from its literature single-site Lennard-Jones parameters
-    /// (`σ` in Å, `ε / k_B` in K, mass in u), in N₂ units. `display_radius`
+    /// (`σ` in Å, `ε / k_B` in K, mass in u), in Ar units. `display_radius`
     /// in Å; `None` draws it at `σ / 2`.
     pub(crate) fn from_literature(
         name: &str,
@@ -77,16 +78,16 @@ impl Species {
         display_radius_angstrom: Option<f64>,
         colour: [f32; 4],
     ) -> Self {
-        let sigma = (sigma_angstrom / N2_SIGMA_ANGSTROM) as f32;
+        let sigma = (sigma_angstrom / AR_SIGMA_ANGSTROM) as f32;
         let mut species = Species::new(
             name,
-            (mass_u / N2_MASS_U) as f32,
+            (mass_u / AR_MASS_U) as f32,
             sigma,
-            (epsilon_kelvin / N2_EPSILON_KELVIN) as f32,
+            (epsilon_kelvin / AR_EPSILON_KELVIN) as f32,
             colour,
         );
         if let Some(radius) = display_radius_angstrom {
-            species.display_radius = (radius / N2_SIGMA_ANGSTROM) as f32;
+            species.display_radius = (radius / AR_SIGMA_ANGSTROM) as f32;
         }
         species
     }
@@ -106,17 +107,22 @@ pub struct SpeciesTable {
     species: Vec<Species>,
 }
 
-/// `σ` of `N2`, the length unit.
-pub(crate) const N2_SIGMA: f32 = 1.0;
-
-/// Single-site Lennard-Jones `σ` of N₂ in Å: the reduced unit of length
-/// (`UnitSystem::N2`). Hirschfelder, Curtiss and Bird, *Molecular Theory of
-/// Gases and Liquids* (Wiley, 1954), table I-A, from second virial
+/// Single-site Lennard-Jones `σ` of Ar in Å: the reduced unit of length
+/// (`UnitSystem::AR`, #405). Hirschfelder, Curtiss and Bird, *Molecular
+/// Theory of Gases and Liquids* (Wiley, 1954), table I-A, from second virial
 /// coefficients.
+pub const AR_SIGMA_ANGSTROM: f64 = 3.405;
+/// `ε / k_B` of Ar in K: the reduced unit of temperature (same source).
+pub const AR_EPSILON_KELVIN: f64 = 119.8;
+/// Atomic mass of Ar in u: the reduced unit of mass.
+pub const AR_MASS_U: f64 = 39.948;
+
+/// Single-site Lennard-Jones `σ` of N₂ in Å (same source); the length unit
+/// before #405 (`UnitSystem::N2`).
 pub const N2_SIGMA_ANGSTROM: f64 = 3.698;
-/// `ε / k_B` of N₂ in K: the reduced unit of temperature (same source).
+/// `ε / k_B` of N₂ in K: the temperature unit before #405.
 pub const N2_EPSILON_KELVIN: f64 = 95.05;
-/// Molecular mass of N₂ in u: the reduced unit of mass.
+/// Molecular mass of N₂ in u: the mass unit before #405.
 pub const N2_MASS_U: f64 = 28.0134;
 
 /// Source of the library gases' `σ` and `ε`.
@@ -141,9 +147,9 @@ pub struct LibrarySpecies {
 pub const LIBRARY: [LibrarySpecies; 4] = [
     LibrarySpecies {
         name: "Ar",
-        sigma_angstrom: 3.405,
-        epsilon_kelvin: 119.8,
-        mass_u: 39.948,
+        sigma_angstrom: AR_SIGMA_ANGSTROM,
+        epsilon_kelvin: AR_EPSILON_KELVIN,
+        mass_u: AR_MASS_U,
         colour: [0.6, 0.45, 1.0, 1.0], // violet
         source: HCB_1954,
     },
@@ -190,17 +196,38 @@ pub(crate) const SIZE_CLASS_NAMES: [&str; 5] = ["XS", "S", "M", "L", "XL"];
 /// Species new balls and new source spheres start with (`N2`).
 pub const DEFAULT_SPECIES: SpeciesId = SpeciesId::new(0);
 
-/// The former size class `M` (contact radius ≈ 1.03): for tests written
-/// around balls of radius 1.
+/// The former size class `M` (contact radius ≈ 1.12): for tests written
+/// around balls of radius about 1.
 #[cfg(any(test, feature = "test-support"))]
 pub const SPECIES_M: SpeciesId = SpeciesId::new(3);
 
+/// `Ar`, the unit species (`σ = ε = m = 1`, #405): for tests written around
+/// reduced values of 1.
+#[cfg(any(test, feature = "test-support"))]
+pub const SPECIES_AR: SpeciesId = SpeciesId::new(6);
+
 static BUILTIN_TABLE: LazyLock<Arc<SpeciesTable>> = LazyLock::new(|| {
-    let n2 = Species::new("N2", 1.0, N2_SIGMA, 1.0, [0.0, 1.0, 1.0, 1.0]);
+    let n2 = Species::from_literature(
+        "N2",
+        N2_SIGMA_ANGSTROM,
+        N2_EPSILON_KELVIN,
+        N2_MASS_U,
+        None,
+        [0.0, 1.0, 1.0, 1.0],
+    );
+    // Defined in the former N₂ units (σ_N2 = ε_N2 = m_N2 = 1), so their
+    // physical size, depth and mass stay as they were (#405).
     let size_classes = SIZE_CLASSES.iter().enumerate().map(|(i, &(name, colour))| {
         let radius = SIZE_CLASS_MIN_RADIUS * 2.0_f32.powi(i as i32);
-        let sigma = 2.0 * radius * INV_SIXTH_ROOT_OF_TWO + N2_SIGMA;
-        Species::new(name, size_class_mass(radius), sigma, 1.0, colour)
+        let sigma_n2 = 2.0 * radius * INV_SIXTH_ROOT_OF_TWO + 1.0;
+        Species::from_literature(
+            name,
+            f64::from(sigma_n2) * N2_SIGMA_ANGSTROM,
+            N2_EPSILON_KELVIN,
+            f64::from(size_class_mass(radius)) * N2_MASS_U,
+            None,
+            colour,
+        )
     });
     let library = LIBRARY.iter().map(|s| {
         Species::from_literature(
@@ -351,15 +378,26 @@ mod tests {
     const SIZE_CLASS_RADII: [f32; 5] = [0.15, 0.3, 0.6, 1.2, 2.4];
 
     #[test]
-    fn n2_is_the_default_and_the_unit() {
+    fn n2_is_the_default_in_argon_units() {
         let n2 = SpeciesTable::builtin().species(DEFAULT_SPECIES);
         assert_eq!(n2.name, "N2");
-        assert_eq!((n2.mass, n2.sigma, n2.epsilon), (1.0, 1.0, 1.0));
-        assert_eq!(n2.display_radius, 0.5);
+        let close = |a: f32, b: f32| (a - b).abs() < 1e-4;
+        assert!(close(n2.sigma, 1.0860) && close(n2.epsilon, 0.7934) && close(n2.mass, 0.7012));
+        assert_eq!(n2.display_radius, 0.5 * n2.sigma);
+    }
+
+    /// Ar defines the reduced units (#405).
+    #[test]
+    fn argon_is_the_unit() {
+        let table = SpeciesTable::builtin();
+        let ar = table.species(table.by_name("Ar").unwrap());
+        assert_eq!((ar.mass, ar.sigma, ar.epsilon), (1.0, 1.0, 1.0));
+        assert_eq!(table.by_name("Ar"), Some(SPECIES_AR));
     }
 
     /// A former size class keeps its mass and colour, and every pair of them
-    /// keeps its old equilibrium centre distance `R_i + R_j + 2^(1/6)`.
+    /// keeps its old equilibrium centre distance `R_i + R_j + 2^(1/6)`, all
+    /// in the former N₂ units (here converted to Ar units, #405).
     #[test]
     fn size_classes_keep_mass_colour_and_equilibrium_distance() {
         let table = SpeciesTable::builtin();
@@ -374,16 +412,18 @@ mod tests {
             [1.0, 0.0, 1.0, 1.0],
         ];
         let sixth_root_of_two = 2.0_f32.powf(1.0 / 6.0);
+        let length = (N2_SIGMA_ANGSTROM / AR_SIGMA_ANGSTROM) as f32;
         for (i, name) in SIZE_CLASS_NAMES.iter().enumerate() {
             let s = table.species(table.by_name(name).unwrap());
-            assert_eq!(s.mass.to_bits(), masses[i].to_bits(), "mass {name}");
+            let mass = (f64::from(masses[i]) * N2_MASS_U / AR_MASS_U) as f32;
+            assert_eq!(s.mass.to_bits(), mass.to_bits(), "mass {name}");
             assert_eq!(s.colour, colours[i], "colour {name}");
             assert_eq!(s.display_radius, 0.5 * s.sigma);
             for (j, other) in SIZE_CLASS_NAMES.iter().enumerate() {
                 let o = table.species(table.by_name(other).unwrap());
                 let sigma_ij = 0.5 * (s.sigma + o.sigma);
                 let old = SIZE_CLASS_RADII[i] + SIZE_CLASS_RADII[j] + sixth_root_of_two;
-                let new = sixth_root_of_two * sigma_ij;
+                let new = sixth_root_of_two * sigma_ij / length;
                 assert!((new - old).abs() < 1e-5, "{name}-{other}: {new} vs {old}");
             }
         }
@@ -413,9 +453,9 @@ mod tests {
         assert_eq!(table.by_name("Kr"), None);
     }
 
-    /// N₂ in literature units is exactly the unit species.
+    /// N₂ in literature units is exactly the default species.
     #[test]
-    fn n2_from_literature_is_the_unit() {
+    fn n2_from_literature_is_the_default() {
         let n2 = Species::from_literature(
             "N2",
             N2_SIGMA_ANGSTROM,
@@ -427,7 +467,7 @@ mod tests {
         assert_eq!(&n2, SpeciesTable::builtin().species(DEFAULT_SPECIES));
     }
 
-    /// The library gases are their literature values in N₂ units, drawn at
+    /// The library gases are their literature values in Ar units, drawn at
     /// `σ / 2`, after `N2` and the size classes.
     #[test]
     fn library_gases_follow_their_literature_values() {
@@ -437,9 +477,9 @@ mod tests {
             assert_eq!(id.index(), 1 + SIZE_CLASS_NAMES.len() + i);
             let s = table.species(id);
             let close = |a: f32, b: f64| ((a as f64) - b).abs() < 1e-6 * b;
-            assert!(close(s.sigma, lib.sigma_angstrom / N2_SIGMA_ANGSTROM));
-            assert!(close(s.epsilon, lib.epsilon_kelvin / N2_EPSILON_KELVIN));
-            assert!(close(s.mass, lib.mass_u / N2_MASS_U));
+            assert!(close(s.sigma, lib.sigma_angstrom / AR_SIGMA_ANGSTROM));
+            assert!(close(s.epsilon, lib.epsilon_kelvin / AR_EPSILON_KELVIN));
+            assert!(close(s.mass, lib.mass_u / AR_MASS_U));
             assert_eq!(s.display_radius, 0.5 * s.sigma);
             assert_eq!(s.colour, lib.colour);
             assert!(!lib.source.is_empty());
@@ -453,18 +493,19 @@ mod tests {
     /// version bump and a migration; otherwise add a new species instead.
     #[test]
     fn builtin_table_is_pinned() {
-        // (name, f32 bits of mass, sigma, epsilon, display_radius), in table order.
+        // (name, f32 bits of mass, sigma, epsilon, display_radius), in table
+        // order, in Ar units (#405, format v6).
         const PINNED: [(&str, u32, u32, u32, u32); 10] = [
-            ("N2", 0x3f800000, 0x3f800000, 0x3f800000, 0x3f000000), // 1, 1, 1, 0.5
-            ("XS", 0x3f800000, 0x3fa235e4, 0x3f800000, 0x3f2235e4), // 1, 1.2672696
-            ("S", 0x3f99999a, 0x3fc46bc8, 0x3f800000, 0x3f446bc8),  // 1.2, 1.5345392
-            ("M", 0x3fdfac12, 0x40046bc8, 0x3f800000, 0x3f846bc8),  // 1.7474387, 2.0690784
-            ("L", 0x40443ab3, 0x4048d790, 0x3f800000, 0x3fc8d790),  // 3.0660827, 3.138157
-            ("XL", 0x40c5008b, 0x40a8d790, 0x3f800000, 0x4028d790), // 6.1563163, 5.276314
-            ("Ar", 0x3fb68836, 0x3f6bb773, 0x3fa15470, 0x3eebb773), // 1.426032, 0.920768, 1.260389
-            ("Ne", 0x3f386a23, 0x3f3e4dd0, 0x3ebfc3ab, 0x3ebe4dd0), // 0.7203695, 0.7433748, 0.3745397
-            ("CH4", 0x3f129bd3, 0x3f841e76, 0x3fc79331, 0x3f041e76), // 0.5726902, 1.03218, 1.559179
-            ("O2", 0x3f92360f, 0x3f77d4cd, 0x3f9e3b86, 0x3ef7d4cd), // 1.142275, 0.9680908, 1.236192
+            ("N2", 0x3f3384e6, 0x3f8b03af, 0x3f4b1ca2, 0x3f0b03af), // 0.7012466, 1.08605, 0.7934057
+            ("XS", 0x3f3384e6, 0x3fb02b31, 0x3f4b1ca2, 0x3f302b31), // 0.7012466, 1.376318, 0.7934057
+            ("S", 0x3f576c48, 0x3fd552b2, 0x3f4b1ca2, 0x3f5552b2),  // 0.841496, 1.666586, 0.7934057
+            ("M", 0x3f9cd96e, 0x400fd0db, 0x3f4b1ca2, 0x3f8fd0db),  // 1.225385, 2.247123, 0.7934057
+            ("L", 0x40099aea, 0x405a1fde, 0x3f4b1ca2, 0x3fda1fde),  // 2.15008, 3.408195, 0.7934057
+            ("XL", 0x408a25a6, 0x40b75ef2, 0x3f4b1ca2, 0x40375ef2), // 4.317096, 5.73034, 0.7934057
+            ("Ar", 0x3f800000, 0x3f800000, 0x3f800000, 0x3f000000), // 1, 1, 1
+            ("Ne", 0x3f0151f3, 0x3f4eadfa, 0x3e98259c, 0x3eceadfa), // 0.5051567, 0.8073422, 0.2971619
+            ("CH4", 0x3ecd9e22, 0x3f8f7ce1, 0x3f9e580a, 0x3f0f7ce1), // 0.4015971, 1.120999, 1.237062
+            ("O2", 0x3f4d0f68, 0x3f86941d, 0x3f7b15cc, 0x3f06941d), // 0.8010163, 1.051395, 0.9808013
         ];
         let actual: Vec<_> = SpeciesTable::builtin()
             .iter()

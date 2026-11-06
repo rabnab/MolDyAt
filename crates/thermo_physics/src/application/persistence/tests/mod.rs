@@ -18,7 +18,7 @@ use std::path::PathBuf;
 pub(super) fn sample_file() -> WorldFile {
     WorldFile::from_json(
         r#"{
-            "version": 3,
+            "version": 6,
             "world_rect": {"x": -20.0, "y": 20.0, "w": 40.0, "h": -40.0},
             "time_step": 0.01,
             "gravity": 0.0,

@@ -13,6 +13,7 @@ use crate::application::persistence::{LoadSource, SaveStore, WORLD_FILE_VERSION,
 use crate::application::sim_config::{
     FieldConfig, FieldKind, WallModel, WallOverrideConfig, WallsConfig,
 };
+use crate::application::units::{UnitScale, UnitSystem};
 use crate::application::{MainContent, SimConfig};
 use crate::objects2d::ball_impl::{SpeciesId, SpeciesTable};
 use crate::objects2d::operator::OperatorState;
@@ -54,6 +55,11 @@ const FIXTURES: &[Fixture] = &[
     Fixture {
         version: 5,
         file: "v5.json",
+        check: check_v5,
+    },
+    Fixture {
+        version: 6,
+        file: "v6.json",
         check: check_v5,
     },
 ];
@@ -190,6 +196,29 @@ fn config_less_save_keeps_its_time_step() {
     assert_eq!(mc.config(), config);
 }
 
+/// A v5 save whose soft walls were at their default (no `walls` in its
+/// config) keeps the physical `ε_w = 1 ε_N2` it ran with when converted to
+/// Ar units (#405), like a save that wrote its `walls`.
+#[test]
+fn default_soft_walls_keep_their_epsilon_in_ar_units() {
+    let mut file: serde_json::Value = serde_json::from_str(&read_fixture("v5.json")).unwrap();
+    let config = file["config"].as_object_mut().expect("v5 has a config");
+    assert!(config.remove("walls").is_some());
+    let dir = scratch_dir("reference_default_walls");
+    fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("v5_default_walls.json");
+    fs::write(&path, serde_json::to_string(&file).unwrap()).unwrap();
+
+    let store = SaveStore::new(dir);
+    let mut mc = MainContent::new(Rect::new(-10.0, 10.0, 100.0, -100.0)).unwrap();
+    mc.load_world(&store, &LoadSource::Path(path), true)
+        .unwrap();
+    let s = UnitSystem::N2.scale_to(&UnitSystem::AR);
+    let walls = mc.config().walls;
+    assert_eq!(walls.model, WallModel::Soft);
+    close(walls.epsilon, 1.0, s.energy, "default ε_w");
+}
+
 #[test]
 fn old_saves_load_into_a_file_type_with_new_fields() {
     for fixture in FIXTURES {
@@ -293,7 +322,9 @@ fn v5_fields() -> Vec<FieldConfig> {
     }]
 }
 
-/// v5 (#347): the v4 world with a harmonic trap in `config.fields`.
+/// v5 (#347): the v4 world with a harmonic trap in `config.fields`. v6
+/// (#405) is the same world in Ar units, written by the #405 build from
+/// `v5.json` (loaded, `WorldFile::capture`d, `to_json`).
 /// Written by the #347 build: `v4.json` loaded, `WorldFile::capture`d, its
 /// `sim_config()` with `fields = v5_fields()` set as `config`, `to_json`.
 fn check_v5(mc: &MainContent) {
@@ -316,20 +347,37 @@ fn check_world(
     fields: Vec<FieldConfig>,
 ) {
     let world = mc.world();
+    // Every reference save holds the same world in N₂ units (v1 to v5) or
+    // its rescaled form (v6); loaded, it is in Ar units (#405). The time step
+    // keeps its number.
+    let s = UnitSystem::N2.scale_to(&UnitSystem::AR);
     assert_eq!(mc.time_step(), 0.005);
     // Up to v3 none has a saved config (#231; v1 and v2 predate it, v3 is the
     // v2 world): they run with the defaults, hard walls (#280) and their own
     // time step. 0.005 is also the default now (#301);
     // `config_less_save_keeps_its_time_step` covers a step that differs.
     let mut config = SimConfig {
-        walls,
-        fields,
+        walls: walls_in_ar(walls, &s),
+        fields: fields_in_ar(fields, &s),
         ..SimConfig::default()
     };
     config.integration.time_step = 0.005;
     assert_eq!(mc.config(), config);
-    assert_eq!(world.physics.constants.gravity, 0.5);
-    assert_eq!(world.world_region(), Rect::new(-20.0, 15.0, 40.0, -30.0));
+    close(
+        world.physics.constants.gravity,
+        0.5,
+        s.acceleration(),
+        "gravity",
+    );
+    let rect = world.world_region();
+    for (actual, n2) in [
+        (rect.x, -20.0),
+        (rect.y, 15.0),
+        (rect.w, 40.0),
+        (rect.h, -30.0),
+    ] {
+        close(actual, n2, s.length, "world_rect");
+    }
 
     let balls: Vec<(usize, &str)> = world
         .balls
@@ -353,13 +401,30 @@ fn check_world(
     ];
     for (i, ball) in world.balls.iter().enumerate() {
         let f = i as f32;
-        assert_eq!(*ball.get_position(), Vec2D::new(xs[i], f - 4.0), "ball {i}");
-        assert_eq!(ball.v, Vec2D::new(0.1 * f, -0.2 - 0.05 * f), "ball {i}");
-        assert_eq!(ball.accel, Vec2D::new(accels[i].0, accels[i].1), "ball {i}");
-        assert_eq!(
+        let what = format!("ball {i}");
+        close_vec(
+            *ball.get_position(),
+            Vec2D::new(xs[i], f - 4.0),
+            s.length,
+            &what,
+        );
+        close_vec(
+            ball.v,
+            Vec2D::new(0.1 * f, -0.2 - 0.05 * f),
+            s.speed(),
+            &what,
+        );
+        close_vec(
+            ball.accel,
+            Vec2D::new(accels[i].0, accels[i].1),
+            s.acceleration(),
+            &what,
+        );
+        close_vec(
             ball.pre_update_pos,
             Vec2D::new(xs[i] - 0.01, f - 4.0 + 0.01),
-            "ball {i}"
+            s.length,
+            &what,
         );
     }
 
@@ -367,23 +432,17 @@ fn check_world(
         .line_segments
         .segments()
         .iter()
-        .map(|s| (s.id, s.thickness))
+        .map(|seg| (seg.id, seg.thickness))
         .collect();
-    assert_eq!(
-        thicknesses,
-        vec![
-            (0, 1.0),
-            (1, 1.0),
-            (2, 4.0),
-            (3, 4.0),
-            (4, 1.0),
-            (5, 1.0),
-            (6, 2.0),
-            (7, 1.5),
-            (8, 1.5),
-            (9, 1.5)
-        ]
-    );
+    let expected = [1.0, 1.0, 4.0, 4.0, 1.0, 1.0, 2.0, 1.5, 1.5, 1.5];
+    assert_eq!(thicknesses.len(), expected.len());
+    for ((id, thickness), (i, n2)) in thicknesses
+        .into_iter()
+        .zip(expected.into_iter().enumerate())
+    {
+        assert_eq!(id, i);
+        close(thickness, n2, s.length, "thickness");
+    }
 
     let valves: Vec<(usize, bool)> = world
         .valve_segments
@@ -448,42 +507,103 @@ fn check_world(
         .source_spheres
         .spheres()
         .iter()
-        .map(|s| {
+        .map(|sphere| {
             (
-                s.id,
-                s.state,
-                s.emit_period,
-                species_name(s.ball_species),
-                s.emission_speed,
+                sphere.id,
+                sphere.state,
+                sphere.emit_period,
+                species_name(sphere.ball_species),
             )
         })
         .collect();
     assert_eq!(
         spheres,
         vec![
-            (0, OperatorState::On, 3000, sphere_species[0], 0.05),
-            (1, OperatorState::Off, 1500, sphere_species[1], 0.08)
+            (0, OperatorState::On, 3000, sphere_species[0]),
+            (1, OperatorState::Off, 1500, sphere_species[1])
         ]
     );
-    assert_eq!(
+    for (sphere, n2) in world.source_spheres.spheres().iter().zip([0.05, 0.08]) {
+        close(sphere.emission_speed, n2, s.speed(), "emission_speed");
+    }
+    close_vec(
         world.source_spheres.spheres()[0].center,
-        Vec2D::new(-10.0, 0.0)
+        Vec2D::new(-10.0, 0.0),
+        s.length,
+        "sphere centre",
     );
 
     let thermostats = world.thermostats.thermostats();
-    let params: Vec<_> = thermostats
-        .iter()
-        .map(|t| (t.id, t.state, t.target_temperature, t.radius, t.tau))
-        .collect();
+    let states: Vec<_> = thermostats.iter().map(|t| (t.id, t.state)).collect();
     assert_eq!(
-        params,
-        vec![
-            (0, OperatorState::Off, 0.25, 5.0, 0.5),
-            (1, OperatorState::On, 0.4, 3.5, 0.8)
-        ]
+        states,
+        vec![(0, OperatorState::Off), (1, OperatorState::On)]
     );
-    assert_eq!(thermostats[0].chain, vec![0.0, 0.25, -0.5, 0.0, 0.125]);
-    assert_eq!(thermostats[1].position, Vec2D::new(-12.0, -3.0));
+    for (t, (temperature, radius, tau)) in
+        thermostats.iter().zip([(0.25, 5.0, 0.5), (0.4, 3.5, 0.8)])
+    {
+        close(
+            t.target_temperature,
+            temperature,
+            s.energy,
+            "target_temperature",
+        );
+        close(t.radius, radius, s.length, "radius");
+        close(t.tau, tau, s.time, "tau");
+    }
+    for (xi, n2) in thermostats[0]
+        .chain
+        .iter()
+        .zip([0.0, 0.25, -0.5, 0.0, 0.125])
+    {
+        close(*xi, n2, 1.0 / s.time, "chain");
+    }
+    close_vec(
+        thermostats[1].position,
+        Vec2D::new(-12.0, -3.0),
+        s.length,
+        "thermostat position",
+    );
+}
+
+/// `actual` is `n2 · factor` (a value in N₂ units, converted to Ar units).
+fn close(actual: f32, n2: f32, factor: f64, what: &str) {
+    let expected = f64::from(n2) * factor;
+    assert!(
+        (f64::from(actual) - expected).abs() <= 1e-6 * expected.abs().max(1e-3),
+        "{what}: {actual} vs {expected}"
+    );
+}
+
+fn close_vec(actual: Vec2D, n2: Vec2D, factor: f64, what: &str) {
+    close(actual.x, n2.x, factor, what);
+    close(actual.y, n2.y, factor, what);
+}
+
+/// `walls` of a v4/v5 save after the migration to Ar units.
+fn walls_in_ar(mut walls: WallsConfig, s: &UnitScale) -> WallsConfig {
+    if walls.model == WallModel::Hard && walls == WallsConfig::hard() {
+        return walls;
+    }
+    walls.sigma = (f64::from(walls.sigma) * s.length) as f32;
+    walls.epsilon = (f64::from(walls.epsilon) * s.energy) as f32;
+    for o in &mut walls.overrides {
+        o.sigma = o.sigma.map(|x| (f64::from(x) * s.length) as f32);
+        o.epsilon = o.epsilon.map(|x| (f64::from(x) * s.energy) as f32);
+    }
+    walls
+}
+
+/// `fields` of a v5 save after the migration to Ar units.
+fn fields_in_ar(fields: Vec<FieldConfig>, s: &UnitScale) -> Vec<FieldConfig> {
+    fields
+        .into_iter()
+        .map(|f| FieldConfig {
+            center: f.center.map(|c| (f64::from(c) * s.length) as f32),
+            stiffness: (f64::from(f.stiffness) * s.stiffness()) as f32,
+            ..f
+        })
+        .collect()
 }
 
 /// Operators have their own file types since #270, in one list since #274.

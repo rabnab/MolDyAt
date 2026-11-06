@@ -6,6 +6,7 @@ use super::scratch_dir;
 use crate::application::persistence::{LoadSource, SaveStore, WorldFile};
 use crate::application::sim_config::PairOverrideConfig;
 use crate::application::{MainContent, SimConfig};
+use crate::objects2d::ball_impl::pair_potential::LJ_SIG;
 use crate::objects2d::ball_impl::{Ball2D, SpeciesId, SpeciesTable};
 use crate::objects2d::{Rect, Vec2D};
 use std::fs;
@@ -99,7 +100,7 @@ fn config_survives_a_save_and_load() {
     assert_eq!(target.config(), custom_config());
     let physics = &target.world().physics;
     assert_eq!(physics.cap_settings().cutoff_factor, 3.5);
-    assert_eq!(physics.get_skin_thickness(), 0.25 * 3.5);
+    assert_eq!(physics.get_skin_thickness(), 0.25 * 3.5 * LJ_SIG);
     let [n2, m] = ["N2", "M"].map(|name| SpeciesTable::builtin().by_name(name).unwrap());
     assert_eq!(physics.cutoff(m, n2), 3.5 * 2.0);
     let _ = fs::remove_dir_all(store.dir());

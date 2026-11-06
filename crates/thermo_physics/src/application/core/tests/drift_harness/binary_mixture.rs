@@ -4,11 +4,11 @@
 
 //! Scenario: binary Lennard-Jones mixture (#235).
 //!
-//! `N2` (σ = ε = 1) and a second species with σ = 1.2 and ε = 1.5, set by
-//! pair overrides on the built-in `XS` (mass 1, like `N2`): `XS`–`XS` gets
-//! σ = 1.2, ε = 1.5 and `N2`–`XS` the Lorentz–Berthelot values of the two,
-//! σ = 1.1, ε = √1.5. Every pair in the run uses an overridden or an `N2`
-//! potential, so the per-pair cutoffs, cap distances and shifts of the
+//! `Ar` (σ = ε = m = 1, the unit species since #405; `N2` before) and a
+//! second species with σ = 1.2 and ε = 1.5, set by pair overrides on the
+//! built-in `XS` (mass 0.70 in Ar units): `XS`–`XS` gets σ = 1.2, ε = 1.5
+//! and `Ar`–`XS` the Lorentz–Berthelot values of the two, σ = 1.1, ε = √1.5.
+//! Every pair in the run uses an overridden or an `Ar` potential, so the per-pair cutoffs, cap distances and shifts of the
 //! overrides all take part. The balls start as a checkerboard in the centre
 //! of the world and stay clear of the walls.
 
@@ -26,7 +26,7 @@ const SPACING: f32 = 1.3;
 const THERMAL_V: f32 = 1.5;
 const STEPS: usize = 1_000;
 
-/// `XS`–`XS`: σ ratio 1 : 1.2 and ε ratio 1 : 1.5 to `N2`.
+/// `XS`–`XS`: σ ratio 1 : 1.2 and ε ratio 1 : 1.5 to `Ar`.
 const SECOND_SIGMA: f32 = 1.2;
 const SECOND_EPSILON: f32 = 1.5;
 
@@ -52,7 +52,7 @@ fn mixture_config() -> SimConfig {
             epsilon: Some(SECOND_EPSILON),
         },
         PairOverrideConfig {
-            a: "N2".into(),
+            a: "Ar".into(),
             b: "XS".into(),
             sigma: Some(0.5 * (1.0 + SECOND_SIGMA)),
             epsilon: Some(SECOND_EPSILON.sqrt()),
@@ -61,7 +61,7 @@ fn mixture_config() -> SimConfig {
     config
 }
 
-/// `SIDE * SIDE` balls on a checkerboard of `N2` and `XS` around the world
+/// `SIDE * SIDE` balls on a checkerboard of `Ar` and `XS` around the world
 /// centre, with deterministic velocities and the total momentum removed.
 fn mixture_world() -> MainContent {
     let (template, _) = super::super::create_main_content_for_region(-50.0, 50.0);
@@ -71,7 +71,7 @@ fn mixture_world() -> MainContent {
     main_content.world_mut().speed_limit_override = Some(f32::INFINITY);
 
     let builtin = SpeciesTable::builtin();
-    let kinds = ["N2", "XS"].map(|name| builtin.by_name(name).unwrap());
+    let kinds = ["Ar", "XS"].map(|name| builtin.by_name(name).unwrap());
     let center = world_center(&main_content);
     let half = (SIDE as f32 - 1.0) * SPACING * 0.5;
     let mut velocities = Vec::with_capacity(SIDE * SIDE);
@@ -175,7 +175,7 @@ fn mixture_violations(run: &MixtureRun) -> Vec<String> {
 fn test_binary_mixture_uses_the_overridden_pairs() {
     let main_content = mixture_world();
     let builtin = SpeciesTable::builtin();
-    let [n2, xs] = ["N2", "XS"].map(|name| builtin.by_name(name).unwrap());
+    let [n2, xs] = ["Ar", "XS"].map(|name| builtin.by_name(name).unwrap());
     let physics = &main_content.world().physics;
     let cutoff_factor = physics.cap_settings().cutoff_factor;
     assert_eq!(physics.cutoff(xs, xs), cutoff_factor * SECOND_SIGMA);

@@ -6,11 +6,12 @@ use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::ball_physics::BallPhysics;
 use crate::objects2d::ball_impl::pair_potential::{LennardJones, PairLaw};
 use crate::objects2d::ball_impl::pair_potential::{PairPotential, Potential};
-use crate::objects2d::ball_impl::{Ball2D, DEFAULT_SPECIES, SpeciesId, SpeciesTable};
+use crate::objects2d::ball_impl::{Ball2D, SPECIES_AR, SpeciesId, SpeciesTable};
 
-/// The reference species (`σ = ε = 1`): its pair is plain Lennard-Jones in
+/// The unit species (Ar, `σ = ε = m = 1`, #405; named `N2` from before
+/// #405): its pair is plain Lennard-Jones in
 /// reduced units.
-const N2: SpeciesId = DEFAULT_SPECIES;
+const N2: SpeciesId = SPECIES_AR;
 
 fn force(phys: &BallPhysics, r: f32) -> f32 {
     phys.force(N2, N2, r)

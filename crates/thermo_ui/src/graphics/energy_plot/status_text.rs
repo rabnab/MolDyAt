@@ -11,8 +11,8 @@ use thermo_physics::application::sim_stats::StatusNumbers;
 use thermo_physics::application::units::UnitSystem;
 use thermo_runtime::application::renderer_snapshot::RendererSnapshot;
 
-/// Units of the real-units display (key `D`): N₂ (see `units`).
-const UNITS: UnitSystem = UnitSystem::N2;
+/// Units of the real-units display (key `D`): the reduced units, Ar (see `units`).
+const UNITS: UnitSystem = UnitSystem::REDUCED;
 
 /// The status lines for `snapshot`, starting with `metrics_line` (render
 /// and physics rates), or `None` while ball stats are not shown.
@@ -32,7 +32,7 @@ fn ball_count(snapshot: &RendererSnapshot) -> usize {
     snapshot.frame.species_counts.iter().sum()
 }
 
-/// Status lines in physical units of N₂: time in ps, the time step in fs,
+/// Status lines in physical units (Ar reference): time in ps, the time step in fs,
 /// temperature in K, energies in J, speeds in m/s.
 fn real_units_lines(snapshot: &RendererSnapshot, s: &StatusNumbers, metrics_line: &str) -> String {
     let frame = &snapshot.frame;

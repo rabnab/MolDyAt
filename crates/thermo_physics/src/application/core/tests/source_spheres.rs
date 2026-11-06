@@ -20,8 +20,9 @@ fn emitted_ball_state(seed: u64) -> Vec<[u32; 4]> {
 /// some emissions; `full_scan` checks emitted balls against every ball
 /// instead of the grid.
 fn emitted_ball_state_in_gas(seed: u64, gas_balls: usize, full_scan: bool) -> Vec<[u32; 4]> {
+    // 40 x 40 in N₂ units, scaled to Ar units (#405).
     let mut mc = crate::application::core::tests::new_main_content_seeded(
-        Rect::new(-20.0, 20.0, 40.0, -40.0),
+        Rect::new(-20.0, 20.0, 40.0, -40.0).scaled_about_centre(1.086_05),
         seed,
     )
     .unwrap();

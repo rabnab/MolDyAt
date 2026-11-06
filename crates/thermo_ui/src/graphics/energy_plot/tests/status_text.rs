@@ -44,9 +44,9 @@ fn reduced_status_shows_the_neighbour_updates_and_starts_with_the_rates() {
 #[test]
 fn real_status_shows_kelvin_and_picoseconds() {
     let text = status_text(&snapshot(Some(numbers(true))), "fps 60").unwrap();
-    assert!(text.contains("time: 220.2ps"), "{text}");
-    assert!(text.contains("dt: 22.0fs"), "{text}");
-    assert!(text.contains("Temp: 95.05K"), "{text}");
+    assert!(text.contains("time: 215.6ps"), "{text}");
+    assert!(text.contains("dt: 21.6fs"), "{text}");
+    assert!(text.contains("Temp: 119.80K"), "{text}");
 }
 
 #[test]

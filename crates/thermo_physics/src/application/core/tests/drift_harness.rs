@@ -226,6 +226,12 @@ impl DriftRunMetrics {
 /// margins show up in CI before they turn into failures.
 pub const DRIFT_WARNING_FRACTION: f32 = 0.7;
 
+/// A length of the former N₂ units in Ar units (#405): the scenarios were
+/// set up in N₂ units and keep their physical geometry.
+pub const N2_LENGTH: f32 = 1.086_05;
+/// A speed of the former N₂ units in Ar units (#405).
+pub const N2_SPEED: f32 = 1.063_68;
+
 /// Prints a machine-readable `DRIFT_WARNING` line when `value` is above
 /// [`DRIFT_WARNING_FRACTION`] of `threshold` (CI turns these into annotations).
 pub fn warn_near_threshold(scenario: &str, metric: &str, value: f32, threshold: f32) {

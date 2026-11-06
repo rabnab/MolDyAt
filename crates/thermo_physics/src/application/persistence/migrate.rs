@@ -34,8 +34,14 @@
 //!   loads the version-`N` reference save (see `tests/reference_saves.rs`).
 
 use super::format::{WORLD_FILE_VERSION, invalid};
+use crate::application::units::{UnitScale, UnitSystem};
 use crate::error::AppResult;
 use crate::objects2d::ball_impl::species::SIZE_CLASS_NAMES;
+use crate::objects2d::line_segment::{MAX_THICKNESS, MIN_THICKNESS};
+use crate::objects2d::operator::{
+    MAX_EMISSION_SPEED, MAX_THERMOSTAT_RADIUS, MIN_EMISSION_SPEED, MIN_THERMOSTAT_RADIUS,
+    THERMOSTAT_CHAIN_MAX, THERMOSTAT_CHAIN_MIN,
+};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
@@ -66,7 +72,200 @@ pub(crate) const MIGRATIONS: &[Migration] = &[
         from: 4,
         apply: migrate_v4_to_v5,
     },
+    Migration {
+        from: 5,
+        apply: migrate_v5_to_v6,
+    },
 ];
+
+/// v5 → v6 (#405): Ar replaced N₂ as the unit species. Every physical
+/// quantity is rescaled from N₂ to Ar units, so the file holds the same
+/// physical state: lengths (world, balls, walls, operators, wall and field
+/// parameters, pair `σ`), speeds, accelerations (gravity), energies and
+/// temperatures, and the force cap (`max_force`, `core_stiffness`), whose
+/// defaults keep their physical value too. Numerical settings keep their
+/// numbers: the time step (and so emission periods in steps) and the cutoff
+/// and skin factors. A config's `[[species]]` list is in Å, K and u already.
+/// Wall thicknesses and emission speeds are clamped to their ranges.
+///
+/// Soft walls left at their default `ε_w` (a config without `walls`, or
+/// without its `epsilon`) ran with `ε_w = 1 ε_N2`: the migrated config states
+/// that value in Ar units, since the default is now `1 ε_Ar`. The config's
+/// `world.scale` keeps its number: it only records how the world was created
+/// (the save keeps its own `world_rect`), so a new world made from a
+/// migrated config is `1 / 1.0861` of the old size in physical units.
+fn migrate_v5_to_v6(file: &mut Value) -> AppResult {
+    let s = UnitSystem::N2.scale_to(&UnitSystem::AR);
+    scale_rect(file, "world_rect", s.length)?;
+    scale_number(file, "gravity", s.acceleration())?;
+    for ball in list_mut(file, "balls")? {
+        for key in ["pos", "pre_update_pos"] {
+            scale_vec(ball, key, s.length)?;
+        }
+        scale_vec(ball, "v", s.speed())?;
+        scale_vec(ball, "accel", s.acceleration())?;
+    }
+    for entry in list_mut(file, "operators")? {
+        let object = object_mut(entry, "operators")?;
+        if let Some(chain) = object.get_mut("wall_chain") {
+            scale_vec(chain, "start", s.length)?;
+            scale_vec(chain, "end", s.length)?;
+            for piece in list_mut(chain, "pieces")? {
+                scale_vec(piece, "start", s.length)?;
+                scale_vec(piece, "end", s.length)?;
+                scale_clamped(piece, "thickness", s.length, MIN_THICKNESS, MAX_THICKNESS)?;
+            }
+        } else if let Some(sphere) = object.get_mut("source_sphere") {
+            scale_vec(sphere, "center", s.length)?;
+            scale_clamped(
+                sphere,
+                "emission_speed",
+                s.speed(),
+                MIN_EMISSION_SPEED,
+                MAX_EMISSION_SPEED,
+            )?;
+        } else if let Some(thermostat) = object.get_mut("thermostat") {
+            scale_vec(thermostat, "position", s.length)?;
+            scale_clamped(
+                thermostat,
+                "radius",
+                s.length,
+                MIN_THERMOSTAT_RADIUS,
+                MAX_THERMOSTAT_RADIUS,
+            )?;
+            scale_number(thermostat, "target_temperature", s.energy)?;
+            scale_number(thermostat, "tau", s.time)?;
+            for xi in list_mut(thermostat, "chain")? {
+                scale_value(xi, 1.0 / s.time, "thermostat chain")?;
+                let x = xi.as_f64().unwrap_or_default();
+                *xi = Value::from(x.clamp(
+                    f64::from(THERMOSTAT_CHAIN_MIN),
+                    f64::from(THERMOSTAT_CHAIN_MAX),
+                ));
+            }
+        }
+        // Unknown kinds are skipped on load anyway.
+    }
+    if let Some(config) = file.get_mut("config").filter(|c| !c.is_null()) {
+        scale_config(config, &s)?;
+    }
+    Ok(())
+}
+
+/// The physical keys of a saved config (see [`migrate_v5_to_v6`]).
+fn scale_config(config: &mut Value, s: &UnitScale) -> AppResult {
+    let config = object_mut(config, "`config`")?;
+    let walls = config
+        .entry("walls")
+        .or_insert_with(|| Value::Object(serde_json::Map::new()));
+    let hard = walls.get("model").and_then(Value::as_str) == Some("hard");
+    if !hard && walls.get("epsilon").is_none() {
+        // The v5 default ε_w, in N₂ units; scaled below.
+        object_mut(walls, "`config.walls`")?.insert("epsilon".into(), Value::from(1.0));
+    }
+    if let Some(potential) = config.get_mut("potential") {
+        scale_optional(potential, "max_force", s.energy / s.length)?;
+        scale_optional(potential, "core_stiffness", s.stiffness())?;
+    }
+    if let Some(overrides) = config
+        .get_mut("potential")
+        .and_then(|p| p.get_mut("pair_override"))
+    {
+        for o in list_mut_value(overrides, "pair_override")? {
+            scale_optional(o, "sigma", s.length)?;
+            scale_optional(o, "epsilon", s.energy)?;
+        }
+    }
+    if let Some(walls) = config.get_mut("walls") {
+        scale_optional(walls, "sigma", s.length)?;
+        scale_optional(walls, "epsilon", s.energy)?;
+        if let Some(overrides) = walls.get_mut("override") {
+            for o in list_mut_value(overrides, "walls.override")? {
+                scale_optional(o, "sigma", s.length)?;
+                scale_optional(o, "epsilon", s.energy)?;
+            }
+        }
+    }
+    if let Some(fields) = config.get_mut("fields") {
+        for field in list_mut_value(fields, "fields")? {
+            let center = field
+                .get_mut("center")
+                .and_then(Value::as_array_mut)
+                .ok_or_else(|| invalid("`fields[].center` must be a list"))?;
+            for c in center {
+                scale_value(c, s.length, "fields[].center")?;
+            }
+            scale_number(field, "stiffness", s.stiffness())?;
+        }
+    }
+    Ok(())
+}
+
+/// Multiply the number `value` by `factor`.
+fn scale_value(value: &mut Value, factor: f64, what: &str) -> AppResult {
+    let x = value
+        .as_f64()
+        .ok_or_else(|| invalid(format!("`{what}` must be a number")))?;
+    *value = Value::from(x * factor);
+    Ok(())
+}
+
+/// Multiply the number at `key` of `entry` by `factor`.
+fn scale_number(entry: &mut Value, key: &str, factor: f64) -> AppResult {
+    let value = entry
+        .get_mut(key)
+        .ok_or_else(|| invalid(format!("missing field `{key}`")))?;
+    scale_value(value, factor, key)
+}
+
+/// [`scale_number`], if `key` is present.
+fn scale_optional(entry: &mut Value, key: &str, factor: f64) -> AppResult {
+    match entry.get_mut(key) {
+        Some(value) => scale_value(value, factor, key),
+        None => Ok(()),
+    }
+}
+
+/// [`scale_number`], clamped to `min..=max` (logged).
+fn scale_clamped(entry: &mut Value, key: &str, factor: f64, min: f32, max: f32) -> AppResult {
+    scale_number(entry, key, factor)?;
+    let value = entry.get(key).and_then(Value::as_f64).unwrap_or_default();
+    let clamped = value.clamp(f64::from(min), f64::from(max));
+    if clamped != value {
+        log::warn!("`{key}` {value} clamped to {clamped} while converting to Ar units");
+        entry[key] = Value::from(clamped);
+    }
+    Ok(())
+}
+
+/// Multiply both coordinates of the `{x, y}` at `key` by `factor`.
+fn scale_vec(entry: &mut Value, key: &str, factor: f64) -> AppResult {
+    let vec = entry
+        .get_mut(key)
+        .ok_or_else(|| invalid(format!("missing field `{key}`")))?;
+    for axis in ["x", "y"] {
+        scale_number(vec, axis, factor)?;
+    }
+    Ok(())
+}
+
+/// Multiply every field of the `{x, y, w, h}` at `key` by `factor`.
+fn scale_rect(entry: &mut Value, key: &str, factor: f64) -> AppResult {
+    let rect = entry
+        .get_mut(key)
+        .ok_or_else(|| invalid(format!("missing field `{key}`")))?;
+    for field in ["x", "y", "w", "h"] {
+        scale_number(rect, field, factor)?;
+    }
+    Ok(())
+}
+
+/// The entries of the list `value`.
+fn list_mut_value<'a>(value: &'a mut Value, name: &str) -> AppResult<&'a mut Vec<Value>> {
+    value
+        .as_array_mut()
+        .ok_or_else(|| invalid(format!("`{name}` must be a list")))
+}
 
 /// v4 → v5 (#347): `config.fields` (external fields besides gravity).
 /// Older files have none, which the default fills in; the version only

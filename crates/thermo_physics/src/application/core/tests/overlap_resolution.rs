@@ -10,9 +10,14 @@ use crate::objects2d::ball_impl::{BallFactory, SPECIES_M, SpeciesId};
 use crate::objects2d::{Rect, Vec2D};
 
 const SPECIES: SpeciesId = SPECIES_M;
+/// Lengths and speeds of these tests were chosen in N₂ units; they are
+/// scaled to Ar units (#405), so the scenarios stay physically the same.
+const LENGTH: f32 = 1.086_05;
+const SPEED: f32 = 1.063_68;
 /// Side of the crowded box: 22 balls at spacing 1.65 with every ball clear
-/// of the walls (`place_grid`).
-const BOX: f32 = 36.8;
+/// of the walls (`place_grid`), in N₂ units.
+const BOX: f32 = 36.8 * LENGTH;
+const SPACING: f32 = 1.65 * LENGTH;
 
 /// (overlapping pairs, deep pairs with centre distance below a quarter of
 /// their equilibrium distance, smallest centre distance). For `M` a quarter
@@ -76,7 +81,8 @@ fn place_grid(main_content: &mut MainContent, rect: &Rect, cols: usize, rows: us
                 rect.x + offset + spacing * i as f32,
                 rect.y - offset - spacing * j as f32,
             );
-            let v = Vec2D::new(((i * 7 + j) as f32).sin(), ((i + 3 * j) as f32).cos());
+            let v =
+                Vec2D::new(((i * 7 + j) as f32).sin(), ((i + 3 * j) as f32).cos()).scaled(SPEED);
             let ball = factory.create_with_species_and_velocity(pos, SPECIES, v);
             main_content.world_mut().balls.push(ball);
         }
@@ -93,7 +99,7 @@ fn test_deep_overlaps_in_a_crowded_box_separate() {
     main_content.resize(rect);
     main_content.unpause_after_resize();
 
-    place_grid(&mut main_content, &rect, 22, 22, 1.65);
+    place_grid(&mut main_content, &rect, 22, 22, SPACING);
     // Nearly coincident partners for a few grid balls
     let factory = BallFactory::new();
     for k in [3usize, 50, 101, 222, 300, 417] {
@@ -127,7 +133,7 @@ fn test_deep_overlaps_in_a_crowded_box_separate() {
 fn test_overlaps_after_shrinking_the_box_separate() {
     // The reported trigger: a gas squeezed into a box too small for it.
     let (mut main_content, full) = create_main_content_for_region(-10., 10.);
-    place_grid(&mut main_content, &full, 23, 22, 4.0);
+    place_grid(&mut main_content, &full, 23, 22, 4.0 * LENGTH);
     main_content.world_mut().rebuild_cell_grid();
     main_content.collect_neighbours_by_cell(DT_GOAL);
     run_steps(&mut main_content, 50);
@@ -179,10 +185,11 @@ fn test_separating_overlaps_conserves_energy() {
     main_content.resize(rect);
     main_content.unpause_after_resize();
 
-    place_grid(&mut main_content, &rect, 22, 22, 1.65);
+    place_grid(&mut main_content, &rect, 22, 22, SPACING);
     let factory = BallFactory::new();
     for k in [3usize, 50, 101, 222, 300, 417] {
-        let pos = *main_content.world().balls[k].get_position() + Vec2D::new(0.3, 0.1);
+        let pos =
+            *main_content.world().balls[k].get_position() + Vec2D::new(0.3, 0.1).scaled(LENGTH);
         let ball = factory.create_with_species_and_velocity(pos, SPECIES, Vec2D::zero());
         main_content.world_mut().balls.push(ball);
     }
