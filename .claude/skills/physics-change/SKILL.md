@@ -7,6 +7,9 @@ description: Contract for changing simulation physics - pair forces and potentia
 
 The simulation must conserve energy where the physics says it should, and seeded runs must stay reproducible. Every physics change proves both with tests and, if results move, with baseline evidence.
 
+## Scope
+Change only the physics the issue asks for. A new quantity goes only into the outputs the issue names (minimal code policy in `.github/copilot-instructions.md`); safety nets are the one exception (`physics.instructions.md`).
+
 ## Invariants
 Read `.github/instructions/physics.instructions.md` first: force and potential match, cutoff, force cap, neighbour lists, index contract, walls, species, reproducibility and precision. Line walls and valves: `operator-framework` skill.
 

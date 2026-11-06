@@ -38,6 +38,7 @@ pub trait RenderPipeline: Any {
 - Data comes only from `PrepareContext`: the snapshot's sections (`frame`, `balls`, `operators`, `fields`, `debug`; see `docs/architecture.md#snapshot-flow`), `operator_previews`, `cursor_world_pos`, margins, `thermo_display`. Read only the sections the pipeline draws. New simulation data goes into the section it belongs to, or a new section, never a new top-level field of `RendererSnapshot` (built in `crates/thermo_runtime/src/application/snapshot.rs` by `fill_snapshot`, which refills a reused snapshot: clear and refill its vectors, do not replace them). Costly data goes behind a `SceneLayers` flag (describe a new layer in `LAYERS`) so the physics thread builds it only when drawn; debug data only for verbose balls, in `DebugSnapshot`.
 
 ## Registration and draw order
+- Extend an existing pipeline with the same instance type, space and layer before adding one; a new pipeline needs its own vertex format, shader or layer.
 - Register in `WgpuPipelines::new` (`render/wgpu_pipelines.rs`). Registration order is draw order: background (sidebar, frame, grid, thermo) → walls and operators → balls → cursor and labels → text. Store a handle in `PipelineHandles` only if other code must reach the pipeline (for example a key that changes its mode, handled in `shell/wgpu_input.rs`).
 - Export the module in `render/pipelines/mod.rs`.
 

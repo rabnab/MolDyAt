@@ -19,6 +19,7 @@ description: Contract for changing headless mode - CLI flags, the JSONL headless
 | `--timings` report (`headless-timings.v1`) | `crates/thermo_runtime/src/headless_timings.rs` | read by `scripts/headless_perf.sh` |
 
 ## Rules
+- **Only what is asked.** Add a flag, field or record only when the issue asks for it in headless output; a new simulation value gets none by default (minimal code policy in `.github/copilot-instructions.md`).
 - **Export model, not renderer model.** Records are built in `headless_output.rs` from `RendererSnapshot`. Do not serialize `RendererSnapshot` directly, and do not export UI data such as the status lines (`FrameInfo::status`, formatted in the UI). If headless needs data the snapshot lacks, add an explicit field or accessor in core.
 - **Versioning.** Every record carries `schema_version: "headless.v1"` and `record_kind`. Consumers ignore unknown kinds and fields, so adding a field or record kind keeps `v1`. Renaming or removing a field, changing its type, unit or meaning, or changing the record order is a breaking change: bump to `headless.v2` in all three records and document it in `docs/headless.md`.
 - **Record sequence.** `run_start`, then a `frame` at step 0, at every `snapshot_every` boundary and at the last step (even if the interval does not divide it), then `run_end`. Runner tests treat this as contract.

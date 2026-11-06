@@ -99,6 +99,28 @@ jobs:
       #  with:
       #    sarif_file: clippy-results.sarif
 
+  # Production lines a PR adds and removes (scripts/code_delta.sh), in the job
+  # summary and as a notice; it never fails. See the minimal code policy in
+  # .github/copilot-instructions.md.
+  code-size:
+    name: production code size
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      # A PR checkout is the PR merged into its base, so HEAD^1 is the base.
+      - name: Report production code size
+        shell: bash
+        run: |
+          out=$(scripts/code_delta.sh HEAD^1)
+          printf '### Production code size\n\n```\n%s\n```\n' "$out" >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice title=Production code size::$(tail -n 1 <<<"$out")"
+
   # Licensing and release metadata: dependency licenses (deny.toml), notices
   # file freshness, source headers, version/tag consistency. The same script
   # runs locally: scripts/check_release_files.sh

@@ -29,11 +29,11 @@ Commands and process rules for AI assistants; other docs link here instead of co
 
 ### Minimal code policy (source of truth)
 
-- Production code must be minimal: the fewest lines that solve the issue, nothing it did not ask for. Padding gets rejected. Tests are exempt.
+- Production code must be minimal: the fewest lines that solve the issue, nothing it did not ask for. Tests are exempt.
 - Expose a new value only in the outputs the issue names (status text, metrics, headless, UI).
-- Reuse existing types, fields and functions; no type, trait or module for a single use.
+- No duplication: extend what exists instead of copying it; no type, trait or module for a single use.
+- Leave less code than before where you can: delete what the change makes redundant, merge duplicates it touches.
 - Comment only what code cannot say: no doc comments repeating the name, no issue numbers.
-- Delete what the change makes redundant.
 
 ---
 
@@ -59,7 +59,6 @@ Read the matching file before changing code in its area (Copilot applies them by
 
 - Avoid `unsafe` unless necessary for performance-critical sections; document why and which invariants hold.
 - Docs layout: `docs/` describes the current code, `docs/plan/` holds open plans, `docs/done/` implemented plans kept as history. See the `docs-maintenance` skill before adding, moving or renaming a doc.
-- Line endings: Git normalizes text files to LF on commit (`.gitattributes`); no further check needed.
 
 ---
 
