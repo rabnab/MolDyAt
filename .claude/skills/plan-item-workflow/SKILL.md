@@ -46,7 +46,14 @@ This is plan item M10, which is part of every PR rather than an item of its own:
 - If a rule in `.github/copilot-instructions.md` or a skill no longer matches the code, fix it.
 - A user-visible change gets a `CHANGELOG.md` entry; follow the `changelog` skill.
 
-## 6. Open the PR
+## 6. Shrink the diff
+Before the PR, review your own diff with the goal of removing lines (minimal code policy in `.github/copilot-instructions.md`; tests are exempt). `/simplify` can help where available.
+- Run `scripts/code_delta.sh` and go through every production file it lists.
+- For each new type, `pub` function or field: extend an existing one instead, or note in the PR why that was not possible.
+- Drop outputs, options and comments the issue did not ask for; delete or merge what the change made redundant or duplicated.
+- Fill the PR's "Code Size" section: the script's summary line, what was deleted, and the justifications.
+
+## 7. Open the PR
 Check divergence, then push:
 ```bash
 git --no-pager rev-list --left-right --count HEAD...origin/master
@@ -68,6 +75,6 @@ gh pr edit <PR> --milestone "<milestone of the issue>"
 gh pr edit <PR> --add-project "<project of the issue>"
 ```
 
-## 7. After review
+## 8. After review
 - Address comments with new commits; rebase on `master` if it moved (`git pull --rebase --autostash`, then `--force-with-lease`).
 - Squash and merge when appropriate. After the merge, check that the issue closed and the plan table is right.

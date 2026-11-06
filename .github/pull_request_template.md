@@ -30,6 +30,12 @@
 -
 -
 
+## Code Size
+<!-- Summary line of scripts/code_delta.sh (production code, tests excluded); see the minimal code policy in .github/copilot-instructions.md -->
+- Production code: +X -Y, net Z
+- Deleted or merged:
+- New types, `pub` functions and fields, and why no existing one could be extended:
+
 ## Physics Impact (if applicable)
 <!-- CRITICAL: For physics-related changes only -->
 - [ ] Energy conservation verified
@@ -77,5 +83,5 @@
 - [ ] Builder pattern used for dependency injection where appropriate
 - [ ] Physics calculations maintain energy conservation (if applicable)
 - [ ] LF line endings used (Unix-style `\n`)
-- [ ] Documentation added for new public APIs
+- [ ] Doc comments only where the code cannot say it (no comments repeating the name)
 - [ ] Test coverage for critical paths
