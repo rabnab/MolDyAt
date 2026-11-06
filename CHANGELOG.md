@@ -5,6 +5,8 @@ User-visible changes to MolDyAt, newest first. Binaries and full release notes a
 
 ## Unreleased
 
+- Add CO₂ as a rigid three-site molecule (`CO2_3S`); molecules bounce off the box walls with a
+  spin. (#408)
 - Add H₂ as a rigid two-site molecule (`H2_2S`). (#407)
 - Add N₂ as a rigid two-site molecule (`N2_2S`). (#406)
 - Add 2D water (`H2O`, Mercedes-Benz model) with hydrogen bonds. (#349)

@@ -283,6 +283,59 @@ mod tests {
         }
     }
 
+    /// CO2_3S: O–C–O with the TraPPE sites, symmetric, inertia from the
+    /// oxygens only (#408).
+    #[test]
+    fn co2_chain_is_built_from_its_sites() {
+        let s = table().species(id("CO2_3S"));
+        let m = s.molecule.as_ref().unwrap();
+        let (o, c) = (m.sites[0], m.sites[1]);
+        assert_eq!(m.sites.len(), 3);
+        assert_eq!(c.offset, 0.0);
+        assert_eq!(m.sites[2].offset, -o.offset);
+        assert!((o.offset.abs() - (1.16 / 3.405) as f32).abs() < 1e-6);
+        assert!((o.sigma - (3.05 / 3.405) as f32).abs() < 1e-6);
+        assert!((c.epsilon - (27.0 / 119.8) as f32).abs() < 1e-6);
+        assert!((s.mass - ((2.0 * 15.999 + 12.011) / 39.948) as f32).abs() < 1e-6);
+        assert!((s.inertia.unwrap() - 2.0 * o.mass * o.offset * o.offset).abs() < 1e-6);
+    }
+
+    /// Force and torque of the three-site chain vs finite differences.
+    #[test]
+    fn co2_force_and_torque_match_finite_differences() {
+        let sites = sites();
+        let (co2, ar) = (id("CO2_3S"), id("Ar"));
+        let h = 1e-3;
+        for (sj, r, ti, tj) in [
+            (co2, Vec2D::new(1.6, 0.4), 0.3, 1.2),
+            (co2, Vec2D::new(-0.6, 1.5), -1.0, 0.2),
+            (ar, Vec2D::new(1.3, -0.5), 0.8, 0.0),
+        ] {
+            let e = |r: Vec2D, ti: f32| sites.pair(co2, ti, sj, tj, r).energy;
+            let p = sites.pair(co2, ti, sj, tj, r);
+            let fx = (e(r + Vec2D::new(h, 0.0), ti) - e(r - &Vec2D::new(h, 0.0), ti)) / (2.0 * h);
+            let fy = (e(r + Vec2D::new(0.0, h), ti) - e(r - &Vec2D::new(0.0, h), ti)) / (2.0 * h);
+            let torque = -(e(r, ti + h) - e(r, ti - h)) / (2.0 * h);
+            let scale = p.force.norm().max(p.torque.abs()).max(1.0);
+            assert!(
+                (p.force.x - fx).abs() < 2e-2 * scale,
+                "{r}: fx {} vs {fx}",
+                p.force.x
+            );
+            assert!(
+                (p.force.y - fy).abs() < 2e-2 * scale,
+                "{r}: fy {} vs {fy}",
+                p.force.y
+            );
+            assert!(
+                (p.torque - torque).abs() < 2e-2 * scale,
+                "{r}: τ {} vs {torque}",
+                p.torque
+            );
+            assert!(p.energy != 0.0, "{r}: inside the cutoff");
+        }
+    }
+
     /// The pair seen from the other ball: same energy, opposite force.
     #[test]
     fn pair_is_symmetric() {

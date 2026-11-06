@@ -16,13 +16,14 @@ cargo ci-test-drift   # = cargo test -p thermo_physics -- --ignored --nocapture
 All scenarios are `#[ignore = "suite:drift"]`, so a plain `cargo test` skips
 them. CI runs the alias in a step of the `test` job, after the unit tests and
 reusing their build. The alias runs every ignored test of `thermo_physics`, so
-it also runs the six `#[ignore = "suite:physics (slow)"]` tests
+it also runs the seven `#[ignore = "suite:physics (slow)"]` tests
 (`test_overlap_fallback_stays_rare_in_a_gas_with_walls`,
 `test_virial_pressure_2d_matches_wall_pressure`,
 `soft_wall_pressure_matches_the_hard_wall`,
 `torques_bring_rotation_to_equipartition`, about 40 s,
 `dumbbells_reach_equipartition`, about 16 s,
-`h2_and_argon_partial_pressures_add_up`, about 50 s); they are not drift
+`h2_and_argon_partial_pressures_add_up`, about 50 s,
+`co2_reaches_equipartition`, about 16 s); they are not drift
 scenarios and print no summary line. The MB water anomaly test
 (`water_has_a_negative_thermal_pressure_coefficient`, about 7 min) is
 ignored as well but does nothing unless `MOLDYAT_SLOW_WATER=1` is set
@@ -321,4 +322,6 @@ stated.
 **N₂ dumbbell (#406).** A new built-in species `N2_2S`; no scenario uses it and the molecule pass only runs while a molecule species is present, so every scenario keeps its `trajectory_hash` (mixed_sizes_cell_borders as after its #349 repair). Both headless fixtures only gain the `N2_2S:count` metric.
 
 **H₂ dumbbell (#407).** A new built-in species `H2_2S`; no scenario uses it, every `trajectory_hash` is unchanged and both headless fixtures only gain the `H2_2S:count` metric.
+
+**CO₂ chain (#408).** A new built-in species `CO2_3S`, and a per-site box-wall contact for molecules: a rigid-body impulse at the end site that hits the wall (`Ball2D::execute_update_pos_molecule`; atomic species keep their contact bit for bit, and molecules away from the walls drift bit for bit as before). A hot CO₂ gas between hard walls keeps its energy to 6.9e-3 of the kinetic energy at dt 0.0025 and 3.6e-3 at half of it (first order: the impulse acts at the end of the drift); the earlier centre-based contact gave 1.2e-1 and 3.9e-2. No scenario uses molecules: every `trajectory_hash` is unchanged and both headless fixtures only gain the `CO2_3S:count` metric.
 

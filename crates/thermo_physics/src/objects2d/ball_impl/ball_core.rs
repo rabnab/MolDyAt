@@ -29,7 +29,7 @@ const TAIL_RESOLUTION_DELTA_SQ: f32 = 1. * 1.; // minimum squared distance to ad
 /// gives one `box_x` and one `box_y` contact, and a line wall is only swept
 /// in a step without a box contact (`line_wall` is `None` whenever a box
 /// field is set).
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct BounceInfo {
     /// Contact with the left or right box wall.
     pub box_x: Option<WallContact>,
@@ -37,12 +37,30 @@ pub(crate) struct BounceInfo {
     pub box_y: Option<WallContact>,
     /// Contact with a line-segment wall (see `SimulationWorld::sweep_wall_contact`).
     pub line_wall: Option<WallContact>,
+    /// Momentum the box walls took from a molecule's site impulses this step
+    /// (#408, [`Ball2D::execute_update_pos_molecule`]); zero for atoms.
+    pub wall_momentum: Vec2D,
+    /// Whether a molecule's site got a box-wall impulse this step (#408):
+    /// counts as a box contact, so the line walls are not swept.
+    pub box_impulse: bool,
+}
+
+impl Default for BounceInfo {
+    fn default() -> Self {
+        Self {
+            box_x: None,
+            box_y: None,
+            line_wall: None,
+            wall_momentum: Vec2D::zero(),
+            box_impulse: false,
+        }
+    }
 }
 
 impl BounceInfo {
     /// Whether the ball touched a box wall this step.
     pub(crate) fn touched_box(&self) -> bool {
-        self.box_x.is_some() || self.box_y.is_some()
+        self.box_x.is_some() || self.box_y.is_some() || self.box_impulse
     }
 
     pub(crate) fn iter(&self) -> impl Iterator<Item = &WallContact> {
@@ -365,21 +383,23 @@ impl Ball2D {
     /// # Arguments
     /// * `dt` - Time step
     /// * `bound` - Boundary rectangle (reflective walls)
-    /// * `contact` - Centre distance from a wall at which the ball is
-    ///   reflected (`BallPhysics::wall_contact_distance`)
+    /// * `contact` - Centre distance from the left/right and the
+    ///   bottom/top walls at which the ball is reflected
+    ///   (`BallPhysics::wall_contact_distance`)
     /// * `restitution` - Normal restitution of the walls (1.0 = elastic)
     pub(crate) fn execute_update_pos(
         &mut self,
         dt: f32,
         bound: &Rect,
-        contact: f32,
+        contact: [f32; 2],
         restitution: f32,
     ) -> BounceInfo {
         let old_pos = self.pos;
         let (x0, y0) = bound.get_tl();
         let (x1, y1) = bound.get_br();
-        let x_range = (f32::min(x0, x1) + contact, f32::max(x0, x1) - contact);
-        let y_range = (f32::min(y0, y1) + contact, f32::max(y0, y1) - contact);
+        let [contact_x, contact_y] = contact;
+        let x_range = (f32::min(x0, x1) + contact_x, f32::max(x0, x1) - contact_x);
+        let y_range = (f32::min(y0, y1) + contact_y, f32::max(y0, y1) - contact_y);
 
         let [x, y] = self.exact;
         let (x, x_contact) =
@@ -411,6 +431,97 @@ impl Ball2D {
             box_x: x_contact.map(|c| contact(Vec2D::new(1.0, 0.0), c)),
             box_y: y_contact.map(|c| contact(Vec2D::new(0.0, 1.0), c)),
             line_wall: None,
+            wall_momentum: Vec2D::zero(),
+            box_impulse: false,
+        }
+    }
+
+    /// Position update of a rigid linear molecule (#408): the centre and the
+    /// orientation drift freely, then each box wall is checked against the
+    /// end site nearest to it. An end site closer to a wall than `site` (its
+    /// contact distance) that moves into it gets the rigid-body impulse at
+    /// that site, `J = -(1 + e)·u / (1/m + (r×n)²/I)` with `u` the site's
+    /// normal velocity and `r` its lever: it reflects the site and turns the
+    /// molecule, and with `e = 1` keeps the kinetic energy (translation plus
+    /// rotation). The centre is then moved out along the normal by `(1 + e)`
+    /// times the overlap, mirroring the overshoot of a free bounce. A site
+    /// that rotated into a wall is stopped the same way, so
+    /// hard walls hold molecules lying along them as well as end-on ones.
+    /// The impulse acts at the end of the drift, not at the contact time, so
+    /// its energy error is first order in dt (unlike the exact parabola of
+    /// the atoms' contact); soft walls keep molecules off it.
+    /// The velocity update adds its kick on top; the walls' share of the
+    /// momentum is returned in [`BounceInfo::wall_momentum`].
+    pub(crate) fn execute_update_pos_molecule(
+        &mut self,
+        dt: f32,
+        bound: &Rect,
+        (half_length, site): (f32, f32),
+        restitution: f32,
+    ) -> BounceInfo {
+        // The free drift of `resolve_box_axis`, term for term, so a molecule
+        // away from the walls moves exactly as before (#213: f32 displacement
+        // added to the f64 position).
+        let drift = |v: f32, a: f32| f64::from(v * dt + 0.5 * a * dt * dt);
+        let [x, y] = self.exact;
+        let mut centre = [
+            x + drift(self.v.x, self.accel.x),
+            y + drift(self.v.y, self.accel.y),
+        ];
+        self.advance_orientation(dt);
+
+        let (x0, y0) = bound.get_tl();
+        let (x1, y1) = bound.get_br();
+        let (left, right) = (f64::from(x0.min(x1)), f64::from(x0.max(x1)));
+        let (bottom, top) = (f64::from(y0.min(y1)), f64::from(y0.max(y1)));
+        let (sin, cos) = self.theta.sin_cos();
+        let axis = Vec2D::new(cos, sin);
+        let mut wall_momentum = Vec2D::zero();
+        let mut box_impulse = false;
+        // (inward normal, coordinate index, wall coordinate): the centre's
+        // distance from the wall is `normal · (centre − wall)` along the index.
+        let sides = [
+            (Vec2D::new(1.0, 0.0), 0, left),
+            (Vec2D::new(-1.0, 0.0), 0, right),
+            (Vec2D::new(0.0, 1.0), 1, bottom),
+            (Vec2D::new(0.0, -1.0), 1, top),
+        ];
+        for (normal, index, wall) in sides {
+            let along = if index == 0 { normal.x } else { normal.y };
+            let distance = f64::from(along) * (centre[index] - wall);
+            // The end site on the wall's side: its lever points away from n.
+            let projection = axis.dot(&normal);
+            let sign = if projection > 0.0 { -1.0 } else { 1.0 };
+            let lever = axis.scaled(sign * half_length);
+            let site_distance = distance as f32 + lever.dot(&normal);
+            let overlap = site - site_distance;
+            if overlap <= 0.0 {
+                continue;
+            }
+            let site_velocity = self.v + Vec2D::new(-self.omega * lever.y, self.omega * lever.x);
+            let approach = site_velocity.dot(&normal);
+            if approach < 0.0 {
+                let arm = lever.x * normal.y - lever.y * normal.x;
+                let inverse_mass = 1.0 / self.mass + arm * arm / self.inertia;
+                let impulse = -(1.0 + restitution) * approach / inverse_mass;
+                self.v = self.v.add_scaled(&normal, impulse / self.mass);
+                self.omega += arm * impulse / self.inertia;
+                wall_momentum = wall_momentum.add_scaled(&normal, -impulse);
+                box_impulse = true;
+                // Mirror the overshoot, as a free bounce would have: the site
+                // ends `e·overlap` outside the contact distance.
+                let push = (1.0 + restitution) * overlap;
+                centre[0] += f64::from(normal.x * push);
+                centre[1] += f64::from(normal.y * push);
+            }
+            // A site already moving out is left to leave on its own: moving
+            // the centre would change the energy with no force paying for it.
+        }
+        self.set_exact_position(centre);
+        BounceInfo {
+            wall_momentum,
+            box_impulse,
+            ..BounceInfo::default()
         }
     }
 
@@ -527,7 +638,7 @@ mod tests {
         b.set_accel(Vec2D::zero());
         let bound = Rect::new(-2.0, -2.0, 4.0, 4.0); // square from -2..2
         // Move with dt so that we cross right boundary (max x = 2 - contact = 1)
-        let bounce_info = b.execute_update_pos(0.2, &bound, 1.0, 1.0); // dx = 2.0
+        let bounce_info = b.execute_update_pos(0.2, &bound, [1.0, 1.0], 1.0); // dx = 2.0
         // Expect bounce: position reflected inside, velocity unchanged (bounce handled later)
         assert!(b.pos.x <= 1.0 + 1e-6, "Position should be reflected");
         assert!(bounce_info.box_x.is_some(), "Should detect x bounce");
@@ -539,7 +650,7 @@ mod tests {
         // Now move towards bottom boundary in y
         b.v = Vec2D::new(0.0, -10.0);
         b.set_position_and_update_tail(Vec2D::new(0.0, 0.0));
-        let bounce_info = b.execute_update_pos(0.2, &bound, 1.0, 1.0); // dy = -2.0 -> bounce at y = -1
+        let bounce_info = b.execute_update_pos(0.2, &bound, [1.0, 1.0], 1.0); // dy = -2.0 -> bounce at y = -1
         assert!(b.pos.y >= -1.0 - 1e-6, "Position should be reflected");
         assert!(bounce_info.box_y.is_some(), "Should detect y bounce");
         assert_eq!(
@@ -598,7 +709,7 @@ mod tests {
         b.set_accel(Vec2D::zero());
         let bound = Rect::new(-4000.0, 4000.0, 8000.0, -8000.0);
         for _ in 0..1000 {
-            b.execute_update_pos(0.01, &bound, 1.0, 1.0);
+            b.execute_update_pos(0.01, &bound, [1.0, 1.0], 1.0);
         }
         let moved = b.exact_position()[0] - 2000.0;
         assert!((moved - 1e-2).abs() < 1e-9, "moved {moved}");

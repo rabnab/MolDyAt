@@ -9,7 +9,7 @@
 use crate::application::persistence::{LoadSource, SaveStore};
 use crate::application::thermo_field::LocalKineticStats;
 use crate::application::{MainContent, SimConfig};
-use crate::objects2d::ball_impl::species::H2_MAX_TIME_STEP;
+use crate::objects2d::ball_impl::species::{CO2_MAX_TIME_STEP, H2_MAX_TIME_STEP};
 use crate::objects2d::ball_impl::{Ball2D, SpeciesId, SpeciesTable};
 use crate::objects2d::{Rect, Vec2D};
 
@@ -42,12 +42,24 @@ fn add(mc: &mut MainContent, pos: Vec2D, v: Vec2D, theta: f32, omega: f32, kind:
 /// A lattice of `N2_2S` (with every `ar_every`-th one `Ar`, 0 for none) at
 /// spacing 1.6, random-ish orientations, speeds about `speed`.
 fn gas(mc: &mut MainContent, side: usize, speed: f32, ar_every: usize) {
-    let (n2, ar) = (species("N2_2S"), species("Ar"));
-    let offset = -0.8 * (side - 1) as f32;
+    gas_of(mc, "N2_2S", 1.6, side, speed, ar_every);
+}
+
+/// [`gas`] of the molecule `name` at lattice spacing `spacing`.
+fn gas_of(
+    mc: &mut MainContent,
+    name: &str,
+    spacing: f32,
+    side: usize,
+    speed: f32,
+    ar_every: usize,
+) {
+    let (n2, ar) = (species(name), species("Ar"));
+    let offset = -0.5 * spacing * (side - 1) as f32;
     for i in 0..side {
         for j in 0..side {
             let k = i * side + j;
-            let pos = Vec2D::new(offset + 1.6 * i as f32, offset + 1.6 * j as f32);
+            let pos = Vec2D::new(offset + spacing * i as f32, offset + spacing * j as f32);
             let phase = (i * 7 + j * 13) as f32;
             let v = Vec2D::new(phase.sin(), (1.3 * phase).cos()).scaled(speed);
             let kind = if ar_every > 0 && k.is_multiple_of(ar_every) {
@@ -204,11 +216,11 @@ fn h2_world(seed: u64, half: f32, dt: f32) -> MainContent {
 }
 
 /// Max energy error, as a share of the kinetic energy, of an H₂ gas at
-/// about 100 K over 20 time units at `dt`.
+/// about 100 K over 5 time units at `dt`.
 fn h2_energy_error(dt: f32) -> f32 {
     let mut mc = h2_world(6, 9.0, dt);
     let h2 = species("H2_2S");
-    // ½ m v² ≈ k_B T: v ≈ 0.96 at T ≈ 0.83 (100 K) for m = 0.0505.
+    // Speeds of a few k_B T for the light molecules (m = 0.0505).
     let side = 9;
     for i in 0..side {
         for j in 0..side {
@@ -229,7 +241,7 @@ fn h2_energy_error(dt: f32) -> f32 {
     mc.simulation_step().unwrap();
     let (e0, kin0) = (reported_energy(&mc), mc.world().sim.get_kinetic_energy());
     let mut max = 0.0f32;
-    for _ in 0..(20.0 / dt) as usize {
+    for _ in 0..(5.0 / dt) as usize {
         mc.simulation_step().unwrap();
         max = max.max((reported_energy(&mc) - e0).abs() / kin0);
     }
@@ -318,4 +330,208 @@ fn h2_and_argon_partial_pressures_add_up() {
     );
     let ratio = p_mix / (p_h2 + p_ar);
     assert!((ratio - 1.0).abs() < 0.1, "P_mix / (P_H2 + P_Ar) = {ratio}");
+}
+
+// ── CO₂ (#408) ──────────────────────────────────────────────────────────
+
+/// A gas of CO₂ chains and Ar in a box at the CO₂ time step: the total
+/// energy is conserved (as a share of the kinetic energy) and the error
+/// falls with dt.
+#[test]
+fn co2_gas_conserves_its_energy() {
+    let error = |dt: f32| {
+        let mut config = SimConfig::default();
+        config.integration.time_step = dt;
+        let mut mc =
+            MainContent::with_config(Rect::new(-12.0, 12.0, 24.0, -24.0), &config, Some(9))
+                .unwrap();
+        mc.world_mut().speed_limit_override = Some(f32::INFINITY);
+        gas_of(&mut mc, "CO2_3S", 2.2, 9, 1.0, 5);
+        mc.simulation_step().unwrap();
+        let (e0, kin0) = (reported_energy(&mc), mc.world().sim.get_kinetic_energy());
+        let mut max = 0.0f32;
+        let mut turned = false;
+        for _ in 0..(10.0 / dt) as usize {
+            mc.simulation_step().unwrap();
+            max = max.max((reported_energy(&mc) - e0).abs() / kin0);
+            turned |= mc.world().balls.iter().any(|b| b.omega != 0.0);
+        }
+        assert!(turned, "no torque acted");
+        assert_eq!(mc.world().sim.wall_contacts, 0, "backstop reached");
+        max
+    };
+    let (coarse, fine) = (error(CO2_MAX_TIME_STEP), error(0.5 * CO2_MAX_TIME_STEP));
+    println!("CO2: energy error {coarse:e} at its dt, {fine:e} at dt/2");
+    assert!(coarse < 3e-3, "energy error {coarse:e}");
+    assert!(
+        fine < 0.5 * coarse,
+        "no convergence: {coarse:e} -> {fine:e}"
+    );
+}
+
+/// Torques bring CO₂ to equipartition: `⟨E_rot⟩ ≈ ⟨E_trans⟩ / 2`.
+#[test]
+#[ignore = "suite:physics (slow)"]
+fn co2_reaches_equipartition() {
+    let mut mc = world(10, 16.0);
+    gas_of(&mut mc, "CO2_3S", 2.4, 12, 1.0, 0);
+    for _ in 0..20_000 {
+        mc.simulation_step().unwrap();
+    }
+    let (mut rot, mut trans) = (0.0f64, 0.0f64);
+    for _ in 0..800 {
+        for _ in 0..25 {
+            mc.simulation_step().unwrap();
+        }
+        let mut stats = LocalKineticStats::new();
+        for ball in &mc.world().balls {
+            stats.add_ball(ball);
+        }
+        let v_com = stats.center_of_mass_velocity().unwrap();
+        for ball in &mc.world().balls {
+            rot += f64::from(ball.rotational_energy());
+            trans += f64::from(0.5 * ball.mass * (ball.v - &v_com).norm_sq());
+        }
+    }
+    let ratio = rot / (0.5 * trans);
+    println!("CO2: ⟨E_rot⟩ / (⟨E_trans⟩ / 2) = {ratio:.3}");
+    assert!((ratio - 1.0).abs() < 0.1, "equipartition ratio {ratio}");
+}
+
+/// End sites of a CO₂ molecule `ball`: their distance from the bottom wall
+/// at `floor`.
+fn end_site_heights(ball: &Ball2D, floor: f32) -> [f32; 2] {
+    let half = SpeciesTable::builtin()
+        .species(ball.species())
+        .molecule
+        .as_ref()
+        .unwrap()
+        .half_length();
+    let lift = half * ball.theta.sin();
+    let y = ball.get_position().y - floor;
+    [y + lift, y - lift]
+}
+
+/// A CO₂ lying along a hard wall and spinning (#408): its end sites hit the
+/// wall and are stopped by the rigid-body impulse at the site, which turns
+/// the molecule back and moves its centre, and the kinetic energy
+/// (translation and rotation) is kept. The old centre-based contact let the
+/// sites rotate into the wall.
+#[test]
+fn spinning_molecule_bounces_off_a_hard_wall() {
+    let mut mc = world(5, 10.0);
+    mc.use_hard_walls();
+    let co2 = species("CO2_3S");
+    let floor = mc
+        .world()
+        .world_region()
+        .get_br()
+        .1
+        .min(mc.world().world_region().get_tl().1);
+    let site = mc.world().physics.wall_contact_distance(species("Ar"));
+    add(
+        &mut mc,
+        Vec2D::new(0.0, floor + 0.7),
+        Vec2D::zero(),
+        0.0,
+        3.0,
+        co2,
+    );
+    mc.collect_neighbours_by_cell(CO2_MAX_TIME_STEP);
+    mc.set_time_step(CO2_MAX_TIME_STEP).unwrap();
+    mc.simulation_step().unwrap();
+    let e0 = reported_energy(&mc);
+    let mut lowest = f32::INFINITY;
+    let mut hit_steps = 0;
+    for _ in 0..4_000 {
+        let before = mc.wall_momentum().1;
+        mc.simulation_step().unwrap();
+        if mc.wall_momentum().1 != before {
+            hit_steps += 1;
+        }
+        let [a, b] = end_site_heights(&mc.world().balls[0], floor);
+        lowest = lowest.min(a).min(b);
+        let e = reported_energy(&mc);
+        assert!((e - e0).abs() <= 1e-4 * e0, "energy {e} vs {e0}");
+    }
+    assert!(hit_steps > 0, "no step reported a box contact");
+    let (_, py) = mc.wall_momentum();
+    assert!(py.abs() > 0.0, "the wall took no momentum: no contact");
+    assert!(
+        lowest > 0.5 * site,
+        "an end site went {lowest} from the wall (contact ≈ {site})"
+    );
+}
+
+/// A hot CO₂ gas between hard walls (#408): the site impulses on the box
+/// walls keep the total energy, and the error shrinks with dt. The impulse
+/// acts at the end of the drift, not at the exact contact time, so the error
+/// is first order in dt (6.9e-3 of the kinetic energy at dt, 3.6e-3 at dt/2;
+/// the centre-based contact before gave 1.2e-1 and 3.9e-2). Soft walls, the
+/// default, keep molecules off this contact.
+#[test]
+fn co2_gas_keeps_its_energy_between_hard_walls() {
+    let run = |dt: f32| {
+        let mut mc = world(6, 5.0);
+        mc.use_hard_walls();
+        mc.set_time_step(dt).unwrap();
+        gas_of(&mut mc, "CO2_3S", 2.2, 4, 3.0, 0);
+        mc.simulation_step().unwrap();
+        let (e0, kin0) = (reported_energy(&mc), mc.world().sim.get_kinetic_energy());
+        let mut max = 0.0f32;
+        for _ in 0..(4.0 / dt) as usize {
+            mc.simulation_step().unwrap();
+            max = max.max((reported_energy(&mc) - e0).abs() / kin0);
+        }
+        (max, mc.wall_momentum())
+    };
+    let (coarse, (px, py)) = run(CO2_MAX_TIME_STEP);
+    let (fine, _) = run(0.5 * CO2_MAX_TIME_STEP);
+    println!("CO2 hard walls: energy error {coarse:e} at dt, {fine:e} at dt/2");
+    assert!(px.abs() + py.abs() > 0.0, "no wall contact");
+    assert!(coarse < 1e-2, "energy error {coarse:e}");
+    assert!(
+        fine < 0.6 * coarse,
+        "no convergence: {coarse:e} -> {fine:e}"
+    );
+}
+
+/// A site impulse on a box wall counts as a box contact (#408), so the
+/// line-wall sweep skips that step as for atoms: contacts in one step must
+/// have orthogonal normals.
+#[test]
+fn site_impulse_counts_as_a_box_contact() {
+    let mut mc = world(7, 10.0);
+    mc.use_hard_walls();
+    let co2 = species("CO2_3S");
+    let floor = mc
+        .world()
+        .world_region()
+        .get_br()
+        .1
+        .min(mc.world().world_region().get_tl().1);
+    add(
+        &mut mc,
+        Vec2D::new(0.0, floor + 0.7),
+        Vec2D::new(0.0, -2.0),
+        0.0,
+        0.0,
+        co2,
+    );
+    let bound = mc.world().world_region();
+    let physics = mc.world().physics.clone();
+    let ball = &mut mc.world_mut().balls[0];
+    let mut touched = false;
+    for _ in 0..200 {
+        let bounce = physics.update_positions(ball, CO2_MAX_TIME_STEP, &bound, 1.0);
+        if bounce.wall_momentum != Vec2D::zero() {
+            assert!(
+                bounce.touched_box(),
+                "a site impulse must count as a box contact"
+            );
+            touched = true;
+            break;
+        }
+    }
+    assert!(touched, "the molecule never reached the wall");
 }

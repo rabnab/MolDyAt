@@ -453,7 +453,7 @@ core_stiffness = 134.53204    # 0..10000, force slope inside the core (0: flat; 
 cutoff_factor = 4.0           # 1.2..10, pair cutoff in units of sigma_ij
 ## Optional, one block per species pair: replaces the mixed sigma_ij and/or
 ## epsilon_ij of that pair (both orders); a missing value keeps the mixed one.
-## Molecule species (N2_2S, H2_2S) cannot be named: their sites mix.
+## Molecule species (N2_2S, H2_2S, CO2_3S) cannot be named: their sites mix.
 # [[potential.pair_override]]
 # a = "N2"                    # species names of the run's table (see [[species]])
 # b = "Ar"
@@ -490,7 +490,8 @@ snapshot_interval_us = 16667  # 1000..1000000, least time between two frames sen
 ## applies: N2, the former size classes XS, S, M, L, XL, and Ar, Ne, CH4, O2,
 ## NH3, CH4_HCB (the CH4 of saves before format v7), H2O (MB water, #349:
 ## needs time_step <= 0.0005, see docs/units.md), N2_2S (N2 as a rigid dumbbell, #406),
-## H2_2S (H2 as a rigid dumbbell, #407: needs time_step <= 0.001).
+## H2_2S (H2 as a rigid dumbbell, #407: needs time_step <= 0.001),
+## CO2_3S (CO2 as a rigid O-C-O chain, #408: needs time_step <= 0.0025).
 ## With it, exactly the listed species, in this order; the first is the
 ## default for new balls. Literature single-site Lennard-Jones values;
 ## Ar (3.405 A, 119.8 K, 39.948 u) is the unit (#405).
