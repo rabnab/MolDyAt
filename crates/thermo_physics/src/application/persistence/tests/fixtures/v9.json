@@ -1,0 +1,816 @@
+{
+  "version": 9,
+  "units": {
+    "sigma_angstrom": 3.405,
+    "epsilon_kelvin": 119.8,
+    "mass_u": 39.948
+  },
+  "world_rect": {
+    "x": -21.720999,
+    "y": 16.290749,
+    "w": 43.441998,
+    "h": -32.581497
+  },
+  "time_step": 0.005,
+  "gravity": 0.52088845,
+  "config": {
+    "integration": {
+      "time_step": 0.005,
+      "speed_limit_factor": 0.2
+    },
+    "potential": {
+      "max_force": 73.05425,
+      "core_stiffness": 134.53204,
+      "cutoff_factor": 4.0
+    },
+    "walls": {
+      "model": "soft",
+      "sigma": 0.54302496,
+      "epsilon": 1.5868113,
+      "attractive": true,
+      "backstop": 0.25,
+      "override": [
+        {
+          "species": "N2",
+          "epsilon": 0.39670283
+        }
+      ]
+    },
+    "neighbours": {
+      "skin_factor": 0.2
+    },
+    "display": {
+      "snapshot_interval_us": 16667
+    },
+    "species": [
+      {
+        "name": "N2",
+        "sigma_angstrom": 3.698,
+        "epsilon_kelvin": 95.05,
+        "mass_u": 28.0134,
+        "colour": [
+          0.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "display_radius_angstrom": 1.849
+      },
+      {
+        "name": "XS",
+        "sigma_angstrom": 4.686363,
+        "epsilon_kelvin": 95.05,
+        "mass_u": 28.0134,
+        "colour": [
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "display_radius_angstrom": 2.3431816
+      },
+      {
+        "name": "S",
+        "sigma_angstrom": 5.674726,
+        "epsilon_kelvin": 95.05,
+        "mass_u": 33.616082,
+        "colour": [
+          0.0,
+          1.0,
+          0.0,
+          1.0
+        ],
+        "display_radius_angstrom": 2.837363
+      },
+      {
+        "name": "M",
+        "sigma_angstrom": 7.651452,
+        "epsilon_kelvin": 95.05,
+        "mass_u": 48.951697,
+        "colour": [
+          0.0,
+          0.0,
+          1.0,
+          1.0
+        ],
+        "display_radius_angstrom": 3.825726
+      },
+      {
+        "name": "L",
+        "sigma_angstrom": 11.604904,
+        "epsilon_kelvin": 95.05,
+        "mass_u": 85.8914,
+        "colour": [
+          1.0,
+          1.0,
+          0.0,
+          1.0
+        ],
+        "display_radius_angstrom": 5.802452
+      },
+      {
+        "name": "XL",
+        "sigma_angstrom": 19.511808,
+        "epsilon_kelvin": 95.05,
+        "mass_u": 172.45934,
+        "colour": [
+          1.0,
+          0.0,
+          1.0,
+          1.0
+        ],
+        "display_radius_angstrom": 9.755904
+      },
+      {
+        "name": "Ar",
+        "sigma_angstrom": 3.405,
+        "epsilon_kelvin": 119.8,
+        "mass_u": 39.948,
+        "colour": [
+          0.6,
+          0.45,
+          1.0,
+          1.0
+        ],
+        "display_radius_angstrom": 1.7025
+      },
+      {
+        "name": "Ne",
+        "sigma_angstrom": 2.749,
+        "epsilon_kelvin": 35.6,
+        "mass_u": 20.18,
+        "colour": [
+          1.0,
+          0.6,
+          0.1,
+          1.0
+        ],
+        "display_radius_angstrom": 1.3745
+      },
+      {
+        "name": "CH4",
+        "sigma_angstrom": 3.73,
+        "epsilon_kelvin": 148.0,
+        "mass_u": 16.043,
+        "colour": [
+          0.55,
+          0.85,
+          0.35,
+          1.0
+        ],
+        "display_radius_angstrom": 1.865
+      },
+      {
+        "name": "O2",
+        "sigma_angstrom": 3.58,
+        "epsilon_kelvin": 117.5,
+        "mass_u": 31.999,
+        "colour": [
+          0.95,
+          0.45,
+          0.55,
+          1.0
+        ],
+        "display_radius_angstrom": 1.79
+      },
+      {
+        "name": "NH3",
+        "sigma_angstrom": 2.9,
+        "epsilon_kelvin": 558.3,
+        "mass_u": 17.031,
+        "colour": [
+          0.3,
+          0.55,
+          1.0,
+          1.0
+        ],
+        "display_radius_angstrom": 1.45
+      },
+      {
+        "name": "CH4_HCB",
+        "sigma_angstrom": 3.817,
+        "epsilon_kelvin": 148.2,
+        "mass_u": 16.043,
+        "colour": [
+          0.4,
+          0.65,
+          0.25,
+          1.0
+        ],
+        "display_radius_angstrom": 1.9085
+      },
+      {
+        "name": "H2O",
+        "sigma_angstrom": 1.96,
+        "epsilon_kelvin": 138.5,
+        "mass_u": 18.015,
+        "colour": [
+          0.95,
+          0.95,
+          1.0,
+          1.0
+        ],
+        "display_radius_angstrom": 1.4,
+        "moment_of_inertia_u_angstrom2": 1.15,
+        "water": {
+          "epsilon_hb_kelvin": 1385.0,
+          "r_hb_angstrom": 2.8
+        }
+      },
+      {
+        "name": "N2_2S",
+        "colour": [
+          0.2,
+          0.75,
+          0.95,
+          1.0
+        ],
+        "display_radius_angstrom": 1.655,
+        "sites": [
+          {
+            "offset_angstrom": [
+              -0.55,
+              0.0
+            ],
+            "sigma_angstrom": 3.31,
+            "epsilon_kelvin": 36.0,
+            "mass_u": 14.007
+          },
+          {
+            "offset_angstrom": [
+              0.55,
+              0.0
+            ],
+            "sigma_angstrom": 3.31,
+            "epsilon_kelvin": 36.0,
+            "mass_u": 14.007
+          }
+        ]
+      },
+      {
+        "name": "H2_2S",
+        "colour": [
+          1.0,
+          0.85,
+          0.85,
+          1.0
+        ],
+        "display_radius_angstrom": 1.36,
+        "sites": [
+          {
+            "offset_angstrom": [
+              -0.37,
+              0.0
+            ],
+            "sigma_angstrom": 2.72,
+            "epsilon_kelvin": 10.0,
+            "mass_u": 1.008
+          },
+          {
+            "offset_angstrom": [
+              0.37,
+              0.0
+            ],
+            "sigma_angstrom": 2.72,
+            "epsilon_kelvin": 10.0,
+            "mass_u": 1.008
+          }
+        ]
+      },
+      {
+        "name": "CO2_3S",
+        "colour": [
+          0.6,
+          0.6,
+          0.6,
+          1.0
+        ],
+        "display_radius_angstrom": 1.525,
+        "sites": [
+          {
+            "offset_angstrom": [
+              -1.16,
+              0.0
+            ],
+            "sigma_angstrom": 3.05,
+            "epsilon_kelvin": 79.0,
+            "mass_u": 15.999
+          },
+          {
+            "offset_angstrom": [
+              0.0,
+              0.0
+            ],
+            "sigma_angstrom": 2.8,
+            "epsilon_kelvin": 27.0,
+            "mass_u": 12.011
+          },
+          {
+            "offset_angstrom": [
+              1.16,
+              0.0
+            ],
+            "sigma_angstrom": 3.05,
+            "epsilon_kelvin": 79.0,
+            "mass_u": 15.999
+          }
+        ]
+      }
+    ],
+    "fields": [
+      {
+        "kind": "harmonic",
+        "center": [
+          1.6290749,
+          -2.1720998
+        ],
+        "stiffness": 0.03363301
+      }
+    ]
+  },
+  "balls": [
+    {
+      "id": 10,
+      "species": "XS",
+      "pos": {
+        "x": -13.032599,
+        "y": -4.3441997
+      },
+      "v": {
+        "x": 0.0,
+        "y": -0.21273662
+      },
+      "pre_update_pos": {
+        "x": -13.04346,
+        "y": -4.333339
+      },
+      "accel": {
+        "x": 0.010417769,
+        "y": -1.0417769
+      }
+    },
+    {
+      "id": 11,
+      "species": "S",
+      "pos": {
+        "x": -6.5162997,
+        "y": -3.2581499
+      },
+      "v": {
+        "x": 0.10636831,
+        "y": -0.2659208
+      },
+      "pre_update_pos": {
+        "x": -6.52716,
+        "y": -3.2472892
+      },
+      "accel": {
+        "x": 0.020835537,
+        "y": -0.97666585
+      }
+    },
+    {
+      "id": 12,
+      "species": "M",
+      "pos": {
+        "x": 0.0,
+        "y": -2.1720998
+      },
+      "v": {
+        "x": 0.21273662,
+        "y": -0.31910494
+      },
+      "pre_update_pos": {
+        "x": -0.010860499,
+        "y": -2.1612394
+      },
+      "accel": {
+        "x": 0.031253308,
+        "y": -0.9115548
+      }
+    },
+    {
+      "id": 13,
+      "species": "L",
+      "pos": {
+        "x": 6.5162997,
+        "y": -1.0860499
+      },
+      "v": {
+        "x": 0.31910494,
+        "y": -0.37228912
+      },
+      "pre_update_pos": {
+        "x": 6.5054393,
+        "y": -1.0751895
+      },
+      "accel": {
+        "x": 0.041671075,
+        "y": -0.8464438
+      }
+    },
+    {
+      "id": 14,
+      "species": "N2",
+      "pos": {
+        "x": 13.032599,
+        "y": 0.0
+      },
+      "v": {
+        "x": 0.42547324,
+        "y": -0.42547324
+      },
+      "pre_update_pos": {
+        "x": 13.021739,
+        "y": 0.010860499
+      },
+      "accel": {
+        "x": 0.05208884,
+        "y": -0.7813327
+      }
+    },
+    {
+      "id": 15,
+      "species": "XL",
+      "pos": {
+        "x": -3.2581499,
+        "y": 1.0860499
+      },
+      "v": {
+        "x": 0.5318416,
+        "y": -0.4786574
+      },
+      "pre_update_pos": {
+        "x": -3.2690103,
+        "y": 1.0969105
+      },
+      "accel": {
+        "x": 0.062506616,
+        "y": -0.71622163
+      }
+    },
+    {
+      "id": 16,
+      "species": "M",
+      "pos": {
+        "x": 3.2581499,
+        "y": 2.1720998
+      },
+      "v": {
+        "x": 0.6382099,
+        "y": -0.5318416
+      },
+      "pre_update_pos": {
+        "x": 3.2472892,
+        "y": 2.1829603
+      },
+      "accel": {
+        "x": 0.07292438,
+        "y": -0.6511106
+      }
+    },
+    {
+      "id": 17,
+      "species": "L",
+      "pos": {
+        "x": 8.688399,
+        "y": 3.2581499
+      },
+      "v": {
+        "x": 0.7445782,
+        "y": -0.5850257
+      },
+      "pre_update_pos": {
+        "x": 8.677539,
+        "y": 3.2690103
+      },
+      "accel": {
+        "x": 0.08334215,
+        "y": -0.5859995
+      }
+    }
+  ],
+  "operators": [
+    {
+      "wall_chain": {
+        "id": 0,
+        "start": {
+          "x": -16.290749,
+          "y": 8.688399
+        },
+        "end": {
+          "x": 16.290749,
+          "y": 8.688399
+        },
+        "pieces": [
+          {
+            "id": 0,
+            "start": {
+              "x": -16.290749,
+              "y": 8.688399
+            },
+            "end": {
+              "x": -3.2581499,
+              "y": 8.688399
+            },
+            "thickness": 1.0860499,
+            "t_start": 0.0,
+            "t_end": 0.4
+          },
+          {
+            "id": 1,
+            "start": {
+              "x": 3.2581499,
+              "y": 8.688399
+            },
+            "end": {
+              "x": 16.290749,
+              "y": 8.688399
+            },
+            "thickness": 1.0860499,
+            "t_start": 0.6,
+            "t_end": 1.0
+          }
+        ],
+        "joints": [
+          {
+            "kind": "valve",
+            "valve_id": 0,
+            "is_closed": true,
+            "t_start": 0.4,
+            "t_end": 0.6
+          }
+        ]
+      }
+    },
+    {
+      "wall_chain": {
+        "id": 1,
+        "start": {
+          "x": -16.290749,
+          "y": -8.688399
+        },
+        "end": {
+          "x": 5.4302497,
+          "y": -13.032599
+        },
+        "pieces": [
+          {
+            "id": 2,
+            "start": {
+              "x": -16.290749,
+              "y": -8.688399
+            },
+            "end": {
+              "x": -11.946549,
+              "y": -9.55724
+            },
+            "thickness": 4.3441997,
+            "t_start": 0.0,
+            "t_end": 0.2
+          },
+          {
+            "id": 3,
+            "start": {
+              "x": -8.688399,
+              "y": -10.208869
+            },
+            "end": {
+              "x": 5.4302497,
+              "y": -13.032599
+            },
+            "thickness": 4.3441997,
+            "t_start": 0.35,
+            "t_end": 1.0
+          }
+        ],
+        "joints": [
+          {
+            "kind": "valve",
+            "valve_id": 1,
+            "is_closed": false,
+            "t_start": 0.2,
+            "t_end": 0.35
+          }
+        ]
+      }
+    },
+    {
+      "wall_chain": {
+        "id": 2,
+        "start": {
+          "x": 10.860499,
+          "y": -5.4302497
+        },
+        "end": {
+          "x": 10.860499,
+          "y": 5.4302497
+        },
+        "pieces": [
+          {
+            "id": 4,
+            "start": {
+              "x": 10.860499,
+              "y": -5.4302497
+            },
+            "end": {
+              "x": 10.860499,
+              "y": -2.7151248
+            },
+            "thickness": 1.0860499,
+            "t_start": 0.0,
+            "t_end": 0.25
+          },
+          {
+            "id": 5,
+            "start": {
+              "x": 10.860499,
+              "y": 2.7151248
+            },
+            "end": {
+              "x": 10.860499,
+              "y": 5.4302497
+            },
+            "thickness": 1.0860499,
+            "t_start": 0.75,
+            "t_end": 1.0
+          }
+        ],
+        "joints": [
+          {
+            "kind": "gap",
+            "t_start": 0.25,
+            "t_end": 0.75
+          }
+        ]
+      }
+    },
+    {
+      "wall_chain": {
+        "id": 3,
+        "start": {
+          "x": -19.548899,
+          "y": -15.204699
+        },
+        "end": {
+          "x": -19.548899,
+          "y": 2.1720998
+        },
+        "pieces": [
+          {
+            "id": 6,
+            "start": {
+              "x": -19.548899,
+              "y": -15.204699
+            },
+            "end": {
+              "x": -19.548899,
+              "y": 2.1720998
+            },
+            "thickness": 2.1720998,
+            "t_start": 0.0,
+            "t_end": 1.0
+          }
+        ],
+        "joints": []
+      }
+    },
+    {
+      "wall_chain": {
+        "id": 4,
+        "start": {
+          "x": -4.3441997,
+          "y": 14.1186495
+        },
+        "end": {
+          "x": 17.376799,
+          "y": 11.946549
+        },
+        "pieces": [
+          {
+            "id": 7,
+            "start": {
+              "x": -4.3441997,
+              "y": 14.1186495
+            },
+            "end": {
+              "x": -2.1720998,
+              "y": 13.901439
+            },
+            "thickness": 1.6290749,
+            "t_start": 0.0,
+            "t_end": 0.1
+          },
+          {
+            "id": 8,
+            "start": {
+              "x": 0.0,
+              "y": 13.684229
+            },
+            "end": {
+              "x": 8.688399,
+              "y": 12.815389
+            },
+            "thickness": 1.6290749,
+            "t_start": 0.2,
+            "t_end": 0.6
+          },
+          {
+            "id": 9,
+            "start": {
+              "x": 13.032599,
+              "y": 12.380969
+            },
+            "end": {
+              "x": 17.376799,
+              "y": 11.946549
+            },
+            "thickness": 1.6290749,
+            "t_start": 0.8,
+            "t_end": 1.0
+          }
+        ],
+        "joints": [
+          {
+            "kind": "valve",
+            "valve_id": 3,
+            "is_closed": true,
+            "t_start": 0.1,
+            "t_end": 0.2
+          },
+          {
+            "kind": "gap",
+            "t_start": 0.6,
+            "t_end": 0.8
+          }
+        ]
+      }
+    },
+    {
+      "source_sphere": {
+        "id": 0,
+        "center": {
+          "x": -10.860499,
+          "y": 0.0
+        },
+        "active": true,
+        "emit_period": 3000,
+        "ball_species": "M",
+        "emission_speed": 0.053184155
+      }
+    },
+    {
+      "source_sphere": {
+        "id": 1,
+        "center": {
+          "x": -5.4302497,
+          "y": 13.032599
+        },
+        "active": false,
+        "emit_period": 1500,
+        "ball_species": "N2",
+        "emission_speed": 0.085094646
+      }
+    },
+    {
+      "thermostat": {
+        "id": 0,
+        "position": {
+          "x": 5.4302497,
+          "y": 0.0
+        },
+        "active": false,
+        "target_temperature": 0.19835141,
+        "radius": 5.4302497,
+        "tau": 0.51051384,
+        "chain": [
+          0.0,
+          0.24485134,
+          -0.48970267,
+          0.0,
+          0.12242567
+        ]
+      }
+    },
+    {
+      "thermostat": {
+        "id": 1,
+        "position": {
+          "x": -13.032599,
+          "y": -3.2581499
+        },
+        "active": true,
+        "target_temperature": 0.31736228,
+        "radius": 3.8011746,
+        "tau": 0.8168222,
+        "chain": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      }
+    }
+  ]
+}

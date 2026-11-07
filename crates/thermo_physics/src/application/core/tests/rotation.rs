@@ -21,13 +21,15 @@ const INERTIA_U_A2: f64 = 200.0;
 fn species_entry(name: &str, inertia: Option<f64>) -> SpeciesConfig {
     SpeciesConfig {
         name: name.into(),
-        sigma_angstrom: 3.405,
-        epsilon_kelvin: 119.8,
-        mass_u: 39.948,
+        sigma_angstrom: Some(3.405),
+        epsilon_kelvin: Some(119.8),
+        mass_u: Some(39.948),
         colour: vec![0.2, 0.6, 1.0],
         display_radius_angstrom: None,
         source: None,
         moment_of_inertia_u_angstrom2: inertia,
+        water: None,
+        sites: Vec::new(),
     }
 }
 

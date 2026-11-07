@@ -16,6 +16,8 @@ use super::format::{
     WORLD_FILE_VERSION, WallChainData, WorldFile,
 };
 use crate::application::core::SimulationWorld;
+use crate::application::sim_config::SpeciesConfig;
+use crate::application::units::UnitSystem;
 use crate::application::{AppResult, MainContent};
 use crate::objects2d::ball_impl::{Ball2D, SpeciesId, SpeciesTable};
 use crate::objects2d::line_segment::DEFAULT_THICKNESS;
@@ -25,17 +27,22 @@ use crate::objects2d::{SimLineSegment, ValveSegment};
 use std::sync::Arc;
 
 impl WorldFile {
-    /// The world of `mc` in file form, with the config it runs with.
+    /// The world of `mc` in file form, with the config it runs with and its
+    /// whole species table.
     pub(crate) fn capture(mc: &MainContent) -> Self {
         let world = mc.world();
-        let config = mc.config();
+        let mut config = mc.config();
         let species = &**world.species();
+        if config.species.is_empty() {
+            config.species = species.iter().map(SpeciesConfig::from).collect();
+        }
         Self {
             version: WORLD_FILE_VERSION,
+            units: UnitSystem::REDUCED,
             world_rect: world.world_rect,
             time_step: config.integration.time_step,
             gravity: world.physics.constants.gravity,
-            config: Some(config),
+            config,
             balls: world
                 .balls
                 .iter()
@@ -74,8 +81,7 @@ impl TryFrom<&WorldFile> for SimulationWorld {
     /// the run settings (see `MainContent::load_world`).
     fn try_from(file: &WorldFile) -> AppResult<Self> {
         let resolved = file.validate()?;
-        let mut world =
-            SimulationWorld::with_resolved(file.world_rect, &file.sim_config(), resolved)?;
+        let mut world = SimulationWorld::with_resolved(file.world_rect, &file.config, resolved)?;
         world.physics.constants.gravity = file.gravity;
         let species = Arc::clone(world.species());
         world.balls = file

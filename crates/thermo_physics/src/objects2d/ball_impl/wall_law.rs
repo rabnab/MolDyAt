@@ -24,19 +24,20 @@
 //! The wall code asks [`WallSettings::contact_factor`] where the hard
 //! contact (or the backstop) is.
 
+use crate::application::units::UnitSystem;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::molecule::Site;
 use crate::objects2d::ball_impl::pair_potential::{
     CapSettings, CappedPotential, LennardJones, PairLaw, SQRT6_OF_TWO,
 };
-use crate::objects2d::ball_impl::species::SpeciesId;
+use crate::objects2d::ball_impl::species::{AR_EPSILON_KELVIN, SpeciesId};
 
 /// Default `σ_w`: no size of its own, so `σ_iw = σ_i / 2`, the hard contact
 /// distance; the soft wall then has the hard wall's contact distance.
 pub(crate) const DEFAULT_WALL_SIGMA: f32 = 0.0;
-/// Default `ε_w`: the well depth of the unit species, Ar (#405). Saves from
-/// before format v6 ran with `1 ε_N2` and are migrated to keep it.
-pub(crate) const DEFAULT_WALL_EPSILON: f32 = 1.0;
+/// Default `ε_w`: the well depth of Ar, 119.8 K. Saves from before format v6
+/// ran with `1 ε_N2` and are migrated to keep it.
+pub(crate) const DEFAULT_WALL_EPSILON: f32 = UnitSystem::REDUCED.from_kelvin(AR_EPSILON_KELVIN);
 /// Default backstop distance as a share of `σ_i`: with the default wall and
 /// cap the wall energy there is ≈ 24 ε for `N2`, so thermal balls reach it
 /// with a probability of about e⁻²⁴ per contact at T* = 1.
