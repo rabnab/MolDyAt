@@ -23,7 +23,7 @@ pub enum Model {
     /// A single Lennard-Jones site; with `inertia` (#348) it has an
     /// orientation, which no force turns.
     Atom { inertia: Option<f32> },
-    /// Lennard-Jones sites of a rigid body (#406).
+    /// Lennard-Jones sites of a rigid body.
     RigidLinear(LinearMolecule),
     /// Mercedes-Benz water (#349): its Lennard-Jones disk plus hydrogen bonds.
     MbWater(MbWater),
@@ -44,7 +44,7 @@ impl Species {
     /// The Lennard-Jones sites of the species, which meet the walls and are
     /// drawn one by one: a molecule's, or one at the centre with the
     /// species' `σ`, `ε` and mass.
-    pub fn sites(&self) -> Vec<Site> {
+    pub(crate) fn sites(&self) -> Vec<Site> {
         match &self.model {
             Model::RigidLinear(m) => m.sites.clone(),
             Model::Atom { .. } | Model::MbWater(_) => vec![Site {
@@ -79,7 +79,7 @@ impl Interaction {
     /// time step limit (`BallPhysics::time_step_limit`).
     pub(crate) fn omega_sq(&self, a: &Species, b: &Species) -> f32 {
         match self {
-            Interaction::Sites(s) => s.omega_sq(a, b),
+            Interaction::Sites(s) => s.omega_sq(),
             Interaction::HBond(w) => w.omega_sq(a, b),
         }
     }

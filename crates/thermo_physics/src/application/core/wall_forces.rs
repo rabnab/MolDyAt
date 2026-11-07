@@ -86,8 +86,8 @@ pub(crate) fn soft_wall_force(
         torque: 0.0,
     };
     let sites = walls.sites(ball.species());
-    // Sites at the centre do not turn: atoms skip the `sin_cos`.
-    let axis = if sites.iter().all(|(offset, _)| *offset == Vec2D::zero()) {
+    // A single site sits at the centre and does not turn: no `sin_cos`.
+    let axis = if sites.len() == 1 {
         Vec2D::new(1.0, 0.0)
     } else {
         axis(ball.theta)

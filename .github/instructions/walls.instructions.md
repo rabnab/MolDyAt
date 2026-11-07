@@ -1,5 +1,5 @@
 ---
-applyTo: "crates/thermo_physics/src/objects2d/ball_impl/wall_law.rs,crates/thermo_physics/src/objects2d/ball_impl/wall_contact.rs,crates/thermo_physics/src/application/core/wall_forces.rs,crates/thermo_physics/src/application/core/line_segments/**,crates/thermo_physics/src/application/core/valves.rs"
+applyTo: "crates/thermo_physics/src/objects2d/ball_impl/ball_physics.rs,crates/thermo_physics/src/application/core/simulation_engine.rs,crates/thermo_physics/src/objects2d/ball_impl/wall_law.rs,crates/thermo_physics/src/objects2d/ball_impl/wall_contact.rs,crates/thermo_physics/src/application/core/wall_forces.rs,crates/thermo_physics/src/application/core/line_segments/**,crates/thermo_physics/src/application/core/valves.rs"
 ---
 
 # Wall rules

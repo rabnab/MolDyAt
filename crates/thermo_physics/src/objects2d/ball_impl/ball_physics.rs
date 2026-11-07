@@ -11,9 +11,7 @@ use crate::objects2d::ball_impl::molecule::Site;
 use crate::objects2d::ball_impl::pair_potential::{
     CapSettings, LJ_SIG, PairOverride, PairPotential, Potential,
 };
-use crate::objects2d::ball_impl::species::{
-    DEFAULT_SPECIES, Species, SpeciesId, SpeciesSet, SpeciesTable,
-};
+use crate::objects2d::ball_impl::species::{DEFAULT_SPECIES, SpeciesId, SpeciesSet, SpeciesTable};
 use crate::objects2d::ball_impl::wall_law::{SoftWalls, WallSettings};
 use crate::objects2d::ball_impl::{Ball2D, Named};
 use std::sync::Arc;
@@ -121,11 +119,11 @@ pub struct BallPhysics {
     /// The interactions of each species pair besides `pair_potential`,
     /// row-major.
     interactions: Vec<Vec<Interaction>>,
-    /// The sites of each species.
-    sites: Vec<Vec<Site>>,
     /// Wall contact distance of each species, from `wall_law`: the hard
     /// contact, or the backstop behind a soft wall.
     wall_contact: Vec<f32>,
+    /// [`Self::wall_release_distance`] of each species.
+    wall_release: Vec<f32>,
     /// Contact distance (`σ_ij`) of each species pair, row-major.
     contact: Vec<f32>,
     /// Cutoff of each species pair, row-major: the largest of its pair
@@ -209,8 +207,8 @@ impl BallPhysics {
             soft_walls: None,
             fields: Vec::new(),
             interactions,
-            sites: species.iter().map(Species::sites).collect(),
             wall_contact: Vec::new(),
+            wall_release: Vec::new(),
             contact,
             cutoff,
             species_count: species.len(),
@@ -226,7 +224,7 @@ impl BallPhysics {
             .species
             .ids()
             .map(|id| {
-                let mut sites = self.sites(id).to_vec();
+                let mut sites = self.species.sites(id).to_vec();
                 if let [site] = &mut sites[..]
                     && let Some(o) = self.pair_overrides.iter().find(|o| o.is_for(id, id))
                 {
@@ -249,6 +247,20 @@ impl BallPhysics {
         self.soft_walls = walls
             .soft
             .then(|| SoftWalls::new(&sites, &walls, *self.cap_settings()));
+        self.wall_release = self
+            .species
+            .ids()
+            .map(|id| {
+                let contact = self.wall_contact_distance(id);
+                self.soft_walls.as_ref().map_or(contact, |w| {
+                    w.sites(id)
+                        .iter()
+                        .map(|(offset, p)| offset.norm() + PairPotential::cutoff(p))
+                        .fold(0.0, f32::max)
+                        .max(contact)
+                })
+            })
+            .collect();
         self.walls = walls;
         self
     }
@@ -405,21 +417,9 @@ impl BallPhysics {
     /// soft wall cutoff, or the contact distance with hard walls. A wall
     /// that appears within this distance of a ball ramps in for it
     /// (`Ball2D::leaving_wall`).
-    pub(crate) fn wall_release_distance(&self, species: SpeciesId) -> f32 {
-        let contact = self.wall_contact_distance(species);
-        self.soft_walls.as_ref().map_or(contact, |w| {
-            w.sites(species)
-                .iter()
-                .map(|(offset, potential)| offset.norm() + PairPotential::cutoff(potential))
-                .fold(0.0, f32::max)
-                .max(contact)
-        })
-    }
-
-    /// The sites of `species` (`Species::sites`).
     #[inline]
-    pub(crate) fn sites(&self, species: SpeciesId) -> &[Site] {
-        &self.sites[species.index()]
+    pub(crate) fn wall_release_distance(&self, species: SpeciesId) -> f32 {
+        self.wall_release[species.index()]
     }
 
     /// Centre distance at which the potential of species `a` and `b`

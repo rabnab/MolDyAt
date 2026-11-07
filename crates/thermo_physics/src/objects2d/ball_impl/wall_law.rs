@@ -110,7 +110,7 @@ pub(crate) type WallSite = (Vec2D, CappedPotential<LennardJones>);
 /// The soft wall potential of every species of a table.
 #[derive(Clone, Debug)]
 pub(crate) struct SoftWalls {
-    /// Per species: its sites (`Species::sites`).
+    /// Per species: each site with its wall potential, overrides applied.
     sites: Vec<Vec<WallSite>>,
     /// Per species: the largest centre distance of a site's potential
     /// minimum (the WCA cutoff).
@@ -163,7 +163,6 @@ impl SoftWalls {
         }
     }
 
-    /// The sites of `species`.
     #[inline]
     pub(crate) fn sites(&self, species: SpeciesId) -> &[WallSite] {
         &self.sites[species.index()]

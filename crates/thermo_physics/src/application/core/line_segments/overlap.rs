@@ -98,7 +98,7 @@ impl SimulationWorld {
             .par_iter_mut()
             .map(|ball| {
                 let species = ball.species();
-                let contact = (physics.sites(species).len() == 1)
+                let contact = (physics.species().sites(species).len() == 1)
                     .then(|| physics.wall_contact_distance(species));
                 let release = physics.wall_release_distance(species);
                 Self::resolve_ball_overlaps(obstacles, ball, contact, release)

@@ -412,7 +412,7 @@ impl SimulationEngine {
             .balls
             .par_iter_mut()
             .map(|ball| {
-                let sites = physics.sites(ball.species());
+                let sites = physics.species().sites(ball.species());
                 if sites.len() > 1 {
                     let walls = (bound_rect, obstacles.as_slice());
                     return (

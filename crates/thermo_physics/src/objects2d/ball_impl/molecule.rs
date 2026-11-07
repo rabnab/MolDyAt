@@ -55,7 +55,9 @@ impl LinearMolecule {
         self.sites.iter().map(|s| s.mass).sum()
     }
 
-    /// `Σ m r²` about the centre of mass.
+    /// `Σ m r²` about the centre of mass. `m·|r|·|r|` rather than
+    /// `m·norm_sq()`: the grouping `(m·x)·x` keeps the built-in molecules'
+    /// inertia, and their trajectories, bit-identical to sites on an axis.
     pub(crate) fn inertia(&self) -> f32 {
         self.sites
             .iter()
@@ -81,14 +83,14 @@ impl LinearMolecule {
 
 /// Unit vector of the molecular axis at angle `theta`.
 #[inline]
-pub(crate) fn axis(theta: f32) -> Vec2D {
+pub fn axis(theta: f32) -> Vec2D {
     let (sin, cos) = theta.sin_cos();
     Vec2D::new(cos, sin)
 }
 
 /// The body-frame `offset` turned to the axis `axis`.
 #[inline]
-pub(crate) fn turn(offset: Vec2D, axis: Vec2D) -> Vec2D {
+pub fn turn(offset: Vec2D, axis: Vec2D) -> Vec2D {
     Vec2D::new(
         axis.x * offset.x - axis.y * offset.y,
         axis.y * offset.x + axis.x * offset.y,
@@ -107,54 +109,62 @@ pub(crate) fn cross(a: Vec2D, b: Vec2D) -> f32 {
 /// site at its centre with its own `σ`, `ε`), mixed by Lorentz–Berthelot.
 #[derive(Clone)]
 pub(crate) struct SitePairs {
-    /// (offset in `a`, offset in `b`, potential) of each site pair.
-    pairs: Vec<(Vec2D, Vec2D, CappedPotential<LennardJones>)>,
+    /// (offset in `a`, offset in `b`, potential, reduced mass of the two
+    /// sites) of each site pair.
+    pairs: Vec<(Vec2D, Vec2D, CappedPotential<LennardJones>, f32)>,
     pub cutoff: f32,
 }
 
 impl SitePairs {
     pub(crate) fn new(a: &Species, b: &Species, cap: CapSettings) -> Self {
-        let sites_b = b.sites();
-        let pairs: Vec<_> = a
-            .sites()
+        // A site at lever `L` moves across the axis as `1/(1/M + L²/I)`.
+        let site_masses = |s: &Species| -> Vec<(Site, f32)> {
+            let sites = s.sites();
+            let many = sites.len() > 1;
+            sites
+                .into_iter()
+                .map(|site| {
+                    let mass = match s.model.inertia() {
+                        Some(inertia) if many => {
+                            1.0 / (1.0 / s.mass + site.offset.norm_sq() / inertia)
+                        }
+                        _ => s.mass,
+                    };
+                    (site, mass)
+                })
+                .collect()
+        };
+        let sites_b = site_masses(b);
+        let pairs: Vec<_> = site_masses(a)
             .into_iter()
-            .flat_map(|sa| {
-                sites_b.iter().map(move |sb| {
+            .flat_map(|(sa, ma)| {
+                sites_b.iter().map(move |&(sb, mb)| {
                     let law = LennardJones {
                         sigma: 0.5 * (sa.sigma + sb.sigma),
                         epsilon: (sa.epsilon * sb.epsilon).sqrt(),
                     };
-                    (sa.offset, sb.offset, CappedPotential::new(law, cap))
+                    let mu = ma * mb / (ma + mb);
+                    (sa.offset, sb.offset, CappedPotential::new(law, cap), mu)
                 })
             })
             .collect();
         let cutoff = pairs
             .iter()
-            .map(|(oa, ob, p)| oa.norm() + ob.norm() + p.cutoff())
+            .map(|(oa, ob, p, _)| oa.norm() + ob.norm() + p.cutoff())
             .fold(0.0, f32::max);
         Self { pairs, cutoff }
     }
 
-    /// The stiffest site pair on the reduced mass of its two sites; a site at
-    /// lever `L` moves across the axis as `1/(1/M + L²/I)`.
-    pub(crate) fn omega_sq(&self, a: &Species, b: &Species) -> f32 {
-        let site_mass = |s: &Species, offset: Vec2D| match s.model.inertia() {
-            Some(inertia) if s.sites().len() > 1 => {
-                1.0 / (1.0 / s.mass + offset.norm_sq() / inertia)
-            }
-            _ => s.mass,
-        };
+    /// The stiffest site pair on the reduced mass of its two sites.
+    pub(crate) fn omega_sq(&self) -> f32 {
         self.pairs
             .iter()
-            .map(|(oa, ob, p)| {
-                let (ma, mb) = (site_mass(a, *oa), site_mass(b, *ob));
-                p.stiffness(REFERENCE_ENERGY) / (ma * mb / (ma + mb))
-            })
+            .map(|(_, _, p, mu)| p.stiffness(REFERENCE_ENERGY) / mu)
             .fold(0.0, f32::max)
     }
 
     pub(crate) fn eval(&self, r: Vec2D, axis_i: Vec2D, axis_j: Vec2D, out: &mut ForceResult) {
-        for (oa, ob, pot) in &self.pairs {
+        for (oa, ob, pot, _) in &self.pairs {
             let pa = turn(*oa, axis_i);
             // From site a to site b.
             let d = r + turn(*ob, axis_j) - &pa;

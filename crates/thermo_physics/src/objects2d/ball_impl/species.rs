@@ -113,6 +113,7 @@ impl Species {
 #[derive(Clone, Debug, PartialEq)]
 pub struct SpeciesTable {
     species: Vec<Species>,
+    sites: Vec<Vec<Site>>,
 }
 
 /// Single-site Lennard-Jones `σ` of Ar in Å: the reduced unit of length
@@ -412,7 +413,10 @@ impl SpeciesTable {
             SpeciesSet::CAPACITY,
             species.len()
         );
-        SpeciesTable { species }
+        SpeciesTable {
+            sites: species.iter().map(Species::sites).collect(),
+            species,
+        }
     }
 
     /// The built-in species: `N2`, the former size classes `XS` to `XL` and
@@ -435,6 +439,13 @@ impl SpeciesTable {
     /// only for ids that came from this table.
     pub fn species(&self, id: SpeciesId) -> &Species {
         &self.species[id.index()]
+    }
+
+    /// [`Species::sites`] of `id`, built once with the table. Without pair
+    /// overrides: the walls apply a like pair override to a single site
+    /// (`BallPhysics::with_walls`).
+    pub fn sites(&self, id: SpeciesId) -> &[Site] {
+        &self.sites[id.index()]
     }
 
     /// The id of the species at `index`, if the table has one.
