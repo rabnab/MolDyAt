@@ -78,7 +78,7 @@ pub(crate) const REFERENCE_ENERGY: f32 = 1.0;
 fn time_step_limits(
     table: &SpeciesTable,
     pairs: &Potential,
-    interactions: &[Vec<Arc<dyn Interaction>>],
+    interactions: &[Vec<Interaction>],
 ) -> Vec<f32> {
     table
         .ids()
@@ -117,7 +117,7 @@ pub struct BallPhysics {
     fields: Vec<Field>,
     /// The interactions of each species pair besides `pair_potential`,
     /// row-major.
-    interactions: Vec<Vec<Arc<dyn Interaction>>>,
+    interactions: Vec<Vec<Interaction>>,
     /// Wall contact distance of each species, from `wall_law`: the hard
     /// contact, or the backstop behind a soft wall.
     wall_contact: Vec<f32>,
@@ -250,7 +250,7 @@ impl BallPhysics {
     /// The interactions of species `a` with each species besides the pair
     /// potential, indexed by the other species.
     #[inline]
-    pub(crate) fn interactions(&self, a: SpeciesId) -> &[Vec<Arc<dyn Interaction>>] {
+    pub(crate) fn interactions(&self, a: SpeciesId) -> &[Vec<Interaction>] {
         let start = a.index() * self.species_count;
         &self.interactions[start..start + self.species_count]
     }

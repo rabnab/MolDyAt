@@ -15,7 +15,6 @@
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::ForceResult;
 use crate::objects2d::ball_impl::ball_physics::REFERENCE_ENERGY;
-use crate::objects2d::ball_impl::interaction::Interaction;
 use crate::objects2d::ball_impl::pair_potential::{
     CapSettings, CappedPotential, LennardJones, PairPotential,
 };
@@ -104,10 +103,11 @@ pub(crate) fn cross(a: Vec2D, b: Vec2D) -> f32 {
 /// The site–site Lennard-Jones of a species pair with a molecule (#406):
 /// every site of one with every site of the other (an atomic species is one
 /// site at its centre with its own `σ`, `ε`), mixed by Lorentz–Berthelot.
+#[derive(Clone)]
 pub(crate) struct SitePairs {
     /// (offset in `a`, offset in `b`, potential) of each site pair.
     pairs: Vec<(f32, f32, CappedPotential<LennardJones>)>,
-    cutoff: f32,
+    pub cutoff: f32,
 }
 
 impl SitePairs {
@@ -139,16 +139,10 @@ impl SitePairs {
             .fold(0.0, f32::max);
         Self { pairs, cutoff }
     }
-}
-
-impl Interaction for SitePairs {
-    fn cutoff(&self) -> f32 {
-        self.cutoff
-    }
 
     /// The stiffest site pair on the reduced mass of its two sites; a site at
     /// lever `L` moves across the axis as `1/(1/M + L²/I)`.
-    fn omega_sq(&self, a: &Species, b: &Species) -> f32 {
+    pub(crate) fn omega_sq(&self, a: &Species, b: &Species) -> f32 {
         let site_mass = |s: &Species, offset: f32| match s.model.molecule() {
             Some(m) => 1.0 / (1.0 / m.mass() + offset * offset / m.inertia()),
             None => s.mass,
@@ -162,7 +156,7 @@ impl Interaction for SitePairs {
             .fold(0.0, f32::max)
     }
 
-    fn eval(&self, r: Vec2D, axis_i: Vec2D, axis_j: Vec2D, out: &mut ForceResult) {
+    pub(crate) fn eval(&self, r: Vec2D, axis_i: Vec2D, axis_j: Vec2D, out: &mut ForceResult) {
         for (oa, ob, pot) in &self.pairs {
             let pa = axis_i.scaled(*oa);
             // From site a to site b.

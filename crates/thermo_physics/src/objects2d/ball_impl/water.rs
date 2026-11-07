@@ -21,7 +21,6 @@
 
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::ForceResult;
-use crate::objects2d::ball_impl::interaction::Interaction;
 use crate::objects2d::ball_impl::species::Species;
 
 /// Hydrogen-bond parameters of a water species, in reduced (Ar) units.
@@ -53,18 +52,16 @@ impl MbWater {
             inertia,
         }
     }
-}
 
-impl Interaction for MbWater {
     /// Beyond this distance the bond energy is below `1e-30·ε_HB`.
-    fn cutoff(&self) -> f32 {
+    pub(crate) fn cutoff(&self) -> f32 {
         self.r_hb + 12.0 * self.width_r
     }
 
     /// The distance Gaussian on the reduced mass, and the largest curvature
     /// of the arm alignment `-ε_HB·exp(-(cos φ - 1)²/(2 w²))` in `φ` (flat
     /// at its optimum) for each of the three arms, which turn together.
-    fn omega_sq(&self, a: &Species, b: &Species) -> f32 {
+    pub(crate) fn omega_sq(&self, a: &Species, b: &Species) -> f32 {
         let w = f64::from(self.width_angle);
         let alignment = |phi: f64| -(-(phi.cos() - 1.0).powi(2) / (2.0 * w * w)).exp();
         let h = 1e-3;
@@ -80,7 +77,7 @@ impl Interaction for MbWater {
     }
 
     /// The hydrogen bond: zero beyond [`Self::cutoff`].
-    fn eval(&self, r: Vec2D, axis_i: Vec2D, axis_j: Vec2D, out: &mut ForceResult) {
+    pub(crate) fn eval(&self, r: Vec2D, axis_i: Vec2D, axis_j: Vec2D, out: &mut ForceResult) {
         let d = r.norm();
         if d >= self.cutoff() || d <= f32::EPSILON {
             return;
