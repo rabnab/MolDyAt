@@ -50,10 +50,10 @@ pub struct SpeciesConfig {
     /// species has no orientation. Required for `water`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub moment_of_inertia_u_angstrom2: Option<f64>,
-    /// Hydrogen bonds of MB water (#349).
+    /// Hydrogen bonds of MB water.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub water: Option<WaterConfig>,
-    /// The Lennard-Jones sites of a rigid molecule (#406).
+    /// The Lennard-Jones sites of a rigid molecule.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sites: Vec<SiteConfig>,
 }
@@ -66,6 +66,10 @@ pub struct WaterConfig {
     pub r_hb_angstrom: f64,
 }
 
+/// Largest distance of a molecule's centre of mass from its body origin, in
+/// reduced lengths: rounding of offsets given in Å, not an off-centre body.
+const MAX_CENTRE_OFFSET: f32 = 1e-4;
+
 /// One site of a rigid molecule.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -76,9 +80,6 @@ pub struct SiteConfig {
     pub epsilon_kelvin: f64,
     pub mass_u: f64,
 }
-
-/// The reduced units entries are converted into.
-const UNITS: UnitSystem = UnitSystem::REDUCED;
 
 impl SpeciesConfig {
     /// The species in reduced units, checked against the `MIN_*` / `MAX_*`
@@ -120,7 +121,6 @@ impl SpeciesConfig {
                     .map(|(i, s)| {
                         let key = format!("{key}.sites[{i}]");
                         let [x, y] = s.offset_angstrom;
-                        check_finite_f64(&[x, y], &format!("{key}.offset_angstrom"))?;
                         let lj = check_lennard_jones(
                             s.sigma_angstrom,
                             s.epsilon_kelvin,
@@ -128,18 +128,33 @@ impl SpeciesConfig {
                             &key,
                         )?;
                         Ok(Site {
-                            offset: Vec2D::new(UNITS.from_angstrom(x), UNITS.from_angstrom(y)),
+                            offset: Vec2D::new(
+                                UnitSystem::REDUCED.from_angstrom(x),
+                                UnitSystem::REDUCED.from_angstrom(y),
+                            ),
                             ..lj
                         })
                     })
                     .collect::<AppResult<Vec<_>>>()?;
                 let molecule = LinearMolecule { sites };
+                // Offsets are from the centre of mass, which the ball turns about.
+                let centre = molecule
+                    .sites
+                    .iter()
+                    .fold(Vec2D::zero(), |sum, s| sum + s.offset.scaled(s.mass))
+                    .scaled(1.0 / molecule.mass());
+                if !(0.0..=MAX_CENTRE_OFFSET).contains(&centre.norm()) {
+                    return Err(invalid(format!(
+                        "{key}.sites must be centred on their centre of mass, which lies {:.4} Å off",
+                        f64::from(centre.norm()) * UnitSystem::REDUCED.sigma_angstrom
+                    )));
+                }
                 check_literature(
                     molecule.inertia(),
                     MIN_SPECIES_INERTIA,
                     MAX_SPECIES_INERTIA,
-                    UNITS.inertia_u_angstrom2(),
-                    f64::from(molecule.inertia()) * UNITS.inertia_u_angstrom2(),
+                    UnitSystem::REDUCED.inertia_u_angstrom2(),
+                    f64::from(molecule.inertia()) * UnitSystem::REDUCED.inertia_u_angstrom2(),
                     &format!("{key}.sites (moment of inertia in u·Å²)"),
                 )?;
                 molecule_species(&self.name, molecule, colour)
@@ -152,7 +167,7 @@ impl SpeciesConfig {
             }
         };
         if let Some(inertia) = self.moment_of_inertia_u_angstrom2 {
-            let unit = UNITS.inertia_u_angstrom2();
+            let unit = UnitSystem::REDUCED.inertia_u_angstrom2();
             let reduced = (inertia / unit) as f32;
             check_literature(
                 reduced,
@@ -175,13 +190,13 @@ impl SpeciesConfig {
                     "{key}.water needs moment_of_inertia_u_angstrom2"
                 )));
             };
-            let epsilon_hb = UNITS.from_kelvin(water.epsilon_hb_kelvin);
-            let r_hb = UNITS.from_angstrom(water.r_hb_angstrom);
+            let epsilon_hb = UnitSystem::REDUCED.from_kelvin(water.epsilon_hb_kelvin);
+            let r_hb = UnitSystem::REDUCED.from_angstrom(water.r_hb_angstrom);
             check_literature(
                 epsilon_hb,
                 MIN_PAIR_EPSILON,
                 MAX_PAIR_EPSILON,
-                UNITS.epsilon_kelvin,
+                UnitSystem::REDUCED.epsilon_kelvin,
                 water.epsilon_hb_kelvin,
                 &format!("{key}.water.epsilon_hb_kelvin"),
             )?;
@@ -189,19 +204,19 @@ impl SpeciesConfig {
                 r_hb,
                 MIN_PAIR_SIGMA,
                 MAX_PAIR_SIGMA,
-                UNITS.sigma_angstrom,
+                UnitSystem::REDUCED.sigma_angstrom,
                 water.r_hb_angstrom,
                 &format!("{key}.water.r_hb_angstrom"),
             )?;
             species.model = Model::MbWater(MbWater::new(epsilon_hb, r_hb, inertia));
         }
         if let Some(radius) = self.display_radius_angstrom {
-            species.display_radius = UNITS.from_angstrom(radius);
+            species.display_radius = UnitSystem::REDUCED.from_angstrom(radius);
             check_literature(
                 species.display_radius,
                 MIN_DISPLAY_RADIUS,
                 MAX_DISPLAY_RADIUS,
-                UNITS.sigma_angstrom,
+                UnitSystem::REDUCED.sigma_angstrom,
                 radius,
                 &format!("{key}.display_radius_angstrom"),
             )?;
@@ -213,12 +228,12 @@ impl SpeciesConfig {
 /// `species` in literature units: the entry that resolves to it exactly.
 impl From<&Species> for SpeciesConfig {
     fn from(species: &Species) -> Self {
-        let length = |x| literature(x, UNITS.sigma_angstrom);
+        let length = |x| literature(x, UnitSystem::REDUCED.sigma_angstrom);
         let lennard_jones = |site: &Site| SiteConfig {
             offset_angstrom: [length(site.offset.x), length(site.offset.y)],
             sigma_angstrom: length(site.sigma),
-            epsilon_kelvin: literature(site.epsilon, UNITS.epsilon_kelvin),
-            mass_u: literature(site.mass, UNITS.mass_u),
+            epsilon_kelvin: literature(site.epsilon, UnitSystem::REDUCED.epsilon_kelvin),
+            mass_u: literature(site.mass, UnitSystem::REDUCED.mass_u),
         };
         let sites: Vec<_> = match &species.model {
             Model::RigidLinear(molecule) => molecule.sites.iter().map(lennard_jones).collect(),
@@ -235,10 +250,10 @@ impl From<&Species> for SpeciesConfig {
             source: None,
             moment_of_inertia_u_angstrom2: centre
                 .and(species.model.inertia())
-                .map(|inertia| literature(inertia, UNITS.inertia_u_angstrom2())),
+                .map(|inertia| literature(inertia, UnitSystem::REDUCED.inertia_u_angstrom2())),
             water: match &species.model {
                 Model::MbWater(w) => Some(WaterConfig {
-                    epsilon_hb_kelvin: literature(w.epsilon_hb, UNITS.epsilon_kelvin),
+                    epsilon_hb_kelvin: literature(w.epsilon_hb, UnitSystem::REDUCED.epsilon_kelvin),
                     r_hb_angstrom: length(w.r_hb),
                 }),
                 _ => None,
@@ -263,15 +278,15 @@ fn literature(reduced: f32, unit: f64) -> f64 {
 fn check_lennard_jones(sigma: f64, epsilon: f64, mass: f64, key: &str) -> AppResult<Site> {
     let site = Site {
         offset: Vec2D::zero(),
-        sigma: UNITS.from_angstrom(sigma),
-        epsilon: UNITS.from_kelvin(epsilon),
-        mass: UNITS.from_atomic_mass(mass),
+        sigma: UnitSystem::REDUCED.from_angstrom(sigma),
+        epsilon: UnitSystem::REDUCED.from_kelvin(epsilon),
+        mass: UnitSystem::REDUCED.from_atomic_mass(mass),
     };
     check_literature(
         site.sigma,
         MIN_PAIR_SIGMA,
         MAX_PAIR_SIGMA,
-        UNITS.sigma_angstrom,
+        UnitSystem::REDUCED.sigma_angstrom,
         sigma,
         &format!("{key}.sigma_angstrom"),
     )?;
@@ -279,7 +294,7 @@ fn check_lennard_jones(sigma: f64, epsilon: f64, mass: f64, key: &str) -> AppRes
         site.epsilon,
         MIN_PAIR_EPSILON,
         MAX_PAIR_EPSILON,
-        UNITS.epsilon_kelvin,
+        UnitSystem::REDUCED.epsilon_kelvin,
         epsilon,
         &format!("{key}.epsilon_kelvin"),
     )?;
@@ -287,19 +302,11 @@ fn check_lennard_jones(sigma: f64, epsilon: f64, mass: f64, key: &str) -> AppRes
         site.mass,
         MIN_SPECIES_MASS,
         MAX_SPECIES_MASS,
-        UNITS.mass_u,
+        UnitSystem::REDUCED.mass_u,
         mass,
         &format!("{key}.mass_u"),
     )?;
     Ok(site)
-}
-
-fn check_finite_f64(values: &[f64], key: &str) -> AppResult {
-    if values.iter().all(|v| v.is_finite()) {
-        Ok(())
-    } else {
-        Err(invalid(format!("{key} must be finite")))
-    }
 }
 
 /// A literature value whose reduced form `reduced` (`value / unit`) must lie

@@ -16,9 +16,9 @@
 //! Conversions use f64; the simulation stores f32. The parameters are fitted
 //! to 3D gases, so in this 2D simulation the SI values are qualitative.
 //!
-//! Every save states the unit system it was written in (`WorldFile::units`,
-//! #426), and constants chosen in physical units are converted here, so
-//! changing `REDUCED` needs no migration.
+//! Every save states the unit system it was written in (`WorldFile::units`),
+//! and constants chosen in physical units are converted here, so changing
+//! `REDUCED` needs no migration.
 
 use crate::objects2d::ball_impl::{
     AR_EPSILON_KELVIN, AR_MASS_U, AR_SIGMA_ANGSTROM, N2_EPSILON_KELVIN, N2_MASS_U,

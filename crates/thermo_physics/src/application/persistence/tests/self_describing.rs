@@ -72,40 +72,96 @@ fn files_before_v9_get_the_frozen_v8_table() {
     assert_eq!(file["units"], json!(UnitSystem::AR));
 }
 
-/// A file written in other units holds the same physical state once loaded:
-/// here the reference save, declared in N₂ units.
+/// A file written in other units holds the same physical state, and runs
+/// with the same physical time step, once loaded: here the reference save
+/// (with a rotating ball and a pair override added), declared in N₂ units.
 #[test]
 fn file_in_other_units_is_converted_on_load() {
-    let ar_file = fixture("v9.json");
+    let mut ar_file = fixture("v9.json");
+    let ball = &mut ar_file["balls"][0];
+    ball["species"] = json!("H2O");
+    ball["omega"] = json!(0.5);
+    ball["alpha"] = json!(0.25);
+    ar_file["config"]["potential"]["pair_override"] =
+        json!([{ "a": "N2", "b": "M", "sigma": 2.0, "epsilon": 1.5 }]);
     let mut n2_file = ar_file.clone();
     n2_file["units"] = json!(UnitSystem::N2);
     let (ar, n2) = (load(&ar_file), load(&n2_file));
     let s = UnitSystem::N2.scale_to(&UnitSystem::REDUCED);
-    let close = |converted: f32, value: f32, factor: f64| {
-        let expected = f64::from(value) * factor;
+    let close = |converted: f64, value: f64, factor: f64| {
+        let expected = value * factor;
         assert!(
-            (f64::from(converted) - expected).abs() <= 1e-5 * expected.abs().max(1e-3),
+            (converted - expected).abs() <= 1e-5 * expected.abs().max(1e-3),
             "{converted} vs {expected}"
         );
     };
+    let close32 = |converted: f32, value: f32, factor: f64| {
+        close(f64::from(converted), f64::from(value), factor)
+    };
+    let per_time = 1.0 / s.time;
     assert_eq!(n2.units, UnitSystem::REDUCED);
     for (a, b) in ar.balls.iter().zip(&n2.balls) {
-        close(b.pos.x, a.pos.x, s.length);
-        close(b.v.y, a.v.y, s.speed());
-        close(b.accel.x, a.accel.x, s.acceleration());
+        close32(b.pos.x, a.pos.x, s.length);
+        close32(b.v.y, a.v.y, s.speed());
+        close32(b.accel.x, a.accel.x, s.acceleration());
+        close32(b.omega, a.omega, per_time);
+        close32(b.alpha, a.alpha, per_time * per_time);
     }
-    close(n2.world_rect.w, ar.world_rect.w, s.length);
-    close(n2.gravity, ar.gravity, s.acceleration());
-    let (pa, pb) = (&ar.config.potential, &n2.config.potential);
-    close(pb.max_force, pa.max_force, s.energy / s.length);
-    close(n2.config.walls.epsilon, ar.config.walls.epsilon, s.energy);
+    assert_eq!(ar.balls[0].omega, 0.5);
+    close32(n2.world_rect.w, ar.world_rect.w, s.length);
+    close32(n2.gravity, ar.gravity, s.acceleration());
+    close32(n2.time_step, ar.time_step, s.time);
+    assert_eq!(n2.config.integration.time_step, n2.time_step);
+
+    let (ca, cb) = (&ar.config, &n2.config);
+    close32(
+        cb.potential.max_force,
+        ca.potential.max_force,
+        s.energy / s.length,
+    );
+    close32(
+        cb.potential.core_stiffness,
+        ca.potential.core_stiffness,
+        s.stiffness(),
+    );
+    let (oa, ob) = (
+        &ca.potential.pair_overrides[0],
+        &cb.potential.pair_overrides[0],
+    );
+    close32(ob.sigma.unwrap(), oa.sigma.unwrap(), s.length);
+    close32(ob.epsilon.unwrap(), oa.epsilon.unwrap(), s.energy);
+    close32(cb.walls.epsilon, ca.walls.epsilon, s.energy);
+    close32(cb.walls.sigma, ca.walls.sigma, s.length);
+    let (wa, wb) = (&ca.walls.overrides[0], &cb.walls.overrides[0]);
+    close32(wb.epsilon.unwrap(), wa.epsilon.unwrap(), s.energy);
+    let (fa, fb) = (&ca.fields[0], &cb.fields[0]);
+    close32(fb.center[0], fa.center[0], s.length);
+    close32(fb.stiffness, fa.stiffness, s.stiffness());
+
     for (a, b) in ar.thermostats().zip(n2.thermostats()) {
-        close(b.target_temperature, a.target_temperature, s.energy);
+        close32(b.target_temperature, a.target_temperature, s.energy);
+        close32(b.radius, a.radius, s.length);
+        close32(b.tau, a.tau, s.time);
+        for (xa, xb) in a.chain.iter().zip(&b.chain) {
+            close(*xb, *xa, per_time);
+        }
     }
-    assert!(ar.thermostats().count() > 0);
-    // In literature units already; numerical settings keep their number.
-    assert_eq!(n2.config.species, ar.config.species);
-    assert_eq!(n2.time_step, ar.time_step);
+    for (a, b) in ar.source_spheres().zip(n2.source_spheres()) {
+        close32(b.center.y, a.center.y, s.length);
+        close32(b.emission_speed, a.emission_speed, s.speed());
+    }
+    for (a, b) in ar.wall_chains().zip(n2.wall_chains()) {
+        for (pa, pb) in a.pieces.iter().zip(&b.pieces) {
+            close32(pb.end.x, pa.end.x, s.length);
+            close32(pb.thickness, pa.thickness, s.length);
+        }
+    }
+    assert!(ar.thermostats().count() > 0 && ar.source_spheres().count() > 0);
+    assert!(ar.wall_chains().count() > 0);
+    // In literature units already; numerical factors keep their number.
+    assert_eq!(cb.species, ca.species);
+    assert_eq!(cb.potential.cutoff_factor, ca.potential.cutoff_factor);
+    assert_eq!(cb.neighbours.skin_factor, ca.neighbours.skin_factor);
 }
 
 #[test]

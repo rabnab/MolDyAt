@@ -34,6 +34,7 @@
 //!   loads the version-`N` reference save (see `tests/reference_saves.rs`).
 
 use super::format::{WORLD_FILE_VERSION, invalid};
+use crate::application::sim_config::{MAX_TIME_STEP, MIN_TIME_STEP};
 use crate::application::units::{UnitScale, UnitSystem};
 use crate::error::AppResult;
 use crate::objects2d::ball_impl::species::{CH4_HCB_NAME, SIZE_CLASS_NAMES};
@@ -226,8 +227,8 @@ fn migrate_v5_to_v6(file: &mut Value) -> AppResult {
 
 /// Convert every reduced value of `file` by `s`, so it holds the same
 /// physical state in other units (see [`migrate_v5_to_v6`]; a v9 file in
-/// other units than `UnitSystem::REDUCED`, #426). Angular velocities and
-/// accelerations scale with time only.
+/// other units than `UnitSystem::REDUCED`, which also converts the time
+/// step). Angular velocities and accelerations scale with time only.
 fn rescale(file: &mut Value, s: &UnitScale) -> AppResult {
     scale_rect(file, "world_rect", s.length)?;
     scale_number(file, "gravity", s.acceleration())?;
@@ -597,8 +598,8 @@ pub(crate) fn parse_with<T: DeserializeOwned>(
     deserialize_reporting(value)
 }
 
-/// Convert a file written in other units than `UnitSystem::REDUCED` to it
-/// (#426). A file without `units` is left alone: reading it reports the
+/// Convert a file written in other units than `UnitSystem::REDUCED` to it.
+/// A file without `units` is left alone: reading it reports the
 /// missing field.
 fn to_reduced_units(file: &mut Value) -> AppResult {
     let Some(units) = file.get("units") else {
@@ -620,7 +621,17 @@ fn to_reduced_units(file: &mut Value) -> AppResult {
     {
         return Err(invalid(format!("`units` must be positive, got {units:?}")));
     }
-    rescale(file, &units.scale_to(&UnitSystem::REDUCED))?;
+    let s = units.scale_to(&UnitSystem::REDUCED);
+    rescale(file, &s)?;
+    // Unlike the one-off v5 → v6 step, the time step keeps its physical value.
+    scale_clamped(file, "time_step", s.time, MIN_TIME_STEP, MAX_TIME_STEP)?;
+    let time_step = file["time_step"].clone();
+    if let Some(config) = file.get_mut("config").filter(|c| !c.is_null()) {
+        let integration = object_mut(config, "`config`")?
+            .entry("integration")
+            .or_insert_with(|| Value::Object(serde_json::Map::new()));
+        object_mut(integration, "`config.integration`")?.insert("time_step".into(), time_step);
+    }
     file["units"] = serde_json::json!(UnitSystem::REDUCED);
     log::info!(
         "converted world file from {units:?} to {:?}",

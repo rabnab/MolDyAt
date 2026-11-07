@@ -43,7 +43,7 @@
 //! species, in that order, the first being the default for new balls. Entries
 //! give literature values (Å, K, u), converted into reduced units. Pair
 //! overrides and saved balls name species of this table; a save always
-//! lists it in full (#426).
+//! lists it in full.
 
 mod sections;
 mod species;

@@ -83,7 +83,7 @@
 //! loads every reference save into a file type with extra defaulted fields
 //! and checks the defaults.
 //!
-//! # Self-describing files (#426)
+//! # Self-describing files
 //!
 //! A file names each ball's species; mass, `σ`, `ε` and the model come from
 //! the whole species table in its `config`, and its `units` state the unit

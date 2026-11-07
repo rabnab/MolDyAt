@@ -597,8 +597,8 @@ const MOLECULE_AND_WATER: &str = "[[species]]\n\
      name = \"CO\"\n\
      colour = [0.5, 0.5, 0.5]\n\
      sites = [\n\
-       { offset_angstrom = [-0.64, 0.0], sigma_angstrom = 3.4, epsilon_kelvin = 30.0, mass_u = 12.011 },\n\
-       { offset_angstrom = [0.48, 0.0], sigma_angstrom = 3.0, epsilon_kelvin = 60.0, mass_u = 15.999 },\n\
+       { offset_angstrom = [-0.6443, 0.0], sigma_angstrom = 3.4, epsilon_kelvin = 30.0, mass_u = 12.011 },\n\
+       { offset_angstrom = [0.4837, 0.0], sigma_angstrom = 3.0, epsilon_kelvin = 60.0, mass_u = 15.999 },\n\
      ]\n\
      [[species]]\n\
      name = \"W\"\n\
@@ -646,6 +646,13 @@ fn species_entries_need_parameters_or_sites() {
         (
             "sites = [{ offset_angstrom = [0.0, 0.0], sigma_angstrom = 3.4, epsilon_kelvin = 30.0, mass_u = 4.0 }]",
             "a molecule without moment of inertia",
+        ),
+        (
+            "sites = [\n\
+               { offset_angstrom = [0.0, 0.0], sigma_angstrom = 3.4, epsilon_kelvin = 30.0, mass_u = 4.0 },\n\
+               { offset_angstrom = [1.1, 0.0], sigma_angstrom = 3.4, epsilon_kelvin = 30.0, mass_u = 4.0 },\n\
+             ]",
+            "sites off their centre of mass",
         ),
     ] {
         let text = format!("[[species]]\nname = \"X\"\ncolour = [1.0, 1.0, 1.0]\n{entry}\n");

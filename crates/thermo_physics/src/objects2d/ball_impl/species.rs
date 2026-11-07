@@ -89,13 +89,13 @@ impl Species {
     ) -> Self {
         let mut species = Species::new(
             name,
-            UNITS.from_atomic_mass(mass_u),
-            UNITS.from_angstrom(sigma_angstrom),
-            UNITS.from_kelvin(epsilon_kelvin),
+            UnitSystem::REDUCED.from_atomic_mass(mass_u),
+            UnitSystem::REDUCED.from_angstrom(sigma_angstrom),
+            UnitSystem::REDUCED.from_kelvin(epsilon_kelvin),
             colour,
         );
         if let Some(radius) = display_radius_angstrom {
-            species.display_radius = UNITS.from_angstrom(radius);
+            species.display_radius = UnitSystem::REDUCED.from_angstrom(radius);
         }
         species
     }
@@ -115,9 +115,6 @@ pub struct SpeciesTable {
     species: Vec<Species>,
     sites: Vec<Vec<Site>>,
 }
-
-/// The reduced units every species is converted into.
-const UNITS: UnitSystem = UnitSystem::REDUCED;
 
 /// Single-site Lennard-Jones `σ` of Ar in Å: the reduced unit of length
 /// (`UnitSystem::AR`, #405). Hirschfelder, Curtiss and Bird, *Molecular
@@ -311,9 +308,9 @@ fn mb_water() -> Species {
         [0.95, 0.95, 1.0, 1.0], // white
     );
     water.model = Model::MbWater(MbWater::new(
-        UNITS.from_kelvin(MB_EPSILON_HB_KELVIN),
-        UNITS.from_angstrom(MB_R_HB_ANGSTROM),
-        (1.15 / UNITS.inertia_u_angstrom2()) as f32,
+        UnitSystem::REDUCED.from_kelvin(MB_EPSILON_HB_KELVIN),
+        UnitSystem::REDUCED.from_angstrom(MB_R_HB_ANGSTROM),
+        (1.15 / UnitSystem::REDUCED.inertia_u_angstrom2()) as f32,
     ));
     water
 }
@@ -325,10 +322,10 @@ fn mb_water() -> Species {
 /// `N2` stays the default species (owner decision).
 fn n2_dumbbell() -> Species {
     let molecule = LinearMolecule::diatomic(
-        UNITS.from_angstrom(N2_BOND_ANGSTROM),
-        UNITS.from_angstrom(TRAPPE_N_SIGMA_ANGSTROM),
-        UNITS.from_kelvin(TRAPPE_N_EPSILON_KELVIN),
-        UNITS.from_atomic_mass(14.007),
+        UnitSystem::REDUCED.from_angstrom(N2_BOND_ANGSTROM),
+        UnitSystem::REDUCED.from_angstrom(TRAPPE_N_SIGMA_ANGSTROM),
+        UnitSystem::REDUCED.from_kelvin(TRAPPE_N_EPSILON_KELVIN),
+        UnitSystem::REDUCED.from_atomic_mass(14.007),
     );
     molecule_species("N2_2S", molecule, [0.2, 0.75, 0.95, 1.0])
 }
@@ -342,10 +339,10 @@ fn n2_dumbbell() -> Species {
 /// collisions limit runs to `dt ≈ 0.0016` (`BallPhysics::time_step_limit`).
 fn h2_dumbbell() -> Species {
     let molecule = LinearMolecule::diatomic(
-        UNITS.from_angstrom(0.74),
-        UNITS.from_angstrom(2.72),
-        UNITS.from_kelvin(10.0),
-        UNITS.from_atomic_mass(1.008),
+        UnitSystem::REDUCED.from_angstrom(0.74),
+        UnitSystem::REDUCED.from_angstrom(2.72),
+        UnitSystem::REDUCED.from_kelvin(10.0),
+        UnitSystem::REDUCED.from_atomic_mass(1.008),
     );
     molecule_species("H2_2S", molecule, [1.0, 0.85, 0.85, 1.0])
 }
@@ -355,9 +352,9 @@ fn h2_dumbbell() -> Species {
 /// 79.0 K; C σ = 2.80 Å, ε/k_B = 27.0 K; C–O 1.16 Å), without the partial
 /// charges: its quadrupole needs long-range electrostatics (out of scope).
 fn co2_chain() -> Species {
-    let ar = |angstrom| UNITS.from_angstrom(angstrom);
-    let kelvin = |k| UNITS.from_kelvin(k);
-    let mass = |u| UNITS.from_atomic_mass(u);
+    let ar = |angstrom| UnitSystem::REDUCED.from_angstrom(angstrom);
+    let kelvin = |k| UnitSystem::REDUCED.from_kelvin(k);
+    let mass = |u| UnitSystem::REDUCED.from_atomic_mass(u);
     let oxygen = |x| Site {
         offset: Vec2D::new(x, 0.0),
         sigma: ar(3.05),
@@ -681,7 +678,7 @@ mod tests {
 
     /// The library's identity: names in table order, which the UI steps
     /// through and tests refer to by id. Not the save format: saves hold
-    /// their own table (#426).
+    /// their own table.
     #[test]
     fn builtin_table_names_are_pinned() {
         let names: Vec<_> = SpeciesTable::builtin()
