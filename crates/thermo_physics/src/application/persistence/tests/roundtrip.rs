@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use super::scratch_dir;
+use super::{builtin_species, scratch_dir};
 use crate::application::persistence::{LoadSource, SaveStore, WorldFile};
 use crate::application::sim_config::PairOverrideConfig;
 use crate::application::{MainContent, SimConfig};
@@ -91,13 +91,18 @@ fn config_survives_a_save_and_load() {
     assert_eq!(source.config(), custom_config());
     let path = source.save_world(&store).unwrap();
     let saved = WorldFile::from_json(&fs::read_to_string(path).unwrap()).unwrap();
-    assert_eq!(saved.config, Some(custom_config()));
+    // The built-in table the world runs with is written out (#426).
+    let expected = SimConfig {
+        species: builtin_species(),
+        ..custom_config()
+    };
+    assert_eq!(saved.config, expected);
 
     let mut target = empty_world();
     target
         .load_world(&store, &LoadSource::Latest, true)
         .unwrap();
-    assert_eq!(target.config(), custom_config());
+    assert_eq!(target.config(), expected);
     let physics = &target.world().physics;
     assert_eq!(physics.cap_settings().cutoff_factor, 3.5);
     assert_eq!(physics.get_skin_thickness(), 0.25 * 3.5 * LJ_SIG);

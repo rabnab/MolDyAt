@@ -577,6 +577,82 @@ fn without_species_the_builtin_library_applies() {
     }
 }
 
+/// Every built-in species, models included, written as a `[[species]]`
+/// entry resolves to exactly itself (#426): what a save stores.
+#[test]
+fn builtin_species_survive_the_literature_form() {
+    let config = SimConfig {
+        species: SpeciesTable::builtin()
+            .iter()
+            .map(SpeciesConfig::from)
+            .collect(),
+        ..SimConfig::default()
+    };
+    assert_eq!(&*config.species_table().unwrap(), SpeciesTable::builtin());
+    let json = serde_json::to_string(&config).unwrap();
+    assert_eq!(SimConfig::from_json(&json).unwrap(), config);
+}
+
+const MOLECULE_AND_WATER: &str = "[[species]]\n\
+     name = \"CO\"\n\
+     colour = [0.5, 0.5, 0.5]\n\
+     sites = [\n\
+       { offset_angstrom = [-0.64, 0.0], sigma_angstrom = 3.4, epsilon_kelvin = 30.0, mass_u = 12.011 },\n\
+       { offset_angstrom = [0.48, 0.0], sigma_angstrom = 3.0, epsilon_kelvin = 60.0, mass_u = 15.999 },\n\
+     ]\n\
+     [[species]]\n\
+     name = \"W\"\n\
+     sigma_angstrom = 1.96\n\
+     epsilon_kelvin = 138.5\n\
+     mass_u = 18.015\n\
+     colour = [1.0, 1.0, 1.0]\n\
+     moment_of_inertia_u_angstrom2 = 1.15\n\
+     water = { epsilon_hb_kelvin = 1385.0, r_hb_angstrom = 2.8 }\n";
+
+/// `sites` makes a rigid molecule, `water` MB water (#426).
+#[test]
+fn species_entries_describe_molecules_and_water() {
+    let table = SimConfig::from_toml(MOLECULE_AND_WATER)
+        .unwrap()
+        .species_table()
+        .unwrap();
+    let co = table.species(table.by_name("CO").unwrap());
+    assert_eq!(table.sites(table.by_name("CO").unwrap()).len(), 2);
+    assert_eq!(co.epsilon, 0.0, "a molecule interacts through its sites");
+    assert!((co.mass * 39.948 - 28.01).abs() < 1e-3);
+    let w = table.species(table.by_name("W").unwrap());
+    let builtin = SpeciesTable::builtin();
+    let h2o = builtin.species(builtin.by_name("H2O").unwrap());
+    assert_eq!(
+        (&w.model, w.sigma, w.mass),
+        (&h2o.model, h2o.sigma, h2o.mass)
+    );
+}
+
+#[test]
+fn species_entries_need_parameters_or_sites() {
+    for (entry, what) in [
+        ("sigma_angstrom = 3.4\nmass_u = 4.0", "only some parameters"),
+        (
+            "sigma_angstrom = 3.4\nepsilon_kelvin = 30.0\nmass_u = 4.0\n\
+             sites = [{ offset_angstrom = [0.0, 0.0], sigma_angstrom = 3.4, epsilon_kelvin = 30.0, mass_u = 4.0 }]",
+            "parameters and sites",
+        ),
+        (
+            "sigma_angstrom = 3.4\nepsilon_kelvin = 30.0\nmass_u = 4.0\n\
+             water = { epsilon_hb_kelvin = 1385.0, r_hb_angstrom = 2.8 }",
+            "water without inertia",
+        ),
+        (
+            "sites = [{ offset_angstrom = [0.0, 0.0], sigma_angstrom = 3.4, epsilon_kelvin = 30.0, mass_u = 4.0 }]",
+            "a molecule without moment of inertia",
+        ),
+    ] {
+        let text = format!("[[species]]\nname = \"X\"\ncolour = [1.0, 1.0, 1.0]\n{entry}\n");
+        assert!(SimConfig::from_toml(&text).is_err(), "{what}");
+    }
+}
+
 /// The world, its new balls and `config()` follow the species list.
 #[test]
 fn main_content_runs_with_its_species() {
@@ -625,10 +701,11 @@ fn species_entries_need_every_required_key() {
             .map(|line| format!("{line}\n"))
             .collect();
         let error = error_message(&text);
-        assert!(
-            error.contains(&format!("missing field `{key}`")),
-            "{key}: {error}"
-        );
+        let expected = match key {
+            "name" | "colour" => format!("missing field `{key}`"),
+            _ => "needs sigma_angstrom, epsilon_kelvin and mass_u, or only sites".into(),
+        };
+        assert!(error.contains(&expected), "{key}: {error}");
     }
 }
 
@@ -659,7 +736,7 @@ fn invalid_species_entries_are_rejected() {
             "species[0].epsilon_kelvin must be within",
         ),
         (
-            entry("Light", 3.698, 95.05, 1.0, "[0.0, 1.0, 1.0]"),
+            entry("Light", 3.698, 95.05, 0.5, "[0.0, 1.0, 1.0]"),
             "species[0].mass_u must be within",
         ),
         (

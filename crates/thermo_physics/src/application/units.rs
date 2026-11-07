@@ -15,11 +15,16 @@
 //!
 //! Conversions use f64; the simulation stores f32. The parameters are fitted
 //! to 3D gases, so in this 2D simulation the SI values are qualitative.
+//!
+//! Every save states the unit system it was written in (`WorldFile::units`,
+//! #426), and constants chosen in physical units are converted here, so
+//! changing `REDUCED` needs no migration.
 
 use crate::objects2d::ball_impl::{
     AR_EPSILON_KELVIN, AR_MASS_U, AR_SIGMA_ANGSTROM, N2_EPSILON_KELVIN, N2_MASS_U,
     N2_SIGMA_ANGSTROM,
 };
+use serde::{Deserialize, Serialize};
 
 /// Boltzmann constant (exact, SI 2019).
 pub(crate) const BOLTZMANN_J_PER_K: f64 = 1.380_649e-23;
@@ -28,17 +33,14 @@ pub(crate) const ATOMIC_MASS_KG: f64 = 1.660_539_066_60e-27;
 
 /// The substance whose single-site Lennard-Jones parameters define the
 /// reduced units.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct UnitSystem {
-    pub name: &'static str,
     /// `σ` in Å: the reduced unit of length.
     pub sigma_angstrom: f64,
     /// `ε / k_B` in K: the reduced unit of temperature.
     pub epsilon_kelvin: f64,
     /// Molecular mass in u: the reduced unit of mass.
     pub mass_u: f64,
-    /// Where the parameters come from.
-    pub source: &'static str,
 }
 
 // `from_*` convert a physical value into this unit system, so they need it.
@@ -47,11 +49,9 @@ impl UnitSystem {
     /// Argon, the reference (#405), from second virial coefficients:
     /// Hirschfelder, Curtiss and Bird (1954), table I-A.
     pub const AR: UnitSystem = UnitSystem {
-        name: "Ar",
         sigma_angstrom: AR_SIGMA_ANGSTROM,
         epsilon_kelvin: AR_EPSILON_KELVIN,
         mass_u: AR_MASS_U,
-        source: "Hirschfelder, Curtiss & Bird (1954), second virial coefficients",
     };
 
     /// The reference of the reduced units the simulation runs in.
@@ -62,11 +62,9 @@ impl UnitSystem {
     /// Published single-site fits for N₂ range over about 70–100 K for
     /// `ε / k_B`, depending on the fitted property; see `docs/units.md`.
     pub const N2: UnitSystem = UnitSystem {
-        name: "N2",
         sigma_angstrom: N2_SIGMA_ANGSTROM,
         epsilon_kelvin: N2_EPSILON_KELVIN,
         mass_u: N2_MASS_U,
-        source: "Hirschfelder, Curtiss & Bird (1954), second virial coefficients",
     };
 
     /// Unit of length in m.
@@ -112,6 +110,11 @@ impl UnitSystem {
         reduced as f64 * self.sigma_angstrom
     }
 
+    /// Unit of moment of inertia in u·Å².
+    pub(crate) const fn inertia_u_angstrom2(&self) -> f64 {
+        self.mass_u * self.sigma_angstrom * self.sigma_angstrom
+    }
+
     /// Reduced energy in J.
     pub fn to_joules(self, reduced: f32) -> f64 {
         reduced as f64 * self.energy_j()
@@ -125,21 +128,28 @@ impl UnitSystem {
     // ── physical → reduced ─────────────────────────────────────────
 
     /// A length in Å (e.g. a literature `σ`) in reduced units.
-    #[cfg(test)]
-    pub(crate) fn from_angstrom(&self, angstrom: f64) -> f32 {
+    pub(crate) const fn from_angstrom(&self, angstrom: f64) -> f32 {
         (angstrom / self.sigma_angstrom) as f32
     }
 
     /// A temperature in K (or a literature `ε / k_B`) in reduced units.
-    #[cfg(test)]
-    pub(crate) fn from_kelvin(&self, kelvin: f64) -> f32 {
+    pub(crate) const fn from_kelvin(&self, kelvin: f64) -> f32 {
         (kelvin / self.epsilon_kelvin) as f32
     }
 
     /// A mass in u in reduced units.
-    #[cfg(test)]
-    pub(crate) fn from_atomic_mass(&self, mass_u: f64) -> f32 {
+    pub(crate) const fn from_atomic_mass(&self, mass_u: f64) -> f32 {
         (mass_u / self.mass_u) as f32
+    }
+
+    /// A force in K/Å (`k_B`·K per Å) in reduced units.
+    pub(crate) const fn from_kelvin_per_angstrom(&self, force: f64) -> f32 {
+        (force / (self.epsilon_kelvin / self.sigma_angstrom)) as f32
+    }
+
+    /// A spring constant in K/Å² in reduced units.
+    pub(crate) const fn from_kelvin_per_angstrom2(&self, stiffness: f64) -> f32 {
+        (stiffness / (self.epsilon_kelvin / (self.sigma_angstrom * self.sigma_angstrom))) as f32
     }
 
     /// An acceleration in m/s² (e.g. gravity) in reduced units:

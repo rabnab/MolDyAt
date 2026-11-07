@@ -9,6 +9,7 @@ mod migrate;
 mod newer_files;
 mod reference_saves;
 mod roundtrip;
+mod self_describing;
 mod store;
 
 use crate::application::persistence::WorldFile;
@@ -30,6 +31,15 @@ pub(super) fn sample_file() -> WorldFile {
         }"#,
     )
     .expect("sample file is valid")
+}
+
+/// The built-in table as a config's `[[species]]` list: what a save of a
+/// world on it holds (#426).
+pub(super) fn builtin_species() -> Vec<crate::application::sim_config::SpeciesConfig> {
+    crate::objects2d::ball_impl::SpeciesTable::builtin()
+        .iter()
+        .map(Into::into)
+        .collect()
 }
 
 pub(super) fn scratch_dir(name: &str) -> PathBuf {

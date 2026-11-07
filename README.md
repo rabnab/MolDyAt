@@ -405,9 +405,13 @@ cargo run -p moldyat_wgpu -- --load saves/world_20260101_120000.json
 cargo run -p moldyat_wgpu -- --save-dir ~/lj-worlds
 ```
 
-The file is versioned JSON (`"version": 3`) holding the world rectangle, time
-step, gravity, the [simulation config](#simulation-config), every ball (`id`, `species`, `pos`, `v`, `pre_update_pos`,
-`accel`) and all operators. Saves of formats 1 and 2 still load: in format 1
+The file is versioned JSON (`"version": 9`) holding its `units` (the reduced
+unit system its values are in), the world rectangle, time step, gravity, the
+[simulation config](#simulation-config) with the whole species table (also
+the built-in one), every ball (`id`, `species`, `pos`, `v`, `pre_update_pos`,
+`accel`) and all operators. So a save loads the same in a later build even if
+the built-in species or the unit species change: a file in other units is
+converted on load. Saves of formats 1 and 2 still load: in format 1
 saves each size class becomes the species of the same name (`XS` to `XL`), and
 the separate operator lists of format 2 become the one `operators` list. The view
 (window size, zoom, pan), the plot window
@@ -499,11 +503,20 @@ snapshot_interval_us = 16667  # 1000..1000000, least time between two frames sen
 # [[species]]
 # name = "N2"                 # unique; saves and pair overrides use it
 # sigma_angstrom = 3.698      # 1.7025..27.24
-# epsilon_kelvin = 95.05      # 11.98..1198
-# mass_u = 28.0134            # 1.997..3994.8
+# epsilon_kelvin = 95.05      # 5.99..2396
+# mass_u = 28.0134            # 0.799..3994.8
 # colour = [0.0, 1.0, 1.0]    # RGB or RGBA, each 0..1
 # source = "Hirschfelder, Curtiss & Bird (1954)"   # optional
-# moment_of_inertia_u_angstrom2 = 200.0   # optional (#348): the species rotates; 0.463..46320
+# moment_of_inertia_u_angstrom2 = 200.0   # optional (#348): the species rotates; 0.0463..46320
+# water = { epsilon_hb_kelvin = 1385.0, r_hb_angstrom = 2.8 }   # optional (#426): MB water, needs the moment of inertia
+## A rigid molecule gives its sites instead of sigma, epsilon and mass (#426):
+# [[species]]
+# name = "N2_2S"
+# colour = [0.2, 0.75, 0.95]
+# sites = [
+#   { offset_angstrom = [-0.55, 0.0], sigma_angstrom = 3.31, epsilon_kelvin = 36.0, mass_u = 14.007 },
+#   { offset_angstrom = [0.55, 0.0], sigma_angstrom = 3.31, epsilon_kelvin = 36.0, mass_u = 14.007 },
+# ]
 # [[species]]
 # name = "Ar"
 # sigma_angstrom = 3.405

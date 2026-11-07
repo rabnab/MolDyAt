@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use super::sample_file;
+use super::{builtin_species, sample_file};
 use crate::application::SimConfig;
 use crate::application::persistence::WorldFile;
 use crate::application::persistence::format::{
@@ -55,10 +55,10 @@ fn rejects_species_missing_from_the_files_species_list() {
          mass_u = 39.948\ncolour = [0.6, 0.45, 1.0]\n",
     )
     .unwrap();
-    file.config = Some(SimConfig {
-        integration: file.sim_config().integration,
+    file.config = SimConfig {
+        integration: file.config.integration.clone(),
         ..config
-    });
+    };
     file.balls[0].species = "N2".to_string();
     assert!(error_text(&file).contains("unknown species"));
     file.balls[0].species = "Ar".to_string();
@@ -286,43 +286,48 @@ fn rejects_ids_that_would_overflow_the_id_counters() {
     assert!(file.validate().is_ok(), "the bound itself is allowed");
 }
 
+/// A file from before v9 without a config gets the one it ran with: the
+/// defaults with hard walls, its time step and the built-in table (#426).
 #[test]
-fn file_without_config_runs_with_the_default_config_and_hard_walls() {
+fn file_without_config_gets_the_default_config_hard_walls_and_the_builtin_table() {
     let file = sample_file();
-    assert_eq!(file.config, None);
     let mut expected = SimConfig {
         walls: WallsConfig::hard(),
+        species: builtin_species(),
         ..SimConfig::default()
     };
     expected.integration.time_step = file.time_step;
-    assert_eq!(file.sim_config(), expected);
+    assert_eq!(file.config, expected);
 }
 
 #[test]
 fn saved_config_is_validated() {
     let mut file = sample_file();
-    let mut config = file.sim_config();
-    config.potential.cutoff_factor = 0.5;
-    file.config = Some(config);
+    file.config.potential.cutoff_factor = 0.5;
     assert!(error_text(&file).contains("cutoff_factor"));
+}
+
+/// Without a list the built-in table would decide the physics (#426).
+#[test]
+fn saved_config_must_list_its_species() {
+    let mut file = sample_file();
+    file.config.species.clear();
+    assert!(error_text(&file).contains("config.species"));
 }
 
 #[test]
 fn saved_config_must_match_the_time_step() {
     let mut file = sample_file();
-    let mut config = file.sim_config();
-    config.integration.time_step = file.time_step * 2.0;
-    file.config = Some(config);
+    file.config.integration.time_step = file.time_step * 2.0;
     assert!(error_text(&file).contains("time_step"));
 }
 
 #[test]
 fn unknown_config_keys_are_rejected() {
-    let json = sample_file().to_json().unwrap().replacen(
-        "\"gravity\"",
-        "\"config\": {\"potential\": {\"max_forc\": 80.0}},\n  \"gravity\"",
-        1,
-    );
+    let json = sample_file()
+        .to_json()
+        .unwrap()
+        .replacen("\"max_force\"", "\"max_forc\"", 1);
     let error = format!("{:?}", WorldFile::from_json(&json).unwrap_err());
     assert!(error.contains("max_forc"), "{error}");
     assert!(error.contains("newer MolDyAt build"), "{error}");
@@ -338,6 +343,7 @@ fn rejects_time_step_outside_the_accepted_range() {
     for time_step in [MIN_TIME_STEP, MAX_TIME_STEP] {
         let mut file = sample_file();
         file.time_step = time_step;
+        file.config.integration.time_step = time_step;
         assert!(file.validate().is_ok(), "{time_step}");
     }
 }

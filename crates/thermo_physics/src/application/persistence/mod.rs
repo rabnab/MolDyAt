@@ -83,14 +83,12 @@
 //! loads every reference save into a file type with extra defaulted fields
 //! and checks the defaults.
 //!
-//! # Built-in species
+//! # Self-describing files (#426)
 //!
-//! A file names each ball's species; mass, `σ` and `ε` come from the built-in
-//! species table when the file is loaded. So the built-in names and their
-//! mass, `σ` and `ε` are part of the file format: changing one is a breaking
-//! change (bump `WORLD_FILE_VERSION` and add a migration), or add a new
-//! species instead of changing an existing one. `builtin_table_is_pinned`
-//! (in `objects2d/ball_impl/species.rs`) fails on any such change.
+//! A file names each ball's species; mass, `σ`, `ε` and the model come from
+//! the whole species table in its `config`, and its `units` state the unit
+//! system of every reduced value. So neither the built-in table nor the unit
+//! species are part of the format: changing them needs no migration.
 
 mod convert;
 pub(crate) mod format;
@@ -182,7 +180,7 @@ impl MainContent {
         let (file, ignored_fields) = store.load_reporting(&path)?;
         let mut world = SimulationWorld::try_from(&file)?;
         world.sim.set_pause(start_paused);
-        let config = file.sim_config();
+        let config = &file.config;
         self.set_time_step(config.integration.time_step)?;
         self.runtime_mut()
             .set_snapshot_interval_us(config.display.snapshot_interval_us);

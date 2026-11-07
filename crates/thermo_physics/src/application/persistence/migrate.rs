@@ -84,7 +84,45 @@ pub(crate) const MIGRATIONS: &[Migration] = &[
         from: 7,
         apply: migrate_v7_to_v8,
     },
+    Migration {
+        from: 8,
+        apply: migrate_v8_to_v9,
+    },
 ];
+
+/// The built-in species table of format v2 to v8 in literature units, and
+/// the units of v6 to v8 (Ar), frozen: what [`migrate_v8_to_v9`] writes.
+const V8_SPECIES: &str = include_str!("v8_species.json");
+
+/// v8 → v9 (#426): every file states its `units` (v6 to v8: Ar) and has a
+/// `config` with the whole species table. A file without a config gets the
+/// one it ran with (hard walls, the defaults otherwise), a file without a
+/// `[[species]]` list the built-in table of v8.
+fn migrate_v8_to_v9(file: &mut Value) -> AppResult {
+    let frozen: Value = serde_json::from_str(V8_SPECIES).map_err(|e| invalid(e.to_string()))?;
+    let time_step = file
+        .get("time_step")
+        .cloned()
+        .ok_or_else(|| invalid("missing field `time_step`"))?;
+    let object = object_mut(file, "the world file")?;
+    object.insert("units".into(), frozen["units"].clone());
+    let config = object.entry("config").or_insert(Value::Null);
+    if config.is_null() {
+        *config = serde_json::json!({
+            "walls": { "model": "hard" },
+            "integration": { "time_step": time_step },
+        });
+    }
+    let config = object_mut(config, "`config`")?;
+    let own_table = config
+        .get("species")
+        .and_then(Value::as_array)
+        .is_some_and(|list| !list.is_empty());
+    if !own_table {
+        config.insert("species".into(), frozen["species"].clone());
+    }
+    Ok(())
+}
 
 /// v7 → v8 (#348): the orientation of balls and the moment of inertia of
 /// `[[species]]` entries. Older files have none, which the defaults fill
@@ -173,7 +211,24 @@ fn migrate_v6_to_v7(file: &mut Value) -> AppResult {
 /// (the save keeps its own `world_rect`), so a new world made from a
 /// migrated config is `1 / 1.0861` of the old size in physical units.
 fn migrate_v5_to_v6(file: &mut Value) -> AppResult {
-    let s = UnitSystem::N2.scale_to(&UnitSystem::AR);
+    if let Some(config) = file.get_mut("config").filter(|c| !c.is_null()) {
+        let walls = object_mut(config, "`config`")?
+            .entry("walls")
+            .or_insert_with(|| Value::Object(serde_json::Map::new()));
+        let hard = walls.get("model").and_then(Value::as_str) == Some("hard");
+        if !hard && walls.get("epsilon").is_none() {
+            // The v5 default ε_w, in N₂ units; scaled below.
+            object_mut(walls, "`config.walls`")?.insert("epsilon".into(), Value::from(1.0));
+        }
+    }
+    rescale(file, &UnitSystem::N2.scale_to(&UnitSystem::AR))
+}
+
+/// Convert every reduced value of `file` by `s`, so it holds the same
+/// physical state in other units (see [`migrate_v5_to_v6`]; a v9 file in
+/// other units than `UnitSystem::REDUCED`, #426). Angular velocities and
+/// accelerations scale with time only.
+fn rescale(file: &mut Value, s: &UnitScale) -> AppResult {
     scale_rect(file, "world_rect", s.length)?;
     scale_number(file, "gravity", s.acceleration())?;
     for ball in list_mut(file, "balls")? {
@@ -182,6 +237,8 @@ fn migrate_v5_to_v6(file: &mut Value) -> AppResult {
         }
         scale_vec(ball, "v", s.speed())?;
         scale_vec(ball, "accel", s.acceleration())?;
+        scale_optional(ball, "omega", 1.0 / s.time)?;
+        scale_optional(ball, "alpha", 1.0 / (s.time * s.time))?;
     }
     for entry in list_mut(file, "operators")? {
         let object = object_mut(entry, "operators")?;
@@ -222,22 +279,15 @@ fn migrate_v5_to_v6(file: &mut Value) -> AppResult {
         // Unknown kinds are skipped on load anyway.
     }
     if let Some(config) = file.get_mut("config").filter(|c| !c.is_null()) {
-        scale_config(config, &s)?;
+        scale_config(config, s)?;
     }
     Ok(())
 }
 
-/// The physical keys of a saved config (see [`migrate_v5_to_v6`]).
+/// The reduced keys of a saved config (see [`rescale`]); `[[species]]` is
+/// in literature units already.
 fn scale_config(config: &mut Value, s: &UnitScale) -> AppResult {
     let config = object_mut(config, "`config`")?;
-    let walls = config
-        .entry("walls")
-        .or_insert_with(|| Value::Object(serde_json::Map::new()));
-    let hard = walls.get("model").and_then(Value::as_str) == Some("hard");
-    if !hard && walls.get("epsilon").is_none() {
-        // The v5 default ε_w, in N₂ units; scaled below.
-        object_mut(walls, "`config.walls`")?.insert("epsilon".into(), Value::from(1.0));
-    }
     if let Some(potential) = config.get_mut("potential") {
         scale_optional(potential, "max_force", s.energy / s.length)?;
         scale_optional(potential, "core_stiffness", s.stiffness())?;
@@ -307,7 +357,7 @@ fn scale_clamped(entry: &mut Value, key: &str, factor: f64, min: f32, max: f32) 
     let value = entry.get(key).and_then(Value::as_f64).unwrap_or_default();
     let clamped = value.clamp(f64::from(min), f64::from(max));
     if clamped != value {
-        log::warn!("`{key}` {value} clamped to {clamped} while converting to Ar units");
+        log::warn!("`{key}` {value} clamped to {clamped} while converting units");
         entry[key] = Value::from(clamped);
     }
     Ok(())
@@ -351,7 +401,7 @@ fn migrate_v4_to_v5(_file: &mut Value) -> AppResult {
 
 /// v3 → v4 (#280): soft walls became the default. A save with a `config`
 /// ran with hard walls, so it gets `config.walls.model = "hard"`; a save
-/// without one already runs with hard walls (`ResolvedSpecies::builtin`).
+/// without one gets hard walls with its config in [`migrate_v8_to_v9`].
 fn migrate_v3_to_v4(file: &mut Value) -> AppResult {
     let Some(config) = file.get_mut("config") else {
         return Ok(());
@@ -526,10 +576,11 @@ pub(crate) fn parse_with<T: DeserializeOwned>(
     #[derive(serde::Deserialize)]
     struct Header {
         version: Option<Value>,
+        units: Option<UnitSystem>,
     }
     let header: Header = serde_json::from_str(json).map_err(|e| invalid(e.to_string()))?;
     let version = check_version(header.version.as_ref(), current)?;
-    if version == current {
+    if version == current && header.units.is_none_or(|u| u == UnitSystem::REDUCED) {
         // Fast path: building a `Value` tree first is many times slower for
         // large saves.
         let mut deserializer = serde_json::Deserializer::from_str(json);
@@ -539,8 +590,43 @@ pub(crate) fn parse_with<T: DeserializeOwned>(
     }
     let mut value: Value = serde_json::from_str(json).map_err(|e| invalid(e.to_string()))?;
     upgrade_with(&mut value, migrations, current)?;
-    log::info!("upgraded world file from format v{version} to v{current}");
+    if version < current {
+        log::info!("upgraded world file from format v{version} to v{current}");
+    }
+    to_reduced_units(&mut value)?;
     deserialize_reporting(value)
+}
+
+/// Convert a file written in other units than `UnitSystem::REDUCED` to it
+/// (#426). A file without `units` is left alone: reading it reports the
+/// missing field.
+fn to_reduced_units(file: &mut Value) -> AppResult {
+    let Some(units) = file.get("units") else {
+        return Ok(());
+    };
+    let units: UnitSystem =
+        serde_json::from_value(units.clone()).map_err(|e| invalid(format!("`units`: {e}")))?;
+    if units == UnitSystem::REDUCED {
+        return Ok(());
+    }
+    let UnitSystem {
+        sigma_angstrom,
+        epsilon_kelvin,
+        mass_u,
+    } = units;
+    if ![sigma_angstrom, epsilon_kelvin, mass_u]
+        .iter()
+        .all(|v| v.is_finite() && *v > 0.0)
+    {
+        return Err(invalid(format!("`units` must be positive, got {units:?}")));
+    }
+    rescale(file, &units.scale_to(&UnitSystem::REDUCED))?;
+    file["units"] = serde_json::json!(UnitSystem::REDUCED);
+    log::info!(
+        "converted world file from {units:?} to {:?}",
+        UnitSystem::REDUCED
+    );
+    Ok(())
 }
 
 /// Deserialize `T`, collecting the path of every field it skips.

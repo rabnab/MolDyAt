@@ -256,7 +256,8 @@ impl Default for WallsConfig {
 
 impl WallsConfig {
     /// The hard walls of a run from before #280.
-    pub fn hard() -> Self {
+    #[cfg(test)]
+    pub(crate) fn hard() -> Self {
         Self {
             model: WallModel::Hard,
             ..Self::default()

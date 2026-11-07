@@ -22,6 +22,7 @@
 //! A config file can replace the whole table with its own `[[species]]` list
 //! (`SimConfig::species_table`); a world keeps the table it was built with.
 
+use crate::application::units::UnitSystem;
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::interaction::Model;
 use crate::objects2d::ball_impl::molecule::{LinearMolecule, Site};
@@ -76,8 +77,8 @@ impl Species {
     }
 
     /// A species from its literature single-site Lennard-Jones parameters
-    /// (`σ` in Å, `ε / k_B` in K, mass in u), in Ar units. `display_radius`
-    /// in Å; `None` draws it at `σ / 2`.
+    /// (`σ` in Å, `ε / k_B` in K, mass in u), in reduced units.
+    /// `display_radius` in Å; `None` draws it at `σ / 2`.
     pub(crate) fn from_literature(
         name: &str,
         sigma_angstrom: f64,
@@ -86,16 +87,15 @@ impl Species {
         display_radius_angstrom: Option<f64>,
         colour: [f32; 4],
     ) -> Self {
-        let sigma = (sigma_angstrom / AR_SIGMA_ANGSTROM) as f32;
         let mut species = Species::new(
             name,
-            (mass_u / AR_MASS_U) as f32,
-            sigma,
-            (epsilon_kelvin / AR_EPSILON_KELVIN) as f32,
+            UNITS.from_atomic_mass(mass_u),
+            UNITS.from_angstrom(sigma_angstrom),
+            UNITS.from_kelvin(epsilon_kelvin),
             colour,
         );
         if let Some(radius) = display_radius_angstrom {
-            species.display_radius = (radius / AR_SIGMA_ANGSTROM) as f32;
+            species.display_radius = UNITS.from_angstrom(radius);
         }
         species
     }
@@ -115,6 +115,9 @@ pub struct SpeciesTable {
     species: Vec<Species>,
     sites: Vec<Vec<Site>>,
 }
+
+/// The reduced units every species is converted into.
+const UNITS: UnitSystem = UnitSystem::REDUCED;
 
 /// Single-site Lennard-Jones `σ` of Ar in Å: the reduced unit of length
 /// (`UnitSystem::AR`, #405). Hirschfelder, Curtiss and Bird, *Molecular
@@ -308,9 +311,9 @@ fn mb_water() -> Species {
         [0.95, 0.95, 1.0, 1.0], // white
     );
     water.model = Model::MbWater(MbWater::new(
-        (MB_EPSILON_HB_KELVIN / AR_EPSILON_KELVIN) as f32,
-        (MB_R_HB_ANGSTROM / AR_SIGMA_ANGSTROM) as f32,
-        (1.15 / (AR_MASS_U * AR_SIGMA_ANGSTROM * AR_SIGMA_ANGSTROM)) as f32,
+        UNITS.from_kelvin(MB_EPSILON_HB_KELVIN),
+        UNITS.from_angstrom(MB_R_HB_ANGSTROM),
+        (1.15 / UNITS.inertia_u_angstrom2()) as f32,
     ));
     water
 }
@@ -322,10 +325,10 @@ fn mb_water() -> Species {
 /// `N2` stays the default species (owner decision).
 fn n2_dumbbell() -> Species {
     let molecule = LinearMolecule::diatomic(
-        (N2_BOND_ANGSTROM / AR_SIGMA_ANGSTROM) as f32,
-        (TRAPPE_N_SIGMA_ANGSTROM / AR_SIGMA_ANGSTROM) as f32,
-        (TRAPPE_N_EPSILON_KELVIN / AR_EPSILON_KELVIN) as f32,
-        (14.007 / AR_MASS_U) as f32,
+        UNITS.from_angstrom(N2_BOND_ANGSTROM),
+        UNITS.from_angstrom(TRAPPE_N_SIGMA_ANGSTROM),
+        UNITS.from_kelvin(TRAPPE_N_EPSILON_KELVIN),
+        UNITS.from_atomic_mass(14.007),
     );
     molecule_species("N2_2S", molecule, [0.2, 0.75, 0.95, 1.0])
 }
@@ -339,10 +342,10 @@ fn n2_dumbbell() -> Species {
 /// collisions limit runs to `dt ≈ 0.0016` (`BallPhysics::time_step_limit`).
 fn h2_dumbbell() -> Species {
     let molecule = LinearMolecule::diatomic(
-        (0.74 / AR_SIGMA_ANGSTROM) as f32,
-        (2.72 / AR_SIGMA_ANGSTROM) as f32,
-        (10.0 / AR_EPSILON_KELVIN) as f32,
-        (1.008 / AR_MASS_U) as f32,
+        UNITS.from_angstrom(0.74),
+        UNITS.from_angstrom(2.72),
+        UNITS.from_kelvin(10.0),
+        UNITS.from_atomic_mass(1.008),
     );
     molecule_species("H2_2S", molecule, [1.0, 0.85, 0.85, 1.0])
 }
@@ -352,9 +355,9 @@ fn h2_dumbbell() -> Species {
 /// 79.0 K; C σ = 2.80 Å, ε/k_B = 27.0 K; C–O 1.16 Å), without the partial
 /// charges: its quadrupole needs long-range electrostatics (out of scope).
 fn co2_chain() -> Species {
-    let ar = |angstrom: f64| (angstrom / AR_SIGMA_ANGSTROM) as f32;
-    let kelvin = |k: f64| (k / AR_EPSILON_KELVIN) as f32;
-    let mass = |u: f64| (u / AR_MASS_U) as f32;
+    let ar = |angstrom| UNITS.from_angstrom(angstrom);
+    let kelvin = |k| UNITS.from_kelvin(k);
+    let mass = |u| UNITS.from_atomic_mass(u);
     let oxygen = |x| Site {
         offset: Vec2D::new(x, 0.0),
         sigma: ar(3.05),
@@ -676,49 +679,21 @@ mod tests {
         }
     }
 
-    /// The built-in table is part of the save format: a file names a species,
-    /// and its mass, `σ` and `ε` come from this table when the file is loaded.
-    /// If this test fails, read "Built-in species" in the `save-format` skill
-    /// before updating it: renaming or changing a species needs a format
-    /// version bump and a migration; otherwise add a new species instead.
+    /// The library's identity: names in table order, which the UI steps
+    /// through and tests refer to by id. Not the save format: saves hold
+    /// their own table (#426).
     #[test]
-    fn builtin_table_is_pinned() {
-        // (name, f32 bits of mass, sigma, epsilon, display_radius), in table
-        // order, in Ar units (#405, format v6; #409, v7: TraPPE CH4, NH3,
-        // the former CH4 as CH4_HCB; #349: MB water H2O; #406: N2_2S; #407: H2_2S; #408: CO2_3S).
-        const PINNED: [(&str, u32, u32, u32, u32); 16] = [
-            ("N2", 0x3f3384e6, 0x3f8b03af, 0x3f4b1ca2, 0x3f0b03af), // 0.7012466, 1.08605, 0.7934057
-            ("XS", 0x3f3384e6, 0x3fb02b31, 0x3f4b1ca2, 0x3f302b31), // 0.7012466, 1.376318, 0.7934057
-            ("S", 0x3f576c48, 0x3fd552b2, 0x3f4b1ca2, 0x3f5552b2),  // 0.841496, 1.666586, 0.7934057
-            ("M", 0x3f9cd96e, 0x400fd0db, 0x3f4b1ca2, 0x3f8fd0db),  // 1.225385, 2.247123, 0.7934057
-            ("L", 0x40099aea, 0x405a1fde, 0x3f4b1ca2, 0x3fda1fde),  // 2.15008, 3.408195, 0.7934057
-            ("XL", 0x408a25a6, 0x40b75ef2, 0x3f4b1ca2, 0x40375ef2), // 4.317096, 5.73034, 0.7934057
-            ("Ar", 0x3f800000, 0x3f800000, 0x3f800000, 0x3f000000), // 1, 1, 1
-            ("Ne", 0x3f0151f3, 0x3f4eadfa, 0x3e98259c, 0x3eceadfa), // 0.5051567, 0.8073422, 0.2971619
-            ("CH4", 0x3ecd9e22, 0x3f8c37a3, 0x3f9e2156, 0x3f0c37a3), // 0.4015971, 1.095448, 1.235392
-            ("O2", 0x3f4d0f68, 0x3f86941d, 0x3f7b15cc, 0x3f06941d), // 0.8010163, 1.051395, 0.9808013
-            ("NH3", 0x3eda47d3, 0x3f5a0845, 0x409520e8, 0x3eda0845), // 0.4263292, 0.8516887, 4.660267
-            ("CH4_HCB", 0x3ecd9e22, 0x3f8f7ce1, 0x3f9e580a, 0x3f0f7ce1), // 0.4015971, 1.120999, 1.237062
-            ("H2O", 0x3ee6e465, 0x3f135c1a, 0x3f93fadf, 0x3ed28392), // 0.4509613, 0.5756241, 1.156093
-            ("N2_2S", 0x3f3385e2, 0x3fa5c79d, 0x00000000, 0x3ef8db89), // 0.7012616, 1.295154, 0
-            ("H2_2S", 0x3d4eb506, 0x3f82114b, 0x00000000, 0x3ecc7fd0), // 0.05046561, 1.016153, 0
-            ("CO2_3S", 0x3f8d031a, 0x3fc9de2b, 0x00000000, 0x3ee54f52), // 1.101657, 1.577093, 0
-        ];
-        let actual: Vec<_> = SpeciesTable::builtin()
+    fn builtin_table_names_are_pinned() {
+        let names: Vec<_> = SpeciesTable::builtin()
             .iter()
-            .map(|s| {
-                (
-                    s.name.as_str(),
-                    s.mass.to_bits(),
-                    s.sigma.to_bits(),
-                    s.epsilon.to_bits(),
-                    s.display_radius.to_bits(),
-                )
-            })
+            .map(|s| s.name.as_str())
             .collect();
         assert_eq!(
-            actual, PINNED,
-            "the built-in species changed; this breaks saved worlds (see the save-format skill)"
+            names,
+            [
+                "N2", "XS", "S", "M", "L", "XL", "Ar", "Ne", "CH4", "O2", "NH3", "CH4_HCB", "H2O",
+                "N2_2S", "H2_2S", "CO2_3S"
+            ]
         );
     }
 

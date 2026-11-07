@@ -5,6 +5,9 @@ User-visible changes to MolDyAt, newest first. Binaries and full release notes a
 
 ## Unreleased
 
+- Saves hold their whole species table (with water and molecule models) and state their units
+  (save format 9), so later changes to the built-in species or units do not change how they load;
+  `[[species]]` can define water (`water`) and rigid molecules (`sites`). (#426)
 - New molecules are placed up to about 0.02 σ closer to soft walls: each site at its own wall
   minimum instead of the molecule's outer disk. (#443)
 - Every species, also from a config, gets a time step limit derived from its potential (`dt limited

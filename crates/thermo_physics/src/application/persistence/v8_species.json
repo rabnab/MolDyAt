@@ -1,0 +1,282 @@
+{
+  "units": {
+    "sigma_angstrom": 3.405,
+    "epsilon_kelvin": 119.8,
+    "mass_u": 39.948
+  },
+  "species": [
+    {
+      "name": "N2",
+      "sigma_angstrom": 3.698,
+      "epsilon_kelvin": 95.05,
+      "mass_u": 28.0134,
+      "colour": [
+        0.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "display_radius_angstrom": 1.849
+    },
+    {
+      "name": "XS",
+      "sigma_angstrom": 4.686363,
+      "epsilon_kelvin": 95.05,
+      "mass_u": 28.0134,
+      "colour": [
+        1.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "display_radius_angstrom": 2.3431816
+    },
+    {
+      "name": "S",
+      "sigma_angstrom": 5.674726,
+      "epsilon_kelvin": 95.05,
+      "mass_u": 33.616082,
+      "colour": [
+        0.0,
+        1.0,
+        0.0,
+        1.0
+      ],
+      "display_radius_angstrom": 2.837363
+    },
+    {
+      "name": "M",
+      "sigma_angstrom": 7.651452,
+      "epsilon_kelvin": 95.05,
+      "mass_u": 48.951697,
+      "colour": [
+        0.0,
+        0.0,
+        1.0,
+        1.0
+      ],
+      "display_radius_angstrom": 3.825726
+    },
+    {
+      "name": "L",
+      "sigma_angstrom": 11.604904,
+      "epsilon_kelvin": 95.05,
+      "mass_u": 85.8914,
+      "colour": [
+        1.0,
+        1.0,
+        0.0,
+        1.0
+      ],
+      "display_radius_angstrom": 5.802452
+    },
+    {
+      "name": "XL",
+      "sigma_angstrom": 19.511808,
+      "epsilon_kelvin": 95.05,
+      "mass_u": 172.45934,
+      "colour": [
+        1.0,
+        0.0,
+        1.0,
+        1.0
+      ],
+      "display_radius_angstrom": 9.755904
+    },
+    {
+      "name": "Ar",
+      "sigma_angstrom": 3.405,
+      "epsilon_kelvin": 119.8,
+      "mass_u": 39.948,
+      "colour": [
+        0.6,
+        0.45,
+        1.0,
+        1.0
+      ],
+      "display_radius_angstrom": 1.7025
+    },
+    {
+      "name": "Ne",
+      "sigma_angstrom": 2.749,
+      "epsilon_kelvin": 35.6,
+      "mass_u": 20.18,
+      "colour": [
+        1.0,
+        0.6,
+        0.1,
+        1.0
+      ],
+      "display_radius_angstrom": 1.3745
+    },
+    {
+      "name": "CH4",
+      "sigma_angstrom": 3.73,
+      "epsilon_kelvin": 148.0,
+      "mass_u": 16.043,
+      "colour": [
+        0.55,
+        0.85,
+        0.35,
+        1.0
+      ],
+      "display_radius_angstrom": 1.865
+    },
+    {
+      "name": "O2",
+      "sigma_angstrom": 3.58,
+      "epsilon_kelvin": 117.5,
+      "mass_u": 31.999,
+      "colour": [
+        0.95,
+        0.45,
+        0.55,
+        1.0
+      ],
+      "display_radius_angstrom": 1.79
+    },
+    {
+      "name": "NH3",
+      "sigma_angstrom": 2.9,
+      "epsilon_kelvin": 558.3,
+      "mass_u": 17.031,
+      "colour": [
+        0.3,
+        0.55,
+        1.0,
+        1.0
+      ],
+      "display_radius_angstrom": 1.45
+    },
+    {
+      "name": "CH4_HCB",
+      "sigma_angstrom": 3.817,
+      "epsilon_kelvin": 148.2,
+      "mass_u": 16.043,
+      "colour": [
+        0.4,
+        0.65,
+        0.25,
+        1.0
+      ],
+      "display_radius_angstrom": 1.9085
+    },
+    {
+      "name": "H2O",
+      "sigma_angstrom": 1.96,
+      "epsilon_kelvin": 138.5,
+      "mass_u": 18.015,
+      "colour": [
+        0.95,
+        0.95,
+        1.0,
+        1.0
+      ],
+      "display_radius_angstrom": 1.4,
+      "moment_of_inertia_u_angstrom2": 1.15,
+      "water": {
+        "epsilon_hb_kelvin": 1385.0,
+        "r_hb_angstrom": 2.8
+      }
+    },
+    {
+      "name": "N2_2S",
+      "colour": [
+        0.2,
+        0.75,
+        0.95,
+        1.0
+      ],
+      "display_radius_angstrom": 1.655,
+      "sites": [
+        {
+          "offset_angstrom": [
+            -0.55,
+            0.0
+          ],
+          "sigma_angstrom": 3.31,
+          "epsilon_kelvin": 36.0,
+          "mass_u": 14.007
+        },
+        {
+          "offset_angstrom": [
+            0.55,
+            0.0
+          ],
+          "sigma_angstrom": 3.31,
+          "epsilon_kelvin": 36.0,
+          "mass_u": 14.007
+        }
+      ]
+    },
+    {
+      "name": "H2_2S",
+      "colour": [
+        1.0,
+        0.85,
+        0.85,
+        1.0
+      ],
+      "display_radius_angstrom": 1.36,
+      "sites": [
+        {
+          "offset_angstrom": [
+            -0.37,
+            0.0
+          ],
+          "sigma_angstrom": 2.72,
+          "epsilon_kelvin": 10.0,
+          "mass_u": 1.008
+        },
+        {
+          "offset_angstrom": [
+            0.37,
+            0.0
+          ],
+          "sigma_angstrom": 2.72,
+          "epsilon_kelvin": 10.0,
+          "mass_u": 1.008
+        }
+      ]
+    },
+    {
+      "name": "CO2_3S",
+      "colour": [
+        0.6,
+        0.6,
+        0.6,
+        1.0
+      ],
+      "display_radius_angstrom": 1.525,
+      "sites": [
+        {
+          "offset_angstrom": [
+            -1.16,
+            0.0
+          ],
+          "sigma_angstrom": 3.05,
+          "epsilon_kelvin": 79.0,
+          "mass_u": 15.999
+        },
+        {
+          "offset_angstrom": [
+            0.0,
+            0.0
+          ],
+          "sigma_angstrom": 2.8,
+          "epsilon_kelvin": 27.0,
+          "mass_u": 12.011
+        },
+        {
+          "offset_angstrom": [
+            1.16,
+            0.0
+          ],
+          "sigma_angstrom": 3.05,
+          "epsilon_kelvin": 79.0,
+          "mass_u": 15.999
+        }
+      ]
+    }
+  ]
+}
