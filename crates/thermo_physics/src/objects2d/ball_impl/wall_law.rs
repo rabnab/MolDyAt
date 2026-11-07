@@ -24,10 +24,12 @@
 //! The wall code asks [`WallSettings::contact_factor`] where the hard
 //! contact (or the backstop) is.
 
+use crate::objects2d::Vec2D;
+use crate::objects2d::ball_impl::molecule::Site;
 use crate::objects2d::ball_impl::pair_potential::{
-    CapSettings, CappedPotential, LennardJones, PairPotential, SQRT6_OF_TWO,
+    CapSettings, CappedPotential, LennardJones, PairLaw, SQRT6_OF_TWO,
 };
-use crate::objects2d::ball_impl::species::{SpeciesId, SpeciesTable};
+use crate::objects2d::ball_impl::species::SpeciesId;
 
 /// Default `σ_w`: no size of its own, so `σ_iw = σ_i / 2`, the hard contact
 /// distance; the soft wall then has the hard wall's contact distance.
@@ -100,31 +102,25 @@ pub(crate) struct WallOverride {
     pub epsilon: Option<f32>,
 }
 
-/// One site of a molecule as the walls see it: its offset along the axis
-/// and its wall potential (#406).
-pub(crate) type WallSite = (f32, CappedPotential<LennardJones>);
+/// One site as the walls see it: its body-frame offset and its wall
+/// potential in the distance `z` from the wall surface (negative behind it:
+/// the sloped core keeps pushing it back).
+pub(crate) type WallSite = (Vec2D, CappedPotential<LennardJones>);
 
 /// The soft wall potential of every species of a table.
 #[derive(Clone, Debug)]
 pub(crate) struct SoftWalls {
-    /// Wall–species potential in the distance `z` from the wall surface.
-    potentials: Vec<CappedPotential<LennardJones>>,
-    /// Distance of the potential minimum (the WCA cutoff).
+    /// Per species: each site with its wall potential, overrides applied.
+    sites: Vec<Vec<WallSite>>,
+    /// Per species: the largest centre distance of a site's potential
+    /// minimum (the WCA cutoff).
     equilibrium: Vec<f32>,
-    /// Per species, for a molecule (#406): (offset along the axis, wall
-    /// potential) of each site. The wall acts on the sites, not the centre.
-    sites: Vec<Option<Vec<WallSite>>>,
 }
 
 impl SoftWalls {
-    /// `like_pair(id)` is the species' effective `(σ_i, ε_i)`: a `σ_ii` or
-    /// `ε_ii` pair override replaces the table's value.
-    pub(crate) fn new(
-        species: &SpeciesTable,
-        like_pair: impl Fn(SpeciesId) -> (f32, f32),
-        settings: &WallSettings,
-        cap: CapSettings,
-    ) -> Self {
+    /// `sites` per species; a single site carries the species' like pair
+    /// override.
+    pub(crate) fn new(sites: &[Vec<Site>], settings: &WallSettings, cap: CapSettings) -> Self {
         let cap = if settings.attractive {
             cap
         } else {
@@ -133,76 +129,48 @@ impl SoftWalls {
                 ..cap
             }
         };
-        let wall_law = |sigma: f32, epsilon: f32| LennardJones {
-            sigma: 0.5 * (sigma + settings.sigma),
-            epsilon: (epsilon * settings.epsilon).sqrt(),
-        };
-        let sites = species
+        let sites: Vec<Vec<WallSite>> = sites
             .iter()
-            .map(|s| {
-                s.model.molecule().map(|m| {
-                    m.sites
-                        .iter()
-                        .map(|site| {
-                            (
-                                site.offset,
-                                CappedPotential::new(wall_law(site.sigma, site.epsilon), cap),
-                            )
-                        })
-                        .collect()
-                })
-            })
-            .collect();
-        let laws: Vec<LennardJones> = species
-            .ids()
-            .map(|id| {
-                let (sigma, epsilon) = like_pair(id);
-                let mixed = LennardJones {
-                    sigma: 0.5 * (sigma + settings.sigma),
-                    epsilon: (epsilon * settings.epsilon).sqrt(),
-                };
-                match settings.overrides.iter().find(|o| o.species == id) {
-                    Some(o) => LennardJones {
-                        sigma: o.sigma.unwrap_or(mixed.sigma),
-                        epsilon: o.epsilon.unwrap_or(mixed.epsilon),
-                    },
-                    None => mixed,
-                }
+            .enumerate()
+            .map(|(i, sites)| {
+                let o = settings.overrides.iter().find(|o| o.species.index() == i);
+                sites
+                    .iter()
+                    .map(|site| {
+                        let law = LennardJones {
+                            sigma: o
+                                .and_then(|o| o.sigma)
+                                .unwrap_or(0.5 * (site.sigma + settings.sigma)),
+                            epsilon: o
+                                .and_then(|o| o.epsilon)
+                                .unwrap_or((site.epsilon * settings.epsilon).sqrt()),
+                        };
+                        (site.offset, CappedPotential::new(law, cap))
+                    })
+                    .collect()
             })
             .collect();
         Self {
-            sites,
-            equilibrium: laws.iter().map(|l| SQRT6_OF_TWO * l.sigma).collect(),
-            potentials: laws
-                .into_iter()
-                .map(|l| CappedPotential::new(l, cap))
+            equilibrium: sites
+                .iter()
+                .map(|s| {
+                    s.iter()
+                        .map(|(o, p)| o.norm() + p.law().equilibrium_distance())
+                        .fold(0.0, f32::max)
+                })
                 .collect(),
+            sites,
         }
     }
 
-    /// Wall distance at and beyond which a ball of `species` feels nothing.
     #[inline]
-    pub(crate) fn cutoff(&self, species: SpeciesId) -> f32 {
-        self.potentials[species.index()].cutoff()
+    pub(crate) fn sites(&self, species: SpeciesId) -> &[WallSite] {
+        &self.sites[species.index()]
     }
 
-    /// The sites of a molecule species (offset, wall potential), `None` for
-    /// an atomic species.
-    pub(crate) fn sites(&self, species: SpeciesId) -> Option<&[WallSite]> {
-        self.sites[species.index()].as_deref()
-    }
-
-    /// Wall distance of the potential minimum of `species`.
+    /// Centre distance from the wall at which every site of `species` is at
+    /// or beyond its potential minimum.
     pub(crate) fn equilibrium_distance(&self, species: SpeciesId) -> f32 {
         self.equilibrium[species.index()]
-    }
-
-    /// Force (positive = away from the wall) and potential energy of a ball
-    /// of `species` at signed distance `z` from the wall surface (negative
-    /// behind it: the sloped core keeps pushing it back).
-    #[inline]
-    pub(crate) fn force_and_potential(&self, species: SpeciesId, z: f32) -> (f32, f32) {
-        let p = &self.potentials[species.index()];
-        (p.force(z), p.potential(z))
     }
 }

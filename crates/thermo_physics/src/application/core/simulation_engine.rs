@@ -412,10 +412,11 @@ impl SimulationEngine {
             .balls
             .par_iter_mut()
             .map(|ball| {
-                if let Some(molecule) = physics.species().species(ball.species()).model.molecule() {
+                let sites = physics.species().sites(ball.species());
+                if sites.len() > 1 {
                     let walls = (bound_rect, obstacles.as_slice());
                     return (
-                        molecule_backstop(physics, ball, molecule, walls, dt, restitution),
+                        molecule_backstop(physics, ball, sites, walls, dt, restitution),
                         0,
                     );
                 }

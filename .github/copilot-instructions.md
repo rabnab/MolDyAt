@@ -50,12 +50,14 @@ Commands and process rules for AI assistants; other docs link here instead of co
 
 ## Area rules
 
-Read the matching file before changing code in its area (Copilot applies them by path):
+Read each file matching your change; Copilot applies them by path:
 
 | Code | Rules |
 |---|---|
-| `crates/thermo_physics/`, `crates/thermo_runtime/`: physics, species, potentials, config, neighbour lists, walls | `.github/instructions/physics.instructions.md` |
-| `crates/thermo_ui/`, `wgpu_renderer/`: coordinates, keyboard commands, operator tools | `.github/instructions/ui.instructions.md` |
+| `crates/thermo_physics/`, `crates/thermo_runtime/` | `.github/instructions/physics.instructions.md` |
+| species, models, potentials, `sim_config/` | `.github/instructions/species.instructions.md` |
+| walls, `line_segments/`, `valves.rs`, `ball_physics.rs`, `simulation_engine.rs` | `.github/instructions/walls.instructions.md` |
+| `crates/thermo_ui/`, `wgpu_renderer/` | `.github/instructions/ui.instructions.md` |
 
 - Avoid `unsafe` unless necessary for performance-critical sections; document why and which invariants hold.
 - Docs layout: `docs/` describes the current code, `docs/plan/` holds open plans, `docs/done/` implemented plans kept as history. See the `docs-maintenance` skill before adding, moving or renaming a doc.

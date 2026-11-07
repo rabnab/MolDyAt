@@ -25,7 +25,7 @@
 
 use super::line_segments::Obstacle;
 use crate::objects2d::ball_impl::ball_core::BounceInfo;
-use crate::objects2d::ball_impl::molecule::{LinearMolecule, axis, cross};
+use crate::objects2d::ball_impl::molecule::{Site, axis, cross, turn};
 use crate::objects2d::ball_impl::pair_potential::PairPotential;
 use crate::objects2d::ball_impl::wall_law::SoftWalls;
 use crate::objects2d::ball_impl::{Ball2D, BallPhysics, ForceResult};
@@ -64,15 +64,14 @@ impl WallForce {
     }
 }
 
-/// The soft wall force on `ball` from the box `bound` and `obstacles`. A
-/// molecule (#406) feels it at each of its sites, which adds a torque.
+/// The soft wall force on `ball` from the box `bound` and `obstacles`, at
+/// each of its sites; off the centre it adds a torque.
 pub(crate) fn soft_wall_force(
     walls: &SoftWalls,
     ball: &Ball2D,
     bound: &Rect,
     obstacles: &[Obstacle],
 ) -> WallForce {
-    let species = ball.species();
     let centre = *ball.get_position();
     let ramp = if ball.leaving_wall {
         ball.cold.wall_ramp
@@ -86,31 +85,24 @@ pub(crate) fn soft_wall_force(
         potential: 0.0,
         torque: 0.0,
     };
-    match walls.sites(species) {
-        None => point_force(
-            centre,
-            Vec2D::zero(),
-            walls.cutoff(species),
-            &|z| walls.force_and_potential(species, z),
+    let sites = walls.sites(ball.species());
+    // A single site sits at the centre and does not turn: no `sin_cos`.
+    let axis = if sites.len() == 1 {
+        Vec2D::new(1.0, 0.0)
+    } else {
+        axis(ball.theta)
+    };
+    for (offset, potential) in sites {
+        let lever = turn(*offset, axis);
+        point_force(
+            centre + lever,
+            lever,
+            potential.cutoff(),
+            &|z| (potential.force(z), potential.potential(z)),
             bound,
             (obstacles, ramp),
             &mut out,
-        ),
-        Some(sites) => {
-            let axis = axis(ball.theta);
-            for (offset, potential) in sites {
-                let lever = axis.scaled(*offset);
-                point_force(
-                    centre + lever,
-                    lever,
-                    potential.cutoff(),
-                    &|z| (potential.force(z), potential.potential(z)),
-                    bound,
-                    (obstacles, ramp),
-                    &mut out,
-                );
-            }
-        }
+        );
     }
     out
 }
@@ -187,7 +179,7 @@ fn box_sides(pos: Vec2D, bound: &Rect) -> [(f32, Vec2D); 4] {
 pub(crate) fn molecule_backstop(
     physics: &BallPhysics,
     ball: &mut Ball2D,
-    molecule: &LinearMolecule,
+    sites: &[Site],
     (bound, obstacles): (&Rect, &[Obstacle]),
     dt: f32,
     restitution: f32,
@@ -206,8 +198,8 @@ pub(crate) fn molecule_backstop(
             }
         }
     };
-    for site in &molecule.sites {
-        let lever = axis.scaled(site.offset);
+    for site in sites {
+        let lever = turn(site.offset, axis);
         let distance = physics.walls().contact_factor() * site.sigma;
         for side in 0..4 {
             let (z, normal) = box_sides(*ball.get_position() + lever, bound)[side];
@@ -215,7 +207,7 @@ pub(crate) fn molecule_backstop(
                 hit(ball, normal, distance - z, lever, true);
             }
         }
-        let from = start + start_axis.scaled(site.offset);
+        let from = start + turn(site.offset, start_axis);
         for obstacle in obstacles {
             let point = *ball.get_position() + lever;
             if let Some((z, normal, mirror)) = obstacle.backstop_distance(&point, &from, distance)

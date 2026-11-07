@@ -10,6 +10,7 @@
 
 use bytemuck::{Pod, Zeroable};
 use thermo_physics::application::AppResult;
+use thermo_physics::objects2d::ball_impl::{axis, turn};
 use thermo_runtime::application::renderer_snapshot::BallRenderData;
 use thermo_runtime::application::scene_layers::SceneLayers;
 
@@ -106,23 +107,22 @@ impl RenderPipeline for BallPipeline {
         self.instances.clear();
         let species = &ctx.balls.species;
         for data in ctx.balls.iter() {
-            match species.get(data.species).and_then(|s| s.model.molecule()) {
-                // A rigid molecule (#406): one disk per site along its axis.
-                Some(molecule) => {
-                    let (sin, cos) = data.theta.sin_cos();
+            match species.sites(data.species) {
+                // Several sites: one disk per site.
+                sites @ [_, _, ..] => {
+                    let axis = axis(data.theta);
                     let color = pack_color(data.color);
-                    self.instances
-                        .extend(molecule.sites.iter().map(|site| GpuBallData {
-                            position: [
-                                data.position.x + cos * site.offset,
-                                data.position.y + sin * site.offset,
-                            ],
+                    self.instances.extend(sites.iter().map(|site| {
+                        let p = data.position + turn(site.offset, axis);
+                        GpuBallData {
+                            position: [p.x, p.y],
                             radius: 0.5 * site.sigma,
                             color,
                             rings: [0.0, 0.0],
-                        }));
+                        }
+                    }));
                 }
-                None => self.instances.push(GpuBallData::from_render_data(data)),
+                _ => self.instances.push(GpuBallData::from_render_data(data)),
             }
         }
         self.gpu.flush(ctx.device, ctx.queue, &self.instances);

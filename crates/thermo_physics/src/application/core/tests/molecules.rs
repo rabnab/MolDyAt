@@ -136,20 +136,13 @@ fn a_wall_turns_a_dumbbell() {
         n2,
     );
     mc.collect_neighbours_by_cell(0.005);
-    let molecule = mc
-        .world()
-        .species()
-        .species(n2)
-        .model
-        .molecule()
-        .unwrap()
-        .clone();
+    let sites = mc.world().species().species(n2).sites();
     let mut min_site_x = f32::INFINITY;
     for _ in 0..1_500 {
         mc.simulation_step().unwrap();
         let ball = &mc.world().balls[0];
-        for site in &molecule.sites {
-            min_site_x = min_site_x.min(ball.get_position().x + ball.theta.cos() * site.offset);
+        for site in &sites {
+            min_site_x = min_site_x.min(ball.get_position().x + ball.theta.cos() * site.offset.x);
         }
     }
     let ball = &mc.world().balls[0];
@@ -421,12 +414,9 @@ fn co2_reaches_equipartition() {
 /// End sites of a CO₂ molecule `ball`: their distance from the bottom wall
 /// at `floor`.
 fn end_site_heights(ball: &Ball2D, floor: f32) -> [f32; 2] {
-    let half = SpeciesTable::builtin()
-        .species(ball.species())
-        .model
-        .molecule()
-        .unwrap()
-        .half_length();
+    let half = SpeciesTable::builtin().species(ball.species()).sites()[2]
+        .offset
+        .x;
     let lift = half * ball.theta.sin();
     let y = ball.get_position().y - floor;
     [y + lift, y - lift]

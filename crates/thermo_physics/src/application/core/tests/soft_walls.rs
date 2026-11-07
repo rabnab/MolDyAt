@@ -8,22 +8,33 @@
 use super::{create_main_content_for_region, new_main_content_seeded};
 use crate::application::MainContent;
 use crate::application::core::wall_forces::soft_wall_force;
-use crate::objects2d::ball_impl::pair_potential::CapSettings;
+use crate::objects2d::ball_impl::pair_potential::{CapSettings, PairPotential};
+use crate::objects2d::ball_impl::species::Species;
 use crate::objects2d::ball_impl::wall_law::{SoftWalls, WALL_RAMP_TIME, WallSettings};
-use crate::objects2d::ball_impl::{BallFactory, DEFAULT_SPECIES, SPECIES_AR, SpeciesTable};
+use crate::objects2d::ball_impl::{
+    BallFactory, DEFAULT_SPECIES, SPECIES_AR, SpeciesId, SpeciesTable,
+};
 use crate::objects2d::line_segment::GhostWall;
 use crate::objects2d::{Rect, Vec2D};
 
 const WORLD_TOP_LEFT: (f32, f32) = (-50.0, 95.0);
 
 fn soft_walls(settings: &WallSettings) -> SoftWalls {
-    let table = SpeciesTable::builtin();
-    SoftWalls::new(
-        table,
-        |id| (table.species(id).sigma, table.species(id).epsilon),
-        settings,
-        CapSettings::default(),
-    )
+    let sites: Vec<_> = SpeciesTable::builtin().iter().map(Species::sites).collect();
+    SoftWalls::new(&sites, settings, CapSettings::default())
+}
+
+/// Wall distance at and beyond which the single site of `species` feels
+/// nothing.
+fn cutoff(walls: &SoftWalls, species: SpeciesId) -> f32 {
+    walls.sites(species)[0].1.cutoff()
+}
+
+/// Force (positive = away from the wall) and potential energy of the single
+/// site of `species` at signed distance `z` from the wall surface.
+fn force_and_potential(walls: &SoftWalls, species: SpeciesId, z: f32) -> (f32, f32) {
+    let p = &walls.sites(species)[0].1;
+    (p.force(z), p.potential(z))
 }
 
 fn reported_energy(mc: &MainContent) -> f32 {
@@ -38,13 +49,13 @@ fn wall_force_is_minus_the_derivative_of_its_potential() {
             attractive,
             ..WallSettings::default()
         });
-        let cutoff = walls.cutoff(SPECIES_AR);
+        let cutoff = cutoff(&walls, SPECIES_AR);
         let h = 1e-3;
         let mut z = 0.1;
         while z < cutoff - 2.0 * h {
-            let (force, _) = walls.force_and_potential(SPECIES_AR, z);
-            let (_, up) = walls.force_and_potential(SPECIES_AR, z + h);
-            let (_, down) = walls.force_and_potential(SPECIES_AR, z - h);
+            let (force, _) = force_and_potential(&walls, SPECIES_AR, z);
+            let (_, up) = force_and_potential(&walls, SPECIES_AR, z + h);
+            let (_, down) = force_and_potential(&walls, SPECIES_AR, z - h);
             let numeric = -(up - down) / (2.0 * h);
             assert!(
                 (force - numeric).abs() < 2e-2 * force.abs().max(1.0),
@@ -52,7 +63,7 @@ fn wall_force_is_minus_the_derivative_of_its_potential() {
             );
             z += 0.01;
         }
-        let (force, potential) = walls.force_and_potential(SPECIES_AR, cutoff);
+        let (force, potential) = force_and_potential(&walls, SPECIES_AR, cutoff);
         assert_eq!((force, potential), (0.0, 0.0), "zero at the cutoff");
     }
 }
@@ -62,11 +73,11 @@ fn default_wall_is_purely_repulsive_with_the_hard_contact_distance() {
     let walls = soft_walls(&WallSettings::default());
     // σ_iw = σ_Ar / 2: zero potential (before the shift) at the hard
     // contact distance, minimum and cutoff at 2^(1/6) of it.
-    let cutoff = walls.cutoff(SPECIES_AR);
+    let cutoff = cutoff(&walls, SPECIES_AR);
     assert!((cutoff - 0.5 * 1.122_462).abs() < 1e-5, "cutoff {cutoff}");
     let mut z = 0.05;
     while z < cutoff {
-        let (force, potential) = walls.force_and_potential(SPECIES_AR, z);
+        let (force, potential) = force_and_potential(&walls, SPECIES_AR, z);
         assert!(
             force >= 0.0 && potential >= 0.0,
             "z={z}: F {force}, U {potential}"
@@ -74,7 +85,7 @@ fn default_wall_is_purely_repulsive_with_the_hard_contact_distance() {
         z += 0.005;
     }
     // Behind the surface (an overshoot) it keeps pushing outward.
-    let (force, _) = walls.force_and_potential(SPECIES_AR, -0.1);
+    let (force, _) = force_and_potential(&walls, SPECIES_AR, -0.1);
     assert!(force > 0.0);
 }
 
@@ -430,7 +441,7 @@ fn like_pair_epsilon_override_reaches_the_wall() {
     let u = |mc: &MainContent| {
         let walls = mc.world().physics.soft_walls().expect("soft walls");
         let z = 0.9 * walls.equilibrium_distance(DEFAULT_SPECIES);
-        walls.force_and_potential(DEFAULT_SPECIES, z).1
+        force_and_potential(walls, DEFAULT_SPECIES, z).1
     };
     let ratio = u(&overridden) / u(&plain);
     assert!((ratio - 2.0).abs() < 1e-4, "ε_iw ratio {ratio}, want √4");

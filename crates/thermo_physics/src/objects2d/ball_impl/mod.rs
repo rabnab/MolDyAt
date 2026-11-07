@@ -5,6 +5,7 @@
 pub use self::ball_factory::*;
 pub use self::ball_physics::*;
 // Re-export core components for external use
+pub use self::molecule::{axis, turn};
 pub use self::species::{
     AR_EPSILON_KELVIN, AR_MASS_U, AR_SIGMA_ANGSTROM, DEFAULT_SPECIES, LIBRARY, LibrarySpecies,
     N2_EPSILON_KELVIN, N2_MASS_U, N2_SIGMA_ANGSTROM, Species, SpeciesId, SpeciesSet, SpeciesTable,

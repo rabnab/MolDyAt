@@ -5,6 +5,8 @@ User-visible changes to MolDyAt, newest first. Binaries and full release notes a
 
 ## Unreleased
 
+- New molecules are placed up to about 0.02 σ closer to soft walls: each site at its own wall
+  minimum instead of the molecule's outer disk. (#443)
 - Every species, also from a config, gets a time step limit derived from its potential (`dt limited
   by …`): water about 0.0007, H₂ 0.0016, NH₃ 0.0034; CO₂ is no longer capped at 0.0025, and a set
   step above about 0.008 is capped for every species. (#427)

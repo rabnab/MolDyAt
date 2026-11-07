@@ -22,8 +22,9 @@
 //! A config file can replace the whole table with its own `[[species]]` list
 //! (`SimConfig::species_table`); a world keeps the table it was built with.
 
+use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::interaction::Model;
-use crate::objects2d::ball_impl::molecule::{LinearMolecule, MoleculeSite};
+use crate::objects2d::ball_impl::molecule::{LinearMolecule, Site};
 use crate::objects2d::ball_impl::water::MbWater;
 use std::sync::{Arc, LazyLock};
 
@@ -112,6 +113,7 @@ impl Species {
 #[derive(Clone, Debug, PartialEq)]
 pub struct SpeciesTable {
     species: Vec<Species>,
+    sites: Vec<Vec<Site>>,
 }
 
 /// Single-site Lennard-Jones `σ` of Ar in Å: the reduced unit of length
@@ -353,14 +355,14 @@ fn co2_chain() -> Species {
     let ar = |angstrom: f64| (angstrom / AR_SIGMA_ANGSTROM) as f32;
     let kelvin = |k: f64| (k / AR_EPSILON_KELVIN) as f32;
     let mass = |u: f64| (u / AR_MASS_U) as f32;
-    let oxygen = |offset| MoleculeSite {
-        offset,
+    let oxygen = |x| Site {
+        offset: Vec2D::new(x, 0.0),
         sigma: ar(3.05),
         epsilon: kelvin(79.0),
         mass: mass(15.999),
     };
-    let carbon = MoleculeSite {
-        offset: 0.0,
+    let carbon = Site {
+        offset: Vec2D::zero(),
         sigma: ar(2.80),
         epsilon: kelvin(27.0),
         mass: mass(12.011),
@@ -411,7 +413,10 @@ impl SpeciesTable {
             SpeciesSet::CAPACITY,
             species.len()
         );
-        SpeciesTable { species }
+        SpeciesTable {
+            sites: species.iter().map(Species::sites).collect(),
+            species,
+        }
     }
 
     /// The built-in species: `N2`, the former size classes `XS` to `XL` and
@@ -434,6 +439,13 @@ impl SpeciesTable {
     /// only for ids that came from this table.
     pub fn species(&self, id: SpeciesId) -> &Species {
         &self.species[id.index()]
+    }
+
+    /// [`Species::sites`] of `id`, built once with the table. Without pair
+    /// overrides: the walls apply a like pair override to a single site
+    /// (`BallPhysics::with_walls`).
+    pub fn sites(&self, id: SpeciesId) -> &[Site] {
+        &self.sites[id.index()]
     }
 
     /// The id of the species at `index`, if the table has one.

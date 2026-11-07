@@ -12,7 +12,7 @@
 
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::ForceResult;
-use crate::objects2d::ball_impl::molecule::{LinearMolecule, SitePairs};
+use crate::objects2d::ball_impl::molecule::{LinearMolecule, Site, SitePairs};
 use crate::objects2d::ball_impl::pair_potential::CapSettings;
 use crate::objects2d::ball_impl::species::{Species, SpeciesTable};
 use crate::objects2d::ball_impl::water::MbWater;
@@ -23,7 +23,7 @@ pub enum Model {
     /// A single Lennard-Jones site; with `inertia` (#348) it has an
     /// orientation, which no force turns.
     Atom { inertia: Option<f32> },
-    /// Lennard-Jones sites along a rigid axis (#406).
+    /// Lennard-Jones sites of a rigid body.
     RigidLinear(LinearMolecule),
     /// Mercedes-Benz water (#349): its Lennard-Jones disk plus hydrogen bonds.
     MbWater(MbWater),
@@ -38,13 +38,21 @@ impl Model {
             Model::MbWater(w) => Some(w.inertia),
         }
     }
+}
 
-    /// The sites of a multi-site model, which meet the walls and are drawn
-    /// one by one; `None` for a single site at the centre.
-    pub fn molecule(&self) -> Option<&LinearMolecule> {
-        match self {
-            Model::RigidLinear(m) => Some(m),
-            _ => None,
+impl Species {
+    /// The Lennard-Jones sites of the species, which meet the walls and are
+    /// drawn one by one: a molecule's, or one at the centre with the
+    /// species' `σ`, `ε` and mass.
+    pub(crate) fn sites(&self) -> Vec<Site> {
+        match &self.model {
+            Model::RigidLinear(m) => m.sites.clone(),
+            Model::Atom { .. } | Model::MbWater(_) => vec![Site {
+                offset: Vec2D::zero(),
+                sigma: self.sigma,
+                epsilon: self.epsilon,
+                mass: self.mass,
+            }],
         }
     }
 }
@@ -71,7 +79,7 @@ impl Interaction {
     /// time step limit (`BallPhysics::time_step_limit`).
     pub(crate) fn omega_sq(&self, a: &Species, b: &Species) -> f32 {
         match self {
-            Interaction::Sites(s) => s.omega_sq(a, b),
+            Interaction::Sites(s) => s.omega_sq(),
             Interaction::HBond(w) => w.omega_sq(a, b),
         }
     }
