@@ -9,6 +9,8 @@
 use super::test_config;
 use crate::application::thermo_field::LocalKineticStats;
 use crate::application::{MainContent, SimConfig};
+use crate::objects2d::ball_impl::interaction::Model;
+use crate::objects2d::ball_impl::water::MbWater;
 use crate::objects2d::ball_impl::{Ball2D, SpeciesId, SpeciesTable};
 use crate::objects2d::{Rect, Vec2D};
 
@@ -19,6 +21,14 @@ fn water_dt() -> f32 {
 
 fn species(name: &str) -> SpeciesId {
     SpeciesTable::builtin().by_name(name).unwrap()
+}
+
+/// The hydrogen-bond parameters of the water species `id` of `table`.
+fn mb_water(table: &SpeciesTable, id: SpeciesId) -> MbWater {
+    match table.species(id).model {
+        Model::MbWater(water) => water,
+        _ => panic!("not water"),
+    }
 }
 
 /// The test config at the water time step.
@@ -53,7 +63,7 @@ fn add(mc: &mut MainContent, pos: Vec2D, v: Vec2D, theta: f32, omega: f32, kind:
 /// orientations and small velocities: bonds form and break.
 fn water_patch(mc: &mut MainContent, side: usize, speed: f32) {
     let water = species("H2O");
-    let r_hb = mc.world().species().species(water).water.unwrap().r_hb;
+    let r_hb = mb_water(mc.world().species(), water).r_hb;
     let spacing = 1.05 * r_hb;
     let offset = -0.5 * spacing * (side - 1) as f32;
     for i in 0..side {
@@ -135,7 +145,7 @@ fn water_and_argon_meet_by_lennard_jones_only() {
     let (water, ar) = (species("H2O"), species("Ar"));
     let mut mc = world(3);
     let table = mc.world().species().clone();
-    let r_hb = table.species(water).water.unwrap().r_hb;
+    let r_hb = mb_water(&table, water).r_hb;
     add(&mut mc, Vec2D::zero(), Vec2D::zero(), 0.0, 0.0, water);
     add(
         &mut mc,
@@ -281,7 +291,7 @@ fn wall_pressure(mc: &mut MainContent, steps: usize) -> f64 {
 /// (in units of `ε_HB / k_B`): its wall pressure in Ar units.
 fn pressure_at_density(t_mb: f32, rho: f32) -> f64 {
     let water = species("H2O");
-    let mb = SpeciesTable::builtin().species(water).water.unwrap();
+    let mb = mb_water(SpeciesTable::builtin(), water);
     // 144 molecules.
     let side = (144.0 / rho).sqrt() * mb.r_hb;
     let mut mc = MainContent::with_config(

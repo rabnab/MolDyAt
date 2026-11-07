@@ -117,7 +117,7 @@ fn the_backstop_acts_on_the_sites_of_a_molecule() {
     );
     let half_length = {
         let species = mc.world().species().species(co2).clone();
-        species.molecule.unwrap().half_length()
+        species.model.molecule().unwrap().half_length()
     };
     let floor = {
         let region = mc.world().world_region();

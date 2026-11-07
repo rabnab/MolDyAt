@@ -140,7 +140,7 @@ impl SoftWalls {
         let sites = species
             .iter()
             .map(|s| {
-                s.molecule.as_ref().map(|m| {
+                s.model.molecule().map(|m| {
                     m.sites
                         .iter()
                         .map(|site| {

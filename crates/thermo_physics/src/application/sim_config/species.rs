@@ -8,6 +8,7 @@ use super::*;
 
 use crate::error::AppResult;
 use crate::objects2d::ball_impl::external_field::Field;
+use crate::objects2d::ball_impl::interaction::Model;
 use crate::objects2d::ball_impl::pair_potential::PairOverride;
 use crate::objects2d::ball_impl::wall_law::WallSettings;
 use crate::objects2d::ball_impl::{
@@ -110,7 +111,9 @@ impl SpeciesConfig {
                 inertia,
                 &format!("{key}.moment_of_inertia_u_angstrom2"),
             )?;
-            species.inertia = Some(reduced);
+            species.model = Model::Atom {
+                inertia: Some(reduced),
+            };
         }
         if let Some(radius) = self.display_radius_angstrom {
             check_literature(

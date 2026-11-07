@@ -13,10 +13,12 @@
 //! a pair. Forces at the sites give the ball's force and torque.
 
 use crate::objects2d::Vec2D;
+use crate::objects2d::ball_impl::ForceResult;
+use crate::objects2d::ball_impl::ball_physics::REFERENCE_ENERGY;
 use crate::objects2d::ball_impl::pair_potential::{
     CapSettings, CappedPotential, LennardJones, PairPotential,
 };
-use crate::objects2d::ball_impl::species::{SpeciesId, SpeciesTable};
+use crate::objects2d::ball_impl::species::Species;
 
 /// One Lennard-Jones site of a [`LinearMolecule`], in reduced units.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -98,153 +100,97 @@ pub(crate) fn cross(a: Vec2D, b: Vec2D) -> f32 {
     a.x * b.y - a.y * b.x
 }
 
-/// The site–site interactions of a species table with molecules (#406):
-/// every species as a list of sites (an atomic species is one site at its
-/// centre with its own `σ`, `ε`), and one capped Lennard-Jones potential
-/// per pair of site types (Lorentz–Berthelot). Only pairs that involve a
-/// molecule use it; atomic pairs stay in the pair table (with their
-/// overrides).
-#[derive(Clone, Debug)]
-pub(crate) struct SiteTable {
-    /// Per species: (site type, offset along the axis) of each site.
-    species_sites: Vec<Vec<(usize, f32)>>,
-    is_molecule: Vec<bool>,
-    potentials: Vec<CappedPotential<LennardJones>>,
-    type_count: usize,
+/// The site–site Lennard-Jones of a species pair with a molecule (#406):
+/// every site of one with every site of the other (an atomic species is one
+/// site at its centre with its own `σ`, `ε`), mixed by Lorentz–Berthelot.
+#[derive(Clone)]
+pub(crate) struct SitePairs {
+    /// (offset in `a`, offset in `b`, potential) of each site pair.
+    pairs: Vec<(f32, f32, CappedPotential<LennardJones>)>,
+    pub cutoff: f32,
 }
 
-/// Energy, force and torque on ball `i` of one molecule pair, and its
-/// virial `Σ (r_a − r_b)·F_a`.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct SitePair {
-    pub energy: f32,
-    pub force: Vec2D,
-    pub torque: f32,
-    pub virial: f32,
-    /// Site pairs inside the force cap's core (#422).
-    pub capped: u32,
-}
-
-impl SiteTable {
-    /// `None` if no species of `table` is a molecule.
-    pub(crate) fn new(table: &SpeciesTable, cap: CapSettings) -> Option<Self> {
-        if table.iter().all(|s| s.molecule.is_none()) {
-            return None;
-        }
-        let mut types: Vec<(f32, f32)> = Vec::new();
-        let mut type_of = |sigma: f32, epsilon: f32| {
-            types
+impl SitePairs {
+    pub(crate) fn new(a: &Species, b: &Species, cap: CapSettings) -> Self {
+        let sites = |s: &Species| match s.model.molecule() {
+            Some(m) => m
+                .sites
                 .iter()
-                .position(|&t| t == (sigma, epsilon))
-                .unwrap_or_else(|| {
-                    types.push((sigma, epsilon));
-                    types.len() - 1
-                })
+                .map(|x| (x.offset, x.sigma, x.epsilon))
+                .collect(),
+            None => vec![(0.0, s.sigma, s.epsilon)],
         };
-        let species_sites: Vec<Vec<(usize, f32)>> = table
-            .iter()
-            .map(|s| match &s.molecule {
-                Some(m) => m
-                    .sites
-                    .iter()
-                    .map(|site| (type_of(site.sigma, site.epsilon), site.offset))
-                    .collect(),
-                None => vec![(type_of(s.sigma, s.epsilon), 0.0)],
-            })
-            .collect();
-        let type_count = types.len();
-        let potentials = types
-            .iter()
-            .flat_map(|&a| types.iter().map(move |&b| (a, b)))
-            .map(|((sa, ea), (sb, eb))| {
-                CappedPotential::new(
-                    LennardJones {
+        let sites_b = sites(b);
+        let pairs: Vec<_> = sites(a)
+            .into_iter()
+            .flat_map(|(oa, sa, ea)| {
+                sites_b.iter().map(move |&(ob, sb, eb)| {
+                    let law = LennardJones {
                         sigma: 0.5 * (sa + sb),
                         epsilon: (ea * eb).sqrt(),
-                    },
-                    cap,
-                )
+                    };
+                    (oa, ob, CappedPotential::new(law, cap))
+                })
             })
             .collect();
-        Some(Self {
-            species_sites,
-            is_molecule: table.iter().map(|s| s.molecule.is_some()).collect(),
-            potentials,
-            type_count,
-        })
-    }
-
-    #[inline]
-    pub(crate) fn is_molecule(&self, species: SpeciesId) -> bool {
-        self.is_molecule[species.index()]
-    }
-
-    /// (offset in `a`, offset in `b`, potential) of every site pair.
-    pub(crate) fn site_pairs(
-        &self,
-        a: SpeciesId,
-        b: SpeciesId,
-    ) -> impl Iterator<Item = (f32, f32, &CappedPotential<LennardJones>)> {
-        self.species_sites[a.index()]
+        let cutoff = pairs
             .iter()
-            .flat_map(move |&(ta, oa)| {
-                self.species_sites[b.index()]
-                    .iter()
-                    .map(move |&(tb, ob)| (oa, ob, &self.potentials[ta * self.type_count + tb]))
-            })
+            .map(|(oa, ob, p)| oa.abs() + ob.abs() + p.cutoff())
+            .fold(0.0, f32::max);
+        Self { pairs, cutoff }
     }
 
-    /// Site–site interaction of ball `i` (species `si`, angle `theta_i`)
-    /// with ball `j` at `r = r_j − r_i`.
-    pub(crate) fn pair(
-        &self,
-        si: SpeciesId,
-        theta_i: f32,
-        sj: SpeciesId,
-        theta_j: f32,
-        r: Vec2D,
-    ) -> SitePair {
-        let (axis_i, axis_j) = (axis(theta_i), axis(theta_j));
-        let mut out = SitePair {
-            energy: 0.0,
-            force: Vec2D::zero(),
-            torque: 0.0,
-            virial: 0.0,
-            capped: 0,
+    /// The stiffest site pair on the reduced mass of its two sites; a site at
+    /// lever `L` moves across the axis as `1/(1/M + L²/I)`.
+    pub(crate) fn omega_sq(&self, a: &Species, b: &Species) -> f32 {
+        let site_mass = |s: &Species, offset: f32| match s.model.molecule() {
+            Some(m) => 1.0 / (1.0 / m.mass() + offset * offset / m.inertia()),
+            None => s.mass,
         };
-        for &(ta, oa) in &self.species_sites[si.index()] {
-            let pa = axis_i.scaled(oa);
-            for &(tb, ob) in &self.species_sites[sj.index()] {
-                let pot = &self.potentials[ta * self.type_count + tb];
-                // From site a to site b.
-                let d = r.add_scaled(&axis_j, ob) - &pa;
-                let dist = d.norm();
-                if dist >= pot.cutoff() || dist <= f32::EPSILON {
-                    continue;
-                }
-                // Repulsive force pushes a away from b.
-                let f = d.scaled(-pot.force(dist) / dist);
-                out.capped += u32::from(pot.is_capped(dist));
-                out.energy += pot.potential(dist);
-                out.force += f;
-                out.torque += cross(pa, f);
-                out.virial -= d.dot(&f);
+        self.pairs
+            .iter()
+            .map(|(oa, ob, p)| {
+                let (ma, mb) = (site_mass(a, *oa), site_mass(b, *ob));
+                p.stiffness(REFERENCE_ENERGY) / (ma * mb / (ma + mb))
+            })
+            .fold(0.0, f32::max)
+    }
+
+    pub(crate) fn eval(&self, r: Vec2D, axis_i: Vec2D, axis_j: Vec2D, out: &mut ForceResult) {
+        for (oa, ob, pot) in &self.pairs {
+            let pa = axis_i.scaled(*oa);
+            // From site a to site b.
+            let d = r.add_scaled(&axis_j, *ob) - &pa;
+            let dist = d.norm();
+            if dist >= pot.cutoff() || dist <= f32::EPSILON {
+                continue;
             }
+            // Repulsive force pushes a away from b.
+            let f = d.scaled(-pot.force(dist) / dist);
+            out.capped_pairs += u32::from(pot.is_capped(dist));
+            out.potential_energy += pot.potential(dist);
+            out.force += f;
+            out.torque += cross(pa, f);
+            out.virial -= d.dot(&f);
         }
-        out
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::objects2d::ball_impl::species::{SpeciesId, SpeciesTable};
 
     fn table() -> &'static SpeciesTable {
         SpeciesTable::builtin()
     }
 
-    fn sites() -> SiteTable {
-        SiteTable::new(table(), CapSettings::default()).expect("N2_2S is a molecule")
+    /// The site pairs of species `a` (angle `ti`) with `b` (`tj`) at `r`.
+    fn pair(a: SpeciesId, ti: f32, b: SpeciesId, tj: f32, r: Vec2D) -> ForceResult {
+        let (a, b) = (table().species(a), table().species(b));
+        let mut out = ForceResult::default();
+        SitePairs::new(a, b, CapSettings::default()).eval(r, axis(ti), axis(tj), &mut out);
+        out
     }
 
     fn id(name: &str) -> SpeciesId {
@@ -255,12 +201,12 @@ mod tests {
     #[test]
     fn n2_dumbbell_is_built_from_its_sites() {
         let s = table().species(id("N2_2S"));
-        let m = s.molecule.as_ref().unwrap();
+        let m = s.model.molecule().unwrap();
         assert_eq!(m.sites.len(), 2);
         let bond = (1.10 / 3.405) as f32;
         assert!((m.sites[1].offset - m.sites[0].offset - bond).abs() < 1e-6);
         assert!((s.mass - (2.0 * 14.007 / 39.948) as f32).abs() < 1e-6);
-        assert!((s.inertia.unwrap() - s.mass * 0.25 * bond * bond).abs() < 1e-6);
+        assert!((s.model.inertia().unwrap() - s.mass * 0.25 * bond * bond).abs() < 1e-6);
         assert_eq!(s.epsilon, 0.0, "the centre itself does not interact");
         assert!((s.sigma - (bond + (3.31 / 3.405) as f32)).abs() < 1e-5);
     }
@@ -269,7 +215,6 @@ mod tests {
     /// energy, for molecule–molecule and molecule–atom pairs.
     #[test]
     fn force_and_torque_match_finite_differences() {
-        let sites = sites();
         let (n2, ar) = (id("N2_2S"), id("Ar"));
         let h = 1e-3;
         for (sj, r, ti, tj) in [
@@ -277,8 +222,8 @@ mod tests {
             (n2, Vec2D::new(-0.9, 1.0), 2.0, 0.4),
             (ar, Vec2D::new(1.2, -0.3), -0.7, 0.0),
         ] {
-            let e = |r: Vec2D, ti: f32| sites.pair(n2, ti, sj, tj, r).energy;
-            let p = sites.pair(n2, ti, sj, tj, r);
+            let e = |r: Vec2D, ti: f32| pair(n2, ti, sj, tj, r).potential_energy;
+            let p = pair(n2, ti, sj, tj, r);
             let fx = (e(r + Vec2D::new(h, 0.0), ti) - e(r - &Vec2D::new(h, 0.0), ti)) / (2.0 * h);
             let fy = (e(r + Vec2D::new(0.0, h), ti) - e(r - &Vec2D::new(0.0, h), ti)) / (2.0 * h);
             let torque = -(e(r, ti + h) - e(r, ti - h)) / (2.0 * h);
@@ -298,7 +243,7 @@ mod tests {
                 "{r}: τ {} vs {torque}",
                 p.torque
             );
-            assert!(p.energy != 0.0, "{r}: inside the cutoff");
+            assert!(p.potential_energy != 0.0, "{r}: inside the cutoff");
         }
     }
 
@@ -307,7 +252,7 @@ mod tests {
     #[test]
     fn co2_chain_is_built_from_its_sites() {
         let s = table().species(id("CO2_3S"));
-        let m = s.molecule.as_ref().unwrap();
+        let m = s.model.molecule().unwrap();
         let (o, c) = (m.sites[0], m.sites[1]);
         assert_eq!(m.sites.len(), 3);
         assert_eq!(c.offset, 0.0);
@@ -316,13 +261,12 @@ mod tests {
         assert!((o.sigma - (3.05 / 3.405) as f32).abs() < 1e-6);
         assert!((c.epsilon - (27.0 / 119.8) as f32).abs() < 1e-6);
         assert!((s.mass - ((2.0 * 15.999 + 12.011) / 39.948) as f32).abs() < 1e-6);
-        assert!((s.inertia.unwrap() - 2.0 * o.mass * o.offset * o.offset).abs() < 1e-6);
+        assert!((s.model.inertia().unwrap() - 2.0 * o.mass * o.offset * o.offset).abs() < 1e-6);
     }
 
     /// Force and torque of the three-site chain vs finite differences.
     #[test]
     fn co2_force_and_torque_match_finite_differences() {
-        let sites = sites();
         let (co2, ar) = (id("CO2_3S"), id("Ar"));
         let h = 1e-3;
         for (sj, r, ti, tj) in [
@@ -330,8 +274,8 @@ mod tests {
             (co2, Vec2D::new(-0.6, 1.5), -1.0, 0.2),
             (ar, Vec2D::new(1.3, -0.5), 0.8, 0.0),
         ] {
-            let e = |r: Vec2D, ti: f32| sites.pair(co2, ti, sj, tj, r).energy;
-            let p = sites.pair(co2, ti, sj, tj, r);
+            let e = |r: Vec2D, ti: f32| pair(co2, ti, sj, tj, r).potential_energy;
+            let p = pair(co2, ti, sj, tj, r);
             let fx = (e(r + Vec2D::new(h, 0.0), ti) - e(r - &Vec2D::new(h, 0.0), ti)) / (2.0 * h);
             let fy = (e(r + Vec2D::new(0.0, h), ti) - e(r - &Vec2D::new(0.0, h), ti)) / (2.0 * h);
             let torque = -(e(r, ti + h) - e(r, ti - h)) / (2.0 * h);
@@ -351,19 +295,21 @@ mod tests {
                 "{r}: τ {} vs {torque}",
                 p.torque
             );
-            assert!(p.energy != 0.0, "{r}: inside the cutoff");
+            assert!(p.potential_energy != 0.0, "{r}: inside the cutoff");
         }
     }
 
     /// The pair seen from the other ball: same energy, opposite force.
     #[test]
     fn pair_is_symmetric() {
-        let sites = sites();
         let n2 = id("N2_2S");
         let r = Vec2D::new(1.3, 0.25);
-        let a = sites.pair(n2, 0.4, n2, -0.8, r);
-        let b = sites.pair(n2, -0.8, n2, 0.4, r.scaled(-1.0));
-        assert!((a.energy - b.energy).abs() < 1e-5 * a.energy.abs().max(1.0));
+        let a = pair(n2, 0.4, n2, -0.8, r);
+        let b = pair(n2, -0.8, n2, 0.4, r.scaled(-1.0));
+        assert!(
+            (a.potential_energy - b.potential_energy).abs()
+                < 1e-5 * a.potential_energy.abs().max(1.0)
+        );
         assert!((a.force + b.force).norm() < 1e-4 * a.force.norm().max(1.0));
     }
 }

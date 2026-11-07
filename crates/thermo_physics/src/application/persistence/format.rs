@@ -388,7 +388,7 @@ impl WorldFile {
             // Only a species with an orientation can rotate (#348).
             let rotates = species
                 .by_name(&ball.species)
-                .is_some_and(|id| species.species(id).inertia.is_some());
+                .is_some_and(|id| species.species(id).model.inertia().is_some());
             if !rotates && (ball.theta != 0.0 || ball.omega != 0.0 || ball.alpha != 0.0) {
                 return Err(invalid(format!(
                     "ball {} has an orientation, but species {:?} has no moment of inertia",

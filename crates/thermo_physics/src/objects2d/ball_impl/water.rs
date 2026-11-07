@@ -20,6 +20,8 @@
 //! Water meets other species through its Lennard-Jones part only.
 
 use crate::objects2d::Vec2D;
+use crate::objects2d::ball_impl::ForceResult;
+use crate::objects2d::ball_impl::species::Species;
 
 /// Hydrogen-bond parameters of a water species, in reduced (Ar) units.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -32,29 +34,22 @@ pub struct MbWater {
     pub width_r: f32,
     /// Width of the arm-alignment Gaussians (dimensionless).
     pub width_angle: f32,
+    /// Moment of inertia of the molecule.
+    pub inertia: f32,
 }
 
 /// The width of both Gaussians in MB units.
 pub(crate) const MB_WIDTH: f32 = 0.085;
 
-/// Hydrogen-bond energy of one pair and its derivatives for ball `i`.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct HbPair {
-    pub energy: f32,
-    /// Force on `i`.
-    pub force: Vec2D,
-    /// Torque on `i`.
-    pub torque: f32,
-}
-
 impl MbWater {
-    /// MB water with `ε_HB` and `r_HB`, both widths 0.085.
-    pub(crate) fn new(epsilon_hb: f32, r_hb: f32) -> Self {
+    /// MB water with `ε_HB`, `r_HB` and `inertia`, both widths 0.085.
+    pub(crate) fn new(epsilon_hb: f32, r_hb: f32, inertia: f32) -> Self {
         Self {
             epsilon_hb,
             r_hb,
             width_r: MB_WIDTH * r_hb,
             width_angle: MB_WIDTH,
+            inertia,
         }
     }
 
@@ -63,11 +58,10 @@ impl MbWater {
         self.r_hb + 12.0 * self.width_r
     }
 
-    /// `ω²` of the bonds of a molecule with `mass` and `inertia`: the
-    /// distance Gaussian on the reduced mass, and the largest curvature of
-    /// the arm alignment `-ε_HB·exp(-(cos φ - 1)²/(2 w²))` in `φ` (flat at
-    /// its optimum) for each of the three arms, which turn together.
-    pub(crate) fn omega_sq(&self, mass: f32, inertia: f32) -> f32 {
+    /// The distance Gaussian on the reduced mass, and the largest curvature
+    /// of the arm alignment `-ε_HB·exp(-(cos φ - 1)²/(2 w²))` in `φ` (flat
+    /// at its optimum) for each of the three arms, which turn together.
+    pub(crate) fn omega_sq(&self, a: &Species, b: &Species) -> f32 {
         let w = f64::from(self.width_angle);
         let alignment = |phi: f64| -(-(phi.cos() - 1.0).powi(2) / (2.0 * w * w)).exp();
         let h = 1e-3;
@@ -77,30 +71,18 @@ impl MbWater {
                 ((alignment(phi + h) - 2.0 * alignment(phi) + alignment(phi - h)) / (h * h)).abs()
             })
             .fold(0.0, f64::max) as f32;
-        let radial = self.epsilon_hb / (self.width_r * self.width_r) / (0.5 * mass);
-        radial.max(3.0 * self.epsilon_hb * largest / inertia)
+        let reduced_mass = a.mass * b.mass / (a.mass + b.mass);
+        let radial = self.epsilon_hb / (self.width_r * self.width_r) / reduced_mass;
+        radial.max(3.0 * self.epsilon_hb * largest / self.inertia)
     }
 
-    /// Bond of ball `i` (orientation `theta_i`) with `j` (`theta_j`) at
-    /// `r = r_j − r_i`: energy, force and torque on `i`. Zero beyond
-    /// [`Self::cutoff`].
-    #[cfg(test)]
-    pub(crate) fn pair(&self, r: Vec2D, theta_i: f32, theta_j: f32) -> HbPair {
-        self.pair_with_arms(r, &arms(theta_i), &arms(theta_j))
-    }
-
-    /// [`Self::pair`] with the arm directions of both balls ([`arms`]), so
-    /// the force pass computes each ball's arms once, not once per pair.
-    pub(crate) fn pair_with_arms(&self, r: Vec2D, arms_i: &Arms, arms_j: &Arms) -> HbPair {
-        let zero = HbPair {
-            energy: 0.0,
-            force: Vec2D::zero(),
-            torque: 0.0,
-        };
+    /// The hydrogen bond: zero beyond [`Self::cutoff`].
+    pub(crate) fn eval(&self, r: Vec2D, axis_i: Vec2D, axis_j: Vec2D, out: &mut ForceResult) {
         let d = r.norm();
         if d >= self.cutoff() || d <= f32::EPSILON {
-            return zero;
+            return;
         }
+        let (arms_i, arms_j) = (arms(axis_i), arms(axis_j));
         let u = r.scaled(1.0 / d);
         let gauss = |x: f32, w: f32| (-x * x / (2.0 * w * w)).exp();
         let w = self.width_angle;
@@ -135,29 +117,22 @@ impl MbWater {
         }
 
         let eps = self.epsilon_hb;
-        let energy = -eps * radial * a_sum * b_sum;
         // dU/dr (r = r_j − r_i); the force on i is −dU/dr_i = +dU/dr.
         let du_dr = u
             .scaled(d_radial * a_sum * b_sum)
             .add_scaled(&da_dr, radial * b_sum)
             .add_scaled(&db_dr, radial * a_sum)
             .scaled(-eps);
-        HbPair {
-            energy,
-            force: du_dr,
-            torque: eps * radial * b_sum * da_dtheta,
-        }
+        out.potential_energy += -eps * radial * a_sum * b_sum;
+        out.force += du_dr;
+        out.torque += eps * radial * b_sum * da_dtheta;
+        out.virial -= r.dot(&du_dr);
     }
 }
 
-/// The three hydrogen-bond arm directions of a molecule.
-pub(crate) type Arms = [Vec2D; 3];
-
-/// The arms of a molecule at orientation `theta`: the first along `theta`,
-/// the others turned by 120° and 240° (one `sin_cos`, then fixed rotations).
-pub(crate) fn arms(theta: f32) -> Arms {
-    let (sin, cos) = theta.sin_cos();
-    let first = Vec2D::new(cos, sin);
+/// The three hydrogen-bond arms of a molecule: `first` along its axis, the
+/// others turned by 120° and 240°.
+fn arms(first: Vec2D) -> [Vec2D; 3] {
     // cos and sin of ±120°.
     const C: f32 = -0.5;
     const S: f32 = 0.866_025_4;
@@ -168,13 +143,24 @@ pub(crate) fn arms(theta: f32) -> Arms {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::objects2d::ball_impl::molecule::axis;
 
     fn water() -> MbWater {
-        MbWater::new(11.56, 0.8223)
+        MbWater::new(11.56, 0.8223, 0.00248)
+    }
+
+    impl MbWater {
+        /// Bond of ball `i` (orientation `theta_i`) with `j` (`theta_j`) at
+        /// `r = r_j − r_i`.
+        fn pair(&self, r: Vec2D, theta_i: f32, theta_j: f32) -> ForceResult {
+            let mut out = ForceResult::default();
+            self.eval(r, axis(theta_i), axis(theta_j), &mut out);
+            out
+        }
     }
 
     fn energy(w: &MbWater, r: Vec2D, ti: f32, tj: f32) -> f32 {
-        w.pair(r, ti, tj).energy
+        w.pair(r, ti, tj).potential_energy
     }
 
     /// Two molecules in the ideal bond: an arm of each on the axis, facing.
@@ -184,7 +170,7 @@ mod tests {
         let r = Vec2D::new(w.r_hb, 0.0);
         let bond = w.pair(r, 0.0, std::f32::consts::PI);
         assert!(
-            (bond.energy + w.epsilon_hb).abs() < 1e-3 * w.epsilon_hb,
+            (bond.potential_energy + w.epsilon_hb).abs() < 1e-3 * w.epsilon_hb,
             "{bond:?}"
         );
         assert!(bond.force.norm() < 1e-2, "{bond:?}");
@@ -238,7 +224,7 @@ mod tests {
         let (ti, tj) = (0.1, 3.0);
         let a = w.pair(r, ti, tj);
         let b = w.pair(r.scaled(-1.0), tj, ti);
-        assert!((a.energy - b.energy).abs() < 1e-5 * a.energy.abs());
+        assert!((a.potential_energy - b.potential_energy).abs() < 1e-5 * a.potential_energy.abs());
         assert!((a.force + b.force).norm() < 1e-4 * a.force.norm().max(1.0));
     }
 
@@ -250,6 +236,6 @@ mod tests {
             0.0,
             std::f32::consts::PI,
         );
-        assert_eq!(p.energy, 0.0);
+        assert_eq!(p.potential_energy, 0.0);
     }
 }

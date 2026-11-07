@@ -247,8 +247,8 @@ fn test_energy_conservation_two_balls_integration() {
     // Run simulation
     for step in 0..NUM_STEPS {
         // Compute forces using SIMD implementation
-        let force1 = force_simd(&phys, 0, &balls, &kernel_points(&balls));
-        let force2 = force_simd(&phys, 1, &balls, &kernel_points(&balls));
+        let force1 = force_simd(&phys, 0, &balls, &kernel_points(&balls), |_, _, _, _| {});
+        let force2 = force_simd(&phys, 1, &balls, &kernel_points(&balls), |_, _, _, _| {});
 
         // Update velocities (velocity Verlet integration - part 1)
         let accel1 = Vec2D::new(
@@ -282,8 +282,8 @@ fn test_energy_conservation_two_balls_integration() {
         balls[1].pre_update_pos = new_pos2;
 
         // Recompute forces at new positions
-        let force1_new = force_simd(&phys, 0, &balls, &kernel_points(&balls));
-        let force2_new = force_simd(&phys, 1, &balls, &kernel_points(&balls));
+        let force1_new = force_simd(&phys, 0, &balls, &kernel_points(&balls), |_, _, _, _| {});
+        let force2_new = force_simd(&phys, 1, &balls, &kernel_points(&balls), |_, _, _, _| {});
 
         // Complete velocity update with new accelerations (velocity Verlet - part 2)
         let accel1_new = Vec2D::new(

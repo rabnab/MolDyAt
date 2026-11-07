@@ -45,7 +45,7 @@ fn test_simd_energy_conservation() {
     let physics = BallPhysics::default();
     let balls = n2_with_neighbours(&[(Vec2D::new(1.25, 0.0), N2)]);
 
-    let result = force_simd(&physics, 0, &balls, &kernel_points(&balls));
+    let result = force_simd(&physics, 0, &balls, &kernel_points(&balls), |_, _, _, _| {});
 
     assert!(result.force.x.is_finite());
     assert!(result.force.y.is_finite());
@@ -60,7 +60,7 @@ fn test_overlapping_pair_is_repelled_and_reports_negative_gap() {
     // Centre distance 0.5 < σ = 1: the contact discs overlap by 0.5.
     let balls = n2_with_neighbours(&[(Vec2D::new(0.5, 0.0), N2)]);
 
-    let result = force_simd(&physics, 0, &balls, &kernel_points(&balls));
+    let result = force_simd(&physics, 0, &balls, &kernel_points(&balls), |_, _, _, _| {});
 
     approx(result.min_dist, -0.5, 1e-6);
     assert!(
@@ -76,7 +76,7 @@ fn test_simd_potential_energy_correctness() {
     // Test Case 1: Single neighbor at various centre distances
     for center_dist in [0.5, 0.8, 1.0, 1.122462, 2.0, 3.0] {
         let balls = n2_with_neighbours(&[(Vec2D::new(center_dist, 0.0), N2)]);
-        let simd_result = force_simd(&physics, 0, &balls, &kernel_points(&balls));
+        let simd_result = force_simd(&physics, 0, &balls, &kernel_points(&balls), |_, _, _, _| {});
         approx(
             simd_result.potential_energy,
             physics.potential(N2, N2, center_dist),
@@ -91,7 +91,7 @@ fn test_simd_potential_energy_correctness() {
         Vec2D::new(1.75, 1.75),
     ];
     let balls = n2_with_neighbours(&positions.map(|p| (p, N2)));
-    let simd_result = force_simd(&physics, 0, &balls, &kernel_points(&balls));
+    let simd_result = force_simd(&physics, 0, &balls, &kernel_points(&balls), |_, _, _, _| {});
     let expected_total: f32 = positions
         .iter()
         .map(|p| physics.potential(N2, N2, p.norm()))
@@ -102,7 +102,7 @@ fn test_simd_potential_energy_correctness() {
     let r_cap = physics.get_force_cap_distance(N2, N2);
     let dist_capped = r_cap * 0.5;
     let balls = n2_with_neighbours(&[(Vec2D::new(dist_capped, 0.0), N2)]);
-    let simd_result = force_simd(&physics, 0, &balls, &kernel_points(&balls));
+    let simd_result = force_simd(&physics, 0, &balls, &kernel_points(&balls), |_, _, _, _| {});
 
     // Expected: U(r) = U(r_cap) - max_force·(r - r_cap) + ½·k·(r - r_cap)², shifted at the cutoff
     let shifted_pot_at_cap = physics.potential(N2, N2, r_cap);
@@ -120,7 +120,7 @@ fn test_simd_potential_energy_correctness() {
 fn test_virial_no_neighbours() {
     let physics = BallPhysics::default();
     let balls = n2_with_neighbours(&[]);
-    let result = force_simd(&physics, 0, &balls, &kernel_points(&balls));
+    let result = force_simd(&physics, 0, &balls, &kernel_points(&balls), |_, _, _, _| {});
     assert_eq!(result.virial, 0.0, "Virial must be 0 with no neighbours");
 }
 
@@ -130,7 +130,7 @@ fn test_virial_single_neighbour_known_geometry() {
     let center_dist: f32 = 1.5;
     let balls = n2_with_neighbours(&[(Vec2D::new(center_dist, 0.0), N2)]);
 
-    let result = force_simd(&physics, 0, &balls, &kernel_points(&balls));
+    let result = force_simd(&physics, 0, &balls, &kernel_points(&balls), |_, _, _, _| {});
 
     // virial = Σ (r_ij · F_ij) = center_dist * lj_force (see derivation in issue #112)
     let expected_virial = center_dist * physics.force(N2, N2, center_dist);
@@ -146,7 +146,7 @@ fn test_virial_force_capped_regime() {
     let center_dist = r_cap * 0.5;
     let balls = n2_with_neighbours(&[(Vec2D::new(center_dist, 0.0), N2)]);
 
-    let result = force_simd(&physics, 0, &balls, &kernel_points(&balls));
+    let result = force_simd(&physics, 0, &balls, &kernel_points(&balls), |_, _, _, _| {});
 
     // In the capped regime the force rises linearly from its value at r_cap
     // (≈ max_force): F(r_cap) + k·(r_cap - r). virial = center_dist * core_force
@@ -171,7 +171,7 @@ fn assert_mixed_chunk_matches_scalar_pairs(physics: &BallPhysics) -> ForceResult
     ];
     let balls = n2_with_neighbours(&neighbours);
 
-    let result = force_simd(physics, 0, &balls, &kernel_points(&balls));
+    let result = force_simd(physics, 0, &balls, &kernel_points(&balls), |_, _, _, _| {});
 
     let (mut force, mut potential, mut virial) = (Vec2D::new(0.0, 0.0), 0.0f32, 0.0f32);
     let mut min_gap = f32::INFINITY;
@@ -250,7 +250,7 @@ fn test_listed_neighbours_beyond_cutoff_do_not_interact() {
         .collect();
     let balls = n2_with_neighbours(&neighbours);
 
-    let result = force_simd(&physics, 0, &balls, &kernel_points(&balls));
+    let result = force_simd(&physics, 0, &balls, &kernel_points(&balls), |_, _, _, _| {});
     assert_eq!(result.force, Vec2D::new(0.0, 0.0));
     assert_eq!(result.potential_energy, 0.0);
     assert_eq!(result.virial, 0.0);
