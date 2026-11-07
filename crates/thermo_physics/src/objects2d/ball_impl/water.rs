@@ -64,8 +64,7 @@ impl Interaction for MbWater {
     /// The distance Gaussian on the reduced mass, and the largest curvature
     /// of the arm alignment `-ε_HB·exp(-(cos φ - 1)²/(2 w²))` in `φ` (flat
     /// at its optimum) for each of the three arms, which turn together.
-    fn omega_sq(&self, a: &Species, _: &Species) -> f32 {
-        let (mass, inertia) = (a.mass, self.inertia);
+    fn omega_sq(&self, a: &Species, b: &Species) -> f32 {
         let w = f64::from(self.width_angle);
         let alignment = |phi: f64| -(-(phi.cos() - 1.0).powi(2) / (2.0 * w * w)).exp();
         let h = 1e-3;
@@ -75,8 +74,9 @@ impl Interaction for MbWater {
                 ((alignment(phi + h) - 2.0 * alignment(phi) + alignment(phi - h)) / (h * h)).abs()
             })
             .fold(0.0, f64::max) as f32;
-        let radial = self.epsilon_hb / (self.width_r * self.width_r) / (0.5 * mass);
-        radial.max(3.0 * self.epsilon_hb * largest / inertia)
+        let reduced_mass = a.mass * b.mass / (a.mass + b.mass);
+        let radial = self.epsilon_hb / (self.width_r * self.width_r) / reduced_mass;
+        radial.max(3.0 * self.epsilon_hb * largest / self.inertia)
     }
 
     /// The hydrogen bond: zero beyond [`Self::cutoff`].

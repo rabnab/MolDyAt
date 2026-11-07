@@ -77,7 +77,8 @@ pub(crate) fn pair_interactions(
                 (Model::RigidLinear(_), _) | (_, Model::RigidLinear(_)) => {
                     vec![Arc::new(SitePairs::new(a, b, cap))]
                 }
-                (Model::MbWater(w), Model::MbWater(_)) => vec![Arc::new(*w)],
+                // Only between equal parameters: the bond is not mixed.
+                (Model::MbWater(w), Model::MbWater(w_b)) if w == w_b => vec![Arc::new(*w)],
                 _ => Vec::new(),
             }
         })

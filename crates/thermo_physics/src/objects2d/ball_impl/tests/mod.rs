@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 mod ball_physics;
+mod interaction;
 mod pair_potential;
 mod simd_forces;
 mod time_step_limit;
