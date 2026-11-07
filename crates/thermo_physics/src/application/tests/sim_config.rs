@@ -525,7 +525,7 @@ fn readme_pair_override_example_is_valid() {
     let config = SimConfig::from_toml(&uncommented).unwrap();
     assert_eq!(config.potential.pair_overrides.len(), 1, "{uncommented}");
     let names: Vec<_> = config.species.iter().map(|s| s.name.as_str()).collect();
-    assert_eq!(names, ["N2", "Ar"], "{uncommented}");
+    assert_eq!(names, ["N2", "N2_2S", "Ar"], "{uncommented}");
 }
 
 // ── [[species]] (#237) ───────────────────────────────────────────────
