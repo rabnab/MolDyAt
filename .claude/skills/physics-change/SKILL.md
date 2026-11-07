@@ -11,7 +11,7 @@ The simulation must conserve energy where the physics says it should, and seeded
 Change only the physics the issue asks for. A new quantity goes only into the outputs the issue names (minimal code policy in `.github/copilot-instructions.md`); safety nets are the one exception (`physics.instructions.md`).
 
 ## Invariants
-Read `.github/instructions/physics.instructions.md` first: force and potential match, cutoff, force cap, neighbour lists, index contract, walls, species, reproducibility and precision. Line walls and valves: `operator-framework` skill.
+Read `.github/instructions/physics.instructions.md` first (force and potential match, cutoff, force cap, neighbour lists, index contract, reproducibility, precision), plus `species.instructions.md` or `walls.instructions.md` when the change touches their area. Line walls and valves: `operator-framework` skill.
 
 ## Tests to run
 Smallest first; all must pass before a PR.
@@ -42,4 +42,4 @@ Never loosen a threshold to clear an unrelated failure; find the cause.
 Force kernels, neighbour rebuilds and the apply pass are hot. If a change touches them, follow the `perf-compare` skill.
 
 ## Documentation
-Update the docs that describe the changed behaviour in the same PR: `docs/units.md` (potential, units), `docs/simulation.md` (cell grid, thermo fields), `docs/architecture.md` (step order), `docs/operators.md` (wall and thermostat physics), and the invariants in `.github/instructions/physics.instructions.md`.
+Update the docs that describe the changed behaviour in the same PR: `docs/units.md` (potential, units), `docs/simulation.md` (cell grid, thermo fields), `docs/architecture.md` (step order), `docs/operators.md` (wall and thermostat physics), and the invariants in `.github/instructions/`.

@@ -15,7 +15,7 @@ rustup install nightly
 This project has comprehensive instructions for GitHub Copilot to help with development. If you're using GitHub Copilot, please review:
 
 - **[Copilot Instructions](.github/copilot-instructions.md)** - Complete guidelines for working with Copilot on this project
-- **[Area rules](.github/instructions/)** - Rules for one part of the code (`physics.instructions.md`, `ui.instructions.md`), applied by path
+- **[Area rules](.github/instructions/)** - Rules for one part of the code (`physics.instructions.md`, `species.instructions.md`, `walls.instructions.md`, `ui.instructions.md`), applied by path
 
 These instructions cover:
 - Project architecture and physics constraints
