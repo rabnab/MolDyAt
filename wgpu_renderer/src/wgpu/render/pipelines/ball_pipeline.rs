@@ -105,24 +105,27 @@ impl RenderPipeline for BallPipeline {
 
         self.instances.clear();
         let species = &ctx.balls.species;
+        let sites: Vec<_> = species
+            .ids()
+            .map(|id| species.species(id).sites())
+            .collect();
         for data in ctx.balls.iter() {
-            match species.get(data.species).and_then(|s| s.model.molecule()) {
-                // A rigid molecule (#406): one disk per site along its axis.
-                Some(molecule) => {
+            match sites.get(data.species.index()).map(Vec::as_slice) {
+                // Several sites (#406): one disk per site.
+                Some(sites @ [_, _, ..]) => {
                     let (sin, cos) = data.theta.sin_cos();
                     let color = pack_color(data.color);
-                    self.instances
-                        .extend(molecule.sites.iter().map(|site| GpuBallData {
-                            position: [
-                                data.position.x + cos * site.offset,
-                                data.position.y + sin * site.offset,
-                            ],
-                            radius: 0.5 * site.sigma,
-                            color,
-                            rings: [0.0, 0.0],
-                        }));
+                    self.instances.extend(sites.iter().map(|site| GpuBallData {
+                        position: [
+                            data.position.x + cos * site.offset.x - sin * site.offset.y,
+                            data.position.y + sin * site.offset.x + cos * site.offset.y,
+                        ],
+                        radius: 0.5 * site.sigma,
+                        color,
+                        rings: [0.0, 0.0],
+                    }));
                 }
-                None => self.instances.push(GpuBallData::from_render_data(data)),
+                _ => self.instances.push(GpuBallData::from_render_data(data)),
             }
         }
         self.gpu.flush(ctx.device, ctx.queue, &self.instances);

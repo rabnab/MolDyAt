@@ -3,8 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! Rigid linear molecules (#406): a ball whose species is a molecule
-//! carries Lennard-Jones sites at fixed offsets along its axis, turned by
-//! the ball's orientation `θ` (#348). The ball is the molecule's centre of
+//! carries Lennard-Jones sites at fixed body-frame offsets, turned by the
+//! ball's orientation `θ` (#348). The ball is the molecule's centre of
 //! mass; its mass and moment of inertia are the sum over the sites.
 //!
 //! Molecules interact site by site: every site of one ball with every site
@@ -20,27 +20,28 @@ use crate::objects2d::ball_impl::pair_potential::{
 };
 use crate::objects2d::ball_impl::species::Species;
 
-/// One Lennard-Jones site of a [`LinearMolecule`], in reduced units.
+/// One Lennard-Jones site of a species, in reduced units (an atom is one
+/// site at its centre).
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct MoleculeSite {
-    /// Signed distance from the centre of mass along the axis.
-    pub offset: f32,
+pub struct Site {
+    /// Offset from the centre of mass in the body frame, turned by `θ`.
+    pub offset: Vec2D,
     pub sigma: f32,
     pub epsilon: f32,
     pub mass: f32,
 }
 
-/// A rigid linear molecule: its sites along the axis at angle `θ`.
+/// A rigid molecule: its sites at fixed offsets.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LinearMolecule {
-    pub sites: Vec<MoleculeSite>,
+    pub sites: Vec<Site>,
 }
 
 impl LinearMolecule {
     /// Two equal sites `bond` apart, centred.
     pub(crate) fn diatomic(bond: f32, sigma: f32, epsilon: f32, site_mass: f32) -> Self {
-        let site = |offset| MoleculeSite {
-            offset,
+        let site = |x| Site {
+            offset: Vec2D::new(x, 0.0),
             sigma,
             epsilon,
             mass: site_mass,
@@ -54,20 +55,12 @@ impl LinearMolecule {
         self.sites.iter().map(|s| s.mass).sum()
     }
 
-    /// `Σ m x²` about the centre of mass.
+    /// `Σ m r²` about the centre of mass.
     pub(crate) fn inertia(&self) -> f32 {
         self.sites
             .iter()
-            .map(|s| s.mass * s.offset * s.offset)
+            .map(|s| s.mass * s.offset.norm() * s.offset.norm())
             .sum()
-    }
-
-    /// Largest distance of a site centre from the centre of mass.
-    pub(crate) fn half_length(&self) -> f32 {
-        self.sites
-            .iter()
-            .map(|s| s.offset.abs())
-            .fold(0.0, f32::max)
     }
 
     /// Largest site `σ`.
@@ -81,7 +74,7 @@ impl LinearMolecule {
         2.0 * self
             .sites
             .iter()
-            .map(|s| s.offset.abs() + 0.5 * s.sigma)
+            .map(|s| s.offset.norm() + 0.5 * s.sigma)
             .fold(0.0, f32::max)
     }
 }
@@ -91,6 +84,15 @@ impl LinearMolecule {
 pub(crate) fn axis(theta: f32) -> Vec2D {
     let (sin, cos) = theta.sin_cos();
     Vec2D::new(cos, sin)
+}
+
+/// The body-frame `offset` turned to the axis `axis`.
+#[inline]
+pub(crate) fn turn(offset: Vec2D, axis: Vec2D) -> Vec2D {
+    Vec2D::new(
+        axis.x * offset.x - axis.y * offset.y,
+        axis.y * offset.x + axis.x * offset.y,
+    )
 }
 
 /// 2D cross product `a × b` (the z component): the torque of force `b` at
@@ -106,36 +108,29 @@ pub(crate) fn cross(a: Vec2D, b: Vec2D) -> f32 {
 #[derive(Clone)]
 pub(crate) struct SitePairs {
     /// (offset in `a`, offset in `b`, potential) of each site pair.
-    pairs: Vec<(f32, f32, CappedPotential<LennardJones>)>,
+    pairs: Vec<(Vec2D, Vec2D, CappedPotential<LennardJones>)>,
     pub cutoff: f32,
 }
 
 impl SitePairs {
     pub(crate) fn new(a: &Species, b: &Species, cap: CapSettings) -> Self {
-        let sites = |s: &Species| match s.model.molecule() {
-            Some(m) => m
-                .sites
-                .iter()
-                .map(|x| (x.offset, x.sigma, x.epsilon))
-                .collect(),
-            None => vec![(0.0, s.sigma, s.epsilon)],
-        };
-        let sites_b = sites(b);
-        let pairs: Vec<_> = sites(a)
+        let sites_b = b.sites();
+        let pairs: Vec<_> = a
+            .sites()
             .into_iter()
-            .flat_map(|(oa, sa, ea)| {
-                sites_b.iter().map(move |&(ob, sb, eb)| {
+            .flat_map(|sa| {
+                sites_b.iter().map(move |sb| {
                     let law = LennardJones {
-                        sigma: 0.5 * (sa + sb),
-                        epsilon: (ea * eb).sqrt(),
+                        sigma: 0.5 * (sa.sigma + sb.sigma),
+                        epsilon: (sa.epsilon * sb.epsilon).sqrt(),
                     };
-                    (oa, ob, CappedPotential::new(law, cap))
+                    (sa.offset, sb.offset, CappedPotential::new(law, cap))
                 })
             })
             .collect();
         let cutoff = pairs
             .iter()
-            .map(|(oa, ob, p)| oa.abs() + ob.abs() + p.cutoff())
+            .map(|(oa, ob, p)| oa.norm() + ob.norm() + p.cutoff())
             .fold(0.0, f32::max);
         Self { pairs, cutoff }
     }
@@ -143,9 +138,11 @@ impl SitePairs {
     /// The stiffest site pair on the reduced mass of its two sites; a site at
     /// lever `L` moves across the axis as `1/(1/M + L²/I)`.
     pub(crate) fn omega_sq(&self, a: &Species, b: &Species) -> f32 {
-        let site_mass = |s: &Species, offset: f32| match s.model.molecule() {
-            Some(m) => 1.0 / (1.0 / m.mass() + offset * offset / m.inertia()),
-            None => s.mass,
+        let site_mass = |s: &Species, offset: Vec2D| match s.model.inertia() {
+            Some(inertia) if s.sites().len() > 1 => {
+                1.0 / (1.0 / s.mass + offset.norm_sq() / inertia)
+            }
+            _ => s.mass,
         };
         self.pairs
             .iter()
@@ -158,9 +155,9 @@ impl SitePairs {
 
     pub(crate) fn eval(&self, r: Vec2D, axis_i: Vec2D, axis_j: Vec2D, out: &mut ForceResult) {
         for (oa, ob, pot) in &self.pairs {
-            let pa = axis_i.scaled(*oa);
+            let pa = turn(*oa, axis_i);
             // From site a to site b.
-            let d = r.add_scaled(&axis_j, *ob) - &pa;
+            let d = r + turn(*ob, axis_j) - &pa;
             let dist = d.norm();
             if dist >= pot.cutoff() || dist <= f32::EPSILON {
                 continue;
@@ -201,10 +198,10 @@ mod tests {
     #[test]
     fn n2_dumbbell_is_built_from_its_sites() {
         let s = table().species(id("N2_2S"));
-        let m = s.model.molecule().unwrap();
-        assert_eq!(m.sites.len(), 2);
+        let sites = s.sites();
+        assert_eq!(sites.len(), 2);
         let bond = (1.10 / 3.405) as f32;
-        assert!((m.sites[1].offset - m.sites[0].offset - bond).abs() < 1e-6);
+        assert!((sites[1].offset.x - sites[0].offset.x - bond).abs() < 1e-6);
         assert!((s.mass - (2.0 * 14.007 / 39.948) as f32).abs() < 1e-6);
         assert!((s.model.inertia().unwrap() - s.mass * 0.25 * bond * bond).abs() < 1e-6);
         assert_eq!(s.epsilon, 0.0, "the centre itself does not interact");
@@ -252,16 +249,16 @@ mod tests {
     #[test]
     fn co2_chain_is_built_from_its_sites() {
         let s = table().species(id("CO2_3S"));
-        let m = s.model.molecule().unwrap();
-        let (o, c) = (m.sites[0], m.sites[1]);
-        assert_eq!(m.sites.len(), 3);
-        assert_eq!(c.offset, 0.0);
-        assert_eq!(m.sites[2].offset, -o.offset);
-        assert!((o.offset.abs() - (1.16 / 3.405) as f32).abs() < 1e-6);
+        let sites = s.sites();
+        let (o, c) = (sites[0], sites[1]);
+        assert_eq!(sites.len(), 3);
+        assert_eq!(c.offset, Vec2D::zero());
+        assert_eq!(sites[2].offset, -o.offset);
+        assert!((o.offset.norm() - (1.16 / 3.405) as f32).abs() < 1e-6);
         assert!((o.sigma - (3.05 / 3.405) as f32).abs() < 1e-6);
         assert!((c.epsilon - (27.0 / 119.8) as f32).abs() < 1e-6);
         assert!((s.mass - ((2.0 * 15.999 + 12.011) / 39.948) as f32).abs() < 1e-6);
-        assert!((s.model.inertia().unwrap() - 2.0 * o.mass * o.offset * o.offset).abs() < 1e-6);
+        assert!((s.model.inertia().unwrap() - 2.0 * o.mass * o.offset.norm_sq()).abs() < 1e-6);
     }
 
     /// Force and torque of the three-site chain vs finite differences.

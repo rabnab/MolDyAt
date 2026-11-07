@@ -115,10 +115,7 @@ fn the_backstop_acts_on_the_sites_of_a_molecule() {
         theta,
         co2,
     );
-    let half_length = {
-        let species = mc.world().species().species(co2).clone();
-        species.model.molecule().unwrap().half_length()
-    };
+    let half_length = mc.world().species().species(co2).sites()[2].offset.x;
     let floor = {
         let region = mc.world().world_region();
         region.get_tl().1.min(region.get_br().1)

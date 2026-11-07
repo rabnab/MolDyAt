@@ -123,7 +123,7 @@ impl PotentialConfig {
             // Lorentz–Berthelot; there are no site overrides yet).
             if let Some(name) = [o.a, o.b]
                 .into_iter()
-                .find(|&id| species.species(id).model.molecule().is_some())
+                .find(|&id| species.species(id).sites().len() > 1)
                 .map(|id| &species.species(id).name)
             {
                 return Err(invalid(format!(
@@ -317,7 +317,7 @@ impl WallsConfig {
                     known.join(", ")
                 ))
             })?;
-            if species.species(id).model.molecule().is_some() {
+            if species.species(id).sites().len() > 1 {
                 return Err(invalid(format!(
                     "{key}: {} is a molecule species; its sites meet the walls with the \
                      mixed site laws, which cannot be overridden",
