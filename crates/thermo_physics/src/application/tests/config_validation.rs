@@ -121,8 +121,10 @@ impl Generator {
     fn overrides(&mut self, key: &str, table: &[Entry], pairs: bool) -> Vec<Value> {
         let mut used: Vec<Vec<String>> = Vec::new();
         let mut out = Vec::new();
-        for i in 0..self.rng.random_range(0..=2) {
-            let key = format!("{key}[{i}]");
+        for _ in 0..self.rng.random_range(0..=2) {
+            // The position in the list, which the validator reports; a
+            // skipped duplicate takes no slot.
+            let key = format!("{key}[{}]", out.len());
             let mut broken = false;
             let mut names: Vec<String> = (0..if pairs { 2 } else { 1 })
                 .map(|_| {
