@@ -491,12 +491,4 @@ impl SimulationWorld {
             .for_each(|ball| ball.cold.hood.remap(&new_index));
         self.rebuild_cell_grid();
     }
-
-    pub(crate) fn resize_cell_grid(&mut self, world_rect: crate::objects2d::Rect) {
-        self.world_rect = world_rect;
-        let list_radius = self.physics.max_list_radius(self.cache.species_present);
-        self.cache.cell_grid = CellGrid::new(self.world_rect, list_radius)
-            .expect("Failed to create cell grid on resize");
-        self.rebuild_cell_grid();
-    }
 }

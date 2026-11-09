@@ -176,8 +176,8 @@ impl MainContent {
             }
         }
 
-        // Rebuild cell grid with new dimensions
-        world.resize_cell_grid(world_rect);
+        world.world_rect = world_rect;
+        world.rebuild_cell_grid();
 
         // Discard stale thermo history — accumulated grids used the old
         // world rect and would produce incorrect cell-to-world mapping.

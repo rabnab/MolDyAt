@@ -16,18 +16,6 @@ impl Rect {
         Self { x, y, w, h }
     }
 
-    /// Create a Rect from top-left and bottom-right coordinates
-    pub(crate) fn from_tl_br(tl: (f32, f32), br: (f32, f32)) -> Self {
-        let (x1, y1) = tl;
-        let (x2, y2) = br;
-        Self {
-            x: x1,
-            y: y1,
-            w: x2 - x1,
-            h: y2 - y1,
-        }
-    }
-
     /// Get top-left corner coordinates.
     ///
     /// # Returns

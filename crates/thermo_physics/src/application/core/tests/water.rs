@@ -209,8 +209,10 @@ fn water_limits_the_time_step_while_present() {
         "step advanced {advanced}"
     );
 
+    assert!(!mc.world().cached_force_results().is_empty());
     mc.world_mut().clear_balls();
     assert_eq!(mc.active_time_step(), set, "back to the set step");
+    assert!(mc.world().cached_force_results().is_empty());
 }
 
 /// The limit also ends when the last water ball becomes invalid and is

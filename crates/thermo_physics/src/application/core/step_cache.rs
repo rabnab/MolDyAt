@@ -3,7 +3,9 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! What the step derives from the world's balls or reuses between steps.
-//! None of it is saved; all of it follows from `SimulationWorld::balls`.
+//! None of it is saved. Only the grid, the species present and the force
+//! results follow from the balls; the scratch buffers and phase timings are
+//! kept across `balls_changed`.
 
 use super::SimulationWorld;
 use super::step_scratch::StepScratch;
@@ -57,7 +59,7 @@ impl SimulationWorld {
     /// a ball or sorting it (`reorder_balls_by_cell` renumbers the lists):
     /// every index is void, so all neighbour lists are cleared and rebuilt
     /// at the next neighbour pass.
-    pub fn balls_changed(&mut self) {
+    pub(crate) fn balls_changed(&mut self) {
         for ball in &mut self.balls {
             ball.cold.hood.clear_neighbours();
             ball.last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
@@ -67,12 +69,14 @@ impl SimulationWorld {
     }
 
     /// Put every ball into the grid from scratch, with cells sized for the
-    /// species now in the world.
+    /// species now in the world and covering `world_rect`.
     pub fn rebuild_cell_grid(&mut self) {
         let cache = &mut self.cache;
         cache.species_present = self.balls.iter().map(Ball2D::species).collect();
         let list_radius = self.physics.max_list_radius(cache.species_present);
-        if list_radius != cache.cell_grid.list_radius() {
+        if list_radius != cache.cell_grid.list_radius()
+            || cache.cell_grid.world_rect() != self.world_rect
+        {
             cache.cell_grid = CellGrid::new(self.world_rect, list_radius)
                 .expect("Failed to create cell grid for the species present");
         }

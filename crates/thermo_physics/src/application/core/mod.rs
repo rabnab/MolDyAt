@@ -158,7 +158,8 @@ impl SimulationWorld {
         self.step_count
     }
 
-    /// The last step's force results, in ball order (empty before the first step).
+    /// The last step's force results, in ball order (empty before the first
+    /// step and after `balls_changed`).
     pub fn cached_force_results(&self) -> &[ForceResult] {
         &self.cache.force_results
     }
