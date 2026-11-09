@@ -37,8 +37,7 @@ fn totals_only_count_up() {
     let mut previous = Values::default();
     for _ in 0..5 {
         content.simulation_step().unwrap();
-        let mut values = Values::default();
-        values.read(&content);
+        let values = Values::read(&content);
         for (observable, value) in values.iter() {
             if observable.kind == Kind::Total {
                 assert!(value >= previous[observable.id], "{:?}", observable.id);
@@ -53,8 +52,7 @@ fn read_matches_the_accessors_of_the_world() {
     let (mut content, _) = create_main_content();
     content.add_random_candidates(20);
     content.simulation_step().unwrap();
-    let mut values = Values::default();
-    values.read(&content);
+    let values = Values::read(&content);
 
     let sim = &content.world().sim;
     assert_eq!(

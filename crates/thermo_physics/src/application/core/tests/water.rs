@@ -200,9 +200,7 @@ fn water_limits_the_time_step_while_present() {
     assert_eq!(mc.time_step(), set, "the set time step is kept");
     let status = mc.status_info().expect("test config shows ball stats");
     assert_eq!(status.dt_limited_by, Some(species("H2O")));
-    let mut values = Values::default();
-    values.read(&mc);
-    assert_eq!(values[Obs::Dt], f64::from(water_dt()));
+    assert_eq!(Values::read(&mc)[Obs::Dt], f64::from(water_dt()));
 
     let t0 = mc.world().sim.get_time();
     mc.simulation_step().unwrap();

@@ -21,6 +21,7 @@ use crate::objects2d::SimThermostat;
 use crate::objects2d::ball_impl::{BallPhysics, SpeciesId, SpeciesSet};
 use crate::objects2d::wall_chain::Joint;
 use std::sync::Arc;
+use thermo_physics::application::observables::Values;
 
 /// Renderer snapshots of the simulation state.
 pub trait CreateSnapshot {
@@ -66,14 +67,12 @@ impl CreateSnapshot for MainContent {
         snapshot.debug = (!debug.neighbor_lines.is_empty()).then_some(debug);
         let new_ball_species = step_config.get_ball_factory().new_ball_species();
 
-        let mut values = snapshot.frame.values;
-        values.read(self);
         snapshot.frame = FrameInfo {
             simulation_step: world.step_count() as u64,
             world_generation: self.runtime().world_generation(),
             layers,
             time: world.sim().get_time(),
-            values,
+            values: Values::read(self),
             species_counts,
             gravity_force_multiple: current_gravity_force_multiple(
                 world.physics().constants.gravity,

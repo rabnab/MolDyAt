@@ -6,7 +6,7 @@
 //! carries them as one array ([`Values`]); headless frames, the metrics
 //! series and the status lines read it by [`Obs`] or iterate
 //! [`OBSERVABLES`]. A new scalar is a variant, its line in [`Values::read`]
-//! and an entry of the table.
+//! (the compiler asks for it) and an entry of the table.
 
 use crate::application::MainContent;
 use crate::objects2d::ball_impl::get_update_hood_call_cnt;
@@ -85,33 +85,32 @@ pub static OBSERVABLES: [Observable; 16] = [
 pub struct Values([f64; OBSERVABLES.len()]);
 
 impl Values {
-    /// Refill from the world, in place.
-    pub fn read(&mut self, main: &MainContent) {
+    /// The values of the world now. The `match` is exhaustive, so a new
+    /// [`Obs`] without its line here does not compile.
+    pub fn read(main: &MainContent) -> Self {
         let sim = &main.world().sim;
         let nets = sim.safety_nets_total;
         let (px, py) = main.wall_momentum();
-        for (id, value) in [
-            (Obs::Dt, f64::from(main.active_time_step())),
-            (Obs::KineticEnergy, f64::from(sim.get_kinetic_energy())),
-            (Obs::PotentialEnergy, f64::from(sim.get_potential_energy())),
+        Self(OBSERVABLES.map(|o| match o.id {
+            Obs::Dt => f64::from(main.active_time_step()),
+            Obs::KineticEnergy => f64::from(sim.get_kinetic_energy()),
+            Obs::PotentialEnergy => f64::from(sim.get_potential_energy()),
             // In f64 (#421): the headless delta and `E_tot` are formed from it.
-            (Obs::EnergyTotal, sim.total_energy()),
-            (Obs::WallMomentum, f64::from(px.hypot(py) as f32)),
-            (Obs::HoodUpdates, get_update_hood_call_cnt() as f64),
-            (Obs::MaxNeighbours, sim.max_neighbours as f64),
+            Obs::EnergyTotal => sim.total_energy(),
+            Obs::WallMomentum => f64::from(px.hypot(py) as f32),
+            Obs::HoodUpdates => get_update_hood_call_cnt() as f64,
+            Obs::MaxNeighbours => sim.max_neighbours as f64,
             // Centre-of-mass frame.
-            (Obs::Temperature, f64::from(sim.temperature)),
-            (Obs::MaxV, f64::from(sim.max_v)),
-            (Obs::VComX, f64::from(sim.v_com.x)),
-            (Obs::VComY, f64::from(sim.v_com.y)),
-            (Obs::PhysicsFps, f64::from(main.runtime().physics_fps())),
-            (Obs::Braked, nets.braked as f64),
-            (Obs::CappedPairs, nets.capped_pairs as f64),
-            (Obs::BackstopHits, nets.backstop_hits as f64),
-            (Obs::OverlapCorrections, nets.overlap_corrections as f64),
-        ] {
-            self[id] = value;
-        }
+            Obs::Temperature => f64::from(sim.temperature),
+            Obs::MaxV => f64::from(sim.max_v),
+            Obs::VComX => f64::from(sim.v_com.x),
+            Obs::VComY => f64::from(sim.v_com.y),
+            Obs::PhysicsFps => f64::from(main.runtime().physics_fps()),
+            Obs::Braked => nets.braked as f64,
+            Obs::CappedPairs => nets.capped_pairs as f64,
+            Obs::BackstopHits => nets.backstop_hits as f64,
+            Obs::OverlapCorrections => nets.overlap_corrections as f64,
+        }))
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (&'static Observable, f64)> {
