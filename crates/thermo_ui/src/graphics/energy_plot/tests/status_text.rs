@@ -5,28 +5,27 @@
 //! The status lines formatted from a snapshot's numbers (#341).
 
 use crate::graphics::energy_plot::status_text::{status_text, write_species_lines};
-use thermo_physics::application::sim_stats::{SafetyNets, StatusNumbers};
-use thermo_physics::objects2d::Vec2D;
+use thermo_physics::application::observables::Obs;
+use thermo_physics::application::sim_stats::StatusInfo;
 use thermo_runtime::application::renderer_snapshot::RendererSnapshot;
 
-fn numbers(real_units: bool) -> StatusNumbers {
-    StatusNumbers {
+fn info(real_units: bool) -> StatusInfo {
+    StatusInfo {
         real_units,
-        dt: 0.01,
         dt_limited_by: None,
-        hood_updates: 42,
-        max_neighbours: 6,
-        temperature: 1.0,
-        max_v: 2.0,
-        v_com: Vec2D::new(0.0, 0.0),
-        safety_nets: SafetyNets::default(),
     }
 }
 
-fn snapshot(status: Option<StatusNumbers>) -> RendererSnapshot {
+fn snapshot(status: Option<StatusInfo>) -> RendererSnapshot {
     let mut snapshot = RendererSnapshot::new();
     snapshot.frame.time = 100.0;
     snapshot.frame.status = status;
+    let values = &mut snapshot.frame.values;
+    values[Obs::Dt] = f64::from(0.01_f32);
+    values[Obs::HoodUpdates] = 42.0;
+    values[Obs::MaxNeighbours] = 6.0;
+    values[Obs::Temperature] = 1.0;
+    values[Obs::MaxV] = 2.0;
     snapshot
 }
 
@@ -37,7 +36,7 @@ fn no_status_while_ball_stats_are_hidden() {
 
 #[test]
 fn reduced_status_shows_the_neighbour_updates_and_starts_with_the_rates() {
-    let text = status_text(&snapshot(Some(numbers(false))), "fps 60").unwrap();
+    let text = status_text(&snapshot(Some(info(false))), "fps 60").unwrap();
     assert!(text.starts_with("fps 60 time: 100.0 (dt:0.0100)"), "{text}");
     assert!(text.contains("#hood: 42"), "{text}");
     assert!(text.contains("maxNeig: 6"), "{text}");
@@ -45,7 +44,7 @@ fn reduced_status_shows_the_neighbour_updates_and_starts_with_the_rates() {
 
 #[test]
 fn real_status_shows_kelvin_and_picoseconds() {
-    let text = status_text(&snapshot(Some(numbers(true))), "fps 60").unwrap();
+    let text = status_text(&snapshot(Some(info(true))), "fps 60").unwrap();
     assert!(text.contains("time: 215.6ps"), "{text}");
     assert!(text.contains("dt: 21.6fs"), "{text}");
     assert!(text.contains("Temp: 119.80K"), "{text}");
@@ -53,7 +52,7 @@ fn real_status_shows_kelvin_and_picoseconds() {
 
 #[test]
 fn species_lines_name_the_new_ball_species_and_count_per_species() {
-    let mut snapshot = snapshot(Some(numbers(false)));
+    let mut snapshot = snapshot(Some(info(false)));
     let table = snapshot.balls.species.clone();
     let ar = table
         .ids()
@@ -73,14 +72,14 @@ fn species_lines_name_the_new_ball_species_and_count_per_species() {
 
 #[test]
 fn status_names_the_species_that_limits_the_time_step() {
-    let mut snapshot = snapshot(Some(numbers(false)));
+    let mut snapshot = snapshot(Some(info(false)));
     let text = status_text(&snapshot, "fps 60").unwrap();
     assert!(!text.contains("dt limited"), "{text}");
 
     let water = snapshot.balls.species.by_name("H2O").expect("built-in H2O");
-    snapshot.frame.status = Some(StatusNumbers {
+    snapshot.frame.status = Some(StatusInfo {
         dt_limited_by: Some(water),
-        ..numbers(false)
+        ..info(false)
     });
     let text = status_text(&snapshot, "fps 60").unwrap();
     assert!(text.contains("\ndt limited by H2O\n"), "{text}");
@@ -89,16 +88,13 @@ fn status_names_the_species_that_limits_the_time_step() {
 /// The safety-net counts since the start are one status line (#422).
 #[test]
 fn status_counts_the_safety_nets() {
-    let numbers = StatusNumbers {
-        safety_nets: SafetyNets {
-            braked: 1,
-            capped_pairs: 22,
-            backstop_hits: 3,
-            overlap_corrections: 4,
-        },
-        ..numbers(false)
-    };
-    let text = status_text(&snapshot(Some(numbers)), "fps 60").unwrap();
+    let mut snapshot = snapshot(Some(info(false)));
+    let values = &mut snapshot.frame.values;
+    values[Obs::Braked] = 1.0;
+    values[Obs::CappedPairs] = 22.0;
+    values[Obs::BackstopHits] = 3.0;
+    values[Obs::OverlapCorrections] = 4.0;
+    let text = status_text(&snapshot, "fps 60").unwrap();
     assert!(
         text.contains("\nNets: brake 1 cap 22 backstop 3 overlap 4\n"),
         "{text}"

@@ -7,8 +7,9 @@
 //! only, and the text is built when the window shows it.
 
 use std::fmt::Write;
-use thermo_physics::application::sim_stats::StatusNumbers;
+use thermo_physics::application::observables::{Obs, Values};
 use thermo_physics::application::units::UnitSystem;
+use thermo_physics::objects2d::Vec2D;
 use thermo_runtime::application::renderer_snapshot::RendererSnapshot;
 
 /// Units of the real-units display (key `D`): the reduced units, Ar (see `units`).
@@ -19,17 +20,20 @@ const UNITS: UnitSystem = UnitSystem::REDUCED;
 pub fn status_text(snapshot: &RendererSnapshot, metrics_line: &str) -> Option<String> {
     let status = snapshot.frame.status.as_ref()?;
     let mut text = if status.real_units {
-        real_units_lines(snapshot, status, metrics_line)
+        real_units_lines(snapshot, metrics_line)
     } else {
-        reduced_units_lines(snapshot, status, metrics_line)
+        reduced_units_lines(snapshot, metrics_line)
     };
     text.push('\n');
     // Safety nets that do not conserve energy, since the start (#422).
-    let nets = &status.safety_nets;
+    let v = &snapshot.frame.values;
     let _ = writeln!(
         text,
         "Nets: brake {} cap {} backstop {} overlap {}",
-        nets.braked, nets.capped_pairs, nets.backstop_hits, nets.overlap_corrections
+        v[Obs::Braked],
+        v[Obs::CappedPairs],
+        v[Obs::BackstopHits],
+        v[Obs::OverlapCorrections]
     );
     if let Some(id) = status.dt_limited_by {
         let name = snapshot
@@ -49,8 +53,9 @@ fn ball_count(snapshot: &RendererSnapshot) -> usize {
 
 /// Status lines in physical units (Ar reference): time in ps, the time step in fs,
 /// temperature in K, energies in J, speeds in m/s.
-fn real_units_lines(snapshot: &RendererSnapshot, s: &StatusNumbers, metrics_line: &str) -> String {
+fn real_units_lines(snapshot: &RendererSnapshot, metrics_line: &str) -> String {
     let frame = &snapshot.frame;
+    let v = &frame.values;
     format!(
         "{} | time: {:.1}ps | dt: {:.1}fs\n\
          #Balls: {} | maxNeig: {}\n\
@@ -60,42 +65,43 @@ fn real_units_lines(snapshot: &RendererSnapshot, s: &StatusNumbers, metrics_line
          vCOM: ({:.2e}, {:.2e})m/s",
         metrics_line,
         UNITS.to_picoseconds(frame.time),
-        UNITS.to_femtoseconds(s.dt),
+        UNITS.to_femtoseconds(f32_of(v, Obs::Dt)),
         ball_count(snapshot),
-        s.max_neighbours,
-        UNITS.to_joules(frame.total_energy()),
-        UNITS.to_joules(frame.kinetic_energy),
-        UNITS.to_joules(frame.potential_energy),
-        UNITS.to_kelvin(s.temperature),
-        UNITS.to_metres_per_second(s.max_v),
-        UNITS.to_metres_per_second(s.v_com.x),
-        UNITS.to_metres_per_second(s.v_com.y)
+        v[Obs::MaxNeighbours],
+        UNITS.to_joules(f32_of(v, Obs::EnergyTotal)),
+        UNITS.to_joules(f32_of(v, Obs::KineticEnergy)),
+        UNITS.to_joules(f32_of(v, Obs::PotentialEnergy)),
+        UNITS.to_kelvin(f32_of(v, Obs::Temperature)),
+        UNITS.to_metres_per_second(f32_of(v, Obs::MaxV)),
+        UNITS.to_metres_per_second(f32_of(v, Obs::VComX)),
+        UNITS.to_metres_per_second(f32_of(v, Obs::VComY))
     )
 }
 
 /// Status lines in reduced units.
-fn reduced_units_lines(
-    snapshot: &RendererSnapshot,
-    s: &StatusNumbers,
-    metrics_line: &str,
-) -> String {
+fn reduced_units_lines(snapshot: &RendererSnapshot, metrics_line: &str) -> String {
     let frame = &snapshot.frame;
+    let v = &frame.values;
     format!(
         "{} time: {:.1} (dt:{:.4})\n#Balls: {} #hood: {}\nmaxNeig: {}\n\
             TotalE: {:.3E}\nEkin: {:.3E}\nEpot: {:.3E}\nTemp: {:.3}\nmaxV: {:.2}\nvCOM: {}",
         metrics_line,
         frame.time,
-        s.dt,
+        f32_of(v, Obs::Dt),
         ball_count(snapshot),
-        s.hood_updates,
-        s.max_neighbours,
-        frame.total_energy(),
-        frame.kinetic_energy,
-        frame.potential_energy,
-        s.temperature,
-        s.max_v,
-        s.v_com,
+        v[Obs::HoodUpdates],
+        v[Obs::MaxNeighbours],
+        f32_of(v, Obs::EnergyTotal),
+        f32_of(v, Obs::KineticEnergy),
+        f32_of(v, Obs::PotentialEnergy),
+        f32_of(v, Obs::Temperature),
+        f32_of(v, Obs::MaxV),
+        Vec2D::new(f32_of(v, Obs::VComX), f32_of(v, Obs::VComY)),
     )
+}
+
+fn f32_of(values: &Values, id: Obs) -> f32 {
+    values[id] as f32
 }
 
 /// Status lines for the species (#238): the species of new balls, then

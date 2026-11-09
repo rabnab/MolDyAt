@@ -249,25 +249,20 @@ mod tests {
 
     #[test]
     fn begin_frame_pulls_snapshot_and_updates_energy_window() {
-        use thermo_physics::application::sim_stats::StatusNumbers;
+        use thermo_physics::application::observables::Obs;
+        use thermo_physics::application::sim_stats::StatusInfo;
         let mut snapshot = RendererSnapshot::new();
         snapshot.frame.simulation_step = 7;
-        snapshot.frame.kinetic_energy = 1.5;
-        snapshot.frame.potential_energy = 2.5;
-        snapshot.frame.energy_total =
-            f64::from(snapshot.frame.kinetic_energy) + f64::from(snapshot.frame.potential_energy);
+        let values = &mut snapshot.frame.values;
+        values[Obs::KineticEnergy] = 1.5;
+        values[Obs::PotentialEnergy] = 2.5;
+        values[Obs::EnergyTotal] = 4.0;
+        values[Obs::PhysicsFps] = 120.0;
+        values[Obs::Dt] = f64::from(0.01_f32);
         snapshot.frame.time = 3.0;
-        snapshot.frame.physics_fps = 120.0;
-        snapshot.frame.status = Some(StatusNumbers {
+        snapshot.frame.status = Some(StatusInfo {
             real_units: false,
-            dt: 0.01,
             dt_limited_by: None,
-            hood_updates: 0,
-            max_neighbours: 0,
-            temperature: 0.0,
-            max_v: 0.0,
-            v_com: Vec2D::zero(),
-            safety_nets: Default::default(),
         });
 
         let physics = PhysicsCoordinator::with_snapshot(snapshot);

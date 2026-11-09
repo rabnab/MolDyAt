@@ -10,6 +10,7 @@ use crate::application::{
     CommandHandler, DomainCommandHandler, PhysicsRuntime, PhysicsThread, ShutdownSignal,
 };
 use crate::metrics::MetricsRegistry;
+use thermo_physics::application::observables::Obs;
 
 use crate::objects2d::{Rect, Vec2D};
 
@@ -479,7 +480,8 @@ fn test_snapshots_follow_changes_for_paused_and_running_by_layers() {
                 std::thread::sleep(SETTLE);
                 let after = latest().expect("snapshot");
                 samples += 1;
-                if !paused || after.frame.physics_fps == before.frame.physics_fps || samples == 4 {
+                let fps = |s: &RendererSnapshot| s.frame.values[Obs::PhysicsFps];
+                if !paused || fps(&after) == fps(&before) || samples == 4 {
                     break (before, after);
                 }
             };

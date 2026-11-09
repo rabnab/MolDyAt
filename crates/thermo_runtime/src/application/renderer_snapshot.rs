@@ -18,12 +18,13 @@
 //! refills the vector without allocating.
 
 use crate::application::log_util::SpeciesCounts;
-use crate::application::sim_stats::{SafetyNets, StatusNumbers};
+use crate::application::sim_stats::StatusInfo;
 use crate::objects2d::ball_impl::{DEFAULT_SPECIES, SpeciesId, SpeciesSet, SpeciesTable};
 use crate::objects2d::line_segment::valve_half_width;
 use crate::objects2d::{Rect, SimLineSegment, SimSourceSphere, SimThermostat, Vec2D};
 use std::sync::Arc;
 use std::time::Instant;
+use thermo_physics::application::observables::Values;
 
 use crate::application::scene_layers::SceneLayers;
 use crate::application::thermo_field::CellFields;
@@ -276,26 +277,9 @@ pub struct FrameInfo {
     /// Simulation time
     pub time: f32,
 
-    /// Safety-net interventions since the start (#422), for headless output
-    /// and the metrics.
-    pub safety_nets: SafetyNets,
-
-    /// Time step the steps run with: the set one, limited to the largest
-    /// stable step of the species present (`MainContent::active_time_step`).
-    pub dt: f32,
-
-    /// Kinetic energy of the system
-    pub kinetic_energy: f32,
-
-    /// Potential energy of the system
-    pub potential_energy: f32,
-
-    /// Kinetic plus potential energy, summed in f64 from the f64 totals
-    /// (#421); `delta_energy` and `E_tot` are formed from it.
-    pub energy_total: f64,
-
-    /// Magnitude of the momentum given to walls since the start of the run.
-    pub wall_momentum: f32,
+    /// The scalars the simulation reports (energies, time step, wall
+    /// momentum, safety nets, ...), declared in `observables.rs`.
+    pub values: Values,
 
     /// Ball count per species index (see `SpeciesTable`), whatever the
     /// layers: the metrics store and the status lines read it.
@@ -304,16 +288,12 @@ pub struct FrameInfo {
     /// Current gravity preset as a multiple of Earth gravity (0, 1, or 2).
     pub gravity_force_multiple: u8,
 
-    /// Actual physics thread step rate (steps per second)
-    /// This is the true simulation performance, independent of rendering
-    pub physics_fps: f32,
-
     /// The world rectangle (the cell grid's bounds).
     pub world_rect: Rect,
 
-    /// The numbers of the status lines, `None` while ball stats are not
-    /// shown (`B`). The UI formats them into text (#341).
-    pub status: Option<StatusNumbers>,
+    /// What the status lines need besides the values, `None` while ball
+    /// stats are not shown (`B`). The UI formats them into text (#341).
+    pub status: Option<StatusInfo>,
 
     /// Timestamp for debugging
     pub created_at: Instant,
@@ -326,27 +306,13 @@ impl Default for FrameInfo {
             world_generation: 0,
             layers: SceneLayers::ALL,
             time: 0.0,
-            dt: 0.0,
-            safety_nets: SafetyNets::default(),
-            kinetic_energy: 0.0,
-            potential_energy: 0.0,
-            energy_total: 0.0,
-            wall_momentum: 0.0,
+            values: Values::default(),
             species_counts: [0; SpeciesSet::CAPACITY],
             gravity_force_multiple: 0,
-            physics_fps: 0.0,
             world_rect: Rect::new(0.0, 0.0, 0.0, 0.0),
             status: None,
             created_at: Instant::now(),
         }
-    }
-}
-
-impl FrameInfo {
-    /// Returns the total energy (kinetic + potential), narrowed to f32 for
-    /// display; [`Self::energy_total`] holds it in f64.
-    pub fn total_energy(&self) -> f32 {
-        self.energy_total as f32
     }
 }
 
@@ -504,11 +470,6 @@ impl RendererSnapshot {
     /// Returns true if the snapshot contains no balls
     pub fn is_empty(&self) -> bool {
         self.balls.is_empty()
-    }
-
-    /// Returns the total energy (kinetic + potential)
-    pub fn total_energy(&self) -> f32 {
-        self.frame.total_energy()
     }
 }
 

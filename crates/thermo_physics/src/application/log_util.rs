@@ -3,27 +3,20 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::application::MainContent;
-use crate::application::sim_stats::StatusNumbers;
-use crate::objects2d::ball_impl::{Ball2D, Named, SpeciesSet, get_update_hood_call_cnt};
+use crate::application::sim_stats::StatusInfo;
+use crate::objects2d::ball_impl::{Ball2D, Named, SpeciesSet};
 
 impl MainContent {
-    /// The numbers of the status lines, or `None` while ball stats are not
-    /// shown (`B`). The UI formats them (#341).
-    pub fn status_numbers(&self) -> Option<StatusNumbers> {
-        if !self.options().show_ball_stats {
-            return None;
-        }
-        let dt = self.active_time_step();
-        let dt_limited_by = self
-            .time_step_limit()
-            .filter(|_| dt < self.time_step())
-            .map(|(_, id)| id);
-        Some(self.world().sim.status_numbers(
-            self.options().real_data,
-            dt,
-            dt_limited_by,
-            get_update_hood_call_cnt(),
-        ))
+    /// What the status lines need besides the observable values, or `None`
+    /// while ball stats are not shown (`B`). The UI formats them (#341).
+    pub fn status_info(&self) -> Option<StatusInfo> {
+        self.options().show_ball_stats.then(|| StatusInfo {
+            real_units: self.options().real_data,
+            dt_limited_by: self
+                .time_step_limit()
+                .filter(|_| self.active_time_step() < self.time_step())
+                .map(|(_, id)| id),
+        })
     }
 }
 

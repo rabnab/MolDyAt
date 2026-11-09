@@ -20,12 +20,12 @@ fn test_frame_record_contains_v1_schema_and_summary_fields() {
     let mut snapshot = RendererSnapshot::new();
     snapshot.frame.simulation_step = 42;
     snapshot.frame.time = 1.25;
-    snapshot.frame.kinetic_energy = 3.5;
-    snapshot.frame.potential_energy = -1.0;
-    snapshot.frame.energy_total =
-        f64::from(snapshot.frame.kinetic_energy) + f64::from(snapshot.frame.potential_energy);
+    let values = &mut snapshot.frame.values;
+    values[Obs::KineticEnergy] = 3.5;
+    values[Obs::PotentialEnergy] = -1.0;
+    values[Obs::EnergyTotal] = 2.5;
+    values[Obs::PhysicsFps] = 144.0;
     snapshot.frame.gravity_force_multiple = 2;
-    snapshot.frame.physics_fps = 144.0;
 
     let line = frame_to_jsonl(&snapshot, Some(2.0));
     let value: serde_json::Value = serde_json::from_str(&line).expect("valid json");
@@ -103,10 +103,10 @@ fn test_console_summary_contains_required_fields() {
     let mut snapshot = RendererSnapshot::new();
     snapshot.frame.simulation_step = 12;
     snapshot.frame.time = 0.12;
-    snapshot.frame.kinetic_energy = 2.5;
-    snapshot.frame.potential_energy = -1.25;
-    snapshot.frame.energy_total =
-        f64::from(snapshot.frame.kinetic_energy) + f64::from(snapshot.frame.potential_energy);
+    let values = &mut snapshot.frame.values;
+    values[Obs::KineticEnergy] = 2.5;
+    values[Obs::PotentialEnergy] = -1.25;
+    values[Obs::EnergyTotal] = 1.25;
 
     let line = frame_to_console_summary(&snapshot, Some(1.0));
 
@@ -225,11 +225,11 @@ fn test_non_finite_values_serialize_as_null() {
     let mut snapshot = RendererSnapshot::new();
     snapshot.frame.simulation_step = 1;
     snapshot.frame.time = f32::NAN;
-    snapshot.frame.kinetic_energy = f32::INFINITY;
-    snapshot.frame.potential_energy = f32::NEG_INFINITY;
-    snapshot.frame.energy_total =
-        f64::from(snapshot.frame.kinetic_energy) + f64::from(snapshot.frame.potential_energy);
-    snapshot.frame.physics_fps = f32::NAN;
+    let values = &mut snapshot.frame.values;
+    values[Obs::KineticEnergy] = f64::INFINITY;
+    values[Obs::PotentialEnergy] = f64::NEG_INFINITY;
+    values[Obs::EnergyTotal] = f64::NAN;
+    values[Obs::PhysicsFps] = f64::NAN;
 
     let line = frame_to_jsonl(&snapshot, Some(0.0));
     let value: serde_json::Value = serde_json::from_str(&line).expect("valid json");

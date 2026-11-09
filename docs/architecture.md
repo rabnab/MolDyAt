@@ -353,13 +353,24 @@ new visual adds a section or data derived from one, not a top-level field:
 
 | Section | Type | Holds |
 |---|---|---|
-| `frame` | `FrameInfo` | Step, world generation, layers, time, energies, wall momentum, ball count per species, gravity preset, physics rate, world rectangle, and the numbers of the status lines (`StatusNumbers`, which the UI formats: `energy_plot/status_text.rs`) |
+| `frame` | `FrameInfo` | Step, world generation, layers, time, ball count per species, gravity preset, world rectangle, the scalars the simulation reports as one array indexed by `Obs` (`Values`: energies, time step, wall momentum, temperature, safety nets, physics rate, ...), and what the status lines need besides them (`StatusInfo`, which the UI formats: `energy_plot/status_text.rs`) |
 | `balls` | `BallBuffer` | `BallRenderData` per ball (no heap data), the species table, the species of new balls and its ring radii; derefs to the ball slice |
 | `operators` | `OperatorSnapshot` | Wall pieces, walls, valve spans, source spheres, thermostats |
 | `fields` | `FieldSnapshot` | The cell grid spec and the averaged per-cell fields (`CellFields`: temperature, pressure, density, flow velocity) with their grid |
 | `debug` | `Option<DebugSnapshot>` | Neighbour lines of verbose balls; `None` without any |
 
 `PrepareContext` passes the sections, not the snapshot, to the pipelines.
+
+**Reported values.** Each scalar the simulation reports is declared once in
+`thermo_physics/src/application/observables.rs`: an `Obs` id and an entry of
+`OBSERVABLES` with its kind (`Gauge`, or `Total`, a count since the start),
+how to read it from the world, and the outputs it appears in (the headless
+frame key, the metrics series name, description and unit). The snapshot's
+`Values` array is refilled from it; headless frames and the metrics registry
+iterate the table, and the status lines read their numbers by `Obs`. A new
+scalar is its computation, a variant and an entry, plus a test. Values with
+their own structure (per-species counts, distributions, thermo grids) stay
+out of the table.
 
 The renderer chooses which `SceneLayers` it needs (`BASE`, `BALLS`, `THERMO`,
 `READOUTS`) with a `View` command; `LAYERS` (`scene_layers.rs`) describes

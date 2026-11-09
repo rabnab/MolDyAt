@@ -64,27 +64,22 @@ impl CreateSnapshot for MainContent {
             }
         }
         snapshot.debug = (!debug.neighbor_lines.is_empty()).then_some(debug);
-        let (wall_px, wall_py) = self.wall_momentum();
         let new_ball_species = step_config.get_ball_factory().new_ball_species();
 
+        let mut values = snapshot.frame.values;
+        values.read(self);
         snapshot.frame = FrameInfo {
             simulation_step: world.step_count() as u64,
             world_generation: self.runtime().world_generation(),
             layers,
             time: world.sim().get_time(),
-            dt: self.active_time_step(),
-            safety_nets: world.sim().safety_nets_total,
-            kinetic_energy: world.sim().get_kinetic_energy(),
-            potential_energy: world.sim().get_potential_energy(),
-            energy_total: world.sim().total_energy(),
-            wall_momentum: wall_px.hypot(wall_py) as f32,
+            values,
             species_counts,
             gravity_force_multiple: current_gravity_force_multiple(
                 world.physics().constants.gravity,
             ),
-            physics_fps: self.runtime().physics_fps(),
             world_rect: world.cell_grid().world_rect(),
-            status: self.status_numbers(),
+            status: self.status_info(),
             created_at: std::time::Instant::now(),
         };
 

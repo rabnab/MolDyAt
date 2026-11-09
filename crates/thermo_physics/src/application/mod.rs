@@ -4,6 +4,7 @@
 
 pub mod core;
 pub mod log_util;
+pub mod observables;
 pub mod persistence;
 pub mod phase_timings;
 pub mod sim_config;
