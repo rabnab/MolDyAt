@@ -19,8 +19,9 @@
 //! view (window size, zoom, pan) are never written.
 
 use crate::application::sim_config::{
-    MAX_TIME_STEP, MIN_TIME_STEP, ResolvedSpecies, SimConfig, WallsConfig, check_time_step,
+    MAX_TIME_STEP, MIN_TIME_STEP, ResolvedSpecies, SimConfig, check_time_step,
 };
+use crate::application::units::UnitSystem;
 use crate::error::{AppError, AppResult};
 use crate::objects2d::operator::{
     DEFAULT_THERMOSTAT_CHAIN_LENGTH, MAX_EMISSION_SPEED, MAX_EMIT_PERIOD, MAX_TARGET_TEMPERATURE,
@@ -41,13 +42,8 @@ use std::collections::HashSet;
 ///   chain holds its pieces (the former `line_segments`) and its valves'
 ///   state (the former `valves`).
 ///
-/// Since v2 the built-in species names and their mass, `σ` and `ε` are part
-/// of the file format: a file stores only the name, the rest comes from
-/// `SpeciesTable::builtin()` when it is loaded, unless the file's config has
-/// its own `[[species]]` list (#237), which then defines every species the
-/// file uses. Changing a built-in species is a breaking change: bump this
-/// version and add a migration, or add a new species instead of changing an
-/// existing one (`builtin_table_is_pinned`).
+/// From v2 to v8 a file without its own `[[species]]` list ran with the
+/// built-in table; the v8 → v9 migration writes that table into it.
 /// - v4 (#280): `config.walls`; soft walls became the default, so older
 ///   files with a config get `walls.model = "hard"`.
 /// - v5 (#347): `config.fields`, external fields besides gravity.
@@ -57,7 +53,11 @@ use std::collections::HashSet;
 ///   name the former `CH4` `CH4_HCB`. `NH3` is new.
 /// - v8 (#348): balls store `theta`, `omega` and `alpha`, and a config's
 ///   `[[species]]` can give a `moment_of_inertia_u_angstrom2`.
-pub(crate) const WORLD_FILE_VERSION: u32 = 8;
+/// - v9 (#426): self-describing. `units` states the unit system of every
+///   reduced value, and `config` is required and lists the whole species
+///   table (with water and molecule models). The built-in table and the
+///   unit species are no longer part of the format.
+pub(crate) const WORLD_FILE_VERSION: u32 = 9;
 
 /// Everything needed to rebuild a world. Energy plot data and simulation
 /// statistics are deliberately not part of it.
@@ -70,17 +70,18 @@ pub(crate) const WORLD_FILE_VERSION: u32 = 8;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct WorldFile {
     pub version: u32,
+    /// The unit system of every reduced value in the file. A file in other
+    /// units than `UnitSystem::REDUCED` is converted on load
+    /// ([`migrate`](super::migrate)).
+    pub units: UnitSystem,
     /// World rectangle (`x`, `y` is the top-left corner, `h` is negative).
     pub world_rect: Rect,
     /// Time step of the run. It wins over `config.integration.time_step`,
     /// which must equal it when a config is present.
     pub time_step: f32,
     pub gravity: f32,
-    /// The config the world ran with (#231). Saves written before it existed
-    /// have none and load with the default config, which reproduces how
-    /// those builds ran.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub config: Option<SimConfig>,
+    /// The config the world ran with (#231), with its whole species table.
+    pub config: SimConfig,
     pub balls: Vec<BallData>,
     /// Every operator, grouped by kind in the order they were captured.
     /// Entries of a kind this build does not know are skipped and reported
@@ -157,9 +158,8 @@ fn known_operators<'de, D: serde::Deserializer<'de>>(
     Ok(entries.into_iter().filter_map(|entry| entry.0).collect())
 }
 
-/// A ball. `species` is the name of a species of the file's table (the
-/// config's `species` list, or the built-in library); mass and `σ` follow from
-/// it and are not stored.
+/// A ball. `species` is the name of a species of the config's `species`
+/// list; mass and `σ` follow from it and are not stored.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct BallData {
     pub id: usize,
@@ -345,19 +345,16 @@ impl WorldFile {
             ))
         })?;
         check_finite(&[self.gravity], "gravity")?;
-        // Saved balls and source spheres name species of the save's table:
-        // the config's, or the built-in library for files without a config.
-        let resolved = match &self.config {
-            Some(config) => config.validated_species()?,
-            None => ResolvedSpecies::builtin(),
-        };
+        // Without a list the config would fall back to the built-in table.
+        if self.config.species.is_empty() {
+            return Err(invalid("config.species must list the species table"));
+        }
+        let resolved = self.config.validated_species()?;
         let species = &*resolved.table;
-        if let Some(config) = &self.config
-            && config.integration.time_step != self.time_step
-        {
+        if self.config.integration.time_step != self.time_step {
             return Err(invalid(format!(
                 "config.integration.time_step {} differs from time_step {}",
-                config.integration.time_step, self.time_step
+                self.config.integration.time_step, self.time_step
             )));
         }
 
@@ -513,18 +510,6 @@ impl WorldFile {
             OperatorData::Thermostat(thermostat) => Some(thermostat),
             _ => None,
         })
-    }
-
-    /// The config to run this world with: the saved one, or the default for
-    /// files without one (with hard walls, as they ran: #280), with the
-    /// file's time step.
-    pub fn sim_config(&self) -> SimConfig {
-        let mut config = self.config.clone().unwrap_or_else(|| SimConfig {
-            walls: WallsConfig::hard(),
-            ..SimConfig::default()
-        });
-        config.integration.time_step = self.time_step;
-        config
     }
 
     pub(crate) fn to_json(&self) -> AppResult<String> {

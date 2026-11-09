@@ -20,7 +20,8 @@
 //!
 //! A save stores the config of the run (`WorldFile::config`), and loading it
 //! restores that config, so a loaded world runs as it did when it was saved.
-//! Saves written before the config existed load with the defaults.
+//! Saves written before the config existed load with the defaults (and hard
+//! walls).
 //!
 //! Every key has an accepted range (the `MIN_*` / `MAX_*` constants), checked
 //! by `SimConfig::validate` for a config file, `--dt`, `--world-scale` and a
@@ -40,8 +41,9 @@
 //! classes `XS` to `XL`, `Ar`, `Ne`, `CH4`, `O2`, `NH3`, `CH4_HCB`); with it,
 //! exactly the listed
 //! species, in that order, the first being the default for new balls. Entries
-//! give literature single-site Lennard-Jones values (Å, K, u), converted into
-//! Ar units (#405). Pair overrides and saved balls name species of this table.
+//! give literature values (Å, K, u), converted into reduced units. Pair
+//! overrides and saved balls name species of this table; a save always
+//! lists it in full.
 
 mod sections;
 mod species;
@@ -106,9 +108,10 @@ pub(crate) const MAX_SKIN_FACTOR: f32 = 1.0;
 /// smaller pairs stiffen the core beyond what the time step resolves.
 pub(crate) const MIN_PAIR_SIGMA: f32 = 0.5;
 pub(crate) const MAX_PAIR_SIGMA: f32 = 8.0;
-/// `ε_ij` of a pair override. The built-in species all have `ε = 1`.
-pub(crate) const MIN_PAIR_EPSILON: f32 = 0.1;
-pub(crate) const MAX_PAIR_EPSILON: f32 = 10.0;
+/// `ε` of a species, site or pair override: 6 K to 2396 K in Ar units,
+/// around the built-in `H2_2S` sites (10 K) and MB water's `ε_HB` (1385 K).
+pub(crate) const MIN_PAIR_EPSILON: f32 = 0.05;
+pub(crate) const MAX_PAIR_EPSILON: f32 = 20.0;
 /// `walls.sigma` (`σ_w`); 0 gives the hard contact distance `σ_i / 2`.
 pub(crate) const MIN_WALL_SIGMA: f32 = 0.0;
 pub(crate) const MAX_WALL_SIGMA: f32 = MAX_PAIR_SIGMA;
@@ -125,12 +128,12 @@ pub(crate) const MIN_FIELD_STIFFNESS: f32 = 1e-6;
 pub(crate) const MAX_FIELD_STIFFNESS: f32 = 100.0;
 /// `[[fields]] center`: within the largest world (scale 100 is ±5600).
 pub(crate) const MAX_FIELD_CENTER: f32 = 1e5;
-/// Mass of a `[[species]]` entry in Ar units (about 2.0 u to 3995 u).
-pub(crate) const MIN_SPECIES_MASS: f32 = 0.05;
+/// Mass of a `[[species]]` entry or site in Ar units (about 0.8 u to 3995 u).
+pub(crate) const MIN_SPECIES_MASS: f32 = 0.02;
 pub(crate) const MAX_SPECIES_MASS: f32 = 100.0;
 /// Moment of inertia of a `[[species]]` entry in Ar units (`m_Ar σ_Ar²` =
-/// 463 u·Å²): from far below a dumbbell's to a large molecule's.
-pub(crate) const MIN_SPECIES_INERTIA: f32 = 0.001;
+/// 463 u·Å²): from below `H2_2S` (0.28 u·Å²) to a large molecule's.
+pub(crate) const MIN_SPECIES_INERTIA: f32 = 0.000_1;
 pub(crate) const MAX_SPECIES_INERTIA: f32 = 100.0;
 /// Drawing radius of a `[[species]]` entry in Ar units.
 pub(crate) const MIN_DISPLAY_RADIUS: f32 = 0.05;

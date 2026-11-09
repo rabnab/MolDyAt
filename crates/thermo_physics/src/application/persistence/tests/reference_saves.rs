@@ -7,7 +7,7 @@
 //! change adds a new fixture, and every older one must keep loading through
 //! the real load path.
 
-use super::scratch_dir;
+use super::{builtin_species, scratch_dir};
 use crate::application::persistence::migrate;
 use crate::application::persistence::{LoadSource, SaveStore, WORLD_FILE_VERSION, WorldFile};
 use crate::application::sim_config::{
@@ -70,6 +70,11 @@ const FIXTURES: &[Fixture] = &[
     Fixture {
         version: 8,
         file: "v8.json",
+        check: check_v5,
+    },
+    Fixture {
+        version: 9,
+        file: "v9.json",
         check: check_v5,
     },
 ];
@@ -140,8 +145,7 @@ fn reference_saves_survive_a_save_and_load() {
 fn current_reference_save_loads_every_field() {
     for fixture in FIXTURES.iter().filter(|f| f.version == WORLD_FILE_VERSION) {
         let json = fs::read_to_string(fixtures_dir().join(fixture.file)).unwrap();
-        let mut expected = WorldFile::from_json(&json).unwrap();
-        expected.config = Some(expected.sim_config());
+        let expected = WorldFile::from_json(&json).unwrap();
         let mc = load_fixture(fixture.file);
         assert_eq!(WorldFile::capture(&mc), expected, "{}", fixture.file);
     }
@@ -200,6 +204,7 @@ fn config_less_save_keeps_its_time_step() {
     assert_eq!(mc.time_step(), TIME_STEP);
     let mut config = SimConfig {
         walls: WallsConfig::hard(),
+        species: builtin_species(),
         ..SimConfig::default()
     };
     config.integration.time_step = TIME_STEP;
@@ -371,6 +376,7 @@ fn check_world(
     let mut config = SimConfig {
         walls: walls_in_ar(walls, &s),
         fields: fields_in_ar(fields, &s),
+        species: builtin_species(),
         ..SimConfig::default()
     };
     config.integration.time_step = 0.005;
