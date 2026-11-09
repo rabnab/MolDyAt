@@ -371,8 +371,7 @@ impl SimulationWorld {
 
         if target_temperature <= f32::EPSILON {
             for &ball_idx in &bucket.ball_indices {
-                self.balls[ball_idx].v = Vec2D::zero();
-                self.balls[ball_idx].omega = 0.0;
+                self.balls[ball_idx].stop();
             }
             thermostat.chain.fill(0.0);
             return !bucket.ball_indices.is_empty();
@@ -396,13 +395,9 @@ impl SimulationWorld {
         }
 
         for &ball_idx in &bucket.ball_indices {
-            // Thermostat only the peculiar velocity in the local COM frame.
-            let peculiar_velocity = self.balls[ball_idx].v - &v_com;
-            self.balls[ball_idx].v = v_com.add_scaled(&peculiar_velocity, damping_scale);
-            // Rotation shares the chain (equipartition, #348).
-            if self.balls[ball_idx].inertia > 0.0 {
-                self.balls[ball_idx].omega *= damping_scale;
-            }
+            // Thermostat only the peculiar velocity in the local COM frame;
+            // rotation shares the chain (equipartition, #348).
+            self.balls[ball_idx].scale_about(v_com, damping_scale);
         }
 
         !bucket.ball_indices.is_empty()
@@ -430,10 +425,7 @@ impl SimulationWorld {
             stats_accumulator.sum_mass += f64::from(ball.mass);
 
             let speed_sq = ball.v.norm_sq();
-            stats_accumulator.kin += f64::from(speed_sq * ball.mass * 0.5);
-            if ball.inertia > 0.0 {
-                stats_accumulator.kin += f64::from(ball.rotational_energy());
-            }
+            stats_accumulator.kin += ball.kinetic_energy();
 
             if stats_accumulator.max_v * stats_accumulator.max_v < speed_sq {
                 stats_accumulator.max_v = speed_sq.sqrt();

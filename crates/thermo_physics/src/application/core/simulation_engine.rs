@@ -603,10 +603,7 @@ impl SimulationEngine {
         stats.pot += f64::from(result.wall_potential);
         stats.px += f64::from(momentum.x);
         stats.py += f64::from(momentum.y);
-        stats.kin += f64::from(speed_sq * ball.mass * 0.5);
-        if ball.inertia > 0.0 {
-            stats.kin += f64::from(ball.rotational_energy());
-        }
+        stats.kin += ball.kinetic_energy();
         stats.mass += f64::from(ball.mass);
         stats.braked += u64::from(ball.braking);
         stats.capped_pairs += u64::from(result.capped_pairs);

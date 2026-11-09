@@ -4,6 +4,7 @@
 
 mod ball_physics;
 mod interaction;
+mod kinetics;
 mod pair_potential;
 mod simd_forces;
 mod time_step_limit;

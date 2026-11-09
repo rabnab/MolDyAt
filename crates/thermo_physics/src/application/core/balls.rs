@@ -9,7 +9,6 @@ use crate::application::{AppError, AppResult};
 use crate::objects2d::ball_impl::ball_core::gravity_acceleration;
 use crate::objects2d::ball_impl::external_field::fields_acceleration;
 use rand::rng;
-use rand_distr::{Distribution, Normal, StandardNormal};
 use rayon::prelude::*;
 
 /// How `place_candidate` checks a candidate against the balls.
@@ -249,38 +248,24 @@ impl MainContent {
     }
 
     pub fn randomize_speeds(&mut self) {
-        let normal = self.calculate_normal_distribution_of_speed();
+        let sigma = self.speed_sigma();
         let mut r = rng();
-
-        // A component `σ` means the temperature `m σ²`: rotating balls get
-        // `ω ~ N(0, σ √(m / I))` for the same temperature (#348).
-        let sigma = normal.std_dev();
+        // A component `σ` means the temperature `m σ²`.
         for ball in &mut self.world.balls {
-            ball.v.x = normal.sample(&mut r);
-            ball.v.y = normal.sample(&mut r);
-            if ball.inertia > 0.0 {
-                ball.omega = sigma
-                    * (ball.mass / ball.inertia).sqrt()
-                    * Distribution::<f32>::sample(&StandardNormal, &mut r);
-            }
+            ball.sample(ball.mass * sigma * sigma, &mut r);
         }
     }
-    pub(crate) fn calculate_normal_distribution_of_speed(&mut self) -> Normal<f32> {
+    pub(crate) fn speed_sigma(&self) -> f32 {
         let (sx2, sy2) = self.world.balls.iter().fold((0., 0.), |(ax, ay), b| {
             (ax + b.v.x.powi(2), ay + b.v.y.powi(2))
         });
         let n = self.world.balls.len() as f32;
         let sig = f32::sqrt(f32::sqrt(sx2 / (n - 1.5) * sy2 / (n - 1.5)));
-        Normal::new(0., f32::max(0.3, sig)).expect("Invalid distribution parameters")
+        f32::max(0.3, sig)
     }
 
-    /// Stop every ball: no velocity and, for rotating species, no angular
-    /// velocity (else the rotation feeds its energy back).
     pub fn stop_all_balls(&mut self) {
-        for ball in &mut self.world.balls {
-            ball.v = Vec2D::new(0., 0.);
-            ball.omega = 0.0;
-        }
+        self.world.balls.iter_mut().for_each(Ball2D::stop);
     }
 
     pub fn next_species(&mut self) {
