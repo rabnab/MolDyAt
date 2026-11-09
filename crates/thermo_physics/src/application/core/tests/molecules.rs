@@ -319,7 +319,7 @@ fn dilute_pressure(h2: usize, ar: usize) -> f64 {
         mc.simulation_step().unwrap();
         sum += mc
             .world()
-            .cached_force_results
+            .cached_force_results()
             .iter()
             .map(|r| f64::from(r.wall_force.x.abs() + r.wall_force.y.abs()))
             .sum::<f64>();

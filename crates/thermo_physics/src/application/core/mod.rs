@@ -13,6 +13,7 @@ mod runtime_options;
 mod sim;
 mod simulation_engine;
 mod source_spheres;
+mod step_cache;
 mod step_scratch;
 mod thermostats;
 mod valves;
@@ -25,29 +26,25 @@ pub(crate) use simulation_engine::SimulationEngine;
 
 use crate::application::StepConfig;
 use crate::application::persistence::SaveStore;
-use crate::application::phase_timings::PhaseTimings;
 use crate::application::sim_config::{SpeciesConfig, WorldConfig};
 use crate::application::sim_stats::SimStats;
 use crate::application::thermo_field::ThermoFieldHistory;
 use crate::objects2d::ball_cell::cell_grid::CellGrid;
-use crate::objects2d::ball_impl::simd_forces::KernelPoints;
-use crate::objects2d::ball_impl::{
-    Ball2D, BallPhysics, ForceResult, SpeciesId, SpeciesSet, SpeciesTable,
-};
+use crate::objects2d::ball_impl::{Ball2D, BallPhysics, ForceResult, SpeciesId, SpeciesTable};
 use crate::objects2d::wall_chain::WallChainCollection;
 use crate::objects2d::{
     LineSegmentCollection, Rect, SourceSphereCollection, ThermostatCollection, ValveCollection,
     Vec2D, VerboseInfoMode,
 };
 use std::sync::Arc;
-use step_scratch::StepScratch;
+use step_cache::StepCache;
 
 /// Persistent simulation domain state.
 ///
-/// Owns the particle data, physics engine, spatial structures, and
-/// operator collections (line segments, valves, source spheres,
-/// thermostats). This is the single source of truth for the physical
-/// state of the simulation world.
+/// Owns the particle data, physics engine and operator collections (line
+/// segments, valves, source spheres, thermostats). This is the single
+/// source of truth for the physical state of the simulation world; what
+/// the step derives from it is in `cache`.
 ///
 /// Stepping and update orchestration live in `SimulationEngine`;
 /// this struct is a pure state holder.
@@ -65,18 +62,8 @@ pub struct SimulationWorld {
 
     pub(crate) sim: SimStats,
     pub(crate) balls: Vec<Ball2D>,
-    /// Per-ball position and species for the force kernel, refilled every step
-    /// (same indices as `balls`). Scratch data: valid only inside `update_sim`,
-    /// from `update_old_positions` to `compute_forces`. Balls are removed and
-    /// added between steps, so read `balls` everywhere else.
-    pub(crate) kernel_points: KernelPoints,
-    /// Buffers the step reuses instead of allocating (see `StepScratch`).
-    pub(crate) scratch: StepScratch,
-    pub(crate) cell_grid: CellGrid,
-    /// Species of the balls in the world (it may also hold species whose
-    /// last ball is gone, until the next `rebuild_cell_grid`). The cell size
-    /// follows the largest pair list radius among them.
-    pub(crate) species_present: SpeciesSet,
+    /// Derived from `balls`, never saved (see `StepCache`).
+    pub(crate) cache: StepCache,
     pub(crate) step_count: usize,
 
     /// Speed limit as a share of the shorter world side (`SimConfig`).
@@ -86,12 +73,8 @@ pub struct SimulationWorld {
     pub(crate) reorder_interval: u32,
     /// Override for speed limit (None = use default calculation, Some(f32::INFINITY) = disable)
     pub(crate) speed_limit_override: Option<f32>,
-    /// Cached force results from last physics step for reuse in rendering
-    pub(crate) cached_force_results: Vec<ForceResult>,
     /// Rolling-window averager for per-cell T/P fields
     pub(crate) thermo_history: ThermoFieldHistory,
-    /// Time per step phase, for headless perf runs (#221).
-    pub(crate) phase_timings: PhaseTimings,
     /// Line segment barriers placed by the operator panel
     pub(crate) line_segments: LineSegmentCollection,
     /// Valve regions placed on top of line segments.
@@ -167,7 +150,7 @@ impl SimulationWorld {
 
     /// The physics cell grid.
     pub fn cell_grid(&self) -> &CellGrid {
-        &self.cell_grid
+        &self.cache.cell_grid
     }
 
     /// Steps run so far.
@@ -177,7 +160,7 @@ impl SimulationWorld {
 
     /// The last step's force results, in ball order (empty before the first step).
     pub fn cached_force_results(&self) -> &[ForceResult] {
-        &self.cached_force_results
+        &self.cache.force_results
     }
 
     /// Rolling window of the per-cell temperature and pressure fields.

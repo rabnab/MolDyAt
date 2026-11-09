@@ -48,7 +48,7 @@ fn bulk_virial_pressure(main_content: &MainContent) -> f64 {
         kinetic.add_ball(ball);
     }
     let pair_virial: f32 = world
-        .cached_force_results
+        .cached_force_results()
         .iter()
         .map(|result| 0.5 * result.virial)
         .sum();

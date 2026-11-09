@@ -48,7 +48,7 @@ impl SimulationEngine {
             let mut clock = PhaseClock::start(log_timings);
             Self::update_neighbor_hoods_for_occupied_cells(world, dt);
             Self::update_neighbor_statistics(world);
-            clock.lap(&mut world.phase_timings, Phase::Neighbours);
+            clock.lap(&mut world.cache.phase_timings, Phase::Neighbours);
         }
     }
 
@@ -87,10 +87,10 @@ impl SimulationEngine {
         let mut clock = PhaseClock::start(log_timings);
         let (sim, balls) = (&mut world.sim, &world.balls);
         sim.calculate_temperature_from_balls(balls);
-        clock.lap(&mut world.phase_timings, Phase::Thermo);
+        clock.lap(&mut world.cache.phase_timings, Phase::Thermo);
 
         world.step_count += 1;
-        world.phase_timings.steps += 1;
+        world.cache.phase_timings.steps += 1;
         Ok(())
     }
 
@@ -109,7 +109,7 @@ impl SimulationEngine {
     /// overlay (and headless output) uses them, so the physics thread calls
     /// this only while they are shown (the `THERMO` layer).
     pub(crate) fn record_thermo_fields(world: &mut SimulationWorld, log_timings: bool) {
-        if world.balls.len() != world.cached_force_results.len() {
+        if world.balls.len() != world.cache.force_results.len() {
             return;
         }
         let mut clock = PhaseClock::start(log_timings);
@@ -118,7 +118,7 @@ impl SimulationEngine {
         let (rows, cols) = thermo_grid_dims(world.world_rect.w, world.world_rect.h);
         let fields = compute_cell_fields(
             &world.balls,
-            &world.cached_force_results,
+            &world.cache.force_results,
             &world.world_rect,
             rows,
             cols,
@@ -126,7 +126,11 @@ impl SimulationEngine {
         world.thermo_history.push(fields);
         // Booked to `thermo` like the global temperature, but logged under
         // its own name so the two lines of a step can be told apart.
-        clock.lap_as(&mut world.phase_timings, Phase::Thermo, "thermo fields");
+        clock.lap_as(
+            &mut world.cache.phase_timings,
+            Phase::Thermo,
+            "thermo fields",
+        );
     }
 
     pub(crate) fn update_sim(
@@ -146,7 +150,7 @@ impl SimulationEngine {
                 world.collect_solid_obstacles_into(&mut scratch.obstacles);
                 let sweep_checks = Self::update_positions(world, dt, bound_rect, scratch);
                 Self::update_old_positions(world);
-                clock.lap(&mut world.phase_timings, Phase::Positions);
+                clock.lap(&mut world.cache.phase_timings, Phase::Positions);
 
                 Self::compute_forces(
                     world,
@@ -154,7 +158,7 @@ impl SimulationEngine {
                     bound_rect,
                     &mut scratch.force_results,
                 );
-                clock.lap(&mut world.phase_timings, Phase::Forces);
+                clock.lap(&mut world.cache.phase_timings, Phase::Forces);
 
                 world.sim.wall_distance_checks += sweep_checks;
                 let contacts = scratch
@@ -184,7 +188,7 @@ impl SimulationEngine {
                 );
 
                 // The previous step's results become the next step's buffer.
-                std::mem::swap(&mut world.cached_force_results, &mut scratch.force_results);
+                std::mem::swap(&mut world.cache.force_results, &mut scratch.force_results);
 
                 let corrections_before = world.sim.wall_overlap_corrections;
                 let (seg_px, seg_py) = world
@@ -230,7 +234,7 @@ impl SimulationEngine {
             (stats_accumulator.momentum[1] / stats_accumulator.sum_mass) as f32,
         );
         world.sim.update(dt, stats_accumulator);
-        clock.lap(&mut world.phase_timings, Phase::Apply);
+        clock.lap(&mut world.cache.phase_timings, Phase::Apply);
     }
 
     fn update_sim_and_move_balls(
@@ -245,14 +249,14 @@ impl SimulationEngine {
         // Every ball into the cell of its new position: one counting sort
         // (`CellGrid::rebuild`). Emission comes after it, so the grid holds
         // every ball at its position and can check the emitted balls (#250).
-        world.cell_grid.rebuild(&world.balls);
+        world.cache.cell_grid.rebuild(&world.balls);
         world.emit_from_source_spheres(step_config.get_ball_factory());
         world.remove_invalid_balls();
         let interval = world.reorder_interval as usize;
         if interval > 0 && (world.step_count + 1).is_multiple_of(interval) {
             world.reorder_balls_by_cell();
         }
-        clock.lap(&mut world.phase_timings, Phase::Cells);
+        clock.lap(&mut world.cache.phase_timings, Phase::Cells);
     }
 
     /// Rebuild the neighbour lists of the balls that moved far enough.
@@ -277,7 +281,7 @@ impl SimulationEngine {
         let physics = &world.physics;
         let min_movement =
             physics.get_min_movement_for_update_hood() * world.neighbor_movement_fault_scale();
-        let cell_grid = &world.cell_grid;
+        let cell_grid = &world.cache.cell_grid;
         let (_, grid_cols) = cell_grid.get_grid_size();
 
         // Which cell the grid holds each ball in (flat index, `NO_CELL` if
@@ -449,8 +453,8 @@ impl SimulationEngine {
     /// force kernel reads into `kernel_points`, in the frame of the cell
     /// grid (#392).
     fn update_old_positions(world: &mut SimulationWorld) {
-        let frame = world.cell_grid.kernel_frame();
-        let kernel = &mut world.kernel_points;
+        let frame = world.cache.cell_grid.kernel_frame();
+        let kernel = &mut world.cache.kernel_points;
         kernel.cell = frame.cell;
         kernel.contacts.clear();
         kernel
@@ -483,9 +487,9 @@ impl SimulationEngine {
     ) {
         let physics = &world.physics;
         let balls = &world.balls;
-        let points = &world.kernel_points;
+        let points = &world.cache.kernel_points;
         let soft_walls = physics.soft_walls();
-        let present = world.species_present;
+        let present = world.cache.species_present;
         let interacting: SpeciesSet = present
             .iter()
             .filter(|&a| {

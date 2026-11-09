@@ -29,11 +29,11 @@ impl MainContent {
 
     /// Time spent per step phase since the last [`Self::reset_phase_timings`].
     pub fn phase_timings(&self) -> &PhaseTimings {
-        &self.world.phase_timings
+        &self.world.cache.phase_timings
     }
 
     pub fn reset_phase_timings(&mut self) {
-        self.world.phase_timings.reset();
+        self.world.cache.phase_timings.reset();
     }
 
     /// Momentum `(px, py)` given to walls (box and non-ghost line walls)
@@ -243,7 +243,7 @@ impl MainContent {
 impl SimulationWorld {
     /// See `BallPhysics::time_step_limit`.
     pub(crate) fn time_step_limit(&self) -> Option<(f32, SpeciesId)> {
-        self.physics.time_step_limit(self.species_present)
+        self.physics.time_step_limit(self.cache.species_present)
     }
 
     /// Rebuild the physics with the wall model `walls`.

@@ -144,7 +144,7 @@ fn loaded_world_starts_fresh_and_keeps_running() {
     );
     for (i, ball) in target.world().balls.iter().enumerate() {
         assert!(
-            target.world().cell_grid.cell_of_ball(i).is_some(),
+            target.world().cell_grid().cell_of_ball(i).is_some(),
             "ball {} not in a cell",
             ball.get_id()
         );

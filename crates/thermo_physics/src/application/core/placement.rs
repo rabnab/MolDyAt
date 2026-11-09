@@ -26,7 +26,7 @@
 //! falls back to the full scan.
 
 use super::SimulationWorld;
-use crate::objects2d::ball_impl::{Ball2D, SpeciesSet};
+use crate::objects2d::ball_impl::Ball2D;
 
 /// Keep the reach this far below the cell size, so float rounding in the cell
 /// index can never move a reachable ball out of the 3x3 cells.
@@ -36,14 +36,12 @@ const CELL_SLACK: f32 = 1e-4;
 pub(crate) struct PlacementIndex {
     /// Balls not found in the grid cell of their position (should not happen, defensive).
     orphans: Vec<usize>,
-    /// Species of the balls in the world.
-    present: SpeciesSet,
 }
 
 impl PlacementIndex {
     /// Index the world as it is; O(balls + cells).
     pub(crate) fn new(world: &SimulationWorld) -> Self {
-        let grid = &world.cell_grid;
+        let grid = &world.cache.cell_grid;
         let orphans = world
             .balls
             .iter()
@@ -54,18 +52,17 @@ impl PlacementIndex {
             })
             .map(|(i, _)| i)
             .collect();
-        let present = world.balls.iter().map(Ball2D::species).collect();
-        Self { orphans, present }
+        Self { orphans }
     }
 
     /// Record ball `ball_idx`, just added through
     /// `SimulationWorld::add_ball_and_register`.
     pub(crate) fn note_added(&mut self, world: &SimulationWorld, ball_idx: usize) {
         let ball = &world.balls[ball_idx];
-        self.present.insert(ball.species());
         // `add_ball_and_register` puts a ball into the cell of its position
         // when there is one; otherwise the grid does not hold it.
         if world
+            .cache
             .cell_grid
             .get_cell_indices(ball.get_position())
             .is_none()
@@ -83,12 +80,7 @@ impl SimulationWorld {
         margin: f32,
         index: &PlacementIndex,
     ) -> bool {
-        self.is_ball_colliding_near(
-            candidate,
-            margin,
-            index.present,
-            index.orphans.iter().copied(),
-        )
+        self.is_ball_colliding_near(candidate, margin, index.orphans.iter().copied())
     }
 
     /// Same result as [`Self::is_ball_colliding`], from the grid alone, with
@@ -101,8 +93,8 @@ impl SimulationWorld {
     /// asserts `CellGrid::matches_positions` in debug builds); the adds of
     /// the batch keep it true.
     pub(crate) fn is_ball_colliding_in_grid(&self, candidate: &Ball2D, margin: f32) -> bool {
-        let outside = self.cell_grid.outside_balls().iter().map(|&b| b as usize);
-        self.is_ball_colliding_near(candidate, margin, self.species_present, outside)
+        let outside = self.cache.cell_grid.outside_balls().iter();
+        self.is_ball_colliding_near(candidate, margin, outside.map(|&b| b as usize))
     }
 
     /// The 3x3 cells around `candidate` plus `orphans` (balls the grid does
@@ -111,11 +103,12 @@ impl SimulationWorld {
         &self,
         candidate: &Ball2D,
         margin: f32,
-        present: SpeciesSet,
         mut orphans: impl Iterator<Item = usize>,
     ) -> bool {
-        let grid = &self.cell_grid;
-        let reach = present
+        let grid = &self.cache.cell_grid;
+        let reach = self
+            .cache
+            .species_present
             .iter()
             .map(|s| self.physics.contact_distance(candidate.species(), s))
             .fold(0.0, f32::max)

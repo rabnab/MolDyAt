@@ -25,7 +25,7 @@ fn gas(reorder_interval: u32) -> MainContent {
 fn cells_in_ball_order(main_content: &MainContent) -> Vec<(usize, usize)> {
     let world = main_content.world();
     (0..world.balls.len())
-        .map(|i| world.cell_grid.cell_of_ball(i).expect("ball in the grid"))
+        .map(|i| world.cell_grid().cell_of_ball(i).expect("ball in the grid"))
         .collect()
 }
 

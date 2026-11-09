@@ -2,13 +2,13 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use super::{BallPhysics, CellGrid, MainContent, RuntimeOptions, SimStats, SimulationWorld};
+use super::{BallPhysics, MainContent, RuntimeOptions, SimStats, SimulationWorld, StepCache};
 use crate::application::AppResult;
 use crate::application::StepConfig;
 use crate::application::sim_config::{ResolvedSpecies, SimConfig};
 use crate::application::thermo_field::ThermoFieldHistory;
 use crate::objects2d::Rect;
-use crate::objects2d::ball_impl::{PhysicsConstants, SpeciesSet};
+use crate::objects2d::ball_impl::PhysicsConstants;
 use std::sync::Arc;
 
 impl MainContent {
@@ -74,26 +74,19 @@ impl SimulationWorld {
         .with_walls(walls)
         .with_fields(fields)
         .with_skin_factor(config.neighbours.skin_factor);
-        let species_present = SpeciesSet::default();
-        let cell_grid = CellGrid::new(world_rect, physics.max_list_radius(species_present))?;
         Ok(Self {
             balls: Vec::new(),
+            cache: StepCache::new(world_rect, &physics)?,
             physics,
             species_config: config.species.clone(),
             world_config: config.world.clone(),
-            cell_grid,
-            species_present,
             world_rect,
             sim: SimStats::default(),
             step_count: 0,
             speed_limit_factor: config.integration.speed_limit_factor,
             speed_limit_override: None,
             reorder_interval: config.neighbours.reorder_interval,
-            kernel_points: Default::default(),
-            scratch: Default::default(),
-            cached_force_results: Vec::new(),
             thermo_history: ThermoFieldHistory::new(),
-            phase_timings: Default::default(),
             line_segments: Default::default(),
             valve_segments: Default::default(),
             source_spheres: Default::default(),

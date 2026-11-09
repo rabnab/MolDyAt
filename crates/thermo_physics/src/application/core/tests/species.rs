@@ -150,7 +150,7 @@ fn cell_grid_follows_the_species_present() {
     mc.add_candidate_to_vec(Ball2D::new(1, Vec2D::new(-6.0, 0.0), n2));
     mc.collect_neighbours_by_cell(DT_GOAL);
     assert_eq!(
-        mc.world().cell_grid.list_radius(),
+        mc.world().cell_grid().list_radius(),
         physics.list_radius(n2, n2)
     );
 
@@ -161,7 +161,7 @@ fn cell_grid_follows_the_species_present() {
     mc.add_candidate_to_vec(Ball2D::new(2, Vec2D::new(6.0, 0.0), xl));
     mc.collect_neighbours_by_cell(DT_GOAL);
     assert_eq!(
-        mc.world().cell_grid.list_radius(),
+        mc.world().cell_grid().list_radius(),
         physics.list_radius(xl, xl)
     );
     assert!(mc.world().balls[0].cold.hood.is_a_neighbour_idx(1));
@@ -170,7 +170,7 @@ fn cell_grid_follows_the_species_present() {
     mc.world_mut().balls[1].set_position_and_update_tail(Vec2D::new(f32::NAN, 0.0));
     mc.world_mut().remove_invalid_balls();
     assert_eq!(
-        mc.world().cell_grid.list_radius(),
+        mc.world().cell_grid().list_radius(),
         physics.list_radius(n2, n2)
     );
 }
@@ -202,7 +202,7 @@ fn cell_grid_fits_an_overridden_pair() {
     mc.add_candidate_to_vec(Ball2D::new(2, Vec2D::new(6.95, 0.0), xs));
     mc.collect_neighbours_by_cell(DT_GOAL);
     assert_eq!(
-        mc.world().cell_grid.list_radius(),
+        mc.world().cell_grid().list_radius(),
         physics.list_radius(n2, xs)
     );
     assert!(mc.world().balls[0].cold.hood.is_a_neighbour_idx(1));

@@ -59,7 +59,7 @@ pub(crate) struct UpdateScratch {
     /// Overlap-pass result of each ball, summed serially in ball order.
     pub(crate) overlap_passes: Vec<OverlapPass>,
     /// Force results of this step. Swapped with
-    /// `SimulationWorld::cached_force_results`, so the previous step's
+    /// `StepCache::force_results`, so the previous step's
     /// results become the next step's buffer.
     pub(crate) force_results: Vec<ForceResult>,
     /// Apply-pass stats of each chunk of balls, combined in chunk order.
@@ -77,16 +77,16 @@ pub(crate) struct RebuildScratch {
 }
 
 impl SimulationWorld {
-    /// Run `f` with a scratch buffer taken out of `self.scratch`; the buffer
-    /// is put back afterwards, also when `f` returns early.
+    /// Run `f` with a scratch buffer taken out of `self.cache.scratch`; the
+    /// buffer is put back afterwards, also when `f` returns early.
     pub(crate) fn with_scratch<T: Default, R>(
         &mut self,
         field: fn(&mut StepScratch) -> &mut T,
         f: impl FnOnce(&mut Self, &mut T) -> R,
     ) -> R {
-        let mut buffer = std::mem::take(field(&mut self.scratch));
+        let mut buffer = std::mem::take(field(&mut self.cache.scratch));
         let result = f(self, &mut buffer);
-        *field(&mut self.scratch) = buffer;
+        *field(&mut self.cache.scratch) = buffer;
         result
     }
 }

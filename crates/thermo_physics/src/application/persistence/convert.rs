@@ -89,7 +89,7 @@ impl TryFrom<&WorldFile> for SimulationWorld {
             .iter()
             .map(|data| data.restore(&species))
             .collect();
-        world.rebuild_cell_grid();
+        world.balls_changed();
         // The chains own their pieces and valves in the file; the world keeps
         // them in collections of their own, ordered by id as they were built.
         let mut segments: Vec<SimLineSegment> = file

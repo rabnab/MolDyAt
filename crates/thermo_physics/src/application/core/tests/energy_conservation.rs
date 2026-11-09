@@ -300,11 +300,11 @@ fn test_cutoff_energy_loss() {
 
     println!(
         "Ball 0 in cell: {:?}",
-        main_content.world().cell_grid.cell_of_ball(0)
+        main_content.world().cell_grid().cell_of_ball(0)
     );
     println!(
         "Ball 1 in cell: {:?}",
-        main_content.world().cell_grid.cell_of_ball(1)
+        main_content.world().cell_grid().cell_of_ball(1)
     );
 
     // Initialize neighbor lists

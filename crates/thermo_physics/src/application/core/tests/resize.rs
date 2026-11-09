@@ -20,7 +20,7 @@ fn test_resize_event() {
     main_content.resize(new_world_rect);
     main_content.unpause_after_resize();
 
-    let new_world = main_content.world().cell_grid.world_rect();
+    let new_world = main_content.world().cell_grid().world_rect();
 
     assert_eq!(new_world.w, new_width);
     assert_eq!(new_world.h, -new_height);
@@ -48,7 +48,7 @@ fn test_resize_world_rect_matches_cell_grid() {
     assert_eq!(main_content.world().world_rect.h, new_world_rect.h);
 
     // Verify cell_grid world_rect matches main_content's world_rect
-    let cell_grid_world = main_content.world().cell_grid.world_rect();
+    let cell_grid_world = main_content.world().cell_grid().world_rect();
     assert_eq!(cell_grid_world.x, main_content.world().world_rect.x);
     assert_eq!(cell_grid_world.y, main_content.world().world_rect.y);
     assert_eq!(cell_grid_world.w, main_content.world().world_rect.w);
@@ -66,7 +66,7 @@ fn test_resize_cell_grid_origin_correct() {
     let new_world_rect = Rect::new(0., 0., new_width, -new_height);
     main_content.resize(new_world_rect);
 
-    let cell_grid_world = main_content.world().cell_grid.world_rect();
+    let cell_grid_world = main_content.world().cell_grid().world_rect();
 
     // Cell grid origin should be at world_rect top-left
     assert_eq!(
@@ -96,7 +96,7 @@ fn test_resize_multiple_times_maintains_consistency() {
         main_content.resize(world_rect);
 
         // Verify consistency after each resize
-        let cell_grid_world = main_content.world().cell_grid.world_rect();
+        let cell_grid_world = main_content.world().cell_grid().world_rect();
 
         assert_eq!(
             main_content.world().world_rect.x,
@@ -134,14 +134,14 @@ fn test_resize_cell_count_changes_with_world_size() {
     let (mut main_content, _win_def) = create_main_content();
 
     // Get initial cell count
-    let (initial_rows, initial_cols) = main_content.world().cell_grid.get_grid_size();
+    let (initial_rows, initial_cols) = main_content.world().cell_grid().get_grid_size();
 
     // Resize to much larger dimensions
 
     let large_world_rect = Rect::new(0., 0., 1000.0, -800.0);
     main_content.resize(large_world_rect);
 
-    let (large_rows, large_cols) = main_content.world().cell_grid.get_grid_size();
+    let (large_rows, large_cols) = main_content.world().cell_grid().get_grid_size();
 
     // Larger world should have more cells
     assert!(
@@ -157,7 +157,7 @@ fn test_resize_cell_count_changes_with_world_size() {
     let small_world_rect = Rect::new(0., 0., 200.0, -150.0);
     main_content.resize(small_world_rect);
 
-    let (small_rows, small_cols) = main_content.world().cell_grid.get_grid_size();
+    let (small_rows, small_cols) = main_content.world().cell_grid().get_grid_size();
 
     // Smaller world should have fewer cells than large
     assert!(
@@ -197,10 +197,10 @@ fn test_unpause_after_resize_leaves_every_ball_in_its_cell() {
     main_content.unpause_after_resize();
 
     let world = main_content.world();
-    let (rows, cols) = world.cell_grid.get_grid_size();
+    let (rows, cols) = world.cell_grid().get_grid_size();
     let in_cells: usize = (0..rows)
         .flat_map(|row| (0..cols).map(move |col| (row, col)))
-        .map(|(row, col)| world.cell_grid.balls_in_cell(row, col).count())
+        .map(|(row, col)| world.cell_grid().balls_in_cell(row, col).count())
         .sum();
     assert_eq!(
         in_cells,
@@ -210,13 +210,13 @@ fn test_unpause_after_resize_leaves_every_ball_in_its_cell() {
 
     for (idx, ball) in world.balls.iter().enumerate() {
         let cell = world
-            .cell_grid
+            .cell_grid()
             .get_cell_indices(ball.get_position())
             .expect("ball is inside the grid");
-        assert_eq!(world.cell_grid.cell_of_ball(idx), Some(cell));
+        assert_eq!(world.cell_grid().cell_of_ball(idx), Some(cell));
         let (row, col) = cell;
         assert!(
-            world.cell_grid.balls_in_cell(row, col).any(|b| b == idx),
+            world.cell_grid().balls_in_cell(row, col).any(|b| b == idx),
             "ball {idx} is not in the cell its position maps to"
         );
     }
