@@ -29,7 +29,7 @@ fn test_simulation_engine_advances_main_content_state() {
     assert_eq!(main_content.world().step_count, initial_step_count + 1);
     assert!(main_content.world().sim.get_time() > 0.0);
     assert_eq!(
-        main_content.world().cached_force_results.len(),
+        main_content.world().cached_force_results().len(),
         main_content.world().balls.len()
     );
 }
@@ -283,16 +283,14 @@ fn buffer<T>(v: &[T], capacity: usize) -> (usize, usize) {
 /// Address and capacity of every scratch buffer.
 fn scratch_buffers(main_content: &crate::application::MainContent) -> Vec<(usize, usize)> {
     let world = main_content.world();
-    let s = &world.scratch;
+    let s = &world.cache.scratch;
     let (u, r) = (&s.update, &s.rebuild);
     // The force buffer and the cached results swap every step; sorted, the
     // pair is the same from step to step.
+    let cached = &world.cache.force_results;
     let mut forces = [
         buffer(&u.force_results, u.force_results.capacity()),
-        buffer(
-            &world.cached_force_results,
-            world.cached_force_results.capacity(),
-        ),
+        buffer(cached, cached.capacity()),
     ];
     forces.sort_unstable();
     let mut buffers = vec![
@@ -306,7 +304,7 @@ fn scratch_buffers(main_content: &crate::application::MainContent) -> Vec<(usize
         buffer(&r.rebuilds, r.rebuilds.capacity()),
     ];
     buffers.extend(forces);
-    buffers.extend(world.cell_grid.buffers());
+    buffers.extend(world.cell_grid().buffers());
     buffers
 }
 
@@ -351,7 +349,14 @@ fn test_simulation_step_keeps_every_scratch_buffer_while_it_fits() {
                 );
             }
         }
-        if !main_content.world().scratch.rebuild.to_rebuild.is_empty() {
+        if !main_content
+            .world()
+            .cache
+            .scratch
+            .rebuild
+            .to_rebuild
+            .is_empty()
+        {
             steps_with_rebuilds += 1;
         }
         previous = current;
@@ -359,12 +364,12 @@ fn test_simulation_step_keeps_every_scratch_buffer_while_it_fits() {
 
     let world = main_content.world();
     assert!(
-        !world.scratch.update.obstacles.is_empty(),
+        !world.cache.scratch.update.obstacles.is_empty(),
         "no wall in the scenario"
     );
     assert!(world.sim.wall_contacts > 0, "no ball reached the wall");
     assert!(steps_with_rebuilds > 0, "no neighbour list was rebuilt");
-    assert!(world.scratch.rebuild.rebuilds.capacity() > 0);
+    assert!(world.cache.scratch.rebuild.rebuilds.capacity() > 0);
 }
 
 /// Energies, wall momentum and positions (as bits) after a seeded run of a

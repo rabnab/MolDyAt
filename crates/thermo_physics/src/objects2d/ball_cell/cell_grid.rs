@@ -91,9 +91,8 @@ pub struct CellGrid {
 impl CellGrid {
     /// Returns the world rectangle that the grid covers.
     pub fn world_rect(&self) -> Rect {
-        let origin = self.geometry.origin;
-        let sim_br = (origin.0 + self.sim_width, origin.1 + self.sim_height);
-        Rect::from_tl_br(origin, sim_br)
+        let (x, y) = self.geometry.origin;
+        Rect::new(x, y, self.sim_width, self.sim_height)
     }
 
     /// Create an empty grid covering `world_rect` with cells at least

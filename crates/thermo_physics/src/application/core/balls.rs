@@ -299,31 +299,17 @@ impl MainContent {
 
 impl SimulationWorld {
     pub(crate) fn remove_invalid_balls(&mut self) {
-        let mut removed_some_balls = false;
-        // Remove invalid balls and rebuild cell grid
+        let count = self.balls.len();
         self.balls.retain(|ball| {
             let keep = !ball.get_position().x.is_nan() && !ball.get_position().y.is_nan();
             if !keep {
-                removed_some_balls = true;
                 log::warn!("ball {:?} became invalid. removing", ball);
             }
             keep
         });
-
-        if !removed_some_balls {
-            return;
+        if self.balls.len() != count {
+            self.balls_changed();
         }
-
-        // After retain, all indices have changed. Clear neighbor lists and force update.
-        // This prevents stale indices from causing incorrect lookups or panics.
-        for ball in &mut self.balls {
-            ball.cold.hood.clear_neighbours();
-            // Reset last_update_hood_pos to infinity to force update_hood on next check
-            ball.last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
-        }
-
-        // Rebuild cell grid with valid balls
-        self.rebuild_cell_grid();
     }
 
     pub(crate) fn is_ball_in_region(&self, pt: &Ball2D) -> bool {
@@ -435,38 +421,16 @@ impl SimulationWorld {
         // A new species may need wider cells; the grid is refitted before the
         // next neighbour rebuild (`fit_cell_grid`), when every ball is in its
         // cell.
-        self.species_present.insert(candidate.species());
+        self.cache.species_present.insert(candidate.species());
         let ball_idx = self.balls.len();
         let position = *candidate.get_position();
         self.balls.push(candidate);
-        self.cell_grid.add_ball(ball_idx, &position);
+        self.cache.cell_grid.add_ball(ball_idx, &position);
     }
 
     pub(crate) fn clear_balls(&mut self) {
         self.balls.clear();
-        self.rebuild_cell_grid();
-    }
-
-    /// Put every ball into the grid from scratch, with cells sized for the
-    /// species now in the world.
-    pub fn rebuild_cell_grid(&mut self) {
-        self.species_present = self.balls.iter().map(Ball2D::species).collect();
-        let list_radius = self.physics.max_list_radius(self.species_present);
-        if list_radius != self.cell_grid.list_radius() {
-            self.cell_grid = CellGrid::new(self.world_rect, list_radius)
-                .expect("Failed to create cell grid for the species present");
-        }
-        self.cell_grid.rebuild(&self.balls);
-    }
-
-    /// Rebuild the grid if the species added since the last rebuild need
-    /// wider cells than it has, so the 3x3 cells around a ball still cover all
-    /// its neighbours. Call only while every ball is registered in the cell of
-    /// its position (not between a position update and the grid moves).
-    pub(crate) fn fit_cell_grid(&mut self) {
-        if self.physics.max_list_radius(self.species_present) > self.cell_grid.list_radius() {
-            self.rebuild_cell_grid();
-        }
+        self.balls_changed();
     }
 
     /// Edge gap of two balls of `species` at their potential minimum: the
@@ -485,12 +449,18 @@ impl SimulationWorld {
     /// rebuild of a step; balls added since (emitted ones) go last.
     ///
     /// Every per-ball state keyed by ball index that lives across steps must
-    /// be permuted here (today: the Verlet lists and `cached_force_results`),
-    /// just as it must be cleared after `retain` in `remove_invalid_balls`.
+    /// be permuted here (today: the Verlet lists and the last force results),
+    /// just as `balls_changed` clears it after any other change.
     pub(crate) fn reorder_balls_by_cell(&mut self) {
         let n = self.balls.len();
         let mut order: Vec<usize> = Vec::with_capacity(n);
-        order.extend(self.cell_grid.sorted_balls().iter().map(|&b| b as usize));
+        order.extend(
+            self.cache
+                .cell_grid
+                .sorted_balls()
+                .iter()
+                .map(|&b| b as usize),
+        );
         if order.len() < n {
             let mut placed = vec![false; n];
             for &b in &order {
@@ -508,9 +478,9 @@ impl SimulationWorld {
             .iter()
             .map(|&b| old[b].take().expect("each ball once"))
             .collect();
-        if self.cached_force_results.len() == n {
-            let results = std::mem::take(&mut self.cached_force_results);
-            self.cached_force_results = order.iter().map(|&b| results[b].clone()).collect();
+        let results = &mut self.cache.force_results;
+        if results.len() == n {
+            *results = order.iter().map(|&b| results[b].clone()).collect();
         }
         let mut new_index = vec![0; n];
         for (new, &old) in order.iter().enumerate() {
@@ -519,14 +489,6 @@ impl SimulationWorld {
         self.balls
             .par_iter_mut()
             .for_each(|ball| ball.cold.hood.remap(&new_index));
-        self.rebuild_cell_grid();
-    }
-
-    pub(crate) fn resize_cell_grid(&mut self, world_rect: crate::objects2d::Rect) {
-        self.world_rect = world_rect;
-        let list_radius = self.physics.max_list_radius(self.species_present);
-        self.cell_grid = CellGrid::new(self.world_rect, list_radius)
-            .expect("Failed to create cell grid on resize");
         self.rebuild_cell_grid();
     }
 }

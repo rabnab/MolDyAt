@@ -124,7 +124,7 @@ fn ball_bouncing_on_soft_walls_keeps_its_energy() {
         let mut in_contact = false;
         for _ in 0..3_000 {
             mc.simulation_step().unwrap();
-            let touching = mc.world().cached_force_results[0].wall_potential != 0.0;
+            let touching = mc.world().cached_force_results()[0].wall_potential != 0.0;
             if in_contact && !touching {
                 bounces += 1;
                 max_drift = max_drift.max((reported_energy(&mc) - e0).abs() / e0.abs());
@@ -260,7 +260,7 @@ fn left_wall_impulse(mc: &MainContent, v_before: &[f32]) -> f64 {
     if world.physics.soft_walls().is_some() {
         let dt = f64::from(mc.active_time_step());
         return world
-            .cached_force_results
+            .cached_force_results()
             .iter()
             .map(|r| f64::from(r.wall_force.x.max(0.0)) * dt)
             .sum();
@@ -269,7 +269,7 @@ fn left_wall_impulse(mc: &MainContent, v_before: &[f32]) -> f64 {
         .balls
         .iter()
         .zip(v_before)
-        .zip(&world.scratch.update.bounce_infos)
+        .zip(&world.cache.scratch.update.bounce_infos)
         .filter(|(_, bounce)| bounce.box_x.is_some_and(|c| c.normal.x > 0.0))
         .map(|((b, vx), _)| f64::from(b.mass * (b.v.x - vx)))
         .sum()

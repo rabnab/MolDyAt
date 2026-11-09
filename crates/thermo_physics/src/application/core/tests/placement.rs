@@ -74,7 +74,7 @@ fn test_indexed_collision_check_matches_full_scan() {
 
     let index = PlacementIndex::new(world);
     let equilibrium = world.equilibrium_gap(crate::objects2d::ball_impl::DEFAULT_SPECIES);
-    let (cell_x, _) = world.cell_grid.get_cell_size();
+    let (cell_x, _) = world.cell_grid().get_cell_size();
     // Small, the seeding margin, near a cell, and one past it (full scan).
     let margins = [0.0, equilibrium, 0.9 * cell_x, 2.0 * cell_x];
     let (mut hits, mut misses) = (0, 0);
@@ -138,11 +138,11 @@ fn test_grid_collision_check_matches_full_scan_after_balls_moved() {
         main_content.simulation_step().unwrap();
     }
     let world = main_content.world();
-    assert!(world.cell_grid.matches_positions(&world.balls));
+    assert!(world.cell_grid().matches_positions(&world.balls));
 
     let factory = BallFactory::with_seed(3);
     let mut rng = XorShift(0x2545_F491_4F6C_DD1D);
-    let (cell_x, _) = world.cell_grid.get_cell_size();
+    let (cell_x, _) = world.cell_grid().get_cell_size();
     let margins = [0.0, 0.5, 0.9 * cell_x, 2.0 * cell_x];
     let (mut hits, mut misses) = (0, 0);
     for _ in 0..3000 {
@@ -176,12 +176,12 @@ fn test_grid_collision_check_finds_balls_outside_the_grid() {
     let world = main_content.world_mut();
     world.balls.push(ball(&factory, 50.3, 0.0, M));
     world.rebuild_cell_grid();
-    assert_eq!(world.cell_grid.outside_balls(), &[0]);
+    assert_eq!(world.cell_grid().outside_balls(), &[0]);
 
     let inside = ball(&factory, 49.9, 0.0, M);
     assert!(
         world
-            .cell_grid
+            .cell_grid()
             .get_cell_indices(inside.get_position())
             .is_some()
     );

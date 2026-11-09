@@ -166,11 +166,11 @@ fn water_and_argon_meet_by_lennard_jones_only() {
             .dist(world.balls[1].get_position())
             .norm(),
     );
-    assert!(world.cached_force_results[0].torque == 0.0);
+    assert!(world.cached_force_results()[0].torque == 0.0);
     assert!(
-        (world.cached_force_results[0].potential_energy - pair).abs() < 1e-5,
+        (world.cached_force_results()[0].potential_energy - pair).abs() < 1e-5,
         "{} vs {pair}",
-        world.cached_force_results[0].potential_energy
+        world.cached_force_results()[0].potential_energy
     );
 }
 
@@ -209,8 +209,37 @@ fn water_limits_the_time_step_while_present() {
         "step advanced {advanced}"
     );
 
+    assert!(!mc.world().cached_force_results().is_empty());
     mc.world_mut().clear_balls();
     assert_eq!(mc.active_time_step(), set, "back to the set step");
+    assert!(mc.world().cached_force_results().is_empty());
+}
+
+/// The limit also ends when the last water ball becomes invalid and is
+/// removed, and the removal leaves no force results at the shifted indices.
+#[test]
+fn water_limit_ends_when_the_last_water_ball_is_removed() {
+    let mut mc =
+        MainContent::with_config(Rect::new(-20.0, 20.0, 40.0, -40.0), &test_config(), None)
+            .unwrap();
+    let (water, ar) = (species("H2O"), species("Ar"));
+    add(
+        &mut mc,
+        Vec2D::new(5.0, 0.0),
+        Vec2D::zero(),
+        0.0,
+        0.0,
+        water,
+    );
+    add(&mut mc, Vec2D::new(-5.0, 0.0), Vec2D::zero(), 0.0, 0.0, ar);
+    mc.simulation_step().unwrap();
+    assert_eq!(mc.world().cached_force_results().len(), 2);
+
+    mc.world_mut().balls[0].set_position_and_update_tail(Vec2D::new(f32::NAN, 0.0));
+    mc.world_mut().remove_invalid_balls();
+    assert_eq!(mc.world().balls.len(), 1);
+    assert_ne!(mc.time_step_limit().map(|(_, s)| s), Some(water));
+    assert!(mc.world().cached_force_results().is_empty());
 }
 
 /// The `+` key does not raise the time step above the water limit, and `-`
@@ -279,7 +308,7 @@ fn wall_pressure(mc: &mut MainContent, steps: usize) -> f64 {
         mc.simulation_step().unwrap();
         sum += mc
             .world()
-            .cached_force_results
+            .cached_force_results()
             .iter()
             .map(|r| f64::from(r.wall_force.x.abs() + r.wall_force.y.abs()))
             .sum::<f64>();
