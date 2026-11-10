@@ -1093,9 +1093,8 @@ fn test_distributions_add_a_frame_field_and_an_export_file() {
         assert_eq!(total, 24, "every ball is in the histogram");
         let pairs = frame["distributions"]["rdf"]["pairs"].as_array().unwrap();
         assert_eq!(pairs[0]["species"], serde_json::json!(["N2", "N2"]));
-        assert!(frame["distributions"]["rdf"].get("normalisation").is_none());
+        assert_eq!(frame["distributions"]["rdf"]["local_density"], false);
     }
-    assert!(records[0]["config"].get("rdf_normalisation").is_none());
 
     let export = fs::read_to_string(dir.join("distributions.jsonl")).expect("export file");
     let kinds: Vec<String> = export
@@ -1112,11 +1111,11 @@ fn test_distributions_add_a_frame_field_and_an_export_file() {
 }
 
 #[test]
-fn test_rdf_local_is_marked_in_the_run_start_frames_and_export() {
+fn test_rdf_local_marks_the_frames_and_the_export() {
     let dir = export_scratch_dir("rdf_local");
     let mut config = export_config(&dir, crate::export::ExportFormat::Jsonl);
     config.distributions = true;
-    config.rdf_normalisation = crate::distributions::Normalisation::Local;
+    config.rdf_local = true;
     let mut application =
         build_application(window_world_rect(), &SimConfig::default(), config.rng_seed)
             .expect("build deterministic app");
@@ -1127,16 +1126,11 @@ fn test_rdf_local_is_marked_in_the_run_start_frames_and_export() {
         .lines()
         .map(|line| serde_json::from_str(line).unwrap())
         .collect();
-    assert_eq!(records[0]["config"]["rdf_normalisation"], "local");
     for frame in records.iter().filter(|r| r["record_kind"] == "frame") {
-        assert_eq!(frame["distributions"]["rdf"]["normalisation"], "local");
+        assert_eq!(frame["distributions"]["rdf"]["local_density"], true);
     }
     let export = fs::read_to_string(dir.join("distributions.jsonl")).expect("export file");
-    assert!(
-        export
-            .lines()
-            .any(|l| l.contains("\"normalisation\":\"local\""))
-    );
+    assert!(export.contains("\"local_density\":true"));
     fs::remove_dir_all(dir).unwrap();
 }
 

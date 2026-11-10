@@ -6,8 +6,8 @@ User-visible changes to MolDyAt, newest first. Binaries and full release notes a
 ## Unreleased
 
 - Normalise g(r) by the density around each ball so it levels off at 1 where the density varies
-  (gravity, chambers): `Alt + M` in the distributions view, `--rdf-local` with `--distributions`
-  (frames, `run_start` and exports then carry `normalisation: "local"`); the default is unchanged. (#384)
+  (gravity, chambers): `Alt + M` in the distributions view, `--rdf-local` in headless runs; the
+  `rdf` object and records of `--distributions` gain `local_density`. The default is unchanged. (#384)
 - Saves hold their whole species table (with water and molecule models) and state their units
   (save format 9), so later changes to the built-in species or units do not change how they load;
   `[[species]]` can define water (`water`) and rigid molecules (`sites`). (#426)

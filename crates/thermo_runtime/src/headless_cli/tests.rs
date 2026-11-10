@@ -3,7 +3,6 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use super::*;
-use crate::distributions::Normalisation;
 use std::env;
 
 #[test]
@@ -643,17 +642,15 @@ fn test_distributions_flag() {
         .unwrap()
         .unwrap();
     assert!(config.distributions);
-    assert_eq!(config.rdf_normalisation, Normalisation::Mean);
+    assert!(!config.rdf_local);
 }
 
 #[test]
-fn test_rdf_local_flag_needs_distributions() {
-    let config = parse_headless_args_with_args(&headless_args(&["--distributions", "--rdf-local"]))
+fn test_rdf_local_flag_implies_distributions() {
+    let config = parse_headless_args_with_args(&headless_args(&["--rdf-local"]))
         .unwrap()
         .unwrap();
-    assert_eq!(config.rdf_normalisation, Normalisation::Local);
-    let error = parse_headless_args_with_args(&headless_args(&["--rdf-local"])).unwrap_err();
-    assert!(error.message.contains("--rdf-local needs --distributions"));
+    assert!(config.distributions && config.rdf_local);
 }
 
 #[test]

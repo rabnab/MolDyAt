@@ -12,7 +12,7 @@ use super::plot_layout::{
     COLOR_ZERO, GLYPH_CELL, LegendEntry, PlotLabel, PlotRect, PlotScene, PlotSegment, Rgba,
     format_tick, nice_ticks, text_scale,
 };
-use thermo_runtime::distributions::{Distributions, Normalisation};
+use thermo_runtime::distributions::Distributions;
 
 /// Colours of the g(r) curves, by pair.
 const PAIR_COLORS: [Rgba; 6] = [
@@ -34,14 +34,6 @@ pub struct DistributionData {
     pub distributions: Distributions,
     /// `"N2-Ar"` per pair of `distributions.radial.pairs`.
     pub pair_names: Vec<String>,
-}
-
-/// The g(r) heading, with the normalisation when it is not the mean density.
-fn rdf_heading(data: &DistributionData) -> &'static str {
-    match data.distributions.radial.normalisation {
-        Normalisation::Mean => "g(r)",
-        Normalisation::Local => "g(r) local",
-    }
 }
 
 /// Builds the scene: `layout` places text and lines in window pixels.
@@ -198,7 +190,9 @@ impl Layout<'_> {
         };
         // Two panels, each with a heading above and x labels below; the g(r)
         // heading wraps its legend onto as many lines as the width needs.
-        let legend = self.pair_legend(rdf_heading(data), &data.pair_names, left, right);
+        let heading = ["g(r)", "g(r) local"][usize::from(data.distributions.radial.local)];
+        let start = left + self.text_width(heading) + glyph * 2.0;
+        let legend = self.pair_legend(&data.pair_names, start, right);
         let rows = legend.iter().map(|&(row, _)| row + 1).max().unwrap_or(1);
         let panel_h = (bottom - top) / 2.0;
         let speed_area = PlotRect {
@@ -214,21 +208,13 @@ impl Layout<'_> {
             bottom: bottom - line * 1.5,
         };
         self.speed_panel(speed_area, data);
-        self.rdf_panel(rdf_area, data, &legend, rows);
+        self.rdf_panel(rdf_area, data, heading, &legend, rows);
     }
 
-    /// Where each g(r) pair's name goes in the heading: `(row, x)`. Row 0
-    /// starts after `heading`, every row at the same x; a name that would
-    /// run past `right` starts the next row, so every entry stays in the
-    /// window and clickable.
-    fn pair_legend(
-        &self,
-        heading: &str,
-        names: &[String],
-        left: f32,
-        right: f32,
-    ) -> Vec<(usize, f32)> {
-        let start = left + self.text_width(heading) + self.glyph * 2.0;
+    /// Where each g(r) pair's name goes in the heading: `(row, x)`. Every row
+    /// starts at `start`; a name that would run past `right` starts the next
+    /// row, so every entry stays in the window and clickable.
+    fn pair_legend(&self, names: &[String], start: f32, right: f32) -> Vec<(usize, f32)> {
         let gap = self.glyph * 2.0;
         let (mut row, mut x) = (0, start);
         names
@@ -298,6 +284,7 @@ impl Layout<'_> {
         &mut self,
         area: PlotRect,
         data: &DistributionData,
+        heading: &str,
         legend: &[(usize, f32)],
         rows: usize,
     ) {
@@ -326,7 +313,7 @@ impl Layout<'_> {
         // a hidden pair's name is grey.
         let line = self.line;
         let row_y = |row: usize| area.top - line * (rows - row) as f32;
-        self.label(rdf_heading(data), [area.left, row_y(0)], COLOR_TEXT);
+        self.label(heading, [area.left, row_y(0)], COLOR_TEXT);
         for (k, (name, &(row, lx))) in data.pair_names.iter().zip(legend).enumerate() {
             let color = if hidden(k) {
                 COLOR_HIDDEN

@@ -2,7 +2,6 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use crate::distributions::Normalisation;
 use crate::export::ExportFormat;
 use crate::headless_script::Script;
 use std::path::{Path, PathBuf};
@@ -68,9 +67,8 @@ pub struct HeadlessConfig {
     /// record, and with `--export-dir` write `distributions.<ext>` at the end
     /// (#343).
     pub distributions: bool,
-    /// `--rdf-local`: normalise g(r) by the density around each ball
-    /// instead of the world's mean (needs `--distributions`).
-    pub rdf_normalisation: Normalisation,
+    /// `--rdf-local`: g(r) by the density around each ball, not the mean.
+    pub rdf_local: bool,
     /// Save the world to the save directory once it is set up (walls,
     /// valves, seeded balls), before the first step. Perf runs seed a large
     /// world once and `--load` it for every run.
@@ -130,7 +128,7 @@ impl Default for HeadlessConfig {
             export_series: None,
             export_stream: false,
             distributions: false,
-            rdf_normalisation: Normalisation::Mean,
+            rdf_local: false,
             save_setup: false,
             script: None,
             sim: None,
@@ -368,7 +366,7 @@ fn parse_headless_args_with_args(args: &[String]) -> Result<Option<HeadlessConfi
                 export_options_given = true;
             }
             "--distributions" => config.distributions = true,
-            "--rdf-local" => config.rdf_normalisation = Normalisation::Local,
+            "--rdf-local" => (config.distributions, config.rdf_local) = (true, true),
             other => return Err(CliError::new(format!("Unknown argument: {}", other))),
         }
         i += 1;
@@ -402,10 +400,6 @@ fn parse_headless_args_with_args(args: &[String]) -> Result<Option<HeadlessConfi
         return Err(CliError::new(
             "--export-format, --export-series and --export-stream need --export-dir",
         ));
-    }
-
-    if config.rdf_normalisation == Normalisation::Local && !config.distributions {
-        return Err(CliError::new("--rdf-local needs --distributions"));
     }
 
     for (index, valve) in config.valves.iter().enumerate() {

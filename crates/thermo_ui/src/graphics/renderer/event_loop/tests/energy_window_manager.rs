@@ -12,7 +12,6 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use thermo_physics::application::observables::Obs;
 use thermo_runtime::application::renderer_snapshot::RendererSnapshot;
-use thermo_runtime::distributions::Normalisation;
 use thermo_runtime::metrics::MetricsRegistry;
 
 fn make_manager() -> EnergyWindowManager {
@@ -387,7 +386,7 @@ fn test_plot_keys_of_the_energy_window() {
     }
     assert_eq!(
         energy_window_key(&key_map, us(KeyCode::KeyM), KeyPhase::Down, alt),
-        Some(EnergyWindowKey::RdfNormalisation)
+        Some(EnergyWindowKey::RdfLocal)
     );
 }
 
@@ -504,16 +503,6 @@ mod plots {
         // Off the legend: nothing.
         assert!(!manager.left_clicked([500.0, 500.0]));
         assert_eq!(manager.selection(), &before);
-    }
-
-    #[test]
-    fn test_rdf_normalisation_toggles_between_mean_and_local() {
-        let mut manager = manager_with_series();
-        assert_eq!(manager.rdf_normalisation(), Normalisation::Mean);
-        manager.toggle_rdf_normalisation();
-        assert_eq!(manager.rdf_normalisation(), Normalisation::Local);
-        manager.toggle_rdf_normalisation();
-        assert_eq!(manager.rdf_normalisation(), Normalisation::Mean);
     }
 
     /// Switching views drops the last frame's click targets, so a click

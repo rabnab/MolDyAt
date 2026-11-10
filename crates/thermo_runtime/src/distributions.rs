@@ -22,20 +22,6 @@ pub const SPEED_BINS: usize = 32;
 pub const RDF_MAX_DISTANCE: f32 = 5.0;
 /// Bins of g(r) from 0 to [`RDF_MAX_DISTANCE`].
 pub const RDF_BINS: usize = 50;
-/// Outer radius of the ring of [`Normalisation::Local`], in units of the
-/// largest distance of g(r).
-const RING_OUTER: f32 = 1.5;
-
-/// The density g(r) is normalised by.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub enum Normalisation {
-    /// The mean density of the whole world.
-    #[default]
-    Mean,
-    /// The density in the ring around each reference ball just beyond the
-    /// largest distance, so g levels off at 1 where the density varies.
-    Local,
-}
 
 /// The speed histogram and the 2D Maxwell–Boltzmann counts expected in the
 /// same bins.
@@ -78,7 +64,8 @@ pub struct PairDistribution {
 #[derive(Debug, Clone, PartialEq)]
 pub struct RadialDistribution {
     pub bin_width: f32,
-    pub normalisation: Normalisation,
+    /// g was normalised by the density around each reference ball.
+    pub local: bool,
     /// One entry per pair `(a, b)` with `a <= b`, in species table order.
     pub pairs: Vec<PairDistribution>,
 }
@@ -99,7 +86,7 @@ pub struct Distributions {
 }
 
 /// The distributions of `snapshot`'s balls (it needs the `BALLS` layer).
-pub fn distributions(snapshot: &RendererSnapshot, normalisation: Normalisation) -> Distributions {
+pub fn distributions(snapshot: &RendererSnapshot, local: bool) -> Distributions {
     Distributions {
         speed: speed_histogram(&snapshot.balls, SPEED_BINS),
         radial: radial_distribution(
@@ -107,7 +94,7 @@ pub fn distributions(snapshot: &RendererSnapshot, normalisation: Normalisation) 
             &snapshot.frame.world_rect,
             RDF_MAX_DISTANCE,
             RDF_BINS,
-            normalisation,
+            local,
         ),
     }
 }
@@ -174,33 +161,30 @@ pub fn speed_histogram(balls: &[BallRenderData], bins: usize) -> Option<SpeedHis
 /// every wall count, so every shell lies inside the world; an ideal gas
 /// then gives g ≈ 1 at every r.
 ///
-/// With [`Normalisation::Mean`], `ρ_b` is the mean density of the whole
-/// world: g is normalised for a world of uniform density. Where the density
+/// `ρ_b` is the mean density of the whole world, so where the density
 /// varies on its own (a gas stratified under gravity, chambers split by
-/// walls or valves at different densities), g then levels off above 1 at
-/// large r even without interactions; read that plateau as the density
-/// variation, not as structure. With [`Normalisation::Local`], `ρ_b` is
-/// each reference ball's own: the density of `b` in the ring from `r_max` to
-/// `1.5 r_max` around it, summed over the reference balls, which then must
-/// be `1.5 r_max` from every wall. The ring sees a wall inside the world
-/// only as a change of density, so reference balls next to one bias g
-/// slightly. No bins (`bins == 0` or `r_max <= 0`) give no pairs.
+/// walls or valves at different densities), g levels off above 1 at large r
+/// even without interactions; read that plateau as the density variation,
+/// not as structure. With `local`, `ρ_b` is each reference ball's own: the
+/// density of `b` in the ring from `r_max` to `1.5 r_max` around it, with
+/// reference balls `1.5 r_max` from every wall; a wall inside the world
+/// biases those next to it slightly. No bins (`bins == 0` or `r_max <= 0`)
+/// give no pairs.
 pub fn radial_distribution(
     balls: &[BallRenderData],
     world: &Rect,
     r_max: f32,
     bins: usize,
-    normalisation: Normalisation,
+    local: bool,
 ) -> RadialDistribution {
     if bins == 0 || r_max.is_nan() || r_max <= 0.0 {
         return RadialDistribution {
             bin_width: 0.0,
-            normalisation,
+            local,
             pairs: Vec::new(),
         };
     }
-    let local = normalisation == Normalisation::Local;
-    let reach = if local { RING_OUTER * r_max } else { r_max };
+    let reach = if local { 1.5 * r_max } else { r_max };
     let ring_area = std::f32::consts::PI * (reach * reach - r_max * r_max);
     let bin_width = r_max / bins as f32;
     let mut counts_per_species = [0usize; SpeciesSet::CAPACITY];
@@ -231,8 +215,7 @@ pub fn radial_distribution(
 
     // One neighbour pass for every pair: counts per (reference species,
     // neighbour species), by place in `present`, are added to the pair
-    // with the smaller species first (as `a <= b` below). `ring` counts the
-    // neighbours in the ring of the local density.
+    // with the smaller species first (as `a <= b` below).
     let p = present.len();
     let place = |species: SpeciesId| present.iter().position(|&s| s == species.index());
     let mut hist = vec![0u64; p * p * bins];
@@ -262,7 +245,6 @@ pub fn radial_distribution(
     let mut pairs = Vec::new();
     for a in 0..p {
         for b in a..p {
-            // `ρ_b` summed over the reference balls.
             let density_sum = if local {
                 ring[a * p + b] as f32 / ring_area
             } else {
@@ -292,7 +274,7 @@ pub fn radial_distribution(
     }
     RadialDistribution {
         bin_width,
-        normalisation,
+        local,
         pairs,
     }
 }

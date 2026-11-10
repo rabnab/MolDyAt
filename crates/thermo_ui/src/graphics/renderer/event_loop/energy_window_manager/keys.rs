@@ -23,7 +23,7 @@ pub(in super::super) enum EnergyWindowKey {
     /// Switch between the time series and the distributions.
     Distributions,
     /// Switch g(r) between the mean and the local density.
-    RdfNormalisation,
+    RdfLocal,
 }
 
 /// The energy window's action for a key event. The keys come from the key
@@ -50,7 +50,7 @@ pub(in super::super) fn energy_window_key(
         UiAction::Plot(change) => Some(EnergyWindowKey::Plot(change)),
         UiAction::ResetPlotView => Some(EnergyWindowKey::ResetView),
         UiAction::TogglePlotDistributions => Some(EnergyWindowKey::Distributions),
-        UiAction::ToggleRdfNormalisation => Some(EnergyWindowKey::RdfNormalisation),
+        UiAction::ToggleRdfLocal => Some(EnergyWindowKey::RdfLocal),
         _ => None,
     }
 }
@@ -97,20 +97,15 @@ pub(in super::super) fn energy_window_key_hints(key_map: &KeyMap) -> String {
     hints.join("  ")
 }
 
-/// The key hints of the distributions view: `Esc`, the key back to the
-/// time series and the key for the g(r) normalisation.
+/// The key hints of the distributions view: `Esc` and the key back to the
+/// time series.
 pub(super) fn distribution_key_hints(key_map: &KeyMap) -> String {
     let mut hints = vec!["Esc: close".to_string()];
-    for (id, what) in [
-        ("view.plot_distributions", "time series"),
-        ("view.plot_rdf_normalisation", "local g(r)"),
-    ] {
-        let keys = command_by_id(id)
-            .map(|command| key_map.binding_display(command).join(" / "))
-            .unwrap_or_default();
-        if !keys.is_empty() {
-            hints.push(format!("{keys}: {what}"));
-        }
+    let keys = command_by_id("view.plot_distributions")
+        .map(|command| key_map.binding_display(command).join(" / "))
+        .unwrap_or_default();
+    if !keys.is_empty() {
+        hints.push(format!("{keys}: time series"));
     }
     hints.join("  ")
 }

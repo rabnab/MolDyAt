@@ -76,8 +76,8 @@ fn run_ui_action(state: &mut UnifiedRenderState, action: UiAction) -> bool {
             state.render.energy_manager.toggle_distributions();
             false
         }
-        UiAction::ToggleRdfNormalisation => {
-            state.render.energy_manager.toggle_rdf_normalisation();
+        UiAction::ToggleRdfLocal => {
+            state.render.energy_manager.toggle_rdf_local();
             false
         }
         UiAction::DeleteHovered => {

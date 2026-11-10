@@ -14,7 +14,7 @@ use crate::graphics::renderer::event_loop::command_registry::PlotChange;
 use std::time::{Duration, Instant};
 use thermo_runtime::application::renderer_snapshot::RendererSnapshot;
 use thermo_runtime::application::scene_layers::SceneLayers;
-use thermo_runtime::distributions::{Normalisation, distributions};
+use thermo_runtime::distributions::distributions;
 
 /// Least time between two distribution computations: g(r) costs a pass over
 /// the neighbours of every ball, so it follows the snapshots at about 2 Hz.
@@ -50,16 +50,8 @@ impl EnergyWindowManager {
 
     /// Switch g(r) between the mean and the local density; the shown
     /// distributions follow with the next snapshot.
-    pub fn toggle_rdf_normalisation(&mut self) {
-        self.rdf_normalisation = match self.rdf_normalisation {
-            Normalisation::Mean => Normalisation::Local,
-            Normalisation::Local => Normalisation::Mean,
-        };
-    }
-
-    /// How g(r) is normalised in the distributions view.
-    pub fn rdf_normalisation(&self) -> Normalisation {
-        self.rdf_normalisation
+    pub fn toggle_rdf_local(&mut self) {
+        self.rdf_local = !self.rdf_local;
     }
 
     /// The window title for what it shows.
@@ -77,7 +69,7 @@ impl EnergyWindowManager {
     pub(super) fn update_distributions(&mut self, snapshot: &RendererSnapshot) {
         let due = self.distributions.as_ref().is_none_or(|(shown, at)| {
             at.elapsed() >= DISTRIBUTION_INTERVAL
-                || shown.distributions.radial.normalisation != self.rdf_normalisation
+                || shown.distributions.radial.local != self.rdf_local
         });
         if !self.show_distributions
             || self.window.is_none()
@@ -86,7 +78,7 @@ impl EnergyWindowManager {
         {
             return;
         }
-        let distributions = distributions(snapshot, self.rdf_normalisation);
+        let distributions = distributions(snapshot, self.rdf_local);
         let table = &snapshot.balls.species;
         let name = |id| table.get(id).map_or("?", |s| s.name.as_str());
         let pair_names = distributions

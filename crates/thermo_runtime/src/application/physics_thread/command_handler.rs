@@ -11,7 +11,6 @@ use crate::application::persistence::LoadSource;
 use crate::application::persistence::timestamp_utc;
 use crate::application::scene_layers::SceneLayers;
 use crate::application::{BallCommand, DomainCommand, SimControl, ViewCommand, WorldCommand};
-use crate::distributions::Normalisation;
 use crate::export::{
     ExportFormat, ExportKind, SampleStream, StreamSettings, distributions_to_string,
     series_to_string, snapshot_to_string, write_export,
@@ -129,7 +128,7 @@ impl<'a> DomainCommandHandler<'a> {
                 if kind == ExportKind::Snapshot {
                     snapshot_to_string(&snapshot, format)
                 } else {
-                    distributions_to_string(&snapshot, format, Normalisation::default())
+                    distributions_to_string(&snapshot, format, false)
                 }
             }
         };

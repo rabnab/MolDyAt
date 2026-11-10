@@ -67,7 +67,7 @@ Script commands due after a step run after that step's frame.
 | `--export-series <A,B,..>`            | Export only these series (default: all); an unknown name fails the run; needs `--export-dir`                                                                                                                                                                                                                                             |
 | `--export-stream`                     | Also append the sample of every frame (all series, not thinned) to `stream.<ext>` while the run goes; see [Sample stream](#sample-stream); needs `--export-dir`                                                                                                                                                                          |
 | `--distributions`                     | Add the speed histogram and g(r) to every `frame` record (see [Distributions](#distributions)); with `--export-dir` also write `distributions.<ext>`                                                                                                                                                                                     |
-| `--rdf-local`                         | Normalise g(r) by the density around each ball instead of the world's mean; needs `--distributions` (see [Distributions](#distributions))                                                                                                                                                                                               |
+| `--rdf-local`                         | Like `--distributions`, with g(r) normalised by the density around each ball instead of the world's mean (see [Distributions](#distributions))                                                                                                                                                                                         |
 | `--load <PATH>`                       | Start from a saved world (shared with the window mode)                                                                                                                                                                                                                                                                                   |
 | `--save-dir <DIR>`                    | Directory for saves (shared with the window mode)                                                                                                                                                                                                                                                                                        |
 | `--world-scale <F>`                   | Scale the default world's width and height by F around its centre, 0.05..=100; overrides `world.scale` of `--config`; not with `--load` (shared with the window mode, parsed by the binary)                                                                                                                                              |
@@ -126,21 +126,20 @@ With `--distributions` (#343) every `frame` record also has a
   Maxwell–Boltzmann counts expected in the same bins at that temperature
   (`Σ_balls exp(-m a²/2T) - exp(-m b²/2T)` for a bin `[a, b)`, exact for
   mixed masses).
-- `rdf`: `bin_width` and `pairs`, one per species pair present (table
-  order), with `species` (two names), `reference_balls` and `g`
+- `rdf`: `bin_width`, `local_density` (see below) and `pairs`, one per
+  species pair present (table order), with `species` (two names), `reference_balls` and `g`
   (`RDF_BINS`, 50, bins up to `RDF_MAX_DISTANCE`, 5 σ). Only balls at least
   5 σ from every wall are reference balls, so no shell is cut off; an ideal
   gas of uniform density gives g ≈ 1. By default g is normalised by the
   mean density of the whole world, so where the density varies on its own
   (stratified under gravity, chambers at different densities) g levels off
-  above 1 at large r even without interactions. With `--rdf-local` it is
-  normalised by the density of the neighbour species in the ring from 5 σ to
-  7.5 σ around each reference ball (summed over the reference balls, which
-  then keep 7.5 σ from every wall), so g levels off at 1 there; `rdf` then
-  has `normalisation: "local"` (absent for the mean) and `run_start`'s
-  `config` has `rdf_normalisation: "local"`. The ring does not see a wall
-  inside the world, so reference balls next to one bias g slightly. `g` is
-  `null` where there are no reference balls.
+  above 1 at large r even without interactions. With `--rdf-local`
+  (`local_density: true`) it is normalised by the density of the neighbour
+  species in the ring from 5 σ to 7.5 σ around each reference ball (summed
+  over the reference balls, which then keep 7.5 σ from every wall), so g
+  levels off at 1 there. The ring does not see a wall inside the world, so
+  reference balls next to one bias g slightly. `g` is `null` where there are
+  no reference balls.
 
 Both are computed from the frame's balls, in ball order, off the physics
 step (`thermo_runtime::distributions`); a run without the flag computes

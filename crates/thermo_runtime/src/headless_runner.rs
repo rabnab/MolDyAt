@@ -5,7 +5,6 @@
 use crate::application::CreateSnapshot;
 use crate::application::renderer_snapshot::RendererSnapshot;
 use crate::application::scene_layers::SceneLayers;
-use crate::distributions::Normalisation;
 use crate::export::{
     ExportFormat, ExportKind, SampleStream, StreamSettings, distributions_to_string,
     series_to_string, snapshot_to_string, write_export,
@@ -65,10 +64,9 @@ pub struct ExportSettings {
     /// Also stream every frame's sample to `stream.<ext>` (#366).
     pub stream: bool,
     /// Also write the final snapshot's distributions to
-    /// `distributions.<ext>` (`--distributions`, #343).
-    pub distributions: bool,
-    /// Normalisation of that file's g(r) (`--rdf-local`).
-    pub rdf_normalisation: Normalisation,
+    /// `distributions.<ext>` (`--distributions`, #343), with g(r) by the
+    /// local density if `Some(true)` (`--rdf-local`).
+    pub distributions: Option<bool>,
 }
 
 /// The series of a run being exported (`--export-dir`).
@@ -363,8 +361,7 @@ impl HeadlessRunner {
                 format: config.export_format,
                 series: config.export_series.clone(),
                 stream: config.export_stream,
-                distributions: config.distributions,
-                rdf_normalisation: config.rdf_normalisation,
+                distributions: config.distributions.then_some(config.rdf_local),
             }))
             .build())
     }
@@ -392,10 +389,10 @@ impl HeadlessRunner {
                 snapshot_to_string(snapshot, settings.format),
             ),
         ];
-        if settings.distributions {
+        if let Some(local) = settings.distributions {
             files.push((
                 ExportKind::Distributions,
-                distributions_to_string(snapshot, settings.format, settings.rdf_normalisation),
+                distributions_to_string(snapshot, settings.format, local),
             ));
         }
         let mut written = files

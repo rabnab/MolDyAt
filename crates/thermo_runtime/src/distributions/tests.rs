@@ -133,13 +133,7 @@ fn g_of_an_ideal_gas_is_one() {
     let world = Rect::new(0.0, 0.0, 100.0, 100.0);
     let mut rng = Uniform(290);
     let gas = ideal_gas(8_000, &world, DEFAULT_SPECIES, &mut rng);
-    let rdf = radial_distribution(
-        &gas,
-        &world,
-        RDF_MAX_DISTANCE,
-        RDF_BINS,
-        Normalisation::Mean,
-    );
+    let rdf = radial_distribution(&gas, &world, RDF_MAX_DISTANCE, RDF_BINS, false);
     assert_eq!(rdf.pairs.len(), 1);
     let pair = &rdf.pairs[0];
     assert!(pair.reference_balls > 6_000, "{}", pair.reference_balls);
@@ -168,13 +162,13 @@ fn far_mean(rdf: &RadialDistribution) -> f32 {
     far.iter().sum::<f32>() / far.len() as f32
 }
 
-fn far_g(gas: &[BallRenderData], world: &Rect, normalisation: Normalisation) -> f32 {
+fn far_g(gas: &[BallRenderData], world: &Rect, local: bool) -> f32 {
     far_mean(&radial_distribution(
         gas,
         world,
         RDF_MAX_DISTANCE,
         RDF_BINS,
-        normalisation,
+        local,
     ))
 }
 
@@ -182,14 +176,8 @@ fn far_g(gas: &[BallRenderData], world: &Rect, normalisation: Normalisation) -> 
 fn g_of_a_uniform_gas_is_one_with_the_local_density_too() {
     let world = Rect::new(0.0, 0.0, 100.0, 100.0);
     let gas = ideal_gas(8_000, &world, DEFAULT_SPECIES, &mut Uniform(290));
-    let rdf = radial_distribution(
-        &gas,
-        &world,
-        RDF_MAX_DISTANCE,
-        RDF_BINS,
-        Normalisation::Local,
-    );
-    assert_eq!(rdf.normalisation, Normalisation::Local);
+    let rdf = radial_distribution(&gas, &world, RDF_MAX_DISTANCE, RDF_BINS, true);
+    assert!(rdf.local);
     let pair = &rdf.pairs[0];
     // The reference balls keep 1.5 r_max from the walls: 85 x 85 of 100 x 100.
     assert!(
@@ -212,8 +200,8 @@ fn g_under_gravity_levels_off_at_one_only_with_the_local_density() {
             ball(DEFAULT_SPECIES, 1.0, Vec2D::new(x, y), Vec2D::zero())
         })
         .collect();
-    let local = far_g(&gas, &world, Normalisation::Local);
-    let mean = far_g(&gas, &world, Normalisation::Mean);
+    let local = far_g(&gas, &world, true);
+    let mean = far_g(&gas, &world, false);
     assert!((local - 1.0).abs() < 0.05, "local {local}");
     assert!(mean > 1.5, "mean {mean}");
 }
@@ -234,8 +222,8 @@ fn g_of_two_chambers_levels_off_at_one_only_with_the_local_density() {
         DEFAULT_SPECIES,
         &mut rng,
     ));
-    let local = far_g(&gas, &world, Normalisation::Local);
-    let mean = far_g(&gas, &world, Normalisation::Mean);
+    let local = far_g(&gas, &world, true);
+    let mean = far_g(&gas, &world, false);
     assert!((local - 1.0).abs() < 0.1, "local {local}");
     assert!(mean > 1.2, "mean {mean}");
 }
@@ -245,21 +233,9 @@ fn a_world_too_small_for_the_ring_has_no_local_g() {
     // Big enough for the shells (5), too small for the ring (7.5 from every wall).
     let world = Rect::new(0.0, 0.0, 14.0, 14.0);
     let gas = ideal_gas(200, &world, DEFAULT_SPECIES, &mut Uniform(1));
-    let local = radial_distribution(
-        &gas,
-        &world,
-        RDF_MAX_DISTANCE,
-        RDF_BINS,
-        Normalisation::Local,
-    );
+    let local = radial_distribution(&gas, &world, RDF_MAX_DISTANCE, RDF_BINS, true);
     assert_eq!(local.pairs[0].reference_balls, 0);
-    let mean = radial_distribution(
-        &gas,
-        &world,
-        RDF_MAX_DISTANCE,
-        RDF_BINS,
-        Normalisation::Mean,
-    );
+    let mean = radial_distribution(&gas, &world, RDF_MAX_DISTANCE, RDF_BINS, false);
     assert!(mean.pairs[0].reference_balls > 0);
 }
 
@@ -270,13 +246,7 @@ fn a_mixture_has_one_g_per_species_pair() {
     let other = SpeciesId::new(6);
     let mut gas = ideal_gas(3_000, &world, DEFAULT_SPECIES, &mut rng);
     gas.extend(ideal_gas(3_000, &world, other, &mut rng));
-    let rdf = radial_distribution(
-        &gas,
-        &world,
-        RDF_MAX_DISTANCE,
-        RDF_BINS,
-        Normalisation::Mean,
-    );
+    let rdf = radial_distribution(&gas, &world, RDF_MAX_DISTANCE, RDF_BINS, false);
     let species: Vec<_> = rdf.pairs.iter().map(|p| p.species).collect();
     assert_eq!(
         species,
@@ -297,12 +267,12 @@ fn no_bins_give_no_pairs() {
     let world = Rect::new(0.0, 0.0, 50.0, 50.0);
     let gas = ideal_gas(20, &world, DEFAULT_SPECIES, &mut Uniform(2));
     assert!(
-        radial_distribution(&gas, &world, RDF_MAX_DISTANCE, 0, Normalisation::Mean)
+        radial_distribution(&gas, &world, RDF_MAX_DISTANCE, 0, false)
             .pairs
             .is_empty()
     );
     assert!(
-        radial_distribution(&gas, &world, 0.0, RDF_BINS, Normalisation::Mean)
+        radial_distribution(&gas, &world, 0.0, RDF_BINS, false)
             .pairs
             .is_empty()
     );
@@ -312,13 +282,7 @@ fn no_bins_give_no_pairs() {
 fn a_world_too_small_for_the_shells_has_no_g() {
     let world = Rect::new(0.0, 0.0, 8.0, 8.0);
     let gas = ideal_gas(20, &world, DEFAULT_SPECIES, &mut Uniform(1));
-    let rdf = radial_distribution(
-        &gas,
-        &world,
-        RDF_MAX_DISTANCE,
-        RDF_BINS,
-        Normalisation::Mean,
-    );
+    let rdf = radial_distribution(&gas, &world, RDF_MAX_DISTANCE, RDF_BINS, false);
     assert_eq!(rdf.pairs[0].reference_balls, 0);
     assert!(rdf.pairs[0].g.iter().all(|g| g.is_nan()));
 }

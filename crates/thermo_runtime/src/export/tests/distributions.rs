@@ -4,7 +4,7 @@
 
 use super::*;
 use crate::application::renderer_snapshot::RendererSnapshot;
-use crate::distributions::{Normalisation, RDF_BINS, SPEED_BINS};
+use crate::distributions::{RDF_BINS, SPEED_BINS};
 use thermo_physics::objects2d::Vec2D;
 
 /// The balls of `snapshot_with_balls`, moving.
@@ -22,7 +22,7 @@ fn test_distributions_csv_has_a_speed_row_per_bin_and_rdf_rows_per_pair() {
     let rows = parse_csv(&distributions_to_string(
         &snapshot,
         ExportFormat::Csv,
-        Normalisation::Mean,
+        false,
     ));
     assert_eq!(
         rows[0],
@@ -45,12 +45,11 @@ fn test_distributions_csv_has_a_speed_row_per_bin_and_rdf_rows_per_pair() {
 #[test]
 fn test_distributions_jsonl_records() {
     let snapshot = moving_balls();
-    let text = distributions_to_string(&snapshot, ExportFormat::Jsonl, Normalisation::Mean);
+    let text = distributions_to_string(&snapshot, ExportFormat::Jsonl, false);
     let records: Vec<serde_json::Value> = text
         .lines()
         .map(|l| serde_json::from_str(l).unwrap())
         .collect();
-    assert!(records.iter().all(|r| r.get("normalisation").is_none()));
     assert_eq!(records[0]["record_kind"], "distributions_header");
     assert_eq!(records[0]["ball_count"], snapshot.balls.len());
     assert_eq!(records[1]["record_kind"], "speed_histogram");
@@ -65,14 +64,14 @@ fn test_distributions_jsonl_records() {
 }
 
 #[test]
-fn test_local_normalisation_is_marked_on_the_rdf_records() {
-    let text = distributions_to_string(&moving_balls(), ExportFormat::Jsonl, Normalisation::Local);
-    let records: Vec<serde_json::Value> = text
-        .lines()
-        .map(|l| serde_json::from_str(l).unwrap())
-        .collect();
-    for record in &records {
-        let expected = (record["record_kind"] == "rdf").then(|| serde_json::json!("local"));
-        assert_eq!(record.get("normalisation"), expected.as_ref());
+fn test_rdf_records_say_whether_g_uses_the_local_density() {
+    for local in [false, true] {
+        let text = distributions_to_string(&moving_balls(), ExportFormat::Jsonl, local);
+        for line in text.lines() {
+            let record: serde_json::Value = serde_json::from_str(line).unwrap();
+            if record["record_kind"] == "rdf" {
+                assert_eq!(record["local_density"], local);
+            }
+        }
     }
 }
