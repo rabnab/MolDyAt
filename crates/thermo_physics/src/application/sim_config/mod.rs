@@ -25,7 +25,10 @@
 //!
 //! Every key has an accepted range (the `MIN_*` / `MAX_*` constants), checked
 //! by `SimConfig::validate` for a config file, `--dt`, `--world-scale` and a
-//! save.
+//! save. Each section is resolved to its typed values first; the rules that
+//! involve several sections then run once on the result
+//! (`ResolvedSpecies::validate`). `config_validation.rs` checks both over
+//! random configs.
 //!
 //! Unknown keys are rejected, here and in a save's `config`. That makes every
 //! key part of the save format: a key added later is unknown to this build,
@@ -344,12 +347,14 @@ impl SimConfig {
             MAX_SNAPSHOT_INTERVAL_US,
             "display.snapshot_interval_us",
         )?;
-        Ok(ResolvedSpecies {
+        let resolved = ResolvedSpecies {
             table,
             pair_overrides,
             walls,
             fields,
-        })
+        };
+        resolved.validate()?;
+        Ok(resolved)
     }
 
     #[cfg(test)]

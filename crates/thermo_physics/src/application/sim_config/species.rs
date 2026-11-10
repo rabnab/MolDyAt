@@ -341,3 +341,32 @@ pub(crate) struct ResolvedSpecies {
     /// The `[[fields]]` (#347).
     pub fields: Vec<Field>,
 }
+
+impl ResolvedSpecies {
+    /// The rules that involve more than one section, checked on the
+    /// resolved config. A molecule (#406) interacts through its sites only:
+    /// a pair override would add a second law between the centres and a
+    /// wall override replaces the mixed site laws, and sites have no
+    /// overrides yet.
+    pub(super) fn validate(&self) -> AppResult {
+        let molecule = |id| (self.table.sites(id).len() > 1).then(|| &self.table.species(id).name);
+        for (i, o) in self.pair_overrides.iter().enumerate() {
+            if let Some(name) = [o.a, o.b].into_iter().find_map(molecule) {
+                return Err(invalid(format!(
+                    "potential.pair_override[{i}] names the molecule species {name}: molecules \
+                     interact through their sites, which mix by Lorentz–Berthelot and cannot \
+                     be overridden"
+                )));
+            }
+        }
+        for (i, o) in self.walls.overrides.iter().enumerate() {
+            if let Some(name) = molecule(o.species) {
+                return Err(invalid(format!(
+                    "walls.override[{i}]: {name} is a molecule species; its sites meet the \
+                     walls with the mixed site laws, which cannot be overridden"
+                )));
+            }
+        }
+        Ok(())
+    }
+}
