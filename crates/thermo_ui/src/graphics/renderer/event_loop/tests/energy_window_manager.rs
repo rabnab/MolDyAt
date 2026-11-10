@@ -229,7 +229,7 @@ mod keys {
     use crate::graphics::renderer::event_loop::KeyCode;
     use crate::graphics::renderer::event_loop::command_registry::KeyInput;
     use crate::graphics::renderer::event_loop::command_registry::PlotChange;
-    use crate::graphics::renderer::event_loop::energy_window_manager::{
+    use crate::graphics::renderer::event_loop::energy_window_manager::keys::{
         EnergyWindowKey, energy_window_key, energy_window_key_hints,
     };
     use crate::graphics::renderer::event_loop::key_map::{HeldModifiers, KeyMap, KeyPhase};
@@ -349,7 +349,7 @@ mod keys {
 fn test_plot_keys_of_the_energy_window() {
     use crate::graphics::renderer::event_loop::KeyCode;
     use crate::graphics::renderer::event_loop::command_registry::PlotChange;
-    use crate::graphics::renderer::event_loop::energy_window_manager::{
+    use crate::graphics::renderer::event_loop::energy_window_manager::keys::{
         EnergyWindowKey, energy_window_key,
     };
     use crate::graphics::renderer::event_loop::key_map::{HeldModifiers, KeyMap, KeyPhase};
@@ -391,7 +391,7 @@ mod plots {
     use super::*;
     use crate::graphics::energy_plot::{LegendEntry, PanelArea, PlotRect, PlotSelection};
     use crate::graphics::renderer::event_loop::command_registry::PlotChange;
-    use crate::graphics::renderer::event_loop::energy_window_manager::ClickTargets;
+    use crate::graphics::renderer::event_loop::energy_window_manager::gestures::ClickTargets;
 
     fn manager_with_series() -> EnergyWindowManager {
         let mut data = EnergyData::new();
@@ -526,7 +526,7 @@ mod plot_view {
     use super::*;
     use crate::graphics::energy_plot::{PlotRect, TimeHistory};
     use crate::graphics::renderer::event_loop::KeyMap;
-    use crate::graphics::renderer::event_loop::energy_window_manager::PlotGeometry;
+    use crate::graphics::renderer::event_loop::energy_window_manager::gestures::PlotGeometry;
     use winit::dpi::{PhysicalPosition, PhysicalSize};
     use winit::event::{
         DeviceId, ElementState, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent,
