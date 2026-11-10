@@ -290,12 +290,6 @@ impl Ball2D {
         self.alpha = alpha;
     }
 
-    /// Rotational kinetic energy `½·I·ω²` (0 without orientation).
-    #[inline]
-    pub(crate) fn rotational_energy(&self) -> f32 {
-        0.5 * self.inertia * self.omega * self.omega
-    }
-
     /// Calculate linear momentum (mass × velocity).
     ///
     /// # Returns

@@ -133,7 +133,10 @@ headless runs; both step with the configured time step.
    (`leaving_wall`) feels the line walls scaled by its ramp, which grows
    from 0 to 1 over `WALL_RAMP_TIME` (#424).
 4. **apply**: velocity update (and `ω += ½ (α_old + α_new) dt`, `α = torque / I`
-   for balls with an orientation), kinetic (with `½ I ω²`), pair and wall
+   for balls with an orientation), kinetic (with `½ I ω²`; degrees of
+   freedom, energy, scaling, stopping and sampling of a ball's motion
+   live in `ball_impl/kinetics.rs`, so rotation is handled nowhere
+   else), pair and wall
    potential energy, wall
    momentum bookkeeping (the soft wall forces times `dt`, backstop
    impulses, hard contacts), the growth of the wall ramp, with hard walls the

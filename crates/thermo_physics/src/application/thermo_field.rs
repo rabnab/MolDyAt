@@ -14,10 +14,8 @@ pub(crate) struct LocalKineticStats {
     sum_m: f64,
     sum_mv: [f64; 2],
     sum_mv2: f64,
-    /// Balls with an orientation (#348): one more thermal degree of
-    /// freedom each.
-    rot_count: usize,
-    /// `Σ I ω²` of those balls.
+    sum_dof: usize,
+    /// `Σ I ω²`.
     sum_iw2: f64,
 }
 
@@ -34,27 +32,16 @@ impl LocalKineticStats {
         self.sum_mv[0] += f64::from(mass * ball.v.x);
         self.sum_mv[1] += f64::from(mass * ball.v.y);
         self.sum_mv2 += f64::from(mass * ball.v.norm_sq());
-        if ball.inertia > 0.0 {
-            self.rot_count += 1;
-            self.sum_iw2 += f64::from(ball.inertia * ball.omega * ball.omega);
-        }
+        self.sum_dof += ball.dof();
+        self.sum_iw2 += 2.0 * f64::from(ball.rotational_energy());
     }
 
-    /// Thermal degrees of freedom: `2·(N − 1)` of the translation in the
-    /// centre-of-mass frame, plus one per ball with an orientation (#348).
-    /// `None` below two balls, also for one rotating ball: its spin alone
-    /// is not a temperature a thermostat should act on (a single ball has
-    /// none in translation either).
+    /// Thermal degrees of freedom: all of the balls less the 2 of the
+    /// centre-of-mass motion. `None` below two balls, also for one rotating
+    /// ball: its spin alone is not a temperature a thermostat should act on
+    /// (a single ball has none in translation either).
     pub(crate) fn thermal_dof(&self) -> Option<f32> {
-        if self.count < 2 {
-            return None;
-        }
-        let translational = 2.0 * (self.count as f32 - 1.0);
-        Some(if self.rot_count > 0 {
-            translational + self.rot_count as f32
-        } else {
-            translational
-        })
+        (self.count >= 2).then(|| (self.sum_dof - 2) as f32)
     }
 
     pub(crate) fn count(&self) -> usize {
@@ -93,10 +80,8 @@ impl LocalKineticStats {
             return None;
         }
 
-        // Removing the 2D center-of-mass motion leaves 2 * (N - 1) thermal
-        // degrees of freedom, plus one per rotating ball (equipartition,
-        // #348). The numerator is `sum m |v - v_com|^2 + sum I ω²`, i.e.
-        // twice the thermal kinetic energy in reduced LJ units.
+        // The numerator is `sum m |v - v_com|^2 + sum I ω²`, i.e. twice the
+        // thermal kinetic energy in reduced LJ units (equipartition, #348).
         let thermal_dof = self.thermal_dof()?;
         if thermal_dof <= f32::EPSILON {
             return None;
@@ -106,11 +91,7 @@ impl LocalKineticStats {
         // floating-point cancellation for rigidly drifting buckets.
         let momentum_sq = self.sum_mv[0] * self.sum_mv[0] + self.sum_mv[1] * self.sum_mv[1];
         let thermal_speed_sq = (self.sum_mv2 - momentum_sq / self.sum_m).max(0.0);
-        let thermal_dof = f64::from(thermal_dof);
-        if self.rot_count > 0 {
-            return Some(((thermal_speed_sq + self.sum_iw2) / thermal_dof) as f32);
-        }
-        Some((thermal_speed_sq / thermal_dof) as f32)
+        Some(((thermal_speed_sq + self.sum_iw2) / f64::from(thermal_dof)) as f32)
     }
 }
 
@@ -121,7 +102,7 @@ impl Default for LocalKineticStats {
             sum_m: 0.0,
             sum_mv: [0.0; 2],
             sum_mv2: 0.0,
-            rot_count: 0,
+            sum_dof: 0,
             sum_iw2: 0.0,
         }
     }

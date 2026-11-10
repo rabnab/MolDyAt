@@ -11,7 +11,6 @@ use std::sync::Arc;
 
 use rand::rngs::{StdRng, SysRng};
 use rand::{RngExt, SeedableRng};
-use rand_distr::{Distribution, Normal};
 
 /// Factory for creating Ball2D instances with various configurations.
 ///
@@ -175,20 +174,12 @@ impl BallFactory {
         ball
     }
 
-    /// Give a rotating `ball` (#348) an angular velocity that matches its
-    /// translation: `ω ~ N(0, √(T / I))` with `T = ½ m v²`, the temperature
-    /// at which that is the mean translational energy (2D, `k_B = 1`). So a
-    /// gas spawned with thermal speeds starts near equipartition instead of
-    /// with cold rotation. Balls without inertia, or at rest, draw nothing
-    /// from the RNG, so their runs stay bit-identical.
+    /// Give a rotating `ball` (#348) a spin at `T = ½ m v²`, the
+    /// temperature at which its speed is the mean translational energy, so
+    /// a gas spawned with thermal speeds starts near equipartition instead
+    /// of with cold rotation.
     fn thermal_spin(rng: &mut StdRng, ball: &mut Ball2D) {
-        let temperature = 0.5 * ball.mass * ball.v.norm_sq();
-        if ball.inertia > 0.0 && temperature > 0.0 {
-            let spread = (temperature / ball.inertia).sqrt();
-            if let Ok(normal) = Normal::new(0.0, spread) {
-                ball.omega = normal.sample(rng);
-            }
-        }
+        ball.sample_spin(0.5 * ball.mass * ball.v.norm_sq(), rng);
     }
 
     /// [`Self::create_with_species_and_velocity`] with a thermal spin for a
