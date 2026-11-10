@@ -152,11 +152,11 @@ jobs:
         run: scripts/check_release_files.sh
 
   # One job builds the test binaries once (nextest and cargo test share them),
-  # then runs the unit tests, the seeded headless regression and the drift
-  # suite. The ignored suites run even if an earlier step failed, so a
-  # unit-test failure still shows the drift and regression results.
+  # then runs the unit tests and the seeded headless regression. The ignored
+  # suites run even if an earlier step failed, so a unit-test failure still
+  # shows the regression results. The drift suite has its own job below.
   test:
-    name: tests (workspace, headless regression, drift)
+    name: tests (workspace, headless regression)
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -227,6 +227,30 @@ jobs:
           name: headless-regression-log
           path: headless-regression.log
 
+  # The drift suite takes as long as the rest of the tests, so it runs
+  # alongside them in its own job.
+  drift:
+    name: drift suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          toolchain: ${{ env.RUST_NIGHTLY }}
+
+      - name: Cache cargo registry and build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+
       - name: Log runner CPU and SIMD path
         shell: bash
         run: |
@@ -253,7 +277,6 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run drift harness tests with scenario summaries
-        if: ${{ !cancelled() }}
         shell: bash
         run: |
           set -o pipefail

@@ -14,9 +14,9 @@ cargo ci-test-drift   # = cargo test -p thermo_physics -- --ignored --nocapture
 ```
 
 All scenarios are `#[ignore = "suite:drift"]`, so a plain `cargo test` skips
-them. CI runs the alias in a step of the `test` job, after the unit tests and
-reusing their build. The alias runs every ignored test of `thermo_physics`, so
-it also runs the seven `#[ignore = "suite:physics (slow)"]` tests
+them. CI runs the alias in its own `drift` job, alongside the `test` job. It
+runs every ignored test of `thermo_physics`, so it also runs the seven
+`#[ignore = "suite:physics (slow)"]` tests
 (`test_overlap_fallback_stays_rare_in_a_gas_with_walls`,
 `test_virial_pressure_2d_matches_wall_pressure`,
 `soft_wall_pressure_matches_the_hard_wall`,
@@ -252,7 +252,7 @@ local to that array, the kernel gather and the position update.
 
 ## CI reporting
 
-The drift steps of the `test` job always upload `drift-harness.log` and write to the job summary:
+The `drift` job always uploads `drift-harness.log` and writes to the job summary:
 
 - the runner arch, CPU model and best host SIMD flag, plus the compiled `target_feature`s, which decide the SIMD path the baselines depend on;
 - every `DRIFT_SCENARIO`, `DRIFT_CONVERGENCE` and `DRIFT_PRECISION` line (matched anywhere in a log line: tests run in parallel, so a line can start after another test's output);
@@ -341,4 +341,3 @@ stated.
 **f64 accumulators (#421).** The simulation time, the step's energy, momentum and mass sums, the wall momentum, the thermostat chains and the temperature sums are kept in f64. They do not feed back into the motion except through thermostats, which no scenario uses: every `trajectory_hash` and every drift value is unchanged. The free-gas headless fixture changes only in the reported energies and time (≤ 7e-8 relative); the operators fixture, which has a thermostat, also in positions and velocities (≤ 1.3e-5 relative). `serde_json` parses floats exactly (`float_roundtrip`), so the f64 chains survive a save and load bit for bit. The total energy is summed in f64 too (`SimStats::total_energy`, `FrameInfo::energy_total`), and the headless `delta_energy` and the `E_tot` series are formed from it before they are narrowed: the free-gas fixture's one non-zero `delta_energy` moves by 1.9e-9.
 
 **Safety-net counters (#422).** The step counts its safety-net interventions; they do not change any trajectory (every `trajectory_hash` and drift value is unchanged). Measured per scenario, with the bound now checked: binary_mixture 27 capped pairs (1.1e-4 per ball and step; bound 2.5e-4), dense_gas_many_body and soft_walled_gas 85 (3.3e-4; 7e-4), hot_sparse_gas 13 920 (3.5e-2; 7e-2) and 43 backstop hits (100), mixed_sizes_cell_borders 554 (3.1e-2; 7e-2) and 7 (20), balls_removed_and_added 4 812 (3.9e-2; 8e-2) and 16 (40), force_cap_transition 12 (2.0e-2; 5e-2); two_body_lj_baseline and the reflection scenarios none. No scenario brakes or corrects an overlap. The engine's capped-pair count agrees with the harness's own `cap_hits` (which also counts step 0). Both headless fixtures gain only the `safety_nets` object and the `net_*` metrics; the operators run brakes 38 balls (its default speed limit).
-

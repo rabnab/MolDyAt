@@ -13,7 +13,8 @@ description: Procedure for diagnosing a failed or warning CI run - finding the f
 | `fmt` | `cargo fmt -- --check` | run `cargo fmt` |
 | `clippy` | `cargo clippy` on the workspace with `-D warnings`, and `-p thermo_physics -p thermo_runtime -p thermo_ui --all-targets --no-default-features` | warnings, or code that only compiles with `measure-time` |
 | `licenses` | `cargo deny check licenses`, `scripts/check_release_files.sh` | new dependency with a license missing from `deny.toml`/`about.toml`, `.rs`/`.wgsl` file without the MPL-2.0 header, stale `Cargo.lock`, `CITATION.cff` version mismatch |
-| `test` | `cargo nextest run --workspace --profile ci`, then `cargo ci-test-headless-regression`, the core tests and fixtures with `--no-default-features`, then `cargo ci-test-drift` | see below |
+| `test` | `cargo nextest run --workspace --profile ci`, then `cargo ci-test-headless-regression`, the core tests and fixtures with `--no-default-features` | see below |
+| `drift` | `cargo ci-test-drift`, alongside `test` | see below |
 
 The pinned nightly is set in `rust-toolchain.toml` and mirrored in `RUST_NIGHTLY` in `ci.yml`; a mismatch shows up as different clippy or rustfmt results than locally.
 
@@ -25,7 +26,7 @@ gh run list --branch <branch> --limit 5
 gh run view <run-id> --log-failed          # only the failing steps
 gh run download <run-id> -n drift-harness-log -n headless-regression-log -n test-results
 ```
-Artifacts: `test-results` (JUnit), `headless-regression-log` (on failure), `drift-harness-log` (always). The job summary lists the runner CPU, the SIMD path (compiled `target_feature`s), every `DRIFT_SCENARIO` / `DRIFT_CONVERGENCE` line and every `DRIFT_WARNING`.
+Artifacts: `test-results` (JUnit), `headless-regression-log` (on failure), `drift-harness-log` (always). The `drift` job summary lists the runner CPU, the SIMD path (compiled `target_feature`s), every `DRIFT_SCENARIO` / `DRIFT_CONVERGENCE` line and every `DRIFT_WARNING`.
 
 ## Reading test failures
 - **Unit tests (nextest):** reproduce locally with the exact test name: `cargo test -p <package> <test> -- --exact --nocapture`. `retries = 0`, so a failure is not hidden by a retry; a test that fails only sometimes is a bug (usually timing in physics-thread tests or a thread-count dependence), not noise.
