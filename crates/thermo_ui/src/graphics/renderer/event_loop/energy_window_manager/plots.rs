@@ -14,7 +14,7 @@ use crate::graphics::renderer::event_loop::command_registry::PlotChange;
 use std::time::{Duration, Instant};
 use thermo_runtime::application::renderer_snapshot::RendererSnapshot;
 use thermo_runtime::application::scene_layers::SceneLayers;
-use thermo_runtime::distributions::distributions;
+use thermo_runtime::distributions::{Normalisation, distributions};
 
 /// Least time between two distribution computations: g(r) costs a pass over
 /// the neighbours of every ball, so it follows the snapshots at about 2 Hz.
@@ -48,6 +48,20 @@ impl EnergyWindowManager {
         self.redraw_now();
     }
 
+    /// Switch g(r) between the mean and the local density; the shown
+    /// distributions follow with the next snapshot.
+    pub fn toggle_rdf_normalisation(&mut self) {
+        self.rdf_normalisation = match self.rdf_normalisation {
+            Normalisation::Mean => Normalisation::Local,
+            Normalisation::Local => Normalisation::Mean,
+        };
+    }
+
+    /// How g(r) is normalised in the distributions view.
+    pub fn rdf_normalisation(&self) -> Normalisation {
+        self.rdf_normalisation
+    }
+
     /// The window title for what it shows.
     pub(super) fn title(&self) -> String {
         if self.show_distributions {
@@ -61,10 +75,10 @@ impl EnergyWindowManager {
     /// snapshot has its balls and the last ones are older than
     /// [`DISTRIBUTION_INTERVAL`]. Computed here, off the physics thread.
     pub(super) fn update_distributions(&mut self, snapshot: &RendererSnapshot) {
-        let due = self
-            .distributions
-            .as_ref()
-            .is_none_or(|(_, at)| at.elapsed() >= DISTRIBUTION_INTERVAL);
+        let due = self.distributions.as_ref().is_none_or(|(shown, at)| {
+            at.elapsed() >= DISTRIBUTION_INTERVAL
+                || shown.distributions.radial.normalisation != self.rdf_normalisation
+        });
         if !self.show_distributions
             || self.window.is_none()
             || !due
@@ -72,7 +86,7 @@ impl EnergyWindowManager {
         {
             return;
         }
-        let distributions = distributions(snapshot);
+        let distributions = distributions(snapshot, self.rdf_normalisation);
         let table = &snapshot.balls.species;
         let name = |id| table.get(id).map_or("?", |s| s.name.as_str());
         let pair_names = distributions

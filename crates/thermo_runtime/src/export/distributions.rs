@@ -7,10 +7,11 @@
 
 use super::{ExportFormat, SCHEMA_VERSION, csv_cell, csv_f32, json_f32};
 use crate::application::renderer_snapshot::RendererSnapshot;
-use crate::distributions::{Distributions, distributions};
+use crate::distributions::{Distributions, Normalisation, distributions};
 use serde_json::json;
 
-/// The distributions of `snapshot`'s balls.
+/// The distributions of `snapshot`'s balls, g(r) normalised as
+/// `normalisation` says.
 ///
 /// CSV: `distribution,species,x,value,expected`, one row per bin: `speed`
 /// rows with the bin's centre speed, ball count and Maxwell–Boltzmann count,
@@ -18,8 +19,12 @@ use serde_json::json;
 /// and g. JSONL: a `distributions_header` record (step, time, temperature),
 /// a `speed_histogram` record and one `rdf` record per species pair, with
 /// the fields of the headless `distributions` object.
-pub fn distributions_to_string(snapshot: &RendererSnapshot, format: ExportFormat) -> String {
-    let data = distributions(snapshot);
+pub fn distributions_to_string(
+    snapshot: &RendererSnapshot,
+    format: ExportFormat,
+    normalisation: Normalisation,
+) -> String {
+    let data = distributions(snapshot, normalisation);
     let mut out = String::new();
     match format {
         ExportFormat::Csv => {
@@ -66,6 +71,9 @@ pub fn distributions_to_string(snapshot: &RendererSnapshot, format: ExportFormat
                 record["schema_version"] = json!(SCHEMA_VERSION);
                 record["record_kind"] = json!("rdf");
                 record["bin_width"] = rdf["bin_width"].clone();
+                if !rdf["normalisation"].is_null() {
+                    record["normalisation"] = rdf["normalisation"].clone();
+                }
                 records.push(record);
             }
             for record in records {
@@ -94,9 +102,9 @@ fn pair_names<'a>(
 
 /// `data` as the JSON object of a headless frame's `distributions` field:
 /// `speed` (absent without a histogram) with `bin_width`, `temperature`,
-/// `counts` and `maxwell_boltzmann`, and `rdf` with `bin_width` and
-/// `pairs`, each with `species`, `reference_balls` and `g`. Non-finite
-/// numbers are `null`.
+/// `counts` and `maxwell_boltzmann`, and `rdf` with `bin_width`, `pairs`,
+/// each with `species`, `reference_balls` and `g`, and, only for the local
+/// density, `normalisation: "local"`. Non-finite numbers are `null`.
 pub fn distributions_json(snapshot: &RendererSnapshot, data: &Distributions) -> serde_json::Value {
     let floats = |values: &[f32]| {
         values
@@ -123,6 +131,9 @@ pub fn distributions_json(snapshot: &RendererSnapshot, data: &Distributions) -> 
             "pairs": pairs,
         },
     });
+    if data.radial.normalisation == Normalisation::Local {
+        value["rdf"]["normalisation"] = json!("local");
+    }
     if let Some(speed) = &data.speed {
         value["speed"] = json!({
             "bin_width": json_f32(Some(speed.bin_width)),

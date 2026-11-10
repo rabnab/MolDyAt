@@ -31,6 +31,7 @@ pub use redraw::PlotFrame;
 use std::time::Instant;
 use thermo_physics::application::observables::Obs;
 use thermo_runtime::application::renderer_snapshot::RendererSnapshot;
+use thermo_runtime::distributions::Normalisation;
 use winit::event::{ElementState, WindowEvent};
 
 /// The plot window while it is open, as the backend reported it.
@@ -75,6 +76,8 @@ pub struct EnergyWindowManager {
     show_distributions: bool,
     /// The distributions shown and when they were computed.
     distributions: Option<(DistributionData, Instant)>,
+    /// How g(r) is normalised in the distributions view.
+    rdf_normalisation: Normalisation,
     /// g(r) pairs hidden in the distributions view, by name (`"N2-Ar"`);
     /// a click on a pair's legend entry hides or shows it. Kept when the
     /// window is closed and reopened, cleared with a new world history.
@@ -102,6 +105,7 @@ impl EnergyWindowManager {
             seen_history_resets: 0,
             show_distributions: false,
             distributions: None,
+            rdf_normalisation: Normalisation::default(),
             hidden_pairs: Vec::new(),
         }
     }
@@ -214,6 +218,7 @@ impl EnergyWindowManager {
                     }
                     Some(EnergyWindowKey::ResetView) => self.reset_plot_view(),
                     Some(EnergyWindowKey::Distributions) => self.toggle_distributions(),
+                    Some(EnergyWindowKey::RdfNormalisation) => self.toggle_rdf_normalisation(),
                     None => return false,
                 }
                 true

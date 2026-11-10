@@ -3,7 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::application::renderer_snapshot::{OperatorSnapshot, RendererSnapshot, ThermoGridSpec};
-use crate::distributions::distributions;
+use crate::distributions::{Normalisation, distributions};
 use crate::export::distributions_json;
 use crate::headless_cli::{DetailLevel, HeadlessConfig, OutputFormat};
 use crate::headless_script::CommandRecord;
@@ -235,6 +235,9 @@ fn run_start_to_jsonl(config: &HeadlessConfig, snapshot: &RendererSnapshot) -> S
     // Only with `--distributions`, so runs without it keep their bytes.
     if config.distributions {
         record["config"]["distributions"] = json!(true);
+        if config.rdf_normalisation == Normalisation::Local {
+            record["config"]["rdf_normalisation"] = json!("local");
+        }
     }
     // Only with `--seed-species`, so runs without it keep their bytes.
     if !config.seed_species.is_empty() {
@@ -370,7 +373,8 @@ fn frame_to_jsonl_with_metrics(
     }
 
     if config.distributions {
-        frame["distributions"] = distributions_json(snapshot, &distributions(snapshot));
+        let data = distributions(snapshot, config.rdf_normalisation);
+        frame["distributions"] = distributions_json(snapshot, &data);
     }
 
     frame.to_string()

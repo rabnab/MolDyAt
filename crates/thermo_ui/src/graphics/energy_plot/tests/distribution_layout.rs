@@ -8,7 +8,7 @@ use crate::graphics::energy_plot::plot_layout::{COLOR_HIDDEN, COLOR_KINETIC};
 use crate::graphics::energy_plot::{DistributionData, PlotScene};
 use thermo_physics::objects2d::ball_impl::DEFAULT_SPECIES;
 use thermo_runtime::distributions::{
-    Distributions, PairDistribution, RadialDistribution, SpeedHistogram,
+    Distributions, Normalisation, PairDistribution, RadialDistribution, SpeedHistogram,
 };
 
 fn data() -> DistributionData {
@@ -22,6 +22,7 @@ fn data() -> DistributionData {
             }),
             radial: RadialDistribution {
                 bin_width: 1.0,
+                normalisation: Normalisation::Mean,
                 pairs: vec![PairDistribution {
                     species: (DEFAULT_SPECIES, DEFAULT_SPECIES),
                     reference_balls: 10,
@@ -31,6 +32,24 @@ fn data() -> DistributionData {
         },
         pair_names: vec!["N2-N2".into()],
     }
+}
+
+#[test]
+fn the_g_heading_names_the_local_density_only() {
+    let heading = |data: &DistributionData| {
+        let scene = PlotScene::build_distributions(Some(data), &[], (800, 600), 1.0, "");
+        scene
+            .labels
+            .iter()
+            .find(|l| l.text.starts_with("g(r)"))
+            .unwrap()
+            .text
+            .clone()
+    };
+    let mut data = data();
+    assert_eq!(heading(&data), "g(r)");
+    data.distributions.radial.normalisation = Normalisation::Local;
+    assert_eq!(heading(&data), "g(r) local");
 }
 
 #[test]

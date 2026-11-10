@@ -76,6 +76,10 @@ fn run_ui_action(state: &mut UnifiedRenderState, action: UiAction) -> bool {
             state.render.energy_manager.toggle_distributions();
             false
         }
+        UiAction::ToggleRdfNormalisation => {
+            state.render.energy_manager.toggle_rdf_normalisation();
+            false
+        }
         UiAction::DeleteHovered => {
             state.delete_hovered_object();
             false

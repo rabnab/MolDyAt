@@ -135,6 +135,11 @@ pub const HEADLESS_OPTIONS: &[OptionHelp] = &[
         ],
     },
     OptionHelp {
+        names: &["--rdf-local"],
+        value: None,
+        help: &["Normalise g(r) by the density around each ball (needs --distributions)"],
+    },
+    OptionHelp {
         names: &["--timing-warmup"],
         value: Some("<N>"),
         help: &["Steps before --timings starts measuring (default 0)"],

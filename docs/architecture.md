@@ -510,7 +510,10 @@ wraps onto more lines when the names do not fit the width, so every entry
 stays in the window): a left click
 hides or shows that pair (`EnergyWindowManager::hidden_pairs`, kept while
 the window is closed, cleared with a new world history); a hidden pair's name is grey, its curve is not
-drawn and the g axis follows the pairs drawn. The manager
+drawn and the g axis follows the pairs drawn. `view.plot_rdf_normalisation`
+(`Alt + M`) switches g(r) between the world's mean density and the local
+density (`Normalisation`, the heading then reads "g(r) local"); the
+exports of the app's commands keep the mean. The manager
 computes them from the snapshot (`thermo_runtime::distributions`, which
 headless output and the export use too) only while the view is shown, at
 most every `DISTRIBUTION_INTERVAL` (0.5 s), off the physics thread.
