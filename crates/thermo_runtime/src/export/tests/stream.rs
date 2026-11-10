@@ -5,6 +5,7 @@
 use super::*;
 use crate::application::renderer_snapshot::RendererSnapshot;
 use std::path::PathBuf;
+use thermo_physics::application::observables::Obs;
 
 fn temp_dir(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("moldyat_stream_{name}_{}", std::process::id()));
@@ -39,7 +40,7 @@ fn sample(
     snapshot.frame.world_generation = generation;
     snapshot.frame.simulation_step = step;
     snapshot.frame.time = step as f32 * 0.5;
-    snapshot.frame.kinetic_energy = step as f32;
+    snapshot.frame.values[Obs::KineticEnergy] = step as f64;
     registry.sample(snapshot);
     stream.record(registry).unwrap()
 }
@@ -105,9 +106,9 @@ fn test_stream_jsonl_round_trips_units_and_non_finite_values() {
     let mut stream = SampleStream::new(settings(&dir, ExportFormat::Jsonl), &registry);
     let mut snapshot = base_snapshot();
     sample(&mut registry, &mut stream, &mut snapshot, 0, 1);
-    snapshot.frame.potential_energy = f32::NAN;
-    snapshot.frame.energy_total =
-        f64::from(snapshot.frame.kinetic_energy) + f64::from(snapshot.frame.potential_energy);
+    let values = &mut snapshot.frame.values;
+    values[Obs::PotentialEnergy] = f64::NAN;
+    values[Obs::EnergyTotal] = values[Obs::KineticEnergy] + values[Obs::PotentialEnergy];
     sample(&mut registry, &mut stream, &mut snapshot, 0, 2);
     let files = stream.finish().unwrap();
 

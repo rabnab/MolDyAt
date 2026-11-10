@@ -5,6 +5,7 @@
 use super::*;
 use crate::application::CreateSnapshot;
 use crate::application::renderer_snapshot::RendererSnapshot;
+use thermo_physics::application::observables::Obs;
 use thermo_physics::test_support::create_main_content;
 
 fn stepped_snapshot(steps: usize) -> RendererSnapshot {
@@ -23,13 +24,15 @@ fn test_sample_records_the_values_of_the_snapshot() {
     registry.sample(&snapshot);
 
     let last = |name: &str| registry.get_series(name).unwrap().latest().copied();
-    assert_eq!(last("E_kin"), Some(snapshot.frame.kinetic_energy));
-    assert_eq!(last("E_pot"), Some(snapshot.frame.potential_energy));
-    assert_eq!(
-        last("E_tot"),
-        Some(snapshot.frame.kinetic_energy + snapshot.frame.potential_energy)
-    );
-    assert_eq!(last("wall_momentum"), Some(snapshot.frame.wall_momentum));
+    let values = &snapshot.frame.values;
+    for (series, id) in [
+        ("E_kin", Obs::KineticEnergy),
+        ("E_pot", Obs::PotentialEnergy),
+        ("E_tot", Obs::EnergyTotal),
+        ("wall_momentum", Obs::WallMomentum),
+    ] {
+        assert_eq!(last(series), Some(values[id] as f32), "{series}");
+    }
 
     let first_species = snapshot.balls.species.ids().next().unwrap();
     let name = format!(
@@ -109,18 +112,14 @@ fn test_species_series_are_registered_once_per_table() {
 /// sample (#422): exact in f32 even when the totals are far past 2^24.
 #[test]
 fn test_safety_net_series_record_the_increase_since_the_last_sample() {
-    use thermo_physics::application::sim_stats::SafetyNets;
     let mut registry = MetricsRegistry::default();
     let mut snapshot = stepped_snapshot(1);
-    let base = 50_000_000u64;
-    snapshot.frame.safety_nets = SafetyNets {
-        capped_pairs: base,
-        ..SafetyNets::default()
-    };
+    let base = 50_000_000.0;
+    snapshot.frame.values[Obs::CappedPairs] = base;
     registry.sample(&snapshot);
     snapshot.frame.simulation_step += 1;
-    snapshot.frame.safety_nets.capped_pairs = base + 3;
-    snapshot.frame.safety_nets.braked = 1;
+    snapshot.frame.values[Obs::CappedPairs] = base + 3.0;
+    snapshot.frame.values[Obs::Braked] = 1.0;
     registry.sample(&snapshot);
 
     let last = |name: &str| registry.get_series(name).unwrap().latest().copied();

@@ -28,30 +28,16 @@ pub(super) fn is_normal_gravity(gravity: f32) -> bool {
     (gravity / NORMAL_GRAVITY).round() == 1.0
 }
 
-/// The numbers of the status lines (`B` shows them, `D` switches to
-/// physical units) that are not in every snapshot anyway: the UI formats
-/// them, with the time, energies and ball counts, into text (#341).
+/// What the status lines (`B` shows them, `D` switches to physical units)
+/// need besides the snapshot's observable values: the UI formats them into
+/// text (#341).
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct StatusNumbers {
+pub struct StatusInfo {
     /// Show physical units (Ar reference, #405) instead of reduced units.
     pub real_units: bool,
-    /// Time step the steps run with.
-    pub dt: f32,
     /// The species whose time step limit holds `dt` below the set time
     /// step, if any (`MainContent::active_time_step`).
     pub dt_limited_by: Option<SpeciesId>,
-    /// Neighbour-list rebuilds since the start.
-    pub hood_updates: usize,
-    /// Most neighbours of any ball.
-    pub max_neighbours: usize,
-    /// Temperature (centre-of-mass frame).
-    pub temperature: f32,
-    /// Largest ball speed.
-    pub max_v: f32,
-    /// Centre-of-mass velocity.
-    pub v_com: Vec2D,
-    /// Safety-net interventions since the start (#422).
-    pub safety_nets: SafetyNets,
 }
 
 /// How often the safety nets that do not conserve energy stepped in (#422).
@@ -81,13 +67,6 @@ impl std::ops::AddAssign for SafetyNets {
     }
 }
 
-impl SafetyNets {
-    /// Whether no safety net stepped in.
-    pub fn is_zero(&self) -> bool {
-        *self == Self::default()
-    }
-}
-
 /// Simulation statistics updated once per physics step.
 ///
 /// Owns energy, temperature, velocity, and timing metrics that are
@@ -99,10 +78,10 @@ pub struct SimStats {
     /// The last step's energies, summed in f64 over the balls (#421).
     energy_pot: f64,
     energy_kin: f64,
-    temperature: f32,
-    max_v: f32,
+    pub(super) temperature: f32,
+    pub(super) max_v: f32,
     max_id: usize,
-    v_com: Vec2D,
+    pub(super) v_com: Vec2D,
     /// Simulation time, summed in f64: in f32, `time += dt` stops advancing
     /// once `dt` is below half the spacing of f32 at `time` (after about
     /// 2^24 steps), which froze the energy plot's time axis.
@@ -112,7 +91,7 @@ pub struct SimStats {
 
     v_pot: VecDeque<f32>,
     v_kin: VecDeque<f32>,
-    max_neighbours: usize,
+    pub(super) max_neighbours: usize,
 
     /// Momentum the walls took since the start, summed in f64 (#421): in
     /// f32 a long run's total stops taking the small per-step amounts.
@@ -158,30 +137,6 @@ impl SimStats {
     pub(crate) fn clear_energy(&mut self) {
         self.v_kin.clear();
         self.v_pot.clear();
-    }
-
-    /// The numbers of the status lines besides the time and the energies
-    /// (which every snapshot carries): the UI formats them (#341).
-    /// `real_units` asks for physical units, Ar reference (key `D`); `dt` is the
-    /// time step and `hood_updates` the neighbour-list rebuilds so far.
-    pub(crate) fn status_numbers(
-        &self,
-        real_units: bool,
-        dt: f32,
-        dt_limited_by: Option<SpeciesId>,
-        hood_updates: usize,
-    ) -> StatusNumbers {
-        StatusNumbers {
-            real_units,
-            dt,
-            dt_limited_by,
-            hood_updates,
-            max_neighbours: self.max_neighbours,
-            temperature: self.temperature,
-            max_v: self.max_v,
-            v_com: self.v_com,
-            safety_nets: self.safety_nets_total,
-        }
     }
 
     /// Update statistics from accumulated physics data.

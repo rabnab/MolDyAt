@@ -11,8 +11,8 @@ use crate::metrics::{SharedMetricsRegistry, read_metrics};
 use serde_json::json;
 use std::fs::File;
 use std::io::{self, BufWriter, Write};
+use thermo_physics::application::observables::{Kind, Obs};
 use thermo_physics::application::sim_config::{SimConfig, WorldConfig};
-use thermo_physics::application::sim_stats::SafetyNets;
 use thermo_physics::application::thermo_field::ThermoGrid;
 
 pub trait HeadlessSnapshotSink {
@@ -51,7 +51,7 @@ impl HeadlessSnapshotSink for HeadlessWriter {
     }
 
     fn write_run_start(&mut self, snapshot: &RendererSnapshot) -> io::Result<()> {
-        self.initial_total_energy = Some(snapshot.frame.energy_total);
+        self.initial_total_energy = Some(snapshot.frame.values[Obs::EnergyTotal]);
         let line = run_start_to_jsonl(&self.config, snapshot);
         self.write_machine_record(&line)
     }
@@ -300,23 +300,31 @@ fn frame_to_jsonl_with_metrics(
     metrics: Option<&SharedMetricsRegistry>,
 ) -> String {
     // In f64 (#421), narrowed only for the record.
-    let delta_energy =
-        initial_total_energy.map(|initial| (snapshot.frame.energy_total - initial) as f32);
+    let delta_energy = initial_total_energy
+        .map(|initial| (snapshot.frame.values[Obs::EnergyTotal] - initial) as f32);
     let mut frame = json!({
         "schema_version": SCHEMA_VERSION,
         "record_kind": "frame",
         "step": snapshot.frame.simulation_step,
         "time": f32_value(snapshot.frame.time),
-        "dt": f32_value(snapshot.frame.dt),
-        "safety_nets": safety_nets_to_json(&snapshot.frame.safety_nets),
-        "kinetic_energy": f32_value(snapshot.frame.kinetic_energy),
-        "potential_energy": f32_value(snapshot.frame.potential_energy),
         "delta_energy": delta_energy.map_or(serde_json::Value::Null, f32_value),
         "ball_count": snapshot.balls.len(),
         "gravity_force_multiple": snapshot.frame.gravity_force_multiple,
-        "physics_fps": f32_value(snapshot.frame.physics_fps),
         "operator_counts": operator_counts(&snapshot.operators),
     });
+    for (observable, value) in snapshot.frame.values.iter() {
+        let Some(key) = observable.headless else {
+            continue;
+        };
+        let value = match observable.kind {
+            Kind::Total => json!(value as u64),
+            Kind::Gauge => f32_value(value as f32),
+        };
+        match key.split_once('.') {
+            Some((group, name)) => frame[group][name] = value,
+            None => frame[key] = value,
+        }
+    }
 
     // Add metrics if available (decision 7-A: nested metrics object)
     if let Some(metrics_registry) = metrics {
@@ -385,9 +393,9 @@ fn frame_to_console_summary(
     snapshot: &RendererSnapshot,
     initial_total_energy: Option<f64>,
 ) -> String {
-    let total_energy = snapshot.frame.total_energy();
+    let values = &snapshot.frame.values;
     let delta_energy = initial_total_energy
-        .map(|initial| (snapshot.frame.energy_total - initial) as f32)
+        .map(|initial| (values[Obs::EnergyTotal] - initial) as f32)
         .unwrap_or(0.0);
     let operator_counts = &snapshot.operators;
 
@@ -396,9 +404,9 @@ fn frame_to_console_summary(
         snapshot.frame.simulation_step,
         snapshot.frame.time,
         snapshot.balls.len(),
-        snapshot.frame.kinetic_energy,
-        snapshot.frame.potential_energy,
-        total_energy,
+        values[Obs::KineticEnergy] as f32,
+        values[Obs::PotentialEnergy] as f32,
+        values[Obs::EnergyTotal] as f32,
         delta_energy,
         operator_counts.line_segments.len(),
         operator_counts.valve_spans.len(),
@@ -480,13 +488,3 @@ fn f32_value(value: f32) -> serde_json::Value {
 
 #[cfg(test)]
 mod tests;
-
-/// The safety-net counts since the start (#422).
-fn safety_nets_to_json(nets: &SafetyNets) -> serde_json::Value {
-    json!({
-        "braked": nets.braked,
-        "capped_pairs": nets.capped_pairs,
-        "backstop_hits": nets.backstop_hits,
-        "overlap_corrections": nets.overlap_corrections,
-    })
-}

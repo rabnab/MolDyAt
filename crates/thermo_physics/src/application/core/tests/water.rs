@@ -7,6 +7,7 @@
 //! species through the Lennard-Jones part only, and the time-step limit.
 
 use super::test_config;
+use crate::application::observables::{Obs, Values};
 use crate::application::thermo_field::LocalKineticStats;
 use crate::application::{MainContent, SimConfig};
 use crate::objects2d::ball_impl::interaction::Model;
@@ -197,9 +198,9 @@ fn water_limits_the_time_step_while_present() {
     assert_eq!(mc.active_time_step(), water_dt());
     assert_eq!(mc.time_step_limit(), Some((water_dt(), species("H2O"))));
     assert_eq!(mc.time_step(), set, "the set time step is kept");
-    let status = mc.status_numbers().expect("test config shows ball stats");
-    assert_eq!(status.dt, water_dt());
+    let status = mc.status_info().expect("test config shows ball stats");
     assert_eq!(status.dt_limited_by, Some(species("H2O")));
+    assert_eq!(Values::read(&mc)[Obs::Dt], f64::from(water_dt()));
 
     let t0 = mc.world().sim.get_time();
     mc.simulation_step().unwrap();

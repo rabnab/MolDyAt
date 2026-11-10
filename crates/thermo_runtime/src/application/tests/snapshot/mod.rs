@@ -10,6 +10,7 @@ mod thermostats;
 mod valves;
 use crate::application::SnapshotPublisher;
 use std::sync::Arc;
+use thermo_physics::application::observables::Obs;
 
 use crate::application::renderer_snapshot::get_special_ball_color;
 use crate::application::{CreateSnapshot, MainContent};
@@ -351,7 +352,10 @@ fn snapshot_without_heavy_layers_skips_ball_render_data_and_thermo_grids() {
     assert!(light.balls.is_empty());
     assert!(light.fields.thermo_grid.is_none());
     assert_eq!(light.fields.cells.temperature.shape(), (0, 0));
-    assert_eq!(light.frame.kinetic_energy, full.frame.kinetic_energy);
+    assert_eq!(
+        light.frame.values[Obs::KineticEnergy],
+        full.frame.values[Obs::KineticEnergy]
+    );
     // The status numbers come either way. Their content is not compared:
     // they include the process-wide neighbour-update counter, which tests
     // running in parallel change between the two snapshots.

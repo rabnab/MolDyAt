@@ -10,6 +10,7 @@ use crate::graphics::renderer::event_loop::energy_window_manager::EnergyWindowMa
 use crate::graphics::renderer::event_loop::metrics::FrameMetrics;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use thermo_physics::application::observables::Obs;
 use thermo_runtime::application::renderer_snapshot::RendererSnapshot;
 use thermo_runtime::metrics::MetricsRegistry;
 
@@ -21,9 +22,10 @@ fn make_manager() -> EnergyWindowManager {
 fn make_snapshot(step: u64, kin: f32, pot: f32) -> RendererSnapshot {
     let mut s = RendererSnapshot::new();
     s.frame.simulation_step = step;
-    s.frame.kinetic_energy = kin;
-    s.frame.potential_energy = pot;
-    s.frame.energy_total = f64::from(s.frame.kinetic_energy) + f64::from(s.frame.potential_energy);
+    let (kin, pot) = (f64::from(kin), f64::from(pot));
+    s.frame.values[Obs::KineticEnergy] = kin;
+    s.frame.values[Obs::PotentialEnergy] = pot;
+    s.frame.values[Obs::EnergyTotal] = kin + pot;
     s.frame.time = step as f32 * 0.01;
     s
 }

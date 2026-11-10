@@ -11,6 +11,7 @@ use std::fs;
 use std::io;
 use std::rc::Rc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use thermo_physics::application::observables::Obs;
 
 /// The default world (`DEFAULT_WORLD_RECT`, `world.scale = 1`), pinned here
 /// so a change to it shows up in these tests.
@@ -197,8 +198,8 @@ fn operators_run_state(threads: usize, seed_balls: u32, steps: u32) -> Operators
             application.simulation_step().expect("step");
             let snapshot = application.create_snapshot();
             energies.push([
-                snapshot.frame.kinetic_energy.to_bits(),
-                snapshot.frame.potential_energy.to_bits(),
+                (snapshot.frame.values[Obs::KineticEnergy] as f32).to_bits(),
+                (snapshot.frame.values[Obs::PotentialEnergy] as f32).to_bits(),
             ]);
             let (px, py) = application.wall_momentum();
             wall_momentum.push([px.to_bits(), py.to_bits()]);

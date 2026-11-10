@@ -24,6 +24,7 @@ use crate::graphics::energy_plot::{
 };
 use crate::graphics::renderer::event_loop::metrics::FrameMetrics;
 use std::time::{Duration, Instant};
+use thermo_physics::application::observables::Obs;
 use thermo_runtime::application::renderer_snapshot::RendererSnapshot;
 use thermo_runtime::application::scene_layers::SceneLayers;
 use thermo_runtime::distributions::distributions;
@@ -829,7 +830,7 @@ impl EnergyWindowManager {
             data.status_text = snapshot.frame.status.is_some().then(|| {
                 let metrics_line = format_metrics_line(
                     render_fps,
-                    snapshot.frame.physics_fps,
+                    snapshot.frame.values[Obs::PhysicsFps] as f32,
                     steps_per_frame,
                     frame_metrics,
                 );
