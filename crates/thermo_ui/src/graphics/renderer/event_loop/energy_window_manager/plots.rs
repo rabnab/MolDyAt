@@ -3,7 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! What the energy window shows: the plots of the selection and, instead of
-//! them, the distributions (#343); changed by plot commands and left clicks.
+//! them, the distributions; changed by plot commands and left clicks.
 
 use super::EnergyWindowManager;
 use super::gestures::ClickTargets;
@@ -26,7 +26,7 @@ impl EnergyWindowManager {
         &self.hidden_pairs
     }
 
-    /// Whether the window shows the distributions (#343).
+    /// Whether the window shows the distributions.
     pub fn shows_distributions(&self) -> bool {
         self.show_distributions
     }
@@ -120,7 +120,7 @@ impl EnergyWindowManager {
     /// entry it hides or shows that series (in the distributions view that
     /// g(r) pair), in a plot it focuses the plot. Returns whether anything
     /// changed.
-    pub(in crate::graphics::renderer::event_loop) fn left_clicked(&mut self, at: [f32; 2]) -> bool {
+    pub(in super::super) fn left_clicked(&mut self, at: [f32; 2]) -> bool {
         let entry = self
             .targets
             .legend

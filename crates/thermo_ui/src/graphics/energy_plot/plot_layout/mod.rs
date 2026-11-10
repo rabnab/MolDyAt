@@ -16,7 +16,7 @@
 //! so the time step changes only how fast the curves scroll, never the
 //! scale. Until the history spans that much, the curves start at the left
 //! edge; then the newest sample stays at the right edge. The scroll wheel
-//! and a middle-button drag change the range (#367). A history shorter than
+//! and a middle-button drag change the range. A history shorter than
 //! the span (the registry keeps a fixed number of samples) leaves the left
 //! part empty.
 //!

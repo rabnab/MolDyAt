@@ -107,7 +107,7 @@ pub(super) fn curves(data: &EnergyData, series: &[Series]) -> Vec<Curve> {
 
 /// Most points of a curve drawn per pixel column of the plot (its lowest
 /// and its highest) when the curve has more points than the plot has
-/// columns (#366).
+/// columns.
 const POINTS_PER_COLUMN: usize = 2;
 
 /// `curve` with at most [`POINTS_PER_COLUMN`] points per pixel column of
@@ -210,14 +210,20 @@ impl TimeWindow {
 }
 
 /// The time history of `curves`; `None` without a single finite point.
-pub(super) fn history_of(curves: &[Curve]) -> Option<TimeHistory> {
-    let mut times = curves.iter().flatten().flatten().map(|&(t, _)| t);
-    let first = times.next()?;
-    let (oldest, newest) = times.fold((first, first), |(lo, hi), t| (lo.min(t), hi.max(t)));
+pub(super) fn history_of<'a>(curves: impl IntoIterator<Item = &'a Curve>) -> Option<TimeHistory> {
+    let mut span: Option<(f64, f64)> = None;
+    let mut samples = 0;
+    for curve in curves {
+        samples = samples.max(curve.len());
+        for &(t, _) in curve.iter().flatten() {
+            span = Some(span.map_or((t, t), |(lo, hi)| (lo.min(t), hi.max(t))));
+        }
+    }
+    let (oldest, newest) = span?;
     Some(TimeHistory {
         oldest,
         newest,
-        samples: curves.iter().map(Vec::len).max().unwrap_or(0),
+        samples,
     })
 }
 
@@ -228,9 +234,11 @@ pub(super) fn interpolate(p: (f64, f64), q: (f64, f64), t: f64) -> f64 {
 
 /// Where each curve crosses an edge of `window`: the value cut there from
 /// the segment between the last point before and the first point after it.
-fn edge_values(curves: &[Curve], window: TimeWindow) -> impl Iterator<Item = f64> + '_ {
+fn edge_values<'a>(
+    curves: impl Iterator<Item = &'a Curve>,
+    window: TimeWindow,
+) -> impl Iterator<Item = f64> {
     curves
-        .iter()
         .flat_map(move |curve| {
             curve.windows(2).flat_map(move |pair| {
                 let (Some(p), Some(q)) = (pair[0], pair[1]) else {
@@ -246,9 +254,12 @@ fn edge_values(curves: &[Curve], window: TimeWindow) -> impl Iterator<Item = f64
 /// The y range shown: the values of the points inside `window` and where
 /// the curves are cut at its edges, so everything drawn fits, with 5% room
 /// above and below. `None` when nothing of the curves is inside.
-pub(super) fn value_range(curves: &[Curve], window: TimeWindow) -> Option<(f64, f64)> {
+pub(super) fn value_range<'a>(
+    curves: impl Iterator<Item = &'a Curve> + Clone,
+    window: TimeWindow,
+) -> Option<(f64, f64)> {
     let inside = curves
-        .iter()
+        .clone()
         .flatten()
         .flatten()
         .filter(|&&(t, _)| window.contains(t))

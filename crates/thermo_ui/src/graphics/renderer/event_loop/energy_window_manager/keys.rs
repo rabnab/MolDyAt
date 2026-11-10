@@ -13,25 +13,25 @@ use winit::keyboard::KeyCode;
 
 /// What a key does while the energy window has the focus.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(in crate::graphics::renderer::event_loop) enum EnergyWindowKey {
+pub(in super::super) enum EnergyWindowKey {
     /// Close the window.
     Close,
-    /// Change the plots (the plot commands, #339).
+    /// Change the plots (the plot commands).
     Plot(PlotChange),
     /// Return the plot to its default time view.
     ResetView,
-    /// Switch between the time series and the distributions (#343).
+    /// Switch between the time series and the distributions.
     Distributions,
 }
 
 /// The energy window's action for a key event. The keys come from the key
-/// map, so a `ui.toml` rebinds them here too (#355): the keys of
+/// map, so a `ui.toml` rebinds them here too: the keys of
 /// `view.cycle_plot` and `view.toggle_energy_window` (`P` and `TAB` by
 /// default) give the focused plot the next energy preset, each on its own
-/// trigger, and the `view.plot_*` commands change the plots (#339). `ESC`
+/// trigger, and the `view.plot_*` commands change the plots. `ESC`
 /// closes the window, as the close shortcut of the window itself, not a
 /// registry command (in the main window `ESC` clears the balls).
-pub(in crate::graphics::renderer::event_loop) fn energy_window_key(
+pub(in super::super) fn energy_window_key(
     key_map: &KeyMap,
     input: KeyInput,
     phase: KeyPhase,
@@ -58,9 +58,7 @@ pub(in crate::graphics::renderer::event_loop) fn energy_window_key(
 /// focused plot the next preset (see [`energy_window_key`]), then the keys
 /// to step the series, reset the view and move the focus, so a rebinding in
 /// `ui.toml` shows here too.
-pub(in crate::graphics::renderer::event_loop) fn energy_window_key_hints(
-    key_map: &KeyMap,
-) -> String {
+pub(in super::super) fn energy_window_key_hints(key_map: &KeyMap) -> String {
     let keys = |ids: &[&str]| -> String {
         ids.iter()
             .copied()

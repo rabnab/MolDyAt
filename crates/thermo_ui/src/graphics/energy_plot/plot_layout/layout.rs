@@ -5,7 +5,7 @@
 //! The page: title, key hints, the plots stacked on a shared time axis with
 //! their legends, the info line and the status text.
 
-use super::curve::{Curve, TimeWindow, curves, history_of, panel_series, value_range};
+use super::curve::{TimeWindow, curves, history_of, panel_series, value_range};
 use super::panel::PanelPlan;
 use super::ticks::{fitting_hints, format_tick, nice_ticks};
 use super::{
@@ -67,8 +67,7 @@ impl Layout<'_> {
                 }
             })
             .collect();
-        let shown: Vec<Curve> = plans.iter().flat_map(PanelPlan::shown_curves).collect();
-        let history = history_of(&shown);
+        let history = history_of(plans.iter().flat_map(PanelPlan::shown_curves));
         self.scene.history = history;
         let window = history.map(|history| {
             let (t0, t1) = self.view.window(&history);
@@ -214,10 +213,9 @@ impl Layout<'_> {
         // several) still gets a few.
         let max_y_ticks = (area_h / (line * 2.0)).clamp(2.0, 10.0) as usize;
         for plan in plans.iter_mut() {
-            let shown: Vec<Curve> = plan.shown_curves().collect();
             // A range panned or zoomed where no curve is: an empty plot
             // with its axes, around zero.
-            plan.range = value_range(&shown, window).unwrap_or((-1.0, 1.0));
+            plan.range = value_range(plan.shown_curves(), window).unwrap_or((-1.0, 1.0));
             plan.ticks = nice_ticks(plan.range.0, plan.range.1, max_y_ticks);
             plan.labels = plan
                 .ticks

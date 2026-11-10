@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Mouse input of the energy window (#367): the scroll wheel zooms the
+//! Mouse input of the energy window: the scroll wheel zooms the
 //! plot's time range around the pointer, a middle-button drag pans it, a
 //! middle-button double click (or the key of `view.reset_plot_view`) returns
 //! to the default view.
@@ -36,17 +36,17 @@ pub(super) struct Drag {
 
 /// Where the plot was in the last frame: turns pointer pixels into times.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub(in crate::graphics::renderer::event_loop) struct PlotGeometry {
-    pub(in crate::graphics::renderer::event_loop) area: PlotRect,
-    pub(in crate::graphics::renderer::event_loop) history: TimeHistory,
+pub(in super::super) struct PlotGeometry {
+    pub(in super::super) area: PlotRect,
+    pub(in super::super) history: TimeHistory,
 }
 
 /// Where the plots and their legend entries were in the last frame, for
-/// left clicks (#339).
+/// left clicks.
 #[derive(Debug, Clone, Default, PartialEq)]
-pub(in crate::graphics::renderer::event_loop) struct ClickTargets {
-    pub(in crate::graphics::renderer::event_loop) panels: Vec<PanelArea>,
-    pub(in crate::graphics::renderer::event_loop) legend: Vec<LegendEntry>,
+pub(in super::super) struct ClickTargets {
+    pub(in super::super) panels: Vec<PanelArea>,
+    pub(in super::super) legend: Vec<LegendEntry>,
 }
 
 impl ClickTargets {
@@ -88,11 +88,7 @@ impl EnergyWindowManager {
     /// Zoom the plot's time range by `notches` wheel notches (positive: in)
     /// around the pointer at `cursor_x` (window pixels), in the geometry of
     /// the last frame. Returns whether the view changed.
-    pub(in crate::graphics::renderer::event_loop) fn zoom_plot(
-        &mut self,
-        notches: f64,
-        cursor_x: Option<f32>,
-    ) -> bool {
+    pub(in super::super) fn zoom_plot(&mut self, notches: f64, cursor_x: Option<f32>) -> bool {
         let Some(geometry) = self.geometry else {
             return false;
         };
@@ -106,7 +102,7 @@ impl EnergyWindowManager {
     /// Pan the plot by a pointer move of `dx_px` window pixels: the curves
     /// follow the pointer, so moving right shows earlier times. Returns
     /// whether the view changed.
-    pub(in crate::graphics::renderer::event_loop) fn pan_plot(&mut self, dx_px: f32) -> bool {
+    pub(in super::super) fn pan_plot(&mut self, dx_px: f32) -> bool {
         let Some(geometry) = self.geometry else {
             return false;
         };
@@ -116,19 +112,13 @@ impl EnergyWindowManager {
 
     /// The geometry of the last frame (tests).
     #[cfg(test)]
-    pub(in crate::graphics::renderer::event_loop) fn set_plot_geometry(
-        &mut self,
-        geometry: Option<PlotGeometry>,
-    ) {
+    pub(in super::super) fn set_plot_geometry(&mut self, geometry: Option<PlotGeometry>) {
         self.geometry = geometry;
     }
 
     /// The click targets of the last frame (tests).
     #[cfg(test)]
-    pub(in crate::graphics::renderer::event_loop) fn set_click_targets(
-        &mut self,
-        targets: ClickTargets,
-    ) {
+    pub(in super::super) fn set_click_targets(&mut self, targets: ClickTargets) {
         self.targets = targets;
     }
 
@@ -159,11 +149,7 @@ impl EnergyWindowManager {
 
     /// A middle-button press at `at`: a double click resets the view,
     /// otherwise a pan starts.
-    pub(in crate::graphics::renderer::event_loop) fn middle_pressed(
-        &mut self,
-        at: [f32; 2],
-        now: Instant,
-    ) {
+    pub(in super::super) fn middle_pressed(&mut self, at: [f32; 2], now: Instant) {
         let double = self.pointer.last_middle_press.is_some_and(|(time, place)| {
             now.duration_since(time) <= DOUBLE_CLICK_TIME
                 && (at[0] - place[0]).hypot(at[1] - place[1]) <= DOUBLE_CLICK_DISTANCE_PX
@@ -184,7 +170,7 @@ impl EnergyWindowManager {
     /// The pointer moved to `at`. While the middle button is held this pans,
     /// once the pointer is more than [`PAN_THRESHOLD_PX`] from the press;
     /// the first pan step covers the whole move from the press.
-    pub(in crate::graphics::renderer::event_loop) fn pointer_moved(&mut self, at: [f32; 2]) {
+    pub(in super::super) fn pointer_moved(&mut self, at: [f32; 2]) {
         self.pointer.cursor = Some(at);
         let Some(drag) = self.pointer.drag else {
             return;

@@ -3,7 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! Energy window manager: whether the plot window is open, data updates, and
-//! when it is redrawn. The backend owns the OS window (#371): it carries out
+//! when it is redrawn. The backend owns the OS window: it carries out
 //! the [`PlotWindowRequest`]s this manager queues (open, close, title,
 //! redraw), reports the window's size back, and draws the [`PlotFrame`] that
 //! [`EnergyWindowManager::handle_redraw`] hands out.
@@ -71,7 +71,7 @@ pub struct EnergyWindowManager {
     /// `EnergyData::history_resets` the view last saw: a new world history
     /// returns the view to its default.
     seen_history_resets: u64,
-    /// The window shows the distributions instead of the time series (#343).
+    /// The window shows the distributions instead of the time series.
     show_distributions: bool,
     /// The distributions shown and when they were computed.
     distributions: Option<(DistributionData, Instant)>,
@@ -136,7 +136,7 @@ impl EnergyWindowManager {
     /// Open the plot window, or give the focused plot the next energy
     /// preset while it is open. A reopened window shows the plots it had.
     /// Opening queues a [`PlotWindowRequest::Open`] for the backend, which
-    /// places the window on the split screen (#167).
+    /// places the window on the split screen.
     pub fn toggle(&mut self) {
         if self.window.is_some() {
             self.change_plots(PlotChange::CyclePreset);

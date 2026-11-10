@@ -2,11 +2,49 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+use crate::graphics::energy_plot::EnergyData;
 use crate::graphics::energy_plot::plot_layout::curve::{
-    Curve, TimeWindow, downsample, history_of, interpolate, value_range,
+    Curve, Series, TimeWindow, curves, downsample, history_of, interpolate, value_range,
 };
 
 const WINDOW: TimeWindow = TimeWindow { t0: 0.0, t1: 10.0 };
+
+fn series(values: &[f32]) -> Series {
+    Series {
+        name: String::new(),
+        color: [0.0; 4],
+        hidden: false,
+        values: values.to_vec(),
+    }
+}
+
+fn data_with_times(times: &[f32]) -> EnergyData {
+    let mut data = EnergyData::new();
+    data.sample_times.extend(times.iter().copied());
+    data
+}
+
+#[test]
+fn test_curves_align_a_shorter_series_to_the_newest_sample() {
+    let data = data_with_times(&[0.0, 1.0, 2.0, 3.0]);
+    let all = curves(&data, &[series(&[1.0, 2.0, 3.0, 4.0]), series(&[7.0, 8.0])]);
+    assert_eq!(all[1], vec![Some((2.0, 7.0)), Some((3.0, 8.0))]);
+    assert_eq!(all[0].len(), 4);
+}
+
+#[test]
+fn test_curves_use_the_index_without_a_time_history() {
+    let data = data_with_times(&[]);
+    let all = curves(&data, &[series(&[5.0, 6.0])]);
+    assert_eq!(all[0], vec![Some((0.0, 5.0)), Some((1.0, 6.0))]);
+}
+
+#[test]
+fn test_curves_break_at_a_non_finite_value() {
+    let data = data_with_times(&[0.0, 1.0, 2.0]);
+    let all = curves(&data, &[series(&[1.0, f32::NAN, 3.0])]);
+    assert_eq!(all[0], vec![Some((0.0, 1.0)), None, Some((2.0, 3.0))]);
+}
 
 #[test]
 fn test_history_of_without_finite_points_is_none() {
@@ -37,7 +75,7 @@ fn test_value_range_includes_the_cut_at_the_window_edge() {
     // The line from (-5, 0) to (5, 10) crosses t0 = 0 at 5; the point at 5
     // is inside, so the range spans 5..10 plus 5% room.
     let curves: Vec<Curve> = vec![vec![Some((-5.0, 0.0)), Some((5.0, 10.0))]];
-    let (lo, hi) = value_range(&curves, WINDOW).expect("points inside");
+    let (lo, hi) = value_range(curves.iter(), WINDOW).expect("points inside");
     assert!(
         (lo - 4.75).abs() < 1e-9 && (hi - 10.25).abs() < 1e-9,
         "{lo} {hi}"
@@ -47,7 +85,7 @@ fn test_value_range_includes_the_cut_at_the_window_edge() {
 #[test]
 fn test_value_range_is_none_when_nothing_is_inside() {
     let curves: Vec<Curve> = vec![vec![Some((20.0, 1.0)), Some((30.0, 2.0))]];
-    assert!(value_range(&curves, WINDOW).is_none());
+    assert!(value_range(curves.iter(), WINDOW).is_none());
 }
 
 #[test]

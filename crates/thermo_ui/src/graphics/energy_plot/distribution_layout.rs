@@ -5,7 +5,7 @@
 //! The distributions view of the plot window (#343): the speed histogram
 //! with the 2D Maxwell–Boltzmann counts at the current temperature, and
 //! g(r) per species pair, as a [`PlotScene`] of segments and labels in
-//! window pixels (see `plot_layout.rs` for the conventions).
+//! window pixels (see `plot_layout/mod.rs` for the conventions).
 
 use super::plot_layout::{
     BACKGROUND, COLOR_AXIS, COLOR_HIDDEN, COLOR_KINETIC, COLOR_TEXT, COLOR_TITLE, COLOR_TOTAL,

@@ -23,12 +23,12 @@ pub(super) struct PanelPlan {
 
 impl PanelPlan {
     /// The curves of the series that are not hidden.
-    pub(super) fn shown_curves(&self) -> impl Iterator<Item = Curve> + '_ {
+    pub(super) fn shown_curves(&self) -> impl Iterator<Item = &Curve> + Clone {
         self.series
             .iter()
             .zip(&self.curves)
             .filter(|(s, _)| !s.hidden)
-            .map(|(_, curve)| curve.clone())
+            .map(|(_, curve)| curve)
     }
 }
 
