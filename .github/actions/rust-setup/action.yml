@@ -1,0 +1,26 @@
+name: Set up Rust
+description: Pinned nightly (RUST_NIGHTLY from the workflow env), cargo cache and sccache for the jobs that build.
+inputs:
+  components:
+    description: Extra rustup components, comma-separated
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Install Rust nightly
+      uses: dtolnay/rust-toolchain@nightly
+      with:
+        components: ${{ inputs.components }}
+        toolchain: ${{ env.RUST_NIGHTLY }}
+
+    - name: Cache cargo registry and build artifacts
+      uses: Swatinem/rust-cache@v2
+
+    - name: Set up sccache
+      uses: mozilla-actions/sccache-action@v0.0.11
+
+    - name: Compile through sccache
+      shell: bash
+      run: |
+        echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
+        echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"

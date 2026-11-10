@@ -14,9 +14,9 @@ updates:
       cargo-minor-and-patch:
         update-types: ["minor", "patch"]
 
-  # Actions used in .github/workflows
+  # Actions used in .github/workflows and the composite actions
   - package-ecosystem: "github-actions"
-    directory: "/"
+    directories: ["/", "/.github/actions/*"]
     schedule:
       interval: "monthly"
     groups:

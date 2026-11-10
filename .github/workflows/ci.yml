@@ -47,24 +47,14 @@ jobs:
     #  contents: read
     #  security-events: write
     #  actions: read
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Install Rust nightly
-        uses: dtolnay/rust-toolchain@nightly
+      - name: Set up Rust
+        uses: ./.github/actions/rust-setup
         with:
           components: clippy
-          toolchain: ${{ env.RUST_NIGHTLY }}
-
-      - name: Cache cargo registry and build artifacts
-        uses: Swatinem/rust-cache@v2
-
-      - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.11
 
       - name: Install clippy-sarif and sarif-fmt
         uses: taiki-e/install-action@v2
@@ -162,23 +152,12 @@ jobs:
     permissions:
       contents: read
       checks: write
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Install Rust nightly
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          toolchain: ${{ env.RUST_NIGHTLY }}
-
-      - name: Cache cargo registry and build artifacts
-        uses: Swatinem/rust-cache@v2
-
-      - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.11
+      - name: Set up Rust
+        uses: ./.github/actions/rust-setup
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@nextest
@@ -233,23 +212,12 @@ jobs:
     name: drift suite
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Install Rust nightly
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          toolchain: ${{ env.RUST_NIGHTLY }}
-
-      - name: Cache cargo registry and build artifacts
-        uses: Swatinem/rust-cache@v2
-
-      - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.11
+      - name: Set up Rust
+        uses: ./.github/actions/rust-setup
 
       - name: Log runner CPU and SIMD path
         shell: bash

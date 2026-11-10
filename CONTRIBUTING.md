@@ -93,7 +93,8 @@ Both formatting and linting must pass without errors.
 
 A refactor must not change simulation results. Besides the steps above, a PR
 that restructures code without an intended behavior change must pass these
-gates unchanged; CI runs all of them in the `test` job:
+gates unchanged; CI runs the drift suite in the `drift` job and the others
+in the `test` job:
 
 1. **Seeded headless fixtures**: `cargo ci-test-headless-regression`
    - `crates/thermo_runtime/src/headless_runner/fixtures/seeded_headless_regression.jsonl`: free gas, summary records.

@@ -77,7 +77,7 @@ fn test_dense_gas_precision_by_distance_from_origin() {
         ("dense_gas", true, DENSE_FAR_OVER_ORIGIN),
         ("cool_gas", false, COOL_FAR_OVER_ORIGIN),
     ];
-    // The 8 gas and centre runs are independent: run them on their own
+    // The gas and centre runs are independent: run them on their own
     // threads, so this test does not set the time of the drift suite.
     let drifts = std::thread::scope(|s| {
         gases
