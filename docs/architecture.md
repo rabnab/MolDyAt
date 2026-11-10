@@ -427,7 +427,10 @@ only new values. What the window shows is a `PlotSelection`
 stacked on a shared time axis, each with one or more series by registry
 name, some of them hidden, and the focused plot that the plot commands
 change. It lives in the manager and survives closing the window; it is not
-saved between runs. `PlotScene::build` (`energy_plot/plot_layout.rs`) lays
+saved between runs. The manager is the module `event_loop/energy_window_manager/`, split into
+`keys`, `gestures`, `plots` and `redraw`. `PlotScene::build`
+(`energy_plot/plot_layout/`: `curve` the series and ranges, `ticks` the
+axis arithmetic, `layout` the page, `panel` one plot) lays
 the plots out in window pixels without a GPU: the title, key hints built
 from the key map (`energy_window_key_hints`; trailing hints are dropped
 when the title line is full, and a `ui.toml` rebinding shows), then per
