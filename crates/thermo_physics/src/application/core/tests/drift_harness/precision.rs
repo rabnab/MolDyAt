@@ -73,14 +73,23 @@ fn drift_by_dt_in(center: f32, line_box: Option<f32>, projectiles: bool) -> [(f3
 #[test]
 #[ignore = "suite:drift"]
 fn test_dense_gas_precision_by_distance_from_origin() {
-    let mut failures = Vec::new();
-    for (gas, projectiles, max_far) in [
+    let gases = [
         ("dense_gas", true, DENSE_FAR_OVER_ORIGIN),
         ("cool_gas", false, COOL_FAR_OVER_ORIGIN),
-    ] {
+    ];
+    // The gas and centre runs are independent: run them on their own
+    // threads, so this test does not set the time of the drift suite.
+    let drifts = std::thread::scope(|s| {
+        gases
+            .map(|(_, projectiles, _)| {
+                CENTERS.map(|center| s.spawn(move || drift_by_dt(center, projectiles)))
+            })
+            .map(|runs| runs.map(|run| run.join().unwrap_or_else(|e| std::panic::resume_unwind(e))))
+    });
+    let mut failures = Vec::new();
+    for ((gas, projectiles, max_far), drifts) in gases.into_iter().zip(drifts) {
         let mut origin_d4 = f32::NAN;
-        for center in CENTERS {
-            let [d1, d2, d4] = drift_by_dt(center, projectiles);
+        for (center, [d1, d2, d4]) in CENTERS.into_iter().zip(drifts) {
             let ratio = d4 / d1.max(1e-12);
             if center == 0.0 {
                 origin_d4 = d4;
