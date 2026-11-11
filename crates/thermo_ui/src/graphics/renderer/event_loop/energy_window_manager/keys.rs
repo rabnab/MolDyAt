@@ -22,6 +22,8 @@ pub(in super::super) enum EnergyWindowKey {
     ResetView,
     /// Switch between the time series and the distributions.
     Distributions,
+    /// Switch g(r) between the mean and the local density.
+    RdfLocal,
 }
 
 /// The energy window's action for a key event. The keys come from the key
@@ -48,6 +50,7 @@ pub(in super::super) fn energy_window_key(
         UiAction::Plot(change) => Some(EnergyWindowKey::Plot(change)),
         UiAction::ResetPlotView => Some(EnergyWindowKey::ResetView),
         UiAction::TogglePlotDistributions => Some(EnergyWindowKey::Distributions),
+        UiAction::ToggleRdfLocal => Some(EnergyWindowKey::RdfLocal),
         _ => None,
     }
 }

@@ -325,6 +325,7 @@ Keyboard (press `H` for the same list in the log):
 | `P` | Cycle the plot content (in the plot window: the focused plot's energy preset). |
 | `TAB` | Toggle the plot window. |
 | `M` | Switch the plot window between the time series and the distributions (speed histogram with Maxwell-Boltzmann, g(r)); opens it if closed. Click a species pair in the g(r) heading to hide or show its curve. |
+| `Alt + M` | Distributions view: normalise g(r) by the density around each ball instead of the world's mean, so it levels off at 1 under gravity or in chambers. |
 | `HOME` | Reset the plot window's time range (follow the newest sample; also a middle double click in the plot). |
 | `.` | Plot window: show the next series in place of the focused plot's last one. |
 | `,` | Plot window: show the previous series in place of the focused plot's last one. |

@@ -642,6 +642,15 @@ fn test_distributions_flag() {
         .unwrap()
         .unwrap();
     assert!(config.distributions);
+    assert!(!config.rdf_local);
+}
+
+#[test]
+fn test_rdf_local_flag_implies_distributions() {
+    let config = parse_headless_args_with_args(&headless_args(&["--rdf-local"]))
+        .unwrap()
+        .unwrap();
+    assert!(config.distributions && config.rdf_local);
 }
 
 #[test]

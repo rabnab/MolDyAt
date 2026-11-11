@@ -66,6 +66,8 @@ pub struct ExportSettings {
     /// Also write the final snapshot's distributions to
     /// `distributions.<ext>` (`--distributions`, #343).
     pub distributions: bool,
+    /// g(r) of that file by the local density (`--rdf-local`).
+    pub rdf_local: bool,
 }
 
 /// The series of a run being exported (`--export-dir`).
@@ -361,6 +363,7 @@ impl HeadlessRunner {
                 series: config.export_series.clone(),
                 stream: config.export_stream,
                 distributions: config.distributions,
+                rdf_local: config.rdf_local,
             }))
             .build())
     }
@@ -391,7 +394,7 @@ impl HeadlessRunner {
         if settings.distributions {
             files.push((
                 ExportKind::Distributions,
-                distributions_to_string(snapshot, settings.format),
+                distributions_to_string(snapshot, settings.format, settings.rdf_local),
             ));
         }
         let mut written = files

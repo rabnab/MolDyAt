@@ -64,6 +64,8 @@ pub struct PairDistribution {
 #[derive(Debug, Clone, PartialEq)]
 pub struct RadialDistribution {
     pub bin_width: f32,
+    /// g was normalised by the density around each reference ball.
+    pub local: bool,
     /// One entry per pair `(a, b)` with `a <= b`, in species table order.
     pub pairs: Vec<PairDistribution>,
 }
@@ -84,7 +86,7 @@ pub struct Distributions {
 }
 
 /// The distributions of `snapshot`'s balls (it needs the `BALLS` layer).
-pub fn distributions(snapshot: &RendererSnapshot) -> Distributions {
+pub fn distributions(snapshot: &RendererSnapshot, local: bool) -> Distributions {
     Distributions {
         speed: speed_histogram(&snapshot.balls, SPEED_BINS),
         radial: radial_distribution(
@@ -92,6 +94,7 @@ pub fn distributions(snapshot: &RendererSnapshot) -> Distributions {
             &snapshot.frame.world_rect,
             RDF_MAX_DISTANCE,
             RDF_BINS,
+            local,
         ),
     }
 }
@@ -158,24 +161,34 @@ pub fn speed_histogram(balls: &[BallRenderData], bins: usize) -> Option<SpeedHis
 /// every wall count, so every shell lies inside the world; an ideal gas
 /// then gives g ≈ 1 at every r.
 ///
-/// `ρ_b` is the mean density of the whole world: g is normalised for a
-/// world of uniform density. Where the density varies on its own (a gas
-/// stratified under gravity, chambers split by walls or valves at
-/// different densities), g levels off above 1 at large r even without
-/// interactions; read that plateau as the density variation, not as
-/// structure. No bins (`bins == 0` or `r_max <= 0`) give no pairs.
+/// `ρ_b` is the mean density of the whole world, so where the density
+/// varies on its own (a gas stratified under gravity, chambers split by
+/// walls or valves at different densities), g levels off above 1 at large r
+/// even without interactions; read that plateau as the density variation,
+/// not as structure. With `local`, `ρ_b` is each reference ball's own: the
+/// density of `b` in the ring from `r_max` to `1.5 r_max` around it, with
+/// reference balls `1.5 r_max` from every wall; a wall inside the world
+/// biases those next to it slightly. Without any such reference ball (a
+/// world under `3 r_max` wide) g falls back to the mean density, and the
+/// result says so (`local` is false). A pair whose reference balls have no
+/// `b` in their ring (a rare species, a droplet in vacuum) has NaN for g.
+/// No bins (`bins == 0` or `r_max <= 0`) give no pairs.
 pub fn radial_distribution(
     balls: &[BallRenderData],
     world: &Rect,
     r_max: f32,
     bins: usize,
+    local: bool,
 ) -> RadialDistribution {
     if bins == 0 || r_max.is_nan() || r_max <= 0.0 {
         return RadialDistribution {
             bin_width: 0.0,
+            local,
             pairs: Vec::new(),
         };
     }
+    let reach = if local { 1.5 * r_max } else { r_max };
+    let ring_area = std::f32::consts::PI * (reach * reach - r_max * r_max);
     let bin_width = r_max / bins as f32;
     let mut counts_per_species = [0usize; SpeciesSet::CAPACITY];
     for ball in balls {
@@ -195,12 +208,12 @@ pub fn radial_distribution(
         world.y.max(world.y + world.h),
     );
     let area = (x1 - x0) * (y1 - y0);
-    let grid = BallGrid::new(balls, x0, y0, x1, y1, r_max);
+    let grid = BallGrid::new(balls, x0, y0, x1, y1, reach);
     let interior = |b: &BallRenderData| {
-        b.position.x - x0 >= r_max
-            && x1 - b.position.x >= r_max
-            && b.position.y - y0 >= r_max
-            && y1 - b.position.y >= r_max
+        b.position.x - x0 >= reach
+            && x1 - b.position.x >= reach
+            && b.position.y - y0 >= reach
+            && y1 - b.position.y >= reach
     };
 
     // One neighbour pass for every pair: counts per (reference species,
@@ -209,6 +222,7 @@ pub fn radial_distribution(
     let p = present.len();
     let place = |species: SpeciesId| present.iter().position(|&s| s == species.index());
     let mut hist = vec![0u64; p * p * bins];
+    let mut ring = vec![0u64; p * p];
     let mut references = vec![0usize; p];
     for (i, ball) in balls.iter().enumerate() {
         let Some(a) = place(ball.species).filter(|_| interior(ball)) else {
@@ -225,21 +239,31 @@ pub fn radial_distribution(
             let r = (other.position.x - ball.position.x).hypot(other.position.y - ball.position.y);
             if r < r_max {
                 hist[(a * p + b) * bins + ((r / bin_width) as usize).min(bins - 1)] += 1;
+            } else if r < reach {
+                ring[a * p + b] += 1;
             }
         });
+    }
+
+    if local && references.iter().all(|&n| n == 0) {
+        return radial_distribution(balls, world, r_max, bins, false);
     }
 
     let mut pairs = Vec::new();
     for a in 0..p {
         for b in a..p {
-            let neighbours = counts_per_species[present[b]] - usize::from(a == b);
-            let density = neighbours as f32 / area;
+            let density_sum = if local {
+                ring[a * p + b] as f32 / ring_area
+            } else {
+                let neighbours = counts_per_species[present[b]] - usize::from(a == b);
+                references[a] as f32 * (neighbours as f32 / area)
+            };
             let counts = &hist[(a * p + b) * bins..][..bins];
             let g = (0..bins)
                 .map(|i| {
                     let (r0, r1) = (i as f32 * bin_width, (i + 1) as f32 * bin_width);
                     let shell = std::f32::consts::PI * (r1 * r1 - r0 * r0);
-                    let ideal = references[a] as f32 * density * shell;
+                    let ideal = density_sum * shell;
                     if ideal > 0.0 {
                         counts[i] as f32 / ideal
                     } else {
@@ -255,7 +279,11 @@ pub fn radial_distribution(
             });
         }
     }
-    RadialDistribution { bin_width, pairs }
+    RadialDistribution {
+        bin_width,
+        local,
+        pairs,
+    }
 }
 
 /// The balls sorted into square cells of at least `r_max`, so the

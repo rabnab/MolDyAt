@@ -67,6 +67,8 @@ pub struct HeadlessConfig {
     /// record, and with `--export-dir` write `distributions.<ext>` at the end
     /// (#343).
     pub distributions: bool,
+    /// `--rdf-local`: g(r) by the density around each ball, not the mean.
+    pub rdf_local: bool,
     /// Save the world to the save directory once it is set up (walls,
     /// valves, seeded balls), before the first step. Perf runs seed a large
     /// world once and `--load` it for every run.
@@ -126,6 +128,7 @@ impl Default for HeadlessConfig {
             export_series: None,
             export_stream: false,
             distributions: false,
+            rdf_local: false,
             save_setup: false,
             script: None,
             sim: None,
@@ -363,6 +366,7 @@ fn parse_headless_args_with_args(args: &[String]) -> Result<Option<HeadlessConfi
                 export_options_given = true;
             }
             "--distributions" => config.distributions = true,
+            "--rdf-local" => (config.distributions, config.rdf_local) = (true, true),
             other => return Err(CliError::new(format!("Unknown argument: {}", other))),
         }
         i += 1;

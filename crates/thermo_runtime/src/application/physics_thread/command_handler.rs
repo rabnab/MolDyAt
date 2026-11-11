@@ -128,7 +128,8 @@ impl<'a> DomainCommandHandler<'a> {
                 if kind == ExportKind::Snapshot {
                     snapshot_to_string(&snapshot, format)
                 } else {
-                    distributions_to_string(&snapshot, format)
+                    // Always the mean density, whatever the plot window shows.
+                    distributions_to_string(&snapshot, format, false)
                 }
             }
         };

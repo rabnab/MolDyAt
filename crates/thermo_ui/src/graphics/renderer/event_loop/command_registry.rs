@@ -74,6 +74,7 @@ pub enum UiAction {
     /// Switch the plot window between the time series and the
     /// distributions (#343).
     TogglePlotDistributions,
+    ToggleRdfLocal,
     DeleteHovered,
 }
 
@@ -570,6 +571,13 @@ pub static COMMANDS: &[CommandDescriptor] = &[
         category: CommandCategory::View,
         default_binding: &[symbol('m', Press)],
         kind: CommandKind::Ui(UiAction::TogglePlotDistributions),
+    },
+    CommandDescriptor {
+        id: "view.plot_rdf_local",
+        label: "Distributions view: normalise g(r) by the density around each ball instead of the world's mean, so it levels off at 1 under gravity or in chambers.",
+        category: CommandCategory::View,
+        default_binding: &[symbol_chord(Alt, 'm', PressOnce)],
+        kind: CommandKind::Ui(UiAction::ToggleRdfLocal),
     },
     CommandDescriptor {
         id: "view.reset_plot_view",

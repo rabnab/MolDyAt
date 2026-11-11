@@ -384,6 +384,10 @@ fn test_plot_keys_of_the_energy_window() {
             "{code:?} {held:?}"
         );
     }
+    assert_eq!(
+        energy_window_key(&key_map, us(KeyCode::KeyM), KeyPhase::Down, alt),
+        Some(EnergyWindowKey::RdfLocal)
+    );
 }
 
 /// Plot commands and clicks (#339), without a window.

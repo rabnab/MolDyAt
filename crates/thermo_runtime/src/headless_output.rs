@@ -370,7 +370,8 @@ fn frame_to_jsonl_with_metrics(
     }
 
     if config.distributions {
-        frame["distributions"] = distributions_json(snapshot, &distributions(snapshot));
+        let data = distributions(snapshot, config.rdf_local);
+        frame["distributions"] = distributions_json(snapshot, &data);
     }
 
     frame.to_string()

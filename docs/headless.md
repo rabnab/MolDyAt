@@ -67,6 +67,7 @@ Script commands due after a step run after that step's frame.
 | `--export-series <A,B,..>`            | Export only these series (default: all); an unknown name fails the run; needs `--export-dir`                                                                                                                                                                                                                                             |
 | `--export-stream`                     | Also append the sample of every frame (all series, not thinned) to `stream.<ext>` while the run goes; see [Sample stream](#sample-stream); needs `--export-dir`                                                                                                                                                                          |
 | `--distributions`                     | Add the speed histogram and g(r) to every `frame` record (see [Distributions](#distributions)); with `--export-dir` also write `distributions.<ext>`                                                                                                                                                                                     |
+| `--rdf-local`                         | Like `--distributions`, with g(r) normalised by the density around each ball instead of the world's mean (see [Distributions](#distributions))                                                                                                                                                                                         |
 | `--load <PATH>`                       | Start from a saved world (shared with the window mode)                                                                                                                                                                                                                                                                                   |
 | `--save-dir <DIR>`                    | Directory for saves (shared with the window mode)                                                                                                                                                                                                                                                                                        |
 | `--world-scale <F>`                   | Scale the default world's width and height by F around its centre, 0.05..=100; overrides `world.scale` of `--config`; not with `--load` (shared with the window mode, parsed by the binary)                                                                                                                                              |
@@ -125,14 +126,21 @@ With `--distributions` (#343) every `frame` record also has a
   Maxwell–Boltzmann counts expected in the same bins at that temperature
   (`Σ_balls exp(-m a²/2T) - exp(-m b²/2T)` for a bin `[a, b)`, exact for
   mixed masses).
-- `rdf`: `bin_width` and `pairs`, one per species pair present (table
-  order), with `species` (two names), `reference_balls` and `g`
+- `rdf`: `bin_width`, `local_density` (see below) and `pairs`, one per
+  species pair present (table order), with `species` (two names), `reference_balls` and `g`
   (`RDF_BINS`, 50, bins up to `RDF_MAX_DISTANCE`, 5 σ). Only balls at least
   5 σ from every wall are reference balls, so no shell is cut off; an ideal
-  gas of uniform density gives g ≈ 1. g is normalised by the mean density of
-  the whole world, so where the density varies on its own (stratified under
-  gravity, chambers at different densities) g levels off above 1 at large r
-  even without interactions. `g` is `null` where there are no reference
+  gas of uniform density gives g ≈ 1. By default g is normalised by the
+  mean density of the whole world, so where the density varies on its own
+  (stratified under gravity, chambers at different densities) g levels off
+  above 1 at large r even without interactions. With `--rdf-local`
+  (`local_density: true`) it is normalised by the density of the neighbour
+  species in the ring from 5 σ to 7.5 σ around each reference ball (summed
+  over the reference balls, which then keep 7.5 σ from every wall), so g
+  levels off at 1 there. In a world under 15 σ wide, where no ball
+  qualifies, g falls back to the mean density and `local_density` is
+  `false`. The ring does not see a wall inside the world, so reference balls
+  next to one bias g slightly. `g` is `null` where there are no reference
   balls.
 
 Both are computed from the frame's balls, in ball order, off the physics
@@ -260,7 +268,7 @@ byte-identical files. JSONL records carry `schema_version: "export.v1"` and a
 |----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
 | series   | Header `step,time,<name>[ [<unit>]],…` with the series sorted by name (`E_kin [eps*]`, `N2:count`), then one row per sampled step with its simulation time. A series registered later has empty cells for the earlier steps | `series_header` (`rows`, `series`: name, unit, description, per_species), then one `series_row` per step (`step`, `time`, `values` object)            |
 | snapshot | `id,species,x,y,vx,vy,mass,contact_radius`, one row per ball sorted by id                                                                                                                                                   | `snapshot_header` (`step`, `time`, `ball_count`), then one `ball` record per ball (`id`, `species`, `position`, `velocity`, `contact_radius`, `mass`) |
-| distributions | `distribution,species,x,value,expected`: a `speed` row per bin (centre speed, ball count, Maxwell–Boltzmann count), then `rdf` rows per pair (`N2-Ar`, centre distance, g) | `distributions_header` (`step`, `time`, `ball_count`), `speed_histogram` and one `rdf` record per pair, with the fields of the headless `distributions` object |
+| distributions | `distribution,species,x,value,expected`: a `speed` row per bin (centre speed, ball count, Maxwell–Boltzmann count), then `rdf` rows per pair (`N2-Ar`, centre distance, g; `rdf_local` rows with `--rdf-local`) | `distributions_header` (`step`, `time`, `ball_count`), `speed_histogram` and one `rdf` record per pair, with the fields of the headless `distributions` object |
 
 The series are those of the `MetricsRegistry` (`E_kin`, `E_pot`, `E_tot`,
 `wall_momentum`, `<species>:count`), sampled at snapshot cadence. Their values are in the

@@ -14,12 +14,16 @@ use serde_json::json;
 ///
 /// CSV: `distribution,species,x,value,expected`, one row per bin: `speed`
 /// rows with the bin's centre speed, ball count and Maxwell–Boltzmann count,
-/// then `rdf` rows per species pair (`N2-Ar`) with the bin's centre distance
-/// and g. JSONL: a `distributions_header` record (step, time, temperature),
+/// then `rdf` rows per species pair (`N2-Ar`; `rdf_local` when g uses the
+/// local density) with the bin's centre distance and g. JSONL: a `distributions_header` record (step, time, temperature),
 /// a `speed_histogram` record and one `rdf` record per species pair, with
 /// the fields of the headless `distributions` object.
-pub fn distributions_to_string(snapshot: &RendererSnapshot, format: ExportFormat) -> String {
-    let data = distributions(snapshot);
+pub fn distributions_to_string(
+    snapshot: &RendererSnapshot,
+    format: ExportFormat,
+    local: bool,
+) -> String {
+    let data = distributions(snapshot, local);
     let mut out = String::new();
     match format {
         ExportFormat::Csv => {
@@ -33,11 +37,16 @@ pub fn distributions_to_string(snapshot: &RendererSnapshot, format: ExportFormat
                     ));
                 }
             }
+            let kind = if data.radial.local {
+                "rdf_local"
+            } else {
+                "rdf"
+            };
             for (pair, names) in data.radial.pairs.iter().zip(pair_names(snapshot, &data)) {
                 let names = csv_cell(&format!("{}-{}", names[0], names[1]));
                 for (i, g) in pair.g.iter().enumerate() {
                     out.push_str(&format!(
-                        "rdf,{names},{},{},\n",
+                        "{kind},{names},{},{},\n",
                         csv_f32(Some(data.radial.bin_centre(i))),
                         csv_f32(Some(*g)),
                     ));
@@ -66,6 +75,7 @@ pub fn distributions_to_string(snapshot: &RendererSnapshot, format: ExportFormat
                 record["schema_version"] = json!(SCHEMA_VERSION);
                 record["record_kind"] = json!("rdf");
                 record["bin_width"] = rdf["bin_width"].clone();
+                record["local_density"] = rdf["local_density"].clone();
                 records.push(record);
             }
             for record in records {
@@ -94,9 +104,9 @@ fn pair_names<'a>(
 
 /// `data` as the JSON object of a headless frame's `distributions` field:
 /// `speed` (absent without a histogram) with `bin_width`, `temperature`,
-/// `counts` and `maxwell_boltzmann`, and `rdf` with `bin_width` and
-/// `pairs`, each with `species`, `reference_balls` and `g`. Non-finite
-/// numbers are `null`.
+/// `counts` and `maxwell_boltzmann`, and `rdf` with `bin_width`,
+/// `local_density` (g by the density around each ball) and `pairs`, each
+/// with `species`, `reference_balls` and `g`. Non-finite numbers are `null`.
 pub fn distributions_json(snapshot: &RendererSnapshot, data: &Distributions) -> serde_json::Value {
     let floats = |values: &[f32]| {
         values
@@ -120,6 +130,7 @@ pub fn distributions_json(snapshot: &RendererSnapshot, data: &Distributions) -> 
     let mut value = json!({
         "rdf": {
             "bin_width": json_f32(Some(data.radial.bin_width)),
+            "local_density": data.radial.local,
             "pairs": pairs,
         },
     });

@@ -5,7 +5,7 @@
 use super::*;
 use crate::application::renderer_snapshot::RendererSnapshot;
 use crate::distributions::{RDF_BINS, SPEED_BINS};
-use thermo_physics::objects2d::Vec2D;
+use thermo_physics::objects2d::{Rect, Vec2D};
 
 /// The balls of `snapshot_with_balls`, moving.
 fn moving_balls() -> RendererSnapshot {
@@ -19,7 +19,11 @@ fn moving_balls() -> RendererSnapshot {
 #[test]
 fn test_distributions_csv_has_a_speed_row_per_bin_and_rdf_rows_per_pair() {
     let snapshot = moving_balls();
-    let rows = parse_csv(&distributions_to_string(&snapshot, ExportFormat::Csv));
+    let rows = parse_csv(&distributions_to_string(
+        &snapshot,
+        ExportFormat::Csv,
+        false,
+    ));
     assert_eq!(
         rows[0],
         ["distribution", "species", "x", "value", "expected"]
@@ -41,7 +45,7 @@ fn test_distributions_csv_has_a_speed_row_per_bin_and_rdf_rows_per_pair() {
 #[test]
 fn test_distributions_jsonl_records() {
     let snapshot = moving_balls();
-    let text = distributions_to_string(&snapshot, ExportFormat::Jsonl);
+    let text = distributions_to_string(&snapshot, ExportFormat::Jsonl, false);
     let records: Vec<serde_json::Value> = text
         .lines()
         .map(|l| serde_json::from_str(l).unwrap())
@@ -57,4 +61,42 @@ fn test_distributions_jsonl_records() {
             .iter()
             .all(|r| r["schema_version"] == SCHEMA_VERSION)
     );
+}
+
+#[test]
+fn test_csv_rdf_rows_say_whether_g_uses_the_local_density() {
+    for (local, kind) in [(false, "rdf"), (true, "rdf_local")] {
+        let text = distributions_to_string(&moving_balls(), ExportFormat::Csv, local);
+        let rows = parse_csv(&text);
+        let rdf = rows[1..].iter().filter(|r| r[0].starts_with("rdf"));
+        assert_eq!(rdf.clone().count(), RDF_BINS);
+        assert!(rdf.into_iter().all(|r| r[0] == kind));
+    }
+}
+
+#[test]
+fn test_csv_rdf_rows_say_mean_when_the_local_density_fell_back() {
+    let mut snapshot = moving_balls();
+    // No ball is 7.5 from every wall of a 14 wide world.
+    snapshot.frame.world_rect = Rect::new(0.0, 0.0, 14.0, 14.0);
+    let rows = parse_csv(&distributions_to_string(&snapshot, ExportFormat::Csv, true));
+    let rdf: Vec<_> = rows[1..]
+        .iter()
+        .filter(|r| r[0].starts_with("rdf"))
+        .collect();
+    assert_eq!(rdf.len(), RDF_BINS);
+    assert!(rdf.iter().all(|r| r[0] == "rdf"));
+}
+
+#[test]
+fn test_rdf_records_say_whether_g_uses_the_local_density() {
+    for local in [false, true] {
+        let text = distributions_to_string(&moving_balls(), ExportFormat::Jsonl, local);
+        for line in text.lines() {
+            let record: serde_json::Value = serde_json::from_str(line).unwrap();
+            if record["record_kind"] == "rdf" {
+                assert_eq!(record["local_density"], local);
+            }
+        }
+    }
 }
