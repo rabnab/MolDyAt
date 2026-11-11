@@ -137,9 +137,11 @@ With `--distributions` (#343) every `frame` record also has a
   (`local_density: true`) it is normalised by the density of the neighbour
   species in the ring from 5 σ to 7.5 σ around each reference ball (summed
   over the reference balls, which then keep 7.5 σ from every wall), so g
-  levels off at 1 there. The ring does not see a wall inside the world, so
-  reference balls next to one bias g slightly. `g` is `null` where there are
-  no reference balls.
+  levels off at 1 there. In a world under 15 σ wide, where no ball
+  qualifies, g falls back to the mean density and `local_density` is
+  `false`. The ring does not see a wall inside the world, so reference balls
+  next to one bias g slightly. `g` is `null` where there are no reference
+  balls.
 
 Both are computed from the frame's balls, in ball order, off the physics
 step (`thermo_runtime::distributions`); a run without the flag computes

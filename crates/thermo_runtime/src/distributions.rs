@@ -168,7 +168,9 @@ pub fn speed_histogram(balls: &[BallRenderData], bins: usize) -> Option<SpeedHis
 /// not as structure. With `local`, `ρ_b` is each reference ball's own: the
 /// density of `b` in the ring from `r_max` to `1.5 r_max` around it, with
 /// reference balls `1.5 r_max` from every wall; a wall inside the world
-/// biases those next to it slightly. A pair whose reference balls have no
+/// biases those next to it slightly. Without any such reference ball (a
+/// world under `3 r_max` wide) g falls back to the mean density, and the
+/// result says so (`local` is false). A pair whose reference balls have no
 /// `b` in their ring (a rare species, a droplet in vacuum) has NaN for g.
 /// No bins (`bins == 0` or `r_max <= 0`) give no pairs.
 pub fn radial_distribution(
@@ -241,6 +243,10 @@ pub fn radial_distribution(
                 ring[a * p + b] += 1;
             }
         });
+    }
+
+    if local && references.iter().all(|&n| n == 0) {
+        return radial_distribution(balls, world, r_max, bins, false);
     }
 
     let mut pairs = Vec::new();

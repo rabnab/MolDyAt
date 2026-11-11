@@ -53,6 +53,7 @@ impl EnergyWindowManager {
     pub fn toggle_rdf_local(&mut self) {
         if self.show_distributions {
             self.rdf_local = !self.rdf_local;
+            self.distributions = None;
         }
     }
 
@@ -69,10 +70,10 @@ impl EnergyWindowManager {
     /// snapshot has its balls and the last ones are older than
     /// [`DISTRIBUTION_INTERVAL`]. Computed here, off the physics thread.
     pub(super) fn update_distributions(&mut self, snapshot: &RendererSnapshot) {
-        let due = self.distributions.as_ref().is_none_or(|(shown, at)| {
-            at.elapsed() >= DISTRIBUTION_INTERVAL
-                || shown.distributions.radial.local != self.rdf_local
-        });
+        let due = self
+            .distributions
+            .as_ref()
+            .is_none_or(|(_, at)| at.elapsed() >= DISTRIBUTION_INTERVAL);
         if !self.show_distributions
             || self.window.is_none()
             || !due

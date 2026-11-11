@@ -229,14 +229,21 @@ fn g_of_two_chambers_levels_off_at_one_only_with_the_local_density() {
 }
 
 #[test]
-fn a_world_too_small_for_the_ring_has_no_local_g() {
+fn a_world_too_small_for_the_ring_falls_back_to_the_mean_density() {
     // Big enough for the shells (5), too small for the ring (7.5 from every wall).
     let world = Rect::new(0.0, 0.0, 14.0, 14.0);
     let gas = ideal_gas(200, &world, DEFAULT_SPECIES, &mut Uniform(1));
     let local = radial_distribution(&gas, &world, RDF_MAX_DISTANCE, RDF_BINS, true);
-    assert_eq!(local.pairs[0].reference_balls, 0);
     let mean = radial_distribution(&gas, &world, RDF_MAX_DISTANCE, RDF_BINS, false);
+    assert!(!local.local, "the result says it used the mean");
     assert!(mean.pairs[0].reference_balls > 0);
+    assert_eq!(
+        local.pairs[0].reference_balls,
+        mean.pairs[0].reference_balls
+    );
+    assert_eq!(local.pairs[0].g.len(), mean.pairs[0].g.len());
+    let same = local.pairs[0].g.iter().zip(&mean.pairs[0].g);
+    assert!(same.into_iter().all(|(a, b)| a.to_bits() == b.to_bits()));
 }
 
 #[test]
