@@ -73,7 +73,7 @@ impl EnergyWindowManager {
         }
         if self.show_distributions {
             return Some(PlotScene::build_distributions(
-                self.distributions.as_ref().map(|(data, _)| data),
+                self.distributions.as_ref().map(|(data, ..)| data),
                 &self.hidden_pairs,
                 window.size,
                 window.scale_factor,
