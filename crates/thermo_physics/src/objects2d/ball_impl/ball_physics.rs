@@ -406,8 +406,8 @@ impl BallPhysics {
         &self.pair_potential
     }
 
-    /// The pair table for a `PairForceBackend`; it changes only with a new
-    /// `BallPhysics`.
+    /// The pair table for the GPU kernel (`thermo_gpu`); it changes only
+    /// with a new `BallPhysics`.
     pub fn pair_params(&self) -> Vec<PairParams> {
         self.pair_potential.pair_params()
     }

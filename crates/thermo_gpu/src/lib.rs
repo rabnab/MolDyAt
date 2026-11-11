@@ -6,13 +6,9 @@
 //! physics and the CPU kernel, which stays the reference, are in
 //! `thermo_physics` (see `docs/architecture.md`).
 
-// For `GpuForces: Send`, which goes deep into wgpu's types.
-#![recursion_limit = "256"]
-
 use bytemuck::{Pod, Zeroable};
-use thermo_physics::objects2d::ball_impl::{
-    KernelPoint, PairForceBackend, PairForces, PairParams, SPECIES_BITS,
-};
+use std::time::Duration;
+use thermo_physics::objects2d::ball_impl::{KernelPoint, PairForces, PairParams, SPECIES_BITS};
 use wgpu::{
     BindGroup, BindGroupLayout, Buffer, BufferBindingType, BufferUsages, ComputePipeline, Device,
     Queue,
@@ -20,6 +16,9 @@ use wgpu::{
 
 /// Invocations per workgroup of a kernel (`WORKGROUP_SIZE` in its WGSL).
 pub const WORKGROUP_SIZE: u32 = 64;
+
+/// How long [`GpuForces::run`] waits for the GPU before it gives up.
+const TIMEOUT: Duration = Duration::from_secs(10);
 
 const LAYOUT: &str = include_str!("layout.wgsl");
 const ALL_PAIRS: &str = include_str!("all_pairs.wgsl");
@@ -53,7 +52,8 @@ pub struct GpuForces {
     pairs: Buffer,
     results: Buffer,
     readback: Buffer,
-    bind_group: BindGroup,
+    /// Built on the next run after a buffer grew.
+    bind_group: Option<BindGroup>,
 }
 
 impl GpuForces {
@@ -78,51 +78,27 @@ impl GpuForces {
                 entry(3, BufferBindingType::Storage { read_only: false }),
             ],
         });
-        let buffer = |size: usize, usage| {
+        // Any size works: `grow` makes room on first use.
+        let buffer = |usage| {
             device.create_buffer(&wgpu::BufferDescriptor {
                 label: None,
-                size: size as u64,
+                size: 256,
                 usage,
                 mapped_at_creation: false,
             })
         };
-        let uniform_buffer = buffer(
-            size_of::<Uniforms>(),
-            BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        );
-        let points = buffer(
-            size_of::<KernelPoint>(),
-            BufferUsages::STORAGE | BufferUsages::COPY_DST,
-        );
-        let pairs = buffer(
-            size_of::<PairParams>(),
-            BufferUsages::STORAGE | BufferUsages::COPY_DST,
-        );
-        let results = buffer(
-            size_of::<PairForces>(),
-            BufferUsages::STORAGE | BufferUsages::COPY_SRC,
-        );
-        let readback = buffer(
-            size_of::<PairForces>(),
-            BufferUsages::MAP_READ | BufferUsages::COPY_DST,
-        );
-        let bind_group = bind_group(
-            &device,
-            &layout,
-            [&uniform_buffer, &points, &pairs, &results],
-        );
         GpuForces {
             kernel: pipeline(&device, &layout, ALL_PAIRS),
+            uniforms: Uniforms::default(),
+            uniform_buffer: buffer(BufferUsages::UNIFORM | BufferUsages::COPY_DST),
+            points: buffer(BufferUsages::STORAGE | BufferUsages::COPY_DST),
+            pairs: buffer(BufferUsages::STORAGE | BufferUsages::COPY_DST),
+            results: buffer(BufferUsages::STORAGE | BufferUsages::COPY_SRC),
+            readback: buffer(BufferUsages::MAP_READ | BufferUsages::COPY_DST),
+            bind_group: None,
+            layout,
             device,
             queue,
-            layout,
-            uniforms: Uniforms::default(),
-            uniform_buffer,
-            points,
-            pairs,
-            results,
-            readback,
-            bind_group,
         }
     }
 
@@ -153,79 +129,108 @@ impl GpuForces {
         }
     }
 
+    /// Upload the pair table: pair `(a, b)` of `n` species at `a * n + b`.
+    pub fn set_pairs(&mut self, pairs: &[PairParams]) {
+        let species = pairs.len().isqrt();
+        assert_eq!(species * species, pairs.len(), "pair table not square");
+        self.uniforms.species = species as u32;
+        if grow(&self.device, &mut self.pairs, size_of_val(pairs)) {
+            self.bind_group = None;
+        }
+        self.queue
+            .write_buffer(&self.pairs, 0, bytemuck::cast_slice(pairs));
+    }
+
+    /// The pair-table forces of every ball of `points` (cells of `cell`
+    /// size) into `results`, one per point in order; errors as [`Self::run`].
+    pub fn compute(
+        &mut self,
+        points: &[KernelPoint],
+        cell: [f32; 2],
+        results: &mut Vec<PairForces>,
+    ) -> Result<(), String> {
+        self.upload_points(points, cell);
+        self.run(&self.kernel.clone(), results)
+    }
+
     /// Upload the balls' points, in cells of `cell` size.
     fn upload_points(&mut self, points: &[KernelPoint], cell: [f32; 2]) {
         self.uniforms.balls = points.len() as u32;
         self.uniforms.cell = cell;
         let results = points.len() * size_of::<PairForces>();
-        let mut grown = grow(&self.device, &mut self.points, size_of_val(points));
-        grown |= grow(&self.device, &mut self.results, results);
-        grown |= grow(&self.device, &mut self.readback, results);
-        if grown {
-            self.rebind();
+        if grow(&self.device, &mut self.points, size_of_val(points))
+            | grow(&self.device, &mut self.results, results)
+            | grow(&self.device, &mut self.readback, results)
+        {
+            self.bind_group = None;
         }
         self.queue
             .write_buffer(&self.points, 0, bytemuck::cast_slice(points));
     }
 
     /// Run `pipeline` once per uploaded point and read its results back
-    /// into `results`, one per point; blocks until the GPU is done.
-    fn run(&self, pipeline: &ComputePipeline, results: &mut Vec<PairForces>) {
+    /// into `results`, one per point; blocks until the GPU is done. After
+    /// an error (no pair table, too many balls, a lost or hung device) the
+    /// caller drops this and computes the forces on the CPU.
+    fn run(
+        &mut self,
+        pipeline: &ComputePipeline,
+        results: &mut Vec<PairForces>,
+    ) -> Result<(), String> {
         results.clear();
         let balls = self.uniforms.balls;
         if balls == 0 {
-            return;
+            return Ok(());
+        }
+        if self.uniforms.species == 0 {
+            return Err("no pair table".into());
+        }
+        let groups = balls.div_ceil(WORKGROUP_SIZE);
+        if groups > self.device.limits().max_compute_workgroups_per_dimension {
+            return Err(format!("{balls} balls are more than one dispatch takes"));
         }
         self.queue
             .write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&self.uniforms));
+        let bind_group = self.bind_group.get_or_insert_with(|| {
+            let buffers = [
+                &self.uniform_buffer,
+                &self.points,
+                &self.pairs,
+                &self.results,
+            ];
+            self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("pair forces"),
+                layout: &self.layout,
+                entries: &[0, 1, 2, 3].map(|i| wgpu::BindGroupEntry {
+                    binding: i,
+                    resource: buffers[i as usize].as_entire_binding(),
+                }),
+            })
+        });
         let size = (balls as usize * size_of::<PairForces>()) as u64;
         let mut encoder = self.device.create_command_encoder(&Default::default());
         {
             let mut pass = encoder.begin_compute_pass(&Default::default());
             pass.set_pipeline(pipeline);
-            pass.set_bind_group(0, &self.bind_group, &[]);
-            pass.dispatch_workgroups(balls.div_ceil(WORKGROUP_SIZE), 1, 1);
+            pass.set_bind_group(0, &*bind_group, &[]);
+            pass.dispatch_workgroups(groups, 1, 1);
         }
         encoder.copy_buffer_to_buffer(&self.results, 0, &self.readback, 0, size);
-        self.queue.submit([encoder.finish()]);
+        let submission = self.queue.submit([encoder.finish()]);
         let slice = self.readback.slice(..size);
-        slice.map_async(wgpu::MapMode::Read, |r| r.expect("map the force readback"));
+        // A failed map shows in `get_mapped_range` below.
+        slice.map_async(wgpu::MapMode::Read, |_| {});
         self.device
-            .poll(wgpu::PollType::wait_indefinitely())
-            .expect("wait for the force kernel");
-        let view = slice.get_mapped_range().expect("read the force readback");
+            .poll(wgpu::PollType::Wait {
+                submission_index: Some(submission),
+                timeout: Some(TIMEOUT),
+            })
+            .map_err(|e| e.to_string())?;
+        let view = slice.get_mapped_range().map_err(|e| e.to_string())?;
         results.extend_from_slice(bytemuck::cast_slice(&view));
         drop(view);
         self.readback.unmap();
-    }
-
-    fn rebind(&mut self) {
-        let buffers = [
-            &self.uniform_buffer,
-            &self.points,
-            &self.pairs,
-            &self.results,
-        ];
-        self.bind_group = bind_group(&self.device, &self.layout, buffers);
-    }
-}
-
-impl PairForceBackend for GpuForces {
-    fn set_pairs(&mut self, pairs: &[PairParams]) {
-        let species = pairs.len().isqrt();
-        assert_eq!(species * species, pairs.len(), "a square pair table");
-        self.uniforms.species = species as u32;
-        if grow(&self.device, &mut self.pairs, size_of_val(pairs)) {
-            self.rebind();
-        }
-        self.queue
-            .write_buffer(&self.pairs, 0, bytemuck::cast_slice(pairs));
-    }
-
-    fn compute(&mut self, points: &[KernelPoint], cell: [f32; 2], results: &mut Vec<PairForces>) {
-        debug_assert!(self.uniforms.species > 0, "set_pairs comes first");
-        self.upload_points(points, cell);
-        self.run(&self.kernel, results);
+        Ok(())
     }
 }
 
@@ -265,20 +270,6 @@ fn grow(device: &Device, buffer: &mut Buffer, size: usize) -> bool {
         mapped_at_creation: false,
     });
     true
-}
-
-/// Bindings 0 to 3: uniforms, points, pair table, results.
-fn bind_group(device: &Device, layout: &BindGroupLayout, buffers: [&Buffer; 4]) -> BindGroup {
-    let entries = buffers.map(|b| b.as_entire_binding());
-    let entries: Vec<_> = (0..)
-        .zip(entries)
-        .map(|(binding, resource)| wgpu::BindGroupEntry { binding, resource })
-        .collect();
-    device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("pair forces"),
-        layout,
-        entries: &entries,
-    })
 }
 
 #[cfg(test)]

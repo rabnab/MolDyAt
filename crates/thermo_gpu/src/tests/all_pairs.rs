@@ -11,7 +11,7 @@ use thermo_physics::application::MainContent;
 use thermo_physics::application::sim_config::PairOverrideConfig;
 use thermo_physics::objects2d::Rect;
 use thermo_physics::objects2d::ball_impl::{
-    KernelPoint, PairForceBackend, PairForces, SPECIES_BITS, SpeciesTable, pair_forces_reference,
+    KernelPoint, PairForces, SPECIES_BITS, SpeciesTable, pair_forces_reference,
 };
 use thermo_physics::test_support::test_config;
 
@@ -83,7 +83,7 @@ const CAPPED: usize = 4;
 fn check(gpu: &mut GpuForces, world: &MainContent, points: &[KernelPoint]) -> Vec<Fields> {
     gpu.set_pairs(&world.world().physics().pair_params());
     let mut results = Vec::new();
-    gpu.compute(points, CELL, &mut results);
+    gpu.compute(points, CELL, &mut results).unwrap();
     let reference = pair_forces_reference(world.world().physics(), points, CELL);
     assert_eq!(results.len(), reference.len());
     for (i, (g, c)) in results.iter().zip(&reference).enumerate() {
@@ -189,10 +189,10 @@ fn timing_of_the_all_pairs_kernel() {
     let mut results = Vec::new();
     for n in [1_000, 10_000, 30_000] {
         let points = gas(n, &["N2", "Ar", "XL"], [0, 0]);
-        gpu.compute(&points, CELL, &mut results);
+        gpu.compute(&points, CELL, &mut results).unwrap();
         let start = std::time::Instant::now();
         for _ in 0..5 {
-            gpu.compute(&points, CELL, &mut results);
+            gpu.compute(&points, CELL, &mut results).unwrap();
         }
         let ms = start.elapsed().as_secs_f64() * 200.0;
         eprintln!(
