@@ -14,8 +14,8 @@ use serde_json::json;
 ///
 /// CSV: `distribution,species,x,value,expected`, one row per bin: `speed`
 /// rows with the bin's centre speed, ball count and Maxwell–Boltzmann count,
-/// then `rdf` rows per species pair (`N2-Ar`) with the bin's centre distance
-/// and g. JSONL: a `distributions_header` record (step, time, temperature),
+/// then `rdf` rows per species pair (`N2-Ar`; `rdf_local` when g uses the
+/// local density) with the bin's centre distance and g. JSONL: a `distributions_header` record (step, time, temperature),
 /// a `speed_histogram` record and one `rdf` record per species pair, with
 /// the fields of the headless `distributions` object.
 pub fn distributions_to_string(
@@ -37,11 +37,12 @@ pub fn distributions_to_string(
                     ));
                 }
             }
+            let kind = if local { "rdf_local" } else { "rdf" };
             for (pair, names) in data.radial.pairs.iter().zip(pair_names(snapshot, &data)) {
                 let names = csv_cell(&format!("{}-{}", names[0], names[1]));
                 for (i, g) in pair.g.iter().enumerate() {
                     out.push_str(&format!(
-                        "rdf,{names},{},{},\n",
+                        "{kind},{names},{},{},\n",
                         csv_f32(Some(data.radial.bin_centre(i))),
                         csv_f32(Some(*g)),
                     ));

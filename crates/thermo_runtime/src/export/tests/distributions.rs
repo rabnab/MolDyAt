@@ -64,6 +64,17 @@ fn test_distributions_jsonl_records() {
 }
 
 #[test]
+fn test_csv_rdf_rows_say_whether_g_uses_the_local_density() {
+    for (local, kind) in [(false, "rdf"), (true, "rdf_local")] {
+        let text = distributions_to_string(&moving_balls(), ExportFormat::Csv, local);
+        let rows = parse_csv(&text);
+        let rdf = rows[1..].iter().filter(|r| r[0].starts_with("rdf"));
+        assert_eq!(rdf.clone().count(), RDF_BINS);
+        assert!(rdf.into_iter().all(|r| r[0] == kind));
+    }
+}
+
+#[test]
 fn test_rdf_records_say_whether_g_uses_the_local_density() {
     for local in [false, true] {
         let text = distributions_to_string(&moving_balls(), ExportFormat::Jsonl, local);

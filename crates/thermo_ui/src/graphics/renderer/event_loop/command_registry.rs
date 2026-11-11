@@ -74,7 +74,6 @@ pub enum UiAction {
     /// Switch the plot window between the time series and the
     /// distributions (#343).
     TogglePlotDistributions,
-    /// g(r) of the distributions view by the local or the mean density.
     ToggleRdfLocal,
     DeleteHovered,
 }

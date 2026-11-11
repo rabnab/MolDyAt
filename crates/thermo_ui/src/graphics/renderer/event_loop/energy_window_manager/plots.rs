@@ -48,10 +48,12 @@ impl EnergyWindowManager {
         self.redraw_now();
     }
 
-    /// Switch g(r) between the mean and the local density; the shown
-    /// distributions follow with the next snapshot.
+    /// Switch g(r) between the mean and the local density in the
+    /// distributions view; the view follows with the next snapshot.
     pub fn toggle_rdf_local(&mut self) {
-        self.rdf_local = !self.rdf_local;
+        if self.show_distributions {
+            self.rdf_local = !self.rdf_local;
+        }
     }
 
     /// The window title for what it shows.
