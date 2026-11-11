@@ -37,7 +37,11 @@ pub fn distributions_to_string(
                     ));
                 }
             }
-            let kind = if local { "rdf_local" } else { "rdf" };
+            let kind = if data.radial.local {
+                "rdf_local"
+            } else {
+                "rdf"
+            };
             for (pair, names) in data.radial.pairs.iter().zip(pair_names(snapshot, &data)) {
                 let names = csv_cell(&format!("{}-{}", names[0], names[1]));
                 for (i, g) in pair.g.iter().enumerate() {

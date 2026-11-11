@@ -5,7 +5,7 @@
 use super::*;
 use crate::application::renderer_snapshot::RendererSnapshot;
 use crate::distributions::{RDF_BINS, SPEED_BINS};
-use thermo_physics::objects2d::Vec2D;
+use thermo_physics::objects2d::{Rect, Vec2D};
 
 /// The balls of `snapshot_with_balls`, moving.
 fn moving_balls() -> RendererSnapshot {
@@ -72,6 +72,20 @@ fn test_csv_rdf_rows_say_whether_g_uses_the_local_density() {
         assert_eq!(rdf.clone().count(), RDF_BINS);
         assert!(rdf.into_iter().all(|r| r[0] == kind));
     }
+}
+
+#[test]
+fn test_csv_rdf_rows_say_mean_when_the_local_density_fell_back() {
+    let mut snapshot = moving_balls();
+    // No ball is 7.5 from every wall of a 14 wide world.
+    snapshot.frame.world_rect = Rect::new(0.0, 0.0, 14.0, 14.0);
+    let rows = parse_csv(&distributions_to_string(&snapshot, ExportFormat::Csv, true));
+    let rdf: Vec<_> = rows[1..]
+        .iter()
+        .filter(|r| r[0].starts_with("rdf"))
+        .collect();
+    assert_eq!(rdf.len(), RDF_BINS);
+    assert!(rdf.iter().all(|r| r[0] == "rdf"));
 }
 
 #[test]

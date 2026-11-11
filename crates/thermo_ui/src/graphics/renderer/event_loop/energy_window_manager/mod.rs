@@ -77,6 +77,9 @@ pub struct EnergyWindowManager {
     distributions: Option<(DistributionData, Instant)>,
     /// g(r) of the distributions view by the local density, not the mean.
     rdf_local: bool,
+    /// The `rdf_local` the shown distributions were computed with (they fall
+    /// back to the mean in a small world, whatever was asked).
+    distributions_local: bool,
     /// g(r) pairs hidden in the distributions view, by name (`"N2-Ar"`);
     /// a click on a pair's legend entry hides or shows it. Kept when the
     /// window is closed and reopened, cleared with a new world history.
@@ -105,6 +108,7 @@ impl EnergyWindowManager {
             show_distributions: false,
             distributions: None,
             rdf_local: false,
+            distributions_local: false,
             hidden_pairs: Vec::new(),
         }
     }
