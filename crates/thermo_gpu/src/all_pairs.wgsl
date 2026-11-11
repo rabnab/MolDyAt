@@ -17,11 +17,10 @@ fn main(
     // Invocations past `n` run along on the last point.
     let me = points[min(i, n - 1u)];
     let row = (me.row_species & SPECIES_MASK) * uniforms.species;
-    // Most pairs are beyond the cutoff: test them without a storage read.
-    var cutoff2: array<f32, SPECIES_MASK + 1u>;
+    // Most pairs are beyond every cutoff of the row: no storage read for them.
+    var max_cutoff = 0.0;
     for (var s = 0u; s < uniforms.species; s++) {
-        let cutoff = pairs[row + s].cutoff;
-        cutoff2[s] = cutoff * cutoff;
+        max_cutoff = max(max_cutoff, pairs[row + s].cutoff);
     }
     var out = PairForces();
     // Each invocation loads one point of the tile, then all read the tile.
@@ -31,7 +30,6 @@ fn main(
         workgroupBarrier();
         for (var k = 0u; k < min(WORKGROUP_SIZE, n - start); k++) {
             let other = tile[k];
-            let species = other.row_species & SPECIES_MASK;
             // Wrapping differences, read as signed.
             let cells = vec2<i32>(vec2(
                 me.col - other.col,
@@ -39,27 +37,30 @@ fn main(
             ));
             let d = vec2<f32>(cells) * uniforms.cell + vec2(me.x - other.x, me.y - other.y);
             let r2 = dot(d, d);
-            if start + k != i && r2 < cutoff2[species] {
-                let pair = pairs[row + species];
+            if start + k != i && r2 < max_cutoff * max_cutoff {
+                let pair = pairs[row + (other.row_species & SPECIES_MASK)];
                 let r = sqrt(r2);
-                // The law at max(r, r_cap) stays finite in the core.
-                let r_outer = max(r, pair.r_cap);
-                let inv = 1.0 / r_outer;
-                let q = pair.sigma * inv;
-                let q2 = q * q;
-                let q6 = q2 * q2 * q2;
-                let core = r_outer - r;
-                let force = 24.0 * pair.epsilon * q6 * (2.0 * q6 - 1.0) * inv
-                    + pair.core_stiffness * core;
-                let force_to_dist = force / max(r, 1e-10);
-                out.force += d * force_to_dist;
-                out.virial += r2 * force_to_dist;
-                out.potential += select(
-                    4.0 * pair.epsilon * q6 * (q6 - 1.0),
-                    pair.pot_at_cap + core * (pair.max_force + 0.5 * pair.core_stiffness * core),
-                    r < pair.r_cap,
-                ) - pair.pot_at_cutoff;
-                out.capped += u32(r < pair.r_cap);
+                if r < pair.cutoff {
+                    // The law at max(r, r_cap) stays finite in the core.
+                    let r_outer = max(r, pair.r_cap);
+                    let inv = 1.0 / r_outer;
+                    let q = pair.sigma * inv;
+                    let q2 = q * q;
+                    let q6 = q2 * q2 * q2;
+                    let core = r_outer - r;
+                    let force = 24.0 * pair.epsilon * q6 * (2.0 * q6 - 1.0) * inv
+                        + pair.core_stiffness * core;
+                    let force_to_dist = force / max(r, 1e-10);
+                    out.force += d * force_to_dist;
+                    out.virial += r2 * force_to_dist;
+                    out.potential += select(
+                        4.0 * pair.epsilon * q6 * (q6 - 1.0),
+                        pair.pot_at_cap
+                            + core * (pair.max_force + 0.5 * pair.core_stiffness * core),
+                        r < pair.r_cap,
+                    ) - pair.pot_at_cutoff;
+                    out.capped += u32(r < pair.r_cap);
+                }
             }
         }
         workgroupBarrier();
