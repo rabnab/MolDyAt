@@ -565,8 +565,8 @@ impl<L: PairLaw> PairTable<L> {
     }
 }
 
-/// One Lennard-Jones [`CappedPotential`] as plain numbers, for a force
-/// kernel outside this crate (`PairForceBackend`).
+/// One Lennard-Jones [`CappedPotential`] as plain numbers, for the GPU
+/// kernel (`thermo_gpu`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Pod, Zeroable)]
 #[repr(C)]
 pub struct PairParams {

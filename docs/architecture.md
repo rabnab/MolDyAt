@@ -13,7 +13,7 @@ are in [refactoring-plan.md](plan/refactoring-plan.md).
 
 | Crate | Package | Contents |
 |---|---|---|
-| `crates/thermo_physics` | `thermo_physics` | The physics: particles and species, pair potentials and the SIMD force kernel, cell grid and Verlet lists, walls and operators (`objects2d`); the world, `MainContent` and its stepping (`application/core`); run settings (`sim_config`), units, stats, thermo fields and saves (`persistence`). Dependencies: rayon, serde, rand, toml, log |
+| `crates/thermo_physics` | `thermo_physics` | The physics: particles and species, pair potentials and the SIMD force kernel, cell grid and Verlet lists, walls and operators (`objects2d`); the world, `MainContent` and its stepping (`application/core`); run settings (`sim_config`), units, stats, thermo fields and saves (`persistence`). Dependencies: rayon, serde, rand, toml, log, bytemuck |
 | `crates/thermo_runtime` | `thermo_runtime` | Running a simulation without a window: the physics thread and its `SnapshotPublisher`, `DomainCommand` and its handler, `OperatorCommand`s, `PhysicsEvent`, `RendererSnapshot` and its builder (`CreateSnapshot`), scene layers, the metrics store (`metrics`), the data export (`export`), and headless runs (`headless_cli`, `headless_runner`, `headless_output`, `headless_timings`, `headless_script`). Dependencies: `thermo_physics`, arc-swap, serde_json, rayon, log |
 | `crates/thermo_gpu` | `thermo_gpu` | Pair forces on the GPU (Phase 9, #357): `GpuForces` holds the force kernel's device, buffers (uniforms, points, pair table, results, readback) and bind group, with the WGSL layouts in `layout.wgsl`. It gets the renderer's device (GUI) or one of its own without a surface (headless, `None` without an adapter). Not yet used by the step. Dependencies: `thermo_physics`, wgpu, bytemuck, pollster, log |
 | `crates/thermo_ui` | `thermo_ui` | The UI without a GPU backend (`graphics`): event loop and input handling, the keyboard command registry and key map, operator tools, viewport, sidebar model, and the energy plot window's state with its plot layout (`PlotScene`, drawn by the backend, which owns the OS window, #371); plus the logger setup and the UI settings file (`ui_settings`: `ui.toml` with the key bindings, #335). Dependencies: `thermo_runtime`, `thermo_physics`, winit (input types only: keys, mouse and window events), arc-swap, toml, log, env_logger |
@@ -52,13 +52,14 @@ touching the other crates.
   mutable access (`MainContent::world_mut`, `SimulationWorld::balls_mut`,
   `sim_mut`, `physics_mut`, `thermostats_mut`, `set_step_count`). Only
   dev-dependencies enable it; normal builds never contain these.
-- `PairForceBackend` is the interface of a force kernel outside the crate
-  (`thermo_gpu` implements it with #359): per step it gets the `KernelPoint`s and the cell size
-  and returns one `PairForces` per ball; the pair table
-  (`BallPhysics::pair_params`, row-major `PairParams`) it gets only with a
-  new `BallPhysics`. All three types are `#[repr(C)]` `bytemuck::Pod`, so
-  they are uploaded and read back without a copy; their WGSL mirrors are
-  checked by `thermo_gpu`'s layout test.
+- The GPU kernel (`thermo_gpu`) reads the `KernelPoint`s, built every
+  step, and the pair table (`BallPhysics::pair_params`, row-major
+  `PairParams`), which changes only with a new `BallPhysics`, and returns
+  one `PairForces` per ball. All three types are `#[repr(C)]`
+  `bytemuck::Pod`, so they are uploaded and read back without a copy;
+  their WGSL mirrors are checked by `thermo_gpu`'s layout test.
+  `PairForces` has no `min_dist`, per-neighbour forces or species
+  interactions: balls that need them stay on the CPU kernel (#360).
 
 ## Threads
 
@@ -85,7 +86,8 @@ FrameRenderer (shell) → draw_main_frame → RenderGraph → GPU (render)
   positions and forces with `par_iter`. The pool has `RAYON_NUM_THREADS`
   workers, or the number of cores minus 2.
 - **GPU forces** (opt-in, wired in by #360). The physics thread drives
-  `thermo_gpu` itself and blocks on each step's readback. In the GUI the
+  `thermo_gpu` itself and blocks on each step's readback (at most 10 s;
+  an error or timeout sends the forces back to the CPU). In the GUI the
   binary hands it a clone of the renderer's `Device` and `Queue` at
   startup (wgpu handles are `Send + Sync`); headless runs request their
   own adapter. Without one the forces stay on the CPU.

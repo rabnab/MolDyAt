@@ -52,7 +52,8 @@ fn check(gpu: &mut GpuForces, pipeline: &wgpu::ComputePipeline, n: u32) {
     let points = points(n);
     gpu.upload_points(&points, CELL);
     let mut results = vec![PairForces::default(); 3];
-    gpu.run(pipeline, &mut results);
+    gpu.run(pipeline, &mut results)
+        .expect("run the copy kernel");
     assert_eq!(results.len(), n as usize);
     for (p, r) in points.iter().zip(&results) {
         assert_eq!(r.force, [p.x * CELL[0], p.y * CELL[1]]);
@@ -75,4 +76,30 @@ fn test_points_and_pairs_round_trip_through_the_gpu() {
     for n in [100, 1000, 70, 1, 0] {
         check(&mut gpu, &pipeline, n);
     }
+}
+
+#[test]
+fn test_run_without_pair_table_or_with_too_many_balls_is_an_error() {
+    let Some(mut gpu) = GpuForces::headless() else {
+        eprintln!("no GPU adapter: errors skipped");
+        return;
+    };
+    let pipeline = gpu.pipeline(COPY);
+    let mut results = Vec::new();
+    gpu.upload_points(&points(10), CELL);
+    assert!(gpu.run(&pipeline, &mut results).is_err(), "no pair table");
+    gpu.set_pairs(&pairs());
+    // More balls than one dispatch takes, without uploading millions of points.
+    gpu.uniforms.balls = u32::MAX;
+    assert!(gpu.run(&pipeline, &mut results).is_err(), "too many balls");
+    assert!(results.is_empty());
+}
+
+#[test]
+#[should_panic(expected = "pair table not square")]
+fn test_set_pairs_rejects_a_table_that_is_not_square() {
+    let Some(mut gpu) = GpuForces::headless() else {
+        panic!("pair table not square (no GPU adapter: skipped)");
+    };
+    gpu.set_pairs(&pairs()[..5]);
 }

@@ -8,7 +8,7 @@ use crate::objects2d::ball_impl::pair_potential::{
     CapSettings, PairOverride, PairPotential, Potential,
 };
 use crate::objects2d::ball_impl::simd_forces::{
-    KernelFrame, KernelPoint, force_simd, kernel_points,
+    KernelFrame, KernelPoint, PairForces, force_simd, kernel_points,
 };
 use crate::objects2d::ball_impl::{Ball2D, SPECIES_AR, SpeciesId, SpeciesTable};
 use std::simd::f32x4;
@@ -38,6 +38,19 @@ fn n2_with_neighbours(neighbours: &[(Vec2D, SpeciesId)]) -> Vec<Ball2D> {
         balls[0].cold.hood.add_neighbour(i + 1);
     }
     balls
+}
+
+#[test]
+fn test_pair_forces_equality_ignores_the_padding() {
+    let mut a = PairForces::default();
+    a.force = [1.0, 2.0];
+    a.capped = 3;
+    let mut b = a;
+    // The padding is the last of the six words.
+    bytemuck::cast_mut::<PairForces, [u32; 6]>(&mut b)[5] = u32::MAX;
+    assert_eq!(a, b);
+    b.capped = 4;
+    assert_ne!(a, b);
 }
 
 #[test]
