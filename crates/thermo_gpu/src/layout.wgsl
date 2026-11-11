@@ -17,9 +17,11 @@ struct KernelPoint {
     x: f32,
     y: f32,
     col: u32,
-    // Row (high 24 bits) and species index (low 8 bits).
+    // Row (high bits) and species index (low `SPECIES_BITS` bits).
     row_species: u32,
 }
+
+const SPECIES_MASK: u32 = (1u << SPECIES_BITS) - 1u;
 
 // Pair (a, b) at a * species + b.
 struct PairParams {

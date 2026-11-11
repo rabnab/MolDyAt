@@ -38,7 +38,7 @@ use std::simd::prelude::SimdFloat;
 use std::simd::{StdFloat, f32x4};
 
 /// Bits of `KernelPoint::row_species` that hold the species index.
-const SPECIES_BITS: u32 = 8;
+pub const SPECIES_BITS: u32 = 8;
 const SPECIES_MASK: u32 = (1 << SPECIES_BITS) - 1;
 /// Largest row index `KernelPoint` can hold (24 bits).
 const MAX_ROW: u32 = u32::MAX >> SPECIES_BITS;

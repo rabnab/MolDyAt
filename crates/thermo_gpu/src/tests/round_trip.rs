@@ -19,7 +19,7 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
         return;
     }
     let p = points[i];
-    let pair = pairs[(p.row_species & 0xffu) * uniforms.species];
+    let pair = pairs[(p.row_species & SPECIES_MASK) * uniforms.species];
     results[i] = PairForces(vec2(p.x, p.y) * uniforms.cell, f32(p.col), pair.sigma, p.row_species);
 }
 ";

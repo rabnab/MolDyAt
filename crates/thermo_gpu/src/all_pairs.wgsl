@@ -14,26 +14,34 @@ fn main(
 ) {
     let i = id.x;
     let n = uniforms.balls;
-    let me = points[i];
-    let row = (me.row_species & 0xffu) * uniforms.species;
+    // Invocations past `n` run along on the last point.
+    let me = points[min(i, n - 1u)];
+    let row = (me.row_species & SPECIES_MASK) * uniforms.species;
+    // Most pairs are beyond the cutoff: test them without a storage read.
+    var cutoff2: array<f32, SPECIES_MASK + 1u>;
+    for (var s = 0u; s < uniforms.species; s++) {
+        let cutoff = pairs[row + s].cutoff;
+        cutoff2[s] = cutoff * cutoff;
+    }
     var out = PairForces();
     // Each invocation loads one point of the tile, then all read the tile.
-    // Barriers need uniform control flow, so invocations past `n` run along.
+    // Barriers need uniform control flow, so no invocation returns early.
     for (var start = 0u; start < n; start += WORKGROUP_SIZE) {
-        tile[slot] = points[start + slot];
+        tile[slot] = points[min(start + slot, n - 1u)];
         workgroupBarrier();
         for (var k = 0u; k < min(WORKGROUP_SIZE, n - start); k++) {
             let other = tile[k];
-            let pair = pairs[row + (other.row_species & 0xffu)];
+            let species = other.row_species & SPECIES_MASK;
             // Wrapping differences, read as signed.
             let cells = vec2<i32>(vec2(
                 me.col - other.col,
-                (other.row_species >> 8u) - (me.row_species >> 8u),
+                (other.row_species >> SPECIES_BITS) - (me.row_species >> SPECIES_BITS),
             ));
             let d = vec2<f32>(cells) * uniforms.cell + vec2(me.x - other.x, me.y - other.y);
             let r2 = dot(d, d);
-            let r = sqrt(r2);
-            if start + k != i && r < pair.cutoff {
+            if start + k != i && r2 < cutoff2[species] {
+                let pair = pairs[row + species];
+                let r = sqrt(r2);
                 // The law at max(r, r_cap) stays finite in the core.
                 let r_outer = max(r, pair.r_cap);
                 let inv = 1.0 / r_outer;

@@ -10,7 +10,9 @@
 #![recursion_limit = "256"]
 
 use bytemuck::{Pod, Zeroable};
-use thermo_physics::objects2d::ball_impl::{KernelPoint, PairForceBackend, PairForces, PairParams};
+use thermo_physics::objects2d::ball_impl::{
+    KernelPoint, PairForceBackend, PairForces, PairParams, SPECIES_BITS,
+};
 use wgpu::{
     BindGroup, BindGroupLayout, Buffer, BufferBindingType, BufferUsages, ComputePipeline, Device,
     Queue,
@@ -30,9 +32,12 @@ struct Uniforms {
     cell: [f32; 2],
 }
 
-/// `kernel` with `WORKGROUP_SIZE` and the buffers of `layout.wgsl` in front.
+/// `kernel` with `WORKGROUP_SIZE`, `SPECIES_BITS` and the buffers of `layout.wgsl` in front.
 fn shader_source(kernel: &str) -> String {
-    format!("const WORKGROUP_SIZE: u32 = {WORKGROUP_SIZE}u;\n{LAYOUT}\n{kernel}")
+    format!(
+        "const WORKGROUP_SIZE: u32 = {WORKGROUP_SIZE}u;\n\
+         const SPECIES_BITS: u32 = {SPECIES_BITS}u;\n{LAYOUT}\n{kernel}"
+    )
 }
 
 /// The force kernel and its buffers on one device. The kernel reads the
@@ -207,7 +212,9 @@ impl GpuForces {
 
 impl PairForceBackend for GpuForces {
     fn set_pairs(&mut self, pairs: &[PairParams]) {
-        self.uniforms.species = pairs.len().isqrt() as u32;
+        let species = pairs.len().isqrt();
+        assert_eq!(species * species, pairs.len(), "a square pair table");
+        self.uniforms.species = species as u32;
         if grow(&self.device, &mut self.pairs, size_of_val(pairs)) {
             self.rebind();
         }
@@ -216,6 +223,7 @@ impl PairForceBackend for GpuForces {
     }
 
     fn compute(&mut self, points: &[KernelPoint], cell: [f32; 2], results: &mut Vec<PairForces>) {
+        debug_assert!(self.uniforms.species > 0, "set_pairs comes first");
         self.upload_points(points, cell);
         self.run(&self.kernel, results);
     }

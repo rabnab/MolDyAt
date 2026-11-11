@@ -11,7 +11,7 @@ use thermo_physics::application::MainContent;
 use thermo_physics::application::sim_config::PairOverrideConfig;
 use thermo_physics::objects2d::Rect;
 use thermo_physics::objects2d::ball_impl::{
-    KernelPoint, PairForceBackend, PairForces, SpeciesTable, pair_forces_reference,
+    KernelPoint, PairForceBackend, PairForces, SPECIES_BITS, SpeciesTable, pair_forces_reference,
 };
 use thermo_physics::test_support::test_config;
 
@@ -51,7 +51,7 @@ fn point(x: f32, y: f32, species: u32, frame: [u32; 2]) -> KernelPoint {
         x: x - col * CELL[0],
         y: row * CELL[1] - y,
         col: frame[0].wrapping_add(col as u32),
-        row_species: ((frame[1] + row as u32) << 8) | species,
+        row_species: ((frame[1] + row as u32) << SPECIES_BITS) | species,
     }
 }
 
@@ -73,9 +73,14 @@ fn gas(n: usize, species_names: &[&str], frame: [u32; 2]) -> Vec<KernelPoint> {
         .collect()
 }
 
+/// A ball's force (x, y), potential, virial and capped count: the fields
+/// the kernel writes (comparing `PairForces` would read its padding).
+type Fields = [f32; 5];
+const CAPPED: usize = 4;
+
 /// The GPU forces of `points` with the physics of `world`, checked against
 /// the CPU's.
-fn check(gpu: &mut GpuForces, world: &MainContent, points: &[KernelPoint]) -> Vec<PairForces> {
+fn check(gpu: &mut GpuForces, world: &MainContent, points: &[KernelPoint]) -> Vec<Fields> {
     gpu.set_pairs(&world.world().physics().pair_params());
     let mut results = Vec::new();
     gpu.compute(points, CELL, &mut results);
@@ -94,7 +99,16 @@ fn check(gpu: &mut GpuForces, world: &MainContent, points: &[KernelPoint]) -> Ve
         );
         assert_eq!(g.capped, c.capped, "ball {i}: capped pairs");
     }
-    results
+    let fields = |r: &PairForces| {
+        [
+            r.force[0],
+            r.force[1],
+            r.potential,
+            r.virial,
+            r.capped as f32,
+        ]
+    };
+    results.iter().map(fields).collect()
 }
 
 #[test]
@@ -104,10 +118,10 @@ fn test_one_species_matches_the_cpu_for_any_ball_count() {
     // Around the workgroup size, and several tiles.
     for n in [1, 63, 64, 65, 300] {
         let results = check(&mut gpu, &world, &gas(n, &["N2"], [0, 0]));
-        assert!(n == 1 || results.iter().any(|r| r.capped > 0 && r.potential != 0.0));
+        assert!(n == 1 || results.iter().any(|r| r[CAPPED] > 0.0 && r[2] != 0.0));
     }
     let alone = check(&mut gpu, &world, &gas(1, &["N2"], [0, 0]));
-    assert_eq!(alone, [PairForces::default()]);
+    assert_eq!(alone, [Fields::default()]);
 }
 
 #[test]
@@ -142,22 +156,18 @@ fn test_cap_and_cutoff_edges_match_the_cpu() {
     let pairs = world.world().physics().pair_params();
     let pair = pairs[(ar as usize) * (pairs.len().isqrt() + 1)];
     let cases = [
-        (0.5 * pair.r_cap, 1),
-        (0.999 * pair.r_cap, 1),
-        (1.001 * pair.r_cap, 0),
-        (0.999 * pair.cutoff, 0),
-        (1.001 * pair.cutoff, 0),
+        (0.5 * pair.r_cap, 1.0),
+        (0.999 * pair.r_cap, 1.0),
+        (1.001 * pair.r_cap, 0.0),
+        (0.999 * pair.cutoff, 0.0),
+        (1.001 * pair.cutoff, 0.0),
     ];
     for (r, capped) in cases {
         // Across a cell edge.
         let points = [point(6.0, 1.0, ar, [0, 0]), point(6.0 + r, 1.0, ar, [0, 0])];
         let results = check(&mut gpu, &world, &points);
-        assert_eq!(results[0].capped, capped, "r = {r}");
-        assert_eq!(
-            results[0] == PairForces::default(),
-            r > pair.cutoff,
-            "r = {r}"
-        );
+        assert_eq!(results[0][CAPPED], capped, "r = {r}");
+        assert_eq!(results[0] == Fields::default(), r > pair.cutoff, "r = {r}");
     }
 }
 

@@ -9,7 +9,7 @@ pub use self::molecule::{axis, turn};
 pub use self::pair_potential::PairParams;
 #[cfg(any(test, feature = "test-support"))]
 pub use self::simd_forces::pair_forces_reference;
-pub use self::simd_forces::{KernelPoint, PairForceBackend, PairForces};
+pub use self::simd_forces::{KernelPoint, PairForceBackend, PairForces, SPECIES_BITS};
 pub use self::species::{
     AR_EPSILON_KELVIN, AR_MASS_U, AR_SIGMA_ANGSTROM, DEFAULT_SPECIES, LIBRARY, LibrarySpecies,
     N2_EPSILON_KELVIN, N2_MASS_U, N2_SIGMA_ANGSTROM, Species, SpeciesId, SpeciesSet, SpeciesTable,
