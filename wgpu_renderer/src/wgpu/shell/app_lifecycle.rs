@@ -28,7 +28,7 @@ pub(crate) struct AppLifecycle;
 impl AppLifecycle {
     pub(crate) fn initialize(
         event_loop: &ActiveEventLoop,
-        application: MainContent,
+        mut application: MainContent,
         key_map: KeyMap,
         proxy: EventLoopProxy<UserEvent>,
     ) -> InitializedApp {
@@ -54,6 +54,11 @@ impl AppLifecycle {
         log::debug!("WGPU context initialized, window size: {:?}", ctx.size());
 
         let pipelines = WgpuPipelines::new(&ctx.device, &ctx.queue, ctx.format, &ctx.glyphs);
+        if application.force_path().is_some() {
+            // `--gpu-forces`: the physics thread computes on this device.
+            let gpu = thermo_gpu::GpuForces::new(ctx.device.clone(), ctx.queue.clone());
+            application.set_force_backend(Some(Box::new(gpu)));
+        }
 
         let initial_world_bounds = application.world().world_region();
         let window_size = (ctx.size().0 as f32, ctx.size().1 as f32);

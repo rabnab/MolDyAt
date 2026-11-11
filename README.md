@@ -170,6 +170,14 @@ cargo run --release -p moldyat_wgpu -- --headless --steps 300 --rng-seed 1 --see
 ```
 
 ```bash
+# --gpu-forces (also in the window) computes the pair forces on the GPU: the
+# all-pairs reference kernel, slower than the CPU for large worlds. Steps it
+# cannot take (no adapter, molecules or water, neighbour lines) stay on the
+# CPU; frames record force_backend, the status lines (B) show it.
+cargo run --release -p moldyat_wgpu -- --headless --steps 300 --rng-seed 1 --seed-balls 2000 --gpu-forces --stdout
+```
+
+```bash
 # Valves: --valve wall,t_start,t_end[,open|closed] cuts a valve into the
 # --line-segment with that 0-based index (fractions along it, one per wall).
 # --timings writes ms/step per phase as JSON, after --timing-warmup steps.

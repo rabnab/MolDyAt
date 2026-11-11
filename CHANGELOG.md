@@ -5,6 +5,9 @@ User-visible changes to MolDyAt, newest first. Binaries and full release notes a
 
 ## Unreleased
 
+- `--gpu-forces` (window and headless) computes the pair forces on the GPU; steps it cannot take
+  (no adapter, molecules or water, neighbour lines) stay on the CPU. The status lines show which,
+  headless frames record `force_backend`. Off by default. (#360)
 - Normalise g(r) by the density around each ball so it levels off at 1 where the density varies
   (gravity, chambers): `Alt + M` in the distributions view, `--rdf-local` in headless runs; the
   `rdf` object and records of `--distributions` gain `local_density`. The default is unchanged. (#384)

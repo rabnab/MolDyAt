@@ -22,7 +22,7 @@ fn test_simulation_engine_advances_main_content_state() {
     main_content.collect_neighbours_by_cell(DT_GOAL);
     let initial_step_count = main_content.world().step_count;
 
-    let (world, step_config, options) = main_content.step_parts();
+    let (world, step_config, options, _) = main_content.step_parts();
     SimulationEngine::simulation_step(world, step_config, options)
         .expect("simulation step should succeed");
 
@@ -57,7 +57,7 @@ fn test_simulation_step_applies_thermostats_before_source_emission() {
     let source_id = main_content.world().source_spheres.spheres()[0].id;
     main_content.toggle_source_sphere(source_id);
 
-    let (world, step_config, options) = main_content.step_parts();
+    let (world, step_config, options, _) = main_content.step_parts();
     SimulationEngine::simulation_step(world, step_config, options)
         .expect("simulation step should succeed");
 
@@ -95,7 +95,7 @@ fn test_simulation_step_does_not_advance_when_paused() {
     let step_count_before = main_content.world().step_count;
     let time_before = main_content.world().sim.get_time();
 
-    let (world, step_config, options) = main_content.step_parts();
+    let (world, step_config, options, _) = main_content.step_parts();
     SimulationEngine::simulation_step(world, step_config, options)
         .expect("simulation step should not error when paused");
 
@@ -160,7 +160,7 @@ fn test_repeated_steps_advance_time_and_update_energy() {
 
     let n_steps = 5;
     for _ in 0..n_steps {
-        let (world, step_config, options) = main_content.step_parts();
+        let (world, step_config, options, _) = main_content.step_parts();
         SimulationEngine::simulation_step(world, step_config, options)
             .expect("simulation step should succeed");
     }
@@ -199,7 +199,7 @@ fn test_simulation_step_counts_steps_and_books_phase_time() {
     main_content.reset_phase_timings();
 
     for _ in 0..3 {
-        let (world, step_config, options) = main_content.step_parts();
+        let (world, step_config, options, _) = main_content.step_parts();
         SimulationEngine::simulation_step(world, step_config, options).expect("simulation step");
     }
 
@@ -212,7 +212,7 @@ fn test_simulation_step_counts_steps_and_books_phase_time() {
 }
 
 fn step(main_content: &mut crate::application::MainContent) {
-    let (world, step_config, options) = main_content.step_parts();
+    let (world, step_config, options, _) = main_content.step_parts();
     SimulationEngine::simulation_step(world, step_config, options).expect("simulation step");
 }
 
@@ -381,7 +381,7 @@ fn many_chunk_run_bits(threads: usize) -> (usize, Vec<u32>) {
             super::new_main_content_seeded(world, 311).expect("could not create main content");
         main_content.seed_random_balls_with_speed(3500, 6.0);
         for _ in 0..40 {
-            let (world, step_config, options) = main_content.step_parts();
+            let (world, step_config, options, _) = main_content.step_parts();
             SimulationEngine::simulation_step(world, step_config, options)
                 .expect("simulation step should succeed");
         }

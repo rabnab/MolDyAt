@@ -13,6 +13,7 @@ use std::fs::File;
 use std::io::{self, BufWriter, Write};
 use thermo_physics::application::observables::{Kind, Obs};
 use thermo_physics::application::sim_config::{SimConfig, WorldConfig};
+use thermo_physics::application::sim_stats::ForcePath;
 use thermo_physics::application::thermo_field::ThermoGrid;
 
 pub trait HeadlessSnapshotSink {
@@ -324,6 +325,10 @@ fn frame_to_jsonl_with_metrics(
             Some((group, name)) => frame[group][name] = value,
             None => frame[key] = value,
         }
+    }
+
+    if let Some(path) = snapshot.frame.forces {
+        frame["force_backend"] = json!(if path == ForcePath::Gpu { "gpu" } else { "cpu" });
     }
 
     // Add metrics if available (decision 7-A: nested metrics object)

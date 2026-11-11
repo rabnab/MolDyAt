@@ -15,7 +15,7 @@ are in [refactoring-plan.md](plan/refactoring-plan.md).
 |---|---|---|
 | `crates/thermo_physics` | `thermo_physics` | The physics: particles and species, pair potentials and the SIMD force kernel, cell grid and Verlet lists, walls and operators (`objects2d`); the world, `MainContent` and its stepping (`application/core`); run settings (`sim_config`), units, stats, thermo fields and saves (`persistence`). Dependencies: rayon, serde, rand, toml, log, bytemuck |
 | `crates/thermo_runtime` | `thermo_runtime` | Running a simulation without a window: the physics thread and its `SnapshotPublisher`, `DomainCommand` and its handler, `OperatorCommand`s, `PhysicsEvent`, `RendererSnapshot` and its builder (`CreateSnapshot`), scene layers, the metrics store (`metrics`), the data export (`export`), and headless runs (`headless_cli`, `headless_runner`, `headless_output`, `headless_timings`, `headless_script`). Dependencies: `thermo_physics`, arc-swap, serde_json, rayon, log |
-| `crates/thermo_gpu` | `thermo_gpu` | Pair forces on the GPU (Phase 9, #357): `GpuForces` holds the force kernel's device, buffers (uniforms, points, pair table, results, readback) and bind group, with the WGSL layouts in `layout.wgsl`, and computes the forces (`GpuForces::compute`) with the kernel `all_pairs.wgsl`: one invocation per ball sums the capped pair law over all other balls inside the pair's cutoff (O(n²), the correctness reference; integration stays on the CPU). It gets the renderer's device (GUI) or one of its own without a surface (headless, `None` without an adapter). Not yet used by the step. Dependencies: `thermo_physics`, wgpu, bytemuck, pollster, log |
+| `crates/thermo_gpu` | `thermo_gpu` | Pair forces on the GPU (Phase 9, #357): `GpuForces` holds the force kernel's device, buffers (uniforms, points, pair table, results, readback) and bind group, with the WGSL layouts in `layout.wgsl`, and computes the forces (`GpuForces::compute`) with the kernel `all_pairs.wgsl`: one invocation per ball sums the capped pair law over all other balls inside the pair's cutoff (O(n²), the correctness reference; integration stays on the CPU). It gets the renderer's device (GUI) or one of its own without a surface (headless, `None` without an adapter), and is the `PairForceBackend` the binary gives `MainContent` with `--gpu-forces`. Dependencies: `thermo_physics`, wgpu, bytemuck, pollster, log |
 | `crates/thermo_ui` | `thermo_ui` | The UI without a GPU backend (`graphics`): event loop and input handling, the keyboard command registry and key map, operator tools, viewport, sidebar model, and the energy plot window's state with its plot layout (`PlotScene`, drawn by the backend, which owns the OS window, #371); plus the logger setup and the UI settings file (`ui_settings`: `ui.toml` with the key bindings, #335). Dependencies: `thermo_runtime`, `thermo_physics`, winit (input types only: keys, mouse and window events), arc-swap, toml, log, env_logger |
 | `wgpu_renderer` | `moldyat_wgpu` | The `moldyat` binary: command line, the app shell (`wgpu/shell`: winit event loop, the main and plot windows, the plot window created and closed as `thermo_ui` asks, #371) and the renderer (`wgpu/render`: GPU context, surfaces, render pipelines; no winit, #372). For `--headless` it computes the default world from its window size and calls `thermo_runtime`, handing it the git commit it was built from (`HeadlessRunner::from_config`) |
 
@@ -23,8 +23,8 @@ Dependencies point one way: `moldyat_wgpu` → `thermo_ui` →
 `thermo_runtime` → `thermo_physics`, and `thermo_gpu` → `thermo_physics`.
 `thermo_physics` and `thermo_runtime` build and test without a windowing or
 GPU stack: `cargo test -p thermo_physics`, `cargo test -p thermo_runtime`.
-`thermo_runtime` is to use `thermo_gpu` behind an optional cargo feature
-(#360).
+Only the binary names `thermo_gpu`: it hands `MainContent` the kernel as a
+`PairForceBackend`, the trait `thermo_physics` defines for it.
 
 Each crate is used under its own name: there are no re-exports of one
 crate's modules in another. The former `moldyat_core` (`core/`), which
@@ -59,8 +59,10 @@ touching the other crates.
   `bytemuck::Pod`, so they are uploaded and read back without a copy;
   their WGSL mirrors are checked by `thermo_gpu`'s layout test.
   `PairForces` has no `min_dist`, per-neighbour forces or species
-  interactions: balls that need them stay on the CPU kernel (#360). The
-  kernel is tested against `pair_forces_reference` (`force_simd` over all
+  interactions: steps that need them stay on the CPU kernel. The forces
+  phase reaches the kernel through the trait `PairForceBackend`
+  (`MainContent::set_force_backend`; `force_path` says how the last step
+  was computed). The kernel is tested against `pair_forces_reference` (`force_simd` over all
   pairs, feature `test-support`).
 
 ## Threads
@@ -87,12 +89,13 @@ FrameRenderer (shell) → draw_main_frame → RenderGraph → GPU (render)
 - **Rayon pool.** The physics step parallelises neighbour-list rebuilds,
   positions and forces with `par_iter`. The pool has `RAYON_NUM_THREADS`
   workers, or the number of cores minus 2.
-- **GPU forces** (opt-in, wired in by #360). The physics thread drives
+- **GPU forces** (opt-in, `--gpu-forces`). The physics thread drives
   `thermo_gpu` itself and blocks on each step's readback (at most 10 s;
-  an error or timeout sends the forces back to the CPU). In the GUI the
-  binary hands it a clone of the renderer's `Device` and `Queue` at
-  startup (wgpu handles are `Send + Sync`); headless runs request their
-  own adapter. Without one the forces stay on the CPU.
+  an error or timeout sends the forces back to the CPU for the rest of
+  the run). In the GUI the binary hands it a clone of the renderer's
+  `Device` and `Queue` before the physics thread starts
+  (`AppLifecycle::initialize`; wgpu handles are `Send + Sync`); headless
+  runs request their own adapter. Without one the forces stay on the CPU.
 - **Energy plot window.** A separate OS window (`graphics/energy_plot`)
   with the history of the metrics series in stacked plots, drawn on the main
   thread with wgpu (see [Energy plot window](#energy-plot-window)).
@@ -142,8 +145,14 @@ headless runs; both step with the configured time step.
    scalar: the site–site Lennard-Jones of pairs with a rigid molecule,
    #406, and the Mercedes-Benz hydrogen bonds of water, #349; energy,
    force, torque and virial), only for species with interactions among
-   those present,
-   plus, with soft walls (#280, the default), the wall forces
+   those present. With the GPU force pass on (`--gpu-forces`,
+   `core::runtime_options::GpuPass`) the pair forces of a step come from
+   the GPU kernel instead (upload of the kernel points, dispatch and
+   readback, all inside this phase), unless the step needs what the kernel
+   does not give: a species with interactions is present, a ball shows
+   its neighbour lines, or there is no adapter. Those steps run on the CPU
+   kernel as without the switch; the status lines and the headless frames
+   say which it was. Both paths add, with soft walls (#280, the default), the wall forces
    (`core::wall_forces`): each box side through the signed distance from
    it, and of each wall chain the nearest line wall only (nearest-feature
    rule, so a chain has no energy step at its joints; separate chains add

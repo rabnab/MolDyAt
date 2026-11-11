@@ -76,6 +76,10 @@ fn run_wgpu_renderer(
             }
         }
     }
+    if common.gpu_forces {
+        // Switched on; the window gives it the renderer's device.
+        application.set_force_backend(None);
+    }
     let application = application.with_save_store(store);
 
     let window = WgpuWindow::new();
@@ -90,8 +94,12 @@ fn run_headless_renderer(
     log::info!("Renderer: headless");
 
     let store = SaveStore::new(&common.save_dir);
-    let application =
+    let mut application =
         headless_runner::prepare_application(&config, sim_config, &store, common.load)?;
+    if common.gpu_forces {
+        let gpu = thermo_gpu::GpuForces::headless();
+        application.set_force_backend(gpu.map(|gpu| Box::new(gpu) as _));
+    }
     if config.save_setup {
         let path = application
             .save_world(&store)

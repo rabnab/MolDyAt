@@ -30,7 +30,7 @@
 
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::pair_potential::{
-    CappedLanes, PairLaw, PairPotential, PairTable, Potential,
+    CappedLanes, PairLaw, PairParams, PairPotential, PairTable, Potential,
 };
 use crate::objects2d::ball_impl::{Ball2D, BallPhysics, ForceResult, SpeciesSet};
 use bytemuck::{Pod, Zeroable};
@@ -157,6 +157,36 @@ pub struct PairForces {
     pub capped: u32,
     /// Never written by the kernel, so not compared.
     _pad: u32,
+}
+
+impl From<&PairForces> for ForceResult {
+    fn from(forces: &PairForces) -> Self {
+        ForceResult {
+            min_dist: f32::NAN,
+            force: Vec2D::new(forces.force[0], forces.force[1]),
+            potential_energy: forces.potential,
+            virial: forces.virial,
+            capped_pairs: forces.capped,
+            ..ForceResult::default()
+        }
+    }
+}
+
+/// Computes the pair-table forces of all balls in place of [`force_simd`]:
+/// the GPU kernel (`thermo_gpu`), which this crate cannot name. Pairs beyond
+/// their cutoff give nothing, so it need not know the neighbour lists.
+pub trait PairForceBackend: Send {
+    /// Replace the pair table: pair `(a, b)` of `n` species at `a * n + b`.
+    fn set_pairs(&mut self, pairs: &[PairParams]);
+    /// The forces of every ball of `points` (cells of `cell` size) into
+    /// `results`, one per point in order. After an error the caller drops
+    /// the backend.
+    fn compute(
+        &mut self,
+        points: &[KernelPoint],
+        cell: [f32; 2],
+        results: &mut Vec<PairForces>,
+    ) -> Result<(), String>;
 }
 
 impl PartialEq for PairForces {

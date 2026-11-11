@@ -17,6 +17,7 @@ thermo_ui = { path = "../crates/thermo_ui", default-features = false }
 thermo_physics = { path = "../crates/thermo_physics", default-features = false }
 # Headless runs (#309)
 thermo_runtime = { path = "../crates/thermo_runtime", default-features = false }
+thermo_gpu = { path = "../crates/thermo_gpu" }
 
 # WGPU rendering
 wgpu = "30"

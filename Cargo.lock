@@ -1078,6 +1078,7 @@ dependencies = [
  "num_cpus",
  "pollster",
  "rayon",
+ "thermo_gpu",
  "thermo_physics",
  "thermo_runtime",
  "thermo_ui",

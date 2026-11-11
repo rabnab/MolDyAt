@@ -43,6 +43,16 @@ fn takes_config_in_both_modes() {
 }
 
 #[test]
+fn takes_gpu_forces_in_both_modes() {
+    let (common, rest) =
+        split_common_args(&args(&["program", "--gpu-forces", "--headless"])).unwrap();
+    assert!(common.gpu_forces);
+    assert_eq!(rest, args(&["program", "--headless"]));
+    let (common, _) = split_common_args(&args(&["program"])).unwrap();
+    assert!(!common.gpu_forces);
+}
+
+#[test]
 fn takes_world_scale_in_both_modes() {
     let (common, rest) =
         split_common_args(&args(&["program", "--world-scale", "2", "--headless"])).unwrap();

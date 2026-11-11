@@ -79,6 +79,7 @@ impl CreateSnapshot for MainContent {
             ),
             world_rect: world.cell_grid().world_rect(),
             status: self.status_info(),
+            forces: self.force_path(),
             created_at: std::time::Instant::now(),
         };
 

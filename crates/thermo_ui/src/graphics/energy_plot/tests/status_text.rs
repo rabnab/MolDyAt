@@ -6,7 +6,7 @@
 
 use crate::graphics::energy_plot::status_text::{status_text, write_species_lines};
 use thermo_physics::application::observables::Obs;
-use thermo_physics::application::sim_stats::StatusInfo;
+use thermo_physics::application::sim_stats::{ForcePath, StatusInfo};
 use thermo_runtime::application::renderer_snapshot::RendererSnapshot;
 
 fn info(real_units: bool) -> StatusInfo {
@@ -83,6 +83,21 @@ fn status_names_the_species_that_limits_the_time_step() {
     });
     let text = status_text(&snapshot, "fps 60").unwrap();
     assert!(text.contains("\ndt limited by H2O\n"), "{text}");
+}
+
+#[test]
+fn status_shows_the_force_backend_only_with_the_gpu_pass_on() {
+    let mut snapshot = snapshot(Some(info(false)));
+    let text = status_text(&snapshot, "fps 60").unwrap();
+    assert!(!text.contains("Forces"), "{text}");
+
+    snapshot.frame.forces = Some(ForcePath::Gpu);
+    let text = status_text(&snapshot, "fps 60").unwrap();
+    assert!(text.contains("\nForces: GPU\n"), "{text}");
+
+    snapshot.frame.forces = Some(ForcePath::Cpu("no GPU"));
+    let text = status_text(&snapshot, "fps 60").unwrap();
+    assert!(text.contains("\nForces: CPU (no GPU)\n"), "{text}");
 }
 
 /// The safety-net counts since the start are one status line (#422).

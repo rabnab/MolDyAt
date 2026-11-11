@@ -83,6 +83,14 @@ pub const COMMON_OPTIONS: &[OptionHelp] = &[
             "Default: saves",
         ],
     },
+    OptionHelp {
+        names: &["--gpu-forces"],
+        value: None,
+        help: &[
+            "Compute the pair forces on the GPU (all pairs, slower than the CPU for large worlds)",
+            "Steps it cannot take stay on the CPU: no adapter, molecules or water, neighbour lines",
+        ],
+    },
 ];
 
 /// Flags parsed by [`parse_window_args`], valid only without `--headless`.
@@ -164,6 +172,8 @@ pub struct CommonArgs {
     /// `--world-scale <F>`: overrides `world.scale` of the config (the
     /// default world's width and height, around its centre).
     pub world_scale: Option<f32>,
+    /// `--gpu-forces`: compute the pair forces on the GPU where it can.
+    pub gpu_forces: bool,
 }
 
 impl Default for CommonArgs {
@@ -173,6 +183,7 @@ impl Default for CommonArgs {
             save_dir: PathBuf::from(DEFAULT_SAVE_DIR),
             config: None,
             world_scale: None,
+            gpu_forces: false,
         }
     }
 }
@@ -188,6 +199,7 @@ pub fn split_common_args(args: &[String]) -> Result<(CommonArgs, Vec<String>), C
             "--load" => common.load = Some(PathBuf::from(value_of(&mut iter, "--load")?)),
             "--save-dir" => common.save_dir = PathBuf::from(value_of(&mut iter, "--save-dir")?),
             "--config" => common.config = Some(PathBuf::from(value_of(&mut iter, "--config")?)),
+            "--gpu-forces" => common.gpu_forces = true,
             "--world-scale" => {
                 let scale = value_of(&mut iter, "--world-scale")?
                     .parse::<f32>()

@@ -37,6 +37,7 @@ impl MainContent {
                 paused_for_resize: false,
             },
             options: RuntimeOptions::default(),
+            gpu: None,
         })
     }
 }

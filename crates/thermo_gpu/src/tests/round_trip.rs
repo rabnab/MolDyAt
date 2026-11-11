@@ -7,7 +7,7 @@
 //! note) without one, e.g. in CI.
 
 use crate::GpuForces;
-use thermo_physics::objects2d::ball_impl::{KernelPoint, PairForces, PairParams};
+use thermo_physics::objects2d::ball_impl::{KernelPoint, PairForceBackend, PairForces, PairParams};
 
 /// Copies every binding into the results: the offset times the cell size,
 /// the column, `σ` of the pair (own species, 0), and `row_species`.

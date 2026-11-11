@@ -9,8 +9,9 @@ use crate::application::sim_config::{
     DisplayConfig, FieldConfig, IntegrationConfig, NeighbourConfig, PairOverrideConfig,
     PotentialConfig, SimConfig, WallsConfig,
 };
-use crate::application::sim_stats::{HIGH_GRAVITY, NORMAL_GRAVITY, is_normal_gravity};
+use crate::application::sim_stats::{ForcePath, HIGH_GRAVITY, NORMAL_GRAVITY, is_normal_gravity};
 use crate::objects2d::Rect;
+use crate::objects2d::ball_impl::PairForceBackend;
 use crate::objects2d::ball_impl::ball_core::gravity_acceleration;
 #[cfg(any(test, feature = "test-support"))]
 use crate::objects2d::ball_impl::wall_law::WallSettings;
@@ -92,15 +93,36 @@ impl MainContent {
         (world, step_config)
     }
 
-    /// What a step needs: the world, the step settings and the options.
-    pub(crate) fn step_parts(&mut self) -> (&mut SimulationWorld, &StepConfig, &RuntimeOptions) {
+    /// What a step needs: the world, the step settings, the options and
+    /// the GPU force pass, if switched on.
+    pub(crate) fn step_parts(
+        &mut self,
+    ) -> (
+        &mut SimulationWorld,
+        &StepConfig,
+        &RuntimeOptions,
+        Option<&mut GpuPass>,
+    ) {
         let Self {
             world,
             step_config,
             options,
+            gpu,
             ..
         } = self;
-        (world, step_config, options)
+        (world, step_config, options, gpu.as_mut())
+    }
+
+    /// Switch the GPU force pass on: `backend` computes the pair forces of
+    /// the steps it can take; without one (no adapter) all stay on the CPU.
+    pub fn set_force_backend(&mut self, backend: Option<Box<dyn PairForceBackend>>) {
+        self.gpu = Some(GpuPass::new(backend));
+    }
+
+    /// How the last step computed the pair forces, `None` while the GPU
+    /// force pass is off.
+    pub fn force_path(&self) -> Option<ForcePath> {
+        self.gpu.as_ref().map(|gpu| gpu.path)
     }
 
     pub fn toggle_pause(&mut self) {

@@ -6,9 +6,15 @@
 //! physics and the CPU kernel, which stays the reference, are in
 //! `thermo_physics` (see `docs/architecture.md`).
 
+// For `GpuForces: Send` (`PairForceBackend`), which goes deep into wgpu's
+// types.
+#![recursion_limit = "256"]
+
 use bytemuck::{Pod, Zeroable};
 use std::time::Duration;
-use thermo_physics::objects2d::ball_impl::{KernelPoint, PairForces, PairParams, SPECIES_BITS};
+use thermo_physics::objects2d::ball_impl::{
+    KernelPoint, PairForceBackend, PairForces, PairParams, SPECIES_BITS,
+};
 use wgpu::{
     BindGroup, BindGroupLayout, Buffer, BufferBindingType, BufferUsages, ComputePipeline, Device,
     Queue,
@@ -129,30 +135,6 @@ impl GpuForces {
         }
     }
 
-    /// Upload the pair table: pair `(a, b)` of `n` species at `a * n + b`.
-    pub fn set_pairs(&mut self, pairs: &[PairParams]) {
-        let species = pairs.len().isqrt();
-        assert_eq!(species * species, pairs.len(), "pair table not square");
-        self.uniforms.species = species as u32;
-        if grow(&self.device, &mut self.pairs, size_of_val(pairs)) {
-            self.bind_group = None;
-        }
-        self.queue
-            .write_buffer(&self.pairs, 0, bytemuck::cast_slice(pairs));
-    }
-
-    /// The pair-table forces of every ball of `points` (cells of `cell`
-    /// size) into `results`, one per point in order; errors as [`Self::run`].
-    pub fn compute(
-        &mut self,
-        points: &[KernelPoint],
-        cell: [f32; 2],
-        results: &mut Vec<PairForces>,
-    ) -> Result<(), String> {
-        self.upload_points(points, cell);
-        self.run(&self.kernel.clone(), results)
-    }
-
     /// Upload the balls' points, in cells of `cell` size.
     fn upload_points(&mut self, points: &[KernelPoint], cell: [f32; 2]) {
         self.uniforms.balls = points.len() as u32;
@@ -231,6 +213,29 @@ impl GpuForces {
         drop(view);
         self.readback.unmap();
         Ok(())
+    }
+}
+
+impl PairForceBackend for GpuForces {
+    fn set_pairs(&mut self, pairs: &[PairParams]) {
+        let species = pairs.len().isqrt();
+        assert_eq!(species * species, pairs.len(), "pair table not square");
+        self.uniforms.species = species as u32;
+        if grow(&self.device, &mut self.pairs, size_of_val(pairs)) {
+            self.bind_group = None;
+        }
+        self.queue
+            .write_buffer(&self.pairs, 0, bytemuck::cast_slice(pairs));
+    }
+
+    fn compute(
+        &mut self,
+        points: &[KernelPoint],
+        cell: [f32; 2],
+        results: &mut Vec<PairForces>,
+    ) -> Result<(), String> {
+        self.upload_points(points, cell);
+        self.run(&self.kernel.clone(), results)
     }
 }
 

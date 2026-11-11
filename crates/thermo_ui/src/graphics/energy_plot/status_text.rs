@@ -8,6 +8,7 @@
 
 use std::fmt::Write;
 use thermo_physics::application::observables::{Obs, Values};
+use thermo_physics::application::sim_stats::ForcePath;
 use thermo_physics::application::units::UnitSystem;
 use thermo_physics::objects2d::Vec2D;
 use thermo_runtime::application::renderer_snapshot::RendererSnapshot;
@@ -42,6 +43,13 @@ pub fn status_text(snapshot: &RendererSnapshot, metrics_line: &str) -> Option<St
             .get(id)
             .map_or("?", |species| species.name.as_str());
         let _ = writeln!(text, "dt limited by {name}");
+    }
+    match snapshot.frame.forces {
+        Some(ForcePath::Gpu) => text.push_str("Forces: GPU\n"),
+        Some(ForcePath::Cpu(why)) => {
+            let _ = writeln!(text, "Forces: CPU ({why})");
+        }
+        None => {}
     }
     write_species_lines(&mut text, snapshot);
     Some(text)

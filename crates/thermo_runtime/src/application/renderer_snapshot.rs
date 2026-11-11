@@ -18,7 +18,7 @@
 //! refills the vector without allocating.
 
 use crate::application::log_util::SpeciesCounts;
-use crate::application::sim_stats::StatusInfo;
+use crate::application::sim_stats::{ForcePath, StatusInfo};
 use crate::objects2d::ball_impl::{DEFAULT_SPECIES, SpeciesId, SpeciesSet, SpeciesTable};
 use crate::objects2d::line_segment::valve_half_width;
 use crate::objects2d::{Rect, SimLineSegment, SimSourceSphere, SimThermostat, Vec2D};
@@ -295,6 +295,10 @@ pub struct FrameInfo {
     /// stats are not shown (`B`). The UI formats them into text (#341).
     pub status: Option<StatusInfo>,
 
+    /// How the last step computed the pair forces, `None` while the GPU
+    /// force pass is off.
+    pub forces: Option<ForcePath>,
+
     /// Timestamp for debugging
     pub created_at: Instant,
 }
@@ -311,6 +315,7 @@ impl Default for FrameInfo {
             gravity_force_multiple: 0,
             world_rect: Rect::new(0.0, 0.0, 0.0, 0.0),
             status: None,
+            forces: None,
             created_at: Instant::now(),
         }
     }

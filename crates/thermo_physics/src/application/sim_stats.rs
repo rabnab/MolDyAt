@@ -40,6 +40,15 @@ pub struct StatusInfo {
     pub dt_limited_by: Option<SpeciesId>,
 }
 
+/// How the last step computed the pair forces while the GPU force pass is
+/// switched on (`MainContent::set_force_backend`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ForcePath {
+    Gpu,
+    /// On the CPU kernel, and why the GPU could not take the step.
+    Cpu(&'static str),
+}
+
 /// How often the safety nets that do not conserve energy stepped in (#422).
 /// They hide instabilities (a time step too coarse for a species, balls
 /// pushed into each other), so they are counted and shown instead of left

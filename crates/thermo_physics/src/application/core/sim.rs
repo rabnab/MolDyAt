@@ -41,12 +41,12 @@ impl MainContent {
 impl MainContent {
     #[cfg(test)]
     pub(crate) fn update_sim(&mut self, dt: f32, bound_rect: &Rect) {
-        let log_timings = self.options.show_timings;
-        SimulationEngine::update_sim(self.world_mut(), dt, bound_rect, log_timings);
+        let (world, _, options, gpu) = self.step_parts();
+        SimulationEngine::update_sim(world, gpu, dt, bound_rect, options.show_timings);
     }
 
     pub(crate) fn collect_neighbours_by_cell(&mut self, dt: f32) {
-        let (world, step_config, options) = self.step_parts();
+        let (world, step_config, options, _) = self.step_parts();
         SimulationEngine::collect_neighbours_by_cell(world, step_config, dt, options.show_timings);
     }
 
@@ -71,9 +71,9 @@ impl MainContent {
     }
 
     fn step_with_dt(&mut self, dt: f32, record_thermo_fields: bool) -> AppResult<()> {
-        let (world, step_config, options) = self.step_parts();
+        let (world, step_config, options, gpu) = self.step_parts();
         let stepped = !world.sim.is_paused();
-        SimulationEngine::simulation_step_with_dt(world, step_config, options, dt)?;
+        SimulationEngine::simulation_step_with_dt(world, step_config, options, gpu, dt)?;
         if stepped && record_thermo_fields {
             SimulationEngine::record_thermo_fields_if_due(world, options.show_timings);
         }

@@ -21,7 +21,7 @@ mod wall_forces;
 pub use valves::{ValveSpanChange, valve_span_problem};
 mod verbose;
 
-pub(crate) use runtime_options::RuntimeOptions;
+pub(crate) use runtime_options::{GpuPass, RuntimeOptions};
 pub(crate) use simulation_engine::SimulationEngine;
 
 use crate::application::StepConfig;
@@ -252,6 +252,9 @@ pub struct MainContent {
     /// Display and stepping options (keys `D`, `S`, `F4`, `B`); not part of
     /// the world, so a load keeps them.
     options: RuntimeOptions,
+
+    /// The GPU force pass while it is switched on; a load keeps it too.
+    gpu: Option<GpuPass>,
 
     runtime: PhysicsRuntimeState,
 }

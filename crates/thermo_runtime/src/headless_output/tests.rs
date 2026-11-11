@@ -36,6 +36,18 @@ fn test_frame_record_contains_v1_schema_and_summary_fields() {
     assert_eq!(value["ball_count"], 0);
     assert_eq!(value["delta_energy"], 0.5);
     assert!(value.get("status_text").is_none());
+    assert!(value.get("force_backend").is_none(), "GPU pass off");
+}
+
+#[test]
+fn test_frame_record_names_the_force_backend_with_the_gpu_pass_on() {
+    let mut snapshot = RendererSnapshot::new();
+    for (path, backend) in [(ForcePath::Gpu, "gpu"), (ForcePath::Cpu("no GPU"), "cpu")] {
+        snapshot.frame.forces = Some(path);
+        let line = frame_to_jsonl(&snapshot, None);
+        let value: serde_json::Value = serde_json::from_str(&line).expect("valid json");
+        assert_eq!(value["force_backend"], backend);
+    }
 }
 
 #[test]

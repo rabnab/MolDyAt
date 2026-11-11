@@ -11,7 +11,7 @@ use thermo_physics::application::MainContent;
 use thermo_physics::application::sim_config::PairOverrideConfig;
 use thermo_physics::objects2d::Rect;
 use thermo_physics::objects2d::ball_impl::{
-    KernelPoint, PairForces, SPECIES_BITS, SpeciesTable, pair_forces_reference,
+    KernelPoint, PairForceBackend, PairForces, SPECIES_BITS, SpeciesTable, pair_forces_reference,
 };
 use thermo_physics::test_support::test_config;
 

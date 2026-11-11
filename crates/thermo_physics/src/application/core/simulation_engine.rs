@@ -5,7 +5,7 @@
 use super::line_segments::Obstacle;
 use super::step_scratch::{NeighbourStats, RebuildScratch, UpdateScratch};
 use super::wall_forces::{molecule_backstop, soft_wall_force};
-use super::{RuntimeOptions, SimulationWorld, StatsAccumulator, StepConfig};
+use super::{GpuPass, RuntimeOptions, SimulationWorld, StatsAccumulator, StepConfig};
 use crate::application::phase_timings::{Phase, PhaseClock};
 use crate::application::sim_stats::SafetyNets;
 use crate::application::thermo_field::{
@@ -59,13 +59,15 @@ impl SimulationEngine {
         options: &RuntimeOptions,
     ) -> AppResult<()> {
         let dt = step_config.get_time_step();
-        Self::simulation_step_with_dt(world, step_config, options, dt)
+        Self::simulation_step_with_dt(world, step_config, options, None, dt)
     }
 
+    /// `gpu`: the GPU force pass, if switched on.
     pub(crate) fn simulation_step_with_dt(
         world: &mut SimulationWorld,
         step_config: &StepConfig,
         options: &RuntimeOptions,
+        gpu: Option<&mut GpuPass>,
         dt: f32,
     ) -> AppResult<()> {
         if world.sim.is_paused() {
@@ -82,7 +84,7 @@ impl SimulationEngine {
         let bound_rect = world.world_rect;
 
         Self::collect_neighbours_by_cell(world, step_config, dt, log_timings);
-        Self::update_sim_and_move_balls(world, step_config, dt, &bound_rect, log_timings);
+        Self::update_sim_and_move_balls(world, step_config, gpu, dt, &bound_rect, log_timings);
 
         let mut clock = PhaseClock::start(log_timings);
         let (sim, balls) = (&mut world.sim, &world.balls);
@@ -135,6 +137,7 @@ impl SimulationEngine {
 
     pub(crate) fn update_sim(
         world: &mut SimulationWorld,
+        gpu: Option<&mut GpuPass>,
         dt: f32,
         bound_rect: &Rect,
         log_timings: bool,
@@ -154,6 +157,7 @@ impl SimulationEngine {
 
                 Self::compute_forces(
                     world,
+                    gpu,
                     &scratch.obstacles,
                     bound_rect,
                     &mut scratch.force_results,
@@ -240,11 +244,12 @@ impl SimulationEngine {
     fn update_sim_and_move_balls(
         world: &mut SimulationWorld,
         step_config: &StepConfig,
+        gpu: Option<&mut GpuPass>,
         dt: f32,
         bound_rect: &Rect,
         log_timings: bool,
     ) {
-        Self::update_sim(world, dt, bound_rect, log_timings);
+        Self::update_sim(world, gpu, dt, bound_rect, log_timings);
         let mut clock = PhaseClock::start(log_timings);
         // Every ball into the cell of its new position: one counting sort
         // (`CellGrid::rebuild`). Emission comes after it, so the grid holds
@@ -478,9 +483,11 @@ impl SimulationEngine {
     /// (replaced, in ball order). One walk over each neighbour list: the
     /// SIMD kernel evaluates the pair potential and hands every pair to its
     /// interactions (`BallPhysics::interactions`), for the species that have
-    /// any with a species present; the others take the kernel alone.
+    /// any with a species present; the others take the kernel alone, or
+    /// their pair forces from `gpu` where it takes the step.
     fn compute_forces(
         world: &SimulationWorld,
+        gpu: Option<&mut GpuPass>,
         obstacles: &[Obstacle],
         bound: &Rect,
         results: &mut Vec<ForceResult>,
@@ -498,11 +505,14 @@ impl SimulationEngine {
                     .any(|b| !physics.interactions(a)[b.index()].is_empty())
             })
             .collect();
+        let pair_forces = gpu.and_then(|gpu| gpu.compute(world, !interacting.is_empty()));
         (0..balls.len())
             .into_par_iter()
             .map(|i| {
                 let ball = &balls[i];
-                let mut result = if interacting.contains(ball.species()) {
+                let mut result = if let Some(forces) = pair_forces {
+                    ForceResult::from(&forces[i])
+                } else if interacting.contains(ball.species()) {
                     let row = physics.interactions(ball.species());
                     let axis_i = axis(ball.theta);
                     force_simd(physics, i, balls, points, |out, j, species, d| {
