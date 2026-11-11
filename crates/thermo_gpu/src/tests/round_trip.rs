@@ -7,7 +7,7 @@
 //! note) without one, e.g. in CI.
 
 use crate::GpuForces;
-use thermo_physics::objects2d::ball_impl::{KernelPoint, PairForces, PairParams};
+use thermo_physics::objects2d::ball_impl::{KernelPoint, PairForceBackend, PairForces, PairParams};
 
 /// Copies every binding into the results: the offset times the cell size,
 /// the column, `σ` of the pair (own species, 0), and `row_species`.
@@ -68,7 +68,7 @@ fn test_points_and_pairs_round_trip_through_the_gpu() {
         eprintln!("no GPU adapter: round trip skipped");
         return;
     };
-    let pipeline = gpu.pipeline(COPY);
+    let pipeline = crate::pipeline(&gpu.device, &gpu.layout, COPY);
     gpu.set_pairs(&pairs());
     // Not a multiple of the workgroup size, then growing the buffers, then
     // shrinking the count, one ball and none.

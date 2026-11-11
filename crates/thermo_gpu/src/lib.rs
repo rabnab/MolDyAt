@@ -2,12 +2,15 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Pair forces on the GPU: the device, buffers and WGSL layouts of the
-//! force kernel. The physics and the CPU kernel, which stays the reference,
-//! are in `thermo_physics` (see `docs/architecture.md`).
+//! Pair forces on the GPU: the device, buffers and WGSL force kernel. The
+//! physics and the CPU kernel, which stays the reference, are in
+//! `thermo_physics` (see `docs/architecture.md`).
+
+// For `GpuForces: Send`, which goes deep into wgpu's types.
+#![recursion_limit = "256"]
 
 use bytemuck::{Pod, Zeroable};
-use thermo_physics::objects2d::ball_impl::{KernelPoint, PairForces, PairParams};
+use thermo_physics::objects2d::ball_impl::{KernelPoint, PairForceBackend, PairForces, PairParams};
 use wgpu::{
     BindGroup, BindGroupLayout, Buffer, BufferBindingType, BufferUsages, ComputePipeline, Device,
     Queue,
@@ -17,6 +20,7 @@ use wgpu::{
 pub const WORKGROUP_SIZE: u32 = 64;
 
 const LAYOUT: &str = include_str!("layout.wgsl");
+const ALL_PAIRS: &str = include_str!("all_pairs.wgsl");
 
 #[derive(Clone, Copy, Default, Pod, Zeroable)]
 #[repr(C)]
@@ -31,12 +35,13 @@ fn shader_source(kernel: &str) -> String {
     format!("const WORKGROUP_SIZE: u32 = {WORKGROUP_SIZE}u;\n{LAYOUT}\n{kernel}")
 }
 
-/// The force kernel's buffers on one device. The kernel reads the points
-/// and the pair table and writes a separate result buffer.
+/// The force kernel and its buffers on one device. The kernel reads the
+/// points and the pair table and writes a separate result buffer.
 pub struct GpuForces {
     device: Device,
     queue: Queue,
     layout: BindGroupLayout,
+    kernel: ComputePipeline,
     uniforms: Uniforms,
     uniform_buffer: Buffer,
     points: Buffer,
@@ -102,6 +107,7 @@ impl GpuForces {
             [&uniform_buffer, &points, &pairs, &results],
         );
         GpuForces {
+            kernel: pipeline(&device, &layout, ALL_PAIRS),
             device,
             queue,
             layout,
@@ -142,18 +148,8 @@ impl GpuForces {
         }
     }
 
-    /// Upload the pair table: pair `(a, b)` of `n` species at `a * n + b`.
-    pub fn set_pairs(&mut self, pairs: &[PairParams]) {
-        self.uniforms.species = pairs.len().isqrt() as u32;
-        if grow(&self.device, &mut self.pairs, size_of_val(pairs)) {
-            self.rebind();
-        }
-        self.queue
-            .write_buffer(&self.pairs, 0, bytemuck::cast_slice(pairs));
-    }
-
     /// Upload the balls' points, in cells of `cell` size.
-    pub fn upload_points(&mut self, points: &[KernelPoint], cell: [f32; 2]) {
+    fn upload_points(&mut self, points: &[KernelPoint], cell: [f32; 2]) {
         self.uniforms.balls = points.len() as u32;
         self.uniforms.cell = cell;
         let results = points.len() * size_of::<PairForces>();
@@ -167,36 +163,9 @@ impl GpuForces {
             .write_buffer(&self.points, 0, bytemuck::cast_slice(points));
     }
 
-    /// A pipeline over these buffers from WGSL `kernel`, whose entry point
-    /// `main` may use the bindings of `layout.wgsl` and `WORKGROUP_SIZE`.
-    pub fn pipeline(&self, kernel: &str) -> ComputePipeline {
-        let module = self
-            .device
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("pair forces"),
-                source: wgpu::ShaderSource::Wgsl(shader_source(kernel).into()),
-            });
-        let layout = self
-            .device
-            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("pair forces"),
-                bind_group_layouts: &[Some(&self.layout)],
-                immediate_size: 0,
-            });
-        self.device
-            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some("pair forces"),
-                layout: Some(&layout),
-                module: &module,
-                entry_point: Some("main"),
-                compilation_options: Default::default(),
-                cache: None,
-            })
-    }
-
     /// Run `pipeline` once per uploaded point and read its results back
     /// into `results`, one per point; blocks until the GPU is done.
-    pub fn run(&mut self, pipeline: &ComputePipeline, results: &mut Vec<PairForces>) {
+    fn run(&self, pipeline: &ComputePipeline, results: &mut Vec<PairForces>) {
         results.clear();
         let balls = self.uniforms.balls;
         if balls == 0 {
@@ -234,6 +203,44 @@ impl GpuForces {
         ];
         self.bind_group = bind_group(&self.device, &self.layout, buffers);
     }
+}
+
+impl PairForceBackend for GpuForces {
+    fn set_pairs(&mut self, pairs: &[PairParams]) {
+        self.uniforms.species = pairs.len().isqrt() as u32;
+        if grow(&self.device, &mut self.pairs, size_of_val(pairs)) {
+            self.rebind();
+        }
+        self.queue
+            .write_buffer(&self.pairs, 0, bytemuck::cast_slice(pairs));
+    }
+
+    fn compute(&mut self, points: &[KernelPoint], cell: [f32; 2], results: &mut Vec<PairForces>) {
+        self.upload_points(points, cell);
+        self.run(&self.kernel, results);
+    }
+}
+
+/// A pipeline from WGSL `kernel`, whose entry point `main` may use the
+/// bindings of `layout.wgsl` and `WORKGROUP_SIZE`.
+fn pipeline(device: &Device, layout: &BindGroupLayout, kernel: &str) -> ComputePipeline {
+    let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("pair forces"),
+        source: wgpu::ShaderSource::Wgsl(shader_source(kernel).into()),
+    });
+    let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("pair forces"),
+        bind_group_layouts: &[Some(layout)],
+        immediate_size: 0,
+    });
+    device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        label: Some("pair forces"),
+        layout: Some(&layout),
+        module: &module,
+        entry_point: Some("main"),
+        compilation_options: Default::default(),
+        cache: None,
+    })
 }
 
 /// Replace `buffer` by one of the next power of two size if it holds fewer

@@ -606,7 +606,7 @@ crates/thermo_runtime/         # Running without a window; no windowing or GPU d
     ├── metrics/               # Metrics time-series store
     ├── distributions/         # Speed distribution and g(r)
     └── export/                # CSV / JSONL export and streaming
-crates/thermo_gpu/             # Pair forces on the GPU: device, buffers, WGSL layouts
+crates/thermo_gpu/             # Pair forces on the GPU: device, buffers, WGSL layouts and kernel
 crates/thermo_ui/              # The UI without a GPU backend
 └── src/
     ├── graphics/

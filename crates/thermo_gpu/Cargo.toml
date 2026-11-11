@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "MolDyAt pair forces on the GPU: wgpu device, buffers and WGSL layouts of the force kernel."
+description = "MolDyAt pair forces on the GPU: wgpu device, buffers and the WGSL force kernel."
 
 [lints]
 workspace = true
@@ -16,3 +16,6 @@ wgpu = "30"
 pollster = "1"
 bytemuck = { version = "1.14", features = ["derive"] }
 log = "0.4"
+
+[dev-dependencies]
+thermo_physics = { path = "../thermo_physics", default-features = false, features = ["test-support"] }

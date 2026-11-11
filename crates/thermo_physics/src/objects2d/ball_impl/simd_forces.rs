@@ -194,6 +194,46 @@ pub(crate) fn kernel_points(balls: &[Ball2D]) -> KernelPoints {
     }
 }
 
+/// [`force_simd`] of every point of the built-in species with all others as
+/// neighbours, as a [`PairForceBackend`] returns it: the reference for its
+/// implementations.
+#[cfg(any(test, feature = "test-support"))]
+pub fn pair_forces_reference(
+    physics: &BallPhysics,
+    points: &[KernelPoint],
+    cell: [f32; 2],
+) -> Vec<PairForces> {
+    use crate::objects2d::ball_impl::SpeciesId;
+    let mut balls: Vec<Ball2D> = (0..points.len())
+        .map(|i| {
+            let species = SpeciesId::new(points[i].species() as u16);
+            Ball2D::new(i, Vec2D::default(), species)
+        })
+        .collect();
+    for (i, ball) in balls.iter_mut().enumerate() {
+        for j in (0..points.len()).filter(|&j| j != i) {
+            ball.cold.hood.add_neighbour(j);
+        }
+    }
+    let kernel = KernelPoints {
+        points: points.to_vec(),
+        cell,
+        contacts: vec![0.0; SpeciesSet::CAPACITY],
+    };
+    (0..points.len())
+        .map(|i| {
+            let f = force_simd(physics, i, &balls, &kernel, |_, _, _, _| {});
+            PairForces {
+                force: [f.force.x, f.force.y],
+                potential: f.potential_energy,
+                virial: f.virial,
+                capped: f.capped_pairs,
+                _pad: 0,
+            }
+        })
+        .collect()
+}
+
 /// Calculate Lennard-Jones forces for multiple ball pairs using SIMD vectorization.
 /// Processes neighbors in chunks of 4 with `f32x4` (see the module docs for the instruction set).
 /// Below r_cap the force rises linearly from max_force, with the matching quadratic potential.

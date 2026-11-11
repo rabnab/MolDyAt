@@ -2,16 +2,17 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! The WGSL structs of `layout.wgsl` against the Rust types they mirror:
-//! the same size (so the same array stride) and field offsets.
+//! The kernel validates, and the WGSL structs of `layout.wgsl` match the
+//! Rust types they mirror: the same size (so the same array stride) and
+//! field offsets.
 
-use crate::{Uniforms, shader_source};
+use crate::{ALL_PAIRS, Uniforms, shader_source};
 use std::mem::offset_of;
 use thermo_physics::objects2d::ball_impl::{KernelPoint, PairForces, PairParams};
 use wgpu::naga;
 
-fn module() -> naga::Module {
-    let source = shader_source("");
+fn module(kernel: &str) -> naga::Module {
+    let source = shader_source(kernel);
     let module = naga::front::wgsl::parse_str(&source)
         .unwrap_or_else(|e| panic!("{}", e.emit_to_string(&source)));
     naga::valid::Validator::new(
@@ -47,7 +48,8 @@ fn check(module: &naga::Module, name: &str, size: usize, fields: &[(&str, usize)
 
 #[test]
 fn test_wgsl_structs_match_the_rust_layouts() {
-    let module = module();
+    let module = module(ALL_PAIRS);
+    assert_eq!(module.entry_points.len(), 1, "the kernel's `main`");
     check(
         &module,
         "Uniforms",
