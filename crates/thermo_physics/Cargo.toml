@@ -25,6 +25,9 @@ toml = { version = "1", default-features = false, features = ["parse", "serde", 
 # Logging
 log = "0.4"
 
+# Plain-data layouts of the GPU force kernel's buffers (`thermo_gpu`)
+bytemuck = { version = "1.14", features = ["derive"] }
+
 [dev-dependencies]
 float-cmp = "0.10"
 

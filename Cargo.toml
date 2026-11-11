@@ -1,7 +1,7 @@
 cargo-features = ["profile-rustflags"]
 
 [workspace]
-members = ["crates/thermo_physics", "crates/thermo_runtime", "crates/thermo_ui", "wgpu_renderer"]
+members = ["crates/thermo_physics", "crates/thermo_runtime", "crates/thermo_gpu", "crates/thermo_ui", "wgpu_renderer"]
 resolver = "2"
 
 [workspace.package]

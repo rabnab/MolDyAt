@@ -9,7 +9,7 @@ use crate::objects2d::ball_impl::external_field::Field;
 use crate::objects2d::ball_impl::interaction::{Interaction, pair_interactions};
 use crate::objects2d::ball_impl::molecule::Site;
 use crate::objects2d::ball_impl::pair_potential::{
-    CapSettings, LJ_SIG, PairOverride, PairPotential, Potential,
+    CapSettings, LJ_SIG, PairOverride, PairParams, PairPotential, Potential,
 };
 use crate::objects2d::ball_impl::species::{DEFAULT_SPECIES, SpeciesId, SpeciesSet, SpeciesTable};
 use crate::objects2d::ball_impl::wall_law::{SoftWalls, WallSettings};
@@ -404,6 +404,12 @@ impl BallPhysics {
     /// The pair potentials; the force kernel matches on them once per ball.
     pub(crate) fn pair_potential(&self) -> &Potential {
         &self.pair_potential
+    }
+
+    /// The pair table for a `PairForceBackend`; it changes only with a new
+    /// `BallPhysics`.
+    pub fn pair_params(&self) -> Vec<PairParams> {
+        self.pair_potential.pair_params()
     }
 
     /// Centre distance from a wall surface at which a ball of `species` is

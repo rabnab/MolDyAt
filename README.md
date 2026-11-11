@@ -583,7 +583,7 @@ If you use MolDyAt in scientific work, please cite it; see
 ## Project Structure
 
 ```
-Cargo.toml                     # Workspace root (members: crates/thermo_physics, crates/thermo_runtime, crates/thermo_ui, wgpu_renderer)
+Cargo.toml                     # Workspace root (members: crates/thermo_physics, crates/thermo_runtime, crates/thermo_gpu, crates/thermo_ui, wgpu_renderer)
 crates/thermo_physics/         # The physics; no windowing or GPU dependencies
 └── src/
     ├── application/
@@ -606,6 +606,7 @@ crates/thermo_runtime/         # Running without a window; no windowing or GPU d
     ├── metrics/               # Metrics time-series store
     ├── distributions/         # Speed distribution and g(r)
     └── export/                # CSV / JSONL export and streaming
+crates/thermo_gpu/             # Pair forces on the GPU: device, buffers, WGSL layouts
 crates/thermo_ui/              # The UI without a GPU backend
 └── src/
     ├── graphics/

@@ -3,8 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::objects2d::ball_impl::pair_potential::{
-    CapSettings, CappedPotential, LennardJones, PairLaw, PairOverride, PairPotential, PairTable,
-    Potential, ScalarLanes, bisect_cap_distance, newton_cap_distance,
+    CapSettings, CappedPotential, LennardJones, PairLaw, PairOverride, PairParams, PairPotential,
+    PairTable, Potential, ScalarLanes, bisect_cap_distance, newton_cap_distance,
 };
 use crate::objects2d::ball_impl::{SpeciesId, SpeciesTable};
 use std::simd::f32x4;
@@ -443,6 +443,59 @@ fn test_partial_override_keeps_the_other_mixed_value() {
             epsilon: 0.5
         }
     );
+}
+
+/// The capped Lennard-Jones force and potential from a flat pair entry, as
+/// a kernel outside the crate evaluates them.
+fn flat_force_and_potential(p: &PairParams, r: f32) -> (f32, f32) {
+    if r >= p.cutoff {
+        return (0.0, 0.0);
+    }
+    let lj = LennardJones {
+        sigma: p.sigma,
+        epsilon: p.epsilon,
+    };
+    let outer = r.max(p.r_cap);
+    let compression = (p.r_cap - r).max(0.0);
+    let force = lj.force(outer) + p.core_stiffness * compression;
+    let potential = if r < p.r_cap {
+        p.pot_at_cap + compression * (p.max_force + 0.5 * p.core_stiffness * compression)
+    } else {
+        lj.potential(r)
+    };
+    (force, potential - p.pot_at_cutoff)
+}
+
+#[test]
+fn test_pair_params_reproduce_every_pair_of_the_table() {
+    let o = PairOverride {
+        a: species("N2"),
+        b: species("XS"),
+        sigma: Some(1.6),
+        epsilon: Some(2.0),
+    };
+    let potential = Potential::lennard_jones(SpeciesTable::builtin(), CapSettings::default(), &[o]);
+    let Potential::LennardJones(table) = &potential;
+    let params = potential.pair_params();
+    let builtin = SpeciesTable::builtin();
+    let n = builtin.len();
+    assert_eq!(params.len(), n * n);
+    for a in builtin.ids() {
+        for b in builtin.ids() {
+            let p = &params[a.index() * n + b.index()];
+            let pair = table.pair(a, b);
+            assert_eq!((p.sigma, p.epsilon), (pair.law().sigma, pair.law().epsilon));
+            for r in [0.3, 0.9, 1.2, 2.0, 0.99 * pair.cutoff(), pair.cutoff()] {
+                let (force, pot) = flat_force_and_potential(p, r);
+                assert_eq!(force.to_bits(), pair.force(r).to_bits(), "force at {r}");
+                assert_eq!(
+                    pot.to_bits(),
+                    pair.potential(r).to_bits(),
+                    "potential at {r}"
+                );
+            }
+        }
+    }
 }
 
 #[test]

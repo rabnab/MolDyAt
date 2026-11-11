@@ -20,6 +20,7 @@ use crate::application::units::UnitSystem;
 use crate::objects2d::ball_impl::species::{
     N2_EPSILON_KELVIN, N2_SIGMA_ANGSTROM, Species, SpeciesId, SpeciesTable,
 };
+use bytemuck::{Pod, Zeroable};
 use std::simd::Select;
 use std::simd::f32x4;
 use std::simd::prelude::{SimdFloat, SimdPartialOrd};
@@ -564,6 +565,21 @@ impl<L: PairLaw> PairTable<L> {
     }
 }
 
+/// One Lennard-Jones [`CappedPotential`] as plain numbers, for a force
+/// kernel outside this crate (`PairForceBackend`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Pod, Zeroable)]
+#[repr(C)]
+pub struct PairParams {
+    pub sigma: f32,
+    pub epsilon: f32,
+    pub r_cap: f32,
+    pub cutoff: f32,
+    pub pot_at_cap: f32,
+    pub pot_at_cutoff: f32,
+    pub max_force: f32,
+    pub core_stiffness: f32,
+}
+
 /// The interaction laws the simulation can use, each as a table over the
 /// species pairs.
 #[derive(Clone, Debug)]
@@ -586,6 +602,26 @@ impl Potential {
                 None => mixed,
             }
         }))
+    }
+
+    /// The table as [`PairParams`], row-major like [`PairTable`].
+    pub(crate) fn pair_params(&self) -> Vec<PairParams> {
+        match self {
+            Potential::LennardJones(t) => t
+                .pairs
+                .iter()
+                .map(|p| PairParams {
+                    sigma: p.law.sigma,
+                    epsilon: p.law.epsilon,
+                    r_cap: p.r_cap,
+                    cutoff: p.cutoff,
+                    pot_at_cap: p.pot_at_cap,
+                    pot_at_cutoff: p.pot_at_cutoff,
+                    max_force: p.settings.max_force,
+                    core_stiffness: p.settings.core_stiffness,
+                })
+                .collect(),
+        }
     }
 
     pub(crate) fn cap_settings(&self) -> &CapSettings {

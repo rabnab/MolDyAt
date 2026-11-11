@@ -2127,9 +2127,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "thermo_gpu"
+version = "0.3.0"
+dependencies = [
+ "bytemuck",
+ "log",
+ "pollster",
+ "thermo_physics",
+ "wgpu",
+]
+
+[[package]]
 name = "thermo_physics"
 version = "0.3.0"
 dependencies = [
+ "bytemuck",
  "float-cmp",
  "log",
  "rand",
