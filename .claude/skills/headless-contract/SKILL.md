@@ -26,9 +26,9 @@ description: Contract for changing headless mode - CLI flags, the JSONL headless
 - **Non-finite numbers.** Every exported `f32` goes through `f32_value`, so `NaN` and `±Inf` become `null`, including thermo grids and summary fields.
 - **Payload size.** `summary` stays the default; per-ball and thermo data stay opt-in through `--detail`.
 - **Flags.** Every flag that `parse_headless_args` accepts has an `OptionHelp` entry (`every_parsed_flag_is_documented` in `thermo_runtime` `headless_cli/tests.rs` checks it; the binary's own flags are checked in `cli/tests.rs`) and a row in `docs/headless.md`. Parse with `std::env::args()`; add a CLI crate only if the option surface grows a lot. The default (windowed) start must not change.
-- **Config.** `prepare_application` builds the world from the `SimConfig` (`--config` or defaults) with `--dt` overriding its time step, and `--dt` also beats a loaded save's time step. Without `--config` the run must stay byte-identical to the fixtures. `run_start` records the effective `dt` and, as `config.sim`, the effective `SimConfig` (#295; `HeadlessConfig::sim`, set in `HeadlessRunner::from_config` from `MainContent::config()`), so the output alone can reproduce the run. A new `SimConfig` key therefore appears in `run_start` and changes both fixtures: refresh them in the same PR.
+- **Config.** `prepare_application` builds the world from the `SimConfig` (`--config` or defaults) with `--dt` overriding its time step, and `--dt` also beats a loaded save's time step. Without `--config` the run must keep the physics of the fixtures. `run_start` records the effective `dt` and, as `config.sim`, the effective `SimConfig` (#295; `HeadlessConfig::sim`, set in `HeadlessRunner::from_config` from `MainContent::config()`), so the output alone can reproduce the run. A new `SimConfig` key therefore appears in `run_start` and changes both fixtures: refresh them in the same PR.
 - **Setup order.** Time step, then walls and valves, then seeded balls, so seeded balls never start inside a wall. Seeding is deterministic for a given `--rng-seed`.
-- **Determinism.** The same seed, flags and build give byte-identical output, independent of the Rayon thread count. Do not add wall-clock values or unordered collections to records (`physics_fps` is always 0 in headless runs, which have no physics thread).
+- **Determinism.** The same seed, flags and build give byte-identical output, independent of the Rayon thread count unless a change took the scheduling-dependent reduction exception (CONTRIBUTING, gate 3). Do not add wall-clock values or unordered collections to records (`physics_fps` is always 0 in headless runs, which have no physics thread).
 - **Timings report.** `scripts/headless_perf.sh` parses `headless-timings.v1`. Changing its fields or phase names means updating the script (and its `headless-perf.v2` report) in the same change.
 
 ## Fixtures
@@ -40,7 +40,7 @@ Each fixture's inputs are checked in next to it: `<name>.args` (the command line
 - `test_seeded_operators_run_does_not_depend_on_thread_count` (1 vs 4 threads, f32 bits).
 - CI also runs the fixtures with `--no-default-features` (without `measure-time`); output must not depend on that feature.
 
-A refactor must leave the fixtures untouched. If a fixture changes, the PR changes behaviour and says so:
+A refactor may refresh the fixtures only for rounding-level diffs, with the drift suite green and its thresholds untouched (CONTRIBUTING, Refactor PRs). Any larger change in a fixture is a behaviour change, and the PR says so:
 1. Make the intended change and understand why the output moved (for physics, follow the `physics-change` skill first).
 2. Refresh on x86_64 Linux with the dev profile (as CI): `UPDATE_HEADLESS_FIXTURE=1 cargo ci-test-headless-regression`. Never refresh on Windows; `sin`/`cos`/`exp` can differ there.
 3. Rerun without `UPDATE_HEADLESS_FIXTURE` to confirm stability.

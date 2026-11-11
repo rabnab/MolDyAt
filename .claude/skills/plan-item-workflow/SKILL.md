@@ -24,13 +24,13 @@ Decide first whether the item may change simulation results.
 
 | Item kind | Results may change? | Required evidence |
 |---|---|---|
-| Refactor (M, C, V, most G) | no | `cargo ci-test-headless-regression`, `cargo ci-test-drift`, `cargo test --workspace thread_count` pass **with fixtures and thresholds untouched** |
-| Performance (P) | no | the refactor gates, plus before/after numbers: follow the `perf-compare` skill |
+| Refactor (M, C, V, most G) | physics the same, bits may differ | `cargo ci-test-headless-regression`, `cargo ci-test-drift`, `cargo test --workspace thread_count` pass with **thresholds untouched**; a fixture refresh is allowed for rounding-level diffs only (CONTRIBUTING, Refactor PRs) |
+| Performance (P) | physics the same, bits may differ | the refactor gates, plus before/after numbers: follow the `perf-compare` skill |
 | Physics / model (I, some P) | yes, intentionally | follow the `physics-change` skill: baselines, threshold rationale, fixture diff |
 | Headless output, CLI | output may change | follow the `headless-contract` skill |
 | Operators, sidebar tools | – | follow the `operator-framework` skill |
 
-Reproducibility is a hard requirement (plan decision 4): no float `sum`/`reduce` whose order depends on Rayon scheduling. Collect parallel results in index order and reduce serially or in fixed chunks.
+Bit-exact reproducibility across thread counts is the default, not a requirement: collect parallel results in index order and reduce serially or in fixed chunks, unless a scheduling-dependent float reduction buys real speed. Then follow the thread-count rule in CONTRIBUTING (Refactor PRs, gate 3). Data races stay bugs.
 
 Before each commit: the validation policy in `.github/copilot-instructions.md` (smallest test scope first, then the gates above).
 
@@ -64,7 +64,7 @@ Create the PR from `.github/pull_request_template.md`, filled in, not left as pl
 gh pr create --base master --title "<commit-style title> (#<N>)" --body-file <filled-template.md>
 ```
 - **Relations:** `Closes #<N>`, `Part of #<parent>`.
-- **Physics Impact:** tick only what was verified; say "no change to results: fixtures and drift thresholds untouched" for refactors.
+- **Physics Impact:** tick only what was verified; say "no physical change: drift thresholds untouched, fixtures untouched or refreshed for rounding only" for refactors.
 - **Testing Commands:** the exact commands run, including the gates.
 - Performance or threshold evidence goes in the body (tables from the respective skills).
 - End the body with the attribution line required by the session.

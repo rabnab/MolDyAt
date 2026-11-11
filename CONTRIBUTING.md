@@ -91,7 +91,8 @@ Both formatting and linting must pass without errors.
 
 ### Refactor PRs: required gates
 
-A refactor must not change simulation results. Besides the steps above, a PR
+A refactor must keep the simulated physics the same; it need not keep the
+same bits. Besides the steps above, a PR
 that restructures code without an intended behavior change must pass these
 gates unchanged; CI runs the drift suite in the `drift` job and the others
 in the `test` job:
@@ -102,14 +103,22 @@ in the `test` job:
    - Each run is described by checked-in inputs next to its fixture (`<name>.args`, plus `.toml` and `.script` for the operator scenario).
 2. **Drift suite**: `cargo ci-test-drift` (see [docs/drift-test.md](docs/drift-test.md)).
 3. **Thread-count reproducibility**: `cargo test --workspace thread_count`.
-   The same seed must give bit-identical energies, wall momentum and ball
-   state with 1 and with 4 Rayon threads. Collect parallel results in index order and reduce
-   them serially; a parallel `sum`/`reduce` over floats breaks this.
+   By default the same seed gives bit-identical energies, wall momentum and
+   ball state with 1 and with 4 Rayon threads: collect parallel results in
+   index order and reduce them serially or in fixed chunks. A change may give
+   this up for speed (a parallel float `sum`/`reduce` in scheduling-dependent
+   order) if the physics stays the same: it turns the affected exact check
+   into a tolerance check, runs the fixture tests on a one-thread pool, and
+   says so in the PR.
 
-A refactor PR must not touch the fixture files or the drift thresholds. If a
-fixture has to change, the PR changes behavior: say so in the description,
-refresh the fixture with `UPDATE_HEADLESS_FIXTURE=1 cargo ci-test-headless-regression`
-and include the fixture diff as evidence. Fixtures hold f32 results, so
+A refactor PR must not touch the drift thresholds. It may refresh the
+fixtures when floating-point rounding moved (a reordered sum or expression)
+and the drift suite still passes: the diff must show the same records with
+values that agree to rounding and energy and temperature within the noise of
+the old run. Say so in the description, refresh with
+`UPDATE_HEADLESS_FIXTURE=1 cargo ci-test-headless-regression` and include the
+fixture diff as evidence. A larger difference changes behavior: follow the
+`physics-change` skill. Fixtures hold f32 results, so
 refresh them with the dev profile on the same target as CI (x86_64 Linux).
 `sin`, `cos` and `exp` come from the platform math library and can give
 different bits on Windows (MSVC) than on Linux (glibc), so the fixture tests

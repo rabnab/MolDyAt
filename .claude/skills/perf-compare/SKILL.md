@@ -11,7 +11,7 @@ Background, scenarios and the committed baseline are in `docs/perf-baseline.md`.
 - Compare two binaries **in one invocation** of `scripts/headless_perf.sh`; they alternate within each round, so host load hits both. Never compare runs from different days or machines, and never compare your numbers with `docs/perf-baseline.json` unless you are on the machine recorded there.
 - Both binaries must be built for the same target and profile (`--profile perf`: `release` with `target-cpu=native`, but thin LTO and 16 codegen units, so it builds much faster) and include #221 (they need `--timings`, `--load`, `--save-setup`). Never time the dev profile: overflow checks, debug assertions, no LTO and the SSE2-only SIMD path distort hot-path numbers.
 - A change is real only when it exceeds the `spread_pct` of **both** binaries. On shared or cloud hosts, treat differences below about 10 % as noise.
-- Performance work must not change results: the drift suite and headless fixtures stay green (see the `physics-change` skill if results move).
+- Performance work must keep the physics the same: the drift suite stays green; fixture bits may move by rounding (CONTRIBUTING, Refactor PRs; `physics-change` skill if more moves).
 
 ## Procedure
 ```bash

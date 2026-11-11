@@ -8,8 +8,8 @@
 #   - Why: the problem or goal, in a sentence or two.
 #   - What: the behaviour that changes; bullets for separate parts.
 #   - Tests and docs added or changed.
-#   - Physics and headless impact, e.g. "No physics change; headless
-#     fixtures and drift thresholds unchanged."
+#   - Physics and headless impact, e.g. "No physics change; drift
+#     thresholds unchanged, fixtures unchanged or refreshed for rounding."
 #
 # Relations: Closes #N / Part of #N / Related to #N
 #   Never start a line with "#": git drops it as a comment.
