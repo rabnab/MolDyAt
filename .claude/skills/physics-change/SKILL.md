@@ -5,7 +5,7 @@ description: Contract for changing simulation physics - pair forces and potentia
 
 # Physics Change Contract
 
-The simulation must conserve energy where the physics says it should, and seeded runs must stay reproducible. Every physics change proves both with tests and, if results move, with baseline evidence.
+The simulation must conserve energy where the physics says it should, and seeded runs stay reproducible by default (bit-exact across thread counts; see `physics.instructions.md`, Reproducibility, for the exception). Every physics change proves both with tests and, if results move, with baseline evidence.
 
 ## Scope
 Change only the physics the issue asks for. A new quantity goes only into the outputs the issue names (minimal code policy in `.github/copilot-instructions.md`); safety nets are the one exception (`physics.instructions.md`).
@@ -28,7 +28,7 @@ Smallest first; all must pass before a PR.
 A change to the force or potential needs a new or updated energy test. A new physics effect needs a test that fails without it.
 
 ## When results change
-Intended trajectory changes (new potential, step order, summation order) move the drift baselines and the headless fixtures.
+Intended trajectory changes (new potential, step order) move the drift baselines and the headless fixtures. A new summation order or expression order that leaves the drift suite within its thresholds is a rounding change: refresh the fixtures only (CONTRIBUTING, Refactor PRs).
 
 1. Run `cargo ci-test-drift` on `master` and on the branch with the same target and profile, and collect the `DRIFT_SCENARIO` / `DRIFT_CONVERGENCE` lines. `simd_forces` is compiled for the build target (`dev`: baseline SSE2/NEON; `release` and `perf`: `target-cpu=native`), so compare only like with like.
 2. Thresholds change only with an intentional behaviour change. Follow `docs/drift-test.md` (Changing thresholds): margin 1.5–2x the new baseline, per scenario and metric, and the PR table with old/new thresholds and baselines.

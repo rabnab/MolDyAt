@@ -31,10 +31,10 @@ Artifacts: `test-results` (JUnit), `headless-regression-log` (on failure), `drif
 ## Reading test failures
 - **Unit tests (nextest):** reproduce locally with the exact test name: `cargo test -p <package> <test> -- --exact --nocapture`. `retries = 0`, so a failure is not hidden by a retry; a test that fails only sometimes is a bug (usually timing in physics-thread tests or a thread-count dependence), not noise.
 - **Headless regression:** the log names the first mismatching JSONL line, expected vs actual. Ask: did this PR intend to change results?
-  - No: it is a regression. Reproduce with `cargo ci-test-headless-regression` and bisect the PR's commits.
+  - No: compare the diff. Rounding only (same records, values equal to the last digits, drift suite green): refresh the fixture as the refactor rule in CONTRIBUTING allows. Larger: it is a regression; reproduce with `cargo ci-test-headless-regression` and bisect the PR's commits.
   - Yes: the fixture must be refreshed in the PR (see the `headless-contract` skill), never on Windows.
   - Only in the `--no-default-features` step: output depends on the `measure-time` feature, which it must not.
-- **Drift suite:** each scenario prints a `DRIFT_SCENARIO … result=` line even when it fails; compare its metrics with the table in `docs/drift-test.md`. Exact checks (missed neighbour pairs, thread-count hash) point to a logic bug; a slightly exceeded energy threshold after a kernel or summation-order change points to an intended change that needs new baselines (see the `physics-change` skill).
+- **Drift suite:** each scenario prints a `DRIFT_SCENARIO … result=` line even when it fails; compare its metrics with the table in `docs/drift-test.md`. Exact checks (missed neighbour pairs, thread-count hash) point to a logic bug or a data race (unless the PR took the scheduling-dependent reduction exception in CONTRIBUTING, gate 3); a slightly exceeded energy threshold after a kernel or summation-order change points to an intended change that needs new baselines (see the `physics-change` skill).
 - **`DRIFT_WARNING` annotations:** a passing metric above 70 % of its threshold. Not a failure, but the PR must explain it if the PR moved it.
 
 ## Platform and infrastructure

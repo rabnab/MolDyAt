@@ -310,7 +310,7 @@ Decisions (2026-10-04):
 1. Split into four crates (M7–M9).
 2. Particle types (species) replace size classes; old saves migrate (I3).
 3. Plots move to a separate wgpu window (V4, now V4a/V4b).
-4. Seeded runs must stay reproducible, including across thread counts (G2, P2; P9 dropped).
+4. Seeded runs are bit-reproducible across thread counts by default (G2, P2); a scheduling-dependent reduction is allowed where it buys speed, under the rule in CONTRIBUTING (P9 was dropped under the old, strict rule).
 5. Mixed-species simulation has priority (Phase 2); N₂ and water models per §5.
 6. ~~N₂ defines the reduced units (I5).~~ Replaced by decision 15 (#405): Ar defines them.
 7. Interaction is Lennard-Jones on the centre distance; the radius is adjustable but visual only (I3).
