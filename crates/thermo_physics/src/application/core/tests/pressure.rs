@@ -69,6 +69,7 @@ fn test_virial_pressure_2d_matches_wall_pressure() {
     // `wall_impulse` reads velocity flips at a hard contact; the soft wall
     // pressure is compared with the hard one in `soft_walls.rs`.
     main_content.use_hard_walls();
+    super::gpu_forces_if_asked(&mut main_content);
     main_content.world_mut().speed_limit_override = Some(f32::INFINITY);
     populate_grid_balls(&mut main_content, 900, 2.0);
     let rect = main_content.world().world_region();

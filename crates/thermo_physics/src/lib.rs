@@ -11,6 +11,9 @@
 
 #![feature(portable_simd)]
 #![cfg_attr(not(test), warn(clippy::print_stdout))]
+// The GPU backend of the drift suite (`tests/gpu_bridge.rs`) is `Send`
+// through wgpu's deep types.
+#![cfg_attr(gpu_drift, recursion_limit = "256")]
 
 pub mod application;
 pub mod error;

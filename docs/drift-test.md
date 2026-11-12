@@ -250,6 +250,51 @@ more bytes per ball and an f64 subtraction per gathered neighbour; P6 (#346)
 puts positions into a hot array of their own first, so the change stays
 local to that array, the kernel gather and the position update.
 
+## On the GPU force pass
+
+```bash
+scripts/drift_gpu.sh          # the whole suite; a test name filters it
+```
+
+runs the same suite with the pair forces from the GPU kernel (`thermo_gpu`,
+`--gpu-forces` in the binary, #361). CI has no GPU and does not run it.
+
+- The script builds the tests of `thermo_physics` with `--cfg gpu_drift`
+  into `target/gpu-drift/`. Only that cfg adds `thermo_gpu` to the test
+  build (`[target.'cfg(gpu_drift)'.dev-dependencies]`), so the normal test
+  build has no GPU stack. `tests/gpu_bridge.rs` hands the kernel to the
+  world as its `PairForceBackend`.
+- `run_drift_harness_with_observer` and
+  `test_virial_pressure_2d_matches_wall_pressure` switch their world to the
+  GPU force pass (`gpu_forces_if_asked`). The other slow tests use
+  molecules or water, which the GPU does not compute, and stay on the CPU.
+- Each harness run prints `DRIFT_FORCES balls=… last_step=…`: `Some(Gpu)`,
+  or `Some(Cpu("…"))` with the reason where a scenario fell back. Without
+  an adapter the suite runs on the CPU kernel and prints `DRIFT_FORCES no
+  GPU adapter`.
+- The thresholds are the CPU's. The GPU kernel sums the same pairs in
+  another order, so values differ in the last digits, and the
+  `trajectory_hash` differs from the CPU's; within one machine it is
+  reproducible (the determinism and thread-count scenarios pass).
+
+Result of #361, on lavapipe (Mesa 25.2 software Vulkan, x86_64, dev
+profile): all 31 tests pass, and all 62 harness runs end on the GPU.
+
+| Scenario | Metric | CPU | GPU | Threshold |
+|---|---|---:|---:|---:|
+| dense_gas_many_body | max relative energy drift | 3.743e-3 | 3.743e-3 | 4.0e-3 |
+| dense_gas_dt_quartering | drift at dt/4 over that at dt | 0.071 | 0.071 | 0.125 |
+| soft_walled_gas | max relative energy drift | 3.905e-3 | 3.903e-3 | 5.5e-3 |
+| binary_mixture | max relative energy drift | 6.66e-4 | 6.660e-4 | 1.0e-3 |
+| hot_sparse_gas | max relative energy drift | 9.0e-4 | 5.921e-4 | 8.0e-3 |
+| two_body_lj_baseline | max relative energy drift | 1.99e-3 | 1.993e-3 | 3.0e-2 |
+| force_cap_transition | relative energy drift | 7.28e-2 | 7.281e-2 | 3.0e-1 |
+| virial against wall pressure | relative deviation | – | 0.029 | see `pressure.rs` |
+
+The CPU column is the baseline of the table above, except the two values
+with four digits, measured in the same session. `hot_sparse_gas` differs
+because its value is realisation noise (see its row above).
+
 ## CI reporting
 
 The `drift` job always uploads `drift-harness.log` and writes to the job summary:

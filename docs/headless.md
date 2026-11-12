@@ -79,6 +79,10 @@ O(n²), so slower than the CPU for large worlds. Steps it cannot take stay on
 the CPU kernel: without an adapter (one log line), while a species with
 molecule sites or water is present, and while a ball shows its neighbour
 lines. Results agree with the CPU kernel to f32 rounding, not bit for bit.
+Two runs with the same seed and flags on the same machine and driver give
+identical output (the kernel sums each ball's pairs in a fixed order, without
+atomics). They are not comparable with the CPU fixtures, and not across
+devices or drivers: `sqrt` and division may round differently there.
 
 `moldyat --help` prints the same list from the option tables in
 `headless_cli.rs` and `cli.rs`.

@@ -2151,6 +2151,8 @@ dependencies = [
  "serde",
  "serde_ignored",
  "serde_json",
+ "thermo_gpu",
+ "thermo_physics",
  "toml",
 ]
 

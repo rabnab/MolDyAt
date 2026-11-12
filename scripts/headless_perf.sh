@@ -14,6 +14,9 @@
 #
 # Usage: scripts/headless_perf.sh [BINARY...]
 #   Compare builds by passing several binaries, e.g. a baseline and a new one.
+#   A BINARY may carry flags for its runs, e.g. CPU against GPU forces:
+#     scripts/headless_perf.sh target/perf/moldyat "target/perf/moldyat --gpu-forces"
+#   (so paths with spaces are not supported).
 #   Default: target/perf/moldyat (build with cargo build --profile perf).
 # Environment:
 #   SCENARIOS       scenarios to run (default "dilute dense walls_valves box_walls large")
@@ -67,6 +70,11 @@ scenario_args() {
     box_walls) echo --seed-balls 6000 --world-scale 4 --seed-speed 8 ;;
     # Ball data far beyond cache: memory-bound.
     large) echo --seed-balls 200000 --world-scale 28 --seed-speed 2 ;;
+    # CPU against GPU forces (#361), not in the default set: a gas of the
+    # density of `dilute` at 10k, 50k and 100k balls.
+    gas_10k) echo --seed-balls 10000 --world-scale 16 --seed-speed 2 ;;
+    gas_50k) echo --seed-balls 50000 --world-scale 36 --seed-speed 2 ;;
+    gas_100k) echo --seed-balls 100000 --world-scale 51 --seed-speed 2 ;;
     *)
         echo "error: unknown scenario $1" >&2
         return 1
@@ -75,7 +83,7 @@ scenario_args() {
 }
 
 for bin in "$@"; do
-    [ -x "$bin" ] || { echo "error: $bin is not an executable" >&2; exit 1; }
+    [ -x "${bin%% *}" ] || { echo "error: ${bin%% *} is not an executable" >&2; exit 1; }
 done
 
 # Fail on a misspelt scenario before seeding or timing anything.
@@ -97,7 +105,7 @@ scenario_world() {
         echo "seeding $name ($args) ..." >&2
         mkdir -p "$dir"
         # shellcheck disable=SC2086
-        env ${run_env[@]+"${run_env[@]}"} "$bin" --headless --steps 1 $args --save-setup \
+        env ${run_env[@]+"${run_env[@]}"} ${bin%% *} --headless --steps 1 $args --save-setup \
             --save-dir "$dir" --no-stdout --output /dev/null >/dev/null 2>&1 || {
             echo "error: seeding $name with $bin failed" >&2
             rm -rf "$dir"
@@ -127,7 +135,8 @@ for name in $SCENARIOS; do
         for b in $(seq "$#"); do
             bin=${!b}
             out="$tmp/$name.$b.$round.json"
-            env ${run_env[@]+"${run_env[@]}"} "$bin" --headless --load "$world" --dt "$DT" --steps "$STEPS" \
+            # shellcheck disable=SC2086
+            env ${run_env[@]+"${run_env[@]}"} $bin --headless --load "$world" --dt "$DT" --steps "$STEPS" \
                 --timing-warmup "$WARMUP" --snapshot-every "$SNAPSHOT_EVERY" \
                 --timings "$out" --no-stdout --output /dev/null >/dev/null 2>&1 || {
                 echo "error: $bin failed on $name" >&2

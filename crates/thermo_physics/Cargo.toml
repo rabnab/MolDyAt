@@ -31,6 +31,13 @@ bytemuck = { version = "1.14", features = ["derive"] }
 [dev-dependencies]
 float-cmp = "0.10"
 
+# The drift suite on the GPU force pass (`scripts/drift_gpu.sh`): only with
+# `--cfg gpu_drift`, so normal test builds have no GPU stack. `thermo_gpu`
+# links the library build of this crate, named here to reach its traits.
+[target.'cfg(gpu_drift)'.dev-dependencies]
+thermo_gpu = { path = "../thermo_gpu" }
+thermo_physics = { path = "." }
+
 [features]
 default = ["measure-time"]
 measure-time = []

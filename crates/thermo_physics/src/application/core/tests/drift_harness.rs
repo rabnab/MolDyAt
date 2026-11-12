@@ -407,6 +407,7 @@ pub fn run_drift_harness_with_observer(
     cfg: DriftHarnessConfig,
     mut observe: impl FnMut(usize, &MainContent),
 ) -> DriftRunMetrics {
+    super::gpu_forces_if_asked(main_content);
     let mut samples = Vec::new();
     let mut pair_history = Vec::with_capacity(cfg.steps + 1);
     let mut neighbor_rebuild_count = 0usize;
@@ -468,6 +469,14 @@ pub fn run_drift_harness_with_observer(
         }
     }
 
+    // Which kernel the last step ran on: scenarios the GPU cannot take
+    // (molecules, water) fall back.
+    #[cfg(gpu_drift)]
+    println!(
+        "DRIFT_FORCES balls={} last_step={:?}",
+        main_content.world().balls.len(),
+        main_content.force_path()
+    );
     let final_sample = *samples.last().expect("at least one sample");
     let trajectory_hash = trajectory_hash(main_content, &samples, &pair_history);
     let nets_after = main_content.world().sim.safety_nets_total;

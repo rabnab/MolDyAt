@@ -32,6 +32,7 @@ and `--world-scale` multiplies both sides.
 | `walls_valves` | 20 000 | 8 | 4 | 4 walls (thickness 2), 1 closed and 2 open valves; wall sweep and overlap passes |
 | `box_walls` | 6 000 | 4 | 8 | hot gas in a small box: about 3x the world-wall contacts per step of `dilute`; wall contacts and wall momentum bookkeeping (in `positions`) |
 | `large` | 200 000 | 28 | 2 | ball data far beyond the cache, memory-bound |
+| `gas_10k`, `gas_50k`, `gas_100k` | 10 000, 50 000, 100 000 | 16, 36, 51 | 2 | not in the default set: [CPU against GPU forces](#cpu-against-gpu-forces) |
 
 How a run works:
 
@@ -211,6 +212,43 @@ timers are about ten `Instant::now()` calls per step, well under 1 µs,
 against steps of 3.5 to 110 ms. The timer cost is therefore below what this
 host can resolve. The `large` difference is too big to come from the calls
 themselves; it is noise or a code-layout effect.
+
+## CPU against GPU forces
+
+A binary argument of the script may carry flags, so one binary can run
+against itself with `--gpu-forces` (#361). The scenarios `gas_10k`,
+`gas_50k` and `gas_100k` (a gas of the density of `dilute`, seed speed 2,
+world scale 16, 36 and 51) are for this comparison and not in the default
+set:
+
+```bash
+SCENARIOS="gas_10k gas_50k gas_100k" STEPS=5 WARMUP=1 RUNS=2 \
+  scripts/headless_perf.sh target/perf/moldyat "target/perf/moldyat --gpu-forces"
+```
+
+Measured on Intel Xeon @ 2.10 GHz, 4 cores (2 Rayon threads), Linux
+6.18, `perf` profile, with **lavapipe** as the adapter: Mesa's software
+Vulkan, which runs the kernel on the same CPU cores. No hardware GPU was
+available, so this shows the cost of the all-pairs kernel, not what a GPU
+gains. ms/step, median (`gas_10k`: 30 steps, 3 rounds; the others: 5 steps,
+2 rounds):
+
+| Scenario | Balls | CPU total | CPU `forces` | GPU total | GPU `forces` | GPU / CPU total |
+|---|---:|---:|---:|---:|---:|---:|
+| `gas_10k` | 10 000 | 2.70 | 0.52 | 92.6 | 90.0 | 34x |
+| `gas_50k` | 50 000 | 11.9 | 2.70 | 2087 | 2076 | 175x |
+| `gas_100k` | 100 000 | 21.6 | 4.99 | 8857 | 8836 | 410x |
+
+- The CPU's `forces` grows linearly with the ball count (neighbour lists),
+  the all-pairs kernel with its square: 4.3x from 50k to 100k here. A
+  hardware GPU moves the curve down, but all-pairs loses to the neighbour
+  lists from some ball count on whatever the device: at 100k it evaluates
+  10^10 pair distances per step, the CPU about 10^6 listed pairs.
+- At 100k a step is close to the 10 s the backend waits for the GPU
+  (`TIMEOUT` in `thermo_gpu`); beyond it the run falls back to the CPU.
+- So the cell-grid GPU kernel (3x3 cells, like the CPU path) is needed
+  before `--gpu-forces` can pay off for large worlds. Repeat the command
+  above on a hardware GPU to see where all-pairs still wins for small ones.
 
 ## Comparing a branch against the baseline
 

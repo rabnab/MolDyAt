@@ -42,6 +42,16 @@ pub(crate) use crate::test_support::{
     new_main_content_seeded, test_config,
 };
 
+#[cfg(gpu_drift)]
+mod gpu_bridge;
+
+/// With `--cfg gpu_drift` (`scripts/drift_gpu.sh`): put `content` on the
+/// GPU force pass, if there is an adapter. Otherwise nothing.
+pub(crate) fn gpu_forces_if_asked(_content: &mut crate::application::MainContent) {
+    #[cfg(gpu_drift)]
+    gpu_bridge::switch_on(_content);
+}
+
 /// The derived time step limit (#427) of the built-in species `name` on its
 /// own, with the default caps.
 pub(crate) fn time_step_limit_of(name: &str) -> f32 {

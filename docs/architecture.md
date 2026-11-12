@@ -23,6 +23,9 @@ Dependencies point one way: `moldyat_wgpu` → `thermo_ui` →
 `thermo_runtime` → `thermo_physics`, and `thermo_gpu` → `thermo_physics`.
 `thermo_physics` and `thermo_runtime` build and test without a windowing or
 GPU stack: `cargo test -p thermo_physics`, `cargo test -p thermo_runtime`.
+The one exception is opt-in: `scripts/drift_gpu.sh` builds the physics tests
+with `--cfg gpu_drift`, which adds `thermo_gpu` to them
+(`docs/drift-test.md`, On the GPU force pass).
 Only the binary names `thermo_gpu`: it hands `MainContent` the kernel as a
 `PairForceBackend`, the trait `thermo_physics` defines for it.
 
