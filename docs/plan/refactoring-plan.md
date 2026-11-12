@@ -192,7 +192,7 @@ Phase 6 (visuals + tools):          #363, V2, #290, V5, V6, #303, #203, #398, #4
 Phase 7 (performance):              P8a, #386, P4, #250, P6, P8b, #392 (16-byte kernel record only)
 Phase 8 (walls + molecules):        I12, I8b, #405, #409, I9, I10, #406, #407, #408, #421, #422
 Phase 8a (core design debt):        #424, #425, #443, #426, #427, #428, #429, #440, #430, #431
-Phase 9 (GPU compute):              #358, #359, #360, #361
+Phase 9 (GPU compute):              dropped (#357)
 ```
 
 Every ID of §3 is in this order, except these, which need no work of their own:
@@ -220,7 +220,7 @@ GitHub issues (every open issue is in a phase, as of 2026-11-02):
 | 7 | #332 | P8a #344, #386, P4 #345, #250, P6 #346 (hot/cold part), P8b #213, #392 (16-byte kernel record; SoA arrays dropped) | M10 |
 | 8 | #333 | I12 #280, I8b #347, #405, #409, I9 #348, I10 #349, #406, #407, #408, #421, #422                                    | M10 |
 | 8a | #423 | #424, #427, #425, #443, #426, #428, #429, #440, #430, #431                                                         | M10 |
-| 9 | #357 | –                                                                                                                  | #358, #359, #360, #361, M10 |
+| 9 | #357 | – (dropped)                                                                                                        | – |
 
 "Landed" is taken from the commits on `master` (as of 2026-11-02), not from
 the issue states. Every item has an issue except M10, which is part of
@@ -255,19 +255,21 @@ crate work, graphs, visuals, performance and water in two long lists:
   cover what I11 (#350) would have done for N₂ and MB water replaces
   atomistic water, so I11 was closed as not planned.
 - **Phase 8a** pays down the design debt in the physics core found while
-  reviewing the Phase 8 PRs (#423), before Phase 9: one wall-contact model
+  reviewing the Phase 8 PRs (#423): one wall-contact model
   (#424), one interaction model (#425), with one site list per model for
   walls, backstop and renderer (#443) so a new species model stays in its
-  own module, and self-describing saves (#426) make the compute-shader
-  port much easier. Then time step limits from the
+  own module, and self-describing saves (#426). Then time step limits from the
   species (#427), the split of `SimulationWorld` (#428), one kinetics
   helper (#429) and each reported value declared once (#440), after #424
   and #427 because both change values it migrates. The low-priority items,
   one config validation pass (#430) and splitting the energy-plot modules
-  (#431), may be deferred past Phase 9.
-- **Phase 9** ports the Lennard-Jones force pass to wgpu compute shaders
-  (#357): buffers and WGSL setup, the all-pairs kernel, zero-copy
-  rendering, then validation of energy conservation.
+  (#431), may be deferred.
+- **Phase 9** (GPU compute, #357) is dropped. On real hardware the GPU force
+  pass was 18–72× slower than the CPU step, and forces are only ~13 % of a
+  CPU step at 100k balls, so moving the whole step to the GPU would not
+  justify a second implementation of it
+  ([numbers](https://github.com/rabnab/MolDyAt/issues/357#issuecomment-6835335928)).
+  Performance work stays on the CPU (#460).
 - **M10** is not a step of its own: every PR keeps the docs, skills and
   this plan in line with its change, so they never lag behind a phase.
 
@@ -299,7 +301,8 @@ hydrogen bonding, so none of water's characteristic behaviour appears.
 
 ## 6. Assumptions and decisions
 
-- The project stays 2D and CPU-physics (no GPU compute for forces).
+- The project stays 2D and CPU-physics: no GPU compute (Phase 9 measured it
+  and was dropped, #357).
 - Determinism of seeded runs on the same target/profile must be preserved; any
   change that alters results needs a drift baseline update per `docs/drift-test.md`.
 - Persistence files may get a format version bump with migration; old saves keep loading.
