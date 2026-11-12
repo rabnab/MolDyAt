@@ -2,7 +2,7 @@
 # Production code size of a change: lines added and removed per .rs/.wgsl file
 # and in total, without tests (tests/ directories, tests.rs) and fixtures.
 # Inline #[cfg(test)] modules still count. Used by CI (job summary) and before
-# opening a PR (plan-item-workflow skill).
+# opening a PR (issue-workflow skill).
 #
 #   scripts/code_delta.sh         # HEAD against its merge base with origin/master
 #   scripts/code_delta.sh BASE    # HEAD against its merge base with BASE

@@ -22,7 +22,6 @@ description: Rules for creating, moving, rewriting or deleting files in docs/ an
 3. Add a status line under the title, e.g. `Status (YYYY-MM-DD): implemented in #NNN. Items 7 and 9 are still open.`
 4. If the plan holds reference material that is still current (formats, CLI flags, workflows), move that part into a concept doc in `docs/` and link to it from the plan.
 5. Update the concept docs that describe the area so they match the implementation.
-6. In `docs/plan/refactoring-plan.md`, mark landed items in the issue table.
 
 ## After any move, rename or delete
 Update every reference in the same change:

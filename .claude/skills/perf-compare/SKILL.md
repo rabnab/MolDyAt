@@ -1,6 +1,6 @@
 ---
 name: perf-compare
-description: Procedure for measuring and reporting simulation performance - comparing a branch against master with scripts/headless_perf.sh, judging noise, reporting numbers in a PR, and updating docs/perf-baseline.json. Use for performance work (refactoring-plan P items), any change to hot paths (force kernel, neighbour rebuilds, apply pass, cell grid, snapshot), or any claim that something is faster or slower.
+description: Procedure for measuring and reporting simulation performance - comparing a branch against master with scripts/headless_perf.sh, judging noise, reporting numbers in a PR, and updating docs/perf-baseline.json. Use for performance work (#460 and its sub-issues), any change to hot paths (force kernel, neighbour rebuilds, apply pass, cell grid, snapshot), or any claim that something is faster or slower.
 ---
 
 # Performance Comparison

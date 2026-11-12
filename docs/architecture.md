@@ -6,8 +6,9 @@ state: user input reaches the simulation as commands, and the simulation
 reaches the screen as immutable snapshots.
 
 How the layout came about is recorded in
-[refactor_architecture.md](done/refactor_architecture.md); planned changes
-are in [refactoring-plan.md](plan/refactoring-plan.md).
+[refactor_architecture.md](done/refactor_architecture.md) and
+[refactoring-plan.md](done/refactoring-plan.md); the decisions that still
+bind are in [design-decisions.md](design-decisions.md).
 
 ## Crates
 
@@ -666,5 +667,4 @@ flags and fixtures are described in [headless.md](headless.md).
   size, loading) runs through `MainContent`.
 
 `UnifiedRenderState` still exposes a wide API to the backend. It is a facade
-over `RenderStateData` and the orchestrators, and the remaining split of
-that facade is tracked in the refactoring plan.
+over `RenderStateData` and the orchestrators.
