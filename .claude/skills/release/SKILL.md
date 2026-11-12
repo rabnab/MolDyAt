@@ -42,7 +42,7 @@ cargo ci-test-drift
 cargo build --locked -p moldyat_wgpu --profile dist
 target/dist/moldyat --version              # shows the version and the git commit
 ```
-Open the PR, get it reviewed and merged with green CI (see the `plan-item-workflow` skill for the PR steps).
+Open the PR, get it reviewed and merged with green CI (see the `issue-workflow` skill for the PR steps).
 
 ## 4. Tag and publish
 After the merge, on the merge commit of `master`:

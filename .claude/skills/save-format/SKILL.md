@@ -5,7 +5,7 @@ description: Contract for changing what is saved and loaded - the WorldFile JSON
 
 # Save Format Contract
 
-Saves are pretty-printed JSON written by `SaveStore` (`crates/thermo_physics/src/application/persistence/`; Ctrl+S, Ctrl+O, `--load`, `--save-setup`). Plan decision: **old saves keep loading** (`docs/plan/refactoring-plan.md` §6).
+Saves are pretty-printed JSON written by `SaveStore` (`crates/thermo_physics/src/application/persistence/`; Ctrl+S, Ctrl+O, `--load`, `--save-setup`). Design decision: **old saves keep loading** (`docs/design-decisions.md`).
 
 ## Files
 | File | Role |

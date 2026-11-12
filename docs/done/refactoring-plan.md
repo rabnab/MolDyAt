@@ -1,10 +1,10 @@
 # Refactoring Plan: Maintainability, Extensibility, Performance
 
-Status: accepted direction, decisions recorded 2026-10-04 (see §6). Phases
-1–3 have landed, and with M9 the crate split; the remaining work was
-regrouped into Phases 4–8 on 2026-10-23, with every work item and open
-issue assigned to a phase (see §4). Successor to the runtime refactor in
-[refactor_architecture.md](../done/refactor_architecture.md) (#137, landed). The current
+Status (2026-11-12): finished. Phases 1–8a landed; Phase 9 (GPU compute,
+#357) was dropped. The decisions of §6 still apply and are kept in
+[design-decisions.md](../design-decisions.md); performance work continues
+in #460. Successor to the runtime refactor in
+[refactor_architecture.md](refactor_architecture.md) (#137, landed). The current
 structure is described in [architecture.md](../architecture.md).
 
 Goals:

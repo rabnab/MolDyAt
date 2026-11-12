@@ -645,11 +645,11 @@ How the application works:
 * [Headless Mode](docs/headless.md)
 * [Drift Tests](docs/drift-test.md)
 * [Performance Baseline](docs/perf-baseline.md)
+* [Design Decisions](docs/design-decisions.md)
 
-Plans and history:
+History:
 
-* [Refactoring Plan](docs/plan/refactoring-plan.md): open work
-* [`docs/done/`](docs/done/): implemented plans and reviews, kept as history
+* [`docs/done/`](docs/done/): implemented plans and reviews, among them the [Refactoring Plan](docs/done/refactoring-plan.md)
 
 Contributing:
 
