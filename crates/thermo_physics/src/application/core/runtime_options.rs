@@ -26,10 +26,15 @@ pub(crate) struct GpuPass {
 impl GpuPass {
     pub(crate) fn new(backend: Option<Box<dyn PairForceBackend>>) -> Self {
         Self {
+            // Before the first step: what it will try.
+            path: if backend.is_some() {
+                ForcePath::Gpu
+            } else {
+                NO_GPU
+            },
             backend,
             pairs: Vec::new(),
             results: Vec::new(),
-            path: NO_GPU,
         }
     }
 

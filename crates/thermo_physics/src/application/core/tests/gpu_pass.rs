@@ -71,6 +71,7 @@ fn is_cpu(path: Option<ForcePath>) -> bool {
 fn test_gpu_pass_gives_the_cpu_run_within_rounding() {
     let (mut cpu, _) = gas(None);
     let (mut gpu, tables) = gas(Some(false));
+    assert_eq!(gpu.force_path(), Some(ForcePath::Gpu), "before a step");
     for _ in 0..200 {
         assert_eq!(step(&mut cpu), None);
         assert_eq!(step(&mut gpu), Some(ForcePath::Gpu));
