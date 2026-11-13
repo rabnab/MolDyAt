@@ -484,6 +484,63 @@ fn test_density_is_balls_per_area_and_zero_in_empty_cells() {
     assert_eq!(fields.density.get(0, 1), 0.0);
 }
 
+/// The fields do not depend on the number of threads: every cell sums its
+/// balls in ball order, as a serial pass over the balls does.
+#[test]
+fn test_cell_fields_do_not_depend_on_thread_count() {
+    // 7 x 5 cells: the bands of cells are uneven for 2, 3, 4 and 8 threads.
+    let world = Rect::new(0.0, 0.0, 70.0, 50.0);
+    // Pseudo-random numbers in [0, 1).
+    let unit = |i: usize, k: usize| {
+        let mut hash = ((i * 8 + k) as u32).wrapping_mul(2_654_435_761);
+        hash = (hash ^ (hash >> 15)).wrapping_mul(2_246_822_519);
+        ((hash ^ (hash >> 13)) >> 8) as f32 / (1 << 24) as f32
+    };
+    let balls: Vec<Ball2D> = (0..3000)
+        .map(|i| {
+            let pos = Vec2D::new(70.0 * unit(i, 1), 50.0 * unit(i, 2));
+            let v = Vec2D::new(unit(i, 3) - 0.5, unit(i, 4) - 0.5);
+            make_ball(i, pos, v, 0.5 + unit(i, 5))
+        })
+        .collect();
+    let forces: Vec<ForceResult> = (0..balls.len())
+        .map(|i| make_force_result(unit(i, 6) - 0.3))
+        .collect();
+    let fields_with = |threads: usize| {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build()
+            .expect("thread pool")
+            .install(|| compute_cell_fields(&balls, &forces, &world, 5, 7))
+    };
+
+    let one = fields_with(1);
+    // Cell (2, 3), summed serially in ball order.
+    let mut kinetic = LocalKineticStats::new();
+    let mut virial = 0.0;
+    for (ball, force) in balls.iter().zip(&forces) {
+        let pos = ball.get_position();
+        if (pos.x / 10.0).floor() == 3.0 && (pos.y / 10.0).floor() == 2.0 {
+            kinetic.add_ball(ball);
+            virial += force.virial * 0.5;
+        }
+    }
+    let t = kinetic
+        .temperature()
+        .expect("scenario invalid: sparse cell");
+    assert_eq!(one.temperature.get(2, 3).to_bits(), t.to_bits());
+    assert_eq!(
+        one.pressure.get(2, 3).to_bits(),
+        virial_pressure_2d(kinetic.count(), t, virial, 100.0).to_bits()
+    );
+    for threads in [2, 3, 4, 8] {
+        assert!(
+            one == fields_with(threads),
+            "fields differ between 1 and {threads} threads"
+        );
+    }
+}
+
 #[test]
 fn test_flow_velocity_is_the_mass_weighted_mean_velocity() {
     // One cell: (2, 0) with mass 1 and (-1, 3) with mass 2 →
