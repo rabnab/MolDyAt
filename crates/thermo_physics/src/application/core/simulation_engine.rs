@@ -84,11 +84,6 @@ impl SimulationEngine {
         Self::collect_neighbours_by_cell(world, step_config, dt, log_timings);
         Self::update_sim_and_move_balls(world, step_config, dt, &bound_rect, log_timings);
 
-        let mut clock = PhaseClock::start(log_timings);
-        let (sim, balls) = (&mut world.sim, &world.balls);
-        sim.calculate_temperature_from_balls(balls);
-        clock.lap(&mut world.cache.phase_timings, Phase::Thermo);
-
         world.step_count += 1;
         world.cache.phase_timings.steps += 1;
         Ok(())
@@ -124,13 +119,7 @@ impl SimulationEngine {
             cols,
         );
         world.thermo_history.push(fields);
-        // Booked to `thermo` like the global temperature, but logged under
-        // its own name so the two lines of a step can be told apart.
-        clock.lap_as(
-            &mut world.cache.phase_timings,
-            Phase::Thermo,
-            "thermo fields",
-        );
+        clock.lap(&mut world.cache.phase_timings, Phase::Thermo);
     }
 
     pub(crate) fn update_sim(

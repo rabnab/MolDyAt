@@ -170,8 +170,9 @@ headless runs; both step with the configured time step.
    permutes them by `sorted` and renumbers the Verlet lists
    (`Verlet::remap`) and the cached force results; it changes the order of
    f32 sums, so runs with and without it are not bit-identical.
-6. **thermo**: global temperature.
 
+The global temperature and the largest neighbour count are only read by
+snapshots, so `Values::read` computes them when a snapshot is taken.
 While a field overlay is shown, the physics thread also samples the
 per-cell fields (temperature, pressure, density, flow velocity) every
 `THERMO_SAMPLE_STRIDE` steps (see

@@ -9,6 +9,7 @@
 //! (the compiler asks for it) and an entry of the table.
 
 use crate::application::MainContent;
+use crate::application::sim_stats::temperature_and_max_neighbours;
 use crate::objects2d::ball_impl::get_update_hood_call_cnt;
 use std::ops::{Index, IndexMut};
 
@@ -91,6 +92,7 @@ impl Values {
         let sim = &main.world().sim;
         let nets = sim.safety_nets_total;
         let (px, py) = main.wall_momentum();
+        let (temperature, max_neighbours) = temperature_and_max_neighbours(&main.world().balls);
         Self(OBSERVABLES.map(|o| match o.id {
             Obs::Dt => f64::from(main.active_time_step()),
             Obs::KineticEnergy => f64::from(sim.get_kinetic_energy()),
@@ -99,9 +101,8 @@ impl Values {
             Obs::EnergyTotal => sim.total_energy(),
             Obs::WallMomentum => f64::from(px.hypot(py) as f32),
             Obs::HoodUpdates => get_update_hood_call_cnt() as f64,
-            Obs::MaxNeighbours => sim.max_neighbours as f64,
-            // Centre-of-mass frame.
-            Obs::Temperature => f64::from(sim.temperature),
+            Obs::MaxNeighbours => max_neighbours as f64,
+            Obs::Temperature => f64::from(temperature),
             Obs::MaxV => f64::from(sim.max_v),
             Obs::VComX => f64::from(sim.v_com.x),
             Obs::VComY => f64::from(sim.v_com.y),

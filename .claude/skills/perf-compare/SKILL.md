@@ -37,7 +37,7 @@ scripts/perf_ratio.sh perf.json
 | `forces` | SIMD pair forces |
 | `apply` | velocity update, stats, wall overlaps, thermostats |
 | `cells` | source spheres, cell-grid moves, invalid-ball removal |
-| `thermo` | global temperature, per-cell T/P fields |
+| `thermo` | per-cell T/P fields (the global temperature is in `snapshot`) |
 | `snapshot` / `output` | snapshot creation / record writing |
 | `other` | `total` minus the above |
 

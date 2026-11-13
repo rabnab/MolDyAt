@@ -69,7 +69,7 @@ pub struct PhaseTimings {
     pub apply: Duration,
     /// Source spheres, cell grid moves and removal of invalid balls.
     pub cells: Duration,
-    /// Global temperature and the per-cell T/P fields.
+    /// The per-cell T/P fields.
     pub thermo: Duration,
 }
 
@@ -129,12 +129,6 @@ impl PhaseClock {
 
     /// Book the time since the last lap to `phase`.
     pub(crate) fn lap(&mut self, timings: &mut PhaseTimings, phase: Phase) {
-        self.lap_as(timings, phase, phase.label());
-    }
-
-    /// [`Self::lap`] with its own name in the timing log, for a part of a
-    /// phase that is timed separately (the time still goes to `phase`).
-    pub(crate) fn lap_as(&mut self, timings: &mut PhaseTimings, phase: Phase, label: &str) {
         let now = Instant::now();
         let elapsed = now - self.last;
         self.last = now;
@@ -143,7 +137,7 @@ impl PhaseClock {
             log::info!(
                 target: crate::logging::TIMING_TARGET,
                 "{}: {} µs",
-                label,
+                phase.label(),
                 elapsed.as_micros()
             );
         }
@@ -198,7 +192,7 @@ mod tests {
         clock.lap(&mut timings, Phase::Positions);
         std::thread::sleep(Duration::from_millis(2));
         let before_last_lap = Instant::now();
-        clock.lap_as(&mut timings, Phase::Forces, "forces, separately");
+        clock.lap(&mut timings, Phase::Forces);
         let after_last_lap = Instant::now();
 
         assert!(timings.positions >= Duration::from_millis(2));
