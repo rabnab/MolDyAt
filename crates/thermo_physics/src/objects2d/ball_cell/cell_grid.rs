@@ -217,8 +217,7 @@ impl CellGrid {
                 self.cell_start[cell as usize + 1] += 1;
             }
         }
-        // A running sum in a register: summing in place would make every
-        // cell wait for the store of the one before.
+        // Sum in a register: in place, each cell waits for the previous store.
         let mut sum = 0;
         for start in &mut self.cell_start {
             sum += *start;

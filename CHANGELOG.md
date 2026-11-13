@@ -5,6 +5,8 @@ User-visible changes to MolDyAt, newest first. Binaries and full release notes a
 
 ## Unreleased
 
+- Dilute gases step about 10 % faster: the cell grid rebuild no longer stalls on large, mostly
+  empty grids. (#480)
 - Normalise g(r) by the density around each ball so it levels off at 1 where the density varies
   (gravity, chambers): `Alt + M` in the distributions view, `--rdf-local` in headless runs; the
   `rdf` object and records of `--distributions` gain `local_density`. The default is unchanged. (#384)
