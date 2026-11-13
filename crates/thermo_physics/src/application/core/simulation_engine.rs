@@ -150,22 +150,6 @@ impl SimulationEngine {
                 clock.lap(&mut world.cache.phase_timings, Phase::Forces);
 
                 world.sim.wall_distance_checks += sweep_checks;
-                let contacts = scratch
-                    .bounce_infos
-                    .iter()
-                    .map(|b| b.iter().count() as u64 + u64::from(b.impulses))
-                    .sum::<u64>();
-                world.sim.wall_contacts += contacts;
-                // Safety nets of this step (#422); braking and capped pairs
-                // are summed in the apply pass.
-                let mut nets = SafetyNets {
-                    backstop_hits: if world.physics.walls().soft {
-                        contacts
-                    } else {
-                        0
-                    },
-                    ..SafetyNets::default()
-                };
                 let (wall_px, wall_py) = Self::apply_forces_and_collect_stats(
                     world,
                     &scratch.force_results,
@@ -175,6 +159,8 @@ impl SimulationEngine {
                     bound_rect,
                     &mut stats_accumulator,
                 );
+                let contacts = stats_accumulator.contacts;
+                world.sim.wall_contacts += contacts;
 
                 // The previous step's results become the next step's buffer.
                 std::mem::swap(&mut world.cache.force_results, &mut scratch.force_results);
@@ -182,9 +168,17 @@ impl SimulationEngine {
                 let corrections_before = world.sim.wall_overlap_corrections;
                 let (seg_px, seg_py) = world
                     .resolve_wall_overlaps_with(&scratch.obstacles, &mut scratch.overlap_passes);
-                nets.overlap_corrections = world.sim.wall_overlap_corrections - corrections_before;
-                nets.braked = stats_accumulator.braked;
-                nets.capped_pairs = stats_accumulator.capped_pairs / 2;
+                // Safety nets of this step (#422).
+                let nets = SafetyNets {
+                    braked: stats_accumulator.braked,
+                    capped_pairs: stats_accumulator.capped_pairs / 2,
+                    backstop_hits: if world.physics.walls().soft {
+                        contacts
+                    } else {
+                        0
+                    },
+                    overlap_corrections: world.sim.wall_overlap_corrections - corrections_before,
+                };
                 world.sim.safety_nets_step = nets;
                 world.sim.safety_nets_total += nets;
                 world.apply_thermostats(dt, &mut stats_accumulator);
@@ -544,6 +538,7 @@ impl SimulationEngine {
         // momentum difference.
         let kick = (accel + ball.accel).scaled(0.5 * dt);
         let mut v_new = ball.v + kick;
+        stats.contacts += u64::from(bounce_info.impulses) + bounce_info.iter().count() as u64;
         for contact in bounce_info.iter() {
             let normal = contact.normal;
             let v_normal = ball.v.dot(&normal);
@@ -697,6 +692,7 @@ impl SimulationEngine {
             stats_accumulator.sum_mass += chunk.mass;
             stats_accumulator.braked += chunk.braked;
             stats_accumulator.capped_pairs += chunk.capped_pairs;
+            stats_accumulator.contacts += chunk.contacts;
             if stats_accumulator.max_v < chunk.max_v {
                 stats_accumulator.max_v = chunk.max_v;
                 stats_accumulator.max_id = chunk.max_id;
@@ -747,4 +743,6 @@ pub(crate) struct ApplyStats {
     braked: u64,
     /// Capped pair evaluations, each pair counted by both balls (#422).
     capped_pairs: u64,
+    /// Wall contacts and molecule site impulses.
+    contacts: u64,
 }

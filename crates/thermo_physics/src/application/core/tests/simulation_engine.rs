@@ -7,6 +7,7 @@ use super::DT_GOAL;
 use super::create_main_content;
 use crate::application::sim_config::DEFAULT_SPEED_LIMIT_FACTOR;
 use crate::objects2d::Vec2D;
+use crate::objects2d::ball_impl::{Ball2D, SpeciesTable};
 
 #[test]
 fn test_simulation_engine_advances_main_content_state() {
@@ -306,6 +307,64 @@ fn scratch_buffers(main_content: &crate::application::MainContent) -> Vec<(usize
     buffers.extend(forces);
     buffers.extend(world.cell_grid().buffers());
     buffers
+}
+
+/// Every step books each ball's wall contacts plus its molecule site
+/// impulses once to `wall_contacts`, and with soft walls the same count to
+/// `backstop_hits`: atoms falling onto a line wall, and a spinning CO₂ on
+/// the floor whose sites hit it.
+#[test]
+fn test_wall_contacts_count_every_contact_and_site_impulse() {
+    for hard in [true, false] {
+        let (mut main_content, _) = create_main_content();
+        if hard {
+            main_content.use_hard_walls();
+        }
+        main_content.add_line_segment(Vec2D::new(-5.0, -30.0), Vec2D::new(85.0, -30.0));
+        for i in 0..20 {
+            main_content
+                .add_candidate_at_pos(Vec2D::new(4.0 * i as f32, -25.0))
+                .expect("failed to add ball");
+        }
+        for ball in &mut main_content.world_mut().balls {
+            ball.v = Vec2D::new(0.0, -30.0);
+        }
+        let region = main_content.world().world_region();
+        let floor = region.get_br().1.min(region.get_tl().1);
+        let co2 = SpeciesTable::builtin().by_name("CO2_3S").unwrap();
+        let table = main_content.world().species().clone();
+        let id = main_content.world().balls.len() + 1;
+        let mut molecule =
+            Ball2D::of_species(id, Vec2D::new(-20.0, floor + 0.7), co2, table.species(co2));
+        molecule.omega = 3.0;
+        main_content.world_mut().add_ball_and_register(molecule);
+        main_content.collect_neighbours_by_cell(DT_GOAL);
+
+        let (mut contacts, mut impulses) = (0, 0);
+        for step_index in 0..400 {
+            let before = main_content.world().sim.wall_contacts;
+            main_content.simulation_step().unwrap();
+            let world = main_content.world();
+            let bounces = &world.cache.scratch.update.bounce_infos;
+            let expected: u64 = bounces
+                .iter()
+                .map(|b| b.iter().count() as u64 + u64::from(b.impulses))
+                .sum();
+            let label = format!("hard={hard}, step {step_index}");
+            assert_eq!(world.sim.wall_contacts - before, expected, "{label}");
+            let backstop = if hard { 0 } else { expected };
+            assert_eq!(
+                world.sim.safety_nets_step.backstop_hits, backstop,
+                "{label}"
+            );
+            contacts += expected;
+            impulses += bounces.iter().map(|b| u64::from(b.impulses)).sum::<u64>();
+        }
+        if hard {
+            assert!(contacts > impulses, "no atom reached a wall");
+            assert!(impulses > 0, "no molecule site hit a wall");
+        }
+    }
 }
 
 #[test]
