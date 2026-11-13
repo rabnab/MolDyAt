@@ -4,7 +4,10 @@
 
 use crate::objects2d::ball_impl::{Ball2D, ForceResult};
 use crate::objects2d::{Rect, Vec2D};
+use rayon::prelude::*;
 use std::collections::VecDeque;
+
+type BallTerms = ([f32; 5], usize);
 
 /// Center-of-mass-subtracted kinetic statistics for a local region.
 #[derive(Clone, Debug)]
@@ -26,14 +29,33 @@ impl LocalKineticStats {
 
     /// Add one ball to the local kinetic accumulator.
     pub(crate) fn add_ball(&mut self, ball: &Ball2D) {
+        self.add_terms(Self::terms(ball));
+    }
+
+    /// What `ball` adds to the sums: `m`, `m·v`, `m·v²`, its rotational
+    /// energy, and its degrees of freedom.
+    fn terms(ball: &Ball2D) -> BallTerms {
         let mass = ball.mass;
+        (
+            [
+                mass,
+                mass * ball.v.x,
+                mass * ball.v.y,
+                mass * ball.v.norm_sq(),
+                ball.rotational_energy(),
+            ],
+            ball.dof(),
+        )
+    }
+
+    fn add_terms(&mut self, ([m, mvx, mvy, mv2, rotational], dof): BallTerms) {
         self.count += 1;
-        self.sum_m += f64::from(mass);
-        self.sum_mv[0] += f64::from(mass * ball.v.x);
-        self.sum_mv[1] += f64::from(mass * ball.v.y);
-        self.sum_mv2 += f64::from(mass * ball.v.norm_sq());
-        self.sum_dof += ball.dof();
-        self.sum_iw2 += 2.0 * f64::from(ball.rotational_energy());
+        self.sum_m += f64::from(m);
+        self.sum_mv[0] += f64::from(mvx);
+        self.sum_mv[1] += f64::from(mvy);
+        self.sum_mv2 += f64::from(mv2);
+        self.sum_dof += dof;
+        self.sum_iw2 += 2.0 * f64::from(rotational);
     }
 
     /// Thermal degrees of freedom: all of the balls less the 2 of the
@@ -393,18 +415,32 @@ pub fn compute_cell_fields(
 
     let mut stats: Vec<CellStats> = (0..rows * cols).map(|_| CellStats::new()).collect();
 
-    for (ball, fr) in balls.iter().zip(force_results.iter()) {
-        let pos = ball.get_position();
-        let col = ((pos.x - origin_x) / cell_w).floor() as usize;
-        let row = ((pos.y - origin_y) / cell_h).floor() as usize;
-        let col = col.min(cols - 1);
-        let row = row.min(rows - 1);
-        let idx = row * cols + col;
-
-        let cs = &mut stats[idx];
-        cs.kinetic.add_ball(ball);
-        cs.pair_virial += fr.virial * 0.5;
-    }
+    // Reading the balls is parallel; the sums are too, one band of cells
+    // per thread. A band takes its balls in ball order, so every cell sums
+    // as a serial pass does, whatever the number of threads.
+    let binned: Vec<(usize, BallTerms, f32)> = balls
+        .par_iter()
+        .zip(force_results)
+        .map(|(ball, fr)| {
+            let pos = ball.get_position();
+            let col = ((pos.x - origin_x) / cell_w).floor() as usize;
+            let row = ((pos.y - origin_y) / cell_h).floor() as usize;
+            let idx = row.min(rows - 1) * cols + col.min(cols - 1);
+            (idx, LocalKineticStats::terms(ball), fr.virial * 0.5)
+        })
+        .collect();
+    let band = stats.len().div_ceil(rayon::current_num_threads());
+    stats
+        .par_chunks_mut(band)
+        .enumerate()
+        .for_each(|(i, band_stats)| {
+            for &(idx, terms, virial) in &binned {
+                if let Some(cs) = band_stats.get_mut(idx.wrapping_sub(i * band)) {
+                    cs.kinetic.add_terms(terms);
+                    cs.pair_virial += virial;
+                }
+            }
+        });
 
     let cell_area = cell_w * cell_h;
     let mut fields = CellFields::filled(rows, cols, f32::NAN);
