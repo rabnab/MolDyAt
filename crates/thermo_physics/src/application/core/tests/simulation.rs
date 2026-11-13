@@ -3,6 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use super::{DT_GOAL, create_main_content, create_main_content_for_region};
+use crate::application::observables::{Obs, Values};
+use crate::application::sim_stats::temperature_and_max_neighbours;
 use crate::objects2d::ball_impl::{Ball2D, BallFactory, Named};
 use crate::objects2d::{Vec2D, VerboseInfoMode};
 
@@ -119,6 +121,33 @@ fn test_collect_neighbours() {
             "Ball 3 should have no neighbours because it is far from others"
         );
     }
+}
+
+/// The temperature and neighbour count are computed when the values are
+/// read, from the balls as they are then, not from the last step.
+#[test]
+fn test_values_report_temperature_and_max_neighbours_of_current_balls() {
+    let (mut main_content, _win_def) = create_main_content_for_region(-50., 50.);
+    for coord in [(3.0, 3.0), (5.5, 5.5), (15., 15.)] {
+        main_content
+            .add_candidate_at_pos(Vec2D::new(coord.0, coord.1))
+            .unwrap();
+    }
+    main_content.world_mut().step_count = 10;
+    main_content.collect_neighbours_by_cell(DT_GOAL);
+    main_content.collect_neighbours_by_cell(DT_GOAL);
+
+    let before = Values::read(&main_content);
+    let (temperature, _) = temperature_and_max_neighbours(&main_content.world().balls);
+    assert_eq!(before[Obs::MaxNeighbours], 1.0);
+    assert_eq!(before[Obs::Temperature], f64::from(temperature));
+
+    main_content.world_mut().balls[2].v += Vec2D::new(10.0, 0.0);
+
+    let after = Values::read(&main_content);
+    let (temperature, _) = temperature_and_max_neighbours(&main_content.world().balls);
+    assert_eq!(after[Obs::Temperature], f64::from(temperature));
+    assert!(after[Obs::Temperature] > before[Obs::Temperature]);
 }
 
 #[test]

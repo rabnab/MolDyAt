@@ -69,7 +69,7 @@ impl std::ops::AddAssign for SafetyNets {
 
 /// Simulation statistics updated once per physics step.
 ///
-/// Owns energy, temperature, velocity, and timing metrics that are
+/// Owns energy, velocity, and timing metrics that are
 /// accumulated during each step and read by snapshot creation.
 /// Does **not** own frame-render bookkeeping or neighbor-update
 /// scheduling — those responsibilities belong to their respective
@@ -78,7 +78,6 @@ pub struct SimStats {
     /// The last step's energies, summed in f64 over the balls (#421).
     energy_pot: f64,
     energy_kin: f64,
-    pub(super) temperature: f32,
     pub(super) max_v: f32,
     max_id: usize,
     pub(super) v_com: Vec2D,
@@ -91,7 +90,6 @@ pub struct SimStats {
 
     v_pot: VecDeque<f32>,
     v_kin: VecDeque<f32>,
-    pub(super) max_neighbours: usize,
 
     /// Momentum the walls took since the start, summed in f64 (#421): in
     /// f32 a long run's total stops taking the small per-step amounts.
@@ -167,28 +165,6 @@ impl SimStats {
         self.v_com = stats_acumulator.v_com;
     }
 
-    /// Calculate temperature from kinetic energy in center-of-mass frame.
-    /// Temperature is proportional to average kinetic energy per particle relative to COM velocity.
-    /// Also updates max_neighbours count.
-    ///
-    /// # Arguments
-    /// * `v_balls` - Slice of all balls in simulation
-    #[inline]
-    pub(crate) fn calculate_temperature_from_balls(&mut self, v_balls: &[Ball2D]) {
-        let mut kinetic = LocalKineticStats::new();
-        let mut max_neighbours = 0;
-
-        for cur in v_balls {
-            kinetic.add_ball(cur);
-            max_neighbours = max_neighbours.max(cur.cold.hood.get_number_of_neighbors());
-        }
-
-        self.max_neighbours = max_neighbours;
-        // Keep the global temperature definition consistent with thermostats and
-        // thermo-field overlays by using the shared COM-subtracted accumulator.
-        self.temperature = kinetic.temperature().unwrap_or(0.0);
-    }
-
     pub fn get_kinetic_energy(&self) -> f32 {
         self.energy_kin as f32
     }
@@ -217,12 +193,24 @@ impl SimStats {
     }
 }
 
+/// The temperature of `balls` in the centre-of-mass frame (the definition the
+/// thermostats and thermo fields use) and their largest neighbour count. Only
+/// snapshots read them, so they are computed there, not every step.
+pub(crate) fn temperature_and_max_neighbours(balls: &[Ball2D]) -> (f32, usize) {
+    let mut kinetic = LocalKineticStats::new();
+    let mut max_neighbours = 0;
+    for ball in balls {
+        kinetic.add_ball(ball);
+        max_neighbours = max_neighbours.max(ball.cold.hood.get_number_of_neighbors());
+    }
+    (kinetic.temperature().unwrap_or(0.0), max_neighbours)
+}
+
 impl Default for SimStats {
     fn default() -> SimStats {
         SimStats {
             energy_pot: 0.,
             energy_kin: 0.,
-            temperature: 0.,
             max_v: 0.,
             max_id: 0,
             v_com: Vec2D::new(0., 0.),
@@ -231,7 +219,6 @@ impl Default for SimStats {
             pause: false,
             v_pot: VecDeque::with_capacity(100),
             v_kin: VecDeque::with_capacity(100),
-            max_neighbours: 0,
             wall_momentum_x: 0.,
             wall_momentum_y: 0.,
             wall_contacts: 0,
@@ -328,16 +315,21 @@ mod tests {
     }
 
     #[test]
-    fn test_calculate_temperature_matches_shared_com_definition() {
-        let mut stats = SimStats::default();
+    fn test_temperature_and_max_neighbours_matches_shared_com_definition() {
         let balls = vec![
             make_ball(0, Vec2D::new(1.0, 0.0)),
             make_ball(1, Vec2D::new(-1.0, 0.0)),
         ];
 
-        stats.calculate_temperature_from_balls(&balls);
+        let (temperature, max_neighbours) = temperature_and_max_neighbours(&balls);
 
-        assert!((stats.temperature - 1.0).abs() < 1e-5);
+        assert!((temperature - 1.0).abs() < 1e-5);
+        assert_eq!(max_neighbours, 0, "no neighbour lists built");
+    }
+
+    #[test]
+    fn test_temperature_and_max_neighbours_of_no_balls_are_zero() {
+        assert_eq!(temperature_and_max_neighbours(&[]), (0.0, 0));
     }
 
     #[test]

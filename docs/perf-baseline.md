@@ -69,8 +69,8 @@ runner adds `snapshot`, `output` and `total`:
 | `forces` | pair forces (SIMD kernel) |
 | `apply` | velocity update and stats, wall overlaps, thermostats |
 | `cells` | source spheres, cell-grid moves, removal of invalid balls |
-| `thermo` | global temperature and the per-cell T/P fields |
-| `snapshot` | `create_snapshot` |
+| `thermo` | the per-cell T/P fields |
+| `snapshot` | `create_snapshot`, with the global temperature |
 | `output` | writing the snapshot record |
 | `other` | `total` minus all of the above (loop overhead) |
 | `total` | wall clock of the measured steps / steps |

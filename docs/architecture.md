@@ -170,12 +170,14 @@ headless runs; both step with the configured time step.
    permutes them by `sorted` and renumbers the Verlet lists
    (`Verlet::remap`) and the cached force results; it changes the order of
    f32 sums, so runs with and without it are not bit-identical.
-6. **thermo**: global temperature.
+6. **thermo**, after the step and only while a field overlay is shown (and
+   in headless runs): every `THERMO_SAMPLE_STRIDE` steps the physics thread
+   samples the per-cell fields (temperature, pressure, density, flow
+   velocity; see [simulation.md](simulation.md#thermodynamic-grid-space)).
 
-While a field overlay is shown, the physics thread also samples the
-per-cell fields (temperature, pressure, density, flow velocity) every
-`THERMO_SAMPLE_STRIDE` steps (see
-[simulation.md](simulation.md#thermodynamic-grid-space)).
+The global temperature and the largest neighbour count are only read by
+the status lines, so `Values::read` computes them when a snapshot is
+taken, not every step.
 
 ### Renderer state and orchestration
 
