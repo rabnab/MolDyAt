@@ -284,17 +284,21 @@ impl MainContent {
 
 impl SimulationWorld {
     pub(crate) fn remove_invalid_balls(&mut self) {
-        let count = self.balls.len();
+        let invalid = |ball: &Ball2D| {
+            let pos = ball.get_position();
+            pos.x.is_nan() || pos.y.is_nan()
+        };
+        // Invalid balls are rare: the serial `retain` runs only if there is one.
+        if !self.balls.par_iter().any(invalid) {
+            return;
+        }
         self.balls.retain(|ball| {
-            let keep = !ball.get_position().x.is_nan() && !ball.get_position().y.is_nan();
-            if !keep {
+            if invalid(ball) {
                 log::warn!("ball {:?} became invalid. removing", ball);
             }
-            keep
+            !invalid(ball)
         });
-        if self.balls.len() != count {
-            self.balls_changed();
-        }
+        self.balls_changed();
     }
 
     pub(crate) fn is_ball_in_region(&self, pt: &Ball2D) -> bool {

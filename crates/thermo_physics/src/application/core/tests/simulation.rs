@@ -150,6 +150,31 @@ fn test_values_report_temperature_and_max_neighbours_of_current_balls() {
     assert!(after[Obs::Temperature] > before[Obs::Temperature]);
 }
 
+/// Without an invalid ball nothing changes (the neighbour lists stay); a
+/// NaN in one coordinate alone removes the ball.
+#[test]
+fn test_remove_invalid_balls_keeps_lists_unless_a_ball_is_invalid() {
+    let (mut main_content, _win_def) = create_main_content_for_region(-50., 50.);
+    for coord in [(3.0, 3.0), (5.5, 5.5), (15., 15.)] {
+        main_content
+            .add_candidate_at_pos(Vec2D::new(coord.0, coord.1))
+            .unwrap();
+    }
+    main_content.collect_neighbours_by_cell(DT_GOAL);
+    main_content.collect_neighbours_by_cell(DT_GOAL);
+
+    main_content.remove_invalid_balls();
+    let balls = &main_content.world().balls;
+    assert_eq!(balls.len(), 3);
+    assert_eq!(balls[0].cold.hood.get_neighbour_indices(), [1]);
+
+    main_content.world_mut().balls[2].set_position_and_update_tail(Vec2D::new(15.0, f32::NAN));
+    main_content.remove_invalid_balls();
+    let balls = &main_content.world().balls;
+    assert_eq!(balls.len(), 2);
+    assert!(balls[0].cold.hood.get_neighbour_indices().is_empty());
+}
+
 #[test]
 fn test_remove_invalid_balls_clears_neighbor_indices() {
     let (mut main_content, _win_def) = create_main_content_for_region(-50.0, 50.0);
