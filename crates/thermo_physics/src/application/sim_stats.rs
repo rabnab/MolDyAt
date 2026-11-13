@@ -315,15 +315,21 @@ mod tests {
     }
 
     #[test]
-    fn test_calculate_temperature_matches_shared_com_definition() {
+    fn test_temperature_and_max_neighbours_matches_shared_com_definition() {
         let balls = vec![
             make_ball(0, Vec2D::new(1.0, 0.0)),
             make_ball(1, Vec2D::new(-1.0, 0.0)),
         ];
 
-        let (temperature, _) = temperature_and_max_neighbours(&balls);
+        let (temperature, max_neighbours) = temperature_and_max_neighbours(&balls);
 
         assert!((temperature - 1.0).abs() < 1e-5);
+        assert_eq!(max_neighbours, 0, "no neighbour lists built");
+    }
+
+    #[test]
+    fn test_temperature_and_max_neighbours_of_no_balls_are_zero() {
+        assert_eq!(temperature_and_max_neighbours(&[]), (0.0, 0));
     }
 
     #[test]
