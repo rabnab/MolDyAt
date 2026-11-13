@@ -236,6 +236,18 @@ jq -r '.results | group_by(.scenario)[] | .[0] as $a | .[1] as $b
   | "\($a.scenario)\t\($p)\t\($a.ms_per_step[$p].median)\t\($b.ms_per_step[$p].median)\t\(($b.ms_per_step[$p].median / ($a.ms_per_step[$p].median + 1e-12) * 100 - 100) | floor)%"' perf.json
 ```
 
+To compare settings instead of builds, give each binary a `--config` file
+after a colon, e.g. one binary twice:
+
+```bash
+scripts/headless_perf.sh target/perf/moldyat:a.toml target/perf/moldyat:b.toml > perf.json
+```
+
+Each entry's world is seeded with its config (a save carries it) and cached
+under a key that covers the file's content; an entry without a config uses the
+defaults. The report adds a `config` field to such entries, and the ratio
+command above applies unchanged.
+
 In a PR, report the `total` and changed-phase medians of both binaries and
 the machine line from the report. A change is real when it exceeds the
 `spread_pct` of both binaries.

@@ -22,6 +22,7 @@ scripts/headless_perf.sh "$TMPDIR/moldyat-base" target/perf/moldyat > perf.json
 ```
 - Progress goes to stderr; the JSON report (`headless-perf.v2`) to stdout or `OUT`.
 - Narrow or tighten a run with environment variables: `SCENARIOS` (`dilute dense walls_valves box_walls large`), `STEPS` (300), `WARMUP` (50), `RUNS` (5), `THREADS` (default cores - 2), `SNAPSHOT_EVERY` (10). For short scenarios use e.g. `SCENARIOS=dilute STEPS=1000 RUNS=9`. Pin `THREADS` when comparing on a busy machine.
+- To compare config values (cutoff, skin), pass `BINARY:CONFIG.toml` per entry, e.g. the same binary twice; see `docs/perf-baseline.md`. A default change still follows the `physics-change` skill.
 - Seeded worlds are cached in `target/perf-worlds/`; delete the cache when the save format or the seeding changes.
 
 Ratio of medians per scenario and phase:

@@ -12,9 +12,13 @@
 # that are not counted. Binaries alternate within a round, so drift in host
 # load hits all of them; the median over the rounds is reported.
 #
-# Usage: scripts/headless_perf.sh [BINARY...]
+# Usage: scripts/headless_perf.sh [BINARY[:CONFIG]...]
 #   Compare builds by passing several binaries, e.g. a baseline and a new one.
 #   Default: target/perf/moldyat (build with cargo build --profile perf).
+#   Compare settings by giving a --config file (TOML) after a colon, e.g. the
+#   same binary twice: moldyat:default.toml moldyat:fast.toml. The world is
+#   seeded with that config (a save carries it); entries without one use the
+#   defaults. The report names the config of each entry.
 # Environment:
 #   SCENARIOS       scenarios to run (default "dilute dense walls_valves box_walls large")
 #   STEPS           steps per run, warmup included (default 300)
@@ -45,6 +49,13 @@ OUT=${OUT:-}
 
 [ "$#" -gt 0 ] || set -- target/perf/moldyat
 
+bins=()
+cfgs=()
+for arg in "$@"; do
+    bins+=("${arg%%:*}")
+    case $arg in *:*) cfgs+=("${arg#*:}") ;; *) cfgs+=("") ;; esac
+done
+
 # Seeding arguments per scenario. The default world is 112 x 62; --world-scale
 # multiplies both sides. Changing a scenario changes its cache key, but the
 # committed baseline must then be recaptured (docs/perf-baseline.md).
@@ -74,8 +85,9 @@ scenario_args() {
     esac
 }
 
-for bin in "$@"; do
-    [ -x "$bin" ] || { echo "error: $bin is not an executable" >&2; exit 1; }
+for i in "${!bins[@]}"; do
+    [ -x "${bins[$i]}" ] || { echo "error: ${bins[$i]} is not an executable" >&2; exit 1; }
+    [ -z "${cfgs[$i]}" ] || [ -f "${cfgs[$i]}" ] || { echo "error: ${cfgs[$i]} is not a file" >&2; exit 1; }
 done
 
 # Fail on a misspelt scenario before seeding or timing anything.
@@ -86,18 +98,24 @@ done
 run_env=()
 [ -z "$THREADS" ] || run_env=(RAYON_NUM_THREADS="$THREADS")
 
-# Path of the cached world of scenario $1, seeded with binary $2 if missing.
+# Path of the cached world of scenario $1, seeded with binary $2 and the
+# config file $3 (may be empty) if missing. The key covers the config's content.
 scenario_world() {
-    local name=$1 bin=$2 args key dir
+    local name=$1 bin=$2 cfg=$3 args key dir cfg_args=()
     args=$(scenario_args "$name") || return 1
     args="$args --rng-seed $SEED --dt $DT"
-    key=$(echo "$args" | cksum | cut -d' ' -f1)
+    key=$args
+    if [ -n "$cfg" ]; then
+        cfg_args=(--config "$cfg")
+        key="$args $(cksum <"$cfg")"
+    fi
+    key=$(echo "$key" | cksum | cut -d' ' -f1)
     dir="$CACHE_DIR/$name-$key"
     if ! ls "$dir"/*.json >/dev/null 2>&1; then
-        echo "seeding $name ($args) ..." >&2
+        echo "seeding $name ($args ${cfg_args[*]:-}) ..." >&2
         mkdir -p "$dir"
         # shellcheck disable=SC2086
-        env ${run_env[@]+"${run_env[@]}"} "$bin" --headless --steps 1 $args --save-setup \
+        env ${run_env[@]+"${run_env[@]}"} "$bin" --headless --steps 1 $args ${cfg_args[@]+"${cfg_args[@]}"} --save-setup \
             --save-dir "$dir" --no-stdout --output /dev/null >/dev/null 2>&1 || {
             echo "error: seeding $name with $bin failed" >&2
             rm -rf "$dir"
@@ -122,12 +140,15 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
 for name in $SCENARIOS; do
-    world=$(scenario_world "$name" "$1")
+    worlds=()
+    for b in "${!bins[@]}"; do
+        worlds[b]=$(scenario_world "$name" "${bins[0]}" "${cfgs[$b]}")
+    done
     for round in $(seq "$RUNS"); do
-        for b in $(seq "$#"); do
-            bin=${!b}
+        for b in "${!bins[@]}"; do
+            bin=${bins[$b]}
             out="$tmp/$name.$b.$round.json"
-            env ${run_env[@]+"${run_env[@]}"} "$bin" --headless --load "$world" --dt "$DT" --steps "$STEPS" \
+            env ${run_env[@]+"${run_env[@]}"} "$bin" --headless --load "${worlds[$b]}" --dt "$DT" --steps "$STEPS" \
                 --timing-warmup "$WARMUP" --snapshot-every "$SNAPSHOT_EVERY" \
                 --timings "$out" --no-stdout --output /dev/null >/dev/null 2>&1 || {
                 echo "error: $bin failed on $name" >&2
@@ -152,11 +173,11 @@ report() {
     printf '  "results": [\n'
     local first=1 name b bin
     for name in $SCENARIOS; do
-        for b in $(seq "$#"); do
-            bin=${!b}
+        for b in "${!bins[@]}"; do
+            bin=${bins[$b]}
             [ "$first" = 1 ] || printf ',\n'
             first=0
-            cat "$tmp/$name.$b".*.json | awk -v scenario="$name" \
+            cat "$tmp/$name.$b".*.json | awk -v scenario="$name" -v config="$(json_escape "${cfgs[$b]}")" \
                 -v bin="$(json_escape "$bin")" -v profile="$(profile_of "$bin")" '
                 function num(key,   m) {
                     if (!match($0, "\"" key "\":[-0-9.eE+]+")) return 0
@@ -188,6 +209,7 @@ report() {
                 }
                 END {
                     printf "    {\"scenario\": \"%s\", \"binary\": \"%s\", \"commit\": \"%s\", \"profile\": \"%s\", ", scenario, bin, commit, profile
+                    if (config != "") printf "\"config\": \"%s\", ", config
                     printf "\"balls\": %d, \"wall_pieces\": %d, \"valves\": %d, \"threads\": %d, \"steps\": %d, \"runs\": %d,\n", \
                         balls, walls, valves, threads, steps, runs
                     printf "     \"ms_per_step\": {"
