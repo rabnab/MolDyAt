@@ -159,6 +159,8 @@ impl SimulationEngine {
                     bound_rect,
                     &mut stats_accumulator,
                 );
+                let contacts = stats_accumulator.contacts;
+                world.sim.wall_contacts += contacts;
 
                 // The previous step's results become the next step's buffer.
                 std::mem::swap(&mut world.cache.force_results, &mut scratch.force_results);
@@ -166,8 +168,6 @@ impl SimulationEngine {
                 let corrections_before = world.sim.wall_overlap_corrections;
                 let (seg_px, seg_py) = world
                     .resolve_wall_overlaps_with(&scratch.obstacles, &mut scratch.overlap_passes);
-                let contacts = stats_accumulator.contacts;
-                world.sim.wall_contacts += contacts;
                 // Safety nets of this step (#422).
                 let nets = SafetyNets {
                     braked: stats_accumulator.braked,
@@ -538,9 +538,8 @@ impl SimulationEngine {
         // momentum difference.
         let kick = (accel + ball.accel).scaled(0.5 * dt);
         let mut v_new = ball.v + kick;
-        stats.contacts += u64::from(bounce_info.impulses);
+        stats.contacts += u64::from(bounce_info.impulses) + bounce_info.iter().count() as u64;
         for contact in bounce_info.iter() {
-            stats.contacts += 1;
             let normal = contact.normal;
             let v_normal = ball.v.dot(&normal);
             let kick_normal = kick.dot(&normal);
