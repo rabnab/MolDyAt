@@ -5,6 +5,8 @@ User-visible changes to MolDyAt, newest first. Binaries and full release notes a
 
 ## Unreleased
 
+- Large and dense worlds step about 10 % faster: the temperature in the status lines is computed
+  when they update, not every step. (#481)
 - Dilute gases step about 10 % faster: the cell grid rebuild no longer stalls on large, mostly
   empty grids. (#480)
 - Normalise g(r) by the density around each ball so it levels off at 1 where the density varies
