@@ -289,6 +289,8 @@ pub(crate) struct StatsAccumulator {
     pub(crate) braked: u64,
     /// Capped pair evaluations this step, each pair counted by both balls.
     pub(crate) capped_pairs: u64,
+    /// Wall contacts and molecule site impulses this step.
+    pub(crate) contacts: u64,
 }
 
 #[cfg(test)]
