@@ -33,6 +33,26 @@ fn species(name: &str) -> SpeciesId {
     SpeciesTable::builtin().by_name(name).unwrap()
 }
 
+/// The stored list radius of every pair is its cutoff plus the skin, also
+/// after the skin factor changes.
+#[test]
+fn test_list_radius_is_cutoff_plus_skin_for_every_pair() {
+    let table = SpeciesTable::builtin();
+    for physics in [
+        BallPhysics::default(),
+        BallPhysics::default().with_skin_factor(0.35),
+    ] {
+        let skin = physics.get_skin_thickness();
+        for a in table.ids() {
+            for b in table.ids() {
+                assert_eq!(physics.list_radius(a, b), physics.cutoff(a, b) + skin);
+            }
+        }
+    }
+    let wide = BallPhysics::default().with_skin_factor(0.35);
+    assert!(wide.list_radius(N2, N2) > BallPhysics::default().list_radius(N2, N2));
+}
+
 fn approx(a: f32, b: f32, eps: f32) {
     assert!(
         (a - b).abs() <= eps * (1.0 + a.abs().max(b.abs())),
