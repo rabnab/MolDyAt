@@ -44,8 +44,6 @@ pub(crate) struct StepScratch {
     pub(crate) update: UpdateScratch,
     /// Buffers of the neighbour-list rebuild.
     pub(crate) rebuild: RebuildScratch,
-    /// Neighbour statistics of each ball.
-    pub(crate) neighbour_stats: Vec<NeighbourStats>,
 }
 
 #[derive(Default)]
@@ -74,6 +72,10 @@ pub(crate) struct RebuildScratch {
     pub(crate) to_rebuild: Vec<(usize, usize, usize)>,
     /// The new lists, installed in ball order.
     pub(crate) rebuilds: Vec<HoodRebuild>,
+    /// The balls whose list the rebuilds changed, sorted.
+    pub(crate) changed: Vec<usize>,
+    /// Neighbour statistics of each ball in `changed`.
+    pub(crate) neighbour_stats: Vec<NeighbourStats>,
 }
 
 impl SimulationWorld {

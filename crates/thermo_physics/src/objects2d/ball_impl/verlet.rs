@@ -231,14 +231,22 @@ impl Verlet {
     /// removed. Partner updates are idempotent (a partner holds this ball
     /// exactly when this ball holds the partner, and both sides compute the
     /// same distance), so applying the rebuilds of one pass in any order gives
-    /// the same lists.
-    pub(crate) fn apply_rebuild(rebuild: HoodRebuild, physics: &BallPhysics, balls: &mut [Ball2D]) {
+    /// the same lists. The balls whose list it changes (marked `hood_dirty`)
+    /// are appended to `changed`.
+    pub(crate) fn apply_rebuild(
+        rebuild: HoodRebuild,
+        physics: &BallPhysics,
+        balls: &mut [Ball2D],
+        changed: &mut Vec<usize>,
+    ) {
         let HoodRebuild {
             ball_idx,
             neighbours,
             added,
             removed,
         } = rebuild;
+        changed.push(ball_idx);
+        changed.extend(removed.iter().chain(&added));
         for removed_idx in removed {
             Self::unlink_partner(balls, removed_idx, ball_idx);
         }
@@ -356,7 +364,7 @@ impl Verlet {
             return;
         }
         let rebuild = Self::rebuild(ball_idx, candidates, physics, balls);
-        Self::apply_rebuild(rebuild, physics, balls);
+        Self::apply_rebuild(rebuild, physics, balls, &mut Vec::new());
     }
 }
 
