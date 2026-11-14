@@ -112,14 +112,13 @@ pub struct Ball2D {
 
 /// The part of a ball kept out of line: the neighbour list (read once per
 /// ball in the force pass and the rebuild, through its own heap buffer
-/// anyway), the tail of verbose balls and the update counter.
+/// anyway) and the tail of verbose balls.
 #[derive(Default)]
 pub(crate) struct BallCold {
     pub(crate) hood: Verlet,
     /// Position history, kept only while the ball is verbose (allocated
     /// lazily; `None` otherwise).
     tail: Option<VecDeque<Vec2D>>,
-    show_update_count: usize,
     /// While `Ball2D::leaving_wall` with soft walls: how strongly the line
     /// walls act on the ball, growing from 0 to 1 over `WALL_RAMP_TIME`.
     pub(crate) wall_ramp: f32,
@@ -133,7 +132,6 @@ impl Default for Ball2D {
     fn default() -> Ball2D {
         let mut ball = Ball2D::new(0, Vec2D::zero(), DEFAULT_SPECIES);
         ball.pre_update_pos = Vec2D::zero();
-        ball.last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
         ball
     }
 }
@@ -172,8 +170,9 @@ impl Ball2D {
     }
 
     /// A ball of species `species` (with the data `data` of that species, from
-    /// the world's table) at rest. Sets pre_update_pos and
-    /// last_update_hood_pos to the initial position.
+    /// the world's table) at rest, without a neighbour list:
+    /// `last_update_hood_pos` at infinity makes the next rebuild pass build
+    /// one.
     pub(crate) fn of_species(id: BallId, pos: Vec2D, species: SpeciesId, data: &Species) -> Ball2D {
         Ball2D {
             contact_radius: data.contact_radius(),
@@ -191,7 +190,7 @@ impl Ball2D {
             braking: false,
             pre_update_pos: pos,
             accel: Vec2D::zero(),
-            last_update_hood_pos: pos,
+            last_update_hood_pos: Vec2D::new(f32::INFINITY, f32::INFINITY),
             leaving_wall: false,
             cold: Box::default(),
         }
@@ -253,26 +252,12 @@ impl Ball2D {
         self.braking
     }
 
-    /// Reset the "show update" counter after a neighborhood (Verlet list) update.
-    ///
-    /// This also clears the tail so that the rendered trajectory only represents
-    /// movement **since the last neighborhood update**, not the full history.
-    /// Callers relying on long-lived trajectory visuals should be aware that
-    /// invoking this method will drop the existing tail points.
-    pub(crate) fn reset_update_counter(&mut self) {
-        self.cold.show_update_count = 200;
+    /// Clear the tail at a neighbour-list rebuild, so the rendered trajectory
+    /// shows the movement since that rebuild only.
+    pub(crate) fn clear_tail(&mut self) {
         if let Some(tail) = self.cold.tail.as_mut() {
             tail.clear();
         }
-    }
-
-    pub(crate) fn decrement_update_counter(&mut self) {
-        let count = &mut self.cold.show_update_count;
-        *count = count.saturating_sub(1);
-    }
-
-    pub fn get_update_counter(&self) -> usize {
-        self.cold.show_update_count
     }
 
     /// Rotational half of the velocity-Verlet drift (#348):

@@ -10,8 +10,6 @@ use crate::objects2d::ball_impl::{BallPhysics, UPDATE_HOOD_CNT};
 use crate::objects2d::vec_2d::Vec2D;
 use std::sync::atomic::Ordering;
 
-const UPDATE_FREQ: usize = 100000; //basically deactivate update by frequency
-
 /// A ball's rebuilt neighbour list (sorted by index) and the partners added
 /// or removed against its previous list. Produced by `Verlet::rebuild`,
 /// installed by `Verlet::apply_rebuild`.
@@ -27,8 +25,6 @@ pub(crate) struct Verlet {
     pub(crate) neighbours: Vec<usize>,
     pub nearest: f32,
     pub farthest: f32,
-    updates_frequency: usize,
-    pub(crate) updates_since_refresh: usize,
     pub(crate) num_neighbours: usize,
     pub(crate) hood_dirty: bool,
 }
@@ -39,8 +35,6 @@ impl Default for Verlet {
             neighbours: Vec::new(),
             nearest: f32::NAN,
             farthest: f32::NAN,
-            updates_frequency: UPDATE_FREQ,
-            updates_since_refresh: UPDATE_FREQ, //initialize with same for instant refresh on creation
             num_neighbours: 0,
             hood_dirty: true, // Initialize as dirty so stats are computed on first frame
         }
@@ -130,45 +124,19 @@ impl Verlet {
         min_movement_threshold * min_movement_threshold < travel_since_last_upd_sq
     }
 
-    /// Check if this ball's neighbor list needs rebuilding.
-    /// Triggers update if refresh frequency reached or ball moved too far.
-    ///
-    /// # Arguments
-    /// * `ball` - Ball to check
-    /// * `dt` - Time step
-    /// * `min_movement_threshold` - Movement threshold for update
-    ///
-    /// # Returns
-    /// `true` if neighbor list should be rebuilt
-    pub(crate) fn needs_update_hood(
-        &self,
-        ball: &Ball2D,
-        dt: f32,
-        min_movement_threshold: f32,
-    ) -> bool {
-        if self.updates_since_refresh >= self.updates_frequency {
-            return true;
-        }
-        Self::has_ball_moved_enough(ball, dt, min_movement_threshold)
-    }
-
-    /// Per-step bookkeeping for one ball. Returns whether its list must be
-    /// rebuilt; if so, records the rebuild position. Touches only `ball`, so
-    /// it can run for all balls in parallel; callers log verbose balls.
+    /// Whether the list of `ball` must be rebuilt; if so, records the
+    /// rebuild position. Decided from the ball's hot data alone (a ball
+    /// without a list has `last_update_hood_pos` at infinity), and touches
+    /// only `ball`, so it can run for all balls in parallel; callers log
+    /// verbose balls.
     pub(crate) fn begin_update(ball: &mut Ball2D, dt: f32, min_movement_threshold: f32) -> bool {
-        let needs_update = ball
-            .cold
-            .hood
-            .needs_update_hood(ball, dt, min_movement_threshold);
-        ball.cold.hood.updates_since_refresh += 1;
-        ball.decrement_update_counter();
-        if !needs_update {
+        if !Self::has_ball_moved_enough(ball, dt, min_movement_threshold) {
             return false;
         }
 
         UPDATE_HOOD_CNT.fetch_add(1, Ordering::Relaxed);
         ball.last_update_hood_pos = *ball.get_position();
-        ball.reset_update_counter();
+        ball.clear_tail();
         true
     }
 
@@ -264,7 +232,6 @@ impl Verlet {
 
         let hood = &mut balls[ball_idx].cold.hood;
         hood.neighbours = neighbours;
-        hood.updates_since_refresh = 0;
         // Mark the hood as dirty since neighbors were updated
         hood.hood_dirty = true;
     }
