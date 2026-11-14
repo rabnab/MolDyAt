@@ -5,6 +5,8 @@ User-visible changes to MolDyAt, newest first. Binaries and full release notes a
 
 ## Unreleased
 
+- Faster steps in large and dense worlds (about 10–15 % at 50 000 balls and more): the neighbour
+  statistics are updated only for the balls whose neighbour list changed. (#491)
 - The temperature in the status lines is computed when they update, not every step; this saves
   about 4 ms per step on very large worlds (200,000 balls). (#481)
 - Dilute gases step about 10 % faster: the cell grid rebuild no longer stalls on large, mostly

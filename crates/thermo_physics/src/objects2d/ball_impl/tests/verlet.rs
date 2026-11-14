@@ -513,7 +513,7 @@ fn test_parallel_style_rebuild_matches_serial_update_hood() {
             .map(|&idx| Verlet::rebuild(idx, &all, &physics, &batched))
             .collect();
         for rebuild in rebuilds {
-            Verlet::apply_rebuild(rebuild, &physics, &mut batched);
+            Verlet::apply_rebuild(rebuild, &physics, &mut batched, &mut Vec::new());
         }
 
         for (s, b) in serial.iter().zip(&batched) {

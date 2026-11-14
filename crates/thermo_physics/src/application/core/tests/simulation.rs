@@ -150,6 +150,43 @@ fn test_values_report_temperature_and_max_neighbours_of_current_balls() {
     assert!(after[Obs::Temperature] > before[Obs::Temperature]);
 }
 
+/// The neighbour statistics follow every changed list: the rebuilt ball's
+/// and those of its partners, which do not rebuild themselves.
+#[test]
+fn test_neighbour_statistics_follow_rebuilt_balls_and_their_partners() {
+    let (mut main_content, _win_def) = create_main_content_for_region(-50., 50.);
+    for coord in [(3.0, 3.0), (5.5, 5.5), (15., 15.)] {
+        main_content
+            .add_candidate_at_pos(Vec2D::new(coord.0, coord.1))
+            .unwrap();
+    }
+    main_content.collect_neighbours_by_cell(DT_GOAL);
+    let counts = |main_content: &crate::application::MainContent| -> Vec<usize> {
+        let balls = &main_content.world().balls;
+        assert!(balls.iter().all(|ball| !ball.cold.hood.hood_dirty));
+        balls
+            .iter()
+            .map(|ball| ball.cold.hood.get_number_of_neighbors())
+            .collect()
+    };
+    assert_eq!(counts(&main_content), [1, 1, 0]);
+
+    let move_ball_2 = |main_content: &mut crate::application::MainContent, to: Vec2D| {
+        let world = main_content.world_mut();
+        world.balls[2].set_position_and_update_tail(to);
+        world.cache.cell_grid.rebuild(&world.balls);
+        main_content.collect_neighbours_by_cell(DT_GOAL);
+    };
+    // Only ball 2 moves: it alone rebuilds, and becomes a partner of both.
+    move_ball_2(&mut main_content, Vec2D::new(4.0, 4.0));
+    assert_eq!(counts(&main_content), [2, 2, 2]);
+    let nearest = main_content.world().balls[0].cold.hood.nearest;
+    assert!((nearest - 2.0_f32.sqrt()).abs() < 1e-6, "{nearest}");
+
+    move_ball_2(&mut main_content, Vec2D::new(15.0, 15.0));
+    assert_eq!(counts(&main_content), [1, 1, 0]);
+}
+
 /// Without an invalid ball nothing changes (the neighbour lists stay); a
 /// NaN in one coordinate alone removes the ball.
 #[test]
