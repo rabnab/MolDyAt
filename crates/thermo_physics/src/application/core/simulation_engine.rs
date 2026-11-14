@@ -47,7 +47,6 @@ impl SimulationEngine {
         {
             let mut clock = PhaseClock::start(log_timings);
             Self::update_neighbor_hoods_for_occupied_cells(world, dt);
-            Self::update_neighbor_statistics(world);
             clock.lap(&mut world.cache.phase_timings, Phase::Neighbours);
         }
     }
@@ -327,32 +326,28 @@ impl SimulationEngine {
             })
             .collect_into_vec(rebuilds);
 
+        let changed = &mut scratch.changed;
+        changed.clear();
         for rebuild in rebuilds.drain(..) {
-            Verlet::apply_rebuild(rebuild, physics, &mut world.balls);
+            Verlet::apply_rebuild(rebuild, physics, &mut world.balls, changed);
         }
+        changed.sort_unstable();
+        changed.dedup();
+        Self::update_neighbor_statistics(world, changed, &mut scratch.neighbour_stats);
     }
 
-    fn update_neighbor_statistics(world: &mut SimulationWorld) {
-        world.with_scratch(
-            |s| &mut s.neighbour_stats,
-            Self::update_neighbor_statistics_into,
-        );
-    }
-
-    fn update_neighbor_statistics_into(
+    /// Statistics of the lists the rebuilds changed (`changed`, in ball
+    /// order): no other list is dirty after a step.
+    fn update_neighbor_statistics(
         world: &mut SimulationWorld,
+        changed: &[usize],
         stats: &mut Vec<NeighbourStats>,
     ) {
         let balls = &world.balls;
-        (0..balls.len())
-            .into_par_iter()
-            .map(|i| {
+        changed
+            .par_iter()
+            .map(|&i| {
                 let ball = &balls[i];
-
-                if !ball.cold.hood.hood_dirty {
-                    return (i, 0, f32::NAN, f32::NAN, false);
-                }
-
                 let ball_pos = *ball.get_position();
                 let neighbour_indices = ball.cold.hood.get_neighbour_indices();
                 let verbose_lines = ball.verbose.lines();
@@ -371,18 +366,16 @@ impl SimulationEngine {
             .collect_into_vec(stats);
 
         for &(i, num_neighbours, nearest, farthest, should_toggle) in stats.iter() {
-            if world.balls[i].cold.hood.hood_dirty {
-                let ball_hood = &mut world.balls[i].cold.hood;
-                ball_hood.num_neighbours = num_neighbours;
-                ball_hood.nearest = nearest;
-                ball_hood.farthest = farthest;
-                ball_hood.hood_dirty = false;
+            let ball_hood = &mut world.balls[i].cold.hood;
+            ball_hood.num_neighbours = num_neighbours;
+            ball_hood.nearest = nearest;
+            ball_hood.farthest = farthest;
+            ball_hood.hood_dirty = false;
 
-                if should_toggle {
-                    world.balls[i].verbose.toggle_other_neighbour();
-                }
-                log_util::log_closeness_update(&world.balls[i]);
+            if should_toggle {
+                world.balls[i].verbose.toggle_other_neighbour();
             }
+            log_util::log_closeness_update(&world.balls[i]);
         }
     }
 
