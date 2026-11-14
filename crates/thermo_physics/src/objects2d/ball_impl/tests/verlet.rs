@@ -48,19 +48,20 @@ fn test_update_closeness_stats() {
     assert!((v.farthest - 5.0).abs() < 1e-6);
 }
 
+/// A new ball has no list and asks for one whatever the threshold; after
+/// that only its movement since the rebuild counts, for any number of steps.
 #[test]
-fn test_needs_update_hood_thresholds() {
-    let mut v = Verlet::new();
-    // Simulate that the ball was just updated by resetting updates_since_refresh
-    v.updates_since_refresh = 0;
-
+fn test_begin_update_builds_a_new_balls_list_then_follows_its_movement() {
     let mut ball = Ball2D::new(1, Vec2D::zero(), DEFAULT_SPECIES);
-    ball.last_update_hood_pos = Vec2D::new(0.0, 0.0);
+    assert!(Verlet::begin_update(&mut ball, 0.01, 10.0));
+    assert_eq!(ball.last_update_hood_pos, Vec2D::zero());
+
     ball.v = Vec2D::new(1.0, 0.0);
-    // With small dt and high threshold -> false
-    assert!(!v.needs_update_hood(&ball, 0.01, 10.0));
-    // With larger dt -> true
-    assert!(v.needs_update_hood(&ball, 1.0, 0.5));
+    for _ in 0..3 {
+        assert!(!Verlet::begin_update(&mut ball, 0.01, 10.0));
+    }
+    // With a larger dt the ball moves beyond the threshold.
+    assert!(Verlet::begin_update(&mut ball, 1.0, 0.5));
 }
 
 #[test]
