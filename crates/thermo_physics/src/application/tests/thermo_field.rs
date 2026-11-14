@@ -484,6 +484,34 @@ fn test_density_is_balls_per_area_and_zero_in_empty_cells() {
     assert_eq!(fields.density.get(0, 1), 0.0);
 }
 
+/// `record` reuses the grids of the sample that leaves the window. It must
+/// give what pushing freshly computed fields gives, also when a cell that
+/// held balls in the recycled sample is empty in the new one.
+#[test]
+fn test_record_with_recycled_grids_matches_pushing_fresh_fields() {
+    // 20 x 10 world: 1 x 2 cells.
+    let world = Rect::new(0.0, 0.0, 20.0, 10.0);
+    let moving = |x: f32, vx: f32| make_ball(0, Vec2D::new(x, 5.0), Vec2D::new(vx, 1.0), 1.0);
+    let samples = [
+        vec![moving(2.0, 1.0), moving(4.0, -2.0), moving(15.0, 3.0)],
+        vec![moving(12.0, 1.0), moving(14.0, 4.0)],
+        vec![],
+        vec![moving(3.0, 2.0), moving(16.0, -1.0), moving(17.0, 5.0)],
+        vec![moving(13.0, 0.5)],
+    ];
+    let mut recorded = ThermoFieldHistory::with_window(2);
+    let mut pushed = ThermoFieldHistory::with_window(2);
+    for (i, balls) in samples.iter().enumerate() {
+        let forces: Vec<ForceResult> = (0..balls.len())
+            .map(|k| make_force_result(0.5 + k as f32))
+            .collect();
+        recorded.record(balls, &forces, &world);
+        pushed.push(compute_cell_fields(balls, &forces, &world, 0, 0));
+        assert!(recorded.average() == pushed.average(), "sample {i}");
+        assert_eq!(recorded.len(), pushed.len());
+    }
+}
+
 /// The fields do not depend on the number of threads: every cell sums its
 /// balls in ball order, as a serial pass over the balls does.
 #[test]

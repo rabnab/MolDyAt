@@ -393,32 +393,61 @@ pub fn compute_cell_fields(
     grid_rows: usize,
     grid_cols: usize,
 ) -> CellFields {
+    let shape = if grid_rows == 0 || grid_cols == 0 {
+        thermo_grid_dims(world_rect.w, world_rect.h)
+    } else {
+        (grid_rows, grid_cols)
+    };
+    let mut scratch = ThermoScratch::default();
+    CellFields::from_grids(cell_grids(
+        balls,
+        force_results,
+        world_rect,
+        shape,
+        &mut scratch,
+        None,
+    ))
+}
+
+/// Working data of [`cell_grids`], kept between samples for its capacity.
+#[derive(Default)]
+struct ThermoScratch {
+    stats: Vec<CellStats>,
+    /// Cell, summands and half virial of each ball.
+    binned: Vec<(usize, BallTerms, f32)>,
+}
+
+/// The source grids of [`compute_cell_fields`] for a grid of `rows` x
+/// `cols`, written into `recycled` (grids of that shape) if given.
+fn cell_grids(
+    balls: &[Ball2D],
+    force_results: &[ForceResult],
+    world_rect: &Rect,
+    (rows, cols): (usize, usize),
+    scratch: &mut ThermoScratch,
+    recycled: Option<[ThermoGrid; CELL_FIELD_COUNT]>,
+) -> [ThermoGrid; CELL_FIELD_COUNT] {
     assert_eq!(
         balls.len(),
         force_results.len(),
         "balls and force_results must have the same length"
     );
 
-    let ww = world_rect.w.abs();
-    let wh = world_rect.h.abs();
-    let (rows, cols) = if grid_rows == 0 || grid_cols == 0 {
-        thermo_grid_dims(ww, wh)
-    } else {
-        (grid_rows, grid_cols)
-    };
-    let cell_w = ww / cols as f32;
-    let cell_h = wh / rows as f32;
+    let cell_w = world_rect.w.abs() / cols as f32;
+    let cell_h = world_rect.h.abs() / rows as f32;
 
     // Top-left corner in world space (account for negative h)
     let origin_x = world_rect.x.min(world_rect.x + world_rect.w);
     let origin_y = world_rect.y.min(world_rect.y + world_rect.h);
 
-    let mut stats: Vec<CellStats> = (0..rows * cols).map(|_| CellStats::new()).collect();
+    let ThermoScratch { stats, binned } = scratch;
+    stats.clear();
+    stats.resize_with(rows * cols, CellStats::new);
 
     // Reading the balls is parallel; the sums are too, one band of cells
     // per thread. A band takes its balls in ball order, so every cell sums
     // as a serial pass does, whatever the number of threads.
-    let binned: Vec<(usize, BallTerms, f32)> = balls
+    balls
         .par_iter()
         .zip(force_results)
         .map(|(ball, fr)| {
@@ -428,13 +457,13 @@ pub fn compute_cell_fields(
             let idx = row.min(rows - 1) * cols + col.min(cols - 1);
             (idx, LocalKineticStats::terms(ball), fr.virial * 0.5)
         })
-        .collect();
+        .collect_into_vec(binned);
     let band = stats.len().div_ceil(rayon::current_num_threads());
     stats
         .par_chunks_mut(band)
         .enumerate()
         .for_each(|(i, band_stats)| {
-            for &(idx, terms, virial) in &binned {
+            for &(idx, terms, virial) in binned.iter() {
                 if let Some(cs) = band_stats.get_mut(idx.wrapping_sub(i * band)) {
                     cs.kinetic.add_terms(terms);
                     cs.pair_virial += virial;
@@ -443,27 +472,23 @@ pub fn compute_cell_fields(
         });
 
     let cell_area = cell_w * cell_h;
-    let mut fields = CellFields::filled(rows, cols, f32::NAN);
-
-    for r in 0..rows {
-        for c in 0..cols {
-            let cs = &stats[r * cols + c];
-            fields
-                .density
-                .set(r, c, cs.kinetic.count() as f32 / cell_area);
-            if let Some(v) = cs.kinetic.flow_velocity() {
-                fields.set_flow_velocity(r, c, v.x, v.y);
-            }
-            let Some(t) = cs.kinetic.temperature() else {
-                continue;
-            };
-            let p = virial_pressure_2d(cs.kinetic.count(), t, cs.pair_virial, cell_area);
-            fields.temperature.set(r, c, t);
-            fields.pressure.set(r, c, p);
-        }
+    let mut grids = recycled
+        .unwrap_or_else(|| std::array::from_fn(|_| ThermoGrid::filled(rows, cols, f32::NAN)));
+    let [temperature, pressure, density, velocity_x, velocity_y] = &mut grids;
+    // Every cell of every grid is written: recycled grids keep nothing.
+    for (i, cs) in stats.iter().enumerate() {
+        let count = cs.kinetic.count();
+        density.data[i] = count as f32 / cell_area;
+        let velocity = cs.kinetic.flow_velocity();
+        velocity_x.data[i] = velocity.map_or(f32::NAN, |v| v.x);
+        velocity_y.data[i] = velocity.map_or(f32::NAN, |v| v.y);
+        let t = cs.kinetic.temperature();
+        temperature.data[i] = t.unwrap_or(f32::NAN);
+        pressure.data[i] = t.map_or(f32::NAN, |t| {
+            virial_pressure_2d(count, t, cs.pair_virial, cell_area)
+        });
     }
-
-    fields
+    grids
 }
 
 /// Steps between two T/P field samples (#229). Binning every ball into the
@@ -494,6 +519,7 @@ pub struct ThermoFieldHistory {
     shape: (usize, usize),
     sums: [Vec<f32>; CELL_FIELD_COUNT],
     counts: [Vec<u32>; CELL_FIELD_COUNT],
+    scratch: ThermoScratch,
 }
 
 impl Default for ThermoFieldHistory {
@@ -516,6 +542,7 @@ impl ThermoFieldHistory {
             shape: (0, 0),
             sums: Default::default(),
             counts: Default::default(),
+            scratch: Default::default(),
         }
     }
 
@@ -544,18 +571,38 @@ impl ThermoFieldHistory {
     /// If the grid shape differs from the stored shape, the entire history
     /// is cleared before inserting.
     pub fn push(&mut self, fields: CellFields) {
-        let new_shape = fields.shape();
-        let new_len = new_shape.0 * new_shape.1;
+        self.make_room(fields.shape());
         // Only the source grids are kept: the flow speed is derived again
         // from the averaged velocity.
-        let grids = fields.into_grids();
-        debug_assert!(
-            grids
-                .iter()
-                .all(|g| g.shape() == new_shape && g.data.len() == new_len),
-            "every field must have the same shape"
-        );
+        self.insert(fields.into_grids());
+    }
 
+    /// Sample the fields of `balls` on the grid of `world_rect` (see
+    /// [`compute_cell_fields`]) and push them. Allocates nothing once the
+    /// window is full: the sample takes the grids of the one that leaves.
+    pub(crate) fn record(
+        &mut self,
+        balls: &[Ball2D],
+        force_results: &[ForceResult],
+        world_rect: &Rect,
+    ) {
+        let shape = thermo_grid_dims(world_rect.w, world_rect.h);
+        let recycled = self.make_room(shape);
+        let grids = cell_grids(
+            balls,
+            force_results,
+            world_rect,
+            shape,
+            &mut self.scratch,
+            recycled,
+        );
+        self.insert(grids);
+    }
+
+    /// Prepare for a sample of `new_shape`: start afresh if the shape
+    /// changed, and take the oldest sample out of a full window.
+    fn make_room(&mut self, new_shape: (usize, usize)) -> Option<[ThermoGrid; CELL_FIELD_COUNT]> {
+        let new_len = new_shape.0 * new_shape.1;
         if new_shape != self.shape {
             self.clear();
             self.shape = new_shape;
@@ -564,14 +611,23 @@ impl ThermoFieldHistory {
             self.reset_accumulators(new_len);
         }
 
-        if self.buffer.len() == self.window
-            && let Some(old) = self.buffer.pop_front()
-        {
-            for ((grid, sums), counts) in old.iter().zip(&mut self.sums).zip(&mut self.counts) {
-                Self::remove_grid(grid, sums, counts);
-            }
+        if self.buffer.len() < self.window {
+            return None;
         }
+        let old = self.buffer.pop_front()?;
+        for ((grid, sums), counts) in old.iter().zip(&mut self.sums).zip(&mut self.counts) {
+            Self::remove_grid(grid, sums, counts);
+        }
+        Some(old)
+    }
 
+    fn insert(&mut self, grids: [ThermoGrid; CELL_FIELD_COUNT]) {
+        debug_assert!(
+            grids
+                .iter()
+                .all(|g| g.shape() == self.shape && g.data.len() == self.sums[0].len()),
+            "every field must have the same shape"
+        );
         for ((grid, sums), counts) in grids.iter().zip(&mut self.sums).zip(&mut self.counts) {
             Self::add_grid(grid, sums, counts);
         }

@@ -8,9 +8,7 @@ use super::wall_forces::{molecule_backstop, soft_wall_force};
 use super::{RuntimeOptions, SimulationWorld, StatsAccumulator, StepConfig};
 use crate::application::phase_timings::{Phase, PhaseClock};
 use crate::application::sim_stats::SafetyNets;
-use crate::application::thermo_field::{
-    THERMO_SAMPLE_STRIDE, compute_cell_fields, thermo_grid_dims,
-};
+use crate::application::thermo_field::THERMO_SAMPLE_STRIDE;
 use crate::application::{AppResult, log_util};
 use crate::logging::log_update_hood_start;
 use crate::objects2d::ball_impl::ball_core::{Ball2D, BounceInfo};
@@ -109,15 +107,9 @@ impl SimulationEngine {
         let mut clock = PhaseClock::start(log_timings);
         // The per-cell fields have a grid of their own, sized from the
         // world only (#290, docs/simulation.md, Thermodynamic Grid Space).
-        let (rows, cols) = thermo_grid_dims(world.world_rect.w, world.world_rect.h);
-        let fields = compute_cell_fields(
-            &world.balls,
-            &world.cache.force_results,
-            &world.world_rect,
-            rows,
-            cols,
-        );
-        world.thermo_history.push(fields);
+        world
+            .thermo_history
+            .record(&world.balls, &world.cache.force_results, &world.world_rect);
         clock.lap(&mut world.cache.phase_timings, Phase::Thermo);
     }
 
