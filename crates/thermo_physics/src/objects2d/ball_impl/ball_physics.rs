@@ -129,6 +129,8 @@ pub struct BallPhysics {
     /// Cutoff of each species pair, row-major: the largest of its pair
     /// potential and interactions.
     cutoff: Vec<f32>,
+    /// [`Self::list_radius`] of each species pair, row-major.
+    list_radius: Vec<f32>,
     species_count: usize,
 }
 
@@ -211,9 +213,11 @@ impl BallPhysics {
             wall_release: Vec::new(),
             contact,
             cutoff,
+            list_radius: Vec::new(),
             species_count: species.len(),
         }
         .with_walls(WallSettings::hard())
+        .with_skin_factor(DEFAULT_SKIN_FACTOR)
     }
 
     /// The same physics with the wall model `walls`. A `σ_ii` or `ε_ii`
@@ -310,6 +314,8 @@ impl BallPhysics {
     /// reference cutoff.
     pub(crate) fn with_skin_factor(mut self, skin_factor: f32) -> Self {
         self.skin_factor = skin_factor;
+        let skin = self.get_skin_thickness();
+        self.list_radius = self.cutoff.iter().map(|cutoff| cutoff + skin).collect();
         self
     }
 
@@ -347,8 +353,9 @@ impl BallPhysics {
 
     /// Centre distance below which a pair of `a` and `b` is listed as
     /// neighbours: its cutoff plus the skin.
+    #[inline]
     pub(crate) fn list_radius(&self, a: SpeciesId, b: SpeciesId) -> f32 {
-        self.cutoff(a, b) + self.get_skin_thickness()
+        self.list_radius[a.index() * self.species_count + b.index()]
     }
 
     /// Largest [`Self::list_radius`] over the pairs of `present`; the cell
