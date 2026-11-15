@@ -347,6 +347,7 @@ impl CellFields {
     }
 
     /// The averaged (source) grids, in the order of [`Self::from_grids`].
+    #[cfg(test)]
     fn into_grids(self) -> [ThermoGrid; CELL_FIELD_COUNT] {
         [
             self.temperature,
@@ -378,15 +379,11 @@ impl CellFields {
 /// Averaged grids in [`CellFields`] (all but the derived flow speed).
 const CELL_FIELD_COUNT: usize = 5;
 
-/// Compute the per-cell fields from ball state and force results.
-///
-/// `grid_rows` and `grid_cols` specify the grid dimensions; when either is
-/// zero the function uses [`thermo_grid_dims`] of `world_rect`, the grid the
+/// One sample of [`cell_grids`] as fields, for tests. A zero `grid_rows` or
+/// `grid_cols` selects [`thermo_grid_dims`] of `world_rect`, the grid the
 /// simulation records.
-///
-/// Cells with fewer than 2 balls have no temperature or pressure (NaN),
-/// empty cells no velocity (NaN); the density is always finite.
-pub fn compute_cell_fields(
+#[cfg(test)]
+pub(crate) fn compute_cell_fields(
     balls: &[Ball2D],
     force_results: &[ForceResult],
     world_rect: &Rect,
@@ -417,8 +414,12 @@ struct ThermoScratch {
     binned: Vec<(usize, BallTerms, f32)>,
 }
 
-/// The source grids of [`compute_cell_fields`] for a grid of `rows` x
-/// `cols`, written into `recycled` (grids of that shape) if given.
+/// The source grids of the per-cell fields, computed from ball state and
+/// force results for a grid of `rows` x `cols`, written into `recycled`
+/// (grids of that shape) if given.
+///
+/// Cells with fewer than 2 balls have no temperature or pressure (NaN),
+/// empty cells no velocity (NaN); the density is always finite.
 fn cell_grids(
     balls: &[Ball2D],
     force_results: &[ForceResult],
@@ -558,7 +559,7 @@ impl ThermoFieldHistory {
         self.buffer.is_empty()
     }
 
-    /// Discard all buffered grids so the next `push` starts fresh.
+    /// Discard all buffered grids so the next sample starts fresh.
     pub(crate) fn clear(&mut self) {
         self.buffer.clear();
         self.shape = (0, 0);
@@ -568,26 +569,17 @@ impl ThermoFieldHistory {
         }
     }
 
-    /// Push a new sample of every field into the ring buffer.
-    ///
-    /// If the grid shape differs from the stored shape, the entire history
-    /// is cleared before inserting.
-    pub fn push(&mut self, fields: CellFields) {
+    /// Push given fields as a sample, for tests.
+    #[cfg(test)]
+    pub(crate) fn push(&mut self, fields: CellFields) {
         self.make_room(fields.shape());
-        // Only the source grids are kept: the flow speed is derived again
-        // from the averaged velocity.
         self.insert(fields.into_grids());
     }
 
     /// Sample the fields of `balls` on the grid of `world_rect` (see
-    /// [`compute_cell_fields`]) and push them. Allocates nothing once the
+    /// [`thermo_grid_dims`]) and push them. Allocates nothing once the
     /// window is full: the sample takes the grids of the one that leaves.
-    pub(crate) fn record(
-        &mut self,
-        balls: &[Ball2D],
-        force_results: &[ForceResult],
-        world_rect: &Rect,
-    ) {
+    pub fn record(&mut self, balls: &[Ball2D], force_results: &[ForceResult], world_rect: &Rect) {
         let shape = thermo_grid_dims(world_rect.w, world_rect.h);
         let recycled = self.make_room(shape);
         let grids = cell_grids(

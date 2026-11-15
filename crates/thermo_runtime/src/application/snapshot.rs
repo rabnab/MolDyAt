@@ -229,7 +229,7 @@ fn build_thermo_snapshot_fields(world: &SimulationWorld) -> (CellFields, Option<
     };
     let region = world.world_region();
     let (rows, cols) = cells.shape();
-    // The same top-left derivation as `compute_cell_fields`, so the spec
+    // The same top-left derivation as `ThermoFieldHistory::record`, so the spec
     // origin matches the binning origin.
     let spec = ThermoGridSpec {
         rows,

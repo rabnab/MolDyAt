@@ -500,7 +500,6 @@ fn the_thermo_grid_has_the_same_resolution_for_any_species() {
 fn test_strided_thermo_average_matches_per_step_average() {
     use crate::application::thermo_field::{
         THERMO_SAMPLE_STRIDE, THERMO_WINDOW, THERMO_WINDOW_STEPS, ThermoFieldHistory,
-        compute_cell_fields,
     };
 
     // The same run averaged two ways over the same 1000 steps: every step
@@ -514,18 +513,14 @@ fn test_strided_thermo_average_matches_per_step_average() {
     for step in 1..=THERMO_WINDOW_STEPS {
         mc.simulation_step().unwrap();
         let world = mc.world();
-        let fields = || {
-            compute_cell_fields(
-                world.balls(),
-                world.cached_force_results(),
-                &world.world_rect(),
-                0,
-                0,
-            )
-        };
-        every_step.push(fields());
+        let (balls, forces, rect) = (
+            world.balls(),
+            world.cached_force_results(),
+            world.world_rect(),
+        );
+        every_step.record(balls, forces, &rect);
         if step.is_multiple_of(THERMO_SAMPLE_STRIDE) {
-            strided.push(fields());
+            strided.record(balls, forces, &rect);
         }
     }
 
