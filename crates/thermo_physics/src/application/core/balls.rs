@@ -289,14 +289,16 @@ impl SimulationWorld {
             pos.x.is_nan() || pos.y.is_nan()
         };
         // Invalid balls are rare: the serial `retain` runs only if there is one.
-        if !self.balls.par_iter().any(invalid) {
+        // `with_min_len` keeps small worlds on one thread.
+        if !self.balls.par_iter().with_min_len(16384).any(invalid) {
             return;
         }
         self.balls.retain(|ball| {
-            if invalid(ball) {
+            let bad = invalid(ball);
+            if bad {
                 log::warn!("ball {:?} became invalid. removing", ball);
             }
-            !invalid(ball)
+            !bad
         });
         self.balls_changed();
     }
