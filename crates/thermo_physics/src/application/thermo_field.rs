@@ -429,7 +429,9 @@ pub fn compute_cell_fields(
             (idx, LocalKineticStats::terms(ball), fr.virial * 0.5)
         })
         .collect();
-    let band = stats.len().div_ceil(rayon::current_num_threads());
+    // Every band reads all records, so more bands than this only add
+    // memory traffic.
+    let band = stats.len().div_ceil(rayon::current_num_threads().min(4));
     stats
         .par_chunks_mut(band)
         .enumerate()

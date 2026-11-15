@@ -488,7 +488,7 @@ fn test_density_is_balls_per_area_and_zero_in_empty_cells() {
 /// balls in ball order, as a serial pass over the balls does.
 #[test]
 fn test_cell_fields_do_not_depend_on_thread_count() {
-    // 7 x 5 cells: the bands of cells are uneven for 2, 3, 4 and 8 threads.
+    // 7 x 5 cells: the bands of cells are uneven for 2, 3 and 4 threads.
     let world = Rect::new(0.0, 0.0, 70.0, 50.0);
     // Pseudo-random numbers in [0, 1).
     let unit = |i: usize, k: usize| {
