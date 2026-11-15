@@ -337,7 +337,7 @@ impl SimulationEngine {
     }
 
     /// Statistics of the lists the rebuilds changed (`changed`, in ball
-    /// order): no other list is dirty after a step.
+    /// order); the statistics of every other list are still valid.
     fn update_neighbor_statistics(
         world: &mut SimulationWorld,
         changed: &[usize],
@@ -370,7 +370,6 @@ impl SimulationEngine {
             ball_hood.num_neighbours = num_neighbours;
             ball_hood.nearest = nearest;
             ball_hood.farthest = farthest;
-            ball_hood.hood_dirty = false;
 
             if should_toggle {
                 world.balls[i].verbose.toggle_other_neighbour();

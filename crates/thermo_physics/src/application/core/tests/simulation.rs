@@ -162,9 +162,9 @@ fn test_neighbour_statistics_follow_rebuilt_balls_and_their_partners() {
     }
     main_content.collect_neighbours_by_cell(DT_GOAL);
     let counts = |main_content: &crate::application::MainContent| -> Vec<usize> {
-        let balls = &main_content.world().balls;
-        assert!(balls.iter().all(|ball| !ball.cold.hood.hood_dirty));
-        balls
+        main_content
+            .world()
+            .balls
             .iter()
             .map(|ball| ball.cold.hood.get_number_of_neighbors())
             .collect()

@@ -278,137 +278,30 @@ fn test_update_hood_removes_distant_neighbors() {
     );
 }
 
+/// `apply_rebuild` reports the rebuilt ball and the partners it adds or
+/// removes, not the partners it keeps.
 #[test]
-fn test_hood_dirty_flag_initialized_true() {
-    // Test that hood_dirty is initialized to true so stats are computed on first frame
-    let v = Verlet::new();
-    assert!(
-        v.hood_dirty,
-        "hood_dirty should be initialized to true for first-frame stats computation"
-    );
-}
-
-#[test]
-fn test_hood_dirty_flag_set_when_neighbor_added() {
-    // Test that hood_dirty is set to true when a neighbor is added
+fn test_apply_rebuild_reports_the_rebuilt_ball_and_its_changed_partners() {
     let physics = BallPhysics::default();
+    let far = Vec2D::new(list_radius(&physics) + 10.0, 0.0);
+    let mut balls = vec![
+        make_ball(0, Vec2D::new(0.0, 0.0)),
+        make_ball(1, Vec2D::new(1.0, 0.0)),
+        make_ball(2, Vec2D::new(0.0, 1.0)),
+    ];
+    let rebuild_ball_0 = |balls: &mut Vec<Ball2D>| {
+        let mut changed = Vec::new();
+        let rebuild = Verlet::rebuild(0, &[1, 2], &physics, balls);
+        Verlet::apply_rebuild(rebuild, &physics, balls, &mut changed);
+        changed.sort_unstable();
+        changed
+    };
 
-    let mut ball0 = make_ball(0, Vec2D::new(0.0, 0.0));
-    let mut ball1 = make_ball(1, Vec2D::new(1.0, 0.0));
+    assert_eq!(rebuild_ball_0(&mut balls), [0, 1, 2]);
 
-    ball0.last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
-    ball1.last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
-
-    let mut balls = vec![ball0, ball1];
-
-    // Initially, hood_dirty should be true
-    assert!(balls[0].cold.hood.hood_dirty);
-    assert!(balls[1].cold.hood.hood_dirty);
-
-    // Perform update_hood which adds a neighbor
-    Verlet::update_hood(0, 0.01, &[1], &physics, 0.1, &mut balls);
-
-    // After update, hood_dirty should still be true (marks as dirty when neighbors change)
-    assert!(
-        balls[0].cold.hood.hood_dirty,
-        "Ball 0's hood_dirty should be true after update_hood"
-    );
-    assert!(
-        balls[1].cold.hood.hood_dirty,
-        "Ball 1's hood_dirty should be true since it was added as inverse neighbor"
-    );
-}
-
-#[test]
-fn test_hood_dirty_flag_set_when_neighbor_removed() {
-    // Test that hood_dirty is set to true when a neighbor is removed
-    let physics = BallPhysics::default();
-    let list_radius = list_radius(&physics);
-
-    let mut ball0 = make_ball(0, Vec2D::new(0.0, 0.0));
-    let mut ball1 = make_ball(1, Vec2D::new(1.0, 0.0));
-
-    ball0.last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
-    ball1.last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
-
-    let mut balls = vec![ball0, ball1];
-
-    // First, add a neighbor
-    Verlet::update_hood(0, 0.01, &[1], &physics, 0.1, &mut balls);
-    assert!(balls[0].cold.hood.neighbours.contains(&1));
-
-    // Simulate resetting hood_dirty to false (as would happen after stats computation)
-    balls[0].cold.hood.hood_dirty = false;
-    balls[1].cold.hood.hood_dirty = false;
-
-    // Move ball 1 far away and update
-    balls[1].set_position_and_update_tail(Vec2D::new(list_radius + 0.5, 0.0));
-    balls[0].last_update_hood_pos = Vec2D::new(f32::INFINITY, f32::INFINITY);
-
-    // Perform update_hood which removes the neighbor
-    Verlet::update_hood(0, 0.01, &[1], &physics, 0.1, &mut balls);
-
-    // After removal, hood_dirty should be true again
-    assert!(
-        balls[0].cold.hood.hood_dirty,
-        "Ball 0's hood_dirty should be true after neighbor removal"
-    );
-    assert!(
-        balls[1].cold.hood.hood_dirty,
-        "Ball 1's hood_dirty should be true since it was removed as inverse neighbor"
-    );
-}
-
-#[test]
-fn test_hood_dirty_flag_tracks_neighbor_changes_correctly() {
-    // Test that hood_dirty correctly tracks whether any neighbor changes occurred
-    let mut v = Verlet::new();
-
-    // After initialization, hood_dirty is true
-    assert!(v.hood_dirty);
-
-    // Manually reset it (simulating that stats were just computed)
-    v.hood_dirty = false;
-    assert!(!v.hood_dirty);
-
-    // Add a neighbor
-    v.add_neighbour(1);
-
-    // Manually set hood_dirty as update_hood would (in a real scenario)
-    v.hood_dirty = true;
-    assert!(v.hood_dirty);
-
-    // Remove the neighbor
-    v.remove(1);
-
-    // Again set hood_dirty
-    v.hood_dirty = true;
-    assert!(v.hood_dirty);
-
-    // Clear and verify
-    v.clear_neighbours();
-    assert!(v.neighbours.is_empty());
-}
-
-#[test]
-fn test_hood_dirty_independent_per_ball() {
-    // Test that hood_dirty flag is independent for each ball
-    let mut v1 = Verlet::new();
-    let mut v2 = Verlet::new();
-
-    // Both start as dirty
-    assert!(v1.hood_dirty);
-    assert!(v2.hood_dirty);
-
-    // Modify one
-    v1.hood_dirty = false;
-    assert!(!v1.hood_dirty);
-    assert!(v2.hood_dirty); // v2 should still be dirty
-
-    // Modify the other
-    v2.hood_dirty = false;
-    assert!(!v1.hood_dirty);
-    assert!(!v2.hood_dirty);
+    balls[2].set_position_and_update_tail(far);
+    assert_eq!(rebuild_ball_0(&mut balls), [0, 2]);
+    assert_eq!(balls[0].cold.hood.neighbours, vec![1]);
 }
 
 #[test]
@@ -446,7 +339,6 @@ fn test_update_hood_keeps_lists_sorted_and_symmetric() {
             "ball {}",
             partner.get_id()
         );
-        assert!(partner.cold.hood.hood_dirty);
     }
 
     // Ball 3 leaves: ball 0 drops it and ball 3 drops ball 0.

@@ -30,7 +30,6 @@ pub(crate) struct Verlet {
     updates_frequency: usize,
     pub(crate) updates_since_refresh: usize,
     pub(crate) num_neighbours: usize,
-    pub(crate) hood_dirty: bool,
 }
 
 impl Default for Verlet {
@@ -42,7 +41,6 @@ impl Default for Verlet {
             updates_frequency: UPDATE_FREQ,
             updates_since_refresh: UPDATE_FREQ, //initialize with same for instant refresh on creation
             num_neighbours: 0,
-            hood_dirty: true, // Initialize as dirty so stats are computed on first frame
         }
     }
 }
@@ -231,8 +229,8 @@ impl Verlet {
     /// removed. Partner updates are idempotent (a partner holds this ball
     /// exactly when this ball holds the partner, and both sides compute the
     /// same distance), so applying the rebuilds of one pass in any order gives
-    /// the same lists. The balls whose list it changes (marked `hood_dirty`)
-    /// are appended to `changed`.
+    /// the same lists. The balls whose list it changes are appended to
+    /// `changed`.
     pub(crate) fn apply_rebuild(
         rebuild: HoodRebuild,
         physics: &BallPhysics,
@@ -248,7 +246,7 @@ impl Verlet {
         changed.push(ball_idx);
         changed.extend(removed.iter().chain(&added));
         for removed_idx in removed {
-            Self::unlink_partner(balls, removed_idx, ball_idx);
+            balls[removed_idx].cold.hood.remove(ball_idx);
         }
         for neighbour_idx in added {
             let (ball, partner) = (&balls[ball_idx], &balls[neighbour_idx]);
@@ -257,23 +255,12 @@ impl Verlet {
                 let radius = physics.list_radius(ball.species(), partner.species());
                 logging::log_neighbour_add(ball, partner, dist_sq, radius * radius);
             }
-            let partner_hood = &mut balls[neighbour_idx].cold.hood;
-            partner_hood.add_neighbour(ball_idx);
-            partner_hood.hood_dirty = true;
+            balls[neighbour_idx].cold.hood.add_neighbour(ball_idx);
         }
 
         let hood = &mut balls[ball_idx].cold.hood;
         hood.neighbours = neighbours;
         hood.updates_since_refresh = 0;
-        // Mark the hood as dirty since neighbors were updated
-        hood.hood_dirty = true;
-    }
-
-    /// Remove `ball_idx` from the list of its former neighbour `partner_idx`.
-    fn unlink_partner(balls: &mut [Ball2D], partner_idx: usize, ball_idx: usize) {
-        let partner_hood = &mut balls[partner_idx].cold.hood;
-        partner_hood.remove(ball_idx);
-        partner_hood.hood_dirty = true;
     }
 
     /// Compute neighbor statistics from a list of indices and ball positions.
