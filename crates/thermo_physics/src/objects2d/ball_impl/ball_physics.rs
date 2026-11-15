@@ -129,7 +129,9 @@ pub struct BallPhysics {
     /// Cutoff of each species pair, row-major: the largest of its pair
     /// potential and interactions.
     cutoff: Vec<f32>,
-    /// [`Self::list_radius`] of each species pair, row-major.
+    /// [`Self::list_radius`] of each species pair, row-major. Filled by
+    /// `with_skin_factor`; anything else that changes `cutoff` or the cap
+    /// settings' cutoff factor has to refill it.
     list_radius: Vec<f32>,
     species_count: usize,
 }
