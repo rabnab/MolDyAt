@@ -128,6 +128,11 @@ impl Verlet {
     /// only `ball`, so it can run for all balls in parallel; callers log
     /// verbose balls.
     pub(crate) fn begin_update(ball: &mut Ball2D, dt: f32, min_movement_threshold: f32) -> bool {
+        // A NaN compares false below, so the ball would never get a list.
+        debug_assert!(
+            !ball.last_update_hood_pos.x.is_nan() && !ball.last_update_hood_pos.y.is_nan(),
+            "NaN list position"
+        );
         if !Self::has_ball_moved_enough(ball, dt, min_movement_threshold) {
             return false;
         }
