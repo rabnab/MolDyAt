@@ -32,6 +32,7 @@ and `--world-scale` multiplies both sides.
 | `walls_valves` | 20 000 | 8 | 4 | 4 walls (thickness 2), 1 closed and 2 open valves; wall sweep and overlap passes |
 | `box_walls` | 6 000 | 4 | 8 | hot gas in a small box: about 3x the world-wall contacts per step of `dilute`; wall contacts and wall momentum bookkeeping (in `positions`) |
 | `large` | 200 000 | 28 | 2 | ball data far beyond the cache, memory-bound |
+| `mixed_sizes` | 20 000 | 6 | 4 | one `XL` per 400 `N2` (`--seed-species`): the coarse grid of wide species. Not in the default `SCENARIOS` or the baseline; name it to run it |
 
 How a run works:
 

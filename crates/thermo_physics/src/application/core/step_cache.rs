@@ -44,7 +44,7 @@ impl StepCache {
     pub(crate) fn new(world_rect: Rect, physics: &BallPhysics) -> AppResult<Self> {
         let species_present = SpeciesSet::default();
         Ok(Self {
-            cell_grid: CellGrid::new(world_rect, physics.max_list_radius(species_present))?,
+            cell_grid: CellGrid::new(world_rect, physics.grid_radii(species_present))?,
             species_present,
             kernel_points: Default::default(),
             force_results: Vec::new(),
@@ -73,23 +73,22 @@ impl SimulationWorld {
     pub fn rebuild_cell_grid(&mut self) {
         let cache = &mut self.cache;
         cache.species_present = self.balls.iter().map(Ball2D::species).collect();
-        let list_radius = self.physics.max_list_radius(cache.species_present);
-        if list_radius != cache.cell_grid.list_radius()
-            || cache.cell_grid.world_rect() != self.world_rect
+        let radii = self.physics.grid_radii(cache.species_present);
+        if radii != cache.cell_grid.list_radii() || cache.cell_grid.world_rect() != self.world_rect
         {
-            cache.cell_grid = CellGrid::new(self.world_rect, list_radius)
+            cache.cell_grid = CellGrid::new(self.world_rect, radii)
                 .expect("Failed to create cell grid for the species present");
         }
         cache.cell_grid.rebuild(&self.balls);
     }
 
     /// Rebuild the grid if the species added since the last rebuild need
-    /// wider cells than it has, so the 3x3 cells around a ball still cover all
-    /// its neighbours. Call only while every ball is registered in the cell of
+    /// other cells than it has, so the cells searched around a ball still
+    /// cover all its neighbours. Call only while every ball is registered in the cell of
     /// its position (not between a position update and the grid moves).
     pub(crate) fn fit_cell_grid(&mut self) {
         let cache = &self.cache;
-        if self.physics.max_list_radius(cache.species_present) > cache.cell_grid.list_radius() {
+        if self.physics.grid_radii(cache.species_present) != cache.cell_grid.list_radii() {
             self.rebuild_cell_grid();
         }
     }

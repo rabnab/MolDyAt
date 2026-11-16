@@ -17,19 +17,20 @@
 //! left of or above it they clamp into the edge cells) and the reach comes from the
 //! species present ([`SimulationWorld::is_ball_colliding_in_grid`]).
 //!
-//! The lookup is exact only when every ball the candidate can collide with
-//! lies in those 3x3 cells: a collision needs a centre distance below the
+//! The lookup is exact because every ball the candidate can collide with
+//! lies in the cells searched: a collision needs a centre distance below the
 //! pair's contact distance plus the margin (the "reach";
-//! `BallPhysics::contact_distance` follows pair overrides), and a ball two or
-//! more cells away along an axis is at least one cell size away along it. When the reach
-//! does not fit in a cell, or the candidate is outside the grid, the check
-//! falls back to the full scan.
+//! `BallPhysics::contact_distance` follows pair overrides), and a ball `n + 1`
+//! or more cells away along an axis is at least `n` cell sizes away along it.
+//! When the reach does not fit in a cell (large balls among small ones, whose
+//! cells stay small), more cells are searched (`CellGrid::reach`). A candidate
+//! outside the grid falls back to the full scan.
 
 use super::SimulationWorld;
 use crate::objects2d::ball_impl::Ball2D;
 
-/// Keep the reach this far below the cell size, so float rounding in the cell
-/// index can never move a reachable ball out of the 3x3 cells.
+/// Keep the reach this far below a whole number of cells, so float rounding
+/// in the cell index can never move a reachable ball out of the cells searched.
 const CELL_SLACK: f32 = 1e-4;
 
 /// Built once per batch of placements; see the module docs.
@@ -97,8 +98,8 @@ impl SimulationWorld {
         self.is_ball_colliding_near(candidate, margin, outside.map(|&b| b as usize))
     }
 
-    /// The 3x3 cells around `candidate` plus `orphans` (balls the grid does
-    /// not hold at their position); the full scan where that is not exact.
+    /// The cells within reach of `candidate` plus `orphans` (balls the grid
+    /// does not hold at their position); the full scan outside the grid.
     fn is_ball_colliding_near(
         &self,
         candidate: &Ball2D,
@@ -113,23 +114,11 @@ impl SimulationWorld {
             .map(|s| self.physics.contact_distance(candidate.species(), s))
             .fold(0.0, f32::max)
             + margin;
-        let (num_rows, num_cols) = grid.get_grid_size();
-        let (cellsize_x, cellsize_y) = grid.get_cell_size();
-        // A 3x3 window spans a whole axis of at most two cells.
-        let cell_covers_ball_reach_area = |cell_size: f32, num_cells_in_direction: usize| {
-            num_cells_in_direction <= 2 || reach < cell_size.abs() * (1.0 - CELL_SLACK)
-        };
-        let cell = grid.get_cell_indices(candidate.get_position());
-
-        //check if candidate position is in a cell, i.e ==Some((row,col)) and if not do the slow is_ball_colliding
-        //we also do the slow search if balls reach farther than the cell size (covers==false)
-        let (Some((row, col)), true) = (
-            cell,
-            cell_covers_ball_reach_area(cellsize_x, num_cols)
-                && cell_covers_ball_reach_area(cellsize_y, num_rows),
-        ) else {
+        // A candidate outside the grid takes the slow full scan.
+        let Some((row, col)) = grid.get_cell_indices(candidate.get_position()) else {
             return self.is_ball_colliding(candidate, margin);
         };
+        let cells = grid.reach(reach / (1.0 - CELL_SLACK));
 
         let collides = |&ball_idx: &usize| {
             self.physics
@@ -137,7 +126,7 @@ impl SimulationWorld {
         };
         let mut hit = false;
         //check neighbouring cells for collision
-        grid.for_each_neighbor(row, col, |balls| {
+        grid.for_each_neighbor(row, col, cells, |balls| {
             hit = hit || balls.iter().map(|&b| b as usize).any(|b| collides(&b));
         });
         //check orphans for collision (balls not on grid)

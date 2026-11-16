@@ -174,6 +174,8 @@ impl Verlet {
             })
             .collect();
         neighbours.sort_unstable();
+        // The grid can list a wide ball twice.
+        neighbours.dedup();
 
         // Both lists are sorted, so one merge walk finds the added and removed
         // partners.

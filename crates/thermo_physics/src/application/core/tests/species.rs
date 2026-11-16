@@ -149,30 +149,60 @@ fn cell_grid_follows_the_species_present() {
     let physics = BallPhysics::default();
     mc.add_candidate_to_vec(Ball2D::new(1, Vec2D::new(-6.0, 0.0), n2));
     mc.collect_neighbours_by_cell(DT_GOAL);
-    assert_eq!(
-        mc.world().cell_grid().list_radius(),
-        physics.list_radius(n2, n2)
-    );
+    let n2_cells = (physics.list_radius(n2, n2), None);
+    assert_eq!(mc.world().cell_grid().list_radii(), n2_cells);
 
-    // An XL ball needs wider cells; the grid grows before the next rebuild,
-    // and the unlike pair 12 apart (more than two N2-sized cells) is listed.
+    // An XL ball is wide: it gets a coarse grid before the next rebuild and
+    // the `N2` cells stay. The unlike pair 12 apart (more than two of them)
+    // is listed from both sides.
     assert!(12.0 < physics.cutoff(n2, xl));
     assert!(12.0 > 2.0 * physics.list_radius(n2, n2));
     mc.add_candidate_to_vec(Ball2D::new(2, Vec2D::new(6.0, 0.0), xl));
     mc.collect_neighbours_by_cell(DT_GOAL);
-    assert_eq!(
-        mc.world().cell_grid().list_radius(),
-        physics.list_radius(xl, xl)
-    );
+    let wide = Some(([xl].into_iter().collect(), physics.list_radius(xl, xl)));
+    assert_eq!(mc.world().cell_grid().list_radii(), (n2_cells.0, wide));
     assert!(mc.world().balls[0].cold.hood.is_a_neighbour_idx(1));
+    assert!(mc.world().balls[1].cold.hood.is_a_neighbour_idx(0));
 
-    // Once the XL ball is gone, the next full rebuild shrinks the cells again.
+    // Once the XL ball is gone, the next full rebuild drops the coarse grid.
     mc.world_mut().balls[1].set_position_and_update_tail(Vec2D::new(f32::NAN, 0.0));
     mc.world_mut().remove_invalid_balls();
-    assert_eq!(
-        mc.world().cell_grid().list_radius(),
-        physics.list_radius(n2, n2)
-    );
+    assert_eq!(mc.world().cell_grid().list_radii(), n2_cells);
+}
+
+/// The lists of small and wide balls, built from the fine and the coarse
+/// grid, are exactly the pairs within their list radius (#470).
+#[test]
+fn lists_of_small_and_wide_species_match_all_pairs_in_range() {
+    let rect = Rect::new(-60.0, 60.0, 120.0, -120.0);
+    let mut mc = crate::application::core::tests::new_main_content_seeded(rect, 5).unwrap();
+    let kinds = [species("N2"), species("XS"), species("N2"), species("XL")];
+    for i in 0..400usize {
+        // A jittered 20 x 20 lattice, every 13th ball wide.
+        let (col, row) = ((i % 20) as f32, (i / 20) as f32);
+        let jitter = Vec2D::new((i as f32 * 1.7).sin(), (i as f32 * 2.3).cos());
+        let pos = Vec2D::new(-57.0 + 6.0 * col, -57.0 + 6.0 * row) + jitter;
+        let kind = if i % 13 == 0 { kinds[3] } else { kinds[i % 3] };
+        mc.world_mut().balls.push(Ball2D::new(i, pos, kind));
+    }
+    mc.world_mut().rebuild_cell_grid();
+    assert!(mc.world().cell_grid().list_radii().1.is_some());
+    mc.collect_neighbours_by_cell(DT_GOAL);
+
+    let world = mc.world();
+    let balls = &world.balls;
+    let mut pairs = 0;
+    for (i, a) in balls.iter().enumerate() {
+        let expected: Vec<usize> = (0..balls.len())
+            .filter(|&j| {
+                let radius = world.physics.list_radius(a.species(), balls[j].species());
+                j != i && a.get_position().dist(balls[j].get_position()).norm_sq() < radius * radius
+            })
+            .collect();
+        assert_eq!(a.cold.hood.get_neighbour_indices(), expected, "ball {i}");
+        pairs += expected.len();
+    }
+    assert!(pairs > 1000, "only {pairs} listed pairs");
 }
 
 /// An override that makes an unlike pair reach further than any like pair
@@ -202,8 +232,8 @@ fn cell_grid_fits_an_overridden_pair() {
     mc.add_candidate_to_vec(Ball2D::new(2, Vec2D::new(6.95, 0.0), xs));
     mc.collect_neighbours_by_cell(DT_GOAL);
     assert_eq!(
-        mc.world().cell_grid().list_radius(),
-        physics.list_radius(n2, xs)
+        mc.world().cell_grid().list_radii(),
+        (physics.list_radius(n2, xs), None)
     );
     assert!(mc.world().balls[0].cold.hood.is_a_neighbour_idx(1));
     assert!(mc.world().balls[1].cold.hood.is_a_neighbour_idx(0));

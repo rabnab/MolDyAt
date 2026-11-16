@@ -313,7 +313,7 @@ impl SimulationEngine {
             .par_iter()
             .map_init(Vec::new, |candidates, &(ball_idx, row, col)| {
                 candidates.clear();
-                cell_grid.collect_ball_indices_into(row, col, candidates);
+                cell_grid.collect_candidates_into(&balls[ball_idx], (row, col), candidates);
                 Verlet::rebuild(ball_idx, candidates, physics, balls)
             })
             .collect_into_vec(rebuilds);

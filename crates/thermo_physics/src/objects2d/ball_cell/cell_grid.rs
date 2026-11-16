@@ -16,8 +16,8 @@
 //! arrays.
 
 use crate::error::AppResult;
-use crate::objects2d::ball_impl::Ball2D;
 use crate::objects2d::ball_impl::simd_forces::KernelFrame;
+use crate::objects2d::ball_impl::{Ball2D, SpeciesSet};
 use crate::objects2d::{Rect, Vec2D};
 use rayon::prelude::*;
 use std::fmt::Debug;
@@ -86,6 +86,10 @@ pub struct CellGrid {
     /// put in, in ball order (left and above clamp into the first column or
     /// row, see `GridGeometry::cell_indices`).
     outside: Vec<u32>,
+    /// The wide species and a coarse grid that holds only their balls (which
+    /// this grid holds too), so that they do not widen this grid's cells.
+    /// The coarse grid's `outside` also lists the other species' balls.
+    wide: Option<(SpeciesSet, Box<CellGrid>)>,
 }
 
 impl CellGrid {
@@ -97,8 +101,14 @@ impl CellGrid {
 
     /// Create an empty grid covering `world_rect` with cells at least
     /// `list_radius` wide: the largest centre distance at which two balls
-    /// are neighbours (pair cutoff plus skin).
-    pub(crate) fn new(world_rect: Rect, list_radius: f32) -> AppResult<Self> {
+    /// are neighbours (pair cutoff plus skin). With `wide` species, that
+    /// is the largest distance of the pairs without them; their balls also
+    /// go into a coarse grid with cells for the radius given with them, the
+    /// largest of any pair.
+    pub(crate) fn new(
+        world_rect: Rect,
+        (list_radius, wide): (f32, Option<(SpeciesSet, f32)>),
+    ) -> AppResult<Self> {
         let sim_width = world_rect.w;
         let sim_height = world_rect.h;
 
@@ -129,12 +139,20 @@ impl CellGrid {
             late: vec![Vec::new(); cells],
             late_cells: Vec::new(),
             outside: Vec::new(),
+            wide: match wide {
+                Some((species, radius)) => Some((
+                    species,
+                    Box::new(CellGrid::new(world_rect, (radius, None))?),
+                )),
+                None => None,
+            },
         })
     }
 
-    /// Neighbour-list radius the cells were sized for.
-    pub(crate) fn list_radius(&self) -> f32 {
-        self.list_radius
+    /// What [`Self::new`] sized the grid for.
+    pub(crate) fn list_radii(&self) -> (f32, Option<(SpeciesSet, f32)>) {
+        let wide = self.wide.as_ref().map(|(s, grid)| (*s, grid.list_radius));
+        (self.list_radius, wide)
     }
 
     /// The grid as the frame of the force kernel's points (#392).
@@ -204,12 +222,35 @@ impl CellGrid {
     /// in parallel, then one counting sort in ball order. O(balls + cells).
     pub(crate) fn rebuild(&mut self, balls: &[Ball2D]) {
         let geometry = self.geometry;
-        balls
-            .par_iter()
-            .map(|ball| geometry.flat_cell(ball.get_position()))
-            .collect_into_vec(&mut self.cell_of);
+        let cell = |ball: &Ball2D| geometry.flat_cell(ball.get_position());
+        match &mut self.wide {
+            None => balls
+                .par_iter()
+                .map(cell)
+                .collect_into_vec(&mut self.cell_of),
+            // One pass over the balls for both grids.
+            Some((species, coarse)) => {
+                let coarse_geometry = coarse.geometry;
+                let coarse_cell = |ball: &Ball2D| {
+                    if species.contains(ball.species()) {
+                        coarse_geometry.flat_cell(ball.get_position())
+                    } else {
+                        NO_CELL
+                    }
+                };
+                balls
+                    .par_iter()
+                    .map(|ball| (cell(ball), coarse_cell(ball)))
+                    .unzip_into_vecs(&mut self.cell_of, &mut coarse.cell_of);
+                coarse.sort_by_cell();
+            }
+        }
+        self.sort_by_cell();
+    }
 
-        let cells = geometry.cell_count();
+    /// The counting sort of [`Self::rebuild`], from `cell_of`.
+    fn sort_by_cell(&mut self) {
+        let cells = self.geometry.cell_count();
         self.cell_start.clear();
         self.cell_start.resize(cells + 1, 0);
         for &cell in &self.cell_of {
@@ -245,10 +286,15 @@ impl CellGrid {
         self.late_cells.clear();
     }
 
-    /// Add ball `ball_idx`, just appended to the balls, to the cell of
-    /// `position` without a rebuild.
-    pub(crate) fn add_ball(&mut self, ball_idx: usize, position: &Vec2D) {
-        let cell = self.geometry.flat_cell(position);
+    /// Add `ball`, just appended to the balls as `ball_idx`, to the cell of
+    /// its position without a rebuild.
+    pub(crate) fn add_ball(&mut self, ball_idx: usize, ball: &Ball2D) {
+        if let Some((species, coarse)) = &mut self.wide
+            && species.contains(ball.species())
+        {
+            coarse.add_ball(ball_idx, ball);
+        }
+        let cell = self.geometry.flat_cell(ball.get_position());
         if self.cell_of.len() <= ball_idx {
             self.cell_of.resize(ball_idx + 1, NO_CELL);
         }
@@ -264,12 +310,20 @@ impl CellGrid {
         }
     }
 
-    /// Calls `f` with the ball indices of every cell in the 3x3
-    /// neighbourhood around (row, col), the cell itself included, clamped to
-    /// the grid. A cell may be passed in two slices (sorted, then added
-    /// since the last rebuild).
+    /// How many cells from a cell its 3x3 neighbourhood must grow to
+    /// `(2 n + 1) x (2 n + 1)` to hold every ball within `distance` of a
+    /// position in the cell (1 up to the cell size).
+    pub(crate) fn reach(&self, distance: f32) -> usize {
+        let cell = self.geometry.cell_size_x.min(self.geometry.cell_size_y);
+        ((distance / cell).ceil() as usize).max(1)
+    }
+
+    /// Calls `f` with the ball indices of every cell at most `reach` cells
+    /// from (row, col) along each axis (3x3 cells for 1), the cell itself
+    /// included, clamped to the grid. A cell may be passed in two slices
+    /// (sorted, then added since the last rebuild).
     #[inline]
-    pub(crate) fn for_each_neighbor<F>(&self, row: usize, col: usize, mut f: F)
+    pub(crate) fn for_each_neighbor<F>(&self, row: usize, col: usize, reach: usize, mut f: F)
     where
         F: FnMut(&[u32]),
     {
@@ -277,10 +331,10 @@ impl CellGrid {
         if height == 0 || width == 0 {
             return;
         }
-        let r_max = (row + 1).min(height - 1);
-        let c_min = col.saturating_sub(1);
-        let c_max = (col + 1).min(width - 1);
-        for r in row.saturating_sub(1)..=r_max {
+        let r_max = (row + reach).min(height - 1);
+        let c_min = col.saturating_sub(reach);
+        let c_max = (col + reach).min(width - 1);
+        for r in row.saturating_sub(reach)..=r_max {
             // The cells of one row are contiguous in `sorted`.
             let first = r * width + c_min;
             let last = r * width + c_max;
@@ -296,12 +350,34 @@ impl CellGrid {
         }
     }
 
-    /// Append the ball indices of the 3x3 neighbourhood of (row, col) to
-    /// `out`. Does not clear `out` first.
-    pub(crate) fn collect_ball_indices_into(&self, row: usize, col: usize, out: &mut Vec<usize>) {
-        self.for_each_neighbor(row, col, |balls| {
-            out.extend(balls.iter().map(|&b| b as usize));
-        });
+    /// Append every ball within the largest list radius of `ball`, which
+    /// this grid holds in (row, col), to `out` (not cleared first). A wide
+    /// ball can be listed twice.
+    pub(crate) fn collect_candidates_into(
+        &self,
+        ball: &Ball2D,
+        (row, col): (usize, usize),
+        out: &mut Vec<usize>,
+    ) {
+        let mut collect = |grid: &CellGrid, (row, col), reach| {
+            grid.for_each_neighbor(row, col, reach, |balls| {
+                out.extend(balls.iter().map(|&b| b as usize));
+            });
+        };
+        match &self.wide {
+            None => collect(self, (row, col), 1),
+            // A wide ball's partners are up to the coarse radius away.
+            Some((species, coarse)) if species.contains(ball.species()) => {
+                collect(self, (row, col), self.reach(coarse.list_radius))
+            }
+            // The others find their wide partners in the coarse grid.
+            Some((_, coarse)) => {
+                collect(self, (row, col), 1);
+                if let Some(cell) = coarse.get_cell_indices(ball.get_position()) {
+                    collect(coarse, cell, 1);
+                }
+            }
+        }
     }
 
     /// The ball indices of one cell, sorted ones first.
