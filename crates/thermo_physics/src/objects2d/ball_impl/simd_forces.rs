@@ -5,10 +5,11 @@
 //! SIMD-optimized pair force calculations
 //!
 //! This module provides the vectorized force kernel using portable `std::simd`
-//! (`f32x4`, 4 neighbours per chunk, scalar code for the remainder). The pair
+//! (8 neighbours per chunk with AVX2, else 4; then one chunk of 4 and scalar
+//! code for the remainder). The pair
 //! interaction itself (law, force cap, cutoff shift, one potential per species
 //! pair) lives in [`pair_potential`](super::pair_potential). Distances are
-//! centre distances; each chunk gathers the potentials of its 4 pairs from the
+//! centre distances; each chunk gathers the potentials of its pairs from the
 //! ball's row of the pair table, by the neighbours' species.
 //!
 //! There is no runtime dispatch or multiversioning: the instruction set is fixed at
@@ -30,11 +31,11 @@
 
 use crate::objects2d::Vec2D;
 use crate::objects2d::ball_impl::pair_potential::{
-    CappedLanes, PairLaw, PairPotential, PairTable, Potential,
+    CappedLanes, CappedPotential, PairLaw, PairPotential, PairTable, Potential,
 };
 use crate::objects2d::ball_impl::{Ball2D, BallPhysics, ForceResult, SpeciesSet};
 use std::simd::prelude::SimdFloat;
-use std::simd::{StdFloat, f32x4};
+use std::simd::{Simd, StdFloat};
 
 /// Bits of `KernelPoint::row_species` that hold the species index.
 const SPECIES_BITS: u32 = 8;
@@ -44,6 +45,10 @@ const MAX_ROW: u32 = u32::MAX >> SPECIES_BITS;
 // Every species index must fit in `SPECIES_BITS`, also in release builds:
 // raising `SpeciesSet::CAPACITY` past it has to fail here.
 const _: () = assert!(SpeciesSet::CAPACITY <= 1 << SPECIES_BITS);
+
+/// Neighbours per SIMD chunk: 8 where the build target has 256-bit
+/// vectors, else 4.
+const WIDE: usize = if cfg!(target_feature = "avx2") { 8 } else { 4 };
 
 /// The 16 bytes of a ball the force kernel reads for every neighbour: its
 /// position at the start of the force pass as an f32 offset from the corner
@@ -170,7 +175,7 @@ pub(crate) fn kernel_points(balls: &[Ball2D]) -> KernelPoints {
 }
 
 /// Calculate Lennard-Jones forces for multiple ball pairs using SIMD vectorization.
-/// Processes neighbors in chunks of 4 with `f32x4` (see the module docs for the instruction set).
+/// Processes neighbors in SIMD chunks (see the module docs for the width and instruction set).
 /// Below r_cap the force rises linearly from max_force, with the matching quadratic potential.
 /// Conditionally collects per-neighbor force magnitudes only when visualization is enabled.
 ///
@@ -229,77 +234,21 @@ fn force_kernel<L: PairLaw>(
     let pairs = table.row(ball.species());
     let neighbour_indices = ball.cold.hood.get_neighbour_indices();
 
-    // Process neighbors in chunks of 4 for SIMD
-    let (chunks, unchunked) = neighbour_indices.as_chunks::<4>();
-
+    let ctx = (
+        pairs,
+        kernel,
+        ball_pos,
+        ball_contact,
+        collect_neighbor_forces,
+    );
+    // Wide chunks, then at most one chunk of 4 (none where `WIDE` is 4).
+    let (chunks, rest) = neighbour_indices.as_chunks::<WIDE>();
     for chunk in chunks {
-        // SIMD path: process 4 neighbors at once
-        let mut dx = [0.0f32; 4];
-        let mut dy = [0.0f32; 4];
-        let mut contacts = [0.0f32; 4];
-        let mut chunk_pairs = [&pairs[0]; 4];
-
-        // Gather data for 4 neighbors
-        for (i, &neighbour_idx) in chunk.iter().enumerate() {
-            if let Some(neighbour) = points.get(neighbour_idx) {
-                let dist_vec = neighbour.dist(ball_pos, cell);
-                dx[i] = dist_vec.x;
-                dy[i] = dist_vec.y;
-                let species = neighbour.species();
-                contacts[i] = contacts_of[species];
-                chunk_pairs[i] = &pairs[species];
-                each_pair(&mut out, neighbour_idx, species, dist_vec);
-            } else {
-                panic!("Invalid neighbor index in SIMD force calculation");
-            }
-        }
-        let potential = CappedLanes::gather(chunk_pairs);
-
-        // Load into SIMD vectors
-        let dx_vec = f32x4::from(dx);
-        let dy_vec = f32x4::from(dy);
-
-        // Calculate distances: sqrt(dx^2 + dy^2)
-        let center_dist_sq = dx_vec * dx_vec + dy_vec * dy_vec;
-        let center_dist = center_dist_sq.sqrt();
-
-        // Pair force, sloped from max_force below r_cap and zero beyond the
-        // cutoff (see CappedPotential).
-        let lj_force = potential.force(center_dist);
-        out.capped_pairs += potential.capped_count(center_dist);
-
-        // Force direction: force / center_dist
-        // Avoid division by zero: if center_dist is 0, use a small epsilon to prevent Inf/NaN
-        let safe_center_dist = center_dist.simd_max(f32x4::splat(1e-10));
-        let force_to_dist = lj_force / safe_center_dist;
-
-        // Calculate force components
-        let fx = dx_vec * force_to_dist;
-        let fy = dy_vec * force_to_dist;
-
-        // Shifted potential with quadratic continuation below r_cap, zero
-        // beyond the cutoff (see CappedPotential).
-        let potential_used = potential.potential(center_dist);
-
-        // Virial: Σ (r_ij · F_ij).
-        // Since fx = dx_vec * force_to_dist and fy = dy_vec * force_to_dist,
-        // we have r · F = (dx^2 + dy^2) * force_to_dist = center_dist_sq * force_to_dist.
-        out.virial += (center_dist_sq * force_to_dist).reduce_sum();
-
-        out.force.x += fx.reduce_sum();
-        out.force.y += fy.reduce_sum();
-        out.potential_energy += potential_used.reduce_sum();
-        let gap = center_dist - (f32x4::from(contacts) + f32x4::splat(ball_contact));
-        // `f32::min` ignores NaN: the first chunk replaces the initial NaN.
-        out.min_dist = out.min_dist.min(gap.reduce_min());
-
-        // Store per-neighbor force magnitudes for visualization
-        if collect_neighbor_forces {
-            let lj_force_array: [f32; 4] = lj_force.abs().to_array();
-            for (i, &neighbour_idx) in chunk.iter().enumerate() {
-                out.neighbor_forces.push((neighbour_idx, lj_force_array[i]));
-            }
-        }
+        force_chunk(ctx, chunk, &mut out, &mut each_pair);
+    }
+    let (chunks, unchunked) = rest.as_chunks::<4>();
+    for chunk in chunks {
+        force_chunk(ctx, chunk, &mut out, &mut each_pair);
     }
 
     // Process remaining neighbors with scalar code
@@ -340,4 +289,86 @@ fn force_kernel<L: PairLaw>(
         }
     }
     out
+}
+
+/// `N` neighbours of the ball of `force_kernel` at once, one per SIMD lane.
+#[inline(always)]
+fn force_chunk<L: PairLaw, const N: usize>(
+    (pairs, kernel, ball_pos, ball_contact, collect): (
+        &[CappedPotential<L>],
+        &KernelPoints,
+        &KernelPoint,
+        f32,
+        bool,
+    ),
+    chunk: &[usize; N],
+    out: &mut ForceResult,
+    each_pair: &mut impl FnMut(&mut ForceResult, usize, usize, Vec2D),
+) {
+    let (points, cell, contacts_of) = (&kernel.points, kernel.cell, &kernel.contacts);
+    let mut dx = [0.0f32; N];
+    let mut dy = [0.0f32; N];
+    let mut contacts = [0.0f32; N];
+    let mut chunk_pairs = [&pairs[0]; N];
+
+    for (i, &neighbour_idx) in chunk.iter().enumerate() {
+        if let Some(neighbour) = points.get(neighbour_idx) {
+            let dist_vec = neighbour.dist(ball_pos, cell);
+            dx[i] = dist_vec.x;
+            dy[i] = dist_vec.y;
+            let species = neighbour.species();
+            contacts[i] = contacts_of[species];
+            chunk_pairs[i] = &pairs[species];
+            each_pair(out, neighbour_idx, species, dist_vec);
+        } else {
+            panic!("Invalid neighbor index in SIMD force calculation");
+        }
+    }
+    let potential = CappedLanes::gather(chunk_pairs);
+
+    // Load into SIMD vectors
+    let dx_vec: Simd<f32, N> = Simd::from(dx);
+    let dy_vec = Simd::from(dy);
+
+    // Calculate distances: sqrt(dx^2 + dy^2)
+    let center_dist_sq = dx_vec * dx_vec + dy_vec * dy_vec;
+    let center_dist = center_dist_sq.sqrt();
+
+    // Pair force, sloped from max_force below r_cap and zero beyond the
+    // cutoff (see CappedPotential).
+    let lj_force = potential.force(center_dist);
+    out.capped_pairs += potential.capped_count(center_dist);
+
+    // Force direction: force / center_dist
+    // Avoid division by zero: if center_dist is 0, use a small epsilon to prevent Inf/NaN
+    let safe_center_dist = center_dist.simd_max(Simd::<f32, N>::splat(1e-10));
+    let force_to_dist = lj_force / safe_center_dist;
+
+    // Calculate force components
+    let fx = dx_vec * force_to_dist;
+    let fy = dy_vec * force_to_dist;
+
+    // Shifted potential with quadratic continuation below r_cap, zero
+    // beyond the cutoff (see CappedPotential).
+    let potential_used = potential.potential(center_dist);
+
+    // Virial: Σ (r_ij · F_ij).
+    // Since fx = dx_vec * force_to_dist and fy = dy_vec * force_to_dist,
+    // we have r · F = (dx^2 + dy^2) * force_to_dist = center_dist_sq * force_to_dist.
+    out.virial += (center_dist_sq * force_to_dist).reduce_sum();
+
+    out.force.x += fx.reduce_sum();
+    out.force.y += fy.reduce_sum();
+    out.potential_energy += potential_used.reduce_sum();
+    let gap = center_dist - (Simd::from(contacts) + Simd::<f32, N>::splat(ball_contact));
+    // `f32::min` ignores NaN: the first chunk replaces the initial NaN.
+    out.min_dist = out.min_dist.min(gap.reduce_min());
+
+    // Store per-neighbor force magnitudes for visualization
+    if collect {
+        let lj_force_array: [f32; N] = lj_force.abs().to_array();
+        for (i, &neighbour_idx) in chunk.iter().enumerate() {
+            out.neighbor_forces.push((neighbour_idx, lj_force_array[i]));
+        }
+    }
 }

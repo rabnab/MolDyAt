@@ -119,7 +119,7 @@ headless runs; both step with the configured time step.
    (`ball_impl::wall_contact`, the line-wall sweep, a molecule's site
    impulses).
 3. **forces**: one walk over each neighbour list (#425): the pair forces
-   from the SIMD kernel (`simd_forces`, `f32x4`), which hands every pair
+   from the SIMD kernel (`simd_forces`, 8 lanes with AVX2, else 4), which hands every pair
    to the interactions its species pair adds (`ball_impl::interaction`,
    scalar: the site–site Lennard-Jones of pairs with a rigid molecule,
    #406, and the Mercedes-Benz hydrogen bonds of water, #349; energy,

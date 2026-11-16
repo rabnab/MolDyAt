@@ -157,15 +157,24 @@ fn test_virial_force_capped_regime() {
     approx(result.virial, center_dist * core_force, 1e-4);
 }
 
-/// One SIMD chunk of four unlike pairs plus scalar remainders: every lane
-/// must use its own pair's potential, and the chunk must agree with the
-/// scalar functions pair by pair. Returns the kernel's result.
+/// SIMD chunks of unlike pairs plus scalar remainders (14 pairs: 8 + 4 + 2
+/// with AVX2, else 4 + 4 + 4 + 2): every lane must use its own pair's
+/// potential, and the chunks must agree with the scalar functions pair by
+/// pair. Returns the kernel's result.
 fn assert_mixed_chunk_matches_scalar_pairs(physics: &BallPhysics) -> ForceResult {
     let neighbours = [
         (Vec2D::new(1.3, 0.0), species("XS")),
         (Vec2D::new(0.0, 2.1), species("M")),
         (Vec2D::new(-3.0, 0.0), species("XL")),
         (Vec2D::new(0.0, -1.2), N2),
+        (Vec2D::new(2.2, 0.4), species("L")),
+        (Vec2D::new(-0.3, 1.4), N2),
+        (Vec2D::new(-2.5, -2.5), species("XL")),
+        (Vec2D::new(0.9, -1.0), species("XS")),
+        (Vec2D::new(-1.7, 0.2), species("S")),
+        (Vec2D::new(0.2, 3.1), species("M")),
+        (Vec2D::new(1.1, 1.0), N2),
+        (Vec2D::new(-4.0, 1.0), species("L")),
         (Vec2D::new(1.6, 1.6), species("L")), // scalar remainder
         (Vec2D::new(-1.1, -1.1), species("S")), // scalar remainder
     ];

@@ -12,7 +12,7 @@
 //! mixed parameters of one pair. [`Potential`] lists the laws the simulation
 //! can use.
 //!
-//! All distances are centre distances. The SIMD kernel evaluates four pairs at
+//! All distances are centre distances. The SIMD kernel evaluates `N` pairs at
 //! once whose parameters may differ: [`PairLaw::lanes`] and
 //! [`CappedLanes::gather`] load them into one lane each.
 
@@ -21,6 +21,8 @@ use crate::objects2d::ball_impl::species::{
     N2_EPSILON_KELVIN, N2_SIGMA_ANGSTROM, Species, SpeciesId, SpeciesTable,
 };
 use std::simd::Select;
+use std::simd::Simd;
+#[cfg(test)]
 use std::simd::f32x4;
 use std::simd::prelude::{SimdFloat, SimdPartialOrd};
 
@@ -84,12 +86,12 @@ pub(crate) trait PairPotential {
 /// `force` must equal `-dU/dr` of `potential`, and fall monotonically across
 /// [`Self::cap_search_range`], so that the cap distance is unique and inside it.
 pub(crate) trait PairLaw: Copy {
-    /// The law for four pairs at once, one per SIMD lane.
-    type Lanes: LawLanes;
+    /// The law for `N` pairs at once, one per SIMD lane.
+    type Lanes<const N: usize>: LawLanes<N>;
 
-    /// Load four laws (of the same kind, possibly different parameters) into
+    /// Load `N` laws (of the same kind, possibly different parameters) into
     /// one lane each.
-    fn lanes(laws: [&Self; 4]) -> Self::Lanes;
+    fn lanes<const N: usize>(laws: [&Self; N]) -> Self::Lanes<N>;
 
     fn force(&self, r: f32) -> f32;
     /// `dF/dr`, used by the Newton solve for `r_cap`.
@@ -111,29 +113,29 @@ pub(crate) trait PairLaw: Copy {
     }
 }
 
-/// A [`PairLaw`] for four pairs, one per lane. Lane `i` must give the same bits
+/// A [`PairLaw`] for `N` pairs, one per lane. Lane `i` must give the same bits
 /// as the scalar law of pair `i`.
-pub(crate) trait LawLanes: Copy {
-    fn force(&self, r: f32x4) -> f32x4;
-    fn potential(&self, r: f32x4) -> f32x4;
+pub(crate) trait LawLanes<const N: usize>: Copy {
+    fn force(&self, r: Simd<f32, N>) -> Simd<f32, N>;
+    fn potential(&self, r: Simd<f32, N>) -> Simd<f32, N>;
 }
 
 /// Lanes that evaluate the scalar law one lane at a time: correct for any law,
 /// for laws without a vectorised form.
 #[cfg(test)]
 #[derive(Clone, Copy)]
-pub(crate) struct ScalarLanes<L>(pub [L; 4]);
+pub(crate) struct ScalarLanes<L, const N: usize>(pub [L; N]);
 
 #[cfg(test)]
-impl<L: PairLaw> LawLanes for ScalarLanes<L> {
-    fn force(&self, r: f32x4) -> f32x4 {
+impl<L: PairLaw, const N: usize> LawLanes<N> for ScalarLanes<L, N> {
+    fn force(&self, r: Simd<f32, N>) -> Simd<f32, N> {
         let r = r.to_array();
-        f32x4::from_array(std::array::from_fn(|i| self.0[i].force(r[i])))
+        Simd::from_array(std::array::from_fn(|i| self.0[i].force(r[i])))
     }
 
-    fn potential(&self, r: f32x4) -> f32x4 {
+    fn potential(&self, r: Simd<f32, N>) -> Simd<f32, N> {
         let r = r.to_array();
-        f32x4::from_array(std::array::from_fn(|i| self.0[i].potential(r[i])))
+        Simd::from_array(std::array::from_fn(|i| self.0[i].potential(r[i])))
     }
 }
 
@@ -195,19 +197,19 @@ impl PairOverride {
 
 /// [`LennardJones`] with one `σ`, `ε` per lane.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct LennardJonesLanes {
-    sigma: f32x4,
-    epsilon: f32x4,
+pub(crate) struct LennardJonesLanes<const N: usize> {
+    sigma: Simd<f32, N>,
+    epsilon: Simd<f32, N>,
 }
 
 impl PairLaw for LennardJones {
-    type Lanes = LennardJonesLanes;
+    type Lanes<const N: usize> = LennardJonesLanes<N>;
 
     #[inline]
-    fn lanes(laws: [&Self; 4]) -> LennardJonesLanes {
+    fn lanes<const N: usize>(laws: [&Self; N]) -> LennardJonesLanes<N> {
         LennardJonesLanes {
-            sigma: f32x4::from_array(laws.map(|l| l.sigma)),
-            epsilon: f32x4::from_array(laws.map(|l| l.epsilon)),
+            sigma: Simd::from_array(laws.map(|l| l.sigma)),
+            epsilon: Simd::from_array(laws.map(|l| l.epsilon)),
         }
     }
 
@@ -245,23 +247,20 @@ impl PairLaw for LennardJones {
     }
 }
 
-impl LawLanes for LennardJonesLanes {
+impl<const N: usize> LawLanes<N> for LennardJonesLanes<N> {
     #[inline]
-    fn force(&self, r: f32x4) -> f32x4 {
+    fn force(&self, r: Simd<f32, N>) -> Simd<f32, N> {
         let quot = self.sigma / r;
         let quot_six = quot * quot * quot * quot * quot * quot;
-        f32x4::splat(24.)
-            * self.epsilon
-            * quot_six
-            * (f32x4::splat(2.) * quot_six - f32x4::splat(1.))
+        Simd::splat(24.) * self.epsilon * quot_six * (Simd::splat(2.) * quot_six - Simd::splat(1.))
             / r
     }
 
     #[inline]
-    fn potential(&self, r: f32x4) -> f32x4 {
+    fn potential(&self, r: Simd<f32, N>) -> Simd<f32, N> {
         let quot = self.sigma / r;
         let quot_six = quot * quot * quot * quot * quot * quot;
-        f32x4::splat(4.) * self.epsilon * quot_six * (quot_six - f32x4::splat(1.))
+        Simd::splat(4.) * self.epsilon * quot_six * (quot_six - Simd::splat(1.))
     }
 }
 
@@ -397,69 +396,68 @@ impl<L: PairLaw> CappedPotential<L> {
     }
 }
 
-/// Four [`CappedPotential`]s, one per lane, for the SIMD force kernel.
+/// `N` [`CappedPotential`]s, one per lane, for the SIMD force kernel.
 #[derive(Clone, Copy)]
-pub(crate) struct CappedLanes<LL> {
+pub(crate) struct CappedLanes<LL, const N: usize> {
     law: LL,
-    cutoff: f32x4,
-    r_cap: f32x4,
-    pot_at_cap: f32x4,
-    pot_at_cutoff: f32x4,
-    max_force: f32x4,
-    core_stiffness: f32x4,
+    cutoff: Simd<f32, N>,
+    r_cap: Simd<f32, N>,
+    pot_at_cap: Simd<f32, N>,
+    pot_at_cutoff: Simd<f32, N>,
+    max_force: Simd<f32, N>,
+    core_stiffness: Simd<f32, N>,
 }
 
-impl<LL: LawLanes> CappedLanes<LL> {
-    /// Load four pair potentials into one lane each.
+impl<LL: LawLanes<N>, const N: usize> CappedLanes<LL, N> {
+    /// Load `N` pair potentials into one lane each.
     #[inline]
-    pub(crate) fn gather<L: PairLaw<Lanes = LL>>(pairs: [&CappedPotential<L>; 4]) -> Self {
+    pub(crate) fn gather<L: PairLaw<Lanes<N> = LL>>(pairs: [&CappedPotential<L>; N]) -> Self {
         CappedLanes {
             law: L::lanes(pairs.map(|p| &p.law)),
-            cutoff: f32x4::from_array(pairs.map(|p| p.cutoff)),
-            r_cap: f32x4::from_array(pairs.map(|p| p.r_cap)),
-            pot_at_cap: f32x4::from_array(pairs.map(|p| p.pot_at_cap)),
-            pot_at_cutoff: f32x4::from_array(pairs.map(|p| p.pot_at_cutoff)),
-            max_force: f32x4::from_array(pairs.map(|p| p.settings.max_force)),
-            core_stiffness: f32x4::from_array(pairs.map(|p| p.settings.core_stiffness)),
+            cutoff: Simd::from_array(pairs.map(|p| p.cutoff)),
+            r_cap: Simd::from_array(pairs.map(|p| p.r_cap)),
+            pot_at_cap: Simd::from_array(pairs.map(|p| p.pot_at_cap)),
+            pot_at_cutoff: Simd::from_array(pairs.map(|p| p.pot_at_cutoff)),
+            max_force: Simd::from_array(pairs.map(|p| p.settings.max_force)),
+            core_stiffness: Simd::from_array(pairs.map(|p| p.settings.core_stiffness)),
         }
     }
 
-    /// How many of the four lanes are inside the capped core (#422).
+    /// How many of the lanes are inside the capped core (#422).
     #[inline]
-    pub(crate) fn capped_count(&self, r: f32x4) -> u32 {
+    pub(crate) fn capped_count(&self, r: Simd<f32, N>) -> u32 {
         r.simd_lt(self.r_cap).to_bitmask().count_ones()
     }
 
     #[inline]
-    fn inside_cutoff(&self, r: f32x4) -> std::simd::Mask<i32, 4> {
+    fn inside_cutoff(&self, r: Simd<f32, N>) -> std::simd::Mask<i32, N> {
         r.simd_lt(self.cutoff)
     }
 
     /// Force of each lane's pair at its distance in `r`; see
     /// [`CappedPotential`].
     #[inline]
-    pub(crate) fn force(&self, r: f32x4) -> f32x4 {
+    pub(crate) fn force(&self, r: Simd<f32, N>) -> Simd<f32, N> {
         // The law is evaluated at max(r, r_cap) only, so it stays finite in the core.
         let r_outer = r.simd_max(self.r_cap);
-        let compression = (r_outer - r).simd_max(f32x4::splat(0.));
+        let compression = (r_outer - r).simd_max(Simd::splat(0.));
         let force = self.law.force(r_outer) + self.core_stiffness * compression;
-        self.inside_cutoff(r).select(force, f32x4::splat(0.))
+        self.inside_cutoff(r).select(force, Simd::splat(0.))
     }
 
     /// Potential of each lane's pair at its distance in `r`.
     #[inline]
-    pub(crate) fn potential(&self, r: f32x4) -> f32x4 {
+    pub(crate) fn potential(&self, r: Simd<f32, N>) -> Simd<f32, N> {
         let potential_outer = self.law.potential(r.simd_max(self.r_cap));
         let compression = self.r_cap - r;
         let potential_core = self.pot_at_cap
-            + compression
-                * (self.max_force + f32x4::splat(0.5) * self.core_stiffness * compression);
+            + compression * (self.max_force + Simd::splat(0.5) * self.core_stiffness * compression);
         let potential_shifted = r
             .simd_lt(self.r_cap)
             .select(potential_core, potential_outer)
             - self.pot_at_cutoff;
         self.inside_cutoff(r)
-            .select(potential_shifted, f32x4::splat(0.))
+            .select(potential_shifted, Simd::splat(0.))
     }
 }
 

@@ -3,8 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::objects2d::ball_impl::pair_potential::{
-    CapSettings, CappedPotential, LennardJones, PairLaw, PairOverride, PairPotential, PairTable,
-    Potential, ScalarLanes, bisect_cap_distance, newton_cap_distance,
+    CapSettings, CappedLanes, CappedPotential, LennardJones, PairLaw, PairOverride, PairPotential,
+    PairTable, Potential, ScalarLanes, bisect_cap_distance, newton_cap_distance,
 };
 use crate::objects2d::ball_impl::{SpeciesId, SpeciesTable};
 use std::simd::f32x4;
@@ -24,9 +24,9 @@ struct RepulsiveCore {
 }
 
 impl PairLaw for RepulsiveCore {
-    type Lanes = ScalarLanes<Self>;
+    type Lanes<const N: usize> = ScalarLanes<Self, N>;
 
-    fn lanes(laws: [&Self; 4]) -> Self::Lanes {
+    fn lanes<const N: usize>(laws: [&Self; N]) -> Self::Lanes<N> {
         ScalarLanes(laws.map(|l| *l))
     }
 
@@ -62,9 +62,9 @@ impl PairLaw for RepulsiveCore {
 struct NewtonFails(LennardJones);
 
 impl PairLaw for NewtonFails {
-    type Lanes = ScalarLanes<Self>;
+    type Lanes<const N: usize> = ScalarLanes<Self, N>;
 
-    fn lanes(laws: [&Self; 4]) -> Self::Lanes {
+    fn lanes<const N: usize>(laws: [&Self; N]) -> Self::Lanes<N> {
         ScalarLanes(laws.map(|l| *l))
     }
 
@@ -100,9 +100,9 @@ struct NewtonMisleads {
 }
 
 impl PairLaw for NewtonMisleads {
-    type Lanes = ScalarLanes<Self>;
+    type Lanes<const N: usize> = ScalarLanes<Self, N>;
 
-    fn lanes(laws: [&Self; 4]) -> Self::Lanes {
+    fn lanes<const N: usize>(laws: [&Self; N]) -> Self::Lanes<N> {
         ScalarLanes(laws.map(|l| *l))
     }
 
@@ -201,6 +201,19 @@ fn check_simd_matches_scalar<L: PairLaw>(p: &CappedPotential<L>, _max_force: f32
                 "potential at {at}"
             );
         }
+    }
+    // The 8 lanes of the wide kernel chunk (AVX2 builds).
+    let chunk: [f32; 8] = dists[2..10].try_into().unwrap();
+    let lanes = CappedLanes::gather([p; 8]);
+    let force = lanes.force(chunk.into()).to_array();
+    let potential = lanes.potential(chunk.into()).to_array();
+    for (i, &r) in chunk.iter().enumerate() {
+        assert_eq!(force[i].to_bits(), p.force(r).to_bits(), "8 lanes, r = {r}");
+        assert_eq!(
+            potential[i].to_bits(),
+            p.potential(r).to_bits(),
+            "8 lanes, r = {r}"
+        );
     }
 }
 
