@@ -58,7 +58,7 @@ Placeable tools from the sidebar:
 ### Performance Optimizations
 
 * **Parallelization**: Multi-threaded physics via Rayon (always enabled)
-* **SIMD Vectorization**: 2-4× speedup on force calculations via portable `std::simd` (`f32x4`)
+* **SIMD Vectorization**: 2-4× speedup on force calculations via portable `std::simd` (8 lanes with AVX2, else 4)
   - The instruction set is chosen at **compile time**, not at runtime
   - Release binaries target a portable baseline (`x86-64-v2`, SSE4.2)
   - For maximum speed on your own CPU, build from source with `--release` (uses `target-cpu=native`)
