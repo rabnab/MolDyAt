@@ -170,6 +170,47 @@ fn cell_grid_follows_the_species_present() {
     assert_eq!(mc.world().cell_grid().list_radii(), n2_cells);
 }
 
+/// Enough rebuilds per pass for the parallel install and partner edits to
+/// split the balls: the lists stay sorted, symmetric and hold every pair
+/// inside its cutoff.
+#[test]
+fn many_rebuilds_in_one_pass_keep_the_lists_symmetric_and_complete() {
+    let rect = Rect::new(-50.0, 50.0, 100.0, -100.0);
+    let mut mc = crate::application::core::tests::new_main_content_seeded(rect, 5).unwrap();
+    mc.world_mut().speed_limit_override = Some(f32::INFINITY);
+    for i in 0..2500usize {
+        let (col, row) = ((i % 50) as f32, (i / 50) as f32);
+        let mut ball = Ball2D::new(
+            i,
+            Vec2D::new(-44.0 + 1.8 * col, -44.0 + 1.8 * row),
+            species("N2"),
+        );
+        // Speeds from 0 to 6, so every pass rebuilds another part of the balls.
+        ball.v = Vec2D::new((i as f32 * 0.7).sin(), (i as f32 * 1.3).cos()).scaled(i as f32 % 7.0);
+        mc.world_mut().balls.push(ball);
+    }
+    mc.world_mut().rebuild_cell_grid();
+    mc.collect_neighbours_by_cell(DT_GOAL);
+    run(&mut mc, 40);
+    mc.collect_neighbours_by_cell(DT_GOAL);
+
+    let world = mc.world();
+    let balls = &world.balls;
+    let cutoff = world.physics.cutoff(species("N2"), species("N2"));
+    for (i, a) in balls.iter().enumerate() {
+        let list = a.cold.hood.get_neighbour_indices();
+        assert!(list.is_sorted(), "ball {i}");
+        for &j in list {
+            assert!(balls[j].cold.hood.is_a_neighbour_idx(i), "{i} lists {j}");
+        }
+        for (j, b) in balls.iter().enumerate().skip(i + 1) {
+            if a.get_position().dist(b.get_position()).norm() < cutoff {
+                assert!(a.cold.hood.is_a_neighbour_idx(j), "pair {i}-{j} not listed");
+            }
+        }
+    }
+}
+
 /// The lists of small and wide balls, built from the fine and the coarse
 /// grid, are exactly the pairs within their list radius (#470).
 #[test]

@@ -3,26 +3,52 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use super::line_segments::Obstacle;
-use super::step_scratch::{NeighbourStats, RebuildScratch, UpdateScratch};
+use super::step_scratch::{NeighbourStats, REBUILD, RebuildScratch, UpdateScratch, VERBOSE};
 use super::wall_forces::{molecule_backstop, soft_wall_force};
 use super::{RuntimeOptions, SimulationWorld, StatsAccumulator, StepConfig};
 use crate::application::phase_timings::{Phase, PhaseClock};
 use crate::application::sim_stats::SafetyNets;
 use crate::application::thermo_field::THERMO_SAMPLE_STRIDE;
 use crate::application::{AppResult, log_util};
-use crate::logging::log_update_hood_start;
+use crate::logging::{log_neighbour_add, log_update_hood_start};
 use crate::objects2d::ball_impl::ball_core::{Ball2D, BounceInfo};
 use crate::objects2d::ball_impl::external_field::{
     ExternalField, Field, UniformField, fields_acceleration,
 };
 use crate::objects2d::ball_impl::molecule::axis;
 use crate::objects2d::ball_impl::simd_forces::{KernelPoint, force_simd};
-use crate::objects2d::ball_impl::verlet::Verlet;
+use crate::objects2d::ball_impl::verlet::{HoodRebuild, Verlet};
 use crate::objects2d::ball_impl::wall_contact::normal_velocity_after_contact;
 use crate::objects2d::ball_impl::wall_law::WALL_RAMP_TIME;
 use crate::objects2d::ball_impl::{ForceResult, SpeciesSet};
 use crate::objects2d::{Rect, Vec2D};
 use rayon::prelude::*;
+
+/// Runs `apply(ball, item)` for every item, in parallel over the balls.
+/// `items` are sorted by the index of their ball (`ball_of`), so the items of
+/// one ball stay in order; `balls` starts at ball `first`.
+fn for_each_ball<T: Send>(
+    balls: &mut [Ball2D],
+    first: usize,
+    items: &mut [T],
+    ball_of: &(impl Fn(&T) -> usize + Sync),
+    apply: &(impl Fn(&mut Ball2D, &mut T) + Sync),
+) {
+    if items.len() <= 256 || balls.len() < 2 {
+        for item in items {
+            apply(&mut balls[ball_of(item) - first], item);
+        }
+        return;
+    }
+    let mid = balls.len() / 2;
+    let split = items.partition_point(|item| ball_of(item) < first + mid);
+    let (left, right) = balls.split_at_mut(mid);
+    let (left_items, right_items) = items.split_at_mut(split);
+    rayon::join(
+        || for_each_ball(left, first, left_items, ball_of, apply),
+        || for_each_ball(right, first + mid, right_items, ball_of, apply),
+    );
+}
 
 /// Stepping/update behavior over the persistent simulation state.
 ///
@@ -238,9 +264,9 @@ impl SimulationEngine {
     /// 1. Parallel: per-ball counters, and which balls must rebuild.
     /// 2. Parallel: each such ball builds its new list from the cells around it,
     ///    reading only, and diffs it against its current list.
-    /// 3. Serial, in ball order: install the lists and add or remove the
-    ///    changed partners. The result does not depend on that order (see
-    ///    `Verlet::apply_rebuild`), so it equals a serial rebuild.
+    /// 3. Parallel over the balls: install the lists, then add or remove the
+    ///    changed partners. The result does not depend on the order (see
+    ///    `HoodRebuild`), so it equals a serial rebuild.
     fn update_neighbor_hoods_for_occupied_cells(world: &mut SimulationWorld, dt: f32) {
         // Every ball is in the cell of its position now, so the grid can be
         // rebuilt if a new species needs wider cells.
@@ -256,73 +282,86 @@ impl SimulationEngine {
         let min_movement =
             physics.get_min_movement_for_update_hood() * world.neighbor_movement_fault_scale();
         let cell_grid = &world.cache.cell_grid;
-        let (_, grid_cols) = cell_grid.get_grid_size();
 
-        // Which cell the grid holds each ball in (flat index, `NO_CELL` if
-        // none): only balls in a cell take part. A ball pushed without
-        // being added to the grid is in none.
-        const NO_CELL: u32 = u32::MAX;
-        let cell_of = cell_grid.flat_cells();
-
-        // (ball, row, col, rebuild, verbose) for balls that rebuild or log.
-        // One entry per ball (an indexed collect fills the reused buffer in
-        // ball order); `None` for balls with nothing to do.
+        // Only balls the grid holds in a cell take part (a ball pushed
+        // without being added to the grid is in none). An indexed collect
+        // fills the reused buffer in ball order.
         let checked = &mut scratch.checked;
         world
             .balls
             .par_iter_mut()
             .enumerate()
             .map(|(ball_idx, ball)| {
-                let flat = cell_of.get(ball_idx).copied().unwrap_or(NO_CELL);
-                if flat == NO_CELL {
-                    return None;
-                }
-                let (row, col) = (flat as usize / grid_cols, flat as usize % grid_cols);
-                // Rebuilds only search the cells around the ball's cell,
-                // so that cell must match its position.
+                let Some(cell) = cell_grid.cell_of_ball(ball_idx) else {
+                    return 0;
+                };
+                // Rebuilds only search the cells around the ball's cell, so
+                // that cell must match its position.
                 debug_assert_eq!(
                     cell_grid.get_cell_indices(ball.get_position()),
-                    Some((row, col)),
-                    "ball {ball_idx} is in cell ({row}, {col}) of the grid but not by position"
+                    Some(cell),
+                    "ball {ball_idx} is in cell {cell:?} of the grid but not by position"
                 );
-                let verbose = ball.verbose.console;
+                let verbose = if ball.verbose.console { VERBOSE } else { 0 };
                 let rebuild = Verlet::begin_update(ball, dt, min_movement);
-                (rebuild || verbose).then_some((ball_idx, row, col, rebuild, verbose))
+                verbose | if rebuild { REBUILD } else { 0 }
             })
             .collect_into_vec(checked);
 
         // Verbose balls are logged here, in ball order, not in the parallel pass.
-        for &(ball_idx, _, _, _, verbose) in checked.iter().flatten() {
-            if verbose {
-                log_update_hood_start(&world.balls[ball_idx], physics.get_skin_thickness());
-            }
-        }
+        let balls = &world.balls;
         let to_rebuild = &mut scratch.to_rebuild;
         to_rebuild.clear();
-        to_rebuild.extend(
-            checked
-                .iter()
-                .flatten()
-                .filter(|&&(_, _, _, rebuild, _)| rebuild)
-                .map(|&(ball_idx, row, col, _, _)| (ball_idx, row, col)),
-        );
+        let mut any_verbose = false;
+        for (ball_idx, &found) in checked.iter().enumerate() {
+            if found & VERBOSE != 0 {
+                any_verbose = true;
+                log_update_hood_start(&balls[ball_idx], physics.get_skin_thickness());
+            }
+            if found & REBUILD != 0 {
+                to_rebuild.push(ball_idx);
+            }
+        }
 
-        let balls = &world.balls;
         let rebuilds = &mut scratch.rebuilds;
         to_rebuild
             .par_iter()
-            .map_init(Vec::new, |candidates, &(ball_idx, row, col)| {
+            .map_init(Vec::new, |candidates, &ball_idx| {
                 candidates.clear();
-                cell_grid.collect_candidates_into(&balls[ball_idx], (row, col), candidates);
+                let cell = cell_grid.cell_of_ball(ball_idx).expect("checked above");
+                cell_grid.collect_candidates_into(&balls[ball_idx], cell, candidates);
                 Verlet::rebuild(ball_idx, candidates, physics, balls)
             })
             .collect_into_vec(rebuilds);
 
+        let edits = &mut scratch.edits;
+        edits.clear();
+        edits.extend(rebuilds.iter().flat_map(HoodRebuild::partner_edits));
+        if any_verbose {
+            for &(partner, ball_idx, add) in edits.iter() {
+                if add && (checked[partner] | checked[ball_idx]) & VERBOSE != 0 {
+                    let (ball, partner) = (&balls[ball_idx], &balls[partner]);
+                    let dist_sq = ball.get_position().dist(partner.get_position()).norm_sq();
+                    let radius = physics.list_radius(ball.species(), partner.species());
+                    log_neighbour_add(ball, partner, dist_sq, radius * radius);
+                }
+            }
+        }
+        edits.par_sort_unstable();
+
+        let balls = &mut world.balls;
+        for_each_ball(balls, 0, rebuilds, &|r| r.ball_idx, &|ball, r| {
+            r.install(ball)
+        });
+        for_each_ball(balls, 0, edits, &|edit| edit.0, &|ball, edit| {
+            ball.cold.hood.apply_edit(*edit)
+        });
+        rebuilds.clear();
+
         let changed = &mut scratch.changed;
         changed.clear();
-        for rebuild in rebuilds.drain(..) {
-            Verlet::apply_rebuild(rebuild, physics, &mut world.balls, changed);
-        }
+        changed.extend_from_slice(to_rebuild);
+        changed.extend(edits.iter().map(|edit| edit.0));
         changed.sort_unstable();
         changed.dedup();
         Self::update_neighbor_statistics(world, changed, &mut scratch.neighbour_stats);
