@@ -13,7 +13,9 @@ use crate::application::AppResult;
 use crate::application::phase_timings::PhaseTimings;
 use crate::objects2d::ball_cell::cell_grid::CellGrid;
 use crate::objects2d::ball_impl::simd_forces::KernelPoints;
-use crate::objects2d::ball_impl::{Ball2D, BallPhysics, ForceResult, SpeciesSet};
+use crate::objects2d::ball_impl::{
+    BallPhysics, DEFAULT_SPECIES, ForceResult, SpeciesId, SpeciesSet,
+};
 use crate::objects2d::{Rect, Vec2D};
 
 /// The step's derived and scratch data. Appending a ball updates it in place
@@ -25,6 +27,9 @@ pub(crate) struct StepCache {
     /// Exactly the species of the balls in the world. The cell size follows
     /// the largest pair list radius among them.
     pub(crate) species_present: SpeciesSet,
+    /// The species with the most balls at the last full grid rebuild; the
+    /// grid's wide species are measured against it (`BallPhysics::grid_radii`).
+    pub(crate) most_numerous: SpeciesId,
     /// Per-ball position and species for the force kernel, refilled every step
     /// (same indices as `balls`). Valid only inside `update_sim`, from
     /// `update_old_positions` to `compute_forces`. Balls are removed and
@@ -44,8 +49,12 @@ impl StepCache {
     pub(crate) fn new(world_rect: Rect, physics: &BallPhysics) -> AppResult<Self> {
         let species_present = SpeciesSet::default();
         Ok(Self {
-            cell_grid: CellGrid::new(world_rect, physics.grid_radii(species_present))?,
+            cell_grid: CellGrid::new(
+                world_rect,
+                physics.grid_radii(species_present, DEFAULT_SPECIES),
+            )?,
             species_present,
+            most_numerous: DEFAULT_SPECIES,
             kernel_points: Default::default(),
             force_results: Vec::new(),
             scratch: Default::default(),
@@ -72,8 +81,22 @@ impl SimulationWorld {
     /// species now in the world and covering `world_rect`.
     pub fn rebuild_cell_grid(&mut self) {
         let cache = &mut self.cache;
-        cache.species_present = self.balls.iter().map(Ball2D::species).collect();
-        let radii = self.physics.grid_radii(cache.species_present);
+        let mut counts = [0usize; SpeciesSet::CAPACITY];
+        for ball in &self.balls {
+            counts[ball.species().index()] += 1;
+        }
+        cache.species_present = (0..counts.len())
+            .filter(|&i| counts[i] > 0)
+            .map(|i| SpeciesId::new(i as u16))
+            .collect();
+        // The first species with the most balls; the default one for none.
+        cache.most_numerous = (0..counts.len())
+            .filter(|&i| counts[i] > 0)
+            .max_by_key(|&i| (counts[i], std::cmp::Reverse(i)))
+            .map_or(DEFAULT_SPECIES, |i| SpeciesId::new(i as u16));
+        let radii = self
+            .physics
+            .grid_radii(cache.species_present, cache.most_numerous);
         if radii != cache.cell_grid.list_radii() || cache.cell_grid.world_rect() != self.world_rect
         {
             cache.cell_grid = CellGrid::new(self.world_rect, radii)
@@ -88,7 +111,10 @@ impl SimulationWorld {
     /// its position (not between a position update and the grid moves).
     pub(crate) fn fit_cell_grid(&mut self) {
         let cache = &self.cache;
-        if self.physics.grid_radii(cache.species_present) != cache.cell_grid.list_radii() {
+        let radii = self
+            .physics
+            .grid_radii(cache.species_present, cache.most_numerous);
+        if radii != cache.cell_grid.list_radii() {
             self.rebuild_cell_grid();
         }
     }

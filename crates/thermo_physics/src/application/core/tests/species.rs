@@ -205,6 +205,35 @@ fn lists_of_small_and_wide_species_match_all_pairs_in_range() {
     assert!(pairs > 1000, "only {pairs} listed pairs");
 }
 
+/// Wide species are measured against the most numerous one: a single `XS`
+/// in a gas of `L` (whose list radius is more than twice that of `XS`) does
+/// not make the `L` balls wide, while one `L` among `XS` balls is.
+#[test]
+fn one_small_ball_does_not_make_a_gas_of_large_ones_wide() {
+    let (xs, l) = (species("XS"), species("L"));
+    let physics = BallPhysics::default();
+    assert!(physics.list_radius(l, l) > 2.0 * physics.list_radius(xs, xs));
+    let grid_for = |kinds: &[SpeciesId]| {
+        let rect = Rect::new(-60.0, 60.0, 120.0, -120.0);
+        let mut mc = crate::application::core::tests::new_main_content_seeded(rect, 3).unwrap();
+        for (i, &kind) in kinds.iter().enumerate() {
+            let pos = Vec2D::new(-55.0 + 7.0 * (i % 15) as f32, -55.0 + 7.0 * (i / 15) as f32);
+            mc.world_mut().balls.push(Ball2D::new(i, pos, kind));
+        }
+        mc.world_mut().rebuild_cell_grid();
+        mc.world().cell_grid().list_radii()
+    };
+
+    let mut large_gas = vec![l; 30];
+    large_gas.push(xs);
+    assert_eq!(grid_for(&large_gas), (physics.list_radius(l, l), None));
+
+    let mut small_gas = vec![xs; 30];
+    small_gas.push(l);
+    let wide = Some(([l].into_iter().collect(), physics.list_radius(l, l)));
+    assert_eq!(grid_for(&small_gas), (physics.list_radius(xs, xs), wide));
+}
+
 /// An override that makes an unlike pair reach further than any like pair
 /// of the species present widens the cells for it (#235).
 #[test]
