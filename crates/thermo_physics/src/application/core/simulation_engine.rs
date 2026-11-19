@@ -236,7 +236,7 @@ impl SimulationEngine {
     /// Rebuild the neighbour lists of the balls that moved far enough.
     ///
     /// 1. Parallel: per-ball counters, and which balls must rebuild.
-    /// 2. Parallel: each such ball builds its new list from its 3x3 cells,
+    /// 2. Parallel: each such ball builds its new list from the cells around it,
     ///    reading only, and diffs it against its current list.
     /// 3. Serial, in ball order: install the lists and add or remove the
     ///    changed partners. The result does not depend on that order (see
@@ -278,7 +278,7 @@ impl SimulationEngine {
                     return None;
                 }
                 let (row, col) = (flat as usize / grid_cols, flat as usize % grid_cols);
-                // Rebuilds only search the 3x3 cells around the ball's cell,
+                // Rebuilds only search the cells around the ball's cell,
                 // so that cell must match its position.
                 debug_assert_eq!(
                     cell_grid.get_cell_indices(ball.get_position()),
@@ -313,7 +313,7 @@ impl SimulationEngine {
             .par_iter()
             .map_init(Vec::new, |candidates, &(ball_idx, row, col)| {
                 candidates.clear();
-                cell_grid.collect_ball_indices_into(row, col, candidates);
+                cell_grid.collect_candidates_into(&balls[ball_idx], (row, col), candidates);
                 Verlet::rebuild(ball_idx, candidates, physics, balls)
             })
             .collect_into_vec(rebuilds);

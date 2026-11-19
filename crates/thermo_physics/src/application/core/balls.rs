@@ -414,9 +414,8 @@ impl SimulationWorld {
         // cell.
         self.cache.species_present.insert(candidate.species());
         let ball_idx = self.balls.len();
-        let position = *candidate.get_position();
+        self.cache.cell_grid.add_ball(ball_idx, &candidate);
         self.balls.push(candidate);
-        self.cache.cell_grid.add_ball(ball_idx, &position);
     }
 
     pub(crate) fn clear_balls(&mut self) {

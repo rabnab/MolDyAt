@@ -5,6 +5,8 @@ User-visible changes to MolDyAt, newest first. Binaries and full release notes a
 
 ## Unreleased
 
+- A few large balls among small ones no longer slow the neighbour search (about 25 % of its
+  time with one `XL` per 400 `N2`); the `Grid` overlay keeps the small cells then. (#470)
 - Faster steps in large and dense worlds (about 10–15 % at 50 000 balls and more): the neighbour
   statistics are updated only for the balls whose neighbour list changed. (#491)
 - The temperature in the status lines is computed when they update, not every step; this saves

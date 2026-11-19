@@ -453,8 +453,9 @@ fn a_new_species_keeps_the_thermo_grid_and_its_average() {
     let samples_before = mc.world().thermo_history().len();
     let t_before = mc.world().thermo_history().average().unwrap().temperature;
 
-    // Species of new balls: N2, XS, S, M, L, XL in the built-in table.
-    for _ in 0..5 {
+    // Species of new balls: N2, XS, S, ... in the built-in table. `S` is
+    // larger than `N2` but not wide, so it widens the cells.
+    for _ in 0..2 {
         mc.next_species();
     }
     mc.add_candidate_at_pos(Vec2D::new(30.0, -30.0)).unwrap();

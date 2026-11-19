@@ -12,7 +12,7 @@ fn test_cells_are_at_least_interaction_range_wide() {
     // used to round the cell count up and shrink the cells.
     let required = 10.0;
     for (w, h) in [(112.0, 62.0), (95.0, 31.0), (10.0, 10.0), (5.0, 3.0)] {
-        let grid = CellGrid::new(Rect::new(0.0, 0.0, w, h), required).unwrap();
+        let grid = CellGrid::new(Rect::new(0.0, 0.0, w, h), (required, None)).unwrap();
         let (rows, cols) = grid.get_grid_size();
         let (cell_w, cell_h) = grid.get_cell_size();
         assert!(rows >= 1 && cols >= 1);
@@ -33,7 +33,7 @@ use crate::objects2d::ball_impl::{Ball2D, SPECIES_M};
 
 /// A 30 x 30 grid of 3 x 3 cells of size 10, its top-left at (0, 30).
 fn grid() -> CellGrid {
-    CellGrid::new(Rect::new(0.0, 30.0, 30.0, -30.0), 10.0).unwrap()
+    CellGrid::new(Rect::new(0.0, 30.0, 30.0, -30.0), (10.0, None)).unwrap()
 }
 
 fn ball_at(id: usize, x: f32, y: f32) -> Ball2D {
@@ -42,7 +42,9 @@ fn ball_at(id: usize, x: f32, y: f32) -> Ball2D {
 
 fn neighbours(grid: &CellGrid, row: usize, col: usize) -> Vec<usize> {
     let mut out = Vec::new();
-    grid.collect_ball_indices_into(row, col, &mut out);
+    grid.for_each_neighbor(row, col, 1, |balls| {
+        out.extend(balls.iter().map(|&b| b as usize));
+    });
     out.sort_unstable();
     out
 }
@@ -77,9 +79,9 @@ fn test_added_balls_are_found_before_and_after_the_next_rebuild() {
     grid.rebuild(&balls);
 
     balls.push(ball_at(1, 15.0, 25.0));
-    grid.add_ball(1, balls[1].get_position());
+    grid.add_ball(1, &balls[1]);
     balls.push(ball_at(2, 99.0, 99.0));
-    grid.add_ball(2, balls[2].get_position());
+    grid.add_ball(2, &balls[2]);
     assert_eq!(grid.cell_of_ball(1), Some((0, 1)));
     assert_eq!(grid.cell_of_ball(2), None);
     assert_eq!(neighbours(&grid, 0, 0), vec![0, 1]);
@@ -88,4 +90,50 @@ fn test_added_balls_are_found_before_and_after_the_next_rebuild() {
     grid.rebuild(&balls);
     assert_eq!(grid.sorted_balls(), &[0, 1]);
     assert_eq!(neighbours(&grid, 0, 0), vec![0, 1], "no ball twice");
+}
+
+/// A small ball a few float steps inside the right or bottom edge: the
+/// coarse grid's other cell size must not round it out of the grid while
+/// the main grid holds it, or it would lose its wide partner.
+#[test]
+fn test_balls_at_the_far_edges_find_their_wide_partners() {
+    use crate::objects2d::ball_impl::{SpeciesSet, SpeciesTable};
+    let table = SpeciesTable::builtin();
+    let (small, wide) = (table.by_name("N2").unwrap(), table.by_name("XL").unwrap());
+    let wide_set: SpeciesSet = [wide].into_iter().collect();
+    let mut checked = 0;
+    // 830.2143: a width where the two cell sizes round apart at the edge.
+    for w in [100.0f32, 97.3, 123.7, 830.2143, 858.186_3] {
+        let mut grid =
+            CellGrid::new(Rect::new(0.0, w, w, -w), (4.8, Some((wide_set, 23.4)))).unwrap();
+        let (mut x, mut y) = (w, 0.0f32);
+        for _ in 0..64 {
+            x = x.next_down();
+            y = y.next_up();
+            for p in [
+                Vec2D::new(x, 0.5 * w),
+                Vec2D::new(0.5 * w, y),
+                Vec2D::new(x, y),
+            ] {
+                // The wide ball 15 inwards: beyond the 3x3 main cells of the
+                // small one, so only the coarse grid finds it.
+                let inward = Vec2D::new(p.x.min(w - 15.0), p.y.max(15.0));
+                let balls = [Ball2D::new(0, p, small), Ball2D::new(1, inward, wide)];
+                grid.rebuild(&balls);
+                let Some(cell) = grid.cell_of_ball(0) else {
+                    continue;
+                };
+                for (ball, partner) in [(0, 1), (1, 0)] {
+                    let mut out = Vec::new();
+                    grid.collect_candidates_into(&balls[ball], cell, &mut out);
+                    assert!(
+                        out.contains(&partner),
+                        "{w}: ball {ball} at {p:?} misses {partner}"
+                    );
+                }
+                checked += 1;
+            }
+        }
+    }
+    assert!(checked > 100, "only {checked} positions inside the grid");
 }

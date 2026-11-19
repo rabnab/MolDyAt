@@ -5,7 +5,7 @@
 use super::*;
 use crate::application::CreateSnapshot;
 use crate::metrics::{MetricsRegistry, SeriesMetadata};
-use thermo_physics::test_support::create_main_content;
+use thermo_physics::test_support::{create_main_content, new_main_content_seeded};
 
 mod distributions;
 mod files;
@@ -63,8 +63,12 @@ fn stepped_registry() -> MetricsRegistry {
     registry
 }
 
+/// Five balls placed with a fixed seed: with unseeded placement, about one
+/// run in 1500 put none of them far enough from the walls for the local
+/// g(r), and the local-density tests failed.
 fn snapshot_with_balls() -> crate::application::renderer_snapshot::RendererSnapshot {
-    let (mut content, _) = create_main_content();
+    let world = thermo_physics::objects2d::Rect::new(-10.0, 10.0, 100.0, -100.0);
+    let mut content = new_main_content_seeded(world, 5).unwrap();
     content.add_random_candidates(5);
     content.create_snapshot()
 }

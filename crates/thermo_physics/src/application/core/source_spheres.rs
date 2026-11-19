@@ -115,7 +115,7 @@ impl SimulationWorld {
 
             // Emission runs right after the grid rebuild of the `cells`
             // phase, so the grid holds every ball at its position and the
-            // 3x3 cells around the candidate decide (#250).
+            // cells within reach of the candidate decide (#250).
             #[cfg(test)]
             if self.test_faults.emission_full_scan {
                 let _ = self.add_candidate_ball_among(candidate, margin, &obstacles);

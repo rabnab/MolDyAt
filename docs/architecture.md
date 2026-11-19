@@ -106,7 +106,8 @@ Outside `thermo_physics` a step goes through `MainContent`:
 headless runs; both step with the configured time step.
 
 1. **neighbours**: balls whose displacement since their last rebuild exceeds
-   skin/3 rebuild their Verlet lists from the 3x3 surrounding cells.
+   skin/3 rebuild their Verlet lists from the 3x3 surrounding cells (with
+   wide species: more cells or a coarse grid, see `docs/simulation.md`).
 2. **positions**: velocity-Verlet position update (and `θ += ω dt + ½ α dt²`
    for balls with an orientation, #348). With soft walls (the default)
    the drift is free and the only hard mechanism is the backstop at
@@ -156,7 +157,7 @@ headless runs; both step with the configured time step.
    energy: it measures drift only while gravity and the ball count stay
    fixed.
 5. **cells**: the cell grid is rebuilt from the new positions, source
-   spheres emit balls (checked against the 3x3 cells around each
+   spheres emit balls (checked against the cells within reach of each
    candidate and the grid's list of balls right of or below it; balls
    left of or above it clamp into the first column or row,
    `is_ball_colliding_in_grid`, exact because the grid was just rebuilt,

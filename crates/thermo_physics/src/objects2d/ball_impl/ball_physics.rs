@@ -374,6 +374,27 @@ impl BallPhysics {
             .fold(0.0, f32::max)
     }
 
+    /// What the cell grid of `present` is sized for (`CellGrid::new`). The
+    /// species whose own list radius is more than twice that of `most`, the
+    /// species with the most balls, are wide: they get a coarse grid with
+    /// [`Self::max_list_radius`], and the cells of the main grid only fit the
+    /// pairs of the other species. Measured against the most numerous species,
+    /// not the smallest, so one small ball does not make a whole gas wide.
+    pub(crate) fn grid_radii(
+        &self,
+        present: SpeciesSet,
+        most: SpeciesId,
+    ) -> (f32, Option<(SpeciesSet, f32)>) {
+        let own = |s| self.list_radius(s, s);
+        let is_wide = |s: &SpeciesId| own(*s) > 2.0 * own(most);
+        let wide: SpeciesSet = present.iter().filter(is_wide).collect();
+        let narrow = present.iter().filter(|s| !is_wide(s)).collect();
+        (
+            self.max_list_radius(narrow),
+            (!wide.is_empty()).then(|| (wide, self.max_list_radius(present))),
+        )
+    }
+
     /// Returns the minimum movement threshold before a ball's neighbor list needs updating.
     ///
     /// Balls rebuild their lists independently, not all at once. When ball j
