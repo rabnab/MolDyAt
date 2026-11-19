@@ -148,7 +148,8 @@ impl Verlet {
     /// in parallel.
     ///
     /// # Arguments
-    /// * `candidates` - Balls in the 3x3 cells around the ball's cell
+    /// * `candidates` - Balls in the cells that can hold a neighbour
+    ///   (`CellGrid::collect_candidates_into`)
     /// * `physics` - Gives each pair's list radius (cutoff + skin), compared
     ///   with the centre distance
     pub(crate) fn rebuild(
@@ -157,7 +158,7 @@ impl Verlet {
         physics: &BallPhysics,
         balls: &[Ball2D],
     ) -> HoodRebuild {
-        // The new list holds the candidates from the 3x3 cells within range.
+        // The new list holds the candidates within range.
         // Each ball sits in exactly one cell, so the candidates have no
         // duplicates, and the cell size guarantees that every ball in range is
         // among them (see `CellGrid::new`).

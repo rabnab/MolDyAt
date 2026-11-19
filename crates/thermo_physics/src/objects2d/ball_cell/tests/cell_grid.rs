@@ -91,3 +91,49 @@ fn test_added_balls_are_found_before_and_after_the_next_rebuild() {
     assert_eq!(grid.sorted_balls(), &[0, 1]);
     assert_eq!(neighbours(&grid, 0, 0), vec![0, 1], "no ball twice");
 }
+
+/// A small ball a few float steps inside the right or bottom edge: the
+/// coarse grid's other cell size must not round it out of the grid while
+/// the main grid holds it, or it would lose its wide partner.
+#[test]
+fn test_balls_at_the_far_edges_find_their_wide_partners() {
+    use crate::objects2d::ball_impl::{SpeciesSet, SpeciesTable};
+    let table = SpeciesTable::builtin();
+    let (small, wide) = (table.by_name("N2").unwrap(), table.by_name("XL").unwrap());
+    let wide_set: SpeciesSet = [wide].into_iter().collect();
+    let mut checked = 0;
+    // 830.2143: a width where the two cell sizes round apart at the edge.
+    for w in [100.0f32, 97.3, 123.7, 830.2143, 858.186_3] {
+        let mut grid =
+            CellGrid::new(Rect::new(0.0, w, w, -w), (4.8, Some((wide_set, 23.4)))).unwrap();
+        let (mut x, mut y) = (w, 0.0f32);
+        for _ in 0..64 {
+            x = x.next_down();
+            y = y.next_up();
+            for p in [
+                Vec2D::new(x, 0.5 * w),
+                Vec2D::new(0.5 * w, y),
+                Vec2D::new(x, y),
+            ] {
+                // The wide ball 15 inwards: beyond the 3x3 main cells of the
+                // small one, so only the coarse grid finds it.
+                let inward = Vec2D::new(p.x.min(w - 15.0), p.y.max(15.0));
+                let balls = [Ball2D::new(0, p, small), Ball2D::new(1, inward, wide)];
+                grid.rebuild(&balls);
+                let Some(cell) = grid.cell_of_ball(0) else {
+                    continue;
+                };
+                for (ball, partner) in [(0, 1), (1, 0)] {
+                    let mut out = Vec::new();
+                    grid.collect_candidates_into(&balls[ball], cell, &mut out);
+                    assert!(
+                        out.contains(&partner),
+                        "{w}: ball {ball} at {p:?} misses {partner}"
+                    );
+                }
+                checked += 1;
+            }
+        }
+    }
+    assert!(checked > 100, "only {checked} positions inside the grid");
+}

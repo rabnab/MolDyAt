@@ -157,7 +157,7 @@ headless runs; both step with the configured time step.
    energy: it measures drift only while gravity and the ball count stay
    fixed.
 5. **cells**: the cell grid is rebuilt from the new positions, source
-   spheres emit balls (checked against the 3x3 cells around each
+   spheres emit balls (checked against the cells within reach of each
    candidate and the grid's list of balls right of or below it; balls
    left of or above it clamp into the first column or row,
    `is_ball_colliding_in_grid`, exact because the grid was just rebuilt,

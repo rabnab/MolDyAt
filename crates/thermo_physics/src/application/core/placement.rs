@@ -6,7 +6,7 @@
 //!
 //! [`SimulationWorld::is_ball_colliding`] compares a candidate with every
 //! ball, so seeding n balls costs O(n²). [`PlacementIndex`] gives the same
-//! answer from the 3x3 cells around the candidate, plus the few balls the cell
+//! answer from the cells within reach of the candidate, plus the few balls the cell
 //! grid does not hold at their actual position ("orphans": outside the grid,
 //! or a stale cell entry). The answer is the same boolean, so seeding places
 //! exactly the same balls and draws the same random numbers.

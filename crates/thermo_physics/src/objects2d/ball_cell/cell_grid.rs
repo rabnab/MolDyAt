@@ -54,6 +54,26 @@ impl GridGeometry {
             .map_or(NO_CELL, |(row, col)| (row * self.grid_width + col) as u32)
     }
 
+    /// [`Self::cell_indices`] clamped into the grid, for the coarse grid:
+    /// a ball the main grid holds must be in the coarse grid too, although
+    /// its other cell size can round a position at the edge out of it.
+    fn clamped_cell(&self, position: &Vec2D) -> (usize, usize) {
+        let col = ((position.x - self.origin.0) / self.cell_size_x) as usize;
+        let row = ((self.origin.1 - position.y) / self.cell_size_y) as usize;
+        (row.min(self.grid_height - 1), col.min(self.grid_width - 1))
+    }
+
+    /// The cell of `ball` in this grid, the coarse one of `species`, given
+    /// its `cell` in the main grid: clamped into the grid, so that both
+    /// grids hold the same wide balls, and `NO_CELL` for the other balls.
+    fn coarse_cell(&self, species: SpeciesSet, ball: &Ball2D, cell: u32) -> u32 {
+        if cell == NO_CELL || !species.contains(ball.species()) {
+            return NO_CELL;
+        }
+        let (row, col) = self.clamped_cell(ball.get_position());
+        (row * self.grid_width + col) as u32
+    }
+
     fn cell_count(&self) -> usize {
         self.grid_width * self.grid_height
     }
@@ -231,25 +251,23 @@ impl CellGrid {
             // One pass over the balls for both grids.
             Some((species, coarse)) => {
                 let coarse_geometry = coarse.geometry;
-                let coarse_cell = |ball: &Ball2D| {
-                    if species.contains(ball.species()) {
-                        coarse_geometry.flat_cell(ball.get_position())
-                    } else {
-                        NO_CELL
-                    }
-                };
                 balls
                     .par_iter()
-                    .map(|ball| (cell(ball), coarse_cell(ball)))
+                    .map(|ball| {
+                        let cell = cell(ball);
+                        (cell, coarse_geometry.coarse_cell(*species, ball, cell))
+                    })
                     .unzip_into_vecs(&mut self.cell_of, &mut coarse.cell_of);
-                coarse.sort_by_cell();
+                coarse.sort_by_cell(false);
             }
         }
-        self.sort_by_cell();
+        self.sort_by_cell(true);
     }
 
-    /// The counting sort of [`Self::rebuild`], from `cell_of`.
-    fn sort_by_cell(&mut self) {
+    /// The counting sort of [`Self::rebuild`], from `cell_of`; lists the
+    /// balls in no cell in `outside` if `list_outside` (not in the coarse
+    /// grid, where that would be every small ball).
+    fn sort_by_cell(&mut self, list_outside: bool) {
         let cells = self.geometry.cell_count();
         self.cell_start.clear();
         self.cell_start.resize(cells + 1, 0);
@@ -272,7 +290,9 @@ impl CellGrid {
         self.outside.clear();
         for (ball_idx, &cell) in self.cell_of.iter().enumerate() {
             if cell == NO_CELL {
-                self.outside.push(ball_idx as u32);
+                if list_outside {
+                    self.outside.push(ball_idx as u32);
+                }
             } else {
                 let slot = &mut self.fill[cell as usize];
                 self.sorted[*slot as usize] = ball_idx as u32;
@@ -289,12 +309,19 @@ impl CellGrid {
     /// Add `ball`, just appended to the balls as `ball_idx`, to the cell of
     /// its position without a rebuild.
     pub(crate) fn add_ball(&mut self, ball_idx: usize, ball: &Ball2D) {
-        if let Some((species, coarse)) = &mut self.wide
-            && species.contains(ball.species())
-        {
-            coarse.add_ball(ball_idx, ball);
-        }
         let cell = self.geometry.flat_cell(ball.get_position());
+        if let Some((species, coarse)) = &mut self.wide {
+            let coarse_cell = coarse.geometry.coarse_cell(*species, ball, cell);
+            if coarse_cell != NO_CELL {
+                coarse.insert(ball_idx, coarse_cell);
+            }
+        }
+        self.insert(ball_idx, cell);
+    }
+
+    /// Put ball `ball_idx` into flat `cell` (or `outside` for `NO_CELL`)
+    /// until the next rebuild.
+    fn insert(&mut self, ball_idx: usize, cell: u32) {
         if self.cell_of.len() <= ball_idx {
             self.cell_of.resize(ball_idx + 1, NO_CELL);
         }
@@ -373,9 +400,7 @@ impl CellGrid {
             // The others find their wide partners in the coarse grid.
             Some((_, coarse)) => {
                 collect(self, (row, col), 1);
-                if let Some(cell) = coarse.get_cell_indices(ball.get_position()) {
-                    collect(coarse, cell, 1);
-                }
+                collect(coarse, coarse.geometry.clamped_cell(ball.get_position()), 1);
             }
         }
     }

@@ -80,7 +80,8 @@ scenario_args() {
     large) echo --seed-balls 200000 --world-scale 28 --seed-speed 2 ;;
     # A few large balls in a gas of small ones (#470). Not in the default
     # SCENARIOS, so not in the committed baseline.
-    mixed_sizes) echo --seed-balls 20000 --world-scale 6 --seed-speed 4 --seed-species N2:400,XL:1 ;;    *)
+    mixed_sizes) echo --seed-balls 20000 --world-scale 6 --seed-speed 4 --seed-species N2:400,XL:1 ;;
+    *)
         echo "error: unknown scenario $1" >&2
         return 1
         ;;
