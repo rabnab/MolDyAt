@@ -279,10 +279,10 @@ fn test_update_hood_removes_distant_neighbors() {
     );
 }
 
-/// `apply_rebuild` reports the rebuilt ball and the partners it adds or
-/// removes, not the partners it keeps.
+/// A rebuild's partner edits name the partners it adds or removes, not the
+/// partners it keeps.
 #[test]
-fn test_apply_rebuild_reports_the_rebuilt_ball_and_its_changed_partners() {
+fn test_rebuild_edits_only_its_changed_partners() {
     let physics = BallPhysics::default();
     let far = Vec2D::new(list_radius(&physics) + 10.0, 0.0);
     let mut balls = vec![
@@ -291,18 +291,18 @@ fn test_apply_rebuild_reports_the_rebuilt_ball_and_its_changed_partners() {
         make_ball(2, Vec2D::new(0.0, 1.0)),
     ];
     let rebuild_ball_0 = |balls: &mut Vec<Ball2D>| {
-        let mut changed = Vec::new();
         let rebuild = Verlet::rebuild(0, &[1, 2], &physics, balls);
-        Verlet::apply_rebuild(rebuild, &physics, balls, &mut changed);
-        changed.sort_unstable();
-        changed
+        let edits: Vec<_> = rebuild.partner_edits().collect();
+        Verlet::apply_rebuild(rebuild, balls);
+        edits
     };
 
-    assert_eq!(rebuild_ball_0(&mut balls), [0, 1, 2]);
+    assert_eq!(rebuild_ball_0(&mut balls), [(1, 0, true), (2, 0, true)]);
 
     balls[2].set_position_and_update_tail(far);
-    assert_eq!(rebuild_ball_0(&mut balls), [0, 2]);
+    assert_eq!(rebuild_ball_0(&mut balls), [(2, 0, false)]);
     assert_eq!(balls[0].cold.hood.neighbours, vec![1]);
+    assert!(balls[2].cold.hood.neighbours.is_empty());
 }
 
 #[test]
@@ -406,7 +406,7 @@ fn test_parallel_style_rebuild_matches_serial_update_hood() {
             .map(|&idx| Verlet::rebuild(idx, &all, &physics, &batched))
             .collect();
         for rebuild in rebuilds {
-            Verlet::apply_rebuild(rebuild, &physics, &mut batched, &mut Vec::new());
+            Verlet::apply_rebuild(rebuild, &mut batched);
         }
 
         for (s, b) in serial.iter().zip(&batched) {

@@ -208,12 +208,6 @@ impl CellGrid {
         (flat != NO_CELL).then(|| (flat as usize / width, flat as usize % width))
     }
 
-    /// The cells of all balls, flat (`row * columns + col`), `u32::MAX` for
-    /// a ball outside the grid. Indexed by ball.
-    pub(crate) fn flat_cells(&self) -> &[u32] {
-        &self.cell_of
-    }
-
     /// Ball indices sorted by cell (ascending within a cell) as of the last
     /// rebuild; balls outside the grid are not in it.
     pub(crate) fn sorted_balls(&self) -> &[u32] {

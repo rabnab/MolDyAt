@@ -28,11 +28,14 @@ use super::line_segments::{Obstacle, OverlapPass};
 use super::simulation_engine::ApplyStats;
 use crate::objects2d::ball_impl::ForceResult;
 use crate::objects2d::ball_impl::ball_core::BounceInfo;
-use crate::objects2d::ball_impl::verlet::HoodRebuild;
+use crate::objects2d::ball_impl::verlet::{HoodRebuild, PartnerEdit};
 
-/// A ball the neighbour rebuild looked at: (ball, cell row, cell column,
-/// rebuild, verbose). `None` for balls outside the grid or with nothing to do.
-pub(crate) type CheckedBall = Option<(usize, usize, usize, bool, bool)>;
+/// What the neighbour rebuild found for a ball: `REBUILD`, `VERBOSE`, both
+/// or 0 (also for balls outside the grid). One byte per ball, since the
+/// rebuilding balls are picked from it serially.
+pub(crate) type CheckedBall = u8;
+pub(crate) const REBUILD: CheckedBall = 1;
+pub(crate) const VERBOSE: CheckedBall = 2;
 
 /// Neighbour statistics of one ball: (ball, count, nearest, farthest, toggle
 /// the "other neighbour" verbosity).
@@ -68,10 +71,12 @@ pub(crate) struct UpdateScratch {
 pub(crate) struct RebuildScratch {
     /// What each ball needs (see [`CheckedBall`]).
     pub(crate) checked: Vec<CheckedBall>,
-    /// (ball, cell row, cell column) of the rebuilding balls.
-    pub(crate) to_rebuild: Vec<(usize, usize, usize)>,
-    /// The new lists, installed in ball order.
+    /// The rebuilding balls, ascending.
+    pub(crate) to_rebuild: Vec<usize>,
+    /// The new lists, in ball order.
     pub(crate) rebuilds: Vec<HoodRebuild>,
+    /// The partner edits of the rebuilds, sorted.
+    pub(crate) edits: Vec<PartnerEdit>,
     /// The balls whose list the rebuilds changed, sorted.
     pub(crate) changed: Vec<usize>,
     /// Neighbour statistics of each ball in `changed`.

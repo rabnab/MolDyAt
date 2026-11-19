@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+#[cfg(test)]
 use crate::logging;
 #[cfg(test)]
 use crate::objects2d::ball_impl::Named;
@@ -10,15 +11,34 @@ use crate::objects2d::ball_impl::{BallPhysics, UPDATE_HOOD_CNT};
 use crate::objects2d::vec_2d::Vec2D;
 use std::sync::atomic::Ordering;
 
-/// A ball's rebuilt neighbour list (sorted by index) and the partners added
-/// or removed against its previous list. Produced by `Verlet::rebuild`,
-/// installed by `Verlet::apply_rebuild`.
+/// A change to a partner's list: `(partner, ball, add)` adds `ball` to the
+/// list of `partner` or removes it. Sorts by partner.
+pub(crate) type PartnerEdit = (usize, usize, bool);
+
+/// A ball's rebuilt neighbour list (sorted by index) and the partners gained
+/// (`true`) or lost against its previous list. Produced by `Verlet::rebuild`.
+///
+/// Partner edits are idempotent (a partner holds this ball exactly when this
+/// ball holds the partner, and both sides compute the same distance), so the
+/// rebuilds of one pass give the same lists in any order: first every new
+/// list is installed, then every partner edit applied.
 pub(crate) struct HoodRebuild {
-    ball_idx: usize,
+    pub(crate) ball_idx: usize,
     neighbours: Vec<usize>,
-    /// New partners.
-    added: Vec<usize>,
-    removed: Vec<usize>,
+    partners: Vec<(usize, bool)>,
+}
+
+impl HoodRebuild {
+    /// Move the new list into `ball`, the ball it was built for.
+    pub(crate) fn install(&mut self, ball: &mut Ball2D) {
+        ball.cold.hood.neighbours = std::mem::take(&mut self.neighbours);
+    }
+
+    pub(crate) fn partner_edits(&self) -> impl Iterator<Item = PartnerEdit> + '_ {
+        self.partners
+            .iter()
+            .map(|&(partner, add)| (partner, self.ball_idx, add))
+    }
 }
 
 pub(crate) struct Verlet {
@@ -180,62 +200,41 @@ impl Verlet {
 
         // Both lists are sorted, so one merge walk finds the added and removed
         // partners.
-        let mut added = Vec::new();
-        let mut removed = Vec::new();
+        let mut partners = Vec::new();
         let mut old_iter = ball.cold.hood.neighbours.iter().copied().peekable();
         for &neighbour_idx in &neighbours {
             while let Some(removed_idx) = old_iter.next_if(|&old_idx| old_idx < neighbour_idx) {
-                removed.push(removed_idx);
+                partners.push((removed_idx, false));
             }
             if old_iter.next_if_eq(&neighbour_idx).is_none() {
-                added.push(neighbour_idx);
+                partners.push((neighbour_idx, true));
             }
         }
-        removed.extend(old_iter);
+        partners.extend(old_iter.map(|removed_idx| (removed_idx, false)));
 
         HoodRebuild {
             ball_idx,
             neighbours,
-            added,
-            removed,
+            partners,
         }
     }
 
-    /// Install a rebuilt list and update the partners that were added or
-    /// removed. Partner updates are idempotent (a partner holds this ball
-    /// exactly when this ball holds the partner, and both sides compute the
-    /// same distance), so applying the rebuilds of one pass in any order gives
-    /// the same lists. The balls whose list it changes are appended to
-    /// `changed`.
-    pub(crate) fn apply_rebuild(
-        rebuild: HoodRebuild,
-        physics: &BallPhysics,
-        balls: &mut [Ball2D],
-        changed: &mut Vec<usize>,
-    ) {
-        let HoodRebuild {
-            ball_idx,
-            neighbours,
-            added,
-            removed,
-        } = rebuild;
-        changed.push(ball_idx);
-        changed.extend(removed.iter().chain(&added));
-        for removed_idx in removed {
-            balls[removed_idx].cold.hood.remove(ball_idx);
+    /// Apply a [`PartnerEdit`] to this list, the partner's.
+    pub(crate) fn apply_edit(&mut self, (_, ball_idx, add): PartnerEdit) {
+        if add {
+            self.add_neighbour(ball_idx);
+        } else {
+            self.remove(ball_idx);
         }
-        for neighbour_idx in added {
-            let (ball, partner) = (&balls[ball_idx], &balls[neighbour_idx]);
-            if ball.verbose.console || partner.verbose.console {
-                let dist_sq = ball.get_position().dist(partner.get_position()).norm_sq();
-                let radius = physics.list_radius(ball.species(), partner.species());
-                logging::log_neighbour_add(ball, partner, dist_sq, radius * radius);
-            }
-            balls[neighbour_idx].cold.hood.add_neighbour(ball_idx);
-        }
+    }
 
-        let hood = &mut balls[ball_idx].cold.hood;
-        hood.neighbours = neighbours;
+    /// Install one rebuilt list and edit its partners, serially.
+    #[cfg(test)]
+    pub(crate) fn apply_rebuild(mut rebuild: HoodRebuild, balls: &mut [Ball2D]) {
+        rebuild.install(&mut balls[rebuild.ball_idx]);
+        for edit in rebuild.partner_edits() {
+            balls[edit.0].cold.hood.apply_edit(edit);
+        }
     }
 
     /// Compute neighbor statistics from a list of indices and ball positions.
@@ -326,7 +325,7 @@ impl Verlet {
             return;
         }
         let rebuild = Self::rebuild(ball_idx, candidates, physics, balls);
-        Self::apply_rebuild(rebuild, physics, balls, &mut Vec::new());
+        Self::apply_rebuild(rebuild, balls);
     }
 }
 
