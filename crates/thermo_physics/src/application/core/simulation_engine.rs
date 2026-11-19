@@ -24,6 +24,10 @@ use crate::objects2d::ball_impl::{ForceResult, SpeciesSet};
 use crate::objects2d::{Rect, Vec2D};
 use rayon::prelude::*;
 
+/// Below this many items `for_each_ball` stops splitting: a guess (not
+/// measured) at where a `rayon::join` costs more than the edits it splits.
+const SERIAL_ITEMS: usize = 256;
+
 /// Runs `apply(ball, item)` for every item, in parallel over the balls.
 /// `items` are sorted by the index of their ball (`ball_of`), so the items of
 /// one ball stay in order; `balls` starts at ball `first`.
@@ -34,7 +38,7 @@ fn for_each_ball<T: Send>(
     ball_of: &(impl Fn(&T) -> usize + Sync),
     apply: &(impl Fn(&mut Ball2D, &mut T) + Sync),
 ) {
-    if items.len() <= 256 || balls.len() < 2 {
+    if items.len() <= SERIAL_ITEMS || balls.len() < 2 {
         for item in items {
             apply(&mut balls[ball_of(item) - first], item);
         }
